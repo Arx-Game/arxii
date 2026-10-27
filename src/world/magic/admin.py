@@ -171,7 +171,7 @@ from world.magic.specialization.models import (
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "corruption_coefficient", "description"]
+    list_display = ["name", "corruption_coefficient", "burn_value", "description"]
     search_fields = ["name"]
 
 
@@ -2624,6 +2624,7 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
         "tier_3_coefficient",
         "tier_4_coefficient",
         "tier_5_coefficient",
+        "hasty_fall_multiplier",
         "updated_at",
     ]
     readonly_fields = ["updated_at"]

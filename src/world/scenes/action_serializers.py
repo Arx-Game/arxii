@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import MAX_RESONANCE_BURN
 from world.magic.models.techniques import Technique
 from world.magic.serializers import (
     TechniqueEffectSummarySerializer,
@@ -166,6 +167,17 @@ class CastPullRequestSerializer(serializers.Serializer):
     )
 
 
+class CastPullWithBurnRequestSerializer(CastPullRequestSerializer):
+    """The cast endpoint's pull, which may also burn resonance for strain (#4736).
+
+    The burn lives inside the pull, so a burn without a pull cannot be sent.
+    """
+
+    burn = serializers.IntegerField(
+        min_value=0, max_value=MAX_RESONANCE_BURN, required=False, default=0
+    )
+
+
 def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> dict:
     """Resolve + validate a declared pull against the initiator's sheet.
 
@@ -253,7 +265,7 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    pull = CastPullRequestSerializer(required=False, allow_null=True)
+    pull = CastPullWithBurnRequestSerializer(required=False, allow_null=True)
     use_base_form = serializers.BooleanField(required=False, default=False)
     # #2901: telnet has offered `variant=<resonance>` since #1619, but the web
     # request carried only `use_base_form` — so a multi-resonance caster could

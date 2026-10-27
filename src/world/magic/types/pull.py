@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
     from world.magic.models import Resonance, Thread
+    from world.magic.types.burn import BurnPreview
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ class ResonancePullResult:
     resonance_spent: int
     anima_spent: int
     resolved_effects: list[ResolvedPullEffect]
+    resonance_burned: int = 0
 
 
 @dataclass(frozen=True)
@@ -131,6 +133,9 @@ class CastPullDeclaration:
     """Emergency thread-bond draw bonus (#1718): added to the single COVENANT_ROLE
     thread's effective level for this pull's multiplier only — never persisted to
     Thread.level. 0 (default) means no emergency draw was invoked."""
+    burn: int = 0
+    """Resonance points the caster asks to burn on top of the pull, for strain (#4736).
+    0 (default) means no burn. The reached amount is resolved at cast time."""
 
 
 @dataclass(frozen=True)
@@ -149,3 +154,6 @@ class PullPreviewResult:
     affordable: bool
     resolved_effects: list[ResolvedPullEffect]
     capped_intensity: bool
+    #: The burn ceiling and per-point value for the technique the pull rides (#4736);
+    #: None when the preview names no technique.
+    burn: BurnPreview | None = None

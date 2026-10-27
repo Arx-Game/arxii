@@ -11,7 +11,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -154,6 +154,8 @@ vi.mock('@/magic/queries', async (importOriginal) => {
       isError: false,
     }),
     useCharacterResonances: vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false }),
+    // #4736 - the pull's burn preview; tests that burn override it.
+    usePullBurnPreview: vi.fn().mockReturnValue({ data: undefined }),
     // #3573 - Guard fee readout reads current anima; stubbed so no real network
     // call fires in these component tests (mirrors the hooks above).
     useCharacterAnima: vi
@@ -163,6 +165,7 @@ vi.mock('@/magic/queries', async (importOriginal) => {
 });
 
 import * as combatQueries from '@/combat/queries';
+import * as magicQueries from '@/magic/queries';
 import * as inventoryHooks from '@/inventory/hooks/useInventory';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
@@ -1598,115 +1601,176 @@ describe('YourTurn — Task 8 move-to-position actions', () => {
 // Task 7 (issue-1455) — Combat inline pull — kwargs wired into dispatch
 // ---------------------------------------------------------------------------
 
-describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
-  it('includes pull kwargs in focused dispatch when a pull is selected', async () => {
+describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
+  const BURN_PREVIEW = {
+    data: {
+      resonance_cost: 2,
+      anima_cost: 0,
+      affordable: true,
+      capped_intensity: false,
+      resolved_effects: [],
+      burn: {
+        ceiling: 5,
+        strain_units_per_point: '1',
+        hasty_fall: false,
+        available: true,
+        resonance_name: 'Dawnlight',
+        off_affinity: false,
+        corruption_affinity_name: null,
+        ceiling_tier_name: 'Amplified',
+      },
+    },
+  };
+
+  type BurnCardProps = CardProps & {
+    strainBurn?: {
+      preview: { ceiling: number; ceiling_tier_name: string | null } | null;
+      value: number;
+      onChange: (next: number) => void;
+    };
+  };
+
+  /** Focused card stub: picks technique 7 and renders the Strain-area burn it is given. */
+  function burnCardImpl({ actionContext, onContextChange, readOnly, strainBurn }: BurnCardProps) {
+    const slot = actionContext.slot;
+    return (
+      <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
+          }
+        >
+          select technique
+        </button>
+        {slot === 'focused' && strainBurn?.preview && (
+          <div data-testid="card-burn">
+            Burn ceiling at {strainBurn.preview.ceiling_tier_name}: {strainBurn.preview.ceiling}
+            <button type="button" data-testid="card-burn-3" onClick={() => strainBurn.onChange(3)}>
+              burn 3
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  type DispatchCall = [{ ref: Record<string, unknown>; kwargs: Record<string, unknown> }];
+
+  async function choosePullAndBurn() {
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+    await userEvent.click(await screen.findByTestId('card-burn-3'));
+  }
+
+  beforeEach(() => {
+    vi.mocked(magicQueries.usePullBurnPreview).mockReturnValue(
+      BURN_PREVIEW as unknown as ReturnType<typeof magicQueries.usePullBurnPreview>
+    );
+    mockActionDeclarationCard.mockImplementation(burnCardImpl);
+  });
+
+  afterEach(() => {
+    vi.mocked(magicQueries.usePullBurnPreview).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof magicQueries.usePullBurnPreview>);
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('shows the burn ceiling in the Strain area once a pull is chosen', async () => {
     setupMocks();
-
-    // Override the focused card stub so selecting a technique emits techniqueId=7.
-    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
-      const slot = actionContext.slot as string;
-      return (
-        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
-          <button
-            type="button"
-            data-testid={`card-select-technique-${slot}`}
-            onClick={() =>
-              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
-            }
-          >
-            select technique
-          </button>
-        </div>
-      );
-    });
-
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
 
-    // Select a technique so there is a focused job to dispatch.
     await userEvent.click(screen.getByTestId('card-select-technique-focused'));
-
-    // Open the pull dialog and simulate selecting a pull.
+    expect(screen.queryByTestId('card-burn')).not.toBeInTheDocument();
     await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
-    expect(screen.getByTestId('thread-pull-dialog-stub')).toBeInTheDocument();
     await userEvent.click(screen.getByTestId('simulate-pull-select'));
 
-    // Dialog stub closes after selection (open=false) — verify the summary shows.
-    await waitFor(() => {
-      expect(screen.getByTestId('selected-pull-summary')).toBeInTheDocument();
-    });
+    expect(await screen.findByTestId('card-burn')).toHaveTextContent(
+      'Burn ceiling at Amplified: 5'
+    );
+  });
 
-    // Submit declarations.
+  it('sends the pull and its burn on the focused cast when no clash is chosen', async () => {
+    setupMocks();
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    await choosePullAndBurn();
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
     });
 
-    // Focused dispatch call (first) must include pull kwargs.
-    const focusedCall = mockMutateAsync.mock.calls[0] as [
-      { ref: { technique_id: number }; kwargs: Record<string, unknown> },
-    ];
+    const focusedCall = mockMutateAsync.mock.calls[0] as DispatchCall;
     expect(focusedCall[0].kwargs).toMatchObject({
       pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
+      pull_burn: 3,
     });
-
-    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
-  it('includes pull kwargs in clash dispatch when a pull is selected', async () => {
+  it('sends the pull and its burn on the clash alone when a clash is chosen', async () => {
     setupMocks();
     const clashAction = makePlayerAction(99, 'The Grand Clash');
-
-    // Override focused card to emit techniqueId=7.
-    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
-      const slot = actionContext.slot as string;
-      return (
-        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
-          <button
-            type="button"
-            data-testid={`card-select-technique-${slot}`}
-            onClick={() =>
-              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
-            }
-          >
-            select technique
-          </button>
-        </div>
-      );
-    });
-
     render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
       wrapper: createWrapper(),
     });
 
-    // Select a technique and a clash.
-    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await choosePullAndBurn();
     await userEvent.click(screen.getByTestId('clash-commit-btn-99'));
-
-    // Select a pull.
-    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
-    await userEvent.click(screen.getByTestId('simulate-pull-select'));
-
-    // Submit.
     await userEvent.click(screen.getByTestId('submit-declarations-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
     });
 
-    // Find the clash dispatch call (has clash_id on ref).
-    const calls = mockMutateAsync.mock.calls as Array<
-      [{ ref: Record<string, unknown>; kwargs: Record<string, unknown> }]
-    >;
+    const calls = mockMutateAsync.mock.calls as DispatchCall[];
     const clashCall = calls.find((c) => c[0].ref.clash_id === 99);
-    expect(clashCall).toBeDefined();
+    const focusedCall = calls.find((c) => c[0].ref.action_slot === 'focused');
     expect(clashCall![0].kwargs).toMatchObject({
       pull_resonance_id: 5,
       pull_tier: 2,
       pull_thread_ids: [10, 11],
+      pull_burn: 3,
+    });
+    // A pull is one per round: the focused cast carries none of it.
+    expect(focusedCall![0].kwargs).not.toHaveProperty('pull_resonance_id');
+    expect(focusedCall![0].kwargs).not.toHaveProperty('pull_burn');
+  });
+
+  it('leaves the pull off a retried submit once the job carrying it succeeded', async () => {
+    setupMocks();
+    // Focused (with the pull) succeeds; the combat_ready dispatch after it fails once.
+    mockMutateAsync
+      .mockResolvedValueOnce({ backend: 'COMBAT', deferred: true })
+      .mockResolvedValueOnce({
+        backend: 'REGISTRY',
+        deferred: false,
+        success: false,
+        message: 'Not in active round.',
+      });
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'ready' }) })} />, {
+      wrapper: createWrapper(),
     });
 
-    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+    await choosePullAndBurn();
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not in active round.');
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const focusedCalls = (mockMutateAsync.mock.calls as DispatchCall[]).filter(
+      (c) => c[0].ref.action_slot === 'focused'
+    );
+    expect(focusedCalls).toHaveLength(2);
+    expect(focusedCalls[0][0].kwargs).toMatchObject({ pull_resonance_id: 5, pull_burn: 3 });
+    expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_resonance_id');
+    expect(focusedCalls[1][0].kwargs).not.toHaveProperty('pull_burn');
   });
 
   it('shows selected pull summary after selection and clears on Clear click', async () => {
@@ -1714,17 +1778,14 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
 
-    // Open dialog and select a pull.
     await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
     await userEvent.click(screen.getByTestId('simulate-pull-select'));
 
-    // Summary visible.
     await waitFor(() => {
       expect(screen.getByTestId('selected-pull-summary')).toBeInTheDocument();
     });
     expect(screen.getByTestId('selected-pull-summary')).toHaveTextContent('Tier 2 pull');
 
-    // Clear button removes the selection.
     await userEvent.click(screen.getByTestId('clear-pull-btn'));
     await waitFor(() => {
       expect(screen.queryByTestId('selected-pull-summary')).not.toBeInTheDocument();

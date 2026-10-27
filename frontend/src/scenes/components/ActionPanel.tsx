@@ -25,6 +25,8 @@ import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
+import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
+import { effectiveBurn } from '@/magic/burn';
 import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { isMapOnlyAction } from '@/combat/roundActionHelpers';
 import { extractErrorMessage } from '@/lib/errors';
@@ -949,6 +951,23 @@ export function ActionPanel({ sceneId }: Props) {
                           {pull.pullNotice && (
                             <p className="mt-1 text-xs text-amber-400">{pull.pullNotice}</p>
                           )}
+                        </div>
+                      )}
+
+                      {/* Strain (#4736): the scene cast has no anima strain control, so
+                          the pull's resonance burn is its whole Strain area. */}
+                      {pull.pullTier !== null && pull.burnPreview?.available && (
+                        <div
+                          className="space-y-1 border-t border-border/50 pt-2"
+                          data-testid="cast-strain"
+                        >
+                          <span className="text-xs font-medium">Strain</span>
+                          <PullBurnInput
+                            preview={pull.burnPreview}
+                            value={effectiveBurn(pull.burnPreview, pull.burn)}
+                            onChange={pull.setBurn}
+                            tier={pull.pullTier}
+                          />
                         </div>
                       )}
 

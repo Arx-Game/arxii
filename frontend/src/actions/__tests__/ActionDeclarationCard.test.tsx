@@ -448,6 +448,51 @@ describe('ActionDeclarationCard — #3446 strain slider', () => {
     fireEvent.change(slider, { target: { value: '7' } });
     expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({ strainCommitment: 7 }));
   });
+
+  it('shows the pull burn beside the anima strain, with the power of both (#4736)', () => {
+    const onBurnChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext({ techniqueId: 5, strainCommitment: 2 })}
+        onContextChange={() => {}}
+        strainMax={12}
+        strainPreview={{
+          cap: 12,
+          default: 0,
+          base_effective_cost: 4,
+          conversion_base: 3,
+          diminishing_step: 5,
+          diminishing_floor: 1,
+        }}
+        strainBurn={{
+          preview: {
+            ceiling: 5,
+            strain_units_per_point: '1.5',
+            hasty_fall: false,
+            available: true,
+            resonance_name: 'Dawnlight',
+            off_affinity: false,
+            corruption_affinity_name: null,
+            ceiling_tier_name: 'Amplified',
+          },
+          value: 3,
+          onChange: onBurnChange,
+        }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('pull-burn-label')).toHaveTextContent('Dawnlight (yours)');
+    expect(screen.getByTestId('pull-burn-ceiling')).toHaveTextContent(
+      'Burn ceiling at Amplified: 5 resonance'
+    );
+    // 2 anima strain + floor(3 x 1.5) = 6 units: 5 at 3 power, 1 at 2.
+    expect(screen.getByTestId('pull-burn-power')).toHaveTextContent('up to +17 power');
+    fireEvent.change(screen.getByTestId('pull-burn-input'), { target: { value: '4' } });
+    expect(onBurnChange).toHaveBeenLastCalledWith(4);
+  });
 });
 
 // ---------------------------------------------------------------------------

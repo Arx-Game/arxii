@@ -765,7 +765,12 @@ class BridgeEvacuationAcceptanceTests(TestCase):
         # Lethal anima deduction clamps the pool at zero and reports the
         # overburn through Soulfray rather than storing a negative balance.
         self.assertEqual(anima.current, 0)
-        self.assertEqual([cast.anima_cost.effective_cost for cast in casts], [5, 5])
+        # Strained intensity feeds the engagement (#4736): strain 3 on the curve
+        # (base 3, step 2, floor 1) is 2x3 + 1x2 = 8 bonus; StrainConfig's default
+        # engagement_share_percent 50 adds 8 * 50 // 100 = 4 to intensity_modifier.
+        # Cast 1: max(2 - (0 - 0), 0) + 3 = 5. Cast 2 runs at intensity 4:
+        # max(2 - (0 - 4), 0) + 3 = 9, so pushing drives her deeper into Soulfray.
+        self.assertEqual([cast.anima_cost.effective_cost for cast in casts], [5, 9])
         self.assertTrue(all(cast.soulfray_result is not None for cast in casts))
         self.assertGreater(
             casts[1].soulfray_result.severity_added,

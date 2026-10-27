@@ -841,6 +841,7 @@ class MagicActivity(models.TextChoices):
     CEREMONY = "ceremony", "Ceremony"
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
+    PUSHING_HARD = "pushing_hard", "Pushing hard by burning resonance"
     KEEPING_FOCUS = "keeping_focus", "Keeping focus against carried drift"
 
 
@@ -857,6 +858,12 @@ class FeedingTaintRole(models.TextChoices):
     MURDER = "murder", "Murder"
     SEDUCTION_DECEPTION = "seduction_deception", "Seduction by deception"
     SEDUCTION_PREDATION = "seduction_predation", "Seduction by predation"
+
+
+#: The most resonance one burn may ask for (#4736): the PositiveIntegerField ceiling the
+#: request is stored in (a pending cast's pull declaration). The intensity ceiling and the
+#: balance cap a real burn far below it; this only refuses absurd input.
+MAX_RESONANCE_BURN = 2**31 - 1
 
 
 class ComponentMode(models.TextChoices):

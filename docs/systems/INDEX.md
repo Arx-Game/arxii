@@ -455,6 +455,21 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
     `resolve_pull_from_kwargs`. Non-combat cast calls
     `request_technique_cast(cast_pull=…)` instead.
+  - **Burning resonance as a Strain option (#4736, `world/magic/services/burn.py`):**
+    `resolve_resonance_burn` (ceiling = floor(runtime intensity x `StrainConfig.burn_per_intensity`),
+    strain check, `StrainBurnReach` reach per outcome tier), `value_burn` (`Affinity.burn_value`;
+    a hasty fall for an Abyssal acting aura burning another affinity converts at the Fall pair
+    rate, corruption x `CorruptionConfig.hasty_fall_multiplier`), `preview_burn`, `announce_burn`;
+    types `BurnValuation`, `ResonanceBurnResult`, `BurnPreview`. Rides the pull:
+    `spend_resonance_for_pull(burn=, burn_valuation=, burned_for=)`, `CombatPull.resonance_burned`
+    (+ `burn_valued_points`, `burn_strain_units`, `burn_hasty_fall`, `burned_for`),
+    `SceneActionPullDeclaration.burn`; one burn strains only the declared action
+    (`use_technique(combat_burn_for=)`); `StrainConfig.engagement_share_percent` feeds a share of
+    the strain bonus into `CharacterEngagement.intensity_modifier`. Telnet `burn=<n>` on `cast`
+    and `clash`; web `pull_burn` (combat dispatch) and `pull.burn` (scene cast); the pull
+    preview carries a `burn` block. See `docs/systems/magic.md` "Burning Resonance as a Strain
+    Option". The web declaration's focused-cast pull is now committed by
+    `CombatRoundContext._commit_focused_pull` (it was dropped before).
   - Distinction → resonance (#1834, `world/magic/services/distinction_resonance.py`):
     `reconcile_distinction_resonance_grants(character_distinction)` (establish + idempotent
     seed top-off; called by `create_distinction_modifiers`/`update_distinction_rank`),

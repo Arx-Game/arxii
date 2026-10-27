@@ -5,6 +5,8 @@ Resonances are style tags that contribute to affinities and have opposing pairs.
 Both are proper domain models replacing the old ModifierTarget-based pattern.
 """
 
+from decimal import Decimal
+
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -81,6 +83,15 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     corruption_coefficient = models.PositiveSmallIntegerField(
         default=0,
         help_text="Integer tenths of corruption per cast tick for this affinity's resonances.",
+    )
+    burn_value = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text=(
+            "Strain units one burned point of this affinity's resonance is worth. "
+            "Higher makes burning this affinity's resonance push harder."
+        ),
     )
     objects = AffinityManager()
 

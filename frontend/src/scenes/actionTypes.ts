@@ -528,6 +528,8 @@ export interface CastPullRequestBody {
   resonance_id: number;
   tier: 1 | 2 | 3;
   thread_ids: number[];
+  /** Resonance burned for strain (#4736); omitted when 0. */
+  burn?: number;
 }
 
 export interface CastRequestBody {

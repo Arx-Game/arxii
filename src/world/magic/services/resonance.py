@@ -66,10 +66,12 @@ if TYPE_CHECKING:
         SanctumDetails,
         SceneEntryEndorsement,
         StylePresentationEndorsement,
+        Technique,
     )
     from world.magic.models.power_config import CapabilityPowerConfig
     from world.magic.models.threads import ThreadPullEffect
     from world.magic.types import PullActionContext
+    from world.magic.types.burn import BurnValuation
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
     from world.relationships.models import CharacterRelationship, RelationshipCapstone
@@ -1144,8 +1146,13 @@ def preview_resonance_pull(  # noqa: PLR0913
     scene_id: int | None = None,
     excluded_kinds: frozenset[str] | None = None,
     target: ObjectDB | None = None,
+    technique: Technique | None = None,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
+
+    ``technique`` (#4736): the technique the pull rides. When given, the result's
+    ``burn`` carries the burn ceiling (from the technique's runtime intensity, capped
+    by the balance left after the pull's cost) and what one burned point is worth.
 
     Validates ownership + same-resonance + non-empty threads, computes the
     tier's resonance / anima cost, reads current balances WITHOUT locking or
@@ -1232,12 +1239,19 @@ def preview_resonance_pull(  # noqa: PLR0913
     highest_tier = IntensityTier.objects.order_by("-threshold").first()
     capped_intensity = highest_tier is not None and total_intensity_bump > highest_tier.threshold
 
+    burn = None
+    if technique is not None:
+        from world.magic.services.burn import preview_burn  # noqa: PLC0415
+
+        burn = preview_burn(character_sheet, resonance, technique, cost.resonance_cost)
+
     return PullPreviewResult(
         resonance_cost=cost.resonance_cost,
         anima_cost=anima_cost,
         affordable=affordable,
         resolved_effects=resolved,
         capped_intensity=capped_intensity,
+        burn=burn,
     )
 
 
@@ -1250,6 +1264,9 @@ def _persist_combat_pull(  # noqa: PLR0913
     resolved: list[ResolvedPullEffect],
     resonance_cost: int,
     anima_total: int,
+    resonance_burned: int = 0,
+    burn_valuation: BurnValuation | None = None,
+    burned_for: str = "",
 ) -> None:
     """Write the CombatPull + CombatPullResolvedEffect rows for a combat pull.
 
@@ -1273,6 +1290,11 @@ def _persist_combat_pull(  # noqa: PLR0913
         tier=tier,
         resonance_spent=resonance_cost,
         anima_spent=anima_total,
+        resonance_burned=resonance_burned,
+        burn_valued_points=burn_valuation.valued_points if burn_valuation else 0,
+        burn_strain_units=burn_valuation.strain_units if burn_valuation else 0,
+        burn_hasty_fall=burn_valuation.hasty_fall if burn_valuation else False,
+        burned_for=burned_for,
     )
     pull.threads.set(threads)
     for r in resolved:
@@ -1340,6 +1362,9 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     beseech_bonus_thread_id: int | None = None,
     beseech_bonus: int = 0,
     anima_cost_override: int | None = None,
+    burn: int = 0,
+    burn_valuation: BurnValuation | None = None,
+    burned_for: str = "",
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -1364,6 +1389,15 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             social context (#1919). The ``CharacterAnima`` lock query is skipped
             entirely and ``anima_spent`` reflects 0. When ``None`` (default), the
             existing per-spec formula applies.
+        burn: Resonance burned on top of the pull for strain (#4736): the REACHED
+            amount from ``resolve_resonance_burn``, debited with the pull under the
+            same lock and recorded on ``CombatPull.resonance_burned``. The balance
+            must cover the pull cost plus the burn, or nothing is debited.
+        burn_valuation: What the burn is worth, valued at declaration; a combat pull
+            stores it so the action reads it at resolution without re-valuing.
+        burned_for: The declared action a combat burn strains (``PullBurnAction``);
+            the caller passes it whenever a burn was asked for, even one that reached
+            nothing, and blank otherwise.
 
     Returns:
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
@@ -1395,8 +1429,10 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         character_sheet=character_sheet,
         resonance=resonance,
     )
-    if cr.balance < cost.resonance_cost:
-        msg = "Need " + str(cost.resonance_cost) + " resonance, have " + str(cr.balance) + "."
+    burn = max(burn, 0)
+    if cr.balance < cost.resonance_cost + burn:
+        needed = cost.resonance_cost + burn
+        msg = "Need " + str(needed) + " resonance, have " + str(cr.balance) + "."
         raise ResonanceInsufficient(msg)
 
     # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
@@ -1449,10 +1485,13 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             resolved=resolved,
             resonance_cost=cost.resonance_cost,
             anima_total=anima_total,
+            resonance_burned=burn,
+            burn_valuation=burn_valuation,
+            burned_for=burned_for,
         )
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).
-    cr.balance -= cost.resonance_cost
+    cr.balance -= cost.resonance_cost + burn
     cr.save(update_fields=["balance"])
     if anima_total:
         anima.current -= anima_total
@@ -1484,6 +1523,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         resonance_spent=cost.resonance_cost,
         anima_spent=anima_total,
         resolved_effects=resolved,
+        resonance_burned=burn,
     )
 
 

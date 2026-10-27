@@ -49003,6 +49003,48 @@ components:
       - building
       - exits
       - rooms
+    BurnPreview:
+      type: object
+      description: |-
+        Wire shape for the burn numbers of a pull preview (#4736).
+
+        ``ceiling`` is the most she may burn now (intensity ceiling capped by the balance
+        left after the pull). ``strain_units_per_point`` is what one burned point adds to
+        her strain. ``hasty_fall`` is True when the burn falls at the pair rate.
+        ``available`` is False when no strain check is designated, so a burn is refused.
+        ``off_affinity`` is True when the resonance is not of the caster's affinity;
+        ``corruption_affinity_name`` names the affinity whose corruption the burn leaves
+        (null when none); ``ceiling_tier_name`` is the intensity tier the ceiling is read at.
+      properties:
+        ceiling:
+          type: integer
+        strain_units_per_point:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,4})?$
+        hasty_fall:
+          type: boolean
+        available:
+          type: boolean
+        resonance_name:
+          type: string
+        off_affinity:
+          type: boolean
+        corruption_affinity_name:
+          type: string
+          nullable: true
+        ceiling_tier_name:
+          type: string
+          nullable: true
+      required:
+      - available
+      - ceiling
+      - ceiling_tier_name
+      - corruption_affinity_name
+      - hasty_fall
+      - off_affinity
+      - resonance_name
+      - strain_units_per_point
     CGGiftOption:
       type: object
       description: |-
@@ -49701,6 +49743,33 @@ components:
           items:
             type: integer
           maxItems: 20
+      required:
+      - resonance_id
+      - thread_ids
+      - tier
+    CastPullWithBurnRequestRequest:
+      type: object
+      description: |-
+        The cast endpoint's pull, which may also burn resonance for strain (#4736).
+
+        The burn lives inside the pull, so a burn without a pull cannot be sent.
+      properties:
+        resonance_id:
+          type: integer
+        tier:
+          type: integer
+          maximum: 3
+          minimum: 1
+        thread_ids:
+          type: array
+          items:
+            type: integer
+          maxItems: 20
+        burn:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          default: 0
       required:
       - resonance_id
       - thread_ids
@@ -95209,7 +95278,7 @@ components:
           nullable: true
         pull:
           allOf:
-          - $ref: '#/components/schemas/CastPullRequestRequest'
+          - $ref: '#/components/schemas/CastPullWithBurnRequestRequest'
           nullable: true
         use_base_form:
           type: boolean
@@ -95810,6 +95879,9 @@ components:
         exclude_gift:
           type: boolean
           default: false
+        technique_id:
+          type: integer
+          nullable: true
       required:
       - character_sheet_id
       - resonance_id
@@ -95831,9 +95903,14 @@ components:
             $ref: '#/components/schemas/ResolvedPullEffect'
         capped_intensity:
           type: boolean
+        burn:
+          allOf:
+          - $ref: '#/components/schemas/BurnPreview'
+          nullable: true
       required:
       - affordable
       - anima_cost
+      - burn
       - capped_intensity
       - resolved_effects
       - resonance_cost

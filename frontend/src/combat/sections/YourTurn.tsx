@@ -36,7 +36,9 @@ import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
-import { useCharacterAnima } from '@/magic/queries';
+import { useCharacterAnima, usePullBurnPreview } from '@/magic/queries';
+import { effectiveBurn } from '@/magic/burn';
+import type { PullPreviewRequest } from '@/magic/types';
 import {
   Select,
   SelectContent,
@@ -224,6 +226,13 @@ interface RoundScopedState {
   submitError: string | null;
   pullDialogOpen: boolean;
   selectedPull: PullSelection | null;
+  /** Resonance to burn with the pull (#4736); entered in the Strain area. */
+  pullBurn: number;
+  /**
+   * True once the dispatch carrying the pull succeeded this round. A retried submit
+   * (a later job failed) then leaves the pull off, so it is never sent twice.
+   */
+  pullCommitted: boolean;
   soulfrayAccepted: boolean;
   furyTierId: number | null;
   furyAnchorId: number | null;
@@ -267,6 +276,8 @@ function initialRoundState(): RoundScopedState {
     submitError: null,
     pullDialogOpen: false,
     selectedPull: null,
+    pullBurn: 0,
+    pullCommitted: false,
     soulfrayAccepted: false,
     furyTierId: null,
     furyAnchorId: null,
@@ -297,13 +308,31 @@ type DispatchFn = (params: DispatchActionRequest) => Promise<DispatchResult>;
 
 type DispatchJob = () => Promise<DispatchResult>;
 
+/** The pull a submit sends: the selection plus the burn, or null for none (#4736). */
+interface PullDispatch {
+  selection: PullSelection;
+  burn: number;
+}
+
+/** pull_resonance_id / pull_tier / pull_thread_ids (and pull_burn) for one dispatch. */
+function pullKwargsFor(pull: PullDispatch | null): Record<string, number | number[]> {
+  const pullKwargs: Record<string, number | number[]> = {};
+  if (pull === null) return pullKwargs;
+  pullKwargs.pull_resonance_id = pull.selection.resonance_id;
+  pullKwargs.pull_tier = pull.selection.tier;
+  pullKwargs.pull_thread_ids = pull.selection.thread_ids;
+  if (pull.burn > 0) pullKwargs.pull_burn = pull.burn;
+  return pullKwargs;
+}
+
 /**
  * Build the focused-slot dispatch job (if a technique is selected). Threads the
  * chosen single target onto the focused declaration (#1001a); the backend
  * resolves these PKs to instances scoped to the encounter.
  *
- * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
- * merged into kwargs so the backend commits a CombatPull alongside the action.
+ * `pull` is the round's thread pull when it rides this job (#4736): a pull is one
+ * per round, so the caller hands it to the clash job when a clash is selected and to
+ * this job otherwise, never both. Its kwargs make the backend commit a CombatPull.
  *
  * When a cast-time position is selected (#2206), `position_params` is merged
  * into kwargs: `{ destination_position_id }` for a "single"-shape technique,
@@ -323,7 +352,7 @@ function buildFocusedJob(
   focusedContext: ActionContext,
   effortLevel: string,
   dispatchAction: DispatchFn,
-  selectedPull: PullSelection | null,
+  pull: PullDispatch | null,
   soulfrayAccepted: boolean,
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
@@ -343,12 +372,7 @@ function buildFocusedJob(
     }
   }
 
-  const pullKwargs: Record<string, number | number[]> = {};
-  if (selectedPull !== null) {
-    pullKwargs.pull_resonance_id = selectedPull.resonance_id;
-    pullKwargs.pull_tier = selectedPull.tier;
-    pullKwargs.pull_thread_ids = selectedPull.thread_ids;
-  }
+  const pullKwargs = pullKwargsFor(pull);
 
   const furyKwargs: Record<string, number> = {};
   if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
@@ -441,27 +465,22 @@ function buildPassiveJobs(
  * the ref) per plan Task 7.3: ActionRef.__post_init__ rejects both clash_id and
  * technique_id being set; see src/actions/types.py:137-155.
  *
- * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
- * merged into kwargs so the backend commits a CombatPull alongside the clash.
+ * `pull` is the round's thread pull when a clash is selected: it rides this job
+ * alone, so its burn strains the clash and the pull commits once (#4736).
  */
 function buildClashJob(
   selectedClashRef: PlayerAction['ref'] | null,
   focusedContext: ActionContext,
   strainByClash: Record<number, number>,
   dispatchAction: DispatchFn,
-  selectedPull: PullSelection | null
+  pull: PullDispatch | null
 ): DispatchJob | null {
   if (selectedClashRef === null || selectedClashRef.clash_id == null) return null;
 
   const clashId = selectedClashRef.clash_id;
   const strain = strainByClash[clashId] ?? 0;
 
-  const pullKwargs: Record<string, number | number[]> = {};
-  if (selectedPull !== null) {
-    pullKwargs.pull_resonance_id = selectedPull.resonance_id;
-    pullKwargs.pull_tier = selectedPull.tier;
-    pullKwargs.pull_thread_ids = selectedPull.thread_ids;
-  }
+  const pullKwargs = pullKwargsFor(pull);
 
   return () =>
     dispatchAction({
@@ -1845,6 +1864,8 @@ export function YourTurn({
     submitError,
     pullDialogOpen,
     selectedPull,
+    pullBurn,
+    pullCommitted,
     soulfrayAccepted,
     furyTierId,
     furyAnchorId,
@@ -1894,7 +1915,18 @@ export function YourTurn({
   const setSubmitted = useMemo(() => makeFieldSetter('submitted'), []);
   const setSubmitError = useMemo(() => makeFieldSetter('submitError'), []);
   const setPullDialogOpen = useMemo(() => makeFieldSetter('pullDialogOpen'), []);
-  const setSelectedPull = useMemo(() => makeFieldSetter('selectedPull'), []);
+  const setSelectedPullField = useMemo(() => makeFieldSetter('selectedPull'), []);
+  const setPullBurn = useMemo(() => makeFieldSetter('pullBurn'), []);
+  const setPullCommitted = useMemo(() => makeFieldSetter('pullCommitted'), []);
+  // A new or cleared pull starts with no burn and has not been committed yet.
+  const setSelectedPull = useMemo(
+    () => (value: PullSelection | null) => {
+      setSelectedPullField(value);
+      setPullBurn(0);
+      setPullCommitted(false);
+    },
+    [setSelectedPullField, setPullBurn, setPullCommitted]
+  );
   const setSoulfrayAccepted = useMemo(() => makeFieldSetter('soulfrayAccepted'), []);
   const setFuryTierId = useMemo(() => makeFieldSetter('furyTierId'), []);
   const setFuryAnchorId = useMemo(() => makeFieldSetter('furyAnchorId'), []);
@@ -2211,6 +2243,25 @@ export function YourTurn({
   );
 
   // ---------------------------------------------------------------------------
+  // Pull burn (#4736): the preview of the chosen pull against the focused technique
+  // gives the burn ceiling and labels the Strain area shows.
+  // ---------------------------------------------------------------------------
+
+  const burnPreviewRequest = useMemo<PullPreviewRequest | null>(() => {
+    if (selectedPull === null || focusedContext.techniqueId === undefined) return null;
+    return {
+      character_sheet_id: characterSheetId,
+      resonance_id: selectedPull.resonance_id,
+      tier: selectedPull.tier,
+      thread_ids: selectedPull.thread_ids,
+      technique_id: focusedContext.techniqueId,
+    };
+  }, [characterSheetId, selectedPull, focusedContext.techniqueId]);
+  const { data: burnPreviewData } = usePullBurnPreview(burnPreviewRequest);
+  const burnPreview = burnPreviewRequest !== null ? (burnPreviewData?.burn ?? null) : null;
+  const burnToSend = effectiveBurn(burnPreview, pullBurn);
+
+  // ---------------------------------------------------------------------------
   // Submit handler
   // ---------------------------------------------------------------------------
 
@@ -2237,13 +2288,20 @@ export function YourTurn({
 
     // Submission order per plan: focused first, then passives, then clashes
     // (focused first guarantees the server sees focused before passives).
-    // selectedPull (if any) rides on focused and clash kwargs — the backend
-    // commits a CombatPull when those kwargs are present.
+    // The pull (and its burn) rides exactly ONE job (#4736): the clash when a clash
+    // is selected, the focused cast otherwise. A pull is one per round, so sending it
+    // on both made the second commit refuse. Once that job has succeeded this round,
+    // a retried submit leaves the pull off.
+    const pull: PullDispatch | null =
+      selectedPull !== null && !pullCommitted
+        ? { selection: selectedPull, burn: burnToSend }
+        : null;
+    const pullRidesClash = selectedClashRef !== null && selectedClashRef.clash_id != null;
     const focusedJob = buildFocusedJob(
       focusedContext,
       effortLevel,
       dispatchAction,
-      selectedPull,
+      pullRidesClash ? null : pull,
       soulfrayAccepted,
       soulfrayWarning,
       furyTierId,
@@ -2263,8 +2321,10 @@ export function YourTurn({
       focusedContext,
       strainByClash,
       dispatchAction,
-      selectedPull
+      pullRidesClash ? pull : null
     );
+    let pullJob: DispatchJob | null = null;
+    if (pull !== null) pullJob = pullRidesClash ? clashJob : focusedJob;
 
     const dispatchJobs: DispatchJob[] = [
       ...(focusedJob ? [focusedJob] : []),
@@ -2283,6 +2343,7 @@ export function YourTurn({
           setSubmitError(result.message ?? 'Submit failed. Try again.');
           return;
         }
+        if (job === pullJob) setPullCommitted(true);
       }
       // PaceMode.READY early-resolution (#3067): `declare_action` resets
       // `is_ready=False` on every declaration, so submitting alone never
@@ -2581,6 +2642,8 @@ export function YourTurn({
           actionContext={focusedContext}
           onContextChange={(next) => {
             setSubmitError(null);
+            // A burn is sized against the technique's ceiling; a new technique starts over.
+            if (next.techniqueId !== focusedContext.techniqueId) setPullBurn(0);
             setFocusedContext(next);
           }}
           readOnly={isLocked}
@@ -2594,6 +2657,16 @@ export function YourTurn({
           onCastPositionChange={setCastPosition}
           strainMax={strainMax}
           strainPreview={focusedCastDescriptor?.strain}
+          strainBurn={
+            selectedPull !== null
+              ? {
+                  preview: burnPreview,
+                  value: burnToSend,
+                  onChange: setPullBurn,
+                  tier: selectedPull.tier,
+                }
+              : undefined
+          }
         />
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate

@@ -125,7 +125,13 @@ class ResonanceInvolvement:
 
     resonance: Resonance
     stat_bonus_contribution: int  # share of runtime intensity attributable to this resonance
-    thread_pull_resonance_spent: int  # sum of CombatPull.resonance_spent for active pulls
+    # Resonance spent on this cast's thread pulls (the combat round's CombatPull rows, or
+    # the non-combat cast pull) plus any resonance burned raw with them (#4736).
+    thread_pull_resonance_spent: int
+    # Burned points that fell at the pair rate (#4736): an Abyssal caster burning this
+    # Celestial or Primal resonance. Valued as Abyssal and accrued at the Abyssal
+    # coefficient times CorruptionConfig.hasty_fall_multiplier.
+    hasty_fall_points: int = 0
 
 
 @dataclass

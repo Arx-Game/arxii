@@ -809,6 +809,27 @@ def _probe_price_components_active() -> ProbeResult:
     return ProbeResult(present=False, missing=stale, detail=detail)
 
 
+def _probe_strain_burn_reach_tiers() -> ProbeResult:
+    """Every canonical CheckOutcome tier must have a StrainBurnReach row (#4736).
+
+    A tier without a row reaches nothing when the strain check lands on it, so a
+    player's burn is debited for zero and she is told nothing was reached.
+    """
+    from world.combat.models import StrainBurnReach  # noqa: PLC0415
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+
+    covered = set(
+        StrainBurnReach.objects.filter(outcome_tier__name__in=CANONICAL_OUTCOME_LEVELS).values_list(
+            "outcome_tier__name", flat=True
+        )
+    )
+    missing = tuple(name for name in CANONICAL_OUTCOME_LEVELS if name not in covered)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"No StrainBurnReach row for outcome tier(s): {', '.join(missing)}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_audere_condition_shape() -> ProbeResult:
     """Audere and Audere Majora must outlast their own round countdown and defer death.
 
@@ -4256,6 +4277,33 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "authored row to tune the formula through."
             ),
             probe=AnyRowProbe(label="AnimaConfig"),
+        ),
+        ContentDependency(
+            key="strain-check-type",
+            label="Strain check type",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/burn.py resolve_resonance_burn()",
+            consequence=(
+                "A character who asks to burn resonance when she strains is refused with a "
+                "message: no check is designated for pushing hard."
+            ),
+            probe=FilteredRowProbe(
+                label="StrainConfig",
+                filters=(("strain_check_type__isnull", False),),
+                absent_detail="StrainConfig has no strain check type set.",
+            ),
+        ),
+        ContentDependency(
+            key="strain-burn-reach",
+            label="Strain burn reach per outcome tier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/burn.py resolve_resonance_burn()",
+            consequence=(
+                "A strain check that lands on a tier with no StrainBurnReach row reaches "
+                "none of the resonance the player asked to burn."
+            ),
+            probe=CustomProbe(fn=_probe_strain_burn_reach_tiers),
+            admin_model="StrainBurnReach",
         ),
         ContentDependency(
             key="corruption-config",

@@ -45,6 +45,7 @@ from world.combat.models import (
     SpectacleRecord,
     StakesEscalationModifier,
     StakesLevelRequirement,
+    StrainBurnReach,
     StrainConfig,
     SurgeDegreeBand,
     SurgeTuning,
@@ -289,6 +290,7 @@ class CombatPullAdmin(admin.ModelAdmin):
         "tier",
         "resonance_spent",
         "anima_spent",
+        "resonance_burned",
         "committed_at",
     ]
     list_filter = ["tier", "resonance"]
@@ -408,8 +410,22 @@ class StrainConfigAdmin(admin.ModelAdmin):
         "conversion_base",
         "diminishing_step",
         "diminishing_floor",
+        "burn_per_intensity",
+        "engagement_share_percent",
+        "strain_check_type",
         "updated_at",
     ]
+    list_select_related = ["strain_check_type"]
+    raw_id_fields = ["strain_check_type"]
+
+
+@admin.register(StrainBurnReach)
+class StrainBurnReachAdmin(admin.ModelAdmin):
+    """#4736 - the share of a requested resonance burn reached, per outcome tier."""
+
+    list_display = ("outcome_tier", "reach_percent")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
 
 
 @admin.register(ClashConfig)

@@ -871,6 +871,28 @@ class AffinityNotConfigured(MagicError):
     user_message = "This affinity has not been set up yet."
 
 
+class ResonanceBurnUnavailable(MagicError):
+    """A burn was asked for but no strain check type is designated (#4736).
+
+    The Required content page lists the missing designation; the player asked for
+    something, so the burn is refused with a message rather than silently dropped.
+    """
+
+    user_message = "No check is set up for pushing hard yet, so you cannot burn resonance."
+
+
+class ResonanceBurnNeedsPull(MagicError):
+    """A burn was asked for without a thread pull in the same action (#4736)."""
+
+    user_message = "Burning resonance needs a thread pull in the same action."
+
+
+class ResonanceBurnInvalid(MagicError):
+    """A burn amount that is not a whole number from 0 up (#4736)."""
+
+    user_message = "A burn must be a whole number of resonance, 0 or more."
+
+
 class DriftCorrectionError(MagicError):
     """Base for refusals of the drift correction rite (#4733, slice 4 of #4672)."""
 

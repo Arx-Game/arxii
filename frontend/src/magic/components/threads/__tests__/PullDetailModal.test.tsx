@@ -71,6 +71,7 @@ function makePreviewResponse(overrides: Partial<PullPreviewResponse> = {}): Pull
     affordable: true,
     capped_intensity: false,
     resolved_effects: [],
+    burn: null,
     ...overrides,
   };
 }

@@ -463,6 +463,13 @@ class SceneActionPullDeclaration(SharedMemoryModel):
         choices=CastPullTier.choices,
         help_text="Paid pull tier (1-3).",
     )
+    burn = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Resonance the caster asked to burn with the pull for strain (#4736); "
+            "resolved when the pending cast resolves. 0 = no burn."
+        ),
+    )
     threads = models.ManyToManyField(
         "arxii.Thread",
         related_name="action_pull_declarations",

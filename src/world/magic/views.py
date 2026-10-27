@@ -1099,9 +1099,10 @@ class ThreadPullPreviewView(APIView):
 
     POST /api/magic/thread-pull-preview/
 
-    Request body: ``{resonance_id, tier, thread_ids[], action_context?}``.
+    Request body: ``{resonance_id, tier, thread_ids[], action_context?, technique_id?}``.
     Response: ``{resonance_cost, anima_cost, affordable, resolved_effects[],
-    capped_intensity}``. Never mutates state.
+    capped_intensity, burn}``; ``burn`` is null without ``technique_id`` (#4736).
+    Never mutates state.
     """
 
     permission_classes = [IsAuthenticated]
@@ -1169,8 +1170,17 @@ class ThreadPullPreviewView(APIView):
                 if can_perceive(sheet.character, target_character):
                     target = target_character
 
+        technique = None
+        technique_id = data.get("technique_id")
+        if technique_id is not None:
+            # Only a technique she knows: the preview reads its runtime intensity.
+            technique = get_object_or_404(
+                Technique, pk=technique_id, character_grants__character=sheet
+            )
+
         try:
             result = preview_resonance_pull(
+                technique=technique,
                 character_sheet=sheet,
                 resonance=resonance,
                 tier=data["tier"],

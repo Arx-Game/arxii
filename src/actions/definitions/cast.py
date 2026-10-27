@@ -345,6 +345,7 @@ class CastTechniqueAction(Action):
                 ``MagicError`` (invalid pull declaration — e.g. thread not in action,
                 insufficient balance).
         """
+        from world.combat.constants import PullBurnAction  # noqa: PLC0415
         from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
         from world.combat.round_context import resolve_focused_target_objectdb  # noqa: PLC0415
         from world.magic.models import Technique  # noqa: PLC0415
@@ -358,6 +359,7 @@ class CastTechniqueAction(Action):
             participant=participant,
             encounter=encounter,
             technique_id=technique_id,
+            burned_for=PullBurnAction.CAST,
             target=target,
             cast_check=resolve_cast_check(
                 participant.character_sheet.character, Technique.objects.get(pk=technique_id)

@@ -24,6 +24,13 @@ class CorruptionConfig(SharedMemoryModel):
     deficit_multiplier = models.PositiveSmallIntegerField(default=20)
     mishap_multiplier = models.PositiveSmallIntegerField(default=15)
     audere_multiplier = models.PositiveSmallIntegerField(default=15)
+    hasty_fall_multiplier = models.PositiveSmallIntegerField(
+        default=20,
+        help_text=(
+            "Integer tenths multiplying a cast's corruption tick when an Abyssal caster "
+            "burns Celestial or Primal resonance (a hasty fall). 20 = 2.0x."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
