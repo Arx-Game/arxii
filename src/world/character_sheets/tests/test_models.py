@@ -272,8 +272,19 @@ class InControlPropertyTests(TestCase):
     def test_in_control_false_with_alters_behavior_condition(self):
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = None
         with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
             self.assertIs(self.sheet.in_control, False)
+
+    def test_in_control_true_once_alters_behavior_condition_is_resolved(self):
+        """A rally that decays the condition to severity 0 sets resolved_at (#4752)."""
+        from django.utils import timezone
+
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = timezone.now()
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            self.assertIs(self.sheet.in_control, True)
 
     def test_in_control_true_when_only_non_altering_conditions(self):
         fake_condition = MagicMock()
