@@ -289,6 +289,12 @@ def resolve_npc_attack(
         opponent_action.threat_entry.base_damage * opponent_action.opponent.damage_multiplier
     )
     base_damage = int(base_damage * opponent_action.damage_scale)
+    # The attacker's own damage-dealt rows (#4742): a smoke-form NPC's steel barely lands.
+    from world.conditions.services import scaled_outgoing_damage  # noqa: PLC0415
+
+    base_damage = scaled_outgoing_damage(
+        opponent_action.opponent.objectdb, base_damage, opponent_action.threat_entry.damage_type
+    )
     final_damage = math.floor(base_damage * multiplier)
 
     with dodge_roll_active():

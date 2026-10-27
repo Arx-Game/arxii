@@ -1,4 +1,4 @@
-"""Intangibility gate: resolve_targets excludes untargetable personas (#1584 Task 8).
+"""Intangible personas stay targetable by area casts (#4742; was excluded in #1584 Task 8).
 
 Uses direct ConditionInstance factory construction (not apply_condition) so these tests
 run on the SQLite fast tier without hitting the PG-only DISTINCT ON path.
@@ -23,7 +23,7 @@ from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFact
 
 
 class IntangibilityGateCastTests(TestCase):
-    """resolve_targets excludes intangible personas from AREA and FILTERED_GROUP casts."""
+    """An incorporeal bearer is protected by resistance, never by leaving the target set."""
 
     def _add_to_scene(self, scene, persona):
         InteractionFactory(scene=scene, persona=persona)
@@ -34,8 +34,8 @@ class IntangibilityGateCastTests(TestCase):
         template = ConditionTemplateFactory(category=category)
         return ConditionInstanceFactory(condition=template, target=character_objectdb)
 
-    def test_intangible_persona_excluded_from_area_cast_while_tangible_remains(self):
-        """An AREA cast skips the intangible persona but still includes the tangible one."""
+    def test_intangible_persona_is_caught_by_an_area_cast(self):
+        """An AREA cast includes the intangible persona alongside the tangible one."""
         tech = TechniqueFactory(
             target_type=ActionTargetType.AREA,
             effect_type=BinaryEffectTypeFactory(),
@@ -62,7 +62,5 @@ class IntangibilityGateCastTests(TestCase):
         )
 
         result_ids = {p.pk for p in result}
-        self.assertNotIn(
-            intangible.pk, result_ids, "Intangible persona must not appear in AREA result"
-        )
+        self.assertIn(intangible.pk, result_ids, "Intangible persona is still an AREA target")
         self.assertIn(tangible.pk, result_ids, "Tangible persona must still appear in AREA result")

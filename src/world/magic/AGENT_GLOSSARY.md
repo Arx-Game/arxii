@@ -327,10 +327,13 @@ Ward (reflect), Phase Step (blink), Phase Jump (teleport), Barricade (obstacle),
 `world/magic/services/effect_handlers.py`.
 
 **Intangibility**:
-The status of being untargetable in combat, conferred by a `ConditionInstance` whose
-`ConditionCategory.grants_intangibility` is True. Checked by `is_untargetable(objectdb)` in
-`world/conditions/services.py` at NPC targeting and PC AoE filter sites. Ghostform and
+The status of being incorporeal (smoke, ghost, sunk into earth), conferred by a
+`ConditionInstance` whose `ConditionCategory.grants_intangibility` is True. An intangible PC
+holds no ground (`is_intangible(objectdb)` in `world/conditions/services.py`, read by
+`held_ground.encounter_holds`) but stays targetable: protection is the condition's own
+severity-scaled Physical resistance, so a hard enough hit still lands (#4742). Ghostform and
 Earthmeld are the seeded intangibility conditions (#1584).
+_Avoid_: untargetable (incorporeal is near-total mitigation, never immunity)
 
 **Target-Aware Pull**:
 A thread pull whose numeric payload can be modulated by the live target the pull's

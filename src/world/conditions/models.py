@@ -11,7 +11,7 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -22,6 +22,8 @@ from django.utils.functional import cached_property
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.areas.positioning.constants import CreatureTraversal, ReactionCostKind, ReactionReach
 from world.checks.constants import ModifierSize
 from world.conditions.constants import (
@@ -92,8 +94,9 @@ class ConditionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     grants_intangibility = models.BooleanField(
         default=False,
         help_text=(
-            "Conditions in this category make the bearer untargetable (incorporeal, "
-            "sunk, phased). Aggregated by is_untargetable()."
+            "Conditions in this category make the bearer incorporeal (smoke, ghost, sunk "
+            "into earth): they hold no ground. They stay targetable; protection comes from "
+            "the condition's resistance rows (#4742). Aggregated by is_intangible()."
         ),
     )
 
@@ -666,6 +669,16 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """
         return list(self.stages.all())
 
+    @PrunedCachedProperty
+    def cached_damage_dealt_modifiers(self) -> list[ConditionDamageDealtModifier]:
+        """This row's outgoing-damage modifiers (#4742, ADR-0298).
+
+        Fed cold by ``CharacterConditionHandler._active``'s ``Prefetch`` into this
+        attribute; this body is the fallback for a lone instance. Writes clear it through
+        ``ConditionDamageDealtModifier.related_cache_fields``.
+        """
+        return list(self.conditiondamagedealtmodifier_set.all())
+
     @cached_property
     def reactive_handler(self) -> ConditionTemplateReactiveHandler:
         from world.conditions.handlers import ConditionTemplateReactiveHandler  # noqa: PLC0415
@@ -807,6 +820,16 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition.name} - {self.name}"
+
+    @PrunedCachedProperty
+    def cached_damage_dealt_modifiers(self) -> list[ConditionDamageDealtModifier]:
+        """This row's outgoing-damage modifiers (#4742, ADR-0298).
+
+        Fed cold by ``CharacterConditionHandler._active``'s ``Prefetch`` into this
+        attribute; this body is the fallback for a lone instance. Writes clear it through
+        ``ConditionDamageDealtModifier.related_cache_fields``.
+        """
+        return list(self.conditiondamagedealtmodifier_set.all())
 
 
 class ConditionStageOnEntry(SharedMemoryModel):
@@ -1173,6 +1196,68 @@ class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):
                 f"{sign}{self.modifier_value} resistance to {dtype}"
             )
         return f"{self.condition.name}: {sign}{self.modifier_value} resistance to {dtype}"
+
+
+class ConditionDamageDealtModifier(
+    NaturalKeyMixin, RelatedCacheClearingMixin, ConditionOrStageEffect
+):
+    """How a condition changes its bearer's OUTGOING damage of one damage type (#4742).
+
+    The attacker-side mirror of ConditionResistanceModifier: resistance is a flat
+    amount off incoming hits, this is a percent on the bearer's own hits. A smoke
+    form carries Physical -75 so plain steel barely lands, and no Fire row, so her
+    fire strikes are untouched. Read by ``scaled_outgoing_damage`` for PC technique
+    profiles, combo riders and joust strikes, and NPC attacks.
+    """
+
+    damage_type = models.ForeignKey(
+        DamageType,
+        on_delete=models.CASCADE,
+        help_text="The damage type this row changes. Types with no row are unchanged.",
+    )
+    modifier_percent = models.IntegerField(
+        help_text=(
+            "Percent change to this bearer's outgoing damage of this type. "
+            "-75 = a quarter of normal; +50 = half again."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    # Clears the owner's cached_damage_dealt_modifiers on save/delete (ADR-0298).
+    related_cache_fields: ClassVar[list[str]] = ["condition", "stage"]
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "damage_type"]
+        dependencies = [
+            _CONDITION_TEMPLATE_FK,
+            _CONDITION_STAGE_FK,
+            _DAMAGE_TYPE_FK,
+        ]
+
+    class Meta(ConditionOrStageEffect.Meta):
+        constraints = [
+            *ConditionOrStageEffect.Meta.constraints,
+            models.UniqueConstraint(
+                fields=["condition", "damage_type"],
+                condition=Q(condition__isnull=False),
+                name="damage_dealt_modifier_unique_condition",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "damage_type"],
+                condition=Q(stage__isnull=False),
+                name="damage_dealt_modifier_unique_stage",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        sign = "+" if self.modifier_percent >= 0 else ""
+        owner = (
+            f"{self.stage.condition.name} ({self.stage.name})"
+            if self.stage
+            else self.condition.name
+        )
+        return f"{owner}: {sign}{self.modifier_percent}% {self.damage_type.name} damage dealt"
 
 
 class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):

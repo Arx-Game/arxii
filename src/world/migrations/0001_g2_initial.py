@@ -1729,7 +1729,7 @@ class Migration(BatchedCreateModelMigration):
                     "grants_intangibility",
                     models.BooleanField(
                         default=False,
-                        help_text="Conditions in this category make the bearer untargetable (incorporeal, sunk, phased). Aggregated by is_untargetable().",
+                        help_text="Conditions in this category make the bearer incorporeal (smoke, ghost, sunk into earth): they hold no ground. They stay targetable; protection comes from the condition's resistance rows (#4742). Aggregated by is_intangible().",
                     ),
                 ),
                 (
