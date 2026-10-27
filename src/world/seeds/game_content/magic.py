@@ -1780,11 +1780,12 @@ def _seed_resonance_environment_config() -> None:
 # Task 1.1 — seed_magic_config()
 # ---------------------------------------------------------------------------
 
-#: Canonical IntensityTier definitions: (name, threshold, control_modifier)
+#: Canonical IntensityTier definitions: (name, threshold, control_modifier).
+#: A tier's control modifier can only add control (#4740, #4727 decision 5).
 _INTENSITY_TIERS: list[tuple[str, int, int]] = [
     ("Minor", 5, 0),
-    ("Moderate", 10, -2),
-    ("Major", 15, -5),
+    ("Moderate", 10, 0),
+    ("Major", 15, 0),
 ]
 
 #: Name for the default mishap consequence pool

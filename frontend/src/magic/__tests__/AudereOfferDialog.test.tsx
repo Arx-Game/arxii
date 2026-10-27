@@ -48,6 +48,7 @@ const OFFER: PendingAudereOffer = {
   offer_title: 'The Audere Gate Stands Open',
   offer_strip_label: 'The Audere gate stands open: answer it',
   offer_body_text: 'Battered down. Break through. Power beyond your limits waits.',
+  stages_lowered_by_control: 0,
   created_at: '2026-06-01T00:00:00Z',
 };
 
@@ -145,6 +146,31 @@ describe('AudereOfferDialog (via AudereOfferGate)', () => {
     expect(offerParagraph.tagName).toBe('P');
     expect(offerParagraph).toHaveTextContent(OFFER.offer_body_text);
     expect(offerParagraph).toContainElement(framing);
+  });
+
+  it('tells the player their control lowered the Soulfray stage by one (#4740)', async () => {
+    renderGate([{ ...OFFER, stages_lowered_by_control: 1 }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByTestId('audere-control-line')).toHaveTextContent(
+      'Your control lets you break through one Soulfray stage earlier than usual.'
+    );
+  });
+
+  it('counts the stages when control lowered more than one (#4740)', async () => {
+    renderGate([{ ...OFFER, stages_lowered_by_control: 2 }]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.getByTestId('audere-control-line')).toHaveTextContent(
+      'Your control lets you break through 2 Soulfray stages earlier than usual.'
+    );
+  });
+
+  it('renders no control line when control lowered nothing (#4740)', async () => {
+    renderGate([OFFER]);
+
+    await screen.findByRole('alertdialog');
+    expect(screen.queryByTestId('audere-control-line')).not.toBeInTheDocument();
   });
 
   it('renders no reveal framing line when reveal_framing_text is empty (#4098)', async () => {

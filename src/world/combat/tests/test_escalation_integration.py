@@ -63,8 +63,8 @@ class BuildToClimaxTests(TestCase):
 
     Authored numbers (computed deliberately, asserted exactly):
     - Tiers (gate fixture): Minor threshold=1 (+0 control), Major threshold=15
-      (-5 control). AudereThreshold: minimum tier=Major, minimum Soulfray
-      stage=3 ("Ripping").
+      (+0 control; no tier lowers control, #4740). AudereThreshold: minimum
+      tier=Major, minimum Soulfray stage=3 ("Ripping").
     - Soulfray stage severity thresholds: 10 / 80 / 160.
     - SoulfrayConfig: threshold ratio 0.30, severity_scale 10, deficit_scale 5.
     - Technique: intensity=10, control=4, anima_cost=3. Anima: 5/50.
@@ -184,11 +184,11 @@ class BuildToClimaxTests(TestCase):
 
         # --- Round 3: second tick crosses the Major tier. ---
         stats3 = self._begin_round_and_assert(modifier=6, intensity=16)  # 2 ticks * step 3
-        # Major tier's -5 control penalty bites (control steps authored to 0,
-        # so the pace check cannot perturb this).
-        self.assertEqual(stats3.control, -1)
-        # cost 20 = 3 - (-1 - 16); severity 110 = 10 + ceil(5*20); total 210 >= 160.
-        result3 = self._cast_and_assert(cost=20, deficit=20, severity=110, stage=3)
+        # No tier lowers control (#4740, #4727 decision 5), so control stays 4 (control
+        # steps authored to 0, so the pace check cannot perturb this).
+        self.assertEqual(stats3.control, 4)
+        # cost 15 = 3 - (4 - 16); severity 85 = 10 + ceil(5*15); total 185 >= 160.
+        result3 = self._cast_and_assert(cost=15, deficit=15, severity=85, stage=3)
 
         # --- Climax: the qualifying cast itself opened the Audere gate. ---
         self.assertTrue(check_audere_eligibility(self.character, stats3.intensity))
@@ -201,8 +201,8 @@ class BuildToClimaxTests(TestCase):
         costs = [r.anima_cost.effective_cost for r in (result1, result2, result3)]
         severities = [r.soulfray_result.severity_added for r in (result1, result2, result3)]
         self.assertEqual(intensities, [10, 13, 16])
-        self.assertEqual(costs, [9, 12, 20])
-        self.assertEqual(severities, [30, 70, 110])
+        self.assertEqual(costs, [9, 12, 15])
+        self.assertEqual(severities, [30, 70, 85])
         self.assertTrue(all(a < b for a, b in pairwise(intensities)))
         self.assertTrue(all(a < b for a, b in pairwise(costs)))
 

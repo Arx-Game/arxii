@@ -115,7 +115,9 @@ The magic system for Arx II. Power flows from identity and connection.
   consumption). `TechniqueSerializer
   .restriction_ids` and the builder's `Restriction.objects.filter(...)` call sites scope to
   `kind=DESIGN`; `CharacterTechnique.clean()` enforces a price can only be `kind=PRICE`.
-- `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
+- `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major).
+  `control_modifier` is 0 or more: a tier only adds control (#4740); the Required content
+  row `intensity-tiers-never-lower-control` lists a negative one
 - `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
 - `TechniqueFunctionTag` - Content-authored `(technique, function)` join recording which
   fine-grained `TechniqueFunction` labels (`constants.py`, 12-value `TextChoices`) a
@@ -1683,7 +1685,12 @@ To add a new handler: implement the `OfferHandler` protocol and call
 
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global
 config), `PendingAudereOffer` (poll-able offer, one per character),
-`check_audere_eligibility` (intensity tier + Soulfray stage + engagement),
+`check_audere_eligibility` (intensity tier + Soulfray stage + engagement; high runtime
+control steps the stage needed back along the Soulfray ladder, one stage per
+`AudereThreshold.control_per_stage_earlier`, never below the first stage, via
+`required_stage_order`; the offer keeps `fired_control` for the accept re-check, and the
+offer surfaces tell the player via `stages_lowered_by_control` / `control_lowered_line`,
+#4740),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
 **Surge broadcast (#3451):** `AudereThreshold.surge_manifestation_text` (blank
 default) is EMITted to the active scene by `_broadcast_surge` when a surge is

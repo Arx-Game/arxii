@@ -84,7 +84,7 @@ class TestAudereOfferPipeline(APITestCase):
         )
 
         # intensity=20 resolves to the major tier (threshold 15) → passes the
-        # gate; control=30 keeps the cast clean even after the tier's -5.
+        # gate; control=30 keeps the cast clean.
         cls.technique = TechniqueFactory(intensity=20, control=30, anima_cost=3)
 
         cls.encounter = CombatEncounterFactory()

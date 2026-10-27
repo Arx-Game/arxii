@@ -42,6 +42,7 @@ const PENDING_FIXTURE: PaginatedPendingAudereOfferList = {
       offer_title: 'The Audere Gate Stands Open',
       offer_strip_label: 'The Audere gate stands open: answer it',
       offer_body_text: 'Battered down. Break through.',
+      stages_lowered_by_control: 0,
       created_at: '2026-06-01T00:00:00Z',
     },
   ],

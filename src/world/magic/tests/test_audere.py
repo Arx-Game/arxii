@@ -82,7 +82,7 @@ class AudereEligibilityTests(TestCase):
 
         # Intensity tiers
         cls.minor_tier = IntensityTierFactory(name="Minor", threshold=1, control_modifier=0)
-        cls.major_tier = IntensityTierFactory(name="Major", threshold=15, control_modifier=-5)
+        cls.major_tier = IntensityTierFactory(name="Major", threshold=15, control_modifier=0)
 
         # Audere requires Major tier + stage 3+ soulfray (Ripping) per §8.6
         cls.threshold = AudereThresholdFactory(
@@ -195,7 +195,7 @@ class AudereLifecycleTests(TestCase):
             condition=cls.soulfray_template, stage_order=3, name="Ripping"
         )
 
-        cls.major_tier = IntensityTierFactory(name="Major_lc", threshold=15, control_modifier=-5)
+        cls.major_tier = IntensityTierFactory(name="Major_lc", threshold=15, control_modifier=0)
         # Threshold now gates at stage 3 (Ripping) per §8.6
         cls.threshold = AudereThresholdFactory(
             minimum_intensity_tier=cls.major_tier,

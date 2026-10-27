@@ -70,6 +70,17 @@ class SoulfrayConfig(SharedMemoryModel):
             "is authored; the Required content dashboard flags an unset value."
         ),
     )
+    anima_zero_stage = models.ForeignKey(
+        "arxii.ConditionStage",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "While she has anima left, Soulfray cannot advance into this stage or "
+            "beyond; it needs anima at 0."
+        ),
+    )
 
     class Meta:
         verbose_name = "Soulfray Configuration"
@@ -80,6 +91,37 @@ class SoulfrayConfig(SharedMemoryModel):
             f"SoulfrayConfig(threshold={self.soulfray_threshold_ratio}, "
             f"scale={self.severity_scale})"
         )
+
+    def clean(self) -> None:
+        """The anima-0 stage must be a severity stage of the Soulfray template (#4740)."""
+        super().clean()
+        stage = self.anima_zero_stage
+        if stage is None:
+            return
+        if stage.condition_id != self.condition_id:
+            raise ValidationError(
+                {"anima_zero_stage": "Pick a stage of the Soulfray condition set above."}
+            )
+        if stage.severity_threshold is None:
+            raise ValidationError(
+                {
+                    "anima_zero_stage": (
+                        "This stage has no severity threshold, so severity never reaches "
+                        "it and the anima-0 rule would do nothing."
+                    )
+                }
+            )
+
+    def anima_zero_ceiling(self, current_anima: int) -> int | None:
+        """Highest Soulfray severity reachable with ``current_anima`` left (#4740).
+
+        ``anima_zero_stage.severity_threshold - 1`` while she still has anima; ``None``
+        (no cap) at anima 0, or when no anima-0 stage with a threshold is set.
+        """
+        stage = self.anima_zero_stage
+        if current_anima <= 0 or stage is None or stage.severity_threshold is None:
+            return None
+        return max(stage.severity_threshold - 1, 0)
 
 
 class MishapPoolTier(SharedMemoryModel):

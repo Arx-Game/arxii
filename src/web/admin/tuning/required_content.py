@@ -1142,6 +1142,38 @@ def _probe_check_types_weight_no_magic_skill() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
 
 
+def _probe_intensity_tiers_never_lower_control() -> ProbeResult:
+    """No intensity tier lowers control (#4740, #4727 decision 5).
+
+    Consumer: `world/magic/services/techniques.py` `_get_intensity_tier_control_modifier`,
+    which adds the tier's `control_modifier` to every cast's runtime control. Control is
+    never a penalty for casting harder, so a negative value is an authoring error. The
+    field refuses one in admin; this lists rows written before that rule or past the form.
+    Each row is `tier: value`; the link opens the admin list filtered to those tiers.
+    """
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+    from world.magic.models import IntensityTier  # noqa: PLC0415
+
+    rows = list(
+        IntensityTier.objects.filter(control_modifier__lt=0)
+        .order_by("threshold")
+        .values_list("pk", "name", "control_modifier")
+    )
+    if not rows:
+        return ProbeResult(present=True)
+    missing = tuple(f"{name}: {value}" for _pk, name, value in rows)
+    changelist = admin_changelist_url("IntensityTier")
+    link = None
+    if changelist:
+        link = f"{changelist}?{urlencode({'id__in': ','.join(str(pk) for pk, _n, _v in rows)})}"
+    detail = (
+        f"{len(missing)} intensity tier(s) lower control; set each control modifier to 0 or more."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
 _ULTIMATE_COPY_FIELDS = (
     "reveal_framing_text",
     "deferred_death_text",
@@ -3174,6 +3206,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error, so players believe the offer failed for no reason."
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
+        ),
+        ContentDependency(
+            key="intensity-tiers-never-lower-control",
+            label="Intensity tiers never lower control",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/techniques.py _get_intensity_tier_control_modifier() "
+                "(every cast's runtime control)"
+            ),
+            consequence=(
+                "Casting at that intensity costs the caster control: more anima spent, more "
+                "mishaps, and a later Audere offer, the opposite of what intensity should do."
+            ),
+            probe=CustomProbe(fn=_probe_intensity_tiers_never_lower_control),
+            admin_model="IntensityTier",
         ),
         ContentDependency(
             key="typeclassed-accounts",

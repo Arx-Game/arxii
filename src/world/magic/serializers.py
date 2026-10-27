@@ -2583,6 +2583,7 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
     offer_title = serializers.SerializerMethodField()
     offer_strip_label = serializers.SerializerMethodField()
     offer_body_text = serializers.SerializerMethodField()
+    stages_lowered_by_control = serializers.SerializerMethodField()
 
     class Meta:
         from world.magic.audere import PendingAudereOffer  # noqa: PLC0415
@@ -2601,6 +2602,7 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
             "offer_title",
             "offer_strip_label",
             "offer_body_text",
+            "stages_lowered_by_control",
             "created_at",
         ]
         read_only_fields = fields
@@ -2652,6 +2654,15 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         if threshold is None:
             return ""
         return threshold.offer_body_text.replace("{intensity}", str(obj.fired_intensity))  # type: ignore[attr-defined]
+
+    def get_stages_lowered_by_control(self, obj: object) -> int:
+        """Soulfray stages the cast's control took off the requirement (#4740); 0 if none."""
+        from world.magic.audere import stages_lowered_by_control  # noqa: PLC0415
+
+        threshold = self._threshold()
+        if threshold is None:
+            return 0
+        return stages_lowered_by_control(threshold, obj.fired_control)  # type: ignore[attr-defined]
 
 
 # =============================================================================
