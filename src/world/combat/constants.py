@@ -105,6 +105,18 @@ class SurgeTriggerKind(models.TextChoices):
     BOSS_ENRAGE = "boss_enrage", "Boss Enrage"
     BOSS_BREAK = "boss_break", "Boss Wall Broken"
     GM_MANUAL = "gm_manual", "GM Manual"
+    TAUNT_RECEIVED = "taunt_received", "Taunt Received"
+    RALLIED = "rallied", "Rallied"
+    ALLY_HURT = "ally_hurt", "Ally Hurt"
+
+
+# Surge kinds resolved by a roll with degrees (#4737). Each has one SurgeTuning row
+# and a band per outcome; every other kind is a fixed amount from the EscalationCurve.
+ROLLED_SURGE_TRIGGER_KINDS: tuple[str, ...] = (
+    SurgeTriggerKind.TAUNT_RECEIVED.value,
+    SurgeTriggerKind.RALLIED.value,
+    SurgeTriggerKind.ALLY_HURT.value,
+)
 
 
 class PaceMode(models.TextChoices):

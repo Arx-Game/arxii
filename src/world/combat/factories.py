@@ -33,6 +33,7 @@ from world.combat.constants import (
     SpectacleKind,
     SpectacleReaction,
     StakesLevel,
+    SurgeTriggerKind,
     SustainedKind,
     TargetingMode,
     TargetSelection,
@@ -72,6 +73,8 @@ from world.combat.models import (
     SpectacleRecord,
     StakesLevelRequirement,
     StrainConfig,
+    SurgeDegreeBand,
+    SurgeTuning,
     SustainedAction,
     ThreatPool,
     ThreatPoolEntry,
@@ -1564,6 +1567,31 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
             check_type=check_type, trait=wits, defaults={"weight": Decimal("1.00")}
         )
         return check_type
+
+
+class SurgeTuningFactory(factory_django.DjangoModelFactory):
+    """Factory for SurgeTuning (#4737). Pass ``trigger_kind``; it is unique per row."""
+
+    class Meta:
+        model = SurgeTuning
+
+    trigger_kind = SurgeTriggerKind.TAUNT_RECEIVED
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    potency_base = 0
+    potency_per_depth = 0
+
+
+class SurgeDegreeBandFactory(factory_django.DjangoModelFactory):
+    """Factory for SurgeDegreeBand (#4737)."""
+
+    class Meta:
+        model = SurgeDegreeBand
+
+    tuning = factory.SubFactory(SurgeTuningFactory)
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    intensity = 1
+    control_change = 0
+    condition = None
 
 
 def wire_flee_config():
