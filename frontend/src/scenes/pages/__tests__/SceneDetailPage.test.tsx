@@ -286,6 +286,9 @@ vi.mock('@/magic/queries', () => ({
   useRespondToStageAdvance: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),
   useRespondToEntryFlourish: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  usePendingDriftConversionOffers: () => ({ data: { results: [] } }),
+  useConvertDrift: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useDeclineDriftConversion: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 

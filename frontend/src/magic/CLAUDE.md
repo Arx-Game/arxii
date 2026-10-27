@@ -620,6 +620,44 @@ non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractiona
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 
+### Drift conversion offers (#4733, slice 4 of #4672)
+
+A deed in a live scene opens a conversion offer; the player answers it with the drift
+correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
+
+**Wire contract** (`/api/magic/drift-correction/`, generated types, re-exported in `types.ts`):
+
+- `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
+  Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
+  `{ id, scene_id, caps[] }`; each cap is `{ target_resonance {id, name, affinity},
+cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
+  `{ resonance_id, resonance_name, balance, multiplier (decimal string), conversion_type
+('FALL' | 'REDEMPTION'), max_amount, projected_output }` (`projected_output` is for
+  `max_amount`); a component is `{ item_id, name, mode ('material' | 'facet' | 'keepsake') }`.
+- `convertDrift(body)` - POST `convert/`, body `{ offer_id, source_resonance_id,
+target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
+  (`attempted_amount`, `converted_amount`, `granted_amount`, `outcome_name`,
+  `success_level`, `conversion_type`, `focus_bonus`). A refusal is 400 `{detail}`, thrown by
+  `readErrorDetail` so the dialog shows `error.message`.
+- `declineDriftConversion({ offer_id })` - POST `decline/` -> `{ detail }`.
+
+**Hooks:** `usePendingDriftConversionOffers(enabled?)` (`magicKeys.driftConversionPending()`,
+polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pending key and
+`characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
+
+**Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
+`useAutoOpenOncePerOffer`; shows the first open offer; keeps the result line after an exhausted
+offer leaves the inbox) and `DriftConversionOfferDialog` (Screen 5: one block per cap with the
+cap remaining, source pills, an amount bounded by the chosen source's `max_amount` defaulting to
+it, single-select component pills `<name> · <mode>`, a rate line built from the source's
+`multiplier` with the focus clause only when `focus_bonus > 0`, "Perform the rite" disabled until
+a component is chosen and the amount is valid, and Decline). The yield for a typed amount is
+`max(1, floor(amount * multiplier))`, the server's own rounding.
+
+**Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
+`EntryFlourishOfferGate`) and `GamePage`'s `GameCenter` (when the session has a scene). Tests that
+mock `@/magic/queries` wholesale (`SceneDetailPage.test.tsx`) must add the three drift hooks.
+
 ## Data Flow
 
 - **GET soul-tether detail:** `useSoulTetherDetail(relationshipId)` → `SoulTetherDetail`
