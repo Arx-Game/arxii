@@ -1104,6 +1104,11 @@ Check resolution engine — converts trait values to ranks and rolls against res
   the size ladder by rank through `DistinctionEffectRankSize` (#4660, ADR-4660-A), through `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)` (kept in the
   CHARACTER kind); `SceneCheckModifier.modifier_level`/`modifier_size` authored together,
   valued in `_scene_check_contributions`.
+  The stat lane (#4726, ADR-4726-A): `ModifierLane.STAT` rows value a buff to a stat in stored
+  units and taper its piles; `TraitHandler._get_stat_modifier` totals the stat target's
+  `modifier_target_contributions(sheet, target, lane=...)` (CHARACTER + EQUIPMENT, the builder
+  the check seam shares) and `conditions.services.condition_target_contributions` (CONDITION),
+  so every stat reader sees one buffed number.
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -1182,7 +1187,10 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `condition_modifier_totals_by_sheet(sheet_ids, modifier_target)` (#4090, batched
   `get_condition_modifier_total` across many sheets in two queries regardless of sheet count; a
   pure read, never tears down an expired instance; backs `species.language_services
-  .comprehension_values`)
+  .comprehension_values`),
+  `condition_target_contributions(sheet, modifier_target, *, lane)` (#4726: one CONDITION
+  contribution per matching `ConditionModifierEffect`, a sized instance valued from the lane's
+  table; the stat read's condition source)
 - **Capability magnitude curve (#2708 — `magic.CapabilityPowerConfig`):** staff-tunable
   singleton (`power_per_doubling`, default 10) driving
   `world.magic.services.capability_curve.apply_capability_curve` /

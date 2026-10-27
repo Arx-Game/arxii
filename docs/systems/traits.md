@@ -125,7 +125,7 @@ from world.traits.handlers import TraitHandler
 # Accessed via character typeclass: character.traits
 handler = character.traits
 
-# Get trait value (includes stat modifiers from distinctions)
+# Get trait value (a stat includes its modifiers, valued and tapered in the stat lane)
 value = handler.get_trait_value("strength")
 
 # Get base value without modifiers
@@ -201,3 +201,12 @@ All models registered with appropriate admin interfaces:
 - **Character Creation**: Trait display and stat allocation
 - **Character Sheets**: Trait display via `TraitHandler`
 - **Mechanics app**: Provides stat modifiers consumed by `TraitHandler._get_stat_modifier()`
+- **Stat lane (#4726, ADR-4726-A)**: `_get_stat_modifier` totals the stat target's CHARACTER
+  and EQUIPMENT contributions (`world.checks.services.modifier_target_contributions`) and
+  CONDITION contributions (`world.conditions.services.condition_target_contributions`) as a
+  checks `ModifierBreakdown` tapered by `load_taper_rules(ModifierLane.STAT)`. A sized technique
+  buff or distinction effect on a stat reads the stat lane's `ModifierValue` table; values are
+  in stored units (x10 the shown stat). Every reader of `get_trait_value` sees this one number.
+  The table and taper rows load only when needed, so a read with nothing sized and no pile of
+  one kind adds no query (the #552 fatigue hot path). See `docs/systems/checks.md`, "The stat
+  lane".
