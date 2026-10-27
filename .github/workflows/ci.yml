@@ -172,8 +172,7 @@ jobs:
               world.societies world.npc_services world.character_sheets
               world.distinctions world.skills evennia_extensions typeclasses
               world.instances world.realms
-          # shard-2 (~344s): world.magic half 2 (~208s) + integration_tests (51)
-          #   + world.mechanics (33) + world.room_features (17) + world.travel (12)
+          # shard-2: world.magic half 2 + world.mechanics + world.room_features + world.travel
           #   + world.classes (8) + world.weather (6) + world.projects (5)
           #   + world.boundaries (3)
           - name: shard-2
@@ -181,7 +180,7 @@ jobs:
             split_part: 2
             split_of: 2
             apps: >-
-              integration_tests world.mechanics world.room_features world.travel
+              world.mechanics world.room_features world.travel
               world.classes world.weather world.projects world.boundaries
           # shard-3: world.combat half 1 + world.items + world.gm
           #   + world.fatigue (10) + world.assets (7) + world.action_points (5)
@@ -261,7 +260,9 @@ jobs:
               commands world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
-          # shard-9: the second half of world.stories + world.seeds.
+          # shard-9: the second half of world.stories + world.seeds and integration tests.
+          # Integration tests moved from shard-2: its measured runtime had grown
+          # far beyond the old 51-second estimate, while shard-9 had headroom.
           # split_test_labels.py keeps the story halves complete and disjoint as
           # test modules change. world.seeds moved here from shard-3
           # (2026-10-03, #4139): its seeder tests take 13-26s each, and with
@@ -271,7 +272,7 @@ jobs:
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: world.seeds world.standoffs
+            apps: world.seeds world.standoffs integration_tests
           # shard-10: web and character_creation. Their old estimate was small,
           # but both suites are now large enough to keep off the story shards.
           # world.checks moved here from shard-3 (2026-10-03, #4139): its
