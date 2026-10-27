@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import F
 
 from world.magic.constants import DEED_GAIN_SOURCES
 from world.magic.exceptions import ConversionMappingError
@@ -115,13 +114,14 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
         cap, _ = DriftConversionCap.objects.get_or_create(
             offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
         )
+        # Lock the offer row so concurrent grants for it serialize. A filter, not get():
+        # the identity map would answer get() without touching the database or the lock.
+        list(DriftConversionOffer.objects.select_for_update().filter(pk=offer.pk))
         if cap.grants.filter(pk=grant.pk).exists():
             return offer
         percent = get_drift_correction_config().cap_percent
-        cap.cap = F("cap") + max(1, grant.amount * percent // 100)
+        cap.cap += max(1, grant.amount * percent // 100)
         cap.save(update_fields=["cap"])
-        # The identity-mapped instance still holds the expression; read the stored value back.
-        cap.cap = DriftConversionCap.objects.values_list("cap", flat=True).get(pk=cap.pk)
         cap.grants.add(grant)
     return offer
 

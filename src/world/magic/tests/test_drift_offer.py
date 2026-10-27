@@ -107,6 +107,7 @@ class OpenOfferTests(DriftOfferTestBase):
         self.assertEqual(DriftConversionOffer.objects.count(), 1)
         cap = DriftConversionCap.objects.get()
         self.assertEqual(cap.cap, 20)
+        self.assertIsInstance(cap.cap, int)
         self.assertEqual(cap.grants.count(), 2)
 
     def test_other_own_affinity_resonance_adds_a_cap_not_an_offer(self) -> None:
@@ -240,6 +241,8 @@ class LapseTests(DriftOfferTestBase):
         cap = DriftConversionCap.objects.get()
         self.assertEqual(cap.cap, 10)
         self.assertEqual(cap.grants.count(), 1)
+        # The identity-mapped instance holds a plain int, not a pending expression.
+        self.assertIsInstance(cap.cap, int)
 
     def test_lapse_conversion_offers_deletes_scene_offers(self) -> None:
         self.deed()
