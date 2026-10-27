@@ -126,7 +126,7 @@ def _grant_free_steels(rallier: CombatParticipant, ally: CombatParticipant) -> N
     engagement = combat_engagement_of(ally)
     if count <= 0 or engagement is None:
         return
-    grant_free_steels(engagement, count)
+    grant_free_steels(engagement, count, rallier.character_sheet)
     noun = "a free steel" if count == 1 else f"{count} free steels"
     ally.character_sheet.character.msg(
         f"{persona_name_of(rallier)}'s encouragement gives you {noun}."

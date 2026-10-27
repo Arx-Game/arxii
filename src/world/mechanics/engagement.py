@@ -74,6 +74,14 @@ class CharacterEngagement(SharedMemoryModel):
             "an ally's successful Rally. Spent one per steel; ends with the engagement."
         ),
     )
+    free_steels_given_by = models.ForeignKey(
+        "arxii.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The ally whose encouragement most recently granted free steels.",
+    )
     last_steeled_round = models.PositiveIntegerField(
         null=True,
         blank=True,

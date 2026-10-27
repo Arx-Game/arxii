@@ -322,7 +322,7 @@ class ContextConsequencePoolAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterEngagement)
 class CharacterEngagementAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character"]
+    autocomplete_fields = ["character", "free_steels_given_by"]
     list_display = ("character", "engagement_type", "escalation_level", "started_at")
     list_filter = ("engagement_type",)
     readonly_fields = ("started_at",)

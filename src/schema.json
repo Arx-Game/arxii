@@ -92497,10 +92497,16 @@ components:
         fatigue_cost:
           type: integer
           description: Fatigue a steel costs without a free one.
+        given_by:
+          type: string
+          nullable: true
+          description: Name of the ally whose encouragement gave her free steels,
+            if any.
       required:
       - fatigue_category
       - fatigue_cost
       - free_steels
+      - given_by
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.

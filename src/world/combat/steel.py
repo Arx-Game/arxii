@@ -34,6 +34,7 @@ from world.mechanics.engagement import CharacterEngagement
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatParticipant
 
 NOT_IN_A_FIGHT_MESSAGE = "You are not in a fight you can steel yourself in."
@@ -65,12 +66,13 @@ def steel_config() -> StrainConfig:
     return StrainConfig.objects.filter(pk=1).first() or StrainConfig()
 
 
-def grant_free_steels(engagement: CharacterEngagement, count: int) -> None:
-    """Add ``count`` free steels to ``engagement`` (the identity-mapped row, saved narrowly)."""
+def grant_free_steels(engagement: CharacterEngagement, count: int, giver: CharacterSheet) -> None:
+    """Add ``count`` free steels credited to ``giver`` (the identity-mapped row, saved narrowly)."""
     if count <= 0:
         return
     engagement.free_steels += count
-    engagement.save(update_fields=["free_steels"])
+    engagement.free_steels_given_by = giver
+    engagement.save(update_fields=["free_steels", "free_steels_given_by"])
 
 
 def _spend_free_steel(engagement: CharacterEngagement) -> bool:
@@ -78,7 +80,11 @@ def _spend_free_steel(engagement: CharacterEngagement) -> bool:
     if engagement.free_steels <= 0:
         return False
     engagement.free_steels -= 1
-    engagement.save(update_fields=["free_steels"])
+    fields = ["free_steels"]
+    if engagement.free_steels == 0:
+        engagement.free_steels_given_by = None
+        fields.append("free_steels_given_by")
+    engagement.save(update_fields=fields)
     return True
 
 
@@ -130,7 +136,11 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
         raise SteelRefusedError(ALREADY_STEELED_MESSAGE)
 
     config = steel_config()
-    held = (engagement.free_steels, engagement.last_steeled_round)
+    held = (
+        engagement.free_steels,
+        engagement.free_steels_given_by,
+        engagement.last_steeled_round,
+    )
     committed = False
     try:
         with transaction.atomic():
@@ -159,7 +169,11 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
     finally:
         if not committed:
             # The database rolled back; the identity-mapped row must say the same.
-            engagement.free_steels, engagement.last_steeled_round = held
+            (
+                engagement.free_steels,
+                engagement.free_steels_given_by,
+                engagement.last_steeled_round,
+            ) = held
     return SteelResult(
         outcome=result.outcome,
         surge_amount=beat.amount if beat is not None else 0,

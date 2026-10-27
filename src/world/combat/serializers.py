@@ -455,6 +455,10 @@ class SteelOfferSerializer(serializers.Serializer):
     free_steels = serializers.IntegerField(help_text="Free steels she holds.")
     fatigue_category = serializers.CharField(help_text="Fatigue pool a steel is paid from.")
     fatigue_cost = serializers.IntegerField(help_text="Fatigue a steel costs without a free one.")
+    given_by = serializers.CharField(
+        allow_null=True,
+        help_text="Name of the ally whose encouragement gave her free steels, if any.",
+    )
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -526,7 +530,20 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "free_steels": engagement.free_steels if engagement is not None else 0,
             "fatigue_category": config.steel_fatigue_category,
             "fatigue_cost": config.steel_fatigue_cost,
+            "given_by": self._steel_giver_name(engagement),
         }
+
+    @staticmethod
+    def _steel_giver_name(engagement: CharacterEngagement | None) -> str | None:
+        """The name others know the free steels' giver by, or None."""
+        if engagement is None or engagement.free_steels <= 0:
+            return None
+        giver_id = engagement.free_steels_given_by_id
+        if giver_id is None:
+            return None
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        return persona_names_for_sheets([giver_id]).get(giver_id)
 
     @extend_schema_field(SquareSerializer(allow_null=True))
     def get_current_square(self, obj: CombatParticipant) -> dict[str, int] | None:

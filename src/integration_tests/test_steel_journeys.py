@@ -134,7 +134,12 @@ class SteelingYourself(_SteelField):
         seats = {p["id"]: p for p in response.json()["participants"]}
         self.assertEqual(
             seats[self.mira_seat.pk]["steel"],
-            {"free_steels": 0, "fatigue_category": "mental", "fatigue_cost": FATIGUE_COST},
+            {
+                "free_steels": 0,
+                "fatigue_category": "mental",
+                "fatigue_cost": FATIGUE_COST,
+                "given_by": None,
+            },
         )
         self.assertIsNone(seats[self.tomas_seat.pk]["steel"])
 
@@ -196,6 +201,27 @@ class BeingEncouraged(_SteelField):
         self.assertIn("Cost: a free steel.", told)
         self.assertEqual(self.free_steels(self.mira), 0)
         self.assertEqual(self.mental_fatigue(), 0)
+
+    def _mira_s_offer(self, viewer) -> dict | None:
+        body = self.api(self.account_of(viewer)).get(f"/api/combat/{self.encounter.pk}/").json()
+        return {p["id"]: p for p in body["participants"]}[self.mira_seat.pk]["steel"]
+
+    def test_the_payload_credits_the_rallier_until_the_last_free_steel_is_spent(self) -> None:
+        self.telnet(self.tomas, "combat rally Mira")
+        self.resolve(self.success)
+
+        offer = self._mira_s_offer(self.mira)
+        self.assertEqual((offer["free_steels"], offer["given_by"]), (1, "Tomas"))
+        self.assertIsNone(self._mira_s_offer(self.tomas))
+
+        self.close_round()
+        self.steel(self.success)
+
+        offer = self._mira_s_offer(self.mira)
+        self.assertEqual((offer["free_steels"], offer["given_by"]), (0, None))
+        self.assertIsNone(
+            CharacterEngagement.objects.get(character=self.mira.sheet_data).free_steels_given_by
+        )
 
     def test_the_free_steel_is_spent_once_then_fatigue_returns(self) -> None:
         self.telnet(self.tomas, "combat rally Mira")
