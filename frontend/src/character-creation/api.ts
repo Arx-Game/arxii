@@ -431,11 +431,14 @@ export async function getResonances(): Promise<Resonance[]> {
 }
 
 export async function getGifts(): Promise<GiftListItem[]> {
-  const res = await apiFetch(`${MAGIC_URL}/gifts/`);
+  // GiftViewSet is paginated (#4669): the body is {count, next, previous, results}.
+  // Gift catalog is small; one page of 100 covers it, as getWorshippedBeings does.
+  const res = await apiFetch(`${MAGIC_URL}/gifts/?page_size=100`);
   if (!res.ok) {
     throw new Error('Failed to load gifts');
   }
-  return res.json();
+  const data = await res.json();
+  return data.results;
 }
 
 export async function getGift(giftId: number): Promise<GiftDetail> {
