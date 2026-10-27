@@ -141,6 +141,7 @@ def resolve_pending_interpose_harm(scene_round: SceneRound) -> None:
     from flows.events.payloads import DamagePreApplyPayload, DamageSource  # noqa: PLC0415
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.combat.services import dispatch_interpose  # noqa: PLC0415
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
     from world.mechanics.effect_handlers import apply_resolved_damage  # noqa: PLC0415
     from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
     from world.scenes.constants import SceneRoundParticipantStatus  # noqa: PLC0415
@@ -177,7 +178,8 @@ def resolve_pending_interpose_harm(scene_round: SceneRound) -> None:
                 pre_payload = DamagePreApplyPayload(
                     target=target_character,
                     amount=amount,
-                    damage_type=pending.damage_type,
+                    # Untyped harm is Physical (#4742), as on the combat pre-apply path.
+                    damage_type=resolved_damage_type(pending.damage_type),
                     source=DamageSource(type="environment", ref=pending.source_description or None),
                 )
                 dispatch_interpose(interposer, target_character, pre_payload, approach=None)

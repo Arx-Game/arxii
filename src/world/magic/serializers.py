@@ -2690,6 +2690,7 @@ class UltimateRevealGroupSerializer(serializers.Serializer):
     gift_name = serializers.SerializerMethodField()
     being_name = serializers.SerializerMethodField()
     companion_name = serializers.SerializerMethodField()
+    alternate_self_name = serializers.SerializerMethodField()
     cards = UltimateRevealCardSerializer(many=True)
 
     def get_path_name(self, group) -> str:
@@ -2703,6 +2704,9 @@ class UltimateRevealGroupSerializer(serializers.Serializer):
 
     def get_companion_name(self, group) -> str:
         return group.companion.name if group.companion is not None else ""
+
+    def get_alternate_self_name(self, group) -> str:
+        return group.alternate_self.shown_name if group.alternate_self is not None else ""
 
 
 class UltimateRevealSerializer(serializers.Serializer):

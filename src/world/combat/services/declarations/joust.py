@@ -169,6 +169,14 @@ def _resolve_joust_pass(
 
     weapon = effective_weapon_profile(winner.character_sheet.character)
     base_damage = weapon.damage if weapon is not None else 0
+    from world.conditions.services import scaled_outgoing_damage  # noqa: PLC0415
+
+    # The winner's own damage-dealt rows (#4742), for the weapon's type (untyped = Physical).
+    base_damage = scaled_outgoing_damage(
+        winner.character_sheet.character,
+        base_damage,
+        weapon.damage_type if weapon is not None else None,
+    )
 
     loser_mirror = CombatOpponent.objects.filter(
         encounter=participant.encounter, mirrors_participant=loser

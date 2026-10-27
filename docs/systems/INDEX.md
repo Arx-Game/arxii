@@ -95,6 +95,14 @@
   crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
 
+- **Acting aura and Audere alternate self (#4731):** `acting_aura(sheet)`
+  (`world/magic/services/acting_aura.py`) is the aura she acts with (alternate self's
+  resonance, else true `CharacterAura`); `AlternateSelf.ultimate_techniques` / `revert_kind` /
+  `emergence_condition` and `ActiveAlternateSelf.assumed_at_audere` with
+  `assume_alternate_self_for_audere` / `revert_audere_alternate_self(s)`
+  (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
+  commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
+  work in the worn self's affinity. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
@@ -753,12 +761,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `docs/systems/progression.md`'s "Path and Technique Requirements" section;
   `docs/adr/adr-4097-threads-carry-through-technique-prerequisites.md`.
 - **Ultimates (#4098):** `Technique.is_ultimate` flags a technique as a Path x
-  major-Gift / patron / companion / minor-gift ultimate, discovered through `KnownUltimate`
+  major-Gift / patron / companion / alternate-self / minor-gift ultimate, discovered through `KnownUltimate`
   (`character`, `technique`, nullable `crossing`, `readied` - constrained to one row
   per `(character, technique)` and at most one `readied=True` row per character),
   never a `CharacterTechnique`. Attachment M2Ms: `PathGiftGrant.ultimate_techniques`,
   `WorshippedBeing.ultimate_techniques` (`world.worship`), `CompanionArchetype
-  .ultimate_techniques` (`world.companions`), and (#4118) `Gift.ultimate_techniques`
+  .ultimate_techniques` (`world.companions`), (#4731) `AlternateSelf.ultimate_techniques`
+  (`world.forms`, revealed as `UltimateSource.ALTERNATE_SELF` through
+  `_alternate_self_pools`), and (#4118) `Gift.ultimate_techniques`
   (minor gifts only, revealed as `UltimateSource.GIFT` through `_gift_pools`). Services
   (`world.magic.services.ultimates`): `ultimate_reveal_for(sheet)` (derives
   the reveal on read - owned/owned-known/bond pools, grouped by category, filtered by
@@ -1183,12 +1193,13 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
   such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
-  `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
+  `grants_intangibility` bool — marks incorporeal categories; `is_intangible` queries this for held ground only, #4742),
   `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
-  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
+  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageDealtModifier`
+  (the bearer's outgoing damage of one type, as a percent, #4742), `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`
   (`mend_on_crit`/`mend_on_success`/`mend_on_partial` PositiveSmallInt, default 0 — HP mend
   amounts routed through `world.vitals.services.mend_wound()`, #2644; `once_per_wound_per_helper`
@@ -8477,10 +8488,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `ParticipantSerializer._combat_engagement`, #3573) for the character's live COMBAT
     `CharacterEngagement`, falling back to lethal when None. See ADR-0255 (amends
     ADR-0118).
-  - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
-    True when the target has an active `ConditionInstance` whose
-    `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
-    filter sites to honour the intangibility gate.
+  - `is_intangible(target: ObjectDB) -> bool` (`world/conditions/services.py`, was
+    `is_untargetable`) — returns True when the target has an active `ConditionInstance`
+    whose `ConditionCategory.grants_intangibility` is True. Read by held ground
+    (`encounter_holds`): an incorporeal PC blocks nobody. Since #4742 it no longer gates
+    NPC or area targeting; incorporeal protection is severity-scaled Physical resistance.
 - **Cast-position targeting (#2206):** runtime destination selection for the
   position-consuming effect-palette techniques (Barricade/obstacle, Phase Jump/teleport,
   Force Grip/telekinesis — previously placeholder `destination_position_id=0` at seed
@@ -8533,7 +8545,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
 - **Condition fields added for effect palette (#1584):**
   - `ConditionCategory.grants_intangibility` (bool) — marks intangibility categories
-    (Ghostform, Earthmeld); the `is_untargetable` gate reads this.
+    (Ghostform, Earthmeld); `is_intangible` reads this for held ground (#4742).
   - `ConditionTemplate.upkeep_anima_per_round` (int) — anima drained per round from the
     bearer when they hold this reactive condition (0 = no upkeep).
   - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
@@ -9254,7 +9266,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
-  `is_untargetable` for intangibility gate; `ConditionCategory.grants_intangibility`),
+  `is_intangible` for held ground; `ConditionCategory.grants_intangibility`),
   mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
   flows (`DAMAGE_PRE_APPLY` event; `COMBAT_ROUND_STARTING` event; `MODIFY_PAYLOAD` flow
   action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),

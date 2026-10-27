@@ -97714,11 +97714,15 @@ components:
         companion_name:
           type: string
           readOnly: true
+        alternate_self_name:
+          type: string
+          readOnly: true
         cards:
           type: array
           items:
             $ref: '#/components/schemas/UltimateRevealCard'
       required:
+      - alternate_self_name
       - being_name
       - cards
       - companion_name

@@ -3056,6 +3056,12 @@
   - other_condition -> conditions.ConditionTemplate [FK]
   - result_condition -> conditions.ConditionTemplate [FK] (nullable)
 
+### ConditionDamageDealtModifier
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - damage_type -> conditions.DamageType [FK]
+
 ### ConditionDamageInteraction
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -3121,6 +3127,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
   - auderethreshold_set <- magic.AudereThreshold
@@ -3160,6 +3167,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - damage_interactions <- conditions.ConditionDamageInteraction
   - applied_by_damage_interaction <- conditions.ConditionDamageInteraction
@@ -3189,6 +3197,7 @@
   - companion_abilities <- companions.CompanionAbility
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - species_gift_benefits <- species.SpeciesGiftGrant
+  - alternate_self_emergences <- forms.AlternateSelf
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
@@ -3209,6 +3218,7 @@
   - rampart_resistances <- areas.RampartElementResistance
   - consequence_effects <- checks.ConsequenceEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
+  - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
@@ -3313,8 +3323,8 @@
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
+- `is_intangible(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `is_magical_treatment(treatment: world.conditions.models.TreatmentTemplate, *, technique_driven: bool = False) -> bool - Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).`
-- `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
@@ -3335,9 +3345,12 @@
 - `remove_condition_by_name(*, payload: object, condition_name: str) -> bool - Remove a named condition from the character carried by the payload.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] - Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None', *, resistance_shift: int = 0) -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
+- `resolved_damage_type(damage_type: 'DamageType | None') -> 'DamageType | None' - The damage type a hit really is: untyped damage is Physical (#4742).`
 - `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
 - `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `scaled_damage_dealt_percent(modifier: 'ConditionDamageDealtModifier', instance: world.conditions.models.ConditionInstance) -> int - One ConditionDamageDealtModifier's percent on one active instance (#4742).`
+- `scaled_outgoing_damage(attacker: 'ObjectDB | None', amount: int, damage_type: 'DamageType | None') -> int - *amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).`
 - `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
@@ -4188,7 +4201,9 @@
   - combat_profile -> forms.FormCombatProfile [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - emergence_condition -> conditions.ConditionTemplate [FK] (nullable)
   - techniques -> magic.Technique [M2M]
+  - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - active_for <- forms.ActiveAlternateSelf
 
@@ -4324,6 +4339,7 @@
 ### Service Functions
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
+- `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
@@ -4340,6 +4356,8 @@
 - `remove_disguise(character: 'Any') -> 'None' - Drop the active fake overlay — the real form presents again (#1110). Idempotent.`
 - `reset_trait_to_natural(character: 'Any', trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' - Restore one trait to its natural (origin) value — "wash out the dye.`
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' - Revert the active alternate self — restore return anchors, delete the`
+- `revert_audere_alternate_self(sheet: 'CharacterSheet') -> 'bool' - Revert the self she took on through the Audere reveal, when Audere ends (#4731).`
+- `revert_audere_alternate_selves(sheet_ids: 'list[int]') -> 'None' - Revert every Audere-assumed AUTOMATIC self worn among ``sheet_ids``, in one query.`
 - `revert_to_true_form(character: 'Any') -> 'None' - Revert a character to their true form.`
 - `switch_form(character: 'Any', target_form: 'CharacterForm') -> 'None' - Switch a character to a different form.`
 
@@ -6483,6 +6501,7 @@
   - ultimate_for_companion_archetypes <- companions.CompanionArchetype
   - companion_abilities <- companions.CompanionAbility
   - alternate_self_grants <- forms.AlternateSelf
+  - ultimate_for_alternate_selves <- forms.AlternateSelf
   - gm_prompts <- gm.GMPrompt
   - train_offers <- npc_services.TrainOfferDetails
   - scene_action_requests <- scenes.SceneActionRequest
@@ -11224,6 +11243,7 @@
   - knockout_pool -> actions.ConsequencePool [FK] (nullable)
   - default_wound_pool -> actions.ConsequencePool [FK] (nullable)
   - default_death_pool -> actions.ConsequencePool [FK] (nullable)
+  - physical_damage_type -> conditions.DamageType [FK] (nullable)
 
 ### WoundDetails
 **Foreign Keys:**

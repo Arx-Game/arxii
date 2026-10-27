@@ -27,6 +27,7 @@ const OPEN: AudereUltimateState = {
         gift_name: 'Fire',
         being_name: '',
         companion_name: '',
+        alternate_self_name: '',
         cards: [
           {
             choice_key: 'known:4',
@@ -157,6 +158,31 @@ describe('UltimateRevealGate', () => {
     expect(screen.getByTestId('ultimate-ready-strip')).toHaveTextContent(
       'Ultimate ready: Cinder Crown'
     );
+  });
+
+  it('heads an alternate self group with the self as a bond (#4731)', async () => {
+    vi.mocked(api.getAudereUltimates).mockResolvedValue({
+      ...OPEN,
+      reveal: {
+        ...OPEN.reveal!,
+        groups: [
+          {
+            ...OPEN.reveal!.groups[0],
+            source: 'alternate_self',
+            path_name: '',
+            gift_name: '',
+            alternate_self_name: 'The Ashen Ysmay',
+          },
+        ],
+      },
+    });
+    render(
+      <UltimateRevealGate characterSheetId={3} characterId={3} encounterId={1} isCeremonyActive />,
+      {
+        wrapper,
+      }
+    );
+    expect(await screen.findByText('Bond · The Ashen Ysmay (alternate self)')).toBeInTheDocument();
   });
 
   it('uses Majora chrome for a Crossing reveal', async () => {

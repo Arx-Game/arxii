@@ -1667,7 +1667,7 @@ def _probe_feature_distinctions() -> ProbeResult:
 
     Consumer: the Appearance stage's distinctive-feature path. Without the opener
     nothing can be made distinctive; without an axis row the Alluring / Menacing /
-    Regal purchases on a feature do not exist. The seed only invents these under
+    Majestic purchases on a feature do not exist. The seed only invents these under
     SEED_SAMPLE_CONTENT, so a production database has to author them.
     """
     from world.distinctions.models import Distinction  # noqa: PLC0415
@@ -3260,7 +3260,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="AppearanceStage distinctive features (#3739, #3756)",
             consequence=(
-                "Nothing can be made distinctive and Alluring, Menacing and Regal cannot "
+                "Nothing can be made distinctive and Alluring, Menacing and Majestic cannot "
                 "be bought on a feature; the seed only invents these rows under "
                 "SEED_SAMPLE_CONTENT."
             ),

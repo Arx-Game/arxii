@@ -8,7 +8,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0309_condition_instance_modifier_vow_step"),
+        ("arxii", "0313_set_physical_damage_type"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

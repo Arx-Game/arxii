@@ -199,6 +199,17 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
   `CharacterForm` FK; surfaced as a safe failure by the actions.
 
+- `AlternateSelf.ultimate_techniques` / `revert_kind` / `emergence_condition` (#4731): an
+  alternate self with ultimates is a bond source in the Audere reveal.
+  `assume_alternate_self_for_audere(sheet, alt)` runs on the commit of the reveal choice
+  (`choose_ultimate` registers it with `transaction.on_commit`), swaps out a different worn
+  self or tells her why it cannot, and marks `ActiveAlternateSelf.assumed_at_audere`
+  (`assume_alternate_self` and `revert_alternate_self` reset it). `revert_audere_alternate_self(sheet)`
+  is called by `end_audere` and `revert_audere_alternate_selves(sheet_ids)` by
+  `cleanup_completed_encounter`; both revert only a marked AUTOMATIC self.
+  `AlternateSelf.shown_name` is the player-facing name (display name, else persona name,
+  else "an alternate self"). See `docs/systems/magic.md` "Audere alternate self".
+
 ### Alternate-self actions
 
 Both verbs are thin REGISTRY actions in `actions/definitions/forms.py` so telnet
@@ -358,7 +369,7 @@ other:
 2. **Opens its description.** `PersonaTraitDescriptor` is written at finalize
    only for a trait the draft made distinctive; a marking's own name and
    description were always free and are unaffected.
-3. **Opens the presence axes.** Alluring, Menacing and Regal
+3. **Opens the presence axes.** Alluring, Menacing and Majestic
    (`requires_feature_opened`) may then be bought on that feature, in any
    combination, at up to `cg_max_rank` tiers in character creation.
 

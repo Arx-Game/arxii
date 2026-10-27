@@ -95,8 +95,17 @@ SUMMONING_CONDITION_NAME: str = "Summoning"  # active CONDITION_APPLIED summon t
 # ensure_sink_content / ensure_telekinesis_content in world.magic.effect_palette_content.
 TELEPORT_CONDITION_NAME: str = "Phase Jump"  # CONDITION_APPLIED → move_position (SELF)
 OBSTACLE_CONDITION_NAME: str = "Barricade"  # CONDITION_APPLIED → create_obstacle (SELF)
-INCORPOREAL_CONDITION_NAME: str = "Ghostform"  # intangibility gate only; no handler
-SINK_CONDITION_NAME: str = "Earthmeld"  # intangibility gate, 1-round duration; no handler
+INCORPOREAL_CONDITION_NAME: str = "Ghostform"  # intangibility (no ground); no handler
+SINK_CONDITION_NAME: str = "Earthmeld"  # intangibility, 1-round duration; no handler
+
+# Seed-only values for the incorporeal bundles above (#4742): staff retune them on the
+# condition's rows. Physical resistance per severity point, and the bearer's percent
+# change to its own Physical damage. PHYSICAL_DAMAGE_TYPE_NAME locates the authored row
+# for seeders and the one data migration only; runtime code reads
+# VitalsConsequenceConfig.physical_damage_type, never this name.
+PHYSICAL_DAMAGE_TYPE_NAME: str = "Physical"
+INCORPOREAL_PHYSICAL_RESISTANCE_PER_SEVERITY: int = 10
+INCORPOREAL_PHYSICAL_DAMAGE_DEALT_PERCENT: int = -75
 TELEKINESIS_CONDITION_NAME: str = "Force Grip"  # CONDITION_APPLIED → move_position (ENEMY)
 
 # Poison content identity keys (#1050). The DamageType, the staged acute

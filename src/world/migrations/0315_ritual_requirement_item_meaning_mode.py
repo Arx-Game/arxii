@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0310_driftconversioncap_driftconversionoffer_and_more")]
+    dependencies = [("arxii", "0314_driftconversioncap_driftconversionoffer_and_more")]
 
     operations = [
         migrations.AddConstraint(

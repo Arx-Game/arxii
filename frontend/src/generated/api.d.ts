@@ -54219,6 +54219,7 @@ export interface components {
       readonly gift_name: string;
       readonly being_name: string;
       readonly companion_name: string;
+      readonly alternate_self_name: string;
       cards: components['schemas']['UltimateRevealCard'][];
     };
     /** @description One visible union in a family tree payload. */

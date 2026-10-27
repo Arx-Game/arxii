@@ -785,6 +785,7 @@ class UltimateSource(models.TextChoices):
     PATRON = "patron", "Patron"
     COMPANION = "companion", "Companion"
     GIFT = "gift", "Gift"
+    ALTERNATE_SELF = "alternate_self", "Alternate self"
 
 
 class UltimateCardKind(models.TextChoices):

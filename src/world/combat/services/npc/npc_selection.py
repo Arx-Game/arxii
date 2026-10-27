@@ -320,7 +320,7 @@ def _provoking_participant_ids(
     """Map each provoked opponent to the participant that provoked it (#4584).
 
     One query for every opponent. The condition's source is mapped through
-    ``active_participants``, so a source that is down, untargetable, out of the fight or
+    ``active_participants``, so a source that is down, out of the fight or
     not a player character is simply absent, and the opponent chooses as it normally would.
     """
     from world.conditions.services import provoking_source_by_target  # noqa: PLC0415
