@@ -23,6 +23,8 @@ from world.combat.escalation import apply_dramatic_surge
 from world.combat.models import SurgeDegreeBand, SurgeTuning
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -91,7 +93,19 @@ def band_for_outcome(
     """
     if outcome is None:
         return None
-    bands = list(tuning.bands.select_related("outcome", "condition"))
+    return pick_band(list(tuning.bands.select_related("outcome", "condition")), outcome)
+
+
+def pick_band(
+    bands: Sequence[SurgeDegreeBand],
+    outcome: CheckOutcome,
+) -> SurgeDegreeBand | None:
+    """The band in ``bands`` for ``outcome``, or the nearest worse one (#4737).
+
+    ``bands`` must carry their ``outcome`` loaded. The pure half of ``band_for_outcome``,
+    so a reader holding a tuning's prefetched bands (the round payload) picks without a
+    query per record.
+    """
     if not bands:
         return None
     for band in bands:
@@ -104,7 +118,7 @@ def band_for_outcome(
     return min(bands, key=lambda band: band.outcome.success_level)
 
 
-def _roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
+def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     *,
     check_type: CheckType,
     trigger_kind: str,
@@ -115,7 +129,11 @@ def _roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     condition_name: str,
 ) -> str:
     """The system line the surged player sees, for example
-    ``Composure check vs taunt potency 14. Partial. Intensity +5, control 0.``"""
+    ``Composure check vs taunt potency 14. Partial. Intensity +5, control 0.``
+
+    The surged player's character is sent it live; the round payload rebuilds it from the
+    stored record for the same viewers (#4737).
+    """
     against = f" vs {POTENCY_LABELS[trigger_kind]} {potency}" if potency is not None else ""
     control = f"{control_change:+d}" if control_change else "0"
     line = (
@@ -201,7 +219,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             if applied.success and applied.instance is not None:
                 condition_name = band.condition.name
     character.msg(
-        _roll_line(
+        roll_line(
             check_type=tuning.check_type,
             trigger_kind=trigger_kind,
             potency=potency,
