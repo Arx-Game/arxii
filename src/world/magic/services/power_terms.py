@@ -143,7 +143,10 @@ def _apply_standing_cap(standing: int, current_level: int) -> int:
 
 def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
     """Affinity-alignment contribution: the acting aura's % per distinct affinity."""
-    from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
+    from world.magic.services.acting_aura import (  # noqa: PLC0415
+        acting_aura,
+        working_affinities,
+    )
 
     if not config.affinity_alignment_bonus:
         return 0
@@ -151,8 +154,7 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     if aura is None:
         return 0
     alignment = 0
-    affinities = {r.affinity for r in resonances}
-    for affinity in affinities:
+    for affinity in working_affinities(ctx.sheet, resonances):
         pct = aura.percent_for(affinity)
         alignment += int(pct / 100 * config.affinity_alignment_bonus)
     return alignment
@@ -178,8 +180,9 @@ def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: l
 def aura_power_term(ctx: PowerTermContext) -> int:
     """Aura contribution to power: affinity-alignment + resonance standing (#768).
 
-    Affinity axis: caster's CharacterAura % in each distinct affinity of the
-    technique's resonances, proportional to ``affinity_alignment_bonus``.
+    Affinity axis: the caster's acting aura % in each working affinity of the cast
+    (the gift's resonances, or the worn alternate self's resonance, #4731),
+    proportional to ``affinity_alignment_bonus``.
     Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
     in those resonances x ``resonance_standing_bonus``, then capped per character
     level by the applicable ``StandingCapBand`` (HARD clamp / SOFT diminish; #853).

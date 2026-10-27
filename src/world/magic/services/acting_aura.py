@@ -16,7 +16,10 @@ from world.magic.specialization.services import active_alt_self_resonance
 from world.magic.types.aura import ActingAura
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Affinity, Resonance
 
 
 def acting_aura(sheet: CharacterSheet) -> ActingAura | None:
@@ -34,3 +37,31 @@ def acting_aura(sheet: CharacterSheet) -> ActingAura | None:
     if true_aura is None and alternate_affinity is None:
         return None
     return ActingAura(true_aura=true_aura, alternate_affinity=alternate_affinity)
+
+
+def working_affinities(
+    sheet: CharacterSheet | None, resonances: Iterable[Resonance]
+) -> list[Affinity]:
+    """The distinct affinities a cast works in, in the order the resonances give them.
+
+    ``resonances`` are the gift's resonances for this character
+    (``gift_resonances_for``). While an alternate self with a resonance is worn, that
+    resonance replaces them, as it does in variant resolution
+    (``_effective_variant_resonance``), so her own techniques work in the affinity she
+    acts with (#4731). Read by the aura-alignment power term and the cast-time
+    resonance of place. Empty when the gift has no resonance for her.
+    """
+    resonances = list(resonances)
+    if not resonances:
+        return []
+    if sheet is not None:
+        alternate = active_alt_self_resonance(sheet)
+        if alternate is not None:
+            return [alternate.affinity]
+    seen: set[int] = set()
+    result: list[Affinity] = []
+    for resonance in resonances:
+        if resonance.affinity_id not in seen:
+            seen.add(resonance.affinity_id)
+            result.append(resonance.affinity)
+    return result

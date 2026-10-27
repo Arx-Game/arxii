@@ -31,7 +31,7 @@ from world.magic.models import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterAura
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
-from world.magic.services.acting_aura import acting_aura
+from world.magic.services.acting_aura import acting_aura, working_affinities
 from world.magic.services.magic_skills import activity_skill_terms
 from world.magic.types.aura import ActingAura
 
@@ -301,21 +301,16 @@ def _working_affinities_for_raw(
 ) -> list[Affinity]:
     """Return the ordered list of working affinities for the enriched raw sum.
 
-    Cast-time: all distinct affinities from the character's GIFT-thread resonance,
-    preserving encounter order (the caller's loop is deterministic).
+    Cast-time: the cast's working affinities (``working_affinities``: the distinct
+    affinities of the character's GIFT-thread resonance, or the worn alternate self's
+    resonance, #4731), preserving encounter order (the caller's loop is deterministic).
     Presence-time: just the single dominant aura affinity.
     """
     if technique is None:
         return [working_affinity]
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
-    seen: set[int] = set()
-    result: list[Affinity] = []
-    for r in gift_resonances_for(caster, technique.gift):
-        if r.affinity.pk not in seen:
-            seen.add(r.affinity.pk)
-            result.append(r.affinity)
-    return result
+    return working_affinities(caster.character_sheet, gift_resonances_for(caster, technique.gift))
 
 
 def _enriched_raw(
@@ -357,24 +352,20 @@ def _working_affinity_cast_time(
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for cast-time evaluation.
 
-    Collect distinct affinities from the character's GIFT-thread resonance. For
-    each, look up AffinityInteraction vs place_affinity. Pick the interaction with
-    the highest severity_multiplier; tiebreak by Affinity.name ascending.
+    Collect the cast's working affinities (``working_affinities``: the distinct
+    affinities of the character's GIFT-thread resonance, or the worn alternate self's
+    resonance, #4731). For each, look up AffinityInteraction vs place_affinity. Pick
+    the interaction with the highest severity_multiplier; tiebreak by Affinity.name
+    ascending.
 
     Returns (chosen_affinity, chosen_interaction). Returns (None, None) if
     no interactions are found.
     """
-    # Collect distinct affinities from the character's GIFT-thread resonance
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
-    gift_resonances = list(gift_resonances_for(caster, technique.gift))
-    seen_affinity_pks: set[int] = set()
-    affinities: list[Affinity] = []
-    for r in gift_resonances:
-        aff = r.affinity
-        if aff.pk not in seen_affinity_pks:
-            seen_affinity_pks.add(aff.pk)
-            affinities.append(aff)
+    affinities = working_affinities(
+        caster.character_sheet, gift_resonances_for(caster, technique.gift)
+    )
 
     if not affinities:
         return None, None
