@@ -145,7 +145,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 |-------|---------|------------|
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
-| `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
+| `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value`, `scales_with_severity` (#4728: multiplies by the instance's `effective_severity`; unset rows are flat, with no stage-multiplier fallback, because stage rows are authored per stage. One rule, `scaled_resistance_value`, read by the damage seam through `CharacterConditionHandler.resistance_modifier` and by `get_resistance_modifier`) |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
 #### DoT tick timing (`DamageTickTiming`) — #1762

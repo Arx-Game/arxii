@@ -2237,6 +2237,22 @@ def scaled_condition_effect_value(
     return effect.value
 
 
+def scaled_resistance_value(
+    modifier: ConditionResistanceModifier, instance: ConditionInstance
+) -> int:
+    """One ConditionResistanceModifier's contribution on one active instance (#4728).
+
+    ``scales_with_severity`` multiplies by the instance's effective severity (which
+    already folds in the stage multiplier). Without it the row is flat. Unlike
+    ``scaled_condition_effect_value`` there is no stage-multiplier fallback: stage
+    resistance rows are authored per stage as flat numbers (Abyssal Taint's Radiant
+    -30 at Marked, -50 at Consumed), so multiplying them again would double-count.
+    """
+    if modifier.scales_with_severity:
+        return int(modifier.modifier_value * instance.effective_severity)
+    return modifier.modifier_value
+
+
 def get_condition_modifier_total(
     character_sheet: "CharacterSheet",
     modifier_target: "ModifierTarget",
@@ -2992,15 +3008,8 @@ def get_resistance_modifier(
             modifiers = modifiers.filter(damage_type__isnull=True)
 
         for mod in modifiers:
-            modifier_value = mod.modifier_value
-
-            # Honor scales_with_severity, consistent with the other numeric readers
-            # (get_condition_modifier_total / get_check_modifier). effective_severity
-            # already folds in the stage multiplier, so it's if/elif.
-            if mod.scales_with_severity:
-                modifier_value = int(modifier_value * instance.effective_severity)
-            elif instance.current_stage:
-                modifier_value = int(modifier_value * instance.current_stage.severity_multiplier)
+            # The same rule the damage seam reads through CharacterConditionHandler.
+            modifier_value = scaled_resistance_value(mod, instance)
 
             result.total_modifier += modifier_value
             result.breakdown.append((instance, modifier_value))

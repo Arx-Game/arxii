@@ -3336,6 +3336,7 @@
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None', *, resistance_shift: int = 0) -> int - Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
 - `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
 - `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
 - `spend_condition_use(instance: world.conditions.models.ConditionInstance) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
