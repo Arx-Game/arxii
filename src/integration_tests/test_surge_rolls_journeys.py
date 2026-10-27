@@ -25,6 +25,7 @@ from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
+    RALLY_BASE_DIFFICULTY,
     CombatManeuver,
     ParticipantStatus,
     SurgeTriggerKind,
@@ -141,7 +142,9 @@ class _SurgeField(JourneyCase):
 
     def resolve(self, outcome):
         """Resolve the round with the first roll the round makes coming up ``outcome``."""
-        with force_check_outcome(outcome):
+        # The roll line is sent once the round's transaction commits; a test's never does,
+        # so run the commit callbacks the real round would have fired.
+        with self.captureOnCommitCallbacks(execute=True), force_check_outcome(outcome):
             return resolve_round(self.encounter)
 
     def next_round(self) -> None:
@@ -262,11 +265,15 @@ class BeingRallied(_SurgeField):
         self.resolve(self.success)
 
         self.assertEqual(self.intensity(self.tomas), SUCCESS_INTENSITY)
-        self.assertTold(self.tomas, f"Success. Intensity +{SUCCESS_INTENSITY}, control 0.")
+        self.assertTold(
+            self.tomas,
+            f"vs rally difficulty {RALLY_BASE_DIFFICULTY}. Success. "
+            f"Intensity +{SUCCESS_INTENSITY}, control 0.",
+        )
         record = self.records(SurgeTriggerKind.RALLIED).get()
         self.assertEqual(record.participant, self.tomas_seat)
         self.assertEqual(record.subject_sheet, self.mira.sheet_data)
-        self.assertIsNone(record.potency)
+        self.assertEqual(record.potency, RALLY_BASE_DIFFICULTY)
         # The rallier is not the one surged, and is not shown the roll.
         self.assertEqual(self.intensity(self.mira), 0)
         self.assertNotTold(self.mira, "Intensity +")
