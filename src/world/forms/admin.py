@@ -217,9 +217,11 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         "persona",
         "combat_profile",
         "resonance",
+        "emerges_at_audere",
+        "revert_kind",
         "has_thumbnail",
     ]
-    list_filter = ["form__form_type", "resonance__affinity"]
+    list_filter = ["form__form_type", "resonance__affinity", "emerges_at_audere", "revert_kind"]
     search_fields = ["character__character__db_key", "display_name"]
     autocomplete_fields = [
         "character",
@@ -228,6 +230,7 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         "combat_profile",
         "techniques",
         "resonance",
+        "emergence_condition",
     ]
 
     @admin.display(boolean=True, description="Has Thumbnail")

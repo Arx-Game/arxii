@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -6,7 +7,7 @@ from core.managers import GuardedSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
-from world.forms.constants import MarkingKind, MarkingSource
+from world.forms.constants import AlternateSelfRevertKind, MarkingKind, MarkingSource
 from world.items.constants import BodyRegion
 from world.species.models import Species
 
@@ -612,11 +613,70 @@ class AlternateSelf(SharedMemoryModel):
         ),
     )
 
+    emerges_at_audere = models.BooleanField(
+        default=False,
+        help_text=(
+            "When set, this is the alternate self the character becomes when "
+            "Audere begins (#4731). At most one per character."
+        ),
+    )
+    revert_kind = models.CharField(
+        max_length=20,
+        choices=AlternateSelfRevertKind.choices,
+        default=AlternateSelfRevertKind.AUTOMATIC,
+        help_text=(
+            "Whether this self drops away when Audere ends, or persists until "
+            "someone talks the character down."
+        ),
+    )
+    emergence_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="alternate_self_emergences",
+        help_text=(
+            "Behavior-altering condition applied while this self is out. "
+            "Required when the self must be talked down."
+        ),
+    )
+
     class Meta:
         ordering = ["character", "display_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character"],
+                condition=models.Q(emerges_at_audere=True),
+                name="one_audere_alternate_self_per_character",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(revert_kind=AlternateSelfRevertKind.TALKED_DOWN)
+                    | models.Q(emergence_condition__isnull=False)
+                ),
+                name="alternate_self_talked_down_needs_condition",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.display_name or f"{self.character} alt-self"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:
+            return
+        if self.emergence_condition is None:
+            raise ValidationError(
+                {"emergence_condition": "A self that must be talked down needs a condition."}
+            )
+        if not self.emergence_condition.category.alters_behavior:
+            raise ValidationError(
+                {
+                    "emergence_condition": (
+                        "Talking down only means something for a behavior-altering condition."
+                    )
+                }
+            )
 
 
 class ActiveAlternateSelf(SharedMemoryModel):
