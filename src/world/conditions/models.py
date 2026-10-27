@@ -381,7 +381,8 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="+",
         help_text=(
             "Applied when the held breath runs out on its own (not when she breathes "
-            "by choice or is made to): Drowning for being underwater. Blank: it just ends."
+            "by choice or is made to): Drowning for being underwater. Its own resist roll, if "
+            "any, still applies (struggling to the surface). Blank: it just ends."
         ),
     )
     breaks_held_breath = models.BooleanField(

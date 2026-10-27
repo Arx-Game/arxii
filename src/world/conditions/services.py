@@ -236,7 +236,13 @@ def breath_hold_rounds(target: "ObjectDB") -> int | None:  # noqa: OBJECTDB_PARA
 
 def held_breath_instances(target: "ObjectDB") -> list[ConditionInstance]:  # noqa: OBJECTDB_PARAM
     """The bearer's active conditions that last only while she holds her breath."""
-    return [i for i in get_active_conditions(target) if i.condition.holds_breath]
+    # Suppressed holds count too: breathing (or a cough) ends a suppressed smoke form,
+    # rather than letting it return when the suppression lapses.
+    return [
+        i
+        for i in get_active_conditions(target, include_suppressed=True)
+        if i.condition.holds_breath
+    ]
 
 
 def take_breath(target: "ObjectDB") -> list[ConditionTemplate]:  # noqa: OBJECTDB_PARAM
@@ -250,7 +256,7 @@ def take_breath(target: "ObjectDB") -> list[ConditionTemplate]:  # noqa: OBJECTD
     ended: list[ConditionTemplate] = []
     for instance in held_breath_instances(target):
         template = instance.condition
-        if remove_condition(target, template, remove_all_stacks=True):
+        if remove_condition(target, template, remove_all_stacks=True, include_suppressed=True):
             ended.append(template)
     return ended
 

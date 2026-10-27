@@ -199,3 +199,65 @@ class CoughingBreaksTheHeldBreathTests(TestCase):
         names = _active_names(self.character)
         self.assertNotIn("Coughing", names)
         self.assertIn("Smoke Form", names)
+
+
+class HeldBreathReachTests(TestCase):
+    """NPC bodies, bulk application, settled time and suppression (#4741 review)."""
+
+    def setUp(self):
+        self.gasp = ConditionTemplateFactory(name="Gasping for Air")
+        self.underwater = _held_breath_template(
+            name="Beneath the Tide", breath_runs_out_condition=self.gasp
+        )
+
+    def test_an_npc_body_runs_out_too(self):
+        from world.combat.factories import CombatOpponentFactory
+
+        body = CombatOpponentFactory().objectdb
+        apply_condition(body, self.underwater)
+        process_round_end(body)
+        process_round_end(body)
+        self.assertEqual(_active_names(body), {"Gasping for Air"})
+
+    def test_a_bulk_cough_ends_the_hold(self):
+        from world.conditions.services import bulk_apply_conditions
+        from world.conditions.types import BulkConditionApplication
+
+        character = CharacterSheetFactory().character
+        apply_condition(character, self.underwater)
+        cough = ConditionTemplateFactory(name="Sputtering", breaks_held_breath=True)
+        bulk_apply_conditions([BulkConditionApplication(target=character, template=cough)])
+        self.assertEqual(_active_names(character), {"Sputtering"})
+
+    def test_running_out_after_the_fight_settles(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.conditions.models import ConditionInstance
+        from world.conditions.services import (
+            settle_round_effects,
+            settled_effects_tick,
+        )
+
+        character = CharacterSheetFactory().character
+        apply_condition(character, self.underwater)
+        settle_round_effects([character])
+        for instance in ConditionInstance.objects.filter(target=character):
+            instance.expires_at = timezone.now() - timedelta(seconds=1)
+            instance.save(update_fields=["expires_at"])
+        character.conditions.invalidate()
+        settled_effects_tick()
+        self.assertEqual(_active_names(character), {"Gasping for Air"})
+
+    def test_breathing_ends_a_suppressed_hold(self):
+        from world.conditions.models import ConditionInstance
+
+        character = CharacterSheetFactory().character
+        apply_condition(character, self.underwater)
+        for instance in ConditionInstance.objects.filter(target=character):
+            instance.is_suppressed = True
+            instance.save(update_fields=["is_suppressed"])
+        character.conditions.invalidate()
+        take_breath(character)
+        self.assertFalse(ConditionInstance.objects.filter(target=character).exists())

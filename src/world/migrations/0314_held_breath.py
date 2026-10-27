@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
             name="breath_runs_out_condition",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Applied when the held breath runs out on its own (not when she breathes by choice or is made to): Drowning for being underwater. Blank: it just ends.",
+                help_text="Applied when the held breath runs out on its own (not when she breathes by choice or is made to): Drowning for being underwater. Its own resist roll, if any, still applies (struggling to the surface). Blank: it just ends.",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="+",
