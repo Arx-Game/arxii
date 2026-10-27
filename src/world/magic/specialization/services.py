@@ -300,9 +300,9 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     (#1578). "Covering" walks the gift lineage (#2891) — a Vulpi thread manifests
     the Khati techniques Vulpi inherits, at the Vulpi thread's resonance.
 
-    When an ``AlternateSelf`` with a ``resonance`` is active, that resonance
-    overrides the thread's (#1619) — the gift manifests as the alt-self's
-    resonance, not the thread's own.
+    An active ``AlternateSelf``'s resonance does NOT change this list; it is
+    applied later, in the variant resolver (#1619), which decides the variant
+    that manifests.
 
     Reads the thread through the cached ``character.threads`` handler (the
     single cached queryset for a character's threads) with a list-comp filter,

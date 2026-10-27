@@ -142,12 +142,12 @@ def _apply_standing_cap(standing: int, current_level: int) -> int:
 
 
 def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
-    """Affinity-alignment contribution: caster's CharacterAura % per distinct affinity."""
-    from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
+    """Affinity-alignment contribution: the acting aura's % per distinct affinity."""
+    from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
 
     if not config.affinity_alignment_bonus:
         return 0
-    aura = magical_profile(ctx.sheet)
+    aura = acting_aura(ctx.sheet)
     if aura is None:
         return 0
     alignment = 0
