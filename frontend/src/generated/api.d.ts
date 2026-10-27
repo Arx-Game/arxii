@@ -16639,6 +16639,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/threads/{id}/resonance-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Where this thread can be moved, and what the owner carries that pays the rite.
+     *
+     *     GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
+     *
+     *     Response: ``{ritual_id, options: [{resonance_id, resonance_name, affinity_name,
+     *     conversion_type, projected_points, qualifying: [{item_id, name, mode}]}]}``.
+     *     ``ritual_id`` is null while no retune rite is authored; perform it through
+     *     ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+     */
+    get: operations['magic_threads_resonance_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/mechanics/categories/': {
     parameters: {
       query?: never;
@@ -53238,6 +53264,30 @@ export interface components {
       description: string;
     };
     /**
+     * @description One resonance a thread may move to, with the carried items that pay the rite (read-only).
+     *
+     *     ``qualifying`` needs ``context["ritual"]`` (the retune rite, or None), ``context["sheet"]``
+     *     and ``context["items"]`` (what the owner carries, fetched once by the view).
+     *     ``conversion_type`` is null for a retune within the thread's own affinity.
+     */
+    ThreadResonanceOption: {
+      resonance_id: number;
+      resonance_name: string;
+      affinity_name: string;
+      conversion_type: string | null;
+      projected_points: number;
+      readonly qualifying: components['schemas']['DriftQualifyingComponent'][];
+    };
+    /**
+     * @description GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+     *
+     *     ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+     */
+    ThreadResonanceOptions: {
+      ritual_id: number | null;
+      options: components['schemas']['ThreadResonanceOption'][];
+    };
+    /**
      * @description * `TRAIT` - Trait
      *     * `TECHNIQUE` - Technique
      *     * `FACET` - Facet
@@ -76501,6 +76551,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrossXPLockResponse'];
+        };
+      };
+    };
+  };
+  magic_threads_resonance_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadResonanceOptions'];
         };
       };
     };
