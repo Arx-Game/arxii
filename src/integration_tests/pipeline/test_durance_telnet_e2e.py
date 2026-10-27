@@ -21,6 +21,7 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 from django.test import TestCase
+from django.utils import timezone
 
 from commands.durance import CmdDurance
 from commands.ritual import CmdRitual
@@ -32,10 +33,13 @@ from world.classes.factories import (
     PathFactory,
 )
 from world.classes.models import PathStage
-from world.magic.constants import TargetKind
+from world.magic.constants import ParticipationRule, TargetKind
 from world.magic.factories import (
+    CharacterAuraFactory,
+    CharacterTraditionFactory,
     GiftFactory,
     ResonanceFactory,
+    RitualFactory,
     RitualOfTheDuranceFactory,
     TechniqueFactory,
 )
@@ -46,8 +50,10 @@ from world.progression.factories import DuranceTrainingSiteFactory
 from world.progression.models import CharacterPathHistory, ClassLevelAdvancement
 from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 from world.progression.selectors import current_path_for_character
+from world.progression.services.advancement import _DURANCE_REGISTRATION_SERVICE_PATH
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
+from world.societies.factories import OrganizationFactory
 
 # Patch target: legend-gate called inside advance_class_level_via_session.
 # Defined at its module so the lazy import inside the service resolves correctly.
@@ -361,6 +367,104 @@ class SiteDuranceTelnetTests(TestCase):
         # Friend's primary persona recorded as an official witness.
         receipt = ClassLevelAdvancement.objects.get(character_sheet=self.inductee_sheet)
         self.assertIn(self.friend_sheet.primary_persona, receipt.witnesses.all())
+
+
+# ---------------------------------------------------------------------------
+# DuranceRegistrationTelnetTests
+# ---------------------------------------------------------------------------
+
+
+def _heard(character) -> str:
+    """Everything the (mocked) ``character.msg`` was sent, as one string."""
+    return " ".join(str(call) for call in character.msg.call_args_list)
+
+
+class DuranceRegistrationTelnetTests(TestCase):
+    """Intake rite through CmdRitual: draft -> join with NO testament -> fire (#4743).
+
+    An empty testament makes the rite compose one from the Glimpse story, and the
+    enrollment antiphon is read off the inductee's active tradition. A friend in the
+    room hears what the room is told.
+    """
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory()
+        self.officiant = CharacterFactory(db_key="IntakeOfficiant")
+        CharacterSheetFactory(character=self.officiant)
+        self.inductee = CharacterFactory(db_key="IntakeInductee")
+        self.inductee_sheet = CharacterSheetFactory(character=self.inductee)
+        self.friend = CharacterFactory(db_key="IntakeFriend")
+        CharacterSheetFactory(character=self.friend)
+        for character in (self.officiant, self.inductee, self.friend):
+            character.location = self.room
+            character.save()
+        self.scene = SceneFactory(room=self.room, is_active=True)
+        OrganizationFactory(name="Shroudwatch Academy")
+        self.ritual = RitualFactory(
+            name="Ritual of the Durance: Registration",
+            service_function_path=_DURANCE_REGISTRATION_SERVICE_PATH,
+            participation_rule=ParticipationRule.INDUCTION,
+            min_participants=2,
+        )
+
+    def _register_with_empty_testament(self) -> None:
+        cmd = _run(
+            CmdRitual,
+            self.officiant,
+            "draft Ritual of the Durance: Registration invite=IntakeInductee",
+        )
+        cmd.caller.search = MagicMock(return_value=self.inductee)
+        cmd.func()
+        session_pk = RitualSession.objects.get(ritual=self.ritual).pk
+        _run(CmdRitual, self.inductee, f"join {session_pk}").func()
+        self.friend.msg = MagicMock()
+        _run(CmdRitual, self.officiant, f"fire {session_pk}").func()
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+        self.inductee_sheet.refresh_from_db()
+        self.assertIsNotNone(self.inductee_sheet.durance_entered_at)
+
+    def _testament(self) -> str:
+        return Interaction.objects.get(
+            scene=self.scene, persona=self.inductee_sheet.primary_persona
+        ).content
+
+    def test_aura_and_active_tradition(self) -> None:
+        """The posted testament carries the Glimpse story; the room hears the sponsored key."""
+        CharacterAuraFactory(
+            character=self.inductee_sheet, glimpse_story="A lamp lit itself in my hands."
+        )
+        CharacterTraditionFactory(character=self.inductee_sheet)
+
+        self._register_with_empty_testament()
+
+        self.assertEqual(
+            self._testament(), "I am IntakeInductee.\n\nA lamp lit itself in my hands."
+        )
+        self.assertIn("[durance_antiphon_sponsored]", _heard(self.friend))
+
+    def test_no_aura_and_no_tradition(self) -> None:
+        """The testament is the name line alone; the room hears the unsponsored key."""
+        self._register_with_empty_testament()
+
+        self.assertEqual(self._testament(), "I am IntakeInductee.")
+        self.assertIn("[durance_antiphon_unsponsored]", _heard(self.friend))
+
+    def test_ended_and_active_tradition_rows(self) -> None:
+        """An ended membership beside the active one neither raises nor decides the key."""
+        CharacterTraditionFactory(character=self.inductee_sheet, left_at=timezone.now())
+        CharacterTraditionFactory(character=self.inductee_sheet)
+
+        self._register_with_empty_testament()
+
+        self.assertIn("[durance_antiphon_sponsored]", _heard(self.friend))
+
+    def test_only_an_ended_tradition_row(self) -> None:
+        """A character whose only membership has ended is unsponsored."""
+        CharacterTraditionFactory(character=self.inductee_sheet, left_at=timezone.now())
+
+        self._register_with_empty_testament()
+
+        self.assertIn("[durance_antiphon_unsponsored]", _heard(self.friend))
 
 
 # ---------------------------------------------------------------------------
