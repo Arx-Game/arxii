@@ -123,23 +123,31 @@ class ConditionHandler:
         self.__dict__.pop("_active", None)
 
 
-def _sum_matching_modifiers(modifiers: Any, damage_type: DamageType) -> int:
-    """Sum ConditionResistanceModifier values matching *damage_type* or type-agnostic."""
+def _sum_matching_modifiers(
+    modifiers: Any, damage_type: DamageType, instance: ConditionInstance
+) -> int:
+    """Sum ConditionResistanceModifier values matching *damage_type* or type-agnostic.
+
+    Each row is scaled by ``scaled_resistance_value`` (#4728), so a self-buff
+    rolled stronger resists more when its row says so.
+    """
+    from world.conditions.services import scaled_resistance_value  # noqa: PLC0415
+
     total = 0
     for mod in modifiers:
         if mod.damage_type_id in (damage_type.pk, None):
-            total += mod.modifier_value
+            total += scaled_resistance_value(mod, instance)
     return total
 
 
 def _instance_resistance_modifier(instance: ConditionInstance, damage_type: DamageType) -> int:
     """Sum template + stage resistance modifiers for one active condition instance."""
     total = _sum_matching_modifiers(
-        instance.condition.template_resistance_modifiers_cached, damage_type
+        instance.condition.template_resistance_modifiers_cached, damage_type, instance
     )
     if instance.current_stage_id:
         total += _sum_matching_modifiers(
-            instance.current_stage.stage_resistance_modifiers_cached, damage_type
+            instance.current_stage.stage_resistance_modifiers_cached, damage_type, instance
         )
     return total
 

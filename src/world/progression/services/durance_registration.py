@@ -70,7 +70,7 @@ def _compose_testament(sheet: CharacterSheet) -> str:
 
     parts = [f"I am {sheet.character.key}."]
     try:
-        aura = CharacterAura.objects.get(character_sheet=sheet)
+        aura = sheet.aura
     except CharacterAura.DoesNotExist:
         aura = None
     if aura and aura.glimpse_story:
@@ -121,11 +121,8 @@ def _fire_enrollment_antiphon(inductee: CharacterSheet, scene: Scene | None) -> 
     from world.character_creation.offers import tradition_is_self_taught
     from world.magic.models import CharacterTradition
 
-    try:
-        tradition = CharacterTradition.objects.get(character_sheet=inductee)
-        sponsored = not tradition_is_self_taught(tradition.tradition)
-    except CharacterTradition.DoesNotExist:
-        sponsored = False
+    tradition = CharacterTradition.objects.filter(character=inductee, left_at__isnull=True).first()
+    sponsored = tradition is not None and not tradition_is_self_taught(tradition.tradition)
 
     key = _DURANCE_ANTIPHON_SPONSORED if sponsored else _DURANCE_ANTIPHON_UNSponsored
     text = f"[{key}]"

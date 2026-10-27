@@ -5,6 +5,9 @@
   rows). The applied condition keeps that level and its authored size, and the check
   lane's value table turns the pair into points (the stat lane's for a stat, #4726).
   The target's level is never read.
+* ``caster_vow_step`` - a vowed caster's size step (#4747): her vow thread's shown
+  level and the matching technique specialty's share, when her engaged vow specializes
+  in one of the cast technique's functions.
 * ``applied_condition_size_warnings`` - the admin size check: a buff's authored size
   should match how its technique spends its power.
 """
@@ -13,17 +16,22 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from world.checks.constants import ModifierSize
+from world.checks.types import round_half_up
 from world.conditions.models import ConditionCheckModifier, ConditionModifierEffect
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 from world.magic.models.techniques import TechniqueAppliedCondition
 from world.traits.models import TraitType
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.magic.models.techniques import Technique
 
 
@@ -84,6 +92,93 @@ def sized_modifier_level(
     if level is None:
         return None, None
     return level, size
+
+
+@dataclass(frozen=True)
+class VowStep:
+    """A caster's vow size step on one cast (#4747): where it is valued and how much.
+
+    ``level`` is her vow thread's shown level; ``tenths`` is the step's share in
+    integer tenths (10 = one whole size step), from the matching specialty row's
+    ``multiplier_tenths``.
+    """
+
+    level: int
+    tenths: int
+
+
+def caster_vow_step(
+    caster: ObjectDB | None,  # noqa: OBJECTDB_PARAM - the cast's source_character
+    technique: Technique,
+) -> VowStep | None:
+    """``caster``'s vow size step on a cast of ``technique``, or None (#4747).
+
+    The vow is the one ``_resolve_source_vow_anchor`` stamps as ``source_vow``: the
+    first of her currently engaged roles. It steps when that role, its resolved
+    resonance sub-role or its anchor has a ``CovenantRoleTechniqueSpecialty`` row
+    whose function is one of ``technique``'s function tags. Only the one-size-up shape
+    is fixed here; every amount is staff-tuned data:
+
+    * the level is the shown level of her COVENANT_ROLE thread on the anchor, never
+      capped by the buff's own level (owner ruling 2026-10-27);
+    * the share is the matching row's ``multiplier_tenths``, the same dial that scales
+      the specialty's cast power; when the role and its sub-role (or anchor) both
+      match, the larger multiplier counts;
+    * a secondary vow (first when her primary is disengaged) multiplies those tenths
+      by ``SecondaryVowConfig.potency_tenths / 10``, rounded half up, as the
+      specialty layer scales a secondary everywhere else. Its level stays whole.
+
+    None when there is no caster or engaged vow, no matching row, no thread, the
+    level is 0, or the share comes to 0. Called once per cast, only when a row is
+    sized.
+    """
+    if caster is None:
+        return None
+    functions = {tag.function for tag in technique.cached_function_tags}
+    if not functions:
+        return None
+    try:
+        engaged = caster.covenant_roles.currently_engaged_roles_with_flags()
+    except (AttributeError, ObjectDoesNotExist):
+        # No covenant_roles handler (a test double) or no CharacterSheet (an NPC):
+        # no engaged vow, as in _resolve_source_vow_anchor.
+        return None
+    if not engaged:
+        return None
+    role, is_secondary = engaged[0]
+    anchor_id = role.parent_role_id or role.pk
+
+    from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+    multipliers = CovenantRoleTechniqueSpecialty.objects.filter(
+        covenant_role_id__in={role.pk, anchor_id}, function__in=functions
+    ).values_list("multiplier_tenths", flat=True)
+    tenths = max(multipliers, default=0)
+    if not tenths:
+        return None
+    stored = (
+        Thread.objects.filter(
+            owner_id=caster.pk,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role_id=anchor_id,
+            retired_at__isnull=True,
+        )
+        .values_list("level", flat=True)
+        .first()
+    )
+    level = shown_thread_level(stored) if stored else 0
+    if not level:
+        return None
+    if is_secondary:
+        from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+
+        tenths = round_half_up(Decimal(tenths) * secondary_vow_config().potency_tenths / 10)
+    if not tenths:
+        return None
+    return VowStep(level=level, tenths=tenths)
 
 
 def _technique_effect_count(technique: Technique) -> int:
