@@ -11,11 +11,12 @@ when the scene finishes.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import DEED_GAIN_SOURCES
+from world.magic.constants import DEED_GAIN_SOURCES, ComponentMode
 from world.magic.exceptions import ConversionMappingError
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.drift import (
@@ -23,10 +24,13 @@ from world.magic.models.drift import (
     DriftConversionOffer,
     DriftCorrectionConfig,
 )
+from world.magic.models.motifs import MotifResonanceAssociation
 from world.magic.services.conversion import conversion_pair
+from world.magic.types.drift import QualifyingComponent
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.items.models import ItemInstance
     from world.magic.models.affinity import Affinity, Resonance
     from world.magic.models.gain import ResonanceGrant
     from world.scenes.models import Scene
@@ -135,3 +139,57 @@ def lapse_conversion_offers(scene: Scene) -> int:
     lapsed = offers.count()
     offers.delete()
     return lapsed
+
+
+def qualifying_components(
+    sheet: CharacterSheet,
+    target: Resonance,
+    items: Iterable[ItemInstance],
+    *,
+    min_item_meaning: int | None = None,
+) -> list[QualifyingComponent]:
+    """The items that count toward a target-resonance offering, each under its first route.
+
+    Three routes, tried in this order: ``MATERIAL`` (the item's template is tied to
+    ``target``), ``FACET`` (it carries a live facet that the performer's own motif ties to
+    ``target``), and ``KEEPSAKE`` (it means at least ``min_item_meaning`` points to the
+    performer; the route is off when that is None). An item qualifies at most once, in the
+    order given. A destroyed or empty item never qualifies.
+    """
+    from world.items.models import ItemFacet  # noqa: PLC0415
+    from world.items.services.meaning import item_meaning  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    live = [item for item in items if item.destroyed_at is None and item.quantity > 0]
+    motif_facet_ids = set(
+        MotifResonanceAssociation.objects.filter(
+            motif_resonance__motif__character=sheet, motif_resonance__resonance=target
+        ).values_list("facet_id", flat=True)
+    )
+    faceted_item_ids = (
+        set(
+            ItemFacet.objects.filter(
+                item_instance__in=live, facet_id__in=motif_facet_ids, removed_at__isnull=True
+            ).values_list("item_instance_id", flat=True)
+        )
+        if motif_facet_ids
+        else set()
+    )
+    config = get_devotion_config() if min_item_meaning is not None else None
+
+    qualifying: list[QualifyingComponent] = []
+    for item in live:
+        if item.template.tied_resonance_id == target.pk:
+            mode = ComponentMode.MATERIAL
+        elif item.pk in faceted_item_ids:
+            mode = ComponentMode.FACET
+        elif (
+            config is not None
+            and min_item_meaning is not None
+            and item_meaning(item, sheet, config=config).points >= min_item_meaning
+        ):
+            mode = ComponentMode.KEEPSAKE
+        else:
+            continue
+        qualifying.append(QualifyingComponent(item=item, mode=mode))
+    return qualifying

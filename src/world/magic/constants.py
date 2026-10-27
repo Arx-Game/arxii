@@ -855,3 +855,14 @@ class FeedingTaintRole(models.TextChoices):
     MURDER = "murder", "Murder"
     SEDUCTION_DECEPTION = "seduction_deception", "Seduction by deception"
     SEDUCTION_PREDATION = "seduction_predation", "Seduction by predation"
+
+
+class ComponentMode(models.TextChoices):
+    """The route by which an item counts toward a target-resonance ritual component (#4733).
+
+    Checked in this order; an item qualifies at most once, under the first that matches.
+    """
+
+    MATERIAL = "material", "Tied to the resonance"
+    FACET = "facet", "Carries a motif facet of the resonance"
+    KEEPSAKE = "keepsake", "Means enough to the performer"

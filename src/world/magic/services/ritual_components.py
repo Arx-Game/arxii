@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING
 from world.items.exceptions import InsufficientMaterials
 from world.items.services.materials import consume_materials, gather_consumable_pks
 from world.magic.exceptions import RitualComponentError
+from world.magic.services.drift import qualifying_components
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
-    from world.magic.models import Resonance, Ritual
+    from world.magic.models import Resonance, Ritual, RitualComponentRequirement
 
 
 def _resolve_touchstone_pks(
@@ -82,6 +83,98 @@ def _resolve_touchstone_pks(
     return matched_instances
 
 
+def _resolve_target_resonance_allocations(
+    *,
+    available: list[ItemInstance],
+    requirements: list[RitualComponentRequirement],
+    performer_sheet: CharacterSheet,
+    resonance_context: Resonance | None,
+    already_allocated: set[int],
+) -> list[tuple[ItemInstance, int]]:
+    """Resolve target-resonance requirements against ``available`` (#4733).
+
+    A requirement takes ``quantity`` units from the items that ``qualifying_components``
+    admits for ``resonance_context`` (its three routes, with the requirement's own
+    ``min_item_meaning`` bar). Units are counted the way template rows count them, so a
+    stack of three can pay a quantity of three. An item already allocated to a template or
+    touchstone row, or to an earlier target row, is not offered again.
+
+    Returns:
+        ``(item, amount)`` allocations for ``consume_materials``.
+
+    Raises:
+        RitualComponentError: With no ``resonance_context``, or on the first unsatisfied
+            requirement.
+    """
+    if not requirements:
+        return []
+    if resonance_context is None:
+        exc = RitualComponentError()
+        exc.user_message = f"Ritual '{requirements[0].ritual.name}' needs a target resonance."
+        raise exc
+
+    taken: dict[int, int] = {}
+    allocations: list[tuple[ItemInstance, int]] = []
+    for req in requirements:
+        offered = qualifying_components(
+            performer_sheet,
+            resonance_context,
+            [inst for inst in available if inst.pk not in already_allocated],
+            min_item_meaning=req.min_item_meaning,
+        )
+        needed = req.quantity
+        for component in offered:
+            if needed == 0:
+                break
+            item = component.item
+            amount = min(item.quantity - taken.get(item.pk, 0), needed)
+            if amount <= 0:
+                continue
+            taken[item.pk] = taken.get(item.pk, 0) + amount
+            allocations.append((item, amount))
+            needed -= amount
+        if needed:
+            exc = RitualComponentError()
+            exc.user_message = (
+                f"Ritual '{req.ritual.name}' requires {req.quantity}x offering "
+                f"for {resonance_context.name} that you don't have."
+            )
+            raise exc
+    return allocations
+
+
+def _partition_requirements(
+    ritual: Ritual, requirements: list[RitualComponentRequirement]
+) -> tuple[
+    list[RitualComponentRequirement],
+    list[RitualComponentRequirement],
+    list[RitualComponentRequirement],
+]:
+    """Split ``requirements`` into (template, touchstone, target-resonance) rows.
+
+    The database allows exactly one mode per row. A row that matches none raises rather
+    than being skipped, so a mode added later cannot be silently ignored here.
+    """
+    template_reqs: list[RitualComponentRequirement] = []
+    touchstone_reqs: list[RitualComponentRequirement] = []
+    target_reqs: list[RitualComponentRequirement] = []
+    for req in requirements:
+        if req.item_template_id is not None:
+            template_reqs.append(req)
+        elif req.min_touchstone_tier_id is not None:
+            touchstone_reqs.append(req)
+        elif req.matches_target_resonance:
+            target_reqs.append(req)
+        else:
+            exc = RitualComponentError()
+            exc.user_message = (
+                f"Ritual '{ritual.name}' has a component requirement this system "
+                "cannot check; tell staff."
+            )
+            raise exc
+    return template_reqs, touchstone_reqs, target_reqs
+
+
 def resolve_and_consume_ritual_components(
     *,
     ritual: Ritual,
@@ -92,11 +185,13 @@ def resolve_and_consume_ritual_components(
     """Validate and atomically consume ``ritual``'s components from ``components``.
 
     Partitions ``ritual.requirements.all()`` into template-mode
-    (``item_template_id is not None``) and touchstone-mode
-    (``min_touchstone_tier_id is not None``) rows. Template-mode rows use the
+    (``item_template_id is not None``), touchstone-mode
+    (``min_touchstone_tier_id is not None``) and target-resonance-mode
+    (``matches_target_resonance``) rows. Template-mode rows use the
     existing ``gather_consumable_pks``; touchstone-mode rows resolve via
-    ``_resolve_touchstone_pks``. All-or-nothing: raises before consuming
-    anything if EITHER set of requirements is unsatisfied.
+    ``_resolve_touchstone_pks``; target-resonance rows via
+    ``_resolve_target_resonance_allocations``. All-or-nothing: raises before consuming
+    anything if ANY set of requirements is unsatisfied.
 
     Args:
         ritual: The Ritual whose requirements to check.
@@ -104,7 +199,9 @@ def resolve_and_consume_ritual_components(
         performer_sheet: The performing character's CharacterSheet.
         resonance_context: When given, touchstone-mode requirements must match
             THIS Resonance specifically (e.g. Sanctification's chosen founding
-            resonance), not just any Resonance the performer holds.
+            resonance), not just any Resonance the performer holds. It is also the
+            resonance a target-resonance-mode requirement is converting toward, and
+            is required for such a requirement.
 
     Raises:
         RitualComponentError: If any requirement is unsatisfied. Nothing is
@@ -115,8 +212,7 @@ def resolve_and_consume_ritual_components(
             "item_template", "min_quality_tier", "min_touchstone_tier"
         )
     )
-    template_reqs = [r for r in requirements if r.item_template_id is not None]
-    touchstone_reqs = [r for r in requirements if r.min_touchstone_tier_id is not None]
+    template_reqs, touchstone_reqs, target_reqs = _partition_requirements(ritual, requirements)
 
     try:
         template_allocations = gather_consumable_pks(
@@ -139,6 +235,21 @@ def resolve_and_consume_ritual_components(
         already_allocated={inst.pk for inst, _ in template_allocations},
     )
 
+    target_allocations = _resolve_target_resonance_allocations(
+        available=components,
+        requirements=target_reqs,
+        performer_sheet=performer_sheet,
+        resonance_context=resonance_context,
+        already_allocated={
+            *(inst.pk for inst, _ in template_allocations),
+            *(inst.pk for inst in touchstone_instances),
+        },
+    )
+
     # Touchstones are non-stackable (quantity=1); consuming amount=1 decrements to 0 → delete.
-    all_allocations = [*template_allocations, *((inst, 1) for inst in touchstone_instances)]
+    all_allocations = [
+        *template_allocations,
+        *((inst, 1) for inst in touchstone_instances),
+        *target_allocations,
+    ]
     consume_materials(all_allocations)
