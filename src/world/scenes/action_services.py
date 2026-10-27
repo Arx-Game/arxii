@@ -220,7 +220,6 @@ if TYPE_CHECKING:
     from world.checks.types import (
         CheckResult,
         ExtraTraitTerm,
-        ModifierBreakdown,
         ModifierContribution,
     )
     from world.conditions.models import ConditionInstance, TreatmentTemplate
@@ -1300,24 +1299,22 @@ def _social_check_contributions(
     return gated
 
 
-def _technique_modifiers(
-    action_request: SceneActionRequest,
-    action_template: ActionTemplate,
-    technique_terms: tuple[ExtraTraitTerm, ...],
-) -> tuple[int, ModifierBreakdown | None]:
-    """Collect the technique check's modifiers when its template has a check."""
-    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-
-    check_type = action_template.check_type
-    if check_type is None:
-        return 0, None
-    breakdown = collect_check_modifiers(
-        action_request.initiator_persona.character_sheet,
-        check_type,
-        scene=action_request.scene,
-        extra_traits=technique_terms,
+def _scene_action_difficulty(action_request: SceneActionRequest, override: int | None) -> int:
+    """Use a per-target override when present, otherwise the request's chosen band."""
+    if override is not None:
+        return override
+    return DIFFICULTY_VALUES.get(
+        action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
-    return breakdown.extra_modifiers_total, breakdown
+
+
+def _scene_action_favor(
+    action_request: SceneActionRequest, pc_resists: bool
+) -> ModifierContribution | None:
+    """Only an acting character's own roll receives a declared invocation."""
+    from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
+
+    return None if pc_resists else declared_invocation_contribution(action_request)
 
 
 def _resolve_action_against_persona(
@@ -1361,15 +1358,8 @@ def _resolve_action_against_persona(
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
     )
-    from world.scenes.favor_invocation import declared_invocation_contribution  # noqa: PLC0415
 
-    difficulty = (
-        difficulty_override
-        if difficulty_override is not None
-        else DIFFICULTY_VALUES.get(
-            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-        )
-    )
+    difficulty = _scene_action_difficulty(action_request, difficulty_override)
     action_template = action_request.action_template
     if action_template is None:
         msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
@@ -1412,7 +1402,7 @@ def _resolve_action_against_persona(
     # #4333: a declared Call on favor rolls first (once per request) and its
     # labelled bonus joins this check.
     pc_resists = _pc_resists(action_request, target_persona)
-    favor = None if pc_resists else declared_invocation_contribution(action_request)
+    favor = _scene_action_favor(action_request, pc_resists)
     if pc_resists:
         result = _resolve_pc_resisting(
             action_request,
@@ -1431,9 +1421,17 @@ def _resolve_action_against_persona(
         # along as one extra term on both the modifier collection and the roll.
         skill_term = technique_skill_term(character, action_request.technique)
         technique_terms = (skill_term,) if skill_term is not None else ()
-        technique_check_modifiers, technique_breakdown = _technique_modifiers(
-            action_request, action_template, technique_terms
-        )
+        tech_check_type = action_template.check_type
+        technique_check_modifiers = 0
+        technique_breakdown = None
+        if tech_check_type is not None:
+            technique_breakdown = collect_check_modifiers(
+                action_request.initiator_persona.character_sheet,
+                tech_check_type,
+                scene=action_request.scene,
+                extra_traits=technique_terms,
+            )
+            technique_check_modifiers = technique_breakdown.extra_modifiers_total
         result = _resolve_enhanced_action(
             character=character,
             technique=action_request.technique,
