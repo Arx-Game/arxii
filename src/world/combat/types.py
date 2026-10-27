@@ -468,7 +468,8 @@ class DramaticSurgeBeat:
 
     The last four fields describe a rolled surge (#4737): the roll's outcome name, the
     potency it was made against, the control change applied and the name of the band's
-    condition. A fixed-amount surge leaves them at their defaults.
+    condition. A fixed-amount surge leaves them at their defaults. ``record_id`` is the pk of
+    the ``DramaticSurgeRecord`` written, so a caller can complete it.
     """
 
     participant: CombatParticipant
@@ -480,6 +481,7 @@ class DramaticSurgeBeat:
     potency: int | None = None
     control_change: int = 0
     condition_name: str = ""
+    record_id: int | None = None
 
 
 # ---------------------------------------------------------------------------

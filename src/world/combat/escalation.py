@@ -335,7 +335,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     if engagement is None:
         return None
 
-    _record, created = DramaticSurgeRecord.objects.get_or_create(
+    record, created = DramaticSurgeRecord.objects.get_or_create(
         encounter=encounter,
         participant=participant,
         trigger_kind=trigger_kind,
@@ -379,6 +379,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         outcome_name=outcome.name if outcome is not None else "",
         potency=potency,
         control_change=control_change,
+        record_id=record.pk,
     )
 
 

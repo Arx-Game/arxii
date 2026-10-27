@@ -197,6 +197,7 @@ class EffectTests(SurgeRollTestCase):
         self.assertEqual(instance.source_character, taunter)
         self.assertEqual(instance.source_description, "Surge roll")
         self.assertEqual(beat.condition_name, "Surge Goaded")
+        self.assertEqual(DramaticSurgeRecord.objects.get().condition, goaded)
 
     def test_condition_not_applied_when_surge_deduped(self) -> None:
         goaded = ConditionTemplateFactory(name="Surge Goaded Once")
@@ -231,6 +232,7 @@ class EffectTests(SurgeRollTestCase):
         ):
             beat = self._surge(self.fail)
         self.assertEqual(beat.condition_name, "")
+        self.assertIsNone(DramaticSurgeRecord.objects.get().condition)
         self.assertNotIn("Goaded", own_msg.call_args.args[0])
         self.assertEqual(self._engagement().intensity_modifier, 2)
 

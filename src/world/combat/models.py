@@ -4205,6 +4205,18 @@ class DramaticSurgeRecord(SharedMemoryModel):
             "Written by the surge service from the band."
         ),
     )
+    condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The condition this surge actually applied to the participant (#4737); null when "
+            "the band carried none or it did not take hold. Written by the surge service. "
+            "SET_NULL: the record is history, so it outlives the template."
+        ),
+    )
     repeat_round = models.PositiveIntegerField(
         null=True,
         blank=True,

@@ -45,7 +45,6 @@ from world.combat.models import (
     DuelChallenge,
     EscalationCurve,
     PendingSelection,
-    SurgeDegreeBand,
     SurgeTuning,
     SustainedAction,
     ThreatPool,
@@ -1368,14 +1367,13 @@ def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict
     """The roll fields of each rolled surge record, keyed by record pk (#4737).
 
     A record with no ``outcome`` (a kind that is not rolled) has no entry. The outcome,
-    potency, control change and amount come from the record. The ``roll`` line and the
-    ``condition`` are rebuilt from the surge tuning authored for the record's kind and the
-    band its outcome picks; the record does not store them, so a tuning staff have since
-    removed leaves ``condition`` null and no ``roll``, and a condition that the band carries
-    but did not take hold on the character (resisted, prevented) is still named. Costs two
-    queries however many records, none when no record is rolled.
+    potency, control change, amount and the condition the surge applied all come from the
+    record, so a later retune of the band changes none of them. The ``roll`` line is the
+    shared ``roll_line`` over those and the check type name of the surge tuning authored for
+    the record's kind; with that tuning gone there is no ``roll``. One query however many
+    records, none when no record is rolled.
     """
-    from world.combat.surge_rolls import pick_band, roll_line  # noqa: PLC0415
+    from world.combat.surge_rolls import roll_line  # noqa: PLC0415
 
     rolled = [record for record in records if record.outcome is not None]
     if not rolled:
@@ -1386,27 +1384,18 @@ def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict
             trigger_kind__in={record.trigger_kind for record in rolled}
         )
     }
-    bands_by_tuning: dict[int, list[SurgeDegreeBand]] = {}
-    for band in SurgeDegreeBand.objects.select_related("outcome", "condition").filter(
-        tuning__in=tunings.values()
-    ):
-        bands_by_tuning.setdefault(band.tuning_id, []).append(band)
     fields: dict[int, dict[str, Any]] = {}
     for record in rolled:
         outcome = record.outcome
+        condition_name = record.condition.name if record.condition is not None else None
         entry: dict[str, Any] = {
             "outcome": outcome.name,
             "potency": record.potency,
             "control_change": record.control_change,
-            "condition": None,
+            "condition": condition_name,
         }
         tuning = tunings.get(record.trigger_kind)
-        band = (
-            pick_band(bands_by_tuning.get(tuning.pk, []), outcome) if tuning is not None else None
-        )
         if tuning is not None:
-            condition = band.condition if band is not None else None
-            entry["condition"] = condition.name if condition is not None else None
             entry["roll"] = roll_line(
                 check_type=tuning.check_type,
                 trigger_kind=record.trigger_kind,
@@ -1414,7 +1403,7 @@ def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict
                 outcome=outcome,
                 amount=record.amount,
                 control_change=record.control_change,
-                condition_name=entry["condition"] or "",
+                condition_name=condition_name or "",
             )
         fields[record.pk] = entry
     return fields
@@ -1796,6 +1785,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "participant__character_sheet__character",
                 "encounter__escalation_curve",
                 "outcome",
+                "condition",
             )
         )
 

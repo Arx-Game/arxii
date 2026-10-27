@@ -20,7 +20,7 @@ from django.db import transaction
 
 from world.combat.constants import SurgeTriggerKind
 from world.combat.escalation import apply_dramatic_surge
-from world.combat.models import SurgeDegreeBand, SurgeTuning
+from world.combat.models import DramaticSurgeRecord, SurgeDegreeBand, SurgeTuning
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -218,6 +218,9 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             # prevent it; only name it when an instance exists.
             if applied.success and applied.instance is not None:
                 condition_name = band.condition.name
+                record = DramaticSurgeRecord.objects.get(pk=beat.record_id)
+                record.condition = band.condition
+                record.save(update_fields=["condition"])
     character.msg(
         roll_line(
             check_type=tuning.check_type,

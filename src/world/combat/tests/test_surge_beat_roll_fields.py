@@ -1,5 +1,7 @@
 """Surge beats in the round payload carry the roll for owner, GM and staff only (#4737)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -18,6 +20,7 @@ from world.combat.factories import (
 from world.combat.models import SurgeTuning
 from world.combat.surge_rolls import apply_rolled_surge
 from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.types import ApplyConditionResult
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 from world.roster.factories import RosterTenureFactory
@@ -144,6 +147,33 @@ class SurgeBeatRollFieldTests(TestCase):
         self.assertIsNone(beat["condition"])
         self.assertIsNone(beat["potency"])
         self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0.")
+
+    def test_a_condition_that_did_not_take_hold_is_not_named(self) -> None:
+        refused = ApplyConditionResult(success=False, instance=None, message="resisted")
+        with patch("world.conditions.services.apply_condition", return_value=refused):
+            self._rolled_surge()
+
+        (beat,) = self._beats_seen_by(self.owner_account)
+        self.assertIsNone(beat["condition"])
+        self.assertEqual(
+            beat["roll"], "Composure check vs taunt potency 14. Partial. Intensity +5, control -1."
+        )
+
+    def test_the_condition_that_applied_is_shown_after_the_band_is_retuned(self) -> None:
+        tuning = SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
+        )
+        band = SurgeDegreeBandFactory(
+            tuning=tuning, outcome=self.partial, intensity=4, condition=self.goaded
+        )
+        self._rallied_surge()
+        band.condition = ConditionTemplateFactory(name="Furious")
+        band.intensity = 9
+        band.save()
+
+        (beat,) = self._beats_seen_by(self.owner_account)
+        self.assertEqual(beat["condition"], "Goaded")
+        self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0. Goaded.")
 
     def test_old_kind_surge_beat_unchanged(self) -> None:
         apply_dramatic_surge(

@@ -374,7 +374,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active ally named '{name}' in this encounter."
             raise CommandError(msg)
         if len(matches) > 1:
-            msg = f"More than one ally named '{name}' — be more specific."
+            msg = f"More than one ally named '{name}'. Be more specific."
             raise CommandError(msg)
         return matches[0].pk
 
@@ -398,7 +398,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active opponent named '{name}' in this encounter."
             raise CommandError(msg)
         if len(matches) > 1:
-            msg = f"More than one opponent named '{name}' — be more specific."
+            msg = f"More than one opponent named '{name}'. Be more specific."
             raise CommandError(msg)
         return matches[0].pk
 
@@ -454,7 +454,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active ally or opponent named '{name}' in this encounter."
             raise CommandError(msg)
         if total > 1:
-            msg = f"More than one target named '{name}' — be more specific."
+            msg = f"More than one target named '{name}'. Be more specific."
             raise CommandError(msg)
         if ally_matches:
             return {"ally_participant_id": ally_matches[0].pk}
