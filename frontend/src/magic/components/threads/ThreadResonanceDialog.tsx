@@ -29,10 +29,12 @@ const MOVE_SWATCHES: Record<ConversionType, string> = {
   FALL: 'bg-rose-500',
   REDEMPTION: 'bg-amber-500',
 };
-const RETUNE_SWATCH = 'bg-primary';
+// A retune's square takes the pill's text colour, so it shows on the filled (selected) pill too.
+const RETUNE_SWATCH = { selected: 'bg-primary-foreground', unselected: 'bg-primary' };
 
-function swatchFor(option: ThreadResonanceOption): string {
-  return option.conversion_type ? MOVE_SWATCHES[option.conversion_type] : RETUNE_SWATCH;
+function swatchFor(option: ThreadResonanceOption, selected: boolean): string {
+  if (option.conversion_type) return MOVE_SWATCHES[option.conversion_type];
+  return selected ? RETUNE_SWATCH.selected : RETUNE_SWATCH.unselected;
 }
 
 function optionSuffix(option: ThreadResonanceOption): string {
@@ -154,7 +156,14 @@ export function ThreadResonanceDialog({ thread, open, onOpenChange }: ThreadReso
                     o.resonance_id === selected.resonance_id
                   )}`}
                 >
-                  <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${swatchFor(o)}`} />
+                  <span
+                    aria-hidden="true"
+                    data-testid={`resonance-swatch-${o.resonance_id}`}
+                    className={`h-2.5 w-2.5 rounded-sm ${swatchFor(
+                      o,
+                      o.resonance_id === selected.resonance_id
+                    )}`}
+                  />
                   {o.resonance_name} {optionSuffix(o)}
                   {o.merges_into_thread_id !== null ? (
                     <span

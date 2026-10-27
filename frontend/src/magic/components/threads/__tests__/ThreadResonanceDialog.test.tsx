@@ -119,6 +119,15 @@ describe('ThreadResonanceDialog', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Retuned.'));
   });
 
+  it("keeps the retune square visible on the selected pill's fill", async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
+    renderDialog();
+    const pill = await screen.findByTestId('resonance-option-2');
+    const swatch = screen.getByTestId('resonance-swatch-2');
+    expect(pill).toHaveClass('bg-primary');
+    expect(swatch).not.toHaveClass('bg-primary');
+  });
+
   it('says so when nothing carried pays the offering', async () => {
     vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
     renderDialog();
