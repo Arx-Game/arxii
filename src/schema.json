@@ -22262,6 +22262,113 @@ paths:
                 items:
                   $ref: '#/components/schemas/DramaticMomentType'
           description: ''
+  /api/magic/drift-correction/convert/:
+    post:
+      operationId: magic_drift_correction_convert_create
+      description: Dispatch the rite through its action (telnet + web converge).
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftCorrectionConvertRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftCorrectionResult'
+          description: ''
+  /api/magic/drift-correction/decline/:
+    post:
+      operationId: magic_drift_correction_decline_create
+      description: Dispatch the decline through its action.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftCorrectionDeclineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftCorrectionDeclined'
+          description: ''
+  /api/magic/drift-correction/pending/:
+    get:
+      operationId: magic_drift_correction_pending_list
+      description: |-
+        Read-only inbox of open drift conversion offers (#4733).
+
+        GET /api/magic/drift-correction/pending/
+        GET /api/magic/drift-correction/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures), and to offers
+        whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+        that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDriftConversionOfferList'
+          description: ''
+  /api/magic/drift-correction/pending/{id}/:
+    get:
+      operationId: magic_drift_correction_pending_retrieve
+      description: |-
+        Read-only inbox of open drift conversion offers (#4733).
+
+        GET /api/magic/drift-correction/pending/
+        GET /api/magic/drift-correction/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures), and to offers
+        whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+        that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftConversionOffer'
+          description: ''
   /api/magic/effect-types/:
     get:
       operationId: magic_effect_types_list
@@ -23271,6 +23378,7 @@ paths:
           - COMPROMISE
           - DISTINCTION
           - DRAMATIC_MOMENT
+          - DRIFT_CORRECTION
           - ENTRY_FLOURISH
           - FALL_CONVERSION
           - MISSION_REPORT
@@ -23312,6 +23420,7 @@ paths:
           * `PENANCE` - Atonement resonance conversion
           * `FALL_CONVERSION` - Fall/Redemption conversion
           * `WORSHIP_RITE` - Worship rite
+          * `DRIFT_CORRECTION` - Drift correction
       tags:
       - magic
       security:
@@ -56160,6 +56269,197 @@ components:
       - dreamwalk_host
       - is_dreamside
       - wake_blocked
+    DriftConversionCap:
+      type: object
+      description: One cap of an offer as a player sees it (read-only).
+      properties:
+        target_resonance:
+          $ref: '#/components/schemas/DriftTargetResonance'
+        cap_remaining:
+          type: integer
+        focus_bonus:
+          type: integer
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftSourceOption'
+        qualifying_components:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftQualifyingComponent'
+      required:
+      - cap_remaining
+      - focus_bonus
+      - qualifying_components
+      - sources
+      - target_resonance
+    DriftConversionOffer:
+      type: object
+      description: |-
+        Player-facing view of an open drift conversion offer. Read-only.
+
+        ``rite_ready`` is false while the rite, its check type or any outcome tier's share is
+        missing; the rite then refuses with ``rite_not_ready_message``, which the dialog shows
+        in place of the offering picker. The message is empty while the rite is ready.
+
+        Readiness is the same for every offer, so the caller works it out once per request
+        (``rite_is_ready()``) and passes it as ``context["rite_ready"]``; this serializer never
+        queries it per offer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scene_id:
+          type: integer
+          readOnly: true
+        caps:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftConversionCap'
+          readOnly: true
+        rite_ready:
+          type: boolean
+          readOnly: true
+        rite_not_ready_message:
+          type: string
+          readOnly: true
+      required:
+      - caps
+      - id
+      - rite_not_ready_message
+      - rite_ready
+      - scene_id
+    DriftCorrectionConvertRequest:
+      type: object
+      description: |-
+        Request shape for POST /api/magic/drift-correction/convert/.
+
+        ``validate`` resolves everything the action needs: the caller's own offer (anyone
+        else's is a 404), both resonances, and the offered items, each of which must be held
+        by the offer's character (a foreign or stray pk is a 400, never passed on).
+      properties:
+        offer_id:
+          type: integer
+        source_resonance_id:
+          type: integer
+        target_resonance_id:
+          type: integer
+        amount:
+          type: integer
+          minimum: 1
+        component_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - amount
+      - offer_id
+      - source_resonance_id
+      - target_resonance_id
+    DriftCorrectionDeclineRequest:
+      type: object
+      description: Request shape for POST /api/magic/drift-correction/decline/.
+      properties:
+        offer_id:
+          type: integer
+      required:
+      - offer_id
+    DriftCorrectionDeclined:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DriftCorrectionResult:
+      type: object
+      description: Read serializer for DriftCorrectionResult (types/drift.py dataclass).
+      properties:
+        source_resonance_id:
+          type: integer
+        target_resonance_id:
+          type: integer
+        attempted_amount:
+          type: integer
+        converted_amount:
+          type: integer
+        granted_amount:
+          type: integer
+        outcome_name:
+          type: string
+        success_level:
+          type: integer
+        conversion_type:
+          type: string
+        focus_bonus:
+          type: integer
+      required:
+      - attempted_amount
+      - conversion_type
+      - converted_amount
+      - focus_bonus
+      - granted_amount
+      - outcome_name
+      - source_resonance_id
+      - success_level
+      - target_resonance_id
+    DriftQualifyingComponent:
+      type: object
+      description: A carried item that counts toward the rite's offering, and its
+        route (read-only).
+      properties:
+        item_id:
+          type: integer
+        name:
+          type: string
+        mode:
+          type: string
+      required:
+      - item_id
+      - mode
+      - name
+    DriftSourceOption:
+      type: object
+      description: One drift holding the rite could convert toward a cap's target
+        (read-only).
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        balance:
+          type: integer
+        multiplier:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+        conversion_type:
+          type: string
+        max_amount:
+          type: integer
+        projected_output:
+          type: integer
+      required:
+      - balance
+      - conversion_type
+      - max_amount
+      - multiplier
+      - projected_output
+      - resonance_id
+      - resonance_name
+    DriftTargetResonance:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        affinity:
+          type: string
+      required:
+      - affinity
+      - id
+      - name
     DriveView:
       type: object
       properties:
@@ -73283,6 +73583,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DramaticMomentTag'
+    PaginatedDriftConversionOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftConversionOffer'
     PaginatedDuelChallengeList:
       type: object
       required:
@@ -86210,6 +86533,7 @@ components:
             * `PENANCE` - Atonement resonance conversion
             * `FALL_CONVERSION` - Fall/Redemption conversion
             * `WORSHIP_RITE` - Worship rite
+            * `DRIFT_CORRECTION` - Drift correction
         granted_at:
           type: string
           format: date-time
@@ -86264,6 +86588,7 @@ components:
       - PENANCE
       - FALL_CONVERSION
       - WORSHIP_RITE
+      - DRIFT_CORRECTION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -86287,6 +86612,7 @@ components:
         * `PENANCE` - Atonement resonance conversion
         * `FALL_CONVERSION` - Fall/Redemption conversion
         * `WORSHIP_RITE` - Worship rite
+        * `DRIFT_CORRECTION` - Drift correction
     ResonanceLine:
       type: object
       properties:

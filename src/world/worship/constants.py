@@ -161,6 +161,9 @@ PASSIVE_DEED_SOURCES: frozenset[str] = frozenset(
         GainSource.OUTFIT_TRICKLE,
         GainSource.DISTINCTION,
         GainSource.STAFF_GRANT,
+        # #4733: a drift correction converts resonance the character already earned
+        # by deeds; the deeds earned their favor, so the conversion earns none again.
+        GainSource.DRIFT_CORRECTION,
     }
 )
 

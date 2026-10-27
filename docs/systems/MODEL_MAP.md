@@ -1733,6 +1733,7 @@
   - aura <- magic.CharacterAura
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - drift_conversion_offers <- magic.DriftConversionOffer
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
   - sceneentryendorsement_given <- magic.SceneEntryEndorsement
@@ -5836,6 +5837,28 @@
   - tags <- magic.DramaticMomentTag
   - suggestions <- gm.GMPrompt
 
+### DriftConversionCap
+**Foreign Keys:**
+  - offer -> magic.DriftConversionOffer [FK]
+  - target_resonance -> magic.Resonance [FK]
+  - grants -> magic.ResonanceGrant [M2M]
+
+### DriftConversionOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK]
+**Pointed to by:**
+  - caps <- magic.DriftConversionCap
+
+### DriftCorrectionConfig
+**Foreign Keys:**
+  - rite -> magic.Ritual [FK] (nullable)
+  - check_type -> checks.CheckType [FK] (nullable)
+
+### DriftCorrectionOutcomeShare
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### EffectType
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -6153,6 +6176,7 @@
   - character_resonances <- magic.CharacterResonance
   - crossing_options <- magic.CrossingOption
   - dramatic_moment_types <- magic.DramaticMomentType
+  - drift_conversion_caps <- magic.DriftConversionCap
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
@@ -6225,6 +6249,7 @@
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
 **Pointed to by:**
+  - drift_conversion_caps <- magic.DriftConversionCap
   - pledge_credit <- worship.PledgeCredit
 
 ### ResonanceTier
@@ -9147,6 +9172,7 @@
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - feedings <- magic.FeedingRecord
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - drift_conversion_offers <- magic.DriftConversionOffer
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
@@ -11093,6 +11119,7 @@
   - arxii_gangturfreputationaward <- societies.GangTurfReputationAward
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - arxii_driftcorrectionoutcomeshare <- magic.DriftCorrectionOutcomeShare
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward

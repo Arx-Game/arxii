@@ -14446,6 +14446,92 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/drift-correction/convert/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the rite through its action (telnet + web converge). */
+    post: operations['magic_drift_correction_convert_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/drift-correction/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the decline through its action. */
+    post: operations['magic_drift_correction_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/drift-correction/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of open drift conversion offers (#4733).
+     *
+     *     GET /api/magic/drift-correction/pending/
+     *     GET /api/magic/drift-correction/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
+     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+     */
+    get: operations['magic_drift_correction_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/drift-correction/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of open drift conversion offers (#4733).
+     *
+     *     GET /api/magic/drift-correction/pending/
+     *     GET /api/magic/drift-correction/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
+     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+     */
+    get: operations['magic_drift_correction_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/effect-types/': {
     parameters: {
       query?: never;
@@ -32871,6 +32957,87 @@ export interface components {
       can_ascend: boolean;
       wake_blocked: boolean;
     };
+    /** @description One cap of an offer as a player sees it (read-only). */
+    DriftConversionCap: {
+      target_resonance: components['schemas']['DriftTargetResonance'];
+      cap_remaining: number;
+      focus_bonus: number;
+      sources: components['schemas']['DriftSourceOption'][];
+      qualifying_components: components['schemas']['DriftQualifyingComponent'][];
+    };
+    /**
+     * @description Player-facing view of an open drift conversion offer. Read-only.
+     *
+     *     ``rite_ready`` is false while the rite, its check type or any outcome tier's share is
+     *     missing; the rite then refuses with ``rite_not_ready_message``, which the dialog shows
+     *     in place of the offering picker. The message is empty while the rite is ready.
+     *
+     *     Readiness is the same for every offer, so the caller works it out once per request
+     *     (``rite_is_ready()``) and passes it as ``context["rite_ready"]``; this serializer never
+     *     queries it per offer.
+     */
+    DriftConversionOffer: {
+      readonly id: number;
+      readonly scene_id: number;
+      readonly caps: components['schemas']['DriftConversionCap'][];
+      readonly rite_ready: boolean;
+      readonly rite_not_ready_message: string;
+    };
+    /**
+     * @description Request shape for POST /api/magic/drift-correction/convert/.
+     *
+     *     ``validate`` resolves everything the action needs: the caller's own offer (anyone
+     *     else's is a 404), both resonances, and the offered items, each of which must be held
+     *     by the offer's character (a foreign or stray pk is a 400, never passed on).
+     */
+    DriftCorrectionConvertRequest: {
+      offer_id: number;
+      source_resonance_id: number;
+      target_resonance_id: number;
+      amount: number;
+      component_ids?: number[];
+    };
+    /** @description Request shape for POST /api/magic/drift-correction/decline/. */
+    DriftCorrectionDeclineRequest: {
+      offer_id: number;
+    };
+    DriftCorrectionDeclined: {
+      detail: string;
+    };
+    /** @description Read serializer for DriftCorrectionResult (types/drift.py dataclass). */
+    DriftCorrectionResult: {
+      source_resonance_id: number;
+      target_resonance_id: number;
+      attempted_amount: number;
+      converted_amount: number;
+      granted_amount: number;
+      outcome_name: string;
+      success_level: number;
+      conversion_type: string;
+      focus_bonus: number;
+    };
+    /** @description A carried item that counts toward the rite's offering, and its route (read-only). */
+    DriftQualifyingComponent: {
+      item_id: number;
+      name: string;
+      mode: string;
+    };
+    /** @description One drift holding the rite could convert toward a cap's target (read-only). */
+    DriftSourceOption: {
+      resonance_id: number;
+      resonance_name: string;
+      balance: number;
+      /** Format: decimal */
+      multiplier: string;
+      conversion_type: string;
+      max_amount: number;
+      projected_output: number;
+    };
+    DriftTargetResonance: {
+      id: number;
+      name: string;
+      affinity: string;
+    };
     DriveView: {
       label: string;
       strength: string;
@@ -41395,6 +41562,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DramaticMomentTag'][];
     };
+    PaginatedDriftConversionOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DriftConversionOffer'][];
+    };
     PaginatedDuelChallengeList: {
       /** @example 123 */
       count: number;
@@ -48625,6 +48807,7 @@ export interface components {
        *     * `PENANCE` - Atonement resonance conversion
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
        *     * `WORSHIP_RITE` - Worship rite
+       *     * `DRIFT_CORRECTION` - Drift correction
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -48656,6 +48839,7 @@ export interface components {
      *     * `PENANCE` - Atonement resonance conversion
      *     * `FALL_CONVERSION` - Fall/Redemption conversion
      *     * `WORSHIP_RITE` - Worship rite
+     *     * `DRIFT_CORRECTION` - Drift correction
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -48679,7 +48863,8 @@ export interface components {
       | 'COMPROMISE'
       | 'PENANCE'
       | 'FALL_CONVERSION'
-      | 'WORSHIP_RITE';
+      | 'WORSHIP_RITE'
+      | 'DRIFT_CORRECTION';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -73809,6 +73994,97 @@ export interface operations {
       };
     };
   };
+  magic_drift_correction_convert_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DriftCorrectionConvertRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DriftCorrectionResult'];
+        };
+      };
+    };
+  };
+  magic_drift_correction_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DriftCorrectionDeclineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DriftCorrectionDeclined'];
+        };
+      };
+    };
+  };
+  magic_drift_correction_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDriftConversionOfferList'];
+        };
+      };
+    };
+  };
+  magic_drift_correction_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DriftConversionOffer'];
+        };
+      };
+    };
+  };
   magic_effect_types_list: {
     parameters: {
       query?: never;
@@ -74649,12 +74925,14 @@ export interface operations {
          *     * `PENANCE` - Atonement resonance conversion
          *     * `FALL_CONVERSION` - Fall/Redemption conversion
          *     * `WORSHIP_RITE` - Worship rite
+         *     * `DRIFT_CORRECTION` - Drift correction
          */
         source?:
           | 'COMBO_DISCOVERY'
           | 'COMPROMISE'
           | 'DISTINCTION'
           | 'DRAMATIC_MOMENT'
+          | 'DRIFT_CORRECTION'
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
           | 'MISSION_REPORT'

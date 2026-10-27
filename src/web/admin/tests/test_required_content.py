@@ -1724,3 +1724,91 @@ class TestSettleActionTemplateProbe(TestCase):
         ActionTemplateFactory(name="Settle RC", category="social", settles_allegiance=True)
         result = _probe_for("settle-action-template").resolve(None)
         self.assertTrue(result.present)
+
+
+class TestDriftCorrectionConfigProbe(TestCase):
+    """`drift-correction-config` needs the rite, the check type and a share per tier (#4733)."""
+
+    def test_missing_when_no_config_row_exists(self) -> None:
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("the rite", "the check type"))
+
+    def test_missing_when_the_config_has_no_rite_or_check_type(self) -> None:
+        from world.magic.factories import DriftCorrectionConfigFactory
+
+        DriftCorrectionConfigFactory()
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("the rite", "the check type"))
+        self.assertEqual(
+            result.detail,
+            "The drift correction configuration has no rite and no check type.",
+        )
+
+    def test_detail_names_only_the_missing_rite(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import DriftCorrectionConfigFactory
+
+        config = DriftCorrectionConfigFactory()
+        config.check_type = CheckTypeFactory(name="RC Drift Check Rite Gap")
+        config.save()
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertEqual(result.missing, ("the rite",))
+        self.assertEqual(result.detail, "The drift correction configuration has no rite.")
+
+    def test_detail_names_only_the_missing_check_type(self) -> None:
+        from world.magic.factories import (
+            DriftCorrectionConfigFactory,
+            DriftCorrectionRiteFactory,
+        )
+
+        config = DriftCorrectionConfigFactory()
+        config.rite = DriftCorrectionRiteFactory()
+        config.save()
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertEqual(result.missing, ("the check type",))
+        self.assertEqual(result.detail, "The drift correction configuration has no check type.")
+
+    def test_names_the_tier_with_no_share(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import (
+            DriftCorrectionConfigFactory,
+            DriftCorrectionOutcomeShareFactory,
+            DriftCorrectionRiteFactory,
+        )
+        from world.traits.models import CheckOutcome
+
+        config = DriftCorrectionConfigFactory()
+        config.rite = DriftCorrectionRiteFactory()
+        config.check_type = CheckTypeFactory(name="RC Drift Check")
+        config.save()
+        covered = CheckOutcome.objects.create(name="RC Covered", success_level=1)
+        CheckOutcome.objects.create(name="RC Uncovered", success_level=2)
+        DriftCorrectionOutcomeShareFactory(outcome_tier=covered)
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("RC Uncovered", result.missing)
+        self.assertNotIn("RC Covered", result.missing)
+        self.assertIn("No drift correction share for outcome(s): ", result.detail)
+        self.assertIn("RC Uncovered", result.detail)
+
+    def test_present_when_authored_and_every_tier_has_a_share(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import (
+            DriftCorrectionConfigFactory,
+            DriftCorrectionOutcomeShareFactory,
+            DriftCorrectionRiteFactory,
+        )
+        from world.traits.models import CheckOutcome
+
+        config = DriftCorrectionConfigFactory()
+        config.rite = DriftCorrectionRiteFactory()
+        config.check_type = CheckTypeFactory(name="RC Drift Check Full")
+        config.save()
+        CheckOutcome.objects.create(name="RC Only Tier", success_level=1)
+        for outcome in CheckOutcome.objects.all():
+            DriftCorrectionOutcomeShareFactory(outcome_tier=outcome)
+        result = _probe_for("drift-correction-config").resolve(None)
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())

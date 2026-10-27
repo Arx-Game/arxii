@@ -298,6 +298,8 @@ class ActionRegistryTests(TestCase):
             "resolve_entry_flourish",
             "resolve_crossing_offer",
             "perform_ritual",
+            "perform_drift_correction",
+            "decline_drift_correction",
             "tavern_game_open",
             "tavern_game_join",
             "tavern_game_roll",
