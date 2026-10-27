@@ -573,6 +573,28 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),
+            # #4733 — DRIFT_CORRECTION: no typed source FK. The offer's cap rows name the
+            # grants it converted (DriftConversionCap.grants), so the ledger row stays untyped.
+            models.CheckConstraint(
+                name="res_grant_drift_correction_shape",
+                check=(
+                    Q(source="DRIFT_CORRECTION")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
+                    & Q(source_worship_rite_performance__isnull=True)
+                )
+                | ~Q(source="DRIFT_CORRECTION"),
+            ),
             # WORSHIP_RITE (#3777): the performance row is the source and stays
             # (PROTECT), so the FK is required whenever the discriminator says so.
             models.CheckConstraint(

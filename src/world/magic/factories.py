@@ -1489,6 +1489,33 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     min_quality_tier = None
 
 
+class DriftCorrectionRiteFactory(RitualFactory):
+    """Seed factory for the drift correction rite (#4733).
+
+    A client-hosted SERVICE ritual carrying one target-resonance component requirement: the
+    item the performer offers up must tie to the resonance they are converting toward.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Drift Correction"
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.drift_correction.perform_drift_correction_rite"
+    flow = None
+    client_hosted = True
+
+    @factory.post_generation
+    def target_resonance_requirement(self, create, extracted, **kwargs):
+        if not create:
+            return
+        if not self.requirements.filter(matches_target_resonance=True).exists():
+            RitualComponentRequirement.objects.create(
+                ritual=self, matches_target_resonance=True, quantity=1
+            )
+
+
 class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     """Factory for RitualCheckConfig.
 
@@ -4738,3 +4765,38 @@ def map_ritual_working_skill() -> MagicActivitySkill:
     """
     existing = MagicActivitySkill.objects.filter(activity=MagicActivity.RITUAL_WORKING).first()
     return existing or MagicActivitySkillFactory(activity=MagicActivity.RITUAL_WORKING)
+
+
+class DriftCorrectionConfigFactory(factory.django.DjangoModelFactory):
+    """The drift correction config singleton, unauthored (rite and check type unset)."""
+
+    class Meta:
+        model = "arxii.DriftCorrectionConfig"
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
+class DriftCorrectionOutcomeShareFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.DriftCorrectionOutcomeShare"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    converted_share = Decimal("0.50")
+
+
+class DriftConversionOfferFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.DriftConversionOffer"
+
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    scene = factory.SubFactory("world.scenes.factories.SceneFactory")
+
+
+class DriftConversionCapFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "arxii.DriftConversionCap"
+
+    offer = factory.SubFactory(DriftConversionOfferFactory)
+    target_resonance = factory.SubFactory(ResonanceFactory)
+    cap = 10

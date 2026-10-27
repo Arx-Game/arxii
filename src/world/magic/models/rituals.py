@@ -255,7 +255,24 @@ class RitualComponentRequirement(SharedMemoryModel):
         help_text=(
             "Touchstone mode: any attuned item whose tied_resonance matches the "
             "performer's own claimed Resonance, at or above this tier, satisfies "
-            "this requirement. Exactly one of item_template/min_touchstone_tier is set."
+            "this requirement. Exactly one of item_template, min_touchstone_tier or "
+            "matches_target_resonance is set."
+        ),
+    )
+    matches_target_resonance = models.BooleanField(
+        default=False,
+        help_text=(
+            "Target-resonance mode: an item that ties to the resonance the performer is "
+            "converting toward satisfies this requirement. Exclusive with item_template "
+            "and min_touchstone_tier."
+        ),
+    )
+    min_item_meaning = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Target-resonance mode only: the least meaning the item must carry for the "
+            "target resonance. Blank asks for any tie."
         ),
     )
     quantity = models.PositiveSmallIntegerField(default=1)
@@ -275,13 +292,27 @@ class RitualComponentRequirement(SharedMemoryModel):
                     (
                         models.Q(item_template__isnull=False)
                         & models.Q(min_touchstone_tier__isnull=True)
+                        & models.Q(matches_target_resonance=False)
                     )
                     | (
                         models.Q(item_template__isnull=True)
                         & models.Q(min_touchstone_tier__isnull=False)
+                        & models.Q(matches_target_resonance=False)
+                    )
+                    | (
+                        models.Q(item_template__isnull=True)
+                        & models.Q(min_touchstone_tier__isnull=True)
+                        & models.Q(matches_target_resonance=True)
                     )
                 ),
                 name="ritualcomponentrequirement_exactly_one_mode",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(min_item_meaning__isnull=True)
+                    | models.Q(matches_target_resonance=True)
+                ),
+                name="ritualcomponentrequirement_min_item_meaning_needs_target_mode",
             ),
         ]
 

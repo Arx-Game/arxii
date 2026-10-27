@@ -1985,6 +1985,15 @@ Repeatable (not a Fall); each conversion loses half the value.
 **New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
 `COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
+`DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
+
+**Drift correction models (`models/drift.py`, #4733):** `DriftCorrectionConfig` (singleton,
+`rite`/`check_type` null until staff author them, `check_difficulty`, `cap_percent`),
+`DriftCorrectionOutcomeShare` (an `OutcomeTierAward`; `clean` keeps the share monotonic by
+success level), `DriftConversionOffer` (one per sheet and scene) and `DriftConversionCap`
+(per offer and target resonance; `grants` names the deed grants measured).
+`RitualComponentRequirement` has a third mode, `matches_target_resonance` (with optional
+`min_item_meaning`), exclusive with `item_template` and `min_touchstone_tier`.
 
 **Seed content:** `wire_fall_redemption_content()` in `factories.py`,
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row
