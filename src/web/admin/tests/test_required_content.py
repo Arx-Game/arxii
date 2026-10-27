@@ -1204,7 +1204,9 @@ class TestSurgeTuningProbe(TestCase):
     def test_missing_every_rolled_kind_with_no_rows(self) -> None:
         result = rc._probe_surge_tuning()
         self.assertFalse(result.present)
-        self.assertEqual(len(result.missing), 3)
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS
+
+        self.assertEqual(len(result.missing), len(ROLLED_SURGE_TRIGGER_KINDS))
         self.assertTrue(all(line.startswith("SurgeTuning for ") for line in result.missing))
 
     def test_present_when_every_rolled_kind_has_a_sane_tuning_with_bands(self) -> None:
