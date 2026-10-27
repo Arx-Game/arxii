@@ -27,7 +27,7 @@ from django.db import models
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.checks.constants import ModifierLane, ModifierSize, ModifierSourceKind
 
-_LANE_HELP = "The kind of quantity this row values (check points, and later lanes)."
+_LANE_HELP = "The kind of quantity this row values (check points, stats, and later lanes)."
 
 
 class ModifierValue(SharedMemoryModel):
@@ -59,7 +59,8 @@ class ModifierValue(SharedMemoryModel):
     )
     value = models.PositiveIntegerField(
         help_text="What the modifier is worth, in the lane's units (check points for the "
-        "check lane). A magnitude: a debuff's authored row supplies the minus sign.",
+        "check lane, internal stat units, x10 the shown stat, for the stat lane). A "
+        "magnitude: a debuff's authored row supplies the minus sign.",
     )
 
     class Meta:

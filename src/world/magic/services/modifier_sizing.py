@@ -3,7 +3,8 @@
 * ``CastLevelTable`` / ``load_cast_level_table`` - the cast's effective power picks a
   level (``CastPowerLevel`` rows) and its outcome shifts it (``CastOutcomeLevelShift``
   rows). The applied condition keeps that level and its authored size, and the check
-  lane's value table turns the pair into points. The target's level is never read.
+  lane's value table turns the pair into points (the stat lane's for a stat, #4726).
+  The target's level is never read.
 * ``applied_condition_size_warnings`` - the admin size check: a buff's authored size
   should match how its technique spends its power.
 """
@@ -17,9 +18,10 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 
 from world.checks.constants import ModifierSize
-from world.conditions.models import ConditionCheckModifier
+from world.conditions.models import ConditionCheckModifier, ConditionModifierEffect
 from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLevel
 from world.magic.models.techniques import TechniqueAppliedCondition
+from world.traits.models import TraitType
 
 if TYPE_CHECKING:
     from world.magic.models.techniques import Technique
@@ -111,7 +113,8 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
     so the buff is Large; one that does something else as well splits it, so the buff
     is Minor or Moderate; narrow use pays for one step more, up to Exceptional. A
     warning, never a refusal: staff may have a reason. A sized row whose condition
-    changes no check also warns, since the size has nothing to act on yet.
+    changes no check and no stat (#4726: a stat target is valued from the stat lane)
+    also warns, since the size has nothing to act on yet.
     """
     effect_count = _technique_effect_count(technique)
     sized_condition_ids = {
@@ -119,12 +122,22 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
         for row in technique.cached_condition_applications
         if row.modifier_size is not None
     }
-    # One query for every sized condition that changes a check, template- or stage-level.
+    # One query for every sized condition that changes a check, and one for every one that
+    # changes a stat (#4726), template- or stage-level.
     checked_condition_ids: set[int] = set()
     if sized_condition_ids:
-        for condition_id, stage_condition_id in ConditionCheckModifier.objects.filter(
-            Q(condition_id__in=sized_condition_ids) | Q(stage__condition_id__in=sized_condition_ids)
-        ).values_list("condition_id", "stage__condition_id"):
+        in_sized = Q(condition_id__in=sized_condition_ids) | Q(
+            stage__condition_id__in=sized_condition_ids
+        )
+        acting_rows = [
+            *ConditionCheckModifier.objects.filter(in_sized).values_list(
+                "condition_id", "stage__condition_id"
+            ),
+            *ConditionModifierEffect.objects.filter(
+                in_sized, modifier_target__target_trait__trait_type=TraitType.STAT
+            ).values_list("condition_id", "stage__condition_id"),
+        ]
+        for condition_id, stage_condition_id in acting_rows:
             checked_condition_ids.update(
                 cid for cid in (condition_id, stage_condition_id) if cid is not None
             )
@@ -149,8 +162,8 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
             )
         if row.condition_id not in checked_condition_ids:
             warnings.append(
-                f"{row.condition.name} is sized {size_label}, but it changes no check, "
-                "so its size has nothing to act on yet."
+                f"{row.condition.name} is sized {size_label}, but it changes no check "
+                "or stat, so its size has nothing to act on yet."
             )
     return warnings
 

@@ -428,9 +428,10 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "How big this effect's bonus or penalty to a check is at rank 1, for its "
-            "holder's level (#4638). Read only when the target is a check type: the "
-            "holder's level and the size read the modifier value table, and the authored "
+            "How big this effect's bonus or penalty is at rank 1, for its holder's "
+            "level (#4638). Read when the target is a check type (the check lane) or a "
+            "stat (the stat lane, #4726): the holder's level and the size read that "
+            "lane's modifier value table, and the authored "
             "rank-1 value's sign says bonus or penalty. Rank never multiplies a sized "
             "effect (#4660): a later rank takes its size from this effect's rank sizes "
             "(the highest authored rank at or below it), and with none authored every "
