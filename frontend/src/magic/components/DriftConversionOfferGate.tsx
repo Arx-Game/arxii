@@ -44,7 +44,7 @@ export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGatePr
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="flex w-full animate-pulse items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-left text-sm font-semibold text-amber-300 shadow-[0_0_24px_-8px] shadow-amber-500/60 motion-reduce:animate-none"
+          className="flex w-full animate-pulse items-center gap-2 rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-left text-sm font-semibold text-amber-800 shadow-[0_0_24px_-8px] shadow-amber-500/60 motion-reduce:animate-none dark:bg-amber-950/40 dark:text-amber-300"
           data-testid="drift-conversion-gate-strip"
         >
           <Flame className="h-4 w-4 shrink-0" />

@@ -443,6 +443,61 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
   });
 });
 
+/**
+ * The light theme is the default; a pale amber text or a near-black amber tint is only
+ * readable on the dark one. Each themed element keeps those under `dark:` and carries a
+ * dark amber text and a pale surface for light (the repo's `text-amber-700/800
+ * dark:text-amber-300|400`, `bg-amber-50 dark:bg-amber-950/..` pairs). jsdom has no
+ * stylesheet, so this pins the class pairs; contrast on a real page needs the live run.
+ */
+const DARK_ONLY =
+  /^(text-amber-(100|200|300|400)|bg-amber-950(\/\d+)?|text-red-200|bg-red-950(\/\d+)?)$/;
+
+function lightThemeClasses(element: HTMLElement): string[] {
+  return Array.from(element.classList).filter((c) => !c.includes(':'));
+}
+
+describe('DriftConversionOfferDialog - readable in the light theme', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('keeps the pale amber text and dark tints under dark: on every themed element', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.convertDrift).mockRejectedValue(new Error('Nope.'));
+    renderGate([OFFER]);
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-501'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+    const themed = [
+      screen.getByTestId('drift-conversion-gate-strip'),
+      screen.getByRole('heading', { name: 'Conversion offer' }),
+      screen.getByRole('heading', { name: 'Dawnlight' }),
+      screen.getByTestId('drift-cap-20'),
+      screen.getByTestId('drift-source-20-30'),
+      screen.getByTestId('drift-component-501'),
+      await screen.findByTestId('drift-error'),
+    ];
+    expect(dialog).toBeInTheDocument();
+    for (const element of themed) {
+      const light = lightThemeClasses(element);
+      expect(light.filter((c) => DARK_ONLY.test(c))).toEqual([]);
+    }
+    // The light theme's own pair: dark amber text on the selected pill and the heading.
+    expect(lightThemeClasses(screen.getByTestId('drift-component-501'))).toContain(
+      'text-amber-800'
+    );
+    expect(screen.getByTestId('drift-component-501')).toHaveClass('dark:text-amber-300');
+    expect(screen.getByTestId('drift-conversion-gate-strip')).toHaveClass(
+      'bg-amber-50',
+      'text-amber-800',
+      'dark:bg-amber-950/40',
+      'dark:text-amber-300'
+    );
+  });
+});
+
 describe('DriftConversionOfferGate - auto-open once per offer id', () => {
   beforeEach(() => {
     vi.clearAllMocks();

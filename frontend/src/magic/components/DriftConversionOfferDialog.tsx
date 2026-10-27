@@ -49,8 +49,8 @@ function projectedOutput(amount: number, multiplier: string): number {
 function pillClass(selected: boolean): string {
   return `rounded-full border px-3 py-1 text-sm transition-colors ${
     selected
-      ? 'border-amber-500 bg-amber-500/20 font-semibold text-amber-300'
-      : 'border-muted-foreground/30 text-muted-foreground hover:border-amber-500/60 hover:text-amber-300'
+      ? 'border-amber-500 bg-amber-500/20 font-semibold text-amber-800 dark:text-amber-300'
+      : 'border-muted-foreground/30 text-muted-foreground hover:border-amber-500/60 hover:text-amber-800 dark:hover:text-amber-300'
   }`;
 }
 
@@ -128,11 +128,13 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
 
   return (
     <section
-      className="space-y-3 rounded-md border border-amber-500/30 bg-amber-950/20 p-3"
+      className="space-y-3 rounded-md border border-amber-500/30 bg-amber-50 p-3 dark:bg-amber-950/20"
       data-testid={`drift-cap-${targetId}`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-lg font-semibold text-amber-300">{cap.target_resonance.name}</h3>
+        <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-300">
+          {cap.target_resonance.name}
+        </h3>
         <span className="text-sm text-muted-foreground">
           Cap remaining{' '}
           <span
@@ -218,7 +220,7 @@ function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
         <div
           role="alert"
           data-testid="drift-error"
-          className="rounded-md border border-red-600/60 bg-red-950/40 p-3 text-sm font-medium text-red-200"
+          className="rounded-md border border-red-600/60 bg-red-50 p-3 text-sm font-medium text-red-800 dark:bg-red-950/40 dark:text-red-200"
         >
           {convert.error?.message || 'The rite did not take; please try again.'}
         </div>
@@ -276,7 +278,7 @@ export function DriftConversionOfferDialog({
         className="max-h-[90vh] overflow-y-auto border-amber-500/60 shadow-[0_0_60px_-12px] shadow-amber-500/50"
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-wide text-amber-400">
+          <DialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-wide text-amber-700 dark:text-amber-400">
             <Flame className="h-7 w-7" />
             Conversion offer
           </DialogTitle>
@@ -302,7 +304,7 @@ export function DriftConversionOfferDialog({
           <div
             role="alert"
             data-testid="drift-decline-error"
-            className="rounded-md border border-red-600/60 bg-red-950/40 p-3 text-sm font-medium text-red-200"
+            className="rounded-md border border-red-600/60 bg-red-50 p-3 text-sm font-medium text-red-800 dark:bg-red-950/40 dark:text-red-200"
           >
             {decline.error?.message || 'The offer could not be declined; please try again.'}
           </div>
