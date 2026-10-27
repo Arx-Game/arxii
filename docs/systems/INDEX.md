@@ -8392,12 +8392,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
-  subject_phase_number=None, subject_companion=None)` (`world/combat/escalation.py`) - the
+  subject_phase_number=None, subject_companion=None, outcome=None, potency=None,
+  control_change=0, repeat_round=None, narrate=True)` (`world/combat/escalation.py`) - the
   one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   every subject FK is `CASCADE`, `subject_sheet` since #4464, because a nulled subject lands
   in the subject-less slice of the dedup index;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
-  GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
+  GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK, plus the three rolled kinds TAUNT_RECEIVED /
+  RALLIED / ALLY_HURT described in the next bullet). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
   blank; never broadcast to the room. Three new trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
@@ -8419,34 +8421,55 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
   `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
   for a companion (no opponent peril band).
-- **Rolled surges (#4737, ADR-4737) [BUILT & WIRED]:** a taunt, a rally and a hurt bonded
-  ally raise a player character's intensity through a roll with degrees.
-  `SurgeTriggerKind` gained `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT`
-  (`ROLLED_SURGE_TRIGGER_KINDS`). Staff author one `SurgeTuning` per kind (`check_type`,
-  `potency_base`, `potency_per_depth`) with `SurgeDegreeBand` rows per `CheckOutcome`
-  (`intensity`, `control_change`, optional `condition`); the monotonic rule is
+- **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
+  taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
+  with degrees. `SurgeTriggerKind` has twelve members: the nine older kinds above and
+  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` (`ROLLED_SURGE_TRIGGER_KINDS`). **All three are
+  off until staff author a `SurgeTuning` row per kind with bands** (no data migration seeds
+  them; the Required content `surge-tuning` probe, `_probe_surge_tuning`, names each kind
+  with no row and every stored band set that breaks the monotonic rule). The hurt-ally surge
+  also needs the staff-authored `escalation_ally_hurt_spike` flow and
+  `escalation_spike_on_damage` trigger definition rows (`wire_escalation_content` looks them
+  up and invents them only under `SEED_SAMPLE_CONTENT`; owner call 2026-10-27: staff author
+  them, no data migration).
+  Staff author one `SurgeTuning` per kind (`check_type`, `potency_base`, `potency_per_depth`,
+  the potency pair only meaningful on `ALLY_HURT`) with `SurgeDegreeBand` rows per
+  `CheckOutcome` (`intensity`, `control_change`, optional `condition`); the monotonic rule is
   `world/combat/surge_bands.validate_surge_bands`, run from the model `clean` and the admin
   inline formset. `world/combat/surge_rolls.py`: `surge_tuning_for`,
+  `rolled_surge_possible` (the pre-roll check that the participant is engaged and the
+  round's slot is free, so a swallowed roll never spends a contributing condition),
   `surge_roll_for_participant` (the social-check roll seam), `band_for_outcome` / `pick_band`
   (exact band, else the nearest worse), `apply_rolled_surge` (writes through
-  `apply_dramatic_surge`, applies the band's condition in one transaction, sends the surged
-  character the `roll_line`), no-ops without an escalation curve. `apply_dramatic_surge` gained
-  `outcome`, `potency`, `control_change`, `repeat_round`; `DramaticSurgeRecord` gained those
-  plus `condition`, and rolled rows dedup once per round per subject (two extra unique
-  constraints, the older ones now apply where `repeat_round` is null). Sources: PC on PC taunt
-  (`declare_taunt` accepts a `CombatParticipant`; the taunter's roll is the potency, the target
-  rolls the tuned check), NPC taunt entry (`ThreatPoolEntry.taunt_potency`, no damage, resolved
-  in `npc_action._resolve_npc_taunt_on_target`), Rally (`rally._surge_rallied_ally`, banded by
-  the Rally roll), and a hurt bonded ally (`escalation.apply_ally_hurt_surge`, fired by
-  `ally_hurt_spike_handler` from the `escalation_spike_on_damage` room trigger, wound-scaled).
-  The ally-hurt flow and trigger definition are authored content seeded by
-  `wire_escalation_content`; a deployment without them has that surge silently off. Surfaces:
-  `TauntAction` (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
-  `opponent_id`), telnet `combat taunt <opponent or ally>`, `surge_beats` roll fields (outcome,
-  potency, control_change, condition, roll) for the surged player's owner, GMs and staff, the
-  round log roll line and an ally taunt in the Combatants row menu. Not built: implore and
-  challenge verbs, a Pressure card, a targeting lock (Goaded is an authored debuff
-  `ConditionTemplate` on a band). Architecture: `docs/architecture/runtime-modifiers-audere.md`.
+  `apply_dramatic_surge`, applies the band's condition in one transaction, and sends the
+  surged character the `roll_line` once the surrounding transaction commits), a quiet no-op
+  without an escalation curve. **Zero-amount rule:** a band whose scaled intensity is 0 and
+  that carries no control change and no condition writes nothing and leaves the round's slot
+  free; with a control change or condition the record is written but the room gets no
+  "power surges" line (`narrate=False`) and the round payload narration is "". The record
+  stores `outcome`, `potency`, `control_change` and `condition` (the condition only if it
+  took hold), and rolled rows dedup once per round per subject (`repeat_round` equals
+  `round_number`; one `nulls_distinct=False` unique constraint, the two older subject-keyed
+  ones now apply where `repeat_round` is null). Sources: PC on PC taunt (`declare_taunt`
+  accepts a `CombatParticipant`; the target's difficulty is the taunter's check RATING for the
+  Taunt check type, `compute_check_rating`, clamped at 0 - no dice for the taunter, nothing
+  spent; the target rolls the tuned check against it), NPC taunt entry
+  (`ThreatPoolEntry.taunt_potency` per pool entry, no damage, resolved in
+  `npc_action._resolve_npc_taunt_on_target`; acts on player characters only, so an entry aimed
+  at an opponent is skipped; one per target per round), Rally (`rally._surge_rallied_ally`:
+  the Rally roll is the tuning's `check_type` against the fixed `RALLY_BASE_DIFFICULTY`, which
+  the roll line shows, and its outcome picks the band), and a hurt bonded ally
+  (`escalation.apply_ally_hurt_surge`, fired by `ally_hurt_spike_handler` from the
+  `escalation_spike_on_damage` room trigger, wound-scaled). Surfaces: `TauntAction`
+  (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
+  `opponent_id`), telnet `combat taunt <opponent or ally>`, `surge_beats` roll fields
+  (outcome, potency, control_change, condition, roll) for the surged player's owner, GMs and
+  staff (a bystander gets only `id` and `narration`), the round log roll line and an ally
+  taunt in the Combatants row menu. On a player character a compulsion such as Goaded is a
+  debuff `ConditionTemplate` a band applies (owner call 2026-10-27), never a declaration
+  lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
+  `integration_tests/test_surge_rolls_journeys.py`, `test_taunt_targets_journeys.py`.
+  Architecture: `docs/architecture/runtime-modifiers-audere.md`.
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the

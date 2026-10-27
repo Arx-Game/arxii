@@ -53,7 +53,8 @@ control does not keep pace with a spike. See `docs/roadmap/combat-build-history.
 entry) for the full surface. Since then dramatic surges have added near-death (ally in
 peril), hated-foe, high-stakes and boss-beat spikes (#2013, #3445), and #4737 (slice 1 of
 #4727) built the rolled surges: a taunt, a rally and a hurt bonded ally raise a player
-character's intensity through a roll with degrees. Remaining design intent not yet built
+character's intensity through a roll with degrees (inert until staff author the tuning
+rows). Remaining design intent not yet built
 (slices 2 to 4 of #4727): strain and steeling feeding intensity, emotional-condition
 intensity feeds, covenant vow scaling of surges given, and the Audere control step.
 

@@ -358,27 +358,36 @@ condition). `world/combat/surge_rolls.apply_rolled_surge` picks the band (the ou
 own, else the nearest worse) and writes it through the same `apply_dramatic_surge` seam,
 which adds the band's `control_change` to `control_modifier` in the same save and keeps
 the outcome, potency and applied condition on the `DramaticSurgeRecord`. The surged
-player's character is sent a roll line; the round payload's `surge_beats` carries the
-roll fields for the surged player's owner, GMs and staff only.
+player's character is sent a roll line once the round's transaction commits; the round
+payload's `surge_beats` carries the roll fields for the surged player's owner, GMs and
+staff only (a bystander gets the generic beat). A band that scales to 0 intensity with no
+control change and no condition writes nothing and leaves the round's slot free; with a
+control change or condition it is written without the room's "power surges" line.
+**All three kinds are inert until staff author a `SurgeTuning` row per kind with bands**
+(the Required content `surge-tuning` probe names what is missing).
 
-- `TAUNT_RECEIVED`: an NPC taunt entry (`ThreatPoolEntry.taunt_potency`) supplies the
-  number and does no damage; a player character's taunt is two stages, the taunter's Taunt
-  roll becoming the potency the target rolls the tuned check (Composure) against. NPCs
-  never roll.
-- `RALLIED`: after the Rally roll, whatever its result, the ally is surged by the band
-  that roll's outcome picks.
+- `TAUNT_RECEIVED`: an NPC taunt entry (`ThreatPoolEntry.taunt_potency`, per pool entry)
+  supplies the number and does no damage; a player character's taunt of another sets the
+  target's difficulty from the taunter's check RATING for the Taunt check type (no dice,
+  nothing spent, clamped at 0; an owner call of 2026-10-27), and the target rolls the tuned
+  check (Composure) against it. NPCs never roll. One NPC taunt per player character per
+  round (it carries no subject).
+- `RALLIED`: the Rally roll is the tuning's `check_type` against the fixed
+  `RALLY_BASE_DIFFICULTY` (the Rally check found by name when no tuning exists), and
+  whatever its result, the ally is surged by the band that roll's outcome picks.
 - `ALLY_HURT`: `ally_hurt_spike_handler` hears `DAMAGE_APPLIED` through the
   `escalation_spike_on_damage` room trigger (installed with the other escalation
   triggers each escalating round) and each bonded co-combatant who qualifies as in the
   peril leg rolls at `potency_base + potency_per_depth * depth`; the band is scaled by
-  the wound (damage over max health, at most 1). The flow and trigger definition are
-  authored content (`wire_escalation_content`); without them this surge is off.
+  the wound (damage over max health, at most 1). The flow and trigger definition rows are
+  staff-authored content (owner call 2026-10-27: no data migration; `wire_escalation_content`
+  only invents them under `SEED_SAMPLE_CONTENT`); without them this surge is off.
 
 A rolled kind surges once per round per subject (`DramaticSurgeRecord.repeat_round`),
 unlike the other kinds' once per encounter (ADR-4737), and, like every surge, only in an
 encounter with an escalation curve (ADR-0098). Not built: implore and challenge verbs,
-a Pressure card and a targeting lock; a compulsion such as Goaded is an authored
-condition attached to a band. The rest of #4727 (strain and steeling, emotional
+a Pressure card and a targeting lock; on a player character a compulsion such as Goaded
+is an authored debuff condition attached to a band, never a declaration lock. The rest of #4727 (strain and steeling, emotional
 conditions and vows, the Audere control step) is not built.
 
 One naming note: the depth signal these two triggers read is a bonded

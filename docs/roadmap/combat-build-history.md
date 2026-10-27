@@ -378,10 +378,13 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   control change, optional condition), validated as a set so a better outcome never gives a
   lower beneficial number (`surge_bands.py`, model `clean`, admin inline formset). The new
   service `world/combat/surge_rolls.py` rolls, picks the band and writes through
-  `apply_dramatic_surge`. Sources: a player character's taunt of another is two-stage (the
-  taunter's roll is the potency the target rolls Composure against); an NPC taunt entry
-  (`ThreatPoolEntry.taunt_potency`, no damage) supplies the potency and never rolls; Rally
-  surges the ally by the Rally roll's outcome; a hurt bonded ally surges its bonded
+  `apply_dramatic_surge`. Sources: a player character's taunt of another sets the target's
+  difficulty from the taunter's check rating for the Taunt check type (no dice, nothing
+  spent; an owner call of 2026-10-27) and the target rolls Composure against it; an NPC
+  taunt entry (`ThreatPoolEntry.taunt_potency`, per pool entry, no damage) supplies the
+  potency and never rolls, one per player character per round; Rally rolls the tuning's
+  check at the fixed rally difficulty and surges the ally by its outcome; a hurt bonded ally
+  surges its bonded
   co-combatants through the new `escalation_spike_on_damage` room trigger, scaled by the
   wound. `DramaticSurgeRecord` gained `outcome`, `potency`, `control_change`, `condition`
   and `repeat_round`; a rolled kind surges once per round per subject, the older kinds stay
@@ -389,13 +392,16 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   telnet `combat taunt <opponent or ally>`, the surged player's character is sent a roll
   line, `surge_beats` carries the roll fields for the surged player's owner, GMs and
   staff, and the web round log shows the line with an ally taunt in the Combatants row menu.
-  Migrations 0309 to 0311. Owner rulings: Rally is the only encouragement verb built
+  Migrations 0310 and 0311. Owner rulings: Rally is the only encouragement verb built
   (implore and challenge are not); the surge is `Inspired`'s effect; Goaded on a player
   character is an authored debuff condition on a degree band, not a targeting lock; no
-  Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py`. Authored rows
-  are needed before any rolled surge happens (`SurgeTuning` and bands; for the hurt-ally
-  surge also the flow and trigger definition `wire_escalation_content` seeds); the
-  remaining slices of #4727 (strain and steeling, emotional conditions and vows, the Audere
+  Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py` and
+  `test_taunt_targets_journeys.py`. All three rolled surges are inert until staff author a
+  `SurgeTuning` per kind with bands (the Required content `surge-tuning` probe reports what
+  is missing); the hurt-ally surge also needs the staff-authored flow and trigger definition
+  rows (`wire_escalation_content` invents them only under `SEED_SAMPLE_CONTENT`; owner call:
+  no data migration). A band that scales to nothing with no control change or condition
+  writes nothing. The remaining slices of #4727 (strain and steeling, emotional conditions and vows, the Audere
   control step) are not built.
 - **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
   `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
