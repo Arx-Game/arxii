@@ -651,14 +651,19 @@ polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pendin
 **Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
 `useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches it,
 polling only once the scene is known; keeps the result line after an exhausted
-offer leaves the inbox) and `DriftConversionOfferDialog` (Screen 5: one block per cap with the
-cap remaining, source pills, an amount bounded by the chosen source's `max_amount` defaulting to
-it, single-select component pills `<name> · <mode>`, a rate line built from the source's
-`multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a focus adds N" only
-when `focus_bonus > 0`), "Perform the rite" disabled until
-a component is chosen and the amount is valid, and Decline). While `rite_ready` is false each
-block shows `rite_not_ready_message` in place of the component pills and the button stays
-disabled. The yield for a typed amount is
+offer leaves the inbox; only an `aria-hidden` glow behind the strip pulses, so its words
+keep full contrast) and `DriftConversionOfferDialog` (Screen 5, one framed box: the small-caps
+title "Conversion offer · this scene"; per cap a system line "You hold <sources with a balance,
+joined with commas and 'and'> that does not fit you. Convert it to <target>." beside the cap
+remaining; a quiet row with the source picker (a plain chip when there is one source) and an
+amount bounded by the chosen source's `max_amount`, defaulting to it; single-select component
+pills `<name> · <mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest
+outlined; a rate line built from the source's `multiplier` ("Redemption: 12 Ruin becomes about
+6 Dawnlight", plus "; a focus adds N" only when `focus_bonus > 0`); the result and error lines;
+and one right-aligned row with Decline and "Perform the rite" (primary), Perform disabled until
+a component is chosen and the amount is valid; with several caps Decline sits in the last cap's
+row). While `rite_ready` is false each block shows `rite_not_ready_message` in place of the
+component pills and the button stays disabled. The yield for a typed amount is
 `max(1, floor(amount * multiplier))`, the server's own rounding.
 
 **Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside

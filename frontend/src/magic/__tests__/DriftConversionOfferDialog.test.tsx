@@ -497,39 +497,97 @@ describe('DriftConversionOfferDialog - readable in the light theme', () => {
     expect(glow).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('keeps the pale amber text and dark tints under dark: on every themed element', async () => {
+  it('keeps pale amber text and dark tints under dark: on the strip and the error', async () => {
     const user = userEvent.setup();
     vi.mocked(api.convertDrift).mockRejectedValue(new Error('Nope.'));
     renderGate([OFFER]);
 
-    const dialog = await screen.findByRole('dialog');
+    await screen.findByRole('dialog');
     await user.click(screen.getByTestId('drift-component-501'));
     await user.click(screen.getByTestId('drift-perform-20'));
     const themed = [
       screen.getByTestId('drift-conversion-gate-strip'),
-      screen.getByRole('heading', { name: 'Conversion offer' }),
-      screen.getByRole('heading', { name: 'Dawnlight' }),
       screen.getByTestId('drift-cap-20'),
       screen.getByTestId('drift-source-20-30'),
       screen.getByTestId('drift-component-501'),
       await screen.findByTestId('drift-error'),
     ];
-    expect(dialog).toBeInTheDocument();
     for (const element of themed) {
       const light = lightThemeClasses(element);
       expect(light.filter((c) => DARK_ONLY.test(c))).toEqual([]);
     }
-    // The light theme's own pair: dark amber text on the selected pill and the heading.
-    expect(lightThemeClasses(screen.getByTestId('drift-component-501'))).toContain(
-      'text-amber-800'
-    );
-    expect(screen.getByTestId('drift-component-501')).toHaveClass('dark:text-amber-300');
     expect(screen.getByTestId('drift-conversion-gate-strip')).toHaveClass(
       'bg-amber-50',
       'text-amber-800',
       'dark:bg-amber-950/40',
       'dark:text-amber-300'
     );
+  });
+
+  it('fills the selected pill in the primary pair and outlines the rest', async () => {
+    const user = userEvent.setup();
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-502'));
+    const chosen = screen.getByTestId('drift-component-502');
+    const other = screen.getByTestId('drift-component-501');
+    expect(chosen).toHaveAttribute('aria-pressed', 'true');
+    expect(chosen).toHaveClass('bg-primary', 'text-primary-foreground');
+    expect(other).toHaveAttribute('aria-pressed', 'false');
+    expect(other).not.toHaveClass('bg-primary');
+    expect(other).toHaveClass('border-input', 'bg-transparent');
+  });
+});
+
+describe('DriftConversionOfferDialog - the approved Screen 5 box', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('is labelled "Conversion offer · this scene"', async () => {
+    renderGate([OFFER]);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Conversion offer · this scene' });
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it('names one held source in the system line', async () => {
+    const one: DriftConversionOffer = {
+      ...OFFER,
+      caps: [{ ...OFFER.caps[0], sources: [OFFER.caps[0].sources[0]] }],
+    };
+    renderGate([one]);
+
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
+      /^You hold Ruin that does not fit you\. Convert it to Dawnlight\.$/
+    );
+    // One source is a plain chip, not a picker.
+    expect(screen.getByTestId('drift-source-20-30').tagName).toBe('SPAN');
+    expect(screen.queryByRole('group', { name: 'Source for Dawnlight' })).not.toBeInTheDocument();
+  });
+
+  it('names two held sources in the system line', async () => {
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('drift-system-line-20')).toHaveTextContent(
+      /^You hold Ruin and Spite that does not fit you\. Convert it to Dawnlight\.$/
+    );
+  });
+
+  it('holds Decline and Perform the rite in one right-aligned row inside the box', async () => {
+    renderGate([OFFER]);
+
+    const dialog = await screen.findByRole('dialog');
+    const row = screen.getByTestId('drift-actions-20');
+    expect(row).toHaveClass('justify-end');
+    expect(dialog).toContainElement(row);
+    const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.textContent);
+    expect(buttons).toEqual(['Decline', 'Perform the rite']);
+    // Decline appears once, in that row.
+    expect(screen.getAllByRole('button', { name: 'Decline' })).toHaveLength(1);
   });
 });
 
