@@ -204,14 +204,32 @@ def consumption_restored_on_raise(items: Iterable[ItemInstance]) -> Iterator[Non
       a hard delete removed is left out of the identity map (its attribute, tag and alias
       handlers were cleared in memory) and the item drops its cached link to it, so the
       next read loads it fresh;
-    * each holder's contents cache is rebuilt from the database, and its carried and
-      equipped item handlers are invalidated.
+    * a consumed container's contents, which ``_spill_contents`` moved out of it, get
+      their container and location back the same way (read in one query, before);
+    * each holder's contents cache (a character, or a container's game object) is
+      rebuilt from the database, and its carried and equipped item handlers are
+      invalidated.
 
     The exception is re-raised. Nothing happens when the block completes.
+
+    Out of scope: the cached ``SET_NULL`` referrers that a hard-deleted component's
+    delete nulled in memory (``core.deletion.IdentityMapCollector``, ADR-0327) keep the
+    null. Rows the rolled-back block created (an ``OwnershipEvent``, a
+    ``RitualAnimaContribution``) stay in the identity map under a pk the table no longer has.
     """
     from core.identity_map import CacheGuard  # noqa: PLC0415
 
-    kept = [item for item in items if item.pk is not None]
+    components = [item for item in items if item.pk is not None]
+    contents = (
+        list(
+            ItemInstance.objects.filter(contained_in__in=components).select_related(
+                "game_object__db_location"
+            )
+        )
+        if components
+        else []
+    )
+    kept = [*components, *contents]
     item_pks = [item.pk for item in kept]
     objects = [item.game_object for item in kept if item.game_object_id is not None]
     object_pks = [obj.pk for obj in objects]

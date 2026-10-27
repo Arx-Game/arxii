@@ -4399,14 +4399,15 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
   the tables; `PerformRitualAction`'s `_spend_restored_on_raise`, entered outside the
   `transaction.atomic()`, restores the identity map to match for every ritual: the items
   (`consumption_restored_on_raise` in `world/items/services/materials.py`: quantity,
-  `destroyed_at`, holder and container in place; a hard-deleted item re-cached; its deleted
+  `destroyed_at`, holder and container in place, a consumed container's spilled contents
+  too; a hard-deleted item re-cached; its deleted
   game object left out of the cache; the holder's `contents_cache` rebuilt and its carried
   and equipped handlers invalidated) and, when the rite channels, the `CharacterAnima` row.
   The full Fall re-anchors threads one by one, so a refusal part way would leave the threads
   already moved, and the balances already zeroed, moved in memory: `perform_fall` takes
   `conversion_restored_on_raise` (`services/conversion.py`) around its transaction, which
   keeps the character's `CharacterResonance` rows and live threads and writes them back in
-  place on a raise. Both use `core.identity_map.CacheGuard` (ADR-4626's restore-in-place).
+  place on a raise, then invalidates the character's thread and resonance handlers. Both use `core.identity_map.CacheGuard` (ADR-4626's restore-in-place).
 - **Surfaces**: telnet `ritual <rite> thread=<id> resonance=<id>` (alias `target_resonance=`;
   leave it out to list the options); the Spellbook's `ThreadResonanceDialog` on the thread
   detail page (vitest `ThreadResonanceDialog.test.tsx`); web `POST /api/magic/rituals/perform/` with

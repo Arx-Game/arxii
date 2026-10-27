@@ -372,6 +372,61 @@ class ARetuneRefusedAfterItsOfferingIsSpent(ThreadRetuneCase):
 
         self.assertIsNotNone(ItemInstance.objects.get(pk=candle).destroyed_at)
 
+    def test_a_container_offering_and_what_it_holds_are_given_back(self) -> None:
+        # Consuming a container spills what it holds into her hands; the refusal puts the
+        # ring back inside the reliquary, in the database and in memory.
+        reliquary_template = ItemTemplateFactory(
+            name="Lumen Reliquary",
+            tied_resonance=self.lumen,
+            resonance_tier=ResonanceTierFactory(),
+            is_container=True,
+            container_capacity=2,
+            container_max_item_size=5,
+        )
+        reliquary = ItemInstanceFactory(
+            template=reliquary_template, holder_character_sheet=self.sheet
+        )
+        materialize_item_game_object(reliquary, self.sheet)
+        ring = ItemInstanceFactory(
+            template=ItemTemplateFactory(name="Bone Ring", size=1),
+            holder_character_sheet=self.sheet,
+        )
+        materialize_item_game_object(ring, self.sheet)
+        self.assertIn(
+            "Bone Ring", strip_ansi(self.telnet(self.ysmay, "put Bone Ring in Lumen Reliquary"))
+        )
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.lumen,
+            target_trait=self.thread.target_trait,
+            developed_points=3,
+        )
+        with mock.patch(
+            "world.magic.services.conversion._find_existing_target_thread", return_value=None
+        ):
+            told = self.retune(self.thread, self.lumen)
+
+        self.assertIn(ThreadAnchorTakenError.user_message, told)
+        stored_ring = ItemInstance.objects.filter(pk=ring.pk).values(
+            "contained_in_id", "game_object__db_location_id"
+        )[0]
+        self.assertEqual(
+            stored_ring,
+            {
+                "contained_in_id": reliquary.pk,
+                "game_object__db_location_id": reliquary.game_object.pk,
+            },
+        )
+        cached_ring = ItemInstance.objects.get(pk=ring.pk)
+        self.assertEqual(cached_ring.contained_in_id, reliquary.pk)
+        self.assertEqual(cached_ring.game_object.location.pk, reliquary.game_object.pk)
+        cached_reliquary = ItemInstance.objects.get(pk=reliquary.pk)
+        self.assertIsNone(cached_reliquary.destroyed_at)
+        self.assertEqual(cached_reliquary.quantity, 1)
+        carrying = strip_ansi(self.telnet(self.ysmay, "inventory"))
+        self.assertIn("Lumen Reliquary", carrying)
+        self.assertNotIn("Bone Ring", carrying)
+
 
 class RetuningThroughTheWebClient(ThreadRetuneCase):
     def post(self, character, data: dict):

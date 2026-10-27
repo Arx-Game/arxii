@@ -387,7 +387,7 @@ def conversion_restored_on_raise(character_sheet: CharacterSheet) -> Iterator[No
     before anything changes; on a raise it writes them back onto the same objects
     (``core.identity_map.CacheGuard``), evicts any resonance row the rolled-back
     conversion created, clears the sheet's cached properties and the character's thread
-    handler, and re-raises.
+    and resonance handlers, and re-raises.
     """
     from core.identity_map import CacheGuard  # noqa: PLC0415
     from evennia_extensions.mixins import clear_django_cached_properties  # noqa: PLC0415
@@ -405,6 +405,7 @@ def conversion_restored_on_raise(character_sheet: CharacterSheet) -> Iterator[No
         guard.restore()
         clear_django_cached_properties(character_sheet)
         character_sheet.character.threads.invalidate()
+        character_sheet.character.resonances.invalidate()
         raise
 
 
