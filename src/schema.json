@@ -25305,6 +25305,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/CrossXPLockResponse'
           description: ''
+  /api/magic/threads/{id}/resonance-options/:
+    get:
+      operationId: magic_threads_resonance_options_retrieve
+      description: |-
+        Where this thread can be moved, and what the owner carries that pays the rite.
+
+        GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
+
+        Response: ``{ritual_id, options: [{resonance_id, resonance_name, affinity_name,
+        conversion_type, projected_points, qualifying: [{item_id, name, mode}]}]}``.
+        ``ritual_id`` is null while no retune rite is authored; perform it through
+        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResonanceOptions'
+          description: ''
   /api/mechanics/categories/:
     get:
       operationId: mechanics_categories_list
@@ -95971,6 +96000,55 @@ components:
       - resonance
       - target_id
       - target_kind
+    ThreadResonanceOption:
+      type: object
+      description: |-
+        One resonance a thread may move to, with the carried items that pay the rite (read-only).
+
+        ``qualifying`` needs ``context["ritual"]`` (the retune rite, or None), ``context["sheet"]``
+        and ``context["items"]`` (what the owner carries, fetched once by the view).
+        ``conversion_type`` is null for a retune within the thread's own affinity.
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        affinity_name:
+          type: string
+        conversion_type:
+          type: string
+          nullable: true
+        projected_points:
+          type: integer
+        qualifying:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftQualifyingComponent'
+          readOnly: true
+      required:
+      - affinity_name
+      - conversion_type
+      - projected_points
+      - qualifying
+      - resonance_id
+      - resonance_name
+    ThreadResonanceOptions:
+      type: object
+      description: |-
+        GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+
+        ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+      properties:
+        ritual_id:
+          type: integer
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadResonanceOption'
+      required:
+      - options
+      - ritual_id
     ThreadTargetKindEnum:
       enum:
       - TRAIT
