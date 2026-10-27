@@ -290,6 +290,7 @@ from world.combat.services.encounter.completion_counters import (
 from world.combat.services.encounter.config import (
     get_clash_config,
     get_flee_config,
+    get_social_maneuver_config,
     get_strain_config,
 )
 from world.combat.services.encounter.death_gate import (
@@ -822,6 +823,7 @@ __all__ = [
     "get_or_create_threat_record",
     "get_penetration_check_type",
     "get_resolution_order",
+    "get_social_maneuver_config",
     "get_strain_config",
     "has_persistent_identity_references",
     "increment_probing",

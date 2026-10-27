@@ -26,7 +26,9 @@ class VitalsConsequenceConfigAdmin(admin.ModelAdmin):
     default_wound_pool / default_death_pool are the fallbacks used when a
     DamageType doesn't specify its own wound_pool / death_pool. Leaving a slot
     null makes that branch skip silently. physical_damage_type names the type
-    untyped damage is (#4742).
+    untyped damage is (#4742). The three condition fields name the acute-peril
+    conditions (Bleeding Out, Plummeting, Surrounded) so code never matches them
+    by name (#4739).
     """
 
     list_display = [
@@ -41,6 +43,9 @@ class VitalsConsequenceConfigAdmin(admin.ModelAdmin):
         "default_wound_pool",
         "default_death_pool",
         "physical_damage_type",
+        "bleed_out_condition",
+        "plummeting_condition",
+        "surrounded_condition",
     ]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002

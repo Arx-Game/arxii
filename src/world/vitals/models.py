@@ -183,6 +183,45 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         ),
     )
     # ------------------------------------------------------------------
+    # Acute-peril conditions (#4739) — code finds these rows here, never by name.
+    # ------------------------------------------------------------------
+
+    bleed_out_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Bleeding Out. A downed character bleeds out "
+            "through this row, and the hold and rescue rules find it here. The Required "
+            "content dashboard flags it unset."
+        ),
+    )
+    plummeting_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Plummeting. A falling character carries it "
+            "until impact. The Required content dashboard flags it unset."
+        ),
+    )
+    surrounded_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Surrounded. A battle participant cut off "
+            "from their allies gets it. The Required content dashboard flags it unset."
+        ),
+    )
+
+    # ------------------------------------------------------------------
     # Survivability difficulty tuning — authored here, read by services.py
     # ------------------------------------------------------------------
 

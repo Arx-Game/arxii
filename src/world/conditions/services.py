@@ -3719,29 +3719,6 @@ def get_condition_control_percent_modifier(
     )
 
 
-def get_condition_intensity_percent_modifier(
-    character_sheet: "CharacterSheet",
-    condition_name: str,
-) -> int:
-    """
-    Get percentage modifier to intensity gain for a condition.
-
-    Used by emotional conditions like anger to determine how much
-    intensity is gained when the condition intensifies. A +50% modifier
-    means 1.5x normal intensity gain.
-
-    Args:
-        target: The character ObjectDB instance
-        condition_name: Condition name (e.g., "anger")
-
-    Returns:
-        Total percentage modifier (e.g., 50 for Wrathful)
-    """
-    return _get_condition_percent_modifier(
-        character_sheet, "condition_intensity_percent", condition_name
-    )
-
-
 def get_condition_penalty_percent_modifier(
     character_sheet: "CharacterSheet",
     condition_name: str,

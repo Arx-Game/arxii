@@ -119,6 +119,30 @@ class AudereThreshold(SharedMemoryModel):
         default="PLACEHOLDER Audere offer line at intensity {intensity}",
         help_text="#4101: the offer's opening line. {intensity} = the fired intensity.",
     )
+    audere_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Audere (#4739). Accepting the offer applies "
+            "it and every Audere rule finds it through this field, so renaming the "
+            "template changes nothing. The Required content dashboard flags it unset."
+        ),
+    )
+    audere_majora_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Audere Majora (#4739). Accepting a crossing "
+            "applies it and every Audere Majora rule finds it through this field. The "
+            "Required content dashboard flags it unset."
+        ),
+    )
     # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
     # Audere naturally drives high Soulfray via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(
@@ -203,6 +227,28 @@ class PendingAudereOffer(AbstractPendingOffer):
         return (
             f"PendingAudereOffer(sheet={self.character_sheet_id}, intensity={self.fired_intensity})"
         )
+
+
+def audere_condition_id() -> int | None:
+    """Primary key of the condition template that IS Audere, or ``None`` when unset.
+
+    Read from ``AudereThreshold.audere_condition`` (#4739), so renaming the template
+    changes nothing. ``None`` means no threshold row or an unset field; a filter on
+    ``condition_id=None`` then matches nothing until staff set it (the Required
+    content dashboard flags it).
+    """
+    threshold = AudereThreshold.objects.cached_singleton()
+    return None if threshold is None else threshold.audere_condition_id
+
+
+def audere_majora_condition_id() -> int | None:
+    """Primary key of the condition template that IS Audere Majora, or ``None`` when unset.
+
+    Read from ``AudereThreshold.audere_majora_condition`` (#4739); same contract as
+    ``audere_condition_id()``.
+    """
+    threshold = AudereThreshold.objects.cached_singleton()
+    return None if threshold is None else threshold.audere_majora_condition_id
 
 
 @dataclass

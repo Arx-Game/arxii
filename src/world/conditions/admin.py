@@ -342,6 +342,7 @@ class ConditionStageAdmin(admin.ModelAdmin):
         "name",
         "rounds_to_next",
         "severity_multiplier",
+        "intensity_per_round",
         "has_thumbnail",
     ]
     list_filter = ["condition"]

@@ -30,6 +30,7 @@ from world.covenants.constants import (
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     BattleBinding,
     CommandTier,
+    CovenantScaledAction,
     CovenantType,
     DefenseStyle,
     InsightTargetKind,
@@ -1124,8 +1125,10 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
     )
     action_key = models.CharField(
         max_length=50,
+        choices=CovenantScaledAction.choices,
         help_text=(
-            "The Action.key this scaling applies to (e.g. 'combat_interpose', 'combat_rally')."
+            "What this scaling applies to: the Interpose or Rally maneuver, or the "
+            "surges this role gives by Rally."
         ),
     )
     thread_level_multiplier = models.DecimalField(

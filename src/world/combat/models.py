@@ -2956,6 +2956,63 @@ class MovementConfig(SharedMemoryModel):
         return f"MovementConfig(pk={self.pk})"
 
 
+class SocialManeuverConfig(SharedMemoryModel):
+    """Singleton (pk=1): which rows the social combat maneuvers use (#4739).
+
+    Taunt, Demoralize and Parley roll the check types set here, and a successful
+    Rally applies ``rally_success_condition``. Code finds these rows through this
+    config, never by name, so renaming them in admin changes nothing. Rally's own
+    check is the Rallied surge tuning's check type, not a field here. Each field may
+    be blank only before it is authored; the Required content dashboard lists an
+    unset field. Read through ``get_social_maneuver_config()``.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    taunt_check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The check the taunter rolls. The target's composure roll is the Taunt "
+            "Received surge tuning's check, not this one."
+        ),
+    )
+    demoralize_check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check a character rolls to demoralize an opponent.",
+    )
+    parley_check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check a character rolls to parley with an opponent.",
+    )
+    rally_success_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The condition a successful Rally gives the rallied ally (Inspired).",
+    )
+
+    class Meta:
+        verbose_name = "Social Maneuver Configuration"
+        verbose_name_plural = "Social Maneuver Configuration"
+
+    def __str__(self) -> str:
+        return f"SocialManeuverConfig(pk={self.pk})"
+
+
 class FleeTierModifier(SharedMemoryModel):
     """Authored flee-difficulty modifier per opponent tier (#878).
 
@@ -4456,10 +4513,17 @@ class DramaticSurgeRecord(SharedMemoryModel):
                 name="surge_repeat_round_is_round_number",
             ),
             # A rolled record has both a repeat_round and an outcome; an old-kind has neither.
+            # The one exception is an emotional condition's per-round feed (#4739): it
+            # recurs each round but rolls nothing, so it has a repeat_round and no outcome.
             models.CheckConstraint(
                 condition=(
                     models.Q(repeat_round__isnull=True, outcome__isnull=True)
                     | models.Q(repeat_round__isnull=False, outcome__isnull=False)
+                    | models.Q(
+                        repeat_round__isnull=False,
+                        outcome__isnull=True,
+                        trigger_kind=SurgeTriggerKind.CONDITION_FED,
+                    )
                 ),
                 name="surge_rolled_has_round_and_outcome",
             ),

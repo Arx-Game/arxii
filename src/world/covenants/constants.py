@@ -41,6 +41,19 @@ class RoleArchetype(models.TextChoices):
     CROWN = "crown", "Crown"  # Support
 
 
+class CovenantScaledAction(models.TextChoices):
+    """What a ``CovenantRoleActionScaling`` row scales (#4739).
+
+    The first two values are the Action keys of the combat maneuvers they scale and
+    stay as stored. ``SURGES_GIVEN`` scales the intensity a rallier's Rally surges
+    the rallied ally by.
+    """
+
+    INTERPOSE = "combat_interpose", "Interpose (partial block)"
+    RALLY = "combat_rally", "Rally (morale restored)"
+    SURGES_GIVEN = "surges_given", "Surges given by Rally"
+
+
 class CommandTier(models.TextChoices):
     """Battle-command hierarchy tier for a CovenantRole (#1710).
 

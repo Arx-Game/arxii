@@ -1391,16 +1391,13 @@ class ConditionPercentageModifiersTest(TestCase):
         """Test zero modifier when character has no relevant distinctions."""
         from world.conditions.services import (
             get_condition_control_percent_modifier,
-            get_condition_intensity_percent_modifier,
             get_condition_penalty_percent_modifier,
         )
 
         control = get_condition_control_percent_modifier(self.target.sheet_data, "anger")
-        intensity = get_condition_intensity_percent_modifier(self.target.sheet_data, "anger")
         penalty = get_condition_penalty_percent_modifier(self.target.sheet_data, "humbled")
 
         assert control == 0
-        assert intensity == 0
         assert penalty == 0
 
     def test_wrathful_anger_control_modifier(self):
@@ -1420,24 +1417,6 @@ class ConditionPercentageModifiersTest(TestCase):
         modifier = get_condition_control_percent_modifier(self.target.sheet_data, "anger")
 
         assert modifier == 100
-
-    def test_wrathful_anger_intensity_modifier(self):
-        """Test Wrathful grants +50% anger intensity gain modifier."""
-        from world.conditions.services import get_condition_intensity_percent_modifier
-        from world.distinctions.models import CharacterDistinction
-        from world.mechanics.services import create_distinction_modifiers
-
-        # Grant Wrathful distinction
-        char_distinction = CharacterDistinction.objects.create(
-            character=self.target.sheet_data,
-            distinction=self.wrathful,
-            rank=1,
-        )
-        create_distinction_modifiers(char_distinction)
-
-        modifier = get_condition_intensity_percent_modifier(self.target.sheet_data, "anger")
-
-        assert modifier == 50
 
     def test_hubris_humbled_penalty_modifier(self):
         """Test Hubris grants +100% humbled penalty modifier."""

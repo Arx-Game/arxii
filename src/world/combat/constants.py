@@ -108,6 +108,7 @@ class SurgeTriggerKind(models.TextChoices):
     TAUNT_RECEIVED = "taunt_received", "Taunt Received"
     RALLIED = "rallied", "Rallied"
     ALLY_HURT = "ally_hurt", "Ally Hurt"
+    CONDITION_FED = "condition_fed", "Emotional Condition"
 
 
 # Surge kinds resolved by a roll with degrees (#4737). Each has one SurgeTuning row

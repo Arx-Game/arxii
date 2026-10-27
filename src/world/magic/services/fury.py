@@ -19,6 +19,7 @@ from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
+    from world.conditions.models import ConditionTemplate
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,17 @@ def clamp_tier(declared_tier: FuryTier, cap: int) -> FuryTier | None:
 def get_fury_config() -> FuryConfig:
     """Public singleton accessor."""
     return _config()
+
+
+def get_berserk_template() -> ConditionTemplate | None:
+    """The condition template that IS Berserk, or ``None`` when unset (#4739).
+
+    Read from ``FuryConfig.berserk_condition`` with one ``cached_singleton()`` read,
+    so renaming the template changes nothing. ``None`` means no config row or an
+    unset field; the Required content dashboard flags it.
+    """
+    config = FuryConfig.objects.cached_singleton()
+    return None if config is None else config.berserk_condition
 
 
 def _ensure_fury_check_type(trait_name: str) -> CheckType:
