@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.classes.models import Path
     from world.companions.models import Companion
+    from world.forms.models import AlternateSelf
     from world.magic.models import Gift, KnownUltimate, Technique
     from world.worship.models import WorshippedBeing
 
@@ -34,6 +35,7 @@ class UltimateRevealGroup:
     gift: Gift | None = None
     being: WorshippedBeing | None = None
     companion: Companion | None = None
+    alternate_self: AlternateSelf | None = None
 
 
 @dataclass(frozen=True)

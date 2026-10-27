@@ -19,6 +19,7 @@ from django.utils.functional import cached_property
 
 from core.managers import ArxSharedMemoryManager, GuardedSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from core.testing import register_test_cache_flusher
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -87,6 +88,9 @@ class AffinityInteractionManager(GuardedSharedMemoryManager):
             cache[key] = None
             return None
         return result  # type: ignore[return-value]
+
+
+register_test_cache_flusher(AffinityInteractionManager.clear_cache)
 
 
 class AffinityInteraction(SharedMemoryModel):
@@ -351,6 +355,9 @@ class ResonanceAlignmentBoonTierManager(GuardedSharedMemoryManager):
                 row.condition_template for row in rows
             )
         return ResonanceAlignmentBoonTierManager._templates_cache
+
+
+register_test_cache_flusher(ResonanceAlignmentBoonTierManager.clear_cache)
 
 
 class ResonanceAlignmentBoonTier(SharedMemoryModel):

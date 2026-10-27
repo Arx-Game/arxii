@@ -9,7 +9,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 ## Per-app glossaries
 
 - [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
-- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds the Ultimates terms (#4098):
+- [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Acting aura (#4731), and the Ultimates terms (#4098):
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
   manifestation; the creation-personalization terms (#4099): Hold, Price, Early form,
@@ -99,7 +99,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md) - also holds wall integrity and the walker rule (#4606), and traversal, hop and strike reach (#4607), and roofed position, screened position and grounding (#4608), and held ground, pass and player traversal (#4663), and place area, square and map terrain (#4670), and feature type, feature, reach and stunt (#4675)
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [locations](src/world/locations/AGENT_GLOSSARY.md)
-- [forms](src/world/forms/AGENT_GLOSSARY.md)
+- [forms](src/world/forms/AGENT_GLOSSARY.md) - also holds Audere alternate self (#4731)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
 - [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)

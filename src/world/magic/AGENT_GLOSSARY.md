@@ -6,6 +6,9 @@ One of the three magical sources — Celestial, Primal, or Abyssal — modeled a
 **Aura**:
 A character's soul-state expressed as a percentage share per Affinity, one `CharacterAuraShare` row per affinity, constrained to sum to 100. Its presence is the derived gate for whether a character can work magic at all.
 
+**Acting aura**:
+The aura a character acts with right now: 100% of the worn alternate self's resonance affinity when it has one, otherwise her true aura. Casts (alignment, and the affinity the cast works in), places of power, defilement and covenant attacker affinity read it; the Fall, the Soul Tether gate and the sheet display keep the true aura. Looked up with `acting_aura(sheet)`. _Avoid_: effective aura, mask aura.
+
 **Aura share**:
 One affinity's percentage of a character's aura: a `CharacterAuraShare` row keyed on the aura and the `Affinity` row. Code reads shares by Affinity row, never by a name or a per-affinity column.
 
@@ -445,8 +448,9 @@ only through Audere or Audere Majora. Reuses the catalog, payload tables, and ca
 path of an ordinary technique; the flag is what keeps it off every everyday cast
 surface, not a separate model. Two kinds: **owned** (the character's Path x major
 Gift pushed to its limit, attached via `PathGiftGrant.ultimate_techniques`) and
-**bond** (a patron being or a companion archetype makes it available while the bond
-holds; past-life bond ultimates are deferred, see `docs/roadmap/magic.md`). A Court
+**bond** (a patron being, a companion archetype, or one of the character's alternate
+selves makes it available while the bond holds; choosing an alternate self's ultimate puts
+her in that self, #4731). A Court
 pact enhances qualifying ultimates the same way it enhances qualifying techniques; it
 never grants ultimates of its own.
 _Avoid_: super move, limit break, unlocked technique.
@@ -486,12 +490,13 @@ _Avoid_: offer, ultimate list (the reveal is derived state, not a stored offer).
 
 **Owned ultimate** / **Bond ultimate** (#4098):
 The two kinds of ultimate (spec decision 1). An **owned** ultimate comes from the
-character's own Path x major Gift; a **bond** ultimate comes from a patron being or a
-companion archetype and is available only while that bond holds, since bonds make
+character's own Path x major Gift; a **bond** ultimate comes from a patron being, a
+companion archetype or one of her alternate selves and is available only while that bond
+holds, since bonds make
 ultimates available but never spend or refuse on the character's behalf (spec
 decision 5, "the character pays").
-_Avoid_: patron ultimate / companion ultimate as the category name (those are the two
-bond *sources*, not a third kind alongside owned and bond).
+_Avoid_: patron ultimate / companion ultimate as the category name (those are bond
+*sources*, not a third kind alongside owned and bond).
 
 **Certain death (deferred)** (#4098):
 See `vitals/AGENT_GLOSSARY.md`.

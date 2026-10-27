@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 
+from world.forms.constants import AlternateSelfRevertKind
 from world.forms.models import (
     ActiveAlternateSelf,
     AlternateSelf,
@@ -35,6 +37,9 @@ from world.species.models import Species
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
+
+
+logger = logging.getLogger(__name__)
 
 
 class NonCosmeticTraitError(ValueError):
@@ -354,7 +359,11 @@ def assume_alternate_self(
     )
 
     active.alternate_self = alt
-    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
+    # A fresh assumption is her own unless the Audere reveal marks it afterwards (#4731).
+    active.assumed_at_audere = False
+    active.save(
+        update_fields=["alternate_self", "return_form", "return_persona", "assumed_at_audere"]
+    )
     return active
 
 
@@ -457,7 +466,10 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     active.alternate_self = None
     active.return_form = None
     active.return_persona = None
-    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
+    active.assumed_at_audere = False
+    active.save(
+        update_fields=["alternate_self", "return_form", "return_persona", "assumed_at_audere"]
+    )
 
 
 def _walk_species_chain(species: Species) -> list[Species]:
@@ -1041,3 +1053,157 @@ def learn_style(
         option=option,
         defaults={"taught_by_label": taught_by_label},
     )
+
+
+def _alternate_self_is_hers(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Whether the self's form and persona both belong to ``sheet``.
+
+    Checked before taking her out of a worn self, so bad staff data never leaves her in
+    her true form with a half-applied swap.
+    """
+    if alt.form_id is not None and alt.form.character_id != sheet.pk:
+        return False
+    return alt.persona_id is None or alt.persona.character_sheet_id == sheet.pk
+
+
+def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Put her in the alternate self whose reveal card she chose at Audere (#4731).
+
+    ``choose_ultimate`` registers this with ``transaction.on_commit`` (robust), so it runs
+    only after the choice is durable, and nothing here undoes the choice, the readied
+    ultimate or Audere. The self is marked ``assumed_at_audere`` so Audere's end reverts
+    it when its ``revert_kind`` is AUTOMATIC. A TALKED_DOWN self also takes its emergence
+    condition; if that does not land (immunity, stacking) a warning is logged, because
+    nothing then stops her reverting at will.
+
+    The self she already wears is left as it is, unmarked: she put it on herself. A
+    different worn self is reverted first, in its own savepoint; when that revert is
+    refused because she is not in control, she is told why and the chosen self does not
+    come out. Any other forms refusal (bad staff data: a form or persona she does not own)
+    is logged, never raised. Returns True when she assumed the chosen self.
+    """
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
+    from world.scenes.services import ActivePersonaError  # noqa: PLC0415
+
+    active = (
+        ActiveAlternateSelf.objects.filter(character=sheet)
+        .select_related("alternate_self__persona")
+        .first()
+    )
+    worn = None if active is None else active.alternate_self
+    if worn is not None and worn.pk == alt.pk:
+        return False
+    if not _alternate_self_is_hers(sheet, alt):
+        logger.warning(
+            "Audere cannot bring out alternate self %s for %s: its form or persona is not "
+            "hers (#4731).",
+            alt,
+            sheet.character,
+        )
+        return False
+    if worn is not None:
+        try:
+            with transaction.atomic():
+                revert_alternate_self(sheet)
+        except RevertBlockedError:
+            sheet.character.msg(
+                f"You cannot leave {worn.shown_name} while not in control of yourself, "
+                f"so {alt.shown_name} does not come out."
+            )
+            return False
+        except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
+            logger.warning(
+                "Audere could not take %s out of alternate self %s for %s (#4731).",
+                sheet.character,
+                worn,
+                alt,
+                exc_info=True,
+            )
+            return False
+    try:
+        with transaction.atomic():
+            assumed = trigger_transformation(sheet, alt, cause="audere")
+            assumed.assumed_at_audere = True
+            assumed.save(update_fields=["assumed_at_audere"])
+            if alt.revert_kind == AlternateSelfRevertKind.TALKED_DOWN:
+                applied = apply_condition(target=sheet.character, condition=alt.emergence_condition)
+                if not applied.success:
+                    logger.warning(
+                        "Audere put %s in alternate self %s but its emergence condition "
+                        "%s did not apply (%s); she can revert at will (#4731).",
+                        sheet.character,
+                        alt,
+                        alt.emergence_condition,
+                        applied.message,
+                    )
+    except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
+        logger.warning(
+            "Audere could not put %s in alternate self %s (#4731); the choice stands.",
+            sheet.character,
+            alt,
+            exc_info=True,
+        )
+        return False
+    sheet.character.msg(f"You assume {alt.shown_name}.")
+    return True
+
+
+def _audere_selves_to_revert() -> QuerySet[ActiveAlternateSelf]:
+    """Worn selves taken on through the Audere reveal that revert on their own."""
+    return ActiveAlternateSelf.objects.filter(
+        assumed_at_audere=True,
+        alternate_self__revert_kind=AlternateSelfRevertKind.AUTOMATIC,
+    ).select_related("character", "alternate_self")
+
+
+def revert_audere_alternate_self(sheet: CharacterSheet) -> bool:
+    """Revert the self she took on through the Audere reveal, when Audere ends (#4731).
+
+    Called by ``end_audere``; a no-op unless the worn self is
+    marked ``assumed_at_audere`` and is AUTOMATIC. A self she put on herself stays, a
+    talked-down one stays, and a blocked revert (not in control) is left as it is. Runs
+    in its own savepoint and never raises the forms refusals, so encounter cleanup is
+    never rolled back by it. Returns True when the revert happened.
+    """
+    active = _audere_selves_to_revert().filter(character=sheet).first()
+    if active is None:
+        return False
+    return _revert_audere_self(sheet, active.alternate_self)
+
+
+def revert_audere_alternate_selves(sheet_ids: list[int]) -> None:
+    """Revert every Audere-assumed AUTOMATIC self worn among ``sheet_ids``, in one query.
+
+    The fight-end sibling of ``revert_audere_alternate_self`` (#4731): encounter cleanup
+    calls it once for all participants, covering an Audere that ran out mid-fight on a
+    round duration and a self taken on at an Audere Majora Crossing, so participants
+    wearing no such self cost nothing.
+    """
+    for active in _audere_selves_to_revert().filter(character_id__in=sheet_ids):
+        _revert_audere_self(active.character, active.alternate_self)
+
+
+def _revert_audere_self(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
+    """Revert ``sheet`` out of ``alt``, logging any refusal."""
+    from world.scenes.services import ActivePersonaError  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            revert_alternate_self(sheet)
+    except RevertBlockedError:
+        logger.info(
+            "Audere ended but %s is not in control; alternate self %s stays until reverted.",
+            sheet.character,
+            alt,
+        )
+        return False
+    except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
+        logger.warning(
+            "Audere ended but %s could not leave alternate self %s (#4731).",
+            sheet.character,
+            alt,
+            exc_info=True,
+        )
+        return False
+    return True
