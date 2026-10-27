@@ -465,6 +465,10 @@ class DramaticSurgeBeat:
     Returned to the immediate caller for optional inline use (tests, future
     callers); the durable source of truth for the round-result payload is
     ``DramaticSurgeRecord`` — this dataclass is not itself persisted.
+
+    The last four fields describe a rolled surge (#4737): the roll's outcome name, the
+    potency it was made against, the control change applied and the name of the band's
+    condition. A fixed-amount surge leaves them at their defaults.
     """
 
     participant: CombatParticipant
@@ -472,6 +476,10 @@ class DramaticSurgeBeat:
     amount: int
     narration: str
     round_number: int
+    outcome_name: str = ""
+    potency: int | None = None
+    control_change: int = 0
+    condition_name: str = ""
 
 
 # ---------------------------------------------------------------------------

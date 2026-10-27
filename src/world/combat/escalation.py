@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
     from world.combat.types import PerformCheckFn
     from world.companions.models import Companion
+    from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,10 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     subject_opponent: CombatOpponent | None = None,
     subject_phase_number: int | None = None,
     subject_companion: Companion | None = None,
+    outcome: CheckOutcome | None = None,
+    potency: int | None = None,
+    control_change: int = 0,
+    repeat_round: int | None = None,
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -307,6 +312,11 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     A companion fall (#3575) passes ``subject_companion`` and dedups on
     (encounter, participant, trigger_kind, subject_companion).
+
+    A rolled surge (#4737) passes ``repeat_round`` (the encounter's round), so the same
+    kind and subject can surge again in a later round while the same round still dedups.
+    ``outcome`` and ``potency`` are the roll that picked the amount, kept on the record;
+    ``control_change`` is added to the engagement's control modifier in the same save.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -332,17 +342,25 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         subject_opponent=subject_opponent,
         subject_phase_number=subject_phase_number,
         subject_companion=subject_companion,
+        repeat_round=repeat_round,
         defaults={
             "amount": amount,
             "round_number": encounter.round_number,
             "reason": reason,
+            "outcome": outcome,
+            "potency": potency,
+            "control_change": control_change,
         },
     )
     if not created:
         return None
 
     engagement.intensity_modifier += amount
-    engagement.save(update_fields=["intensity_modifier"])
+    updated_fields = ["intensity_modifier"]
+    if control_change:
+        engagement.control_modifier += control_change
+        updated_fields.append("control_modifier")
+    engagement.save(update_fields=updated_fields)
 
     curve = encounter.escalation_curve
     character_name = participant.character_sheet.character.db_key
@@ -357,6 +375,9 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         amount=amount,
         narration=narration,
         round_number=encounter.round_number,
+        outcome_name=outcome.name if outcome is not None else "",
+        potency=potency,
+        control_change=control_change,
     )
 
 
