@@ -4101,7 +4101,10 @@ class DramaticSurgeRecord(SharedMemoryModel):
     Created by ``apply_dramatic_surge``; a given (encounter, participant,
     trigger_kind, subject_sheet) tuple surges at most once — a bonded ally's
     peril surges you once per encounter; their later fall is a different
-    trigger_kind and surges again. Two partial UniqueConstraints (mirroring
+    trigger_kind and surges again. The exception is a rolled kind (#4737,
+    ADR-4737), which sets ``repeat_round`` and so surges once per round per
+    subject instead; the once-per-encounter constraints below apply only where
+    ``repeat_round`` is null. Two partial UniqueConstraints (mirroring
     the ``NpcRegard`` precedent, ``world/npc_services/models.py``) because
     Postgres never matches NULL=NULL — a single constraint spanning the
     nullable subject_sheet column would let subjectless (HIGH_STAKES)

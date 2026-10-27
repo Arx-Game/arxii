@@ -330,8 +330,8 @@ narration of mechanical events" section; ADR-4101.
 
 This section used to list relationship-driven intensity spikes as a future hook
 waiting on a combat event system and Thread integration. Both exist now, as
-dramatic surges: `SurgeTriggerKind` (`world/combat/constants.py`) names nine
-triggers, and `apply_dramatic_surge` (`world/combat/escalation.py`) is the shared
+dramatic surges: `SurgeTriggerKind` (`world/combat/constants.py`) names twelve
+triggers (nine fixed-amount ones and the three rolled ones below), and `apply_dramatic_surge` (`world/combat/escalation.py`) is the shared
 seam every one of them writes through, adding its amount straight onto
 `engagement.intensity_modifier`. Two of the nine are the relationship-event
 spikes this section asked for: `ALLY_FALLEN` (`apply_relationship_escalation_spike`,
@@ -345,6 +345,41 @@ and whose combined scene/invested depth clears the escalation curve's
 stake in the one who fell or is in peril get the spike. The other seven
 (`HIGH_STAKES`, `HATED_FOE`, `INTERFERENCE`, the two boss triggers, `GM_MANUAL`)
 cover combat drama outside the relationship axis and are not part of this hook.
+
+### Rolled Surges (#4737) [BUILT & WIRED]
+
+The other three triggers, `TAUNT_RECEIVED`, `RALLIED` and `ALLY_HURT`
+(`ROLLED_SURGE_TRIGGER_KINDS`), are not fixed amounts from the `EscalationCurve`. A
+player character rolls and the roll's degree picks the surge, so a better result
+never raises intensity less than a worse one. Staff author a `SurgeTuning` per kind
+(the check rolled, a base difficulty and, for `ALLY_HURT`, a per-depth difficulty step)
+with a `SurgeDegreeBand` per `CheckOutcome` (intensity, control change, an optional
+condition). `world/combat/surge_rolls.apply_rolled_surge` picks the band (the outcome's
+own, else the nearest worse) and writes it through the same `apply_dramatic_surge` seam,
+which adds the band's `control_change` to `control_modifier` in the same save and keeps
+the outcome, potency and applied condition on the `DramaticSurgeRecord`. The surged
+player's character is sent a roll line; the round payload's `surge_beats` carries the
+roll fields for the surged player's owner, GMs and staff only.
+
+- `TAUNT_RECEIVED`: an NPC taunt entry (`ThreatPoolEntry.taunt_potency`) supplies the
+  number and does no damage; a player character's taunt is two stages, the taunter's Taunt
+  roll becoming the potency the target rolls the tuned check (Composure) against. NPCs
+  never roll.
+- `RALLIED`: after the Rally roll, whatever its result, the ally is surged by the band
+  that roll's outcome picks.
+- `ALLY_HURT`: `ally_hurt_spike_handler` hears `DAMAGE_APPLIED` through the
+  `escalation_spike_on_damage` room trigger (installed with the other escalation
+  triggers each escalating round) and each bonded co-combatant who qualifies as in the
+  peril leg rolls at `potency_base + potency_per_depth * depth`; the band is scaled by
+  the wound (damage over max health, at most 1). The flow and trigger definition are
+  authored content (`wire_escalation_content`); without them this surge is off.
+
+A rolled kind surges once per round per subject (`DramaticSurgeRecord.repeat_round`),
+unlike the other kinds' once per encounter (ADR-4737), and, like every surge, only in an
+encounter with an escalation curve (ADR-0098). Not built: implore and challenge verbs,
+a Pressure card and a targeting lock; a compulsion such as Goaded is an authored
+condition attached to a band. The rest of #4727 (strain and steeling, emotional
+conditions and vows, the Audere control step) is not built.
 
 One naming note: the depth signal these two triggers read is a bonded
 `CharacterRelationship` (via its labels), not a woven `magic.Thread`, so

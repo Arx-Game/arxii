@@ -8414,6 +8414,34 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
   `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
   for a companion (no opponent peril band).
+- **Rolled surges (#4737, ADR-4737) [BUILT & WIRED]:** a taunt, a rally and a hurt bonded
+  ally raise a player character's intensity through a roll with degrees.
+  `SurgeTriggerKind` gained `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT`
+  (`ROLLED_SURGE_TRIGGER_KINDS`). Staff author one `SurgeTuning` per kind (`check_type`,
+  `potency_base`, `potency_per_depth`) with `SurgeDegreeBand` rows per `CheckOutcome`
+  (`intensity`, `control_change`, optional `condition`); the monotonic rule is
+  `world/combat/surge_bands.validate_surge_bands`, run from the model `clean` and the admin
+  inline formset. `world/combat/surge_rolls.py`: `surge_tuning_for`,
+  `surge_roll_for_participant` (the social-check roll seam), `band_for_outcome` / `pick_band`
+  (exact band, else the nearest worse), `apply_rolled_surge` (writes through
+  `apply_dramatic_surge`, applies the band's condition in one transaction, sends the surged
+  character the `roll_line`), no-ops without an escalation curve. `apply_dramatic_surge` gained
+  `outcome`, `potency`, `control_change`, `repeat_round`; `DramaticSurgeRecord` gained those
+  plus `condition`, and rolled rows dedup once per round per subject (two extra unique
+  constraints, the older ones now apply where `repeat_round` is null). Sources: PC on PC taunt
+  (`declare_taunt` accepts a `CombatParticipant`; the taunter's roll is the potency, the target
+  rolls the tuned check), NPC taunt entry (`ThreatPoolEntry.taunt_potency`, no damage, resolved
+  in `npc_action._resolve_npc_taunt_on_target`), Rally (`rally._surge_rallied_ally`, banded by
+  the Rally roll), and a hurt bonded ally (`escalation.apply_ally_hurt_surge`, fired by
+  `ally_hurt_spike_handler` from the `escalation_spike_on_damage` room trigger, wound-scaled).
+  The ally-hurt flow and trigger definition are authored content seeded by
+  `wire_escalation_content`; a deployment without them has that surge silently off. Surfaces:
+  `TauntAction` (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
+  `opponent_id`), telnet `combat taunt <opponent or ally>`, `surge_beats` roll fields (outcome,
+  potency, control_change, condition, roll) for the surged player's owner, GMs and staff, the
+  round log roll line and an ally taunt in the Combatants row menu. Not built: implore and
+  challenge verbs, a Pressure card, a targeting lock (Goaded is an authored debuff
+  `ConditionTemplate` on a band). Architecture: `docs/architecture/runtime-modifiers-audere.md`.
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the

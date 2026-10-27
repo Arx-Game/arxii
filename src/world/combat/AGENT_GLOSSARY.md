@@ -33,7 +33,7 @@ A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war
 _Avoid_: willpower, resolve (as a field name — `morale` is the canonical column)
 
 **Rally**:
-The social-combat maneuver by which a PC inspires an ally — rolling presence + Performance + Oratory to apply a short-lived `Inspired` buff, and on a great success restoring morale to ally-side summon opponents. A benefit, so consent-free (ADR-0024).
+The social-combat maneuver by which a PC inspires an ally — rolling presence + Performance + Oratory to apply a short-lived `Inspired` buff, and on a great success restoring morale to ally-side summon opponents. A benefit, so consent-free (ADR-0024). Whatever the roll, the ally then gets a **Rolled surge** (`RALLIED`) banded by the Rally roll's outcome (#4737). Rally is the only encouragement verb built; implore and challenge are not.
 _Avoid_: inspire (as the maneuver name), buff, motivate
 
 **Demoralize**:
@@ -41,7 +41,7 @@ The social-combat maneuver by which a PC breaks an opponent's nerve — rolling 
 _Avoid_: intimidate (that name is the CheckType), frighten, cow
 
 **Taunt**:
-The social-combat maneuver by which a PC draws an NPC's aggro — rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round.
+The social-combat maneuver by which a PC draws an NPC's aggro — rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round. Aimed at another player character it is instead a two-stage roll: the taunter's roll sets the **Taunt Potency**, the target rolls Composure against it and gets a **Rolled surge** (`TAUNT_RECEIVED`) (#4737).
 _Avoid_: mock, aggro (colloquial). Not **Provoke** (below): Taunt biases an NPC's choice through threat, Provoke removes the choice.
 
 **Provoke** (#4584):
@@ -177,8 +177,24 @@ The reserved combat primitive for a multi-round contest in which two sides pour 
 _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects
 
 **Dramatic Surge**:
-A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a bonded companion falling (its ALLY `CombatOpponent` defeated, #3575), a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`) — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`. A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, label, subject, or (for a manual trigger) the GM's stated reason.
+A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a bonded companion falling (its ALLY `CombatOpponent` defeated, #3575), a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`) — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`: once per encounter for the fixed-amount kinds, but once per round per subject for the three rolled kinds (`DramaticSurgeRecord.repeat_round` is set, ADR-4737; see **Rolled surge**). A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, label, subject, or (for a manual trigger) the GM's stated reason.
 _Avoid_: clash (reserved, see above), spike (ambiguous with the pre-existing #872 grief "spike" internals — "surge" is the player-facing term), burst, power-up
+
+**Rolled surge** (#4737, ADR-4737):
+A Dramatic Surge whose size comes from a roll with degrees instead of a fixed curve amount. Three kinds (`ROLLED_SURGE_TRIGGER_KINDS`): `TAUNT_RECEIVED`, `RALLIED` and `ALLY_HURT`. A player character rolls; the roll's outcome picks a **Degree Band** and `apply_rolled_surge` writes the band's intensity and control change through `apply_dramatic_surge`, with the outcome, potency, control change and the condition actually applied kept on the `DramaticSurgeRecord`. A rolled kind may surge again each round (once per round per subject) and only in an encounter that has an escalation curve (ADR-0098). The surged player's character is sent a roll line such as `Composure check vs taunt potency 14. Partial. Intensity +3, control 0.`; the room only gets the generic narration, and the round payload shows the roll fields to the surged player's owner, GMs and staff.
+_Avoid_: spike, buff, power-up
+
+**Surge Tuning** (#4737):
+The authored `SurgeTuning` row for one rolled surge kind (unique per `trigger_kind`): the `check_type` rolled, a `potency_base` and, for Ally Hurt, a `potency_per_depth` (difficulty = base + per_depth x relationship depth). No row for a kind means that beat does not surge. For `RALLIED` the roll is the rallier's own Rally check; the tuning's `check_type` only names the check on the roll line.
+_Avoid_: surge config, surge rule
+
+**Degree Band** (#4737):
+A `SurgeDegreeBand` row: what one roll outcome does for one Surge Tuning (`intensity`, `control_change`, an optional `condition`). One band per outcome; a roll with no band of its own takes the nearest worse band, or the lowest. A better outcome never gives a lower beneficial number, checked as a set on save (`surge_bands.validate_surge_bands`, the model `clean` and the admin inline formset). A compulsion such as Goaded is an ordinary authored `ConditionTemplate` attached to a band; it is a debuff with its own effects, not a code term and not a targeting lock.
+_Avoid_: tier, step, result row
+
+**Taunt Potency** (#4737):
+`ThreatPoolEntry.taunt_potency`: the number a targeted player character rolls Composure against when an NPC opponent uses that entry. An entry with a taunt potency deals no damage (`clean` rejects both) and the NPC does not roll. Between players the potency is the taunter's own Taunt roll (`total_points`).
+_Avoid_: taunt difficulty, taunt damage
 
 **Escalation intensity**:
 `CharacterEngagement.intensity_modifier`. The one lever the escalation tick, every

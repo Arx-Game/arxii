@@ -557,6 +557,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   CHARACTER_INCAPACITATED; owner surges once on a companion-targeted relationship
   (world/combat/tests/test_escalation_companion_fall.py).
 
+- **Rolled surges (#4737), journey-proven (`test_surge_rolls_journeys`).** An NPC taunt
+  entry surges a player character through a Composure roll with degrees (a better result
+  surges more, the roll line reaches only that player), Rally surges the ally by the Rally
+  roll and again the next round, and a bonded ally's wound surges in proportion through a
+  real damage hit and the room trigger. A taunt between two players is unit-tested only.
+  Needs authored `SurgeTuning`/`SurgeDegreeBand` rows; see `combat-build-history.md`.
 - **A companion's defeat resolves at the end of the fight (#3652, #1873 Decision
   4):** `resolve_companion_defeat` is now called at both completion seams -
   `complete_encounter` (`_resolve_companion_defeats`) and battle conclusion

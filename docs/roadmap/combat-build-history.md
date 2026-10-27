@@ -371,6 +371,32 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   `DramaticSurgeRecord` gained `subject_opponent`/`subject_phase_number` and a third
   partial unique constraint - a boss beat dedups per boss per phase, not once per
   encounter (ADR-0250).
+- **Rolled surges (#4737, slice 1 of #4727) - DONE:** taunts, encouragement and a hurt
+  bonded ally raise a player character's intensity through a roll with degrees instead of
+  a fixed curve amount. New trigger kinds `TAUNT_RECEIVED`, `RALLIED`, `ALLY_HURT`; staff
+  author a `SurgeTuning` per kind and a `SurgeDegreeBand` per roll outcome (intensity,
+  control change, optional condition), validated as a set so a better outcome never gives a
+  lower beneficial number (`surge_bands.py`, model `clean`, admin inline formset). The new
+  service `world/combat/surge_rolls.py` rolls, picks the band and writes through
+  `apply_dramatic_surge`. Sources: a player character's taunt of another is two-stage (the
+  taunter's roll is the potency the target rolls Composure against); an NPC taunt entry
+  (`ThreatPoolEntry.taunt_potency`, no damage) supplies the potency and never rolls; Rally
+  surges the ally by the Rally roll's outcome; a hurt bonded ally surges its bonded
+  co-combatants through the new `escalation_spike_on_damage` room trigger, scaled by the
+  wound. `DramaticSurgeRecord` gained `outcome`, `potency`, `control_change`, `condition`
+  and `repeat_round`; a rolled kind surges once per round per subject, the older kinds stay
+  once per encounter (ADR-4737). Surfaces: `TauntAction` and REST `taunt` take an ally,
+  telnet `combat taunt <opponent or ally>`, the surged player's character is sent a roll
+  line, `surge_beats` carries the roll fields for the surged player's owner, GMs and
+  staff, and the web round log shows the line with an ally taunt in the Combatants row menu.
+  Migrations 0309 to 0311. Owner rulings: Rally is the only encouragement verb built
+  (implore and challenge are not); the surge is `Inspired`'s effect; Goaded on a player
+  character is an authored debuff condition on a degree band, not a targeting lock; no
+  Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py`. Authored rows
+  are needed before any rolled surge happens (`SurgeTuning` and bands; for the hurt-ally
+  surge also the flow and trigger definition `wire_escalation_content` seeds); the
+  remaining slices of #4727 (strain and steeling, emotional conditions and vows, the Audere
+  control step) are not built.
 - **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
   `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
   endpoints (`/api/magic/audere/`) and the combat-panel ceremony dialog (auto-opens on
