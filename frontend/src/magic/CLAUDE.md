@@ -124,8 +124,8 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `getTeachingOffers()` — GET `/api/magic/teaching-offers/`
 - `getThreadResonanceOptions(id)` — GET `/api/magic/threads/{id}/resonance-options/` →
   `ThreadResonanceOptions` (`{ritual_id, offering_required, offering_count,
-  unavailable_reason, options: [{resonance_id, resonance_name, affinity_name,
-  conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-only,
+unavailable_reason, options: [{resonance_id, resonance_name, affinity_name,
+conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-only,
   slice 6 of #4672)
 
 **Thread mutations:**
