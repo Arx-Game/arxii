@@ -2009,6 +2009,7 @@
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
+  - surge_tunings <- combat.SurgeTuning
   - professions <- currency.Profession
   - dream_peril_configs <- dreams.DreamPerilConfig
   - situation_fits <- gm.CheckTypeSituationFit
@@ -2680,6 +2681,8 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_opponent -> combat.CombatOpponent [FK] (nullable)
   - subject_companion -> companions.Companion [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**
@@ -2784,6 +2787,18 @@
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
+### SurgeDegreeBand
+**Foreign Keys:**
+  - tuning -> combat.SurgeTuning [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### SurgeTuning
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - bands <- combat.SurgeDegreeBand
+
 ### SustainedAction
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
@@ -2865,7 +2880,7 @@
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
-- `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
+- `declare_taunt(participant: 'CombatParticipant', target: 'CombatOpponent | CombatParticipant') -> 'CombatRoundAction' - Declare a taunting maneuver, auto-ready (#2015, #4737).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
 - `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`

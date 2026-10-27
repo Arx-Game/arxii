@@ -52,7 +52,7 @@ _SUBVERBS: dict[str, str] = {
 
 # subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
-_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley", "engage", "mark"}
+_OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
 
 # Trailing-clause separator for ``interpose [ally] with <technique>`` (#2207) —
 # mirrors ``CmdClashCommit``'s ``" with "`` split in ``commands/combat.py``.
@@ -116,7 +116,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat use <item> [on <target>] - use a held on-use item this round
         combat rally <ally>         - inspire an ally, bolstering their next action
         combat demoralize <opp>     - break an opponent's nerve (morale damage)
-        combat taunt <opp>          - draw an NPC's aggro toward you
+        combat taunt <opp|ally>      - draw an NPC's aggro, or goad an ally into a surge
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat dodge [<place>|here|off] - where you land if you dodge this round
@@ -175,6 +175,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb == "rally":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
+        if self._subverb == "taunt":  # noqa: STRING_LITERAL
+            return self._resolve_use_item_target(self._require_rest("an opponent or ally"))
         if self._subverb in _OPPONENT_SUBVERBS:
             return {"opponent_id": self._resolve_opponent_pk(self._require_rest("an opponent"))}
         if self._subverb == "combo":  # noqa: STRING_LITERAL
@@ -372,7 +374,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active ally named '{name}' in this encounter."
             raise CommandError(msg)
         if len(matches) > 1:
-            msg = f"More than one ally named '{name}' — be more specific."
+            msg = f"More than one ally named '{name}'. Be more specific."
             raise CommandError(msg)
         return matches[0].pk
 
@@ -396,7 +398,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active opponent named '{name}' in this encounter."
             raise CommandError(msg)
         if len(matches) > 1:
-            msg = f"More than one opponent named '{name}' — be more specific."
+            msg = f"More than one opponent named '{name}'. Be more specific."
             raise CommandError(msg)
         return matches[0].pk
 
@@ -420,11 +422,11 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return kwargs
 
     def _resolve_use_item_target(self, name: str) -> dict[str, Any]:
-        """Resolve a use-item target name to an ally or opponent kwarg (#2120).
+        """Resolve a target name to an ally or opponent kwarg (#2120, #4737).
 
-        Tries an active ally first, then an active opponent -- USE_ITEM's
-        target can be either (heal an ally / throw at a foe), unlike the
-        ally-only or opponent-only subverbs above.
+        One name may match an active ally or an active opponent -- USE_ITEM's target
+        can be either (heal an ally / throw at a foe), and so can a taunt's (draw a foe's
+        aggro / goad an ally) -- unlike the ally-only or opponent-only subverbs above.
         """
         from world.combat.constants import OpponentStatus, ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
@@ -452,7 +454,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             msg = f"No active ally or opponent named '{name}' in this encounter."
             raise CommandError(msg)
         if total > 1:
-            msg = f"More than one target named '{name}' — be more specific."
+            msg = f"More than one target named '{name}'. Be more specific."
             raise CommandError(msg)
         if ally_matches:
             return {"ally_participant_id": ally_matches[0].pk}
@@ -608,7 +610,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "interpose [ally] [with <technique>] [into <dest>] [soulfray], "
             "succor <ally>, "
             "use <item> [on <target>], "
-            "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, mark <opp>, "
+            "rally <ally>, demoralize <opp>, taunt <opp|ally>, parley <opp>, mark <opp>, "
             "charge <opp> with <technique>, joust with <technique>, "
             "engage <opp>, disengage, "
             "join, leave, ready, "
