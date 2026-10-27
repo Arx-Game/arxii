@@ -179,6 +179,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `cast` gained `strain=<n>`, and the focused declaration card gained a strain slider
   (the scene ActionPanel already had one for standalone casts). No migration — the
   column already existed.
+- **Burning resonance on a pull (#4736).** A focused cast or a clash contribution that declares
+  a thread pull may add `burn=<n>` (telnet) or `pull_burn` (web dispatch). The burn is rolled,
+  debited and valued when the action is declared, stored on `CombatPull`, and strains only that
+  action at resolution (`use_technique(combat_burn_for=)`; clash passes `CLASH`, the round's cast
+  `CAST`). Also fixed: `CombatRoundContext._record_combat_declaration` dropped the web
+  declaration's `pull_*` kwargs, so a focused-cast pull from the web was never committed; it now
+  is (`_commit_focused_pull`). See `docs/systems/magic.md` "Burning Resonance as a Strain Option".
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).

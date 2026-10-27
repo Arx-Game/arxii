@@ -1097,6 +1097,24 @@ working affinities that follow the worn self's resonance (`working_affinities`),
 in `integration_tests/test_acting_aura_journeys.py` and
 `integration_tests/test_audere_alternate_self_journeys.py`.
 
+## Resonance burning as a Strain option (#4736, slice 7 of #4672, BUILT 2026-10-27)
+
+A thread pull can burn resonance to push a cast harder: ceiling from runtime intensity
+(`StrainConfig.burn_per_intensity`), a strain check whose outcome tier selects a
+`StrainBurnReach` share, strain units at `Affinity.burn_value`, and a hasty fall for an
+Abyssal acting aura burning other resonance (Fall pair rate, `CorruptionConfig.hasty_fall_multiplier`
+on corruption). A share of the strain bonus feeds the caster's engagement intensity
+(`StrainConfig.engagement_share_percent`; #4738 reuses it). One burn is paid once and strains only the
+action it was declared with. Corruption now counts burned points and the non-combat pull's
+resonance spend (that gap is closed). Built: `world/magic/services/burn.py`, burn columns on
+`CombatPull` and `SceneActionPullDeclaration`, telnet `burn=<n>`, web `pull_burn` / `pull.burn`,
+the pull preview's `burn` block and the frontend `PullBurnInput` in the Strain area (combat
+card and scene cast). Also fixed: the web combat declaration used to drop its focused-cast pull;
+the web now sends the pull on one job (the clash when chosen) and a resubmit never charges it
+twice. Not built: the demo's intensity-after and anima-cost projection rows. Journeys in
+`integration_tests/test_resonance_strain_journeys.py`. Unauthored until staff set a strain check
+type, the `StrainBurnReach` rows and the `burn_value` of each affinity.
+
 ## Drift and Resonance Conflict (#4732, slice 3 of #4672, BUILT 2026-10-27)
 
 Resonance carried outside the affinity she acts with is drift. Drift strictly past an authored

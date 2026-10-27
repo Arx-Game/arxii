@@ -41,7 +41,13 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.combat.constants import ClashFlavor, ClashResolution, ClashStatus, LockPcRole
+from world.combat.constants import (
+    ClashFlavor,
+    ClashResolution,
+    ClashStatus,
+    LockPcRole,
+    PullBurnAction,
+)
 from world.combat.models import ClashConfig, ClashContribution, ClashRound, StrainConfig
 from world.combat.types import (
     ClashContributionResult,
@@ -308,6 +314,8 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         lethal=clash.encounter.is_lethal,
         strain_config=config_strain,
         cast_check=cast_check,
+        # #4736: a burn declared with this clash contribution's pull strains it, once.
+        combat_burn_for=PullBurnAction.CLASH,
         # #2536 Task 4 review fix: thread the live round context (when a
         # CombatParticipant resolves — see step 0b above) so situational-perk
         # POWER_BONUS providers can read combat-positioning situations

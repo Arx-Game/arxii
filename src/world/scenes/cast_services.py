@@ -795,6 +795,7 @@ def _resolve_cast_pull(
             resonance=declaration.resonance,
             tier=declaration.tier,
             threads=tuple(threads),
+            burn=declaration.burn,
         )
         return cast_pull, None
     return None, _PULL_FIZZLE_NOTE
@@ -1460,6 +1461,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
                 request=request,
                 resonance=cast_pull.resonance,
                 tier=cast_pull.tier,
+                burn=cast_pull.burn,
             )
             declaration.threads.set(cast_pull.threads)
     return CastResult(request=request)

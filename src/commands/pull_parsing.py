@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
+from world.magic.constants import MAX_RESONANCE_BURN
 
 if TYPE_CHECKING:
     from world.magic.types.pull import CastPullDeclaration
@@ -34,6 +35,8 @@ _OPENLY_KEYWORD = "openly"
 # Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
 _FURY_PREFIX = "fury="
 _ANCHOR_PREFIX = "anchor="
+# Keyword prefix for burning resonance with a pull when straining (#4736).
+_BURN_PREFIX = "burn="
 
 
 class PullParsingMixin:
@@ -60,7 +63,7 @@ class PullParsingMixin:
         lower = tok.lower()
         return (
             any(lower.startswith(k + "=") for k in pull_keys)
-            or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _ANCHOR_PREFIX))
+            or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _ANCHOR_PREFIX, _BURN_PREFIX))
             or lower in (_SECONDARY_KEYWORD, _BASE_KEYWORD)
         )
 
@@ -172,12 +175,41 @@ class PullParsingMixin:
 
         return remainder, pull_val, resonance_val, pull_tier, beseech_bonus
 
+    @staticmethod
+    def _extract_burn_keyword(raw: str, *, has_pull: bool) -> tuple[str, int]:
+        """Strip ``burn=<n>`` from *raw* (#4736). Order-independent, single token.
+
+        Returns ``(remainder, burn)``; ``burn`` is 0 when the keyword is absent.
+
+        Raises:
+            CommandError: If the value is not a non-negative integer, or a burn is
+                asked for without ``pull=`` (no pull, no burn).
+        """
+        burn = 0
+        kept: list[str] = []
+        for token in raw.split():
+            if token.lower().startswith(_BURN_PREFIX):
+                burn_str = token[len(_BURN_PREFIX) :]
+                # isdecimal, not isdigit: "²" is a digit that int() refuses.
+                if not burn_str.isdecimal() or int(burn_str) > MAX_RESONANCE_BURN:
+                    msg = f"Invalid burn value '{burn_str}' - must be a whole number, 0 or more."
+                    raise CommandError(msg)
+                burn = int(burn_str)
+            else:
+                kept.append(token)
+        if burn > 0 and not has_pull:
+            from world.magic.exceptions import ResonanceBurnNeedsPull  # noqa: PLC0415
+
+            raise CommandError(ResonanceBurnNeedsPull.user_message)
+        return " ".join(kept), burn
+
     def _resolve_cast_pull(
         self,
         pull_thread_str: str | None,
         pull_resonance_str: str | None,
         pull_tier: int,
         beseech_bonus: int = 0,
+        burn: int = 0,
     ) -> CastPullDeclaration | None:
         """Return a ``CastPullDeclaration`` if *pull_thread_str* is set, else ``None``.
 
@@ -190,6 +222,7 @@ class PullParsingMixin:
             pull_tier: Integer tier (1–3).
             beseech_bonus: Emergency thread-bond draw bonus (#1718); 0 means
                 no emergency draw was invoked. Social commands always pass 0.
+            burn: Resonance to burn with the pull for strain (#4736); 0 for none.
 
         Raises:
             CommandError: If resonance is unknown, any thread is not found /
@@ -239,4 +272,5 @@ class PullParsingMixin:
             tier=pull_tier,
             threads=tuple(threads),
             beseech_bonus=beseech_bonus,
+            burn=burn,
         )

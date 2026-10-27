@@ -152,6 +152,7 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
                 "name": "Daybreak",
                 "description": self.dawn.description,
                 "corruption_coefficient": self.dawn.corruption_coefficient,
+                "burn_value": self.dawn.burn_value,
             },
         )
         self.assertEqual(response.status_code, 302, response.content[:2000])

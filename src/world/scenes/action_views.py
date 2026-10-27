@@ -759,6 +759,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 resonance=pull_data["resonance"],
                 tier=pull_data["tier"],
                 threads=tuple(pull_data["threads"]),
+                burn=pull_data.get("burn", 0),
             )
 
         try:

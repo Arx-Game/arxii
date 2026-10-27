@@ -147,6 +147,19 @@ The magical strain a character accrues by casting while anima is depleted below 
 **Overburn**:
 The condition where a cast's effective anima cost exceeds the available pool and the deficit is drawn from the caster's life force. Non-lethal encounters clamp cost to available anima instead.
 
+**Burn**:
+Resonance a character spends from the resonance of a thread she is pulling, on top of the pull's cost, to push a cast harder (#4736). Rolled on the strain check, the outcome tier's `StrainBurnReach` sets the share she reaches, and only that share is debited. Reached points become strain units at the resonance's affinity `burn_value`, joining the anima strain before the one diminishing curve. It exists only with a pull and strains only the action it was declared with.
+_Avoid_: overburn (that is the anima deficit), sacrifice.
+
+**Burn ceiling**:
+The most resonance a cast may burn: its runtime intensity times `StrainConfig.burn_per_intensity`, floored, and never more than the balance left after the pull's cost. The pull preview shows it.
+
+**Hasty fall**:
+A burn by a caster whose acting aura is dominantly Abyssal, of resonance from another affinity. The points convert at the Fall pair rate and are valued as Abyssal, and the corruption they cause is multiplied by `CorruptionConfig.hasty_fall_multiplier`.
+
+**Engagement share**:
+The percentage (`StrainConfig.engagement_share_percent`) of a cast's strain bonus that is also added to the caster's engagement intensity modifier, so strained intensity feeds back into her engagement.
+
 **Penetration**:
 The contest run when a Technique's Power meets a target's ward: a check against the ward's strength whose success level selects a factor from the authored ladder, applied as the `PENETRATION` stage of power derivation. Unwarded casts record no penetration entry.
 

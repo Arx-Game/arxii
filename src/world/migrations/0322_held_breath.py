@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0319_affinityinteraction_conflict_weight_and_more")]
+    dependencies = [("arxii", "0321_sceneactionpulldeclaration_burn")]
 
     operations = [
         migrations.AddField(

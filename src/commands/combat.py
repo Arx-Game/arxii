@@ -86,7 +86,7 @@ _POSITION_PAIR_PREFIX = "position_a="
 # Usage hint for the clash command (shared across three error sites in _parse_args).
 _CLASH_USAGE = (
     "Usage: clash <opponent> with <technique> [strain=<n>]"
-    " [pull=<thread> resonance=<name> [tier=N] [beseech=N]]"
+    " [pull=<thread> resonance=<name> [tier=N] [beseech=N] [burn=N]]"
 )
 
 # Mapping from ActionCategory to the corresponding passive CombatActionSlot.
@@ -187,6 +187,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     cast, a one-way choice: it can only remove concealment a subtle style
     already imposes, never add concealment to an overt one.
 
+    With a thread pull (``pull=<thread> resonance=<name>``), ``burn=<n>`` burns
+    that much resonance from it on top of any ``strain=<n>`` to push harder.
+
     Use ``soulfray`` to consent up front to holding this cast's protective
     ward alive past zero anima by drawing on Soulfray, skipping the separate
     ``accept soulfray`` prompt that would otherwise gate a cast made while you
@@ -210,6 +213,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _pull_resonance_str: str | None = None
     _pull_tier: int = 1
     _beseech_bonus: int = 0
+    # Resonance burned with the pull when straining (#4736); 0 means none.
+    _burn: int = 0
     # Fury-related parsed state (None means no fury declared).
     _fury_str: str | None = None
     _anchor_str: str | None = None
@@ -226,7 +231,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     # --------------------------------------------------------------------------
 
-    def _parse_args(self) -> None:
+    def _parse_args(self) -> None:  # noqa: PLR0915 - one strip step per cast keyword
         """Parse ``self.args`` once; cache technique name, optional target, effort, secondary.
 
         Also extracts optional pull=<thread>[,…], resonance=<name>, tier=<1-3>,
@@ -257,6 +262,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         raw, pull_thread_str, resonance_str, pull_tier, beseech_bonus = self._extract_pull_keywords(
             raw
         )
+        # Strip burn=<n> (#4736): resonance burned with the pull when straining.
+        raw, burn = self._extract_burn_keyword(raw, has_pull=pull_thread_str is not None)
 
         # Strip fury=<tier> and anchor=<name> if present (single-token values).
         # Done before effort=/secondary/at parsing so the keywords are fully
@@ -325,6 +332,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
         self._beseech_bonus = beseech_bonus
+        self._burn = burn
         self._fury_str = fury_str
         self._anchor_str = anchor_str
         self._strain = strain
@@ -796,6 +804,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             self._pull_resonance_str,
             self._pull_tier,
             self._beseech_bonus,
+            burn=self._burn,
         )
 
     # -- DispatchCommand interface ---------------------------------------------
@@ -1009,7 +1018,9 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
 
     Usage:
         clash <opponent> with <technique> [strain=<n>]
-            [pull=<thread>[,…] resonance=<name> [tier=N] [beseech=N]]
+            [pull=<thread>[,…] resonance=<name> [tier=N] [beseech=N] [burn=N]]
+
+    ``burn=N`` (with a pull) burns resonance from the pulled thread to push harder.
 
     Identifies the active Clash against the named NPC opponent and declares a
     ClashContributionDeclaration via the COMBAT backend dispatcher.  The round
@@ -1039,6 +1050,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
     _pull_resonance_str: str | None = None
     _pull_tier: int = 1
     _beseech_bonus: int = 0
+    _burn: int = 0
 
     # ---------------------------------------------------------------------------
 
@@ -1059,6 +1071,8 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
         raw, pull_thread_str, resonance_str, pull_tier, beseech_bonus = self._extract_pull_keywords(
             raw
         )
+        # Strip burn=<n> (#4736) before the strain= suffix split swallows it.
+        raw, burn = self._extract_burn_keyword(raw, has_pull=pull_thread_str is not None)
 
         # Strip off strain=<n> suffix (case-insensitive).
         strain = 0
@@ -1087,6 +1101,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
         self._beseech_bonus = beseech_bonus
+        self._burn = burn
         self._parsed = True
 
     def _resolve_clash(self, participant: CombatParticipant) -> Any:
@@ -1162,6 +1177,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
             self._pull_resonance_str,
             self._pull_tier,
             self._beseech_bonus,
+            burn=self._burn,
         )
         if cast_pull is not None:
             kwargs["cast_pull"] = cast_pull

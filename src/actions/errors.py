@@ -1,3 +1,10 @@
+from world.magic.exceptions import (
+    ResonanceBurnInvalid,
+    ResonanceBurnNeedsPull,
+    ResonanceBurnUnavailable,
+)
+
+
 class ActionDispatchError(Exception):
     """User-safe error from action-dispatch / combat-resolution operations.
 
@@ -18,6 +25,11 @@ class ActionDispatchError(Exception):
     PULL_ALREADY_COMMITTED = "pull_already_committed"
     PULL_INVALID = "pull_invalid"
     PARTICIPANT_MID_CROSSING = "participant_mid_crossing"
+    BURN_NEEDS_PULL = "burn_needs_pull"
+    BURN_UNAVAILABLE = "burn_unavailable"
+    BURN_NO_FALL_RATE = "burn_no_fall_rate"
+    BURN_INVALID = "burn_invalid"
+    PULL_NEEDS_SOULFRAY_CONSENT = "pull_needs_soulfray_consent"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -29,6 +41,13 @@ class ActionDispatchError(Exception):
         PULL_ALREADY_COMMITTED: "You have already pulled a thread this round.",
         PULL_INVALID: "That pull cannot be applied to this action.",
         PARTICIPANT_MID_CROSSING: "A participant needs a moment; try again shortly.",
+        BURN_NEEDS_PULL: ResonanceBurnNeedsPull.user_message,
+        BURN_UNAVAILABLE: ResonanceBurnUnavailable.user_message,
+        BURN_NO_FALL_RATE: "No Fall rate is set up for burning that resonance.",
+        BURN_INVALID: ResonanceBurnInvalid.user_message,
+        PULL_NEEDS_SOULFRAY_CONSENT: (
+            "Accept the Soulfray risk before pulling a thread on this cast."
+        ),
     }
     _FALLBACK = "That action could not be completed."
 

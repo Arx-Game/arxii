@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.covenants.perks.context import SituationContext
     from world.magic.models import Resonance
+    from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration
 
@@ -51,6 +52,7 @@ def build_cast_pull_declaration(
     resonance_id: int,
     tier: int,
     thread_ids: list[int],
+    burn: int = 0,
 ) -> CastPullDeclaration:
     """Resolve raw pull IDs into a ``CastPullDeclaration`` scoped to *owner_sheet_id*.
 
@@ -67,6 +69,7 @@ def build_cast_pull_declaration(
         resonance_id: PK of the ``Resonance`` the pull is declared on.
         tier: Pull tier (1–3).
         thread_ids: Ordered list of ``Thread`` PKs to include in the pull.
+        burn: Resonance the caster asks to burn with the pull for strain (#4736).
 
     Returns:
         A ``CastPullDeclaration`` carrying the resolved ``Resonance`` instance and
@@ -80,10 +83,13 @@ def build_cast_pull_declaration(
             at the ``MagicError`` boundary; the DRF serializer maps it to a
             ``ValidationError`` at the serializer boundary.
     """
-    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
+    from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
+    from world.magic.exceptions import InvalidImbueAmount, ResonanceBurnInvalid  # noqa: PLC0415
     from world.magic.models import Resonance, Thread  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
 
+    if not 0 <= burn <= MAX_RESONANCE_BURN:
+        raise ResonanceBurnInvalid
     try:
         resonance = Resonance.objects.get(pk=resonance_id)
     except Resonance.DoesNotExist:
@@ -109,6 +115,7 @@ def build_cast_pull_declaration(
         resonance=resonance,
         tier=tier,
         threads=tuple(threads),
+        burn=burn,
     )
 
 
@@ -123,7 +130,8 @@ def resolve_pull_from_kwargs(
     - **Telnet** passes ``cast_pull`` as a pre-built ``CastPullDeclaration``
       (ORM instances already resolved by the command parser).
     - **Web** passes raw IDs: ``pull_resonance_id`` (int), ``pull_tier`` (int),
-      ``pull_thread_ids`` (list[int]).
+      ``pull_thread_ids`` (list[int]), and optionally ``pull_burn`` (int, #4736): the
+      resonance to burn with the pull for strain.
 
     This helper normalises both into a single ``CastPullDeclaration | None`` so
     both combat seams (``CastTechniqueAction.round_declaration`` and
@@ -146,7 +154,9 @@ def resolve_pull_from_kwargs(
             ``build_cast_pull_declaration`` when any web-form ID is invalid.
         ``actions.errors.ActionDispatchError``: With ``PULL_INVALID`` wrapping an
             ``InvalidImbueAmount`` at the combat-seam call sites (the helpers above
-            this layer map the MagicError; this function does not).
+            this layer map the MagicError; this function does not). With
+            ``BURN_NEEDS_PULL`` when ``pull_burn`` is set and no pull is declared
+            (no pull, no burn).
     """
     from world.magic.types.pull import CastPullDeclaration as _CastPullDeclaration  # noqa: PLC0415
 
@@ -159,15 +169,41 @@ def resolve_pull_from_kwargs(
     resonance_id = kwargs.get("pull_resonance_id")
     tier = kwargs.get("pull_tier")
     thread_ids = kwargs.get("pull_thread_ids")
+    burn = _parse_pull_burn(kwargs.get("pull_burn"))
     if resonance_id is not None and tier is not None and thread_ids is not None:
         return build_cast_pull_declaration(
             sheet.pk,
             resonance_id=int(resonance_id),
             tier=int(tier),
             thread_ids=[int(t) for t in thread_ids],
+            burn=burn,
         )
+    if burn > 0:
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+
+        raise ActionDispatchError(ActionDispatchError.BURN_NEEDS_PULL)
 
     return None
+
+
+def _parse_pull_burn(raw: object) -> int:
+    """The web ``pull_burn`` kwarg as a burn amount, strictly (#4736).
+
+    Absent or ``None`` is no burn. Anything but a whole number from 0 to
+    ``MAX_RESONANCE_BURN`` (a string, a list, a float, a bool, a negative) is refused,
+    never coerced or clamped.
+
+    Raises:
+        ActionDispatchError(BURN_INVALID): The value is not such a number.
+    """
+    from actions.errors import ActionDispatchError  # noqa: PLC0415
+    from world.magic.constants import MAX_RESONANCE_BURN  # noqa: PLC0415
+
+    if raw is None:
+        return 0
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= MAX_RESONANCE_BURN:
+        raise ActionDispatchError(ActionDispatchError.BURN_INVALID)
+    return raw
 
 
 def round_pull_resonance(participant: CombatParticipant) -> Resonance | None:
@@ -189,6 +225,7 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     technique_id: int,
     target: ObjectDB | None = None,
     cast_check: CastCheck | None = None,
+    burned_for: str = "",
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
 
@@ -224,6 +261,8 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         cast_check: What the cast rolls, from ``resolve_cast_check`` (#4450). Its stat and
             skill traits are the ``involved_traits`` a TRAIT thread is matched against;
             without it no TRAIT thread is in the action.
+        burned_for: The declared action a burn on this pull strains (``PullBurnAction``,
+            #4736). A burn is paid once and strains only that action.
 
     Raises:
         ActionDispatchError(PULL_ALREADY_COMMITTED): When the
@@ -277,6 +316,9 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             sheet, cast_pull, situation_ctx=situation_ctx
         )
 
+    burn_result = _resolve_combat_burn(
+        cast_pull, sheet=sheet, technique_id=technique_id, participant=participant
+    )
     try:
         spend_resonance_for_pull(
             character_sheet=sheet,
@@ -286,11 +328,73 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             action_context=action_context,
             beseech_bonus_thread_id=beseech_bonus_thread_id,
             beseech_bonus=applied_bonus,
+            burn=burn_result.reached if burn_result is not None else 0,
+            burn_valuation=burn_result.valuation if burn_result is not None else None,
+            # Recorded whenever a burn was asked for (even one that reached nothing),
+            # so a resubmitted declaration can be matched against it.
+            burned_for=burned_for if cast_pull.burn > 0 else "",
         )
     except IntegrityError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
     except MagicError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
+    if burn_result is not None:
+        from world.magic.services.burn import announce_burn  # noqa: PLC0415
+
+        announce_burn(sheet.character, burn_result)
+
+
+def _resolve_combat_burn(
+    cast_pull: CastPullDeclaration,
+    *,
+    sheet: CharacterSheet,
+    technique_id: int,
+    participant: CombatParticipant,
+) -> ResonanceBurnResult | None:
+    """Resolve a combat pull's burn at declaration, before the pull is debited (#4736).
+
+    The ceiling comes from the technique's runtime intensity now; the strain check rolls
+    now; the reached amount is debited with the pull and recorded on the ``CombatPull``,
+    and the round's casts read its strain units back at resolution.
+
+    Raises:
+        ActionDispatchError(BURN_UNAVAILABLE): No strain check type is designated.
+        ActionDispatchError(BURN_NO_FALL_RATE): A hasty fall with no Fall pair authored.
+    """
+    if cast_pull.burn <= 0:
+        return None
+    from actions.errors import ActionDispatchError  # noqa: PLC0415
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        ConversionMappingError,
+        ResonanceBurnUnavailable,
+    )
+    from world.magic.models import Technique  # noqa: PLC0415
+    from world.magic.services.burn import resolve_resonance_burn  # noqa: PLC0415
+    from world.magic.services.techniques import get_runtime_technique_stats  # noqa: PLC0415
+    from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
+
+    technique = Technique.objects.get(pk=technique_id)
+    stats = get_runtime_technique_stats(technique, sheet.character)
+    try:
+        return resolve_resonance_burn(
+            sheet=sheet,
+            resonance=cast_pull.resonance,
+            requested=cast_pull.burn,
+            runtime_intensity=stats.intensity,
+            pull_cost=get_pull_cost(cast_pull.tier, None).resonance_cost,
+            situation_ctx=SituationContext(
+                holder=sheet,
+                subject=sheet,
+                target=None,
+                resolution=CombatRoundContext(participant),
+            ),
+        )
+    except ResonanceBurnUnavailable as exc:
+        raise ActionDispatchError(ActionDispatchError.BURN_UNAVAILABLE) from exc
+    except ConversionMappingError as exc:
+        raise ActionDispatchError(ActionDispatchError.BURN_NO_FALL_RATE) from exc
 
 
 def _resolve_emergency_draw(

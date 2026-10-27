@@ -29665,6 +29665,28 @@ export interface components {
       exits: components['schemas']['ManagerExit'][];
     };
     /**
+     * @description Wire shape for the burn numbers of a pull preview (#4736).
+     *
+     *     ``ceiling`` is the most she may burn now (intensity ceiling capped by the balance
+     *     left after the pull). ``strain_units_per_point`` is what one burned point adds to
+     *     her strain. ``hasty_fall`` is True when the burn falls at the pair rate.
+     *     ``available`` is False when no strain check is designated, so a burn is refused.
+     *     ``off_affinity`` is True when the resonance is not of the caster's affinity;
+     *     ``corruption_affinity_name`` names the affinity whose corruption the burn leaves
+     *     (null when none); ``ceiling_tier_name`` is the intensity tier the ceiling is read at.
+     */
+    BurnPreview: {
+      ceiling: number;
+      /** Format: decimal */
+      strain_units_per_point: string;
+      hasty_fall: boolean;
+      available: boolean;
+      resonance_name: string;
+      off_affinity: boolean;
+      corruption_affinity_name: string | null;
+      ceiling_tier_name: string | null;
+    };
+    /**
      * @description Gift row for the CG gift-options list (#2426).
      *
      *     Backs ``GET /api/character-creation/gifts/?draft_id=<id>`` — a gift the
@@ -29986,6 +30008,18 @@ export interface components {
       resonance_id: number;
       tier: number;
       thread_ids: number[];
+    };
+    /**
+     * @description The cast endpoint's pull, which may also burn resonance for strain (#4736).
+     *
+     *     The burn lives inside the pull, so a burn without a pull cannot be sent.
+     */
+    CastPullWithBurnRequestRequest: {
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+      /** @default 0 */
+      burn: number;
     };
     /**
      * @description Serializes a Technique for the castable-techniques list endpoint.
@@ -52872,7 +52906,7 @@ export interface components {
       strain_commitment: number;
       fury_commitment_id?: number | null;
       fury_anchor_id?: number | null;
-      pull?: components['schemas']['CastPullRequestRequest'] | null;
+      pull?: components['schemas']['CastPullWithBurnRequestRequest'] | null;
       /** @default false */
       use_base_form: boolean;
       preferred_resonance_id?: number | null;
@@ -53157,6 +53191,7 @@ export interface components {
       scene_id?: number | null;
       /** @default false */
       exclude_gift: boolean;
+      technique_id?: number | null;
     };
     /** @description Response serializer for POST /api/magic/thread-pull-preview/. */
     ThreadPullPreviewResponse: {
@@ -53165,6 +53200,7 @@ export interface components {
       affordable: boolean;
       resolved_effects: components['schemas']['ResolvedPullEffect'][];
       capped_intensity: boolean;
+      burn: components['schemas']['BurnPreview'] | null;
     };
     /**
      * @description Serializer for Thread records (Spec A §4.5).

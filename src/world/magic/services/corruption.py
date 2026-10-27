@@ -13,7 +13,7 @@ from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import advance_condition_severity, decay_condition_severity
 from world.conditions.types import AdvancementOutcome
 from world.magic.constants import SoulTetherRole, TargetKind
-from world.magic.models.affinity import Resonance
+from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.types.corruption import (
@@ -78,6 +78,7 @@ def _compute_tick(  # noqa: PLR0913
     was_deficit: bool,
     was_mishap: bool,
     was_audere: bool,
+    hasty_fall_multiplier: int = 10,
 ) -> int:
     """Compute the per-resonance corruption tick per spec §3.1.
 
@@ -85,15 +86,16 @@ def _compute_tick(  # noqa: PLR0913
     Multipliers default to 10 (× 0.1 → 1.0) when their flag is False.
 
     base_tick   = involvement × (affinity_coef / 10) × (tier_coef / 10)
-    multipliers = (d × m × a) / 1000   where each of d/m/a is either the
-                  configured integer-tenths value or 10 (neutral)
+    multipliers = (d × m × a × h) / 10000   where each of d/m/a is either the
+                  configured integer-tenths value or 10 (neutral), and h is the
+                  hasty-fall multiplier (10, neutral, unless the caller passes one)
     tick        = ceil(base_tick × multipliers)
     """
     base_tick = involvement * affinity_coef / 10 * tier_coef / 10
     d = deficit_multiplier if was_deficit else 10
     m = mishap_multiplier if was_mishap else 10
     a = audere_multiplier if was_audere else 10
-    multipliers = d * m * a / 1000
+    multipliers = d * m * a * hasty_fall_multiplier / 10000
     return math.ceil(base_tick * multipliers)
 
 
@@ -116,23 +118,14 @@ def accrue_corruption_for_cast(
         config = get_corruption_config()
 
     per_resonance: list[CorruptionAccrualResult] = []
+    tier = technique_use_result.technique.tier  # type: ignore[union-attr]
+    tier_coef = _resolve_tier_coefficient(tier, config)
 
-    for inv in technique_use_result.resonance_involvements:
-        resonance = inv.resonance
-        affinity_coef = resonance.affinity.corruption_coefficient
-
-        # Celestial always has coefficient 0 — skip entirely (no accrual, no audit noise)
-        if affinity_coef == 0:
-            continue
-
-        involvement = inv.stat_bonus_contribution + inv.thread_pull_resonance_spent
-        if involvement <= 0:
-            continue
-
-        tier = technique_use_result.technique.tier  # type: ignore[union-attr]
-        tier_coef = _resolve_tier_coefficient(tier, config)
-
-        tick = _compute_tick(
+    def tick_for(involvement: int, affinity_coef: int, hasty_fall_multiplier: int = 10) -> int:
+        # Celestial always has coefficient 0: no accrual, no audit noise.
+        if affinity_coef == 0 or involvement <= 0:
+            return 0
+        return _compute_tick(
             involvement=involvement,
             affinity_coef=affinity_coef,
             tier_coef=tier_coef,
@@ -142,7 +135,24 @@ def accrue_corruption_for_cast(
             was_deficit=technique_use_result.was_deficit,
             was_mishap=technique_use_result.was_mishap,
             was_audere=technique_use_result.was_audere,
+            hasty_fall_multiplier=hasty_fall_multiplier,
         )
+
+    for inv in technique_use_result.resonance_involvements:
+        resonance = inv.resonance
+        tick = tick_for(
+            inv.stat_bonus_contribution + inv.thread_pull_resonance_spent,
+            resonance.affinity.corruption_coefficient,
+        )
+        if inv.hasty_fall_points > 0:
+            # A hasty fall (#4736): the burned points fell to Abyssal at the pair rate,
+            # so they corrupt at the Abyssal coefficient, multiplied, even when the
+            # burned resonance's own affinity (Celestial) never corrupts.
+            tick += tick_for(
+                inv.hasty_fall_points,
+                Affinity.objects.get_abyssal_affinity().corruption_coefficient,
+                config.hasty_fall_multiplier,
+            )
 
         if tick == 0:
             continue
