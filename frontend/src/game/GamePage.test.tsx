@@ -142,15 +142,10 @@ vi.mock('@/combat/api', async (importOriginal) => ({
 
 // #4733: the drift conversion inbox; empty unless a test sets an offer.
 const driftOffers = vi.hoisted(() => ({ current: [] as unknown[] }));
+const getDriftOffers = vi.hoisted(() => vi.fn());
 vi.mock('@/magic/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/magic/api')>()),
-  getPendingDriftConversionOffers: () =>
-    Promise.resolve({
-      count: driftOffers.current.length,
-      next: null,
-      previous: null,
-      results: driftOffers.current,
-    }),
+  getPendingDriftConversionOffers: (...args: unknown[]) => getDriftOffers(...args),
 }));
 
 // #4418: the Guide's offers; empty unless a test sets one.
@@ -459,6 +454,15 @@ function blockOf(element: HTMLElement): HTMLElement {
 describe('GamePage', () => {
   beforeEach(() => {
     driftOffers.current = [];
+    getDriftOffers.mockReset();
+    getDriftOffers.mockImplementation(() =>
+      Promise.resolve({
+        count: driftOffers.current.length,
+        next: null,
+        previous: null,
+        results: driftOffers.current,
+      })
+    );
     dispatch(setAccount(null));
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
@@ -1599,6 +1603,13 @@ describe('GamePage', () => {
       renderWithProviders(<GamePage />);
 
       expect(await screen.findByTestId('consent-prompt')).toBeInTheDocument();
+      // The inbox must have been asked AND answered before absence means anything.
+      await waitFor(() => {
+        expect(getDriftOffers).toHaveBeenCalled();
+      });
+      await act(async () => {
+        await getDriftOffers.mock.results[0].value;
+      });
       expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
     });
 

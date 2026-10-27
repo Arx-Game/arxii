@@ -295,7 +295,7 @@ vi.mock('@/magic/queries', () => ({
     mockUsePendingDriftConversionOffers(enabled);
     return { data: { results: mockDriftOffers.results } };
   },
-  useConvertDrift: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useConvertDrift: vi.fn(() => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false })),
   useDeclineDriftConversion: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
 }));

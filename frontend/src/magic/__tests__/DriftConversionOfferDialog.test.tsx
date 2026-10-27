@@ -227,6 +227,26 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     expect(line).toHaveTextContent('4 Dawnlight');
   });
 
+  it('says the rite fails, in the telnet words, when nothing converted', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.convertDrift).mockResolvedValue({
+      ...RESULT,
+      converted_amount: 0,
+      granted_amount: 0,
+      outcome_name: 'Failure',
+      success_level: -1,
+    });
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-502'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
+      /^The rite fails; nothing is converted\.$/
+    );
+  });
+
   it('keeps the result line after the exhausted offer leaves the inbox', async () => {
     const user = userEvent.setup();
     vi.mocked(api.convertDrift).mockResolvedValue(RESULT);
@@ -306,8 +326,12 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
   it('renders nothing when no offer belongs to the scene', async () => {
     renderGate([OFFER], 303);
 
+    // The poll must have been asked AND answered before absence means anything.
     await waitFor(() => {
       expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
@@ -372,8 +396,12 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
   it('renders nothing when there is no open offer', async () => {
     renderGate([]);
 
+    // The poll must have been asked AND answered before absence means anything.
     await waitFor(() => {
       expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await vi.mocked(api.getPendingDriftConversionOffers).mock.results[0].value;
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();

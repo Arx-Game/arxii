@@ -59,6 +59,8 @@ function resultText(
   source: DriftSourceOption | undefined,
   target: string
 ): string {
+  // Same words as the telnet verb for a failed roll.
+  if (result.converted_amount === 0) return 'The rite fails; nothing is converted.';
   const sourceName = source?.resonance_name ?? 'drift';
   return `${result.outcome_name}: ${result.converted_amount} ${sourceName} became ${result.granted_amount} ${target}.`;
 }
