@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
@@ -77,6 +77,10 @@ class CheckResult:
     level_points: int = 0  # #2707 — LEVEL_POINTS_PER_LEVEL x class level, on every check
     effective_roll: int = 0  # #2886 — the clamped d100; 0 = no roll (forced/duck-typed)
     standing: CheckStanding | None = None  # #4601: band positions and the slide
+
+    def with_outcome(self, outcome: CheckOutcome | None) -> CheckResult:
+        """Copy the result while replacing only its outcome tier."""
+        return replace(self, outcome=outcome)
 
     @property
     def rank_text(self) -> str:

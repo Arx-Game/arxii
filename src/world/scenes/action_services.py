@@ -217,7 +217,12 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution, StepResult
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, Consequence
-    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierContribution
+    from world.checks.types import (
+        CheckResult,
+        ExtraTraitTerm,
+        ModifierBreakdown,
+        ModifierContribution,
+    )
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -1295,6 +1300,26 @@ def _social_check_contributions(
     return gated
 
 
+def _technique_modifiers(
+    action_request: SceneActionRequest,
+    action_template: ActionTemplate,
+    technique_terms: tuple[ExtraTraitTerm, ...],
+) -> tuple[int, ModifierBreakdown | None]:
+    """Collect the technique check's modifiers when its template has a check."""
+    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
+
+    check_type = action_template.check_type
+    if check_type is None:
+        return 0, None
+    breakdown = collect_check_modifiers(
+        action_request.initiator_persona.character_sheet,
+        check_type,
+        scene=action_request.scene,
+        extra_traits=technique_terms,
+    )
+    return breakdown.extra_modifiers_total, breakdown
+
+
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
@@ -1404,19 +1429,11 @@ def _resolve_action_against_persona(
         #
         # The template's own check type still rolls; the technique's skill (#4450) rides
         # along as one extra term on both the modifier collection and the roll.
-        tech_check_type = action_template.check_type
         skill_term = technique_skill_term(character, action_request.technique)
         technique_terms = (skill_term,) if skill_term is not None else ()
-        technique_check_modifiers = 0
-        technique_breakdown = None
-        if tech_check_type is not None:
-            technique_breakdown = collect_check_modifiers(
-                action_request.initiator_persona.character_sheet,
-                tech_check_type,
-                scene=action_request.scene,
-                extra_traits=technique_terms,
-            )
-            technique_check_modifiers = technique_breakdown.extra_modifiers_total
+        technique_check_modifiers, technique_breakdown = _technique_modifiers(
+            action_request, action_template, technique_terms
+        )
         result = _resolve_enhanced_action(
             character=character,
             technique=action_request.technique,

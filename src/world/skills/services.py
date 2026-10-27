@@ -613,6 +613,15 @@ def _record_training_transaction(
     )
 
 
+def _skill_plateau_message(skill_value: CharacterSkillValue, cap: int | None) -> str | None:
+    """Describe the first advancement boundary reached, if any."""
+    if cap is not None and skill_value.value >= cap:
+        return skill_cap_message(skill_value.skill.name, cap)
+    if _is_at_xp_boundary(skill_value.value):
+        return _boundary_message(skill_value.skill, skill_value.value + 1)
+    return None
+
+
 def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> str | None:
     """Apply development points to a skill, handling rust payoff, level-ups, and plateau.
 
@@ -642,17 +651,11 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
         skill_value.rust_points -= rust_paid
         remaining -= rust_paid
 
-    if cap is not None and skill_value.value >= cap:
-        message = skill_cap_message(skill_value.skill.name, cap) if remaining else None
+    plateau = _skill_plateau_message(skill_value, cap)
+    if plateau is not None:
         skill_value.development_points = 0
         skill_value.save()
-        return message
-
-    if _is_at_xp_boundary(skill_value.value):
-        message = _boundary_message(skill_value.skill, skill_value.value + 1) if remaining else None
-        skill_value.development_points = 0
-        skill_value.save()
-        return message
+        return plateau if remaining else None
 
     # Apply remaining to development
     remaining += skill_value.development_points
@@ -662,14 +665,9 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
     while remaining >= cost:
         remaining -= cost
         skill_value.value += 1
-        if cap is not None and skill_value.value >= cap:
-            if remaining > 0:
-                message = skill_cap_message(skill_value.skill.name, cap)
-            remaining = 0
-            break
-        if _is_at_xp_boundary(skill_value.value):
-            if remaining > 0:
-                message = _boundary_message(skill_value.skill, skill_value.value + 1)
+        plateau = _skill_plateau_message(skill_value, cap)
+        if plateau is not None:
+            message = plateau if remaining > 0 else None
             remaining = 0
             break
         cost = _development_cost(skill_value.value)

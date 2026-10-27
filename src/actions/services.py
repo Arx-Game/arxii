@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 from actions.constants import Pipeline, PlayerDecision, ResolutionPhase
@@ -233,9 +232,8 @@ def start_resisted_action_resolution(  # noqa: PLR0913 - mirrors start_action_re
         extra_modifiers=extra_modifiers,
         effort_level=effort_level,
     )
-    mirrored = dataclasses.replace(
-        resist_result,
-        outcome=mirrored_outcome(resist_result.outcome) if resist_result.outcome else None,
+    mirrored = resist_result.with_outcome(
+        mirrored_outcome(resist_result.outcome) if resist_result.outcome else None
     )
     pool = template.consequence_pool
     consequences = get_effective_consequences(pool) if pool is not None else []

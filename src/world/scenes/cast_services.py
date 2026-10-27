@@ -456,51 +456,14 @@ def _conceal_action_interaction(action_interaction: Interaction, audience: CastA
     conceal_action_interaction(action_interaction, audience)
 
 
-def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolution
-    *,
-    request: SceneActionRequest,
-    scene: Scene,
+def _cast_display_form(
     caster_persona: Persona,
-    target_persona: Persona | None,
     technique: Technique,
-    strain_commitment: int,
-    fury_commitment: FuryTier | None = None,
-    fury_anchor: CharacterSheet | None = None,
-    cast_pull: CastPullDeclaration | None = None,
-    fizzle_note: str | None = None,
-    supplied_personas: list[Persona] | None = None,
-    confirm_soulfray_risk: bool = True,
-    soulfray_consented: bool | None = None,
-    use_base_form: bool = False,
-    position_params: dict[str, int] | None = None,
-    preferred_resonance: Resonance | None = None,
-) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
-    """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
-
-    Shared by the immediate path (request just created) and the consent-accept path
-    (an existing PENDING request). The caller MUST wrap this in ``transaction.atomic()``.
-
-    Args:
-        fizzle_note: Optional note forwarded to ``create_cast_outcome_pose`` when a
-            declared pull could not be charged and fizzled instead.
-        supplied_personas: For FILTERED_GROUP techniques, the player-picked subset of
-            targets already resolved from ``target_persona_ids``. Passed directly to
-            ``resolve_targets`` as ``supplied_personas``. If ``None``, falls back to
-            ``[target_persona]`` (the pre-existing single-target path).
-        soulfray_consented: The caster's Soulfray consent (#3573) to stamp on any
-            condition minted by this cast. When ``None`` (the default, used by the
-            immediate path), derived from ``confirm_soulfray_risk`` - that flag
-            means "the caster confirmed this cast" on the immediate path, so it
-            doubles as consent there. The consent-accept path passes ``False``
-            explicitly: its ``confirm_soulfray_risk=True`` only bypasses the
-            re-halt on a cast the caster already got past, and is NOT the
-            caster's Soulfray consent.
-    """
-    if soulfray_consented is None:
-        soulfray_consented = confirm_soulfray_risk
+    use_base_form: bool,
+    preferred_resonance: Resonance | None,
+) -> tuple[str, int]:
+    """Resolve the cast form's display name and base intensity."""
     character = caster_persona.character_sheet.character
-    target = target_persona.character_sheet.character if target_persona is not None else None
-
     # #1581: pose and cost reflect the gift-technique's unlocked variant by default.
     # When use_base_form=True, bypass variant resolution and use the raw technique.
     # #2022: when the technique was role-granted, resolve the variant by the
@@ -546,6 +509,58 @@ def _resolve_and_pose_cast(  # noqa: PLR0913, PLR0915 - one cohesive cast resolu
         )
 
         resolved_name = technique_display_name(character, technique, fallback=resolved_name)
+
+    return resolved_name, resolved_intensity
+
+
+def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
+    *,
+    request: SceneActionRequest,
+    scene: Scene,
+    caster_persona: Persona,
+    target_persona: Persona | None,
+    technique: Technique,
+    strain_commitment: int,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
+    cast_pull: CastPullDeclaration | None = None,
+    fizzle_note: str | None = None,
+    supplied_personas: list[Persona] | None = None,
+    confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
+    use_base_form: bool = False,
+    position_params: dict[str, int] | None = None,
+    preferred_resonance: Resonance | None = None,
+) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
+    """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
+
+    Shared by the immediate path (request just created) and the consent-accept path
+    (an existing PENDING request). The caller MUST wrap this in ``transaction.atomic()``.
+
+    Args:
+        fizzle_note: Optional note forwarded to ``create_cast_outcome_pose`` when a
+            declared pull could not be charged and fizzled instead.
+        supplied_personas: For FILTERED_GROUP techniques, the player-picked subset of
+            targets already resolved from ``target_persona_ids``. Passed directly to
+            ``resolve_targets`` as ``supplied_personas``. If ``None``, falls back to
+            ``[target_persona]`` (the pre-existing single-target path).
+        soulfray_consented: The caster's Soulfray consent (#3573) to stamp on any
+            condition minted by this cast. When ``None`` (the default, used by the
+            immediate path), derived from ``confirm_soulfray_risk`` - that flag
+            means "the caster confirmed this cast" on the immediate path, so it
+            doubles as consent there. The consent-accept path passes ``False``
+            explicitly: its ``confirm_soulfray_risk=True`` only bypasses the
+            re-halt on a cast the caster already got past, and is NOT the
+            caster's Soulfray consent.
+    """
+    if soulfray_consented is None:
+        soulfray_consented = confirm_soulfray_risk
+    character = caster_persona.character_sheet.character
+    target = target_persona.character_sheet.character if target_persona is not None else None
+
+    resolved_name, resolved_intensity = _cast_display_form(
+        caster_persona, technique, use_base_form, preferred_resonance
+    )
 
     difficulty = derive_cast_difficulty(technique)
 

@@ -1287,70 +1287,29 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
     return entries
 
 
-def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
-    """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
+@dataclasses.dataclass(frozen=True)
+class _PositionMoveContext:
+    traversals: frozenset[str]
+    hops: int | None
+    move_met: bool
+    move_reason: str
+    move_note: str
+    holders: dict[int, str]
+    pass_ways: list[PassOption]
 
-    "Directly adjacent" means a single-hop edge a walker can cross
-    (``edge_blocks_crossing``) from the character's current position.  Multi-hop reachability is
-    handled by the service's ``reachable_positions`` function (BFS), but this
-    action picker only offers single-hop moves so the player makes one step at a time.
 
-    If the character is not placed in any position, surfaces a take_position
-    ``PlayerAction`` for each PRIMARY/FEATURE (entry-point) position in the room
-    instead (#2005) — the voluntary entry onto the graph. If the room has no
-    positioning graph at all (unstaged), returns an empty list — no error is raised.
-    """
-    from django.db.models import Q  # noqa: PLC0415
-
-    from actions.prerequisites import CombatMovementPrerequisite  # noqa: PLC0415
+def _open_position_entries(
+    current: Position, context: _PositionMoveContext, airborne: bool
+) -> list[PlayerAction]:
+    """Offer reachable adjacent moves and ways past held positions."""
     from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
-    from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         adjacent_open_positions,
-        is_aerial,
-        position_of,
         roof_between,
     )
-    from world.areas.positioning.traversal import (  # noqa: PLC0415
-        cheapest_crossing,
-        traversals_of,
-    )
 
-    current = position_of(character)
-    if current is None:
-        entry_positions = Position.objects.filter(
-            room=character.location,
-            kind__in=(PositionKind.PRIMARY, PositionKind.FEATURE),
-        )
-        return [
-            PlayerAction(
-                backend=ActionBackend.REGISTRY,
-                display_name=f"Take position: {position.name}",
-                ref=ActionRef(
-                    backend=ActionBackend.REGISTRY,
-                    registry_key="take_position",
-                    position_id=position.pk,
-                ),
-                description=position.description,
-                action_category=ActionCategory.PHYSICAL,
-            )
-            for position in entry_positions
-        ]
-
-    # The prerequisite is not run for these hand-built entries, so ask it once here (#4607):
-    # a refusal shows on every move, and a live declaring round shows the hops left.
-    move_met, move_reason = CombatMovementPrerequisite().is_met(character)
-    move_note = _hops_left_note(character) if move_met else ""
-    # A place a ready enemy holds ends her movement on entry (#4663); only a declaring
-    # round with hops left has a note, and only then does held ground matter.
-    holders = _held_place_holders(character) if move_note else {}
-    # Her ways past held ground, read once for every held neighbour (#4663).
-    pass_ways = _pass_ways(character) if holders else []
-
-    hops = _declaring_hops_left(character)
-
-    # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
-    airborne = is_aerial(character)
+    move_met, move_reason, move_note = context.move_met, context.move_reason, context.move_note
+    holders, pass_ways, hops = context.holders, context.pass_ways, context.hops
     result: list[PlayerAction] = []
     for edge in adjacent_open_positions(current):
         # Determine which side of the edge is the destination (not current).
@@ -1377,16 +1336,20 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         )
         result.extend(_pass_entry(neighbor, holders, pass_ways, 1, hops, move_met, move_reason))
 
-    # Take off or land (#4663): a character with a flight capability above its baseline
-    # rises into the air above where she stands; an airborne one comes down.
-    # A roof closes the way up or down for everyone (#4608), so neither is offered under one.
-    traversals = traversals_of(character)
-    below = current.elevation_anchor if airborne else None
-    if airborne and not (below is not None and below.is_roofed):
-        result.append(_flight_entry("land", "Land", move_met, move_reason, move_note))
-    elif not airborne and CreatureTraversal.FLIES in traversals and not current.is_roofed:
-        result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
+    return result
 
+
+def _gated_position_entries(current: Position, context: _PositionMoveContext) -> list[PlayerAction]:
+    """Offer crossings or a visible challenge for each gated adjacent edge."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.areas.positioning.models import PositionEdge  # noqa: PLC0415
+    from world.areas.positioning.traversal import cheapest_crossing  # noqa: PLC0415
+
+    traversals, hops = context.traversals, context.hops
+    move_met, move_reason, move_note = context.move_met, context.move_reason, context.move_note
+    holders, pass_ways = context.holders, context.pass_ways
+    result: list[PlayerAction] = []
     # Surface gated (locked) edges as non-actionable entries so the player
     # can see that a path exists but is currently blocked by a challenge. A
     # sealed wall with a challenge lists too (#4606): its climb is the way over.
@@ -1434,6 +1397,85 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 prerequisite_reasons=[f"Gated by challenge: {challenge_name}"],
             )
         )
+
+    return result
+
+
+def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface a move_to_position ``PlayerAction`` for each directly adjacent open position.
+
+    "Directly adjacent" means a single-hop edge a walker can cross
+    (``edge_blocks_crossing``) from the character's current position.  Multi-hop reachability is
+    handled by the service's ``reachable_positions`` function (BFS), but this
+    action picker only offers single-hop moves so the player makes one step at a time.
+
+    If the character is not placed in any position, surfaces a take_position
+    ``PlayerAction`` for each PRIMARY/FEATURE (entry-point) position in the room
+    instead (#2005) — the voluntary entry onto the graph. If the room has no
+    positioning graph at all (unstaged), returns an empty list — no error is raised.
+    """
+    from actions.prerequisites import CombatMovementPrerequisite  # noqa: PLC0415
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        is_aerial,
+        position_of,
+    )
+    from world.areas.positioning.traversal import (  # noqa: PLC0415
+        traversals_of,
+    )
+
+    current = position_of(character)
+    if current is None:
+        entry_positions = Position.objects.filter(
+            room=character.location,
+            kind__in=(PositionKind.PRIMARY, PositionKind.FEATURE),
+        )
+        return [
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=f"Take position: {position.name}",
+                ref=ActionRef(
+                    backend=ActionBackend.REGISTRY,
+                    registry_key="take_position",
+                    position_id=position.pk,
+                ),
+                description=position.description,
+                action_category=ActionCategory.PHYSICAL,
+            )
+            for position in entry_positions
+        ]
+
+    # The prerequisite is not run for these hand-built entries, so ask it once here (#4607):
+    # a refusal shows on every move, and a live declaring round shows the hops left.
+    move_met, move_reason = CombatMovementPrerequisite().is_met(character)
+    move_note = _hops_left_note(character) if move_met else ""
+    # A place a ready enemy holds ends her movement on entry (#4663); only a declaring
+    # round with hops left has a note, and only then does held ground matter.
+    holders = _held_place_holders(character) if move_note else {}
+    # Her ways past held ground, read once for every held neighbour (#4663).
+    pass_ways = _pass_ways(character) if holders else []
+
+    hops = _declaring_hops_left(character)
+
+    # Only an airborne mover steps onto an AERIAL position; nobody else is offered one.
+    airborne = is_aerial(character)
+    traversals = traversals_of(character)
+    move_context = _PositionMoveContext(
+        traversals, hops, move_met, move_reason, move_note, holders, pass_ways
+    )
+    result = _open_position_entries(current, move_context, airborne)
+
+    # Take off or land (#4663): a character with a flight capability above its baseline
+    # rises into the air above where she stands; an airborne one comes down.
+    # A roof closes the way up or down for everyone (#4608), so neither is offered under one.
+    below = current.elevation_anchor if airborne else None
+    if airborne and not (below is not None and below.is_roofed):
+        result.append(_flight_entry("land", "Land", move_met, move_reason, move_note))
+    elif not airborne and CreatureTraversal.FLIES in traversals and not current.is_roofed:
+        result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
+
+    result.extend(_gated_position_entries(current, move_context))
 
     result.extend(_stunt_entries(character, move_met, move_reason))
     return result
