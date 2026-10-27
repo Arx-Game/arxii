@@ -106,7 +106,7 @@ def _surge_rallied_ally(
         subject_sheet=rallier.character_sheet,
         source_character=rallier.character_sheet.character,
         tuning=tuning,
-        cause=f"{persona_name_of(rallier)} rallies you.",
+        cause=f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}.",
     )
 
 

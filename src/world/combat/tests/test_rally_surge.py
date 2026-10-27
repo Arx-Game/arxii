@@ -79,7 +79,8 @@ class RallySurgeTests(TestCase):
         self._rally(self.success)
         self.assertEqual(
             DramaticSurgeRecord.objects.get().cause,
-            f"{self.rallier.character_sheet.character.key} rallies you.",
+            f"{self.rallier.character_sheet.character.key} rallies "
+            f"{self.ally.character_sheet.character.key}.",
         )
 
     def test_rally_rolls_the_tuned_check_at_the_fixed_difficulty(self) -> None:

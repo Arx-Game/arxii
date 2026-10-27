@@ -141,7 +141,8 @@ class ResolveTests(PlayerTauntTestCase):
         self._taunt(self.partial)
         self.assertEqual(
             DramaticSurgeRecord.objects.get().cause,
-            f"{self.taunter.character_sheet.character.key} taunts you.",
+            f"{self.taunter.character_sheet.character.key} taunts "
+            f"{self.target.character_sheet.character.key}.",
         )
 
     def test_a_negative_rating_is_a_potency_of_zero(self) -> None:

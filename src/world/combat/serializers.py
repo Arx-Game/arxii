@@ -1365,7 +1365,7 @@ class SurgeBeatSerializer(serializers.Serializer):
     )
     cause = serializers.CharField(
         required=False,
-        help_text="What caused the surge, e.g. 'Mira taunts you.'. Only the surged player, "
+        help_text="What caused the surge, e.g. 'Mira taunts Tomas.'. Only the surged player, "
         "GMs and staff get it; everyone else reads the generic narration.",
     )
 

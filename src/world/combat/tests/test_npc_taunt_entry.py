@@ -101,7 +101,7 @@ class NpcTauntEntryTests(TestCase):
         DramaticSurgeRecord.objects.all().delete()
         self._resolve(self._taunt_action(), self.partial)
         self.assertEqual(
-            DramaticSurgeRecord.objects.get().cause, f"{self.opponent.name} taunts you."
+            DramaticSurgeRecord.objects.get().cause, f"{self.opponent.name} taunts {name}."
         )
 
     def test_a_target_with_no_combat_engagement_is_not_rolled_for(self) -> None:

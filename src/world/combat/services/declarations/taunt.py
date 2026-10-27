@@ -141,7 +141,7 @@ def _resolve_taunt_on_participant(
         subject_sheet=participant.character_sheet,
         source_character=participant.character_sheet.character,
         tuning=tuning,
-        cause=f"{persona_name_of(participant)} taunts you.",
+        cause=f"{persona_name_of(participant)} taunts {persona_name_of(target)}.",
     )
 
 

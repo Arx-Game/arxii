@@ -8459,9 +8459,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   free; with a control change or condition the record is written but the room gets no
   "power surges" line (`narrate=False`) and the round payload narration is "". The record
   stores `outcome`, `potency`, `control_change`, `condition` (the condition only if it
-  took hold) and `cause` (the line the surged player, GMs and staff read: "<name> taunts
-  you.", "<name> rallies you.", the NPC entry's authored taunt text as the room is told it,
-  or "<ally>, bonded to you, loses N% of their health."), and rolled rows dedup once per round per subject (`repeat_round` equals
+  took hold) and `cause` (the line the surged player, GMs and staff read, in
+  the third person with persona names: "<taunter> taunts <target>.", "<rallier> rallies
+  <target>.", the NPC entry's authored taunt text as the room is told it (else "<opponent>
+  taunts <target>."), or "<hurt ally>, bonded to <surged player>, loses N% of their
+  health."), and rolled rows dedup once per round per subject (`repeat_round` equals
   `round_number`; one `nulls_distinct=False` unique constraint, the two older subject-keyed
   ones now apply where `repeat_round` is null). Sources: PC on PC taunt (`declare_taunt`
   accepts a `CombatParticipant`; the target's difficulty is the taunter's check RATING for the

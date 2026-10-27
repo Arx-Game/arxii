@@ -117,7 +117,8 @@ class AllyHurtRollTests(AllyHurtSurgeTestCase):
             self._hurt(damage=60)
         self.assertEqual(
             self._records().get().cause,
-            f"{self.victim_char.key}, bonded to you, loses 60% of their health.",
+            f"{self.victim_char.key}, bonded to {self.protector_char.key}, "
+            "loses 60% of their health.",
         )
 
     def test_the_cause_percent_rounds_half_up_and_caps_at_a_hundred(self) -> None:

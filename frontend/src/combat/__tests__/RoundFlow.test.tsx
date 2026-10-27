@@ -357,7 +357,7 @@ describe('SurgeBeats', () => {
         {
           id: 6,
           narration: 'Kira surges.',
-          cause: 'Bandit Captain taunts you.',
+          cause: 'Bandit Captain taunts Kira.',
           trigger_kind: 'taunt_received',
           amount: 5,
           participant: 1,
@@ -370,7 +370,7 @@ describe('SurgeBeats', () => {
     render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent(
-      'Bandit Captain taunts you.'
+      'Bandit Captain taunts Kira.'
     );
     expect(screen.queryByText('Kira surges.')).not.toBeInTheDocument();
     expect(screen.getByTestId('surge-beat-roll')).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe('SurgeBeats', () => {
         {
           id: 8,
           narration: '',
-          cause: 'Mira rallies you.',
+          cause: 'Mira rallies Kira.',
           trigger_kind: 'rallied',
           amount: 0,
           participant: 1,
@@ -406,7 +406,7 @@ describe('SurgeBeats', () => {
 
     render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
 
-    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent('Mira rallies you.');
+    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent('Mira rallies Kira.');
     expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent('control -2');
   });
 

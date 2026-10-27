@@ -197,7 +197,7 @@ _Avoid_: tier, step, result row
 _Avoid_: taunt difficulty, taunt damage
 
 **Surge Cause** (#4737):
-`DramaticSurgeRecord.cause`: the line the surged player, GMs and staff read for a rolled surge, written when it happened ("Mira taunts you.", "Mira rallies you.", the opponent's authored taunt line as the room is told it, or "Tomas, bonded to you, loses 60% of their health."). Persona names, never the character sheet label. Every other viewer reads only the generic curve line, so the cause never names a bond, a foe or a roll to them.
+`DramaticSurgeRecord.cause`: the line the surged player, GMs and staff read for a rolled surge, written when it happened ("Mira taunts Tomas.", "Mira rallies Tomas.", the opponent's authored taunt line as the room is told it, or "Tomas, bonded to Mira, loses 60% of their health."). Third person with persona names, never the character sheet label, because GMs and staff read the same line for someone else's beat. Every other viewer reads only the generic curve line, so the cause never names a bond, a foe or a roll to them.
 _Avoid_: reason (that is the staff-stated provenance of a GM_MANUAL surge), provenance
 
 **Escalation intensity**:

@@ -321,8 +321,8 @@ class CauseTests(SurgeRollTestCase):
     def test_the_cause_is_stored_on_the_record_and_never_in_the_room_line(self) -> None:
         self._band(self.partial, 3)
         with patch.object(self.encounter.room, "msg_contents") as room_msg:
-            self._surge(self.partial, cause="Mira taunts you.")
-        self.assertEqual(DramaticSurgeRecord.objects.get().cause, "Mira taunts you.")
+            self._surge(self.partial, cause="Mira taunts Tomas.")
+        self.assertEqual(DramaticSurgeRecord.objects.get().cause, "Mira taunts Tomas.")
         self.assertNotIn("taunts", room_msg.call_args.args[0])
 
     def test_a_surge_with_no_cause_stores_an_empty_one(self) -> None:

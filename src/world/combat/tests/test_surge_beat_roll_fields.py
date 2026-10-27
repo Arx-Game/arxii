@@ -172,7 +172,7 @@ class SurgeBeatRollFieldTests(TestCase):
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
         )
         SurgeDegreeBandFactory(tuning=tuning, outcome=self.partial, intensity=0, control_change=-2)
-        self._rallied_surge(cause="Mira rallies you.")
+        self._rallied_surge(cause="Mira rallies Surgeowner.")
 
         # Nothing was announced to the room, so a bystander has no beat at all, even
         # though the surged player's beat carries a cause line.
@@ -180,16 +180,16 @@ class SurgeBeatRollFieldTests(TestCase):
         for account in (self.owner_account, self.staff_account, self.gm_account):
             (beat,) = self._beats_seen_by(account)
             self.assertEqual(beat["narration"], "")
-            self.assertEqual(beat["cause"], "Mira rallies you.")
+            self.assertEqual(beat["cause"], "Mira rallies Surgeowner.")
             self.assertEqual(beat["amount"], 0)
             self.assertEqual(beat["roll"], "Rally check · Partial · Intensity +0 · control -2")
 
     def test_cause_is_read_by_the_owner_gm_and_staff_never_a_bystander(self) -> None:
-        self._rolled_surge_with_cause("Bandit Captain taunts you.")
+        self._rolled_surge_with_cause("Bandit Captain taunts Surgeowner.")
 
         for account in (self.owner_account, self.staff_account, self.gm_account):
             (beat,) = self._beats_seen_by(account)
-            self.assertEqual(beat["cause"], "Bandit Captain taunts you.")
+            self.assertEqual(beat["cause"], "Bandit Captain taunts Surgeowner.")
             # The generic line stays for everyone.
             self.assertEqual(beat["narration"], "Surgeowner surges.")
         (bystander,) = self._beats_seen_by(self.other_account)

@@ -75,7 +75,8 @@ def _resolve_npc_taunt_on_target(
     this round): no roll is made, nothing is spent, nothing is printed.
 
     The surged player reads a cause line: the entry's authored ``hit_narration`` rendered
-    as the room is told it, else "<opponent> taunts you."
+    as the room is told it, else "<opponent> taunts <target>." (both are
+    ``render_taunt_narration``, so the cause is the line the room reads)
     """
     from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
     from world.combat.interaction_services import render_taunt_narration  # noqa: PLC0415
@@ -98,14 +99,11 @@ def _resolve_npc_taunt_on_target(
     ):
         return
     result = surge_roll_for_participant(target_participant, tuning.check_type, potency)
-    if hit_narration:
-        cause = render_taunt_narration(
-            actor_label=opponent.name,
-            target_label=persona_name_of(target_participant),
-            hit_text=hit_narration,
-        )
-    else:
-        cause = f"{opponent.name} taunts you."
+    cause = render_taunt_narration(
+        actor_label=opponent.name,
+        target_label=persona_name_of(target_participant),
+        hit_text=hit_narration,
+    )
     apply_rolled_surge(
         encounter=encounter,
         participant=target_participant,

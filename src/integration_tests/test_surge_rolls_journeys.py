@@ -339,7 +339,7 @@ class BeingTauntedByAnNpc(_SurgeField):
 
         self.resolve(self.partial)
 
-        self.assertCauseReadOnlyBy(self.mira, self.tomas, "Bandit Captain taunts you.")
+        self.assertCauseReadOnlyBy(self.mira, self.tomas, "Bandit Captain taunts Mira.")
 
     def test_a_better_composure_result_surges_her_more(self) -> None:
         self._captain_jibes_at_mira()
@@ -402,7 +402,7 @@ class BeingTauntedByAnotherPlayer(_SurgeField):
         self.assertEqual(record.subject_sheet, self.mira.sheet_data)
         self.assertEqual(record.potency, TAUNT_RATING)
         self.assertEqual(record.outcome, self.partial)
-        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira taunts you.")
+        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira taunts Tomas.")
         # Mira rolled nothing and is not shown his roll.
         self.assertNotTold(self.mira, "Composure check")
         self.assertEqual(self.intensity_or_zero(self.mira), 0)
@@ -605,7 +605,7 @@ class BeingRallied(_SurgeField):
         self.assertEqual(record.participant, self.tomas_seat)
         self.assertEqual(record.subject_sheet, self.mira.sheet_data)
         self.assertEqual(record.potency, RALLY_BASE_DIFFICULTY)
-        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira rallies you.")
+        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira rallies Tomas.")
         # The rallier is not the one surged, and is not shown the roll.
         self.assertEqual(self.intensity(self.mira), 0)
         self.assertNotTold(self.mira, "Intensity +")
@@ -695,7 +695,7 @@ class AnAllyBeingWounded(_SurgeField):
         self.assertEqual(record.participant, self.mira_seat)
         self.assertEqual(record.subject_sheet, self.tomas.sheet_data)
         self.assertCauseReadOnlyBy(
-            self.mira, self.tomas, "Tomas, bonded to you, loses 60% of their health."
+            self.mira, self.tomas, "Tomas, bonded to Mira, loses 60% of their health."
         )
         # The one who was hurt is not the one surged.
         self.assertEqual(self.intensity(self.tomas), 0)

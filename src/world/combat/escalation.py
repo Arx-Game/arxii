@@ -695,10 +695,16 @@ def apply_ally_hurt_surge(
     ally_name = persona_names_for_sheets([victim_sheet.pk]).get(
         victim_sheet.pk, victim_character.key
     )
-    cause = f"{ally_name}, bonded to you, loses {percent}% of their health."
 
     for encounter in encounters:
-        for participant, depth in _hurt_ally_rollers(encounter, victim_sheet):
+        rollers = _hurt_ally_rollers(encounter, victim_sheet)
+        # One persona lookup for the surged players of this encounter (never a query each).
+        surged_names = persona_names_for_sheets(p.character_sheet_id for p, _ in rollers)
+        for participant, depth in rollers:
+            surged_name = surged_names.get(
+                participant.character_sheet_id, participant.character_sheet.character.key
+            )
+            cause = f"{ally_name}, bonded to {surged_name}, loses {percent}% of their health."
             potency = tuning.potency_base + tuning.potency_per_depth * depth
             result = surge_roll_for_participant(participant, tuning.check_type, potency)
             apply_rolled_surge(
