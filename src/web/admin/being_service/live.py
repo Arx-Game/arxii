@@ -320,6 +320,19 @@ class RequestSupplyRow:
     unsupplied: bool
 
 
+def _request_supply(request, stalls_by_template: dict[int, set[str]]) -> str:
+    """Describe where the requested template or facet can be obtained."""
+    if request.item_template_id is None:
+        count = request.cheap_templates
+        return f"{count} cheap template{'s' if count != 1 else ''} carry it" if count else ""
+    template = request.item_template
+    stalls = sorted(stalls_by_template.get(template.pk, ()))
+    parts = [f"sold at {', '.join(stalls)}"] if stalls else []
+    if template.is_craftable:
+        parts.append("can be crafted")
+    return "; ".join(parts)
+
+
 def request_suppliers(being: WorshippedBeing) -> list[RequestSupplyRow]:
     """For each request on the being's pledges and rites, where a player can find it: the
     stalls that stock the template, whether it can be crafted, or how many cheap templates
@@ -349,16 +362,7 @@ def request_suppliers(being: WorshippedBeing) -> list[RequestSupplyRow]:
         stalls_by_template.setdefault(listing.template_id, set()).add(listing.stall.name)
     rows: list[RequestSupplyRow] = []
     for request in requests:
-        if request.item_template_id is not None:
-            template = request.item_template
-            stalls = sorted(stalls_by_template.get(template.pk, ()))
-            parts = [f"sold at {', '.join(stalls)}"] if stalls else []
-            if template.is_craftable:
-                parts.append("can be crafted")
-            supply = "; ".join(parts)
-        else:
-            count = request.cheap_templates
-            supply = f"{count} cheap template{'s' if count != 1 else ''} carry it" if count else ""
+        supply = _request_supply(request, stalls_by_template)
         rows.append(
             RequestSupplyRow(
                 asked_for=request.asked_for,

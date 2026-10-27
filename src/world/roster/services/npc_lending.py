@@ -373,6 +373,19 @@ def _activate(loan: NPCLoan) -> None:
     _unpuppet_sessions(loan.roster_entry, keep=loan.borrower)
 
 
+def _validate_offered_answer(loan: NPCLoan, accept: bool, by: AccountDB) -> None:
+    """Check that the offered loan can be answered by this Guide."""
+    if by.pk != loan.borrower_id:
+        msg = "That offer wasn't made to you."
+        raise NPCLendingError(msg)
+    if accept and not _is_active_guide(by):
+        msg = "Only a Guide can accept an NPC for a scene."
+        raise NPCLendingError(msg)
+    if accept and loan.scene is not None and not loan.scene.is_active:
+        msg = "That scene has ended."
+        raise NPCLendingError(msg)
+
+
 @transaction.atomic
 def answer_loan(*, loan: NPCLoan, accept: bool, by: AccountDB) -> NPCLoan:
     """Accept or decline a waiting loan.
@@ -383,15 +396,7 @@ def answer_loan(*, loan: NPCLoan, accept: bool, by: AccountDB) -> NPCLoan:
     """
     _lock_status(loan)
     if loan.status == NPCLoanStatus.OFFERED:
-        if by.pk != loan.borrower_id:
-            msg = "That offer wasn't made to you."
-            raise NPCLendingError(msg)
-        if accept and not _is_active_guide(by):
-            msg = "Only a Guide can accept an NPC for a scene."
-            raise NPCLendingError(msg)
-        if accept and loan.scene is not None and not loan.scene.is_active:
-            msg = "That scene has ended."
-            raise NPCLendingError(msg)
+        _validate_offered_answer(loan, accept, by)
     elif loan.status == NPCLoanStatus.REQUESTED:
         if not (_is_owner(loan.roster_entry, by) or _is_staff(by)):
             msg = "Only the NPC's owner can answer that request."

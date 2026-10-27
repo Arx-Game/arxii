@@ -222,10 +222,11 @@ def choose_dodge(
         landing = None
     if landing is not None:
         for source in sources:
-            if landing in reachable_landings(current, source.reach):
-                if covered_position is not None and landing.pk == covered_position.pk:
-                    return None
-                return Dodge(source=source, landing=landing if landing != current else None)
+            if landing not in reachable_landings(current, source.reach):
+                continue
+            if covered_position is not None and landing.pk == covered_position.pk:
+                return None
+            return Dodge(source=source, landing=landing if landing != current else None)
     if covered_position is not None:
         return None
     return Dodge(source=sources[0], landing=None)

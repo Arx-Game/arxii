@@ -148,17 +148,20 @@ def build_tactics_inputs(
             "consequence_id", flat=True
         )
     )
-    grounding: set[int] = set()
-    if grounding_consequences:
-        for entries in ally_entries.values():
-            for entry in entries:
-                if entry.on_hit_consequence_pool_id is None:
-                    continue
-                pool = entry.on_hit_consequence_pool  # identity-mapped; few distinct pools
-                if any(
-                    wc.consequence.pk in grounding_consequences for wc in pool.cached_consequences
-                ):
-                    grounding.add(entry.pk)
+    grounding = (
+        {
+            entry.pk
+            for entries in ally_entries.values()
+            for entry in entries
+            if entry.on_hit_consequence_pool_id is not None
+            and any(
+                wc.consequence.pk in grounding_consequences
+                for wc in entry.on_hit_consequence_pool.cached_consequences
+            )
+        }
+        if grounding_consequences
+        else set()
+    )
 
     return TacticsInputs(
         config=config,

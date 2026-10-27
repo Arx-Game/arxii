@@ -50,6 +50,17 @@ def _tier_sort_key(tier: CheckOutcome) -> tuple[int, int]:
     return (int(tier.success_level), tier.pk)
 
 
+def _route_is_followed(
+    option: MissionOption, track_node_pks: set[int], route: MissionOptionRoute
+) -> bool:
+    """Whether the engine follows this route when leaving its option."""
+    if option.option_kind in _BRANCHING_KINDS and (
+        option.branch_target_id is not None or route.outcome_tier_id is not None
+    ):
+        return False
+    return not (option.node_id in track_node_pks and option.option_kind in _TRACK_COUNTED_KINDS)
+
+
 def _graph_edges(
     nodes: list[MissionNode],
     options: list[MissionOption],
@@ -72,12 +83,8 @@ def _graph_edges(
     followed: dict[int, int] = {}  # route pk -> the node it leaves from
     for route in routes:
         option = option_by_pk[route.option_id]
-        if option.option_kind in _BRANCHING_KINDS and (
-            option.branch_target_id is not None or route.outcome_tier_id is not None
-        ):
-            continue  # the engine reads only a branch option's tier-less route
-        if option.node_id in track_node_pks and option.option_kind in _TRACK_COUNTED_KINDS:
-            continue  # a counted roll on a track node never routes; the track decides
+        if not _route_is_followed(option, track_node_pks, route):
+            continue
         followed[route.pk] = option.node_id
         if route.target_node_id is not None:
             edges[option.node_id].add(route.target_node_id)
