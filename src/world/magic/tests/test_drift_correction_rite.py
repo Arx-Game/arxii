@@ -11,9 +11,15 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
+from world.items.factories import (
+    EquippedItemFactory,
+    ItemFacetFactory,
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+    QualityTierFactory,
+)
 from world.items.models import ItemInstance
-from world.magic.constants import GainSource
+from world.magic.constants import EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     DriftConversionInvalidError,
     DriftCorrectionNotConfiguredError,
@@ -25,7 +31,10 @@ from world.magic.factories import (
     DriftConversionCapFactory,
     DriftConversionOfferFactory,
     DriftCorrectionRiteFactory,
+    FacetFactory,
     ResonanceTierFactory,
+    ThreadFactory,
+    ThreadPullEffectFactory,
     set_aura_split,
 )
 from world.magic.models import (
@@ -44,6 +53,8 @@ from world.magic.services.drift_correction import (
     preview_conversion,
 )
 from world.magic.tests.test_drift_offer import DriftOfferTestBase, _author_pair, _hold
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.mechanics.services import equipment_walk_total
 from world.scenes.factories import SceneFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -162,13 +173,24 @@ class PerformRiteTests(DriftRiteTestBase):
         self.assertEqual((result.converted_amount, result.granted_amount), (1, 1))
         self.assertEqual(self.cap_value(), 11)
 
-    def test_missing_share_row_refuses_and_rolls_back_the_offering(self) -> None:
+    def test_missing_share_row_for_the_rolled_tier_refuses_before_consuming(self) -> None:
         DriftCorrectionOutcomeShare.objects.filter(outcome_tier=self.outcomes["Success"]).delete()
         with self.assertRaises(DriftCorrectionNotConfiguredError):
             self.perform()
         self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual((self.component.pk, self.component.quantity), (self.component_pk, 1))
         self.assertEqual(self.cap_value(), 12)
         self.assertEqual(_balance(self.sheet, self.dread), 30)
+
+    def test_missing_share_row_for_any_tier_refuses_before_consuming(self) -> None:
+        worst = self.outcomes["Critical Failure"]
+        DriftCorrectionOutcomeShare.objects.filter(outcome_tier=worst).delete()
+        roll = MagicMock()
+        with patch(ROLL_PATH, roll), self.assertRaises(DriftCorrectionNotConfiguredError):
+            self.perform()
+        roll.assert_not_called()
+        self.assertFalse(_consumed(self.component_pk))
+        self.assertEqual((self.component.pk, self.component.quantity), (self.component_pk, 1))
 
 
 class FallDirectionTests(DriftRiteTestBase):
@@ -227,8 +249,9 @@ class RefusalTests(DriftRiteTestBase):
 
     def test_own_affinity_source_is_not_convertible(self) -> None:
         _hold(self.sheet, self.sunrise, 20)
-        with self.assertRaises(DriftConversionInvalidError):
+        with self.assertRaises(DriftConversionInvalidError) as ctx:
             self.perform(amount=5, source=self.sunrise)
+        self.assertEqual(ctx.exception.user_message, "That resonance is not drift you can convert.")
         self.assert_nothing_moved()
         self.assertEqual(_balance(self.sheet, self.sunrise), 20)
 
@@ -275,6 +298,15 @@ class RefusalTests(DriftRiteTestBase):
             self.perform()
         self.assert_nothing_moved()
 
+    def test_balance_lost_to_a_race_is_a_clean_refusal(self) -> None:
+        convert = MagicMock(side_effect=ValueError("Cannot convert 12 of a 0 balance."))
+        with (
+            patch("world.magic.services.drift_correction.convert_resonance_amount", convert),
+            self.assertRaises(DriftConversionInvalidError),
+        ):
+            self.perform()
+        convert.assert_called_once()
+
     def test_pair_with_no_authored_conversion(self) -> None:
         _author_pair(self.abyssal, self.celestial, None, "")
         with self.assertRaises(DriftConversionInvalidError):
@@ -305,6 +337,56 @@ class FocusTests(DriftRiteTestBase):
         self.assertEqual(kwargs["extra_modifiers"], bonus)
         self.assertEqual(args[1], self.config.check_type)
         self.assertEqual(result.focus_bonus, bonus)
+
+    def test_equipment_walk_on_the_target_feeds_the_check(self) -> None:
+        category = ModifierCategoryFactory(name="resonance")
+        target = ModifierTargetFactory(
+            name="DriftFocusTarget", category=category, target_resonance=self.dawnlight
+        )
+        facet = FacetFactory(name="DriftFocusFacet")
+        item = ItemInstanceFactory(
+            template=ItemTemplateFactory(facet_capacity=1),
+            quality_tier=QualityTierFactory(name="DriftFocusQuality", stat_multiplier=2.0),
+        )
+        ItemFacetFactory(
+            item_instance=item,
+            facet=facet,
+            attachment_quality_tier=QualityTierFactory(
+                name="DriftFocusAttach", stat_multiplier=3.0
+            ),
+        )
+        EquippedItemFactory(character=self.sheet, item_instance=item)
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=self.dawnlight,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            target_trait=None,
+            level=2,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=self.dawnlight,
+            tier=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+        self.sheet.character.equipped_items.invalidate()
+        self.sheet.character.threads.invalidate()
+        walk = equipment_walk_total(self.sheet, target)
+        self.assertEqual(walk, 60)  # 5 flat x item 2 x attachment 3 x level 2
+        self.assertEqual(focus_bonus(self.sheet, self.dawnlight), walk)
+        roll = MagicMock(return_value=MagicMock(outcome=self.outcomes["Success"]))
+        with patch(ROLL_PATH, roll):
+            result = perform_drift_correction_rite(
+                self.offer,
+                source_resonance=self.dread,
+                target_resonance=self.dawnlight,
+                amount=12,
+                components=[self.component],
+            )
+        self.assertEqual(roll.call_args.kwargs["extra_modifiers"], walk)
+        self.assertEqual(result.focus_bonus, walk)
 
 
 class PreviewTests(DriftRiteTestBase):

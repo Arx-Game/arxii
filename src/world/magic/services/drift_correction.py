@@ -43,6 +43,7 @@ from world.magic.types.drift import (
     DriftSourceOption,
 )
 from world.mechanics.services import equipment_walk_total
+from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -60,7 +61,7 @@ def focus_bonus(sheet: CharacterSheet, target: Resonance) -> int:
         modifier_target = target.modifier_target
     except ObjectDoesNotExist:
         modifier_target = None
-    walk = 0 if modifier_target is None else equipment_walk_total(sheet.character, modifier_target)
+    walk = 0 if modifier_target is None else equipment_walk_total(sheet, modifier_target)
     return walk + touchstone_cast_bonus(sheet, target)
 
 
@@ -133,30 +134,42 @@ def _locked_offer(offer: DriftConversionOffer) -> DriftConversionOffer:
     return locked[0]
 
 
+def _require_every_share() -> None:
+    """Refuse before anything is consumed unless every outcome tier has a share row.
+
+    The roll can land on any ``CheckOutcome``; a tier with no share would otherwise only be
+    found after the offering is gone.
+    """
+    if CheckOutcome.objects.exclude(
+        pk__in=DriftCorrectionOutcomeShare.objects.values("outcome_tier_id")
+    ).exists():
+        raise DriftCorrectionNotConfiguredError
+
+
 def _validated_source(
     sheet: CharacterSheet, source: Resonance, target: Resonance, amount: int, cap_value: int
 ) -> AffinityInteraction:
-    """Check the requested amount and source; return the authored pair."""
+    """Check the requested amount and source; return the authored pair.
+
+    Locks the source ``CharacterResonance`` row before reading its balance.
+    """
     if amount <= 0:
         msg = "Convert at least 1."
         raise DriftConversionInvalidError(msg)
     if amount > cap_value:
         msg = f"You may convert at most {cap_value} toward that resonance."
         raise DriftConversionInvalidError(msg)
+    if source.pk not in {row.resonance_id for row in convertible_drift(sheet, target)}:
+        msg = "That resonance is not drift you can convert."
+        raise DriftConversionInvalidError(msg)
     try:
         pair = conversion_pair(source.affinity, target.affinity)
     except ConversionMappingError as exc:
         msg = "That resonance cannot be converted toward that one."
         raise DriftConversionInvalidError(msg) from exc
-    if source.pk not in {row.resonance_id for row in convertible_drift(sheet, target)}:
-        msg = "That resonance is not drift you can convert."
-        raise DriftConversionInvalidError(msg)
-    balance = (
-        CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
-        .values_list("balance", flat=True)
-        .first()
-        or 0
-    )
+    rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
+    list(rows.select_for_update())
+    balance = rows.values_list("balance", flat=True).first() or 0
     if amount > balance:
         msg = f"You hold only {balance} of that resonance."
         raise DriftConversionInvalidError(msg)
@@ -188,6 +201,9 @@ def perform_drift_correction_rite(
             unauthored.
         DriftConversionInvalidError: Bad amount, source, or unauthored pair.
         RitualComponentError: The offering does not satisfy the rite.
+
+    Component ownership is not checked here: the caller (the action or API layer) resolves
+    ``components`` from the performer's own inventory before calling.
     """
     offer = _locked_offer(offer)
     sheet = offer.character_sheet
@@ -201,6 +217,7 @@ def perform_drift_correction_rite(
     # writers, and the identity map would not refresh a cached row's value.
     cap_value = DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True)[0]
     pair = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
+    _require_every_share()
 
     resolve_and_consume_ritual_components(
         ritual=config.rite,
@@ -216,25 +233,30 @@ def perform_drift_correction_rite(
         extra_modifiers=bonus,
     )
     outcome = check.outcome
-    share_row = (
-        DriftCorrectionOutcomeShare.objects.filter(outcome_tier=outcome).first()
-        if outcome is not None
-        else None
-    )
+    # Safety net: _require_every_share already refused a table with a missing tier.
+    if outcome is None:
+        raise DriftCorrectionNotConfiguredError
+    share_row = DriftCorrectionOutcomeShare.objects.filter(outcome_tier=outcome).first()
     if share_row is None:
         raise DriftCorrectionNotConfiguredError
+    outcome_name = outcome.name
+    success_level = outcome.success_level
 
     converted = int(Decimal(amount) * share_row.converted_share)
     granted = 0
     if converted > 0:
-        granted, _ = convert_resonance_amount(
-            sheet,
-            source_resonance=source_resonance,
-            target_resonance=target_resonance,
-            amount=converted,
-            multiplier=pair.conversion_multiplier,
-            gain_source=GainSource.DRIFT_CORRECTION,
-        )
+        try:
+            granted, _ = convert_resonance_amount(
+                sheet,
+                source_resonance=source_resonance,
+                target_resonance=target_resonance,
+                amount=converted,
+                multiplier=pair.conversion_multiplier,
+                gain_source=GainSource.DRIFT_CORRECTION,
+            )
+        except ValueError as exc:
+            msg = "You no longer hold enough of that resonance."
+            raise DriftConversionInvalidError(msg) from exc
         remaining = cap_value - converted
         if remaining > 0:
             cap.cap = remaining
@@ -250,8 +272,8 @@ def perform_drift_correction_rite(
         attempted_amount=amount,
         converted_amount=converted,
         granted_amount=granted,
-        outcome_name=outcome.name,
-        success_level=outcome.success_level,
+        outcome_name=outcome_name,
+        success_level=success_level,
         conversion_type=pair.conversion_type,
         focus_bonus=bonus,
     )
