@@ -59,6 +59,17 @@ def _npc_action_target_label(
     return ", ".join(names)
 
 
+def _flat_threat_damage(npc_action: CombatOpponentAction, opponent: CombatOpponent) -> int:
+    """Damage for a flat threat entry (no defense check), scaled like a defended hit.
+
+    The attacker's ``damage_multiplier`` (a boss enrage, a per-opponent scale) applies
+    here as it does in ``resolve_npc_attack``. Two steps, so the Decimal multiplier
+    never meets the float ``damage_scale`` in one multiplication (npc_attack.py).
+    """
+    base_damage = int(npc_action.threat_entry.base_damage * opponent.damage_multiplier)
+    return int(base_damage * npc_action.damage_scale)
+
+
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
     target_participant: CombatParticipant,
     *,
@@ -111,7 +122,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         else:
             dmg_result = _svc.apply_damage_to_participant(
                 target_participant,
-                int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
+                _flat_threat_damage(npc_action, opponent),
                 damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
                 on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
@@ -227,7 +238,7 @@ def _resolve_npc_action_on_opponent_target(  # noqa: PLR0913 - needs full resolu
 
     dmg_result = _svc.apply_damage_to_opponent(
         target_opponent,
-        int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
+        _flat_threat_damage(npc_action, opponent),
         damage_type=npc_action.threat_entry.damage_type,
         source_sheet=_allegiance_credit_sheet(opponent, opponent.encounter),
     )
