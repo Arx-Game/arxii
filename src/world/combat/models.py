@@ -4033,7 +4033,7 @@ class SurgeTuning(SharedMemoryModel):
             raise ValidationError(errors)
 
     def __str__(self) -> str:
-        return f"SurgeTuning({self.trigger_kind})"
+        return self.get_trigger_kind_display()
 
 
 class SurgeDegreeBand(SharedMemoryModel):
@@ -4125,7 +4125,7 @@ class SurgeDegreeBand(SharedMemoryModel):
             raise ValidationError(problems)
 
     def __str__(self) -> str:
-        return f"SurgeDegreeBand({self.tuning_id}, {self.outcome_id})"
+        return f"{self.tuning}: {self.outcome.name}"
 
 
 class DramaticSurgeRecord(SharedMemoryModel):

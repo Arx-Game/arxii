@@ -52,6 +52,14 @@ class SurgeTuningModelTests(TestCase):
         with self.assertRaises(ValidationError):
             bad.clean()
 
+    def test_staff_read_a_plain_label_not_the_code_name_or_ids(self) -> None:
+        # The admin heading and the inline row label are the only places staff see these.
+        tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.ALLY_HURT)
+        outcome = CheckOutcomeFactory(name="Surge Label Outcome", success_level=1)
+        band = SurgeDegreeBandFactory(tuning=tuning, outcome=outcome)
+        self.assertEqual(str(tuning), "Ally Hurt")
+        self.assertEqual(str(band), "Ally Hurt: Surge Label Outcome")
+
 
 class DramaticSurgeRecordRepeatTests(TestCase):
     """Kept: the dedup uniques and CheckConstraints are database invariants no played round
