@@ -1079,8 +1079,10 @@ on corruption). A share of the strain bonus feeds the caster's engagement intens
 action it was declared with. Corruption now counts burned points and the non-combat pull's
 resonance spend (that gap is closed). Built: `world/magic/services/burn.py`, burn columns on
 `CombatPull` and `SceneActionPullDeclaration`, telnet `burn=<n>`, web `pull_burn` / `pull.burn`,
-the pull preview's `burn` block and the frontend `PullBurnInput`. Also fixed: the web combat
-declaration used to drop its focused-cast pull. Journeys in
+the pull preview's `burn` block and the frontend `PullBurnInput` in the Strain area (combat
+card and scene cast). Also fixed: the web combat declaration used to drop its focused-cast pull;
+the web now sends the pull on one job (the clash when chosen) and a resubmit never charges it
+twice. Not built: the demo's intensity-after and anima-cost projection rows. Journeys in
 `integration_tests/test_resonance_strain_journeys.py`. Unauthored until staff set a strain check
 type, the `StrainBurnReach` rows and the `burn_value` of each affinity.
 

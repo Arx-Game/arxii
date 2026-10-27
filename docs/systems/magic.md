@@ -2001,15 +2001,15 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   has coefficient 0. It does not move to a mapped Abyssal resonance. Every other pairing burns
   raw.
 - **Corruption.** `_build_resonance_involvements` counts the active combat pulls and the
-  non-combat cast pull plus burned points (`ResonanceInvolvement.add_burn`,
-  `hasty_fall_points`), which also closes a gap: a non-combat pull's resonance spend never
+  non-combat cast pull plus burned points (`_PullSpend.add_burn` in
+  `world/magic/services/techniques.py`, `hasty_fall_points`), which also closes a gap: a non-combat pull's resonance spend never
   reached corruption before. A pull on a resonance outside the gift's set still involves that
   resonance. Celestial's coefficient 0 means no corruption.
 - **Engagement share.** After every cast whose strain bonus is above 0 (anima-only strain
   included), `_share_strain_with_engagement` adds
   `StrainConfig.engagement_share_percent` (default 50) of the bonus, floored, to
-  `CharacterEngagement.intensity_modifier`. Out of an engagement nothing is added. #4738 reuses
-  it.
+  `CharacterEngagement.intensity_modifier` under a row lock (`select_for_update`). Out of an
+  engagement nothing is added. #4738 reuses it.
 - **One burn per declared action.** A combat burn is resolved, valued and debited at
   declaration (`commit_combat_pull` -> `_resolve_combat_burn`), stored on `CombatPull`
   (`resonance_burned`, `burn_valued_points`, `burn_strain_units`, `burn_hasty_fall`, `burned_for`
@@ -2019,7 +2019,25 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   engagement share follows it once. The pull's own cost still counts toward corruption for every
   cast in the round, as before. A non-combat cast resolves the burn inside `use_technique`,
   after the Soulfray gate; a pending (consent-gated) scene cast stores it on
-  `SceneActionPullDeclaration.burn`.
+  `SceneActionPullDeclaration.burn`. Both strain checks read situational perks: the combat burn
+  passes a `SituationContext` with the live `CombatRoundContext`; the non-combat burn
+  (`_resolve_cast_burn`) passes the cast's own `situation_ctx` when one was threaded, else a
+  `SituationContext` for the caster with no target and `resolution=None` (no round to read, so
+  combat-positioning situations never hold there).
+- **One pull per round, one job per pull.** A `CombatPull` is unique per (participant, round).
+  The web client sends the pull and its burn on exactly one dispatch: the clash contribution
+  when a clash is chosen, the focused cast otherwise (`YourTurn` `buildFocusedJob` /
+  `buildClashJob`). Sending it on both made the second commit refuse with "You have already
+  pulled a thread this round." `burned_for` is recorded whenever a burn was asked for, even one
+  that reached nothing, and is blank when none was.
+- **Idempotent resubmit.** A submit is several dispatches; when a later one fails, the player
+  submits again. `_commit_focused_pull` first checks this round's committed pull
+  (`_focused_pull_already_committed`): the same resonance, tier and threads, with
+  `burned_for` CAST when a burn is asked (blank when not) and a stored reach no more than the
+  request, is a no-op (no second charge, no second burn line); any other pull is refused with
+  `PULL_ALREADY_COMMITTED`. The client also leaves the pull off a retried submit once the job
+  carrying it succeeded (`pullCommitted` in `YourTurn`'s round state). The clash path has no
+  such check; the client guard covers it.
 - **Refusals.** No strain check type designated: `ResonanceBurnUnavailable` /
   `BURN_UNAVAILABLE` (a pending cast refused at accept time degrades to the pull-fizzle path).
   Bad web value (non-integer, bool, negative, above `MAX_RESONANCE_BURN` = 2**31-1):
@@ -2029,17 +2047,37 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   `confirm_soulfray_risk` is refused (`PULL_NEEDS_SOULFRAY_CONSENT`) before anything is charged;
   telnet instead holds the declaration for `accept soulfray`.
 - **Telling her.** `announce_burn` sends, on commit, "You burn {reached} of {requested}
-  {Resonance} resonance." (a hasty fall adds "; it falls at the pair rate to {valued}.").
+  {Resonance} resonance." (a hasty fall adds "; it falls at the pair rate to {valued}."). A burn
+  that reached nothing says why: "You burn none of the {requested} {Resonance} resonance you
+  asked for: " then "your burn ceiling is 0 at this intensity", "you have no {Resonance}
+  resonance left once the pull is paid", or "your strain check reached none of it".
 - **Surfaces.** Telnet `cast` and `clash` take `burn=<n>`, valid only beside `pull=`. Web combat
   dispatch takes `pull_burn` beside `pull_resonance_id` / `pull_tier` / `pull_thread_ids`
   (`_parse_pull_burn` in `world/combat/pull_helpers.py`). Web scene cast
   `POST /api/action-requests/cast/` takes `pull.burn` (`CastPullWithBurnRequestSerializer`); the
   social action endpoint takes none. The pull preview (`POST /api/magic/thread-pull-preview/`)
-  takes an optional `technique_id` and returns `burn` = `{ceiling, strain_units_per_point,
-  hasty_fall, available}` (null without a technique); `ceiling` is already capped by the balance
-  left after the pull's cost, and `available` is False when no strain check is designated or the
-  hasty fall has no Fall pair. The frontend `PullBurnInput` (`ThreadPullDialog`, the scene
-  cast panel) renders only when the preview's burn is available.
+  takes an optional `technique_id` (only a technique she knows, `CharacterTechnique`; another
+  is a 404) and returns `burn` = `{ceiling, strain_units_per_point, hasty_fall, available,
+  resonance_name, off_affinity, corruption_affinity_name, ceiling_tier_name}` (null without a
+  technique); `ceiling` is already capped by the balance left after the pull's cost, and
+  `available` is False when no strain check is designated or the hasty fall has no Fall pair.
+  `off_affinity` is True when the resonance is not of the caster's acting-aura affinity;
+  `corruption_affinity_name` is the affinity whose corruption the burn leaves (the Abyssal on a
+  hasty fall, the resonance's own when its coefficient is above 0, else null);
+  `ceiling_tier_name` is the `IntensityTier` her runtime intensity has reached.
+- **Web Strain area.** The burn is entered in the Strain area, not the pull dialog: in combat,
+  `ActionDeclarationCard`'s Strain block under the anima strain slider (`strainBurn` prop, fed
+  by `YourTurn` from `usePullBurnPreview`); on the scene cast, which has no anima strain
+  control, a Strain block of its own under the pull picker (`ActionPanel`,
+  `useCastPullSelection`). `PullBurnInput` labels the row "{Resonance} (yours)" or
+  "(off-affinity)", shows "Burn ceiling at {tier name}: N resonance" (falling back to the pull
+  tier), and once something is burned: "Strain check on submit. Degrees decide how much of the
+  N you reach.", the combat power of anima strain plus burn on the client mirror of the strain
+  curve ("up to +N power", `strainPowerBonus` with `burnStrainUnits` from `magic/burn.ts`), and
+  the warnings "Burning {Resonance} raw. It leaves {Affinity} corruption you will need
+  cleansed." or "Hasty fall. No rite, so it leaves extra {Affinity} corruption." The burn resets
+  when the pull or the technique changes. The demo's "intensity after" and "anima cost"
+  projection rows are not built (they need a server projection of the spiral).
 - **Authored numbers.** `StrainConfig.burn_per_intensity`, `engagement_share_percent`,
   `strain_check_type`, `strain_check_difficulty`; `StrainBurnReach` rows; `Affinity.burn_value`;
   `CorruptionConfig.hasty_fall_multiplier`. Migrations 0314 (fields, `CombatPull` burn columns)
