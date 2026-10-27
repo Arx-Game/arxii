@@ -67,16 +67,19 @@ class BreakFreeAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
-        from world.conditions.services import attempt_break_free  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            attempt_break_free,
+            breakable_condition_filter,
+        )
 
         condition_name = kwargs.get("condition_name")
 
         instances = (
             ConditionInstance.objects.select_related("condition", "condition__category")
             .filter(
+                breakable_condition_filter(),
                 target=actor,
                 resolved_at__isnull=True,
-                condition__category__alters_behavior=True,
             )
             .exclude(condition__break_free_mode="none")
         )
@@ -176,6 +179,8 @@ class RevealConditionAction(Action):
             target=target,
             resolved_at__isnull=True,
             is_aware=False,
+            # Revealing is about behaviour-altering effects only: a self-shakeable
+            # condition (Resonance Conflict) alters nothing she would hide.
             condition__category__alters_behavior=True,
         )
         if not instances.exists():
@@ -244,7 +249,10 @@ class RallyAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.checks.services import level_opposition, perform_check  # noqa: PLC0415
-        from world.conditions.services import attempt_break_free  # noqa: PLC0415
+        from world.conditions.services import (  # noqa: PLC0415
+            attempt_break_free,
+            breakable_condition_filter,
+        )
         from world.progression.services.skill_development import (  # noqa: PLC0415
             get_character_path_level,
         )
@@ -258,10 +266,10 @@ class RallyAction(Action):
         instances = (
             ConditionInstance.objects.select_related("condition", "condition__category")
             .filter(
+                breakable_condition_filter(),
                 target=target,
                 resolved_at__isnull=True,
                 is_aware=True,
-                condition__category__alters_behavior=True,
             )
             .exclude(condition__break_free_mode="none")
         )

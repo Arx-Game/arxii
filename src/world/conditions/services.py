@@ -4418,6 +4418,18 @@ def attempt_break_free(
     return _resolve_break_free_outcome(instance, result.success_level)
 
 
+def breakable_condition_filter() -> Q:
+    """Filter for condition instances a character may fight off or be rallied against.
+
+    Behaviour-altering categories plus self-shakeable ones (Resonance Conflict).
+    ``in_control`` stays driven by ``alters_behavior`` alone. Callers still exclude
+    ``break_free_mode`` NONE.
+    """
+    return Q(condition__category__alters_behavior=True) | Q(
+        condition__category__self_shakeable=True
+    )
+
+
 def process_break_free_tick() -> list[BreakFreeResult]:
     """Process periodic break-free attempts for NPC targets (#2706).
 
@@ -4430,10 +4442,7 @@ def process_break_free_tick() -> list[BreakFreeResult]:
 
     instances = (
         ConditionInstance.objects.select_related("condition", "condition__category", "target")
-        .filter(
-            resolved_at__isnull=True,
-            condition__category__alters_behavior=True,
-        )
+        .filter(breakable_condition_filter(), resolved_at__isnull=True)
         .exclude(condition__break_free_mode=BreakFreeMode.NONE)
     )
 

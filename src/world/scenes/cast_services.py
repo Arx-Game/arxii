@@ -205,19 +205,10 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     # (world/combat/services.py) and plain social actions
     # (world/scenes/action_services.py) already use. Without this, conditions
     # are structurally invisible to standalone casts (#2697).
+    #
+    # Gathered inside _resolve_fn, after use_technique's focus check against carried
+    # drift (#4732), so a conflict that check applies reaches this same roll.
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-
-    check_modifier_total = 0
-    cast_breakdown = None
-    if cast_check is not None and character_sheet is not None:
-        cast_breakdown = collect_check_modifiers(
-            character_sheet,
-            cast_check.check_type,
-            scene=scene,
-            extra_traits=cast_check.extra_traits,
-        )
-        check_modifier_total = cast_breakdown.extra_modifiers_total
-
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
     applicable_threads = applicable_threads_for_cast(
@@ -246,6 +237,16 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         extra_modifiers: int = 0,
     ) -> PendingActionResolution:
         captured["ledger"] = ledger
+        check_modifier_total = 0
+        cast_breakdown = None
+        if cast_check is not None and character_sheet is not None:
+            cast_breakdown = collect_check_modifiers(
+                character_sheet,
+                cast_check.check_type,
+                scene=scene,
+                extra_traits=cast_check.extra_traits,
+            )
+            check_modifier_total = cast_breakdown.extra_modifiers_total
         resolution = start_action_resolution(
             character=character,
             template=action_template,

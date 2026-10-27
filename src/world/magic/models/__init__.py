@@ -101,6 +101,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentType,
 )
 from world.magic.models.drift import (
+    DriftConfig,
     DriftConversionCap,
     DriftConversionOffer,
     DriftCorrectionConfig,
@@ -353,6 +354,7 @@ __all__ = [
     "DistinctionRitualGrant",
     "DramaticMomentTag",
     "DramaticMomentType",
+    "DriftConfig",
     # drift correction (#4733)
     "DriftConversionCap",
     "DriftConversionOffer",
