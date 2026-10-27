@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
     from world.items.models import ItemInstance
     from world.magic.constants import ComponentMode
+    from world.magic.models.affinity import Resonance
 
 
 @dataclass(frozen=True)
@@ -64,3 +65,16 @@ class DriftCorrectionResult:
     success_level: int
     conversion_type: str
     focus_bonus: int
+
+
+@dataclass(frozen=True)
+class DriftOfferCapOption:
+    """One cap of an offer, as a player sees it: what may be converted and what to offer up.
+
+    ``qualifying`` is the carried items that count toward the rite's offering for this
+    target, each with the route it took.
+    """
+
+    target_resonance: Resonance
+    preview: DriftConversionPreview
+    qualifying: tuple[QualifyingComponent, ...]

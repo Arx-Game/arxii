@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 
 from actions.models import ConsequencePool
 from actions.serializers import TargetSpecSerializer
@@ -50,6 +51,7 @@ from world.magic.models import (
     CharacterSurgeText,
     CharacterThreadWeavingUnlock,
     CrossingOption,
+    DriftConversionOffer,
     EffectType,
     Facet,
     Gift,
@@ -4074,6 +4076,156 @@ class EntryFlourishResultSerializer(serializers.Serializer):
     resonance_name = serializers.CharField()
     granted_amount = serializers.IntegerField()
     scene_id = serializers.IntegerField(allow_null=True)
+
+
+# =============================================================================
+# Drift correction REST surface (#4733, slice 4 of #4672)
+# =============================================================================
+
+
+class DriftSourceOptionSerializer(serializers.Serializer):
+    """One drift holding the rite could convert toward a cap's target (read-only)."""
+
+    resonance_id = serializers.IntegerField()
+    resonance_name = serializers.CharField()
+    balance = serializers.IntegerField()
+    multiplier = serializers.DecimalField(max_digits=6, decimal_places=2)
+    conversion_type = serializers.CharField()
+    max_amount = serializers.IntegerField()
+    projected_output = serializers.IntegerField()
+
+
+class DriftQualifyingComponentSerializer(serializers.Serializer):
+    """A carried item that counts toward the rite's offering, and its route (read-only)."""
+
+    item_id = serializers.IntegerField(source="item.pk")
+    name = serializers.CharField(source="item.display_name")
+    mode = serializers.CharField()
+
+
+class DriftTargetResonanceSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    affinity = serializers.CharField(source="affinity.name")
+
+
+class DriftConversionCapSerializer(serializers.Serializer):
+    """One cap of an offer as a player sees it (read-only)."""
+
+    target_resonance = DriftTargetResonanceSerializer()
+    cap_remaining = serializers.IntegerField(source="preview.cap_remaining")
+    focus_bonus = serializers.IntegerField(source="preview.focus_bonus")
+    sources = DriftSourceOptionSerializer(many=True, source="preview.sources")
+    qualifying_components = DriftQualifyingComponentSerializer(many=True, source="qualifying")
+
+
+class DriftConversionOfferSerializer(serializers.ModelSerializer):
+    """Player-facing view of an open drift conversion offer. Read-only."""
+
+    caps = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DriftConversionOffer
+        fields = ["id", "scene_id", "caps"]
+        read_only_fields = fields
+
+    @extend_schema_field(DriftConversionCapSerializer(many=True))
+    def get_caps(self, offer) -> list[dict]:
+        from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
+
+        # One fetch of what the character carries per offer; qualifying items are worked
+        # out once per cap inside offer_options, never per source.
+        items = ItemInstance.objects.filter(
+            holder_character_sheet_id=offer.character_sheet_id
+        ).select_related("template")
+        return DriftConversionCapSerializer(offer_options(offer, items), many=True).data
+
+
+class DriftCorrectionConvertSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/drift-correction/convert/.
+
+    ``validate`` resolves everything the action needs: the caller's own offer (anyone
+    else's is a 404), both resonances, and the offered items, each of which must be held
+    by the offer's character (a foreign or stray pk is a 400, never passed on).
+    """
+
+    offer_id = serializers.IntegerField()
+    source_resonance_id = serializers.IntegerField()
+    target_resonance_id = serializers.IntegerField()
+    amount = serializers.IntegerField(min_value=1)
+    component_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        offer = _own_drift_offer(attrs["offer_id"], self.context["request"])
+        resonances = {
+            r.pk: r
+            for r in Resonance.objects.filter(
+                pk__in={attrs["source_resonance_id"], attrs["target_resonance_id"]}
+            ).select_related("affinity")
+        }
+        try:
+            source = resonances[attrs["source_resonance_id"]]
+            target = resonances[attrs["target_resonance_id"]]
+        except KeyError as exc:
+            msg = "Resonance not found."
+            raise NotFound(msg) from exc
+        wanted = set(attrs["component_ids"])
+        components = list(
+            ItemInstance.objects.filter(
+                pk__in=wanted, holder_character_sheet_id=offer.character_sheet_id
+            ).select_related("template", "quality_tier")
+        )
+        if len(components) != len(wanted):
+            msg = "You are not carrying everything you offered."
+            raise serializers.ValidationError({"component_ids": msg})
+        return {
+            "offer": offer,
+            "source_resonance": source,
+            "target_resonance": target,
+            "amount": attrs["amount"],
+            "components": components,
+        }
+
+
+class DriftCorrectionDeclineSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/drift-correction/decline/."""
+
+    offer_id = serializers.IntegerField()
+
+    def validate(self, attrs: dict) -> dict:
+        return {"offer": _own_drift_offer(attrs["offer_id"], self.context["request"])}
+
+
+class DriftCorrectionResultSerializer(serializers.Serializer):
+    """Read serializer for DriftCorrectionResult (types/drift.py dataclass)."""
+
+    source_resonance_id = serializers.IntegerField()
+    target_resonance_id = serializers.IntegerField()
+    attempted_amount = serializers.IntegerField()
+    converted_amount = serializers.IntegerField()
+    granted_amount = serializers.IntegerField()
+    outcome_name = serializers.CharField()
+    success_level = serializers.IntegerField()
+    conversion_type = serializers.CharField()
+    focus_bonus = serializers.IntegerField()
+
+
+def _own_drift_offer(offer_id: int, request):
+    """The open offer ``offer_id`` if one of the caller's own characters holds it, else 404."""
+    offer = (
+        DriftConversionOffer.objects.filter(
+            pk=offer_id,
+            character_sheet_id__in=RosterEntry.objects.for_account(request.user).character_ids(),
+        )
+        .select_related("character_sheet__character")
+        .first()
+    )
+    if offer is None:
+        msg = "No open drift conversion offer found."
+        raise NotFound(msg)
+    return offer
 
 
 # =============================================================================

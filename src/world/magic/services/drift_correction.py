@@ -10,6 +10,7 @@ transaction: a refusal or a raise consumes and moves nothing.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -34,13 +35,19 @@ from world.magic.models.drift import (
 )
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
-from world.magic.services.drift import convertible_drift, get_drift_correction_config
+from world.magic.services.drift import (
+    convertible_drift,
+    get_drift_correction_config,
+    qualifying_components,
+)
 from world.magic.services.ritual_components import resolve_and_consume_ritual_components
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
     DriftConversionPreview,
     DriftCorrectionResult,
+    DriftOfferCapOption,
     DriftSourceOption,
+    QualifyingComponent,
 )
 from world.mechanics.services import equipment_walk_total
 from world.traits.models import CheckOutcome
@@ -106,6 +113,48 @@ def preview_conversion(offer: DriftConversionOffer, target: Resonance) -> DriftC
         sources=tuple(sources),
         focus_bonus=focus_bonus(sheet, target),
     )
+
+
+def offered_components(
+    sheet: CharacterSheet, target: Resonance, items: Iterable[ItemInstance]
+) -> list[QualifyingComponent]:
+    """The ``items`` that count toward the rite's offering for ``target``, with their routes.
+
+    The keepsake route is open when any target-resonance requirement of the rite carries a
+    ``min_item_meaning`` (the lowest such bar applies). Empty while the rite is unset.
+    """
+    config = get_drift_correction_config()
+    if config.rite_id is None:
+        return []
+    bars = list(
+        config.rite.requirements.filter(
+            matches_target_resonance=True, min_item_meaning__isnull=False
+        ).values_list("min_item_meaning", flat=True)
+    )
+    return qualifying_components(sheet, target, items, min_item_meaning=min(bars) if bars else None)
+
+
+def offer_options(
+    offer: DriftConversionOffer, items: Iterable[ItemInstance]
+) -> list[DriftOfferCapOption]:
+    """Every cap of ``offer`` as a player sees it, given the items the character carries.
+
+    ``items`` is fetched once by the caller; qualifying items are worked out once per cap
+    (they depend on the target, not on the source).
+    """
+    carried = list(items)
+    sheet = offer.character_sheet
+    options = []
+    for cap in offer.caps.select_related("target_resonance__affinity"):
+        target = cap.target_resonance
+        options.append(
+            DriftOfferCapOption(
+                target_resonance=target,
+                preview=preview_conversion(offer, target),
+                qualifying=tuple(offered_components(sheet, target, carried)),
+            )
+        )
+    return options
 
 
 def max_yield_per_earned_point(config: DriftCorrectionConfig) -> Decimal:

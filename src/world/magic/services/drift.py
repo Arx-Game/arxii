@@ -153,8 +153,10 @@ def qualifying_components(
     Three routes, tried in this order: ``MATERIAL`` (the item's template is tied to
     ``target``), ``FACET`` (it carries a live facet that the performer's own motif ties to
     ``target``), and ``KEEPSAKE`` (it means at least ``min_item_meaning`` points to the
-    performer; the route is off when that is None). An item qualifies at most once, in the
-    order given. A destroyed or empty item never qualifies.
+    performer; the route is off when that is None). An item qualifies at most once. The list
+    is ordered by route (material, facet, keepsake), then as given, so an offering that is
+    spent in order burns a plain material before a keepsake. A destroyed or empty item never
+    qualifies.
     """
     from world.items.models import ItemFacet  # noqa: PLC0415
     from world.items.services.meaning import item_meaning  # noqa: PLC0415
@@ -192,4 +194,6 @@ def qualifying_components(
         else:
             continue
         qualifying.append(QualifyingComponent(item=item, mode=mode))
+    route_rank = {mode: rank for rank, mode in enumerate(ComponentMode)}
+    qualifying.sort(key=lambda component: route_rank[component.mode])
     return qualifying

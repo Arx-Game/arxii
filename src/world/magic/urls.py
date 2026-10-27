@@ -23,6 +23,8 @@ from world.magic.views import (
     CrossingRespondView,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
+    DriftCorrectionConvertView,
+    DriftCorrectionDeclineView,
     EffectTypeViewSet,
     EntryFlourishRespondView,
     FacetViewSet,
@@ -32,6 +34,7 @@ from world.magic.views import (
     PendingAudereMajoraOfferViewSet,
     PendingAudereOfferViewSet,
     PendingCrossingOfferViewSet,
+    PendingDriftConversionOfferViewSet,
     PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
@@ -338,6 +341,27 @@ urlpatterns = [
         "entry-flourish/respond/",
         EntryFlourishRespondView.as_view(),
         name="entry-flourish-respond",
+    ),
+    # #4733 — Drift correction offer inbox + convert + decline
+    path(
+        "drift-correction/pending/",
+        PendingDriftConversionOfferViewSet.as_view({"get": "list"}),
+        name="drift-correction-pending-list",
+    ),
+    path(
+        "drift-correction/pending/<int:pk>/",
+        PendingDriftConversionOfferViewSet.as_view({"get": "retrieve"}),
+        name="drift-correction-pending-detail",
+    ),
+    path(
+        "drift-correction/convert/",
+        DriftCorrectionConvertView.as_view(),
+        name="drift-correction-convert",
+    ),
+    path(
+        "drift-correction/decline/",
+        DriftCorrectionDeclineView.as_view(),
+        name="drift-correction-decline",
     ),
     # #1989 — Trait crossing offer inbox + respond
     path(
