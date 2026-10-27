@@ -52099,8 +52099,10 @@ export interface components {
       control_change?: number;
       /** @description Name of the condition the surge actually applied. */
       condition?: string | null;
-      /** @description The roll line the surged player was shown, e.g. 'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.' */
+      /** @description The roll caption the surged player was shown, e.g. 'Composure check vs taunt potency 14 · Partial · Intensity +5'. */
       roll?: string;
+      /** @description What caused the surge, e.g. 'Mira taunts you.'. Only the surged player, GMs and staff get it; everyone else reads the generic narration. */
+      cause?: string;
     };
     /** @description Observable countdown and erosion for a multi-round commitment. */
     SustainedAction: {

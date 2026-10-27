@@ -93657,8 +93657,12 @@ components:
           description: Name of the condition the surge actually applied.
         roll:
           type: string
-          description: The roll line the surged player was shown, e.g. 'Composure
-            check vs taunt potency 14. Partial. Intensity +5, control 0.'
+          description: The roll caption the surged player was shown, e.g. 'Composure
+            check vs taunt potency 14 · Partial · Intensity +5'.
+        cause:
+          type: string
+          description: What caused the surge, e.g. 'Mira taunts you.'. Only the surged
+            player, GMs and staff get it; everyone else reads the generic narration.
       required:
       - id
       - narration
