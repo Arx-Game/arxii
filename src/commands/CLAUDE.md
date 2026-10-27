@@ -1612,9 +1612,13 @@ actions, backends, and service functions.
   wrapper resolving a pending entry-flourish offer via `ResolveFlourishOfferAction`.
 - **`drift_correction.py`** (#4733): `CmdDrift` (`drift`): bare `drift` shows the character's
   open conversion offer (per target resonance: cap, drift sources with rate and projected yield,
-  focus bonus, carried items that count as the offering); `drift convert <from>=<into>
-  [<amount>]` dispatches `PerformDriftCorrectionAction` (no amount means the most allowed, and
-  every carried item is offered, the rite spends only what qualifies); `drift decline`
+  focus bonus, carried items that count as the offering, with the faceted and keepsake ones
+  marked as spent only when named); `drift convert <from>=<into> [<amount>] [with <item>]`
+  dispatches `PerformDriftCorrectionAction` (no amount means the most allowed). By default it
+  offers every carried item except those that count only as a facet or a keepsake, so a plain
+  material is what gets spent; `with <item>` names one of the caller's own carried items
+  (exact name, else a unique part of one) to spend instead, and a name that matches nothing,
+  several things, or an item that does not count is the command's own error. `drift decline`
   dispatches `DeclineDriftCorrectionAction`. Thin: rules live in
   `world/magic/services/drift_correction.py`.
 

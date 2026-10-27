@@ -1,12 +1,17 @@
 """Telnet command for the drift correction rite (#4733, slice 4 of #4672).
 
-``drift`` shows the open conversion offer, ``drift convert <from>=<into> [<amount>]`` performs
-the rite and ``drift decline`` lets the offer go. Thin: every rule lives in the actions and
-``world.magic.services.drift_correction``.
+``drift`` shows the open conversion offer, ``drift convert <from>=<into> [<amount>]
+[with <item>]`` performs the rite and ``drift decline`` lets the offer go. Thin: every rule
+lives in the actions and ``world.magic.services.drift_correction``.
+
+A faceted or keepsake item is only ever offered when the player names it with ``with``:
+the rite spends the first item that counts, and a worn faceted cloak or a keepsake must
+never go without being chosen.
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from actions.definitions.drift_correction import (
@@ -22,11 +27,17 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import DriftConversionOffer, Resonance
+    from world.magic.types.drift import QualifyingComponent
 
-_USAGE = "Usage: drift | drift convert <from resonance>=<into resonance> [<amount>] | drift decline"
+_USAGE = (
+    "Usage: drift | drift convert <from resonance>=<into resonance> [<amount>] "
+    "[with <item>] | drift decline"
+)
 _NO_OFFER = "You have no open chance to correct drift."
 _DECLINE = "decline"
 _CONVERT = "convert"
+# `` with <item>`` after the target; a bare trailing ``with`` is caught too, to refuse it.
+_WITH = re.compile(r"\s+with(?:\s+|$)", re.IGNORECASE)
 
 
 def _own_sheet(caller: ObjectDB) -> CharacterSheet:
@@ -71,6 +82,49 @@ def _carried(caller: ObjectDB, sheet: CharacterSheet) -> list[ItemInstance]:
     return items
 
 
+def _named_item(carried: list[ItemInstance], typed: str) -> ItemInstance:
+    """Resolve a typed item name among the caller's own carried items.
+
+    An exact name (any case) wins; otherwise a name that contains the typed text. Nothing
+    or several things matching is a ``CommandError`` naming them.
+    """
+    wanted = typed.strip().lower()
+    exact = [item for item in carried if item.display_name.lower() == wanted]
+    matches = exact or [item for item in carried if wanted in item.display_name.lower()]
+    if not matches:
+        msg = f"You carry nothing called '{typed.strip()}'."
+        raise CommandError(msg)
+    if len(matches) > 1:
+        names = ", ".join(item.display_name for item in matches)
+        msg = f"More than one thing you carry matches '{typed.strip()}': {names}. Name one."
+        raise CommandError(msg)
+    return matches[0]
+
+
+def _offering(
+    sheet: CharacterSheet, target: Resonance, carried: list[ItemInstance], named: str | None
+) -> list[ItemInstance]:
+    """The carried items to offer toward ``target``.
+
+    With no name: everything carried except the items that count only as a facet or a
+    keepsake, so a plain material is what the rite spends. With a name: that item, which
+    must count toward ``target``, and nothing else that counts.
+    """
+    from world.magic.constants import ComponentMode  # noqa: PLC0415
+    from world.magic.services.drift_correction import offered_components  # noqa: PLC0415
+
+    qualifying = {q.item.pk: q.mode for q in offered_components(sheet, target, carried)}
+    if named is None:
+        return [
+            item for item in carried if qualifying.get(item.pk) in (None, ComponentMode.MATERIAL)
+        ]
+    chosen = _named_item(carried, named)
+    if chosen.pk not in qualifying:
+        msg = f"{chosen.display_name} does not count as an offering for {target.name}."
+        raise CommandError(msg)
+    return [item for item in carried if item.pk not in qualifying] + [chosen]
+
+
 def _own_resonance(sheet: CharacterSheet, typed: str) -> Resonance:
     """Resolve a player-typed resonance name among the resonances the character holds."""
     from world.magic.models import CharacterResonance  # noqa: PLC0415
@@ -105,12 +159,14 @@ class CmdDrift(ArxCommand):
 
     Usage:
         drift
-        drift convert <from resonance>=<into resonance> [<amount>]
+        drift convert <from resonance>=<into resonance> [<amount>] [with <item>]
         drift decline
 
     Bare `drift` shows your open chance: what you may convert, at what rate, and the
     items you carry that count as the offering. `convert` performs the rite; with no
-    amount it converts the most you may. `decline` lets the chance pass.
+    amount it converts the most you may. It spends a plain material you carry; to spend
+    a faceted item or a keepsake instead, name it with `with <item>`. `decline` lets the
+    chance pass.
     """
 
     key = "drift"
@@ -134,13 +190,20 @@ class CmdDrift(ArxCommand):
             raise CommandError(_USAGE)
 
     def resolve_action_args(self) -> dict:
-        """Parse ``convert <from>=<into> [<amount>]`` into the rite action's kwargs."""
+        """Parse ``convert <from>=<into> [<amount>] [with <item>]`` into the action's kwargs."""
         from world.magic.services.drift_correction import preview_conversion  # noqa: PLC0415
 
         _, _, rest = (self.args or "").strip().partition(" ")
         source_text, sep, target_part = rest.partition("=")
         if not sep or not source_text.strip() or not target_part.strip():
             raise CommandError(_USAGE)
+        named: str | None = None
+        split = _WITH.search(target_part)
+        if split is not None:
+            named = target_part[split.end() :].strip()
+            target_part = target_part[: split.start()]
+            if not named:
+                raise CommandError(_USAGE)
         target_text, amount = _split_amount(target_part.strip())
         sheet = _own_sheet(self.caller)
         offer = _open_offer(sheet)
@@ -164,13 +227,16 @@ class CmdDrift(ArxCommand):
             "source_resonance": source,
             "target_resonance": target,
             "amount": amount,
-            "components_provided": _carried(self.caller, sheet),
+            "components_provided": _offering(sheet, target, _carried(self.caller, sheet), named),
         }
 
     def _describe_offer(self, offer: DriftConversionOffer, sheet: CharacterSheet) -> str:
+        from world.magic.constants import ComponentMode  # noqa: PLC0415
         from world.magic.services.drift_correction import offer_options  # noqa: PLC0415
 
-        lines = ["You may correct drift. Use |wdrift convert <from>=<into> [<amount>]|n."]
+        lines = [
+            "You may correct drift. Use |wdrift convert <from>=<into> [<amount>] [with <item>]|n."
+        ]
         for option in offer_options(offer, _carried(self.caller, sheet)):
             preview = option.preview
             lines.append(f"Toward {option.target_resonance.name}: up to {preview.cap_remaining}.")
@@ -184,11 +250,16 @@ class CmdDrift(ArxCommand):
                 lines.append("  You hold no drift you can convert toward it.")
             if preview.focus_bonus > 0:
                 lines.append(f"  Your focus adds {preview.focus_bonus} to the rite.")
-            if option.qualifying:
-                carried = ", ".join(
-                    f"{q.item.display_name} ({q.mode.value})" for q in option.qualifying
-                )
-                lines.append(f"  Offering you carry: {carried}.")
-            else:
+            spent = [q for q in option.qualifying if q.mode == ComponentMode.MATERIAL]
+            chosen = [q for q in option.qualifying if q.mode != ComponentMode.MATERIAL]
+            if spent:
+                lines.append(f"  Offering you carry: {_listed(spent)}.")
+            if chosen:
+                lines.append(f"  Spent only if named (|wwith <item>|n): {_listed(chosen)}.")
+            if not option.qualifying:
                 lines.append("  You carry nothing that counts as the offering.")
         return "\n".join(lines)
+
+
+def _listed(components: list[QualifyingComponent]) -> str:
+    return ", ".join(f"{q.item.display_name} ({q.mode.value})" for q in components)

@@ -31,7 +31,7 @@ from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.factories import ItemFacetFactory, ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
 from world.magic.admin import grant_resonance_action
@@ -41,6 +41,9 @@ from world.magic.factories import (
     DramaticMomentTagFactory,
     DramaticMomentTypeFactory,
     DriftCorrectionRiteFactory,
+    FacetFactory,
+    MotifResonanceAssociationFactory,
+    MotifResonanceFactory,
     ResonanceFactory,
     ResonanceTierFactory,
     set_aura_split,
@@ -283,6 +286,43 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertEqual(drift_grants(), [])
         self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+
+    def test_a_faceted_cloak_is_spent_only_when_she_names_it(self) -> None:
+        # Her motif ties the Dawn Sigil facet to Dawnlight, so a cloak bearing it counts
+        # toward a Dawnlight offering by the facet route. She carries no material.
+        sigil = FacetFactory(name="Dawn Sigil")
+        link = MotifResonanceFactory(
+            motif__character=self.ysmay.sheet_data, resonance=self.dawnlight
+        )
+        MotifResonanceAssociationFactory(motif_resonance=link, facet=sigil)
+        cloak = ItemInstanceFactory(
+            template=ItemTemplateFactory(name="Sigil Cloak"),
+            holder_character_sheet=self.ysmay.sheet_data,
+        )
+        ItemFacetFactory(item_instance=cloak, facet=sigil)
+        materialize_item_game_object(cloak, self.ysmay.sheet_data)
+        self.deed(self.ysmay)
+
+        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        self.assertIn("Spent only if named (with <item>): Sigil Cloak (facet).", shown)
+
+        with force_check_outcome(self.outcomes["Success"]):
+            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
+        self.assertIn(
+            "Ritual 'Rite of Drift Correction' requires 1x offering for Dawnlight "
+            "that you don't have.",
+            told,
+        )
+        self.assertFalse(consumed(cloak.pk))
+        self.assertEqual(balance(self.ysmay, self.ruin), 30)
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+
+        cloak_pk = cloak.pk
+        with force_check_outcome(self.outcomes["Success"]):
+            told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10 with cloak")
+        self.assertIn("10 Ruin became 5 Dawnlight.", told)
+        self.assertTrue(consumed(cloak_pk))
+        self.assertEqual(balance(self.ysmay, self.ruin), 20)
 
 
 class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):

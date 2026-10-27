@@ -15,8 +15,16 @@ from commands.drift_correction import CmdDrift
 from commands.exceptions import CommandError
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.items.factories import ItemFacetFactory, ItemInstanceFactory, ItemTemplateFactory
+from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
-from world.magic.factories import DriftConversionCapFactory, DriftConversionOfferFactory
+from world.magic.factories import (
+    DriftConversionCapFactory,
+    DriftConversionOfferFactory,
+    FacetFactory,
+    MotifResonanceAssociationFactory,
+    MotifResonanceFactory,
+)
 from world.magic.tests.test_drift_correction_rite import DriftRiteTestBase, _tied_item
 from world.scenes.factories import SceneFactory
 
@@ -25,6 +33,22 @@ class DriftCommandTestBase(DriftRiteTestBase):
     def setUp(self) -> None:
         super().setUp()
         self.caller = self.sheet.character
+        # The caller's motif ties this facet to Dawnlight, so an item bearing it counts.
+        self.motif_facet = FacetFactory()
+        link = MotifResonanceFactory(motif__character=self.sheet, resonance=self.dawnlight)
+        MotifResonanceAssociationFactory(motif_resonance=link, facet=self.motif_facet)
+
+    def carry(self, item: ItemInstance) -> ItemInstance:
+        item.holder_character_sheet = self.sheet
+        item.save(update_fields=["holder_character_sheet"])
+        materialize_item_game_object(item, self.sheet)
+        return item
+
+    def faceted(self, name: str) -> ItemInstance:
+        """A carried item bearing a facet the caller's motif ties to Dawnlight."""
+        item = ItemInstanceFactory(template=ItemTemplateFactory(name=name))
+        ItemFacetFactory(item_instance=item, facet=self.motif_facet)
+        return self.carry(item)
 
     def command(self, args: str) -> CmdDrift:
         cmd = CmdDrift()
@@ -79,6 +103,59 @@ class ResolveActionArgsTests(DriftCommandTestBase):
         materialize_item_game_object(stray, self.sheet)
         kwargs = self.command("convert Drift Dread=Drift Dawnlight").resolve_action_args()
         self.assertEqual(kwargs["components_provided"], [mine])
+
+    def test_a_faceted_item_is_not_offered_unless_named(self) -> None:
+        material = self.carry(_tied_item(self.dawnlight))
+        cloak = self.faceted("Faceted Cloak")
+        plain = self.carry(ItemInstanceFactory())
+        kwargs = self.command("convert Drift Dread=Drift Dawnlight").resolve_action_args()
+        self.assertEqual(kwargs["components_provided"], [material, plain])
+        self.assertNotIn(cloak, kwargs["components_provided"])
+
+    def test_with_names_the_item_to_spend_in_place_of_the_material(self) -> None:
+        material = self.carry(_tied_item(self.dawnlight))
+        cloak = self.faceted("Faceted Cloak")
+        kwargs = self.command(
+            "convert Drift Dread=Drift Dawnlight 5 with faceted cloak"
+        ).resolve_action_args()
+        self.assertEqual(kwargs["amount"], 5)
+        self.assertEqual(kwargs["target_resonance"], self.dawnlight)
+        self.assertEqual(kwargs["components_provided"], [cloak])
+        self.assertNotIn(material, kwargs["components_provided"])
+
+    def test_with_matches_part_of_a_name(self) -> None:
+        cloak = self.faceted("Faceted Cloak")
+        kwargs = self.command(
+            "convert Drift Dread=Drift Dawnlight with cloak"
+        ).resolve_action_args()
+        self.assertEqual(kwargs["components_provided"], [cloak])
+
+    def test_with_an_unknown_name_is_a_command_error(self) -> None:
+        self.faceted("Faceted Cloak")
+        with self.assertRaises(CommandError) as ctx:
+            self.command("convert Drift Dread=Drift Dawnlight with lantern").resolve_action_args()
+        self.assertEqual(ctx.exception.msg, "You carry nothing called 'lantern'.")
+
+    def test_with_an_ambiguous_name_is_a_command_error_naming_both(self) -> None:
+        self.faceted("Faceted Cloak")
+        self.faceted("Faceted Cloak Pin")
+        with self.assertRaises(CommandError) as ctx:
+            self.command("convert Drift Dread=Drift Dawnlight with faceted").resolve_action_args()
+        self.assertIn("More than one thing you carry matches 'faceted'", ctx.exception.msg)
+        self.assertIn("Faceted Cloak Pin", ctx.exception.msg)
+
+    def test_with_an_item_that_does_not_count_says_so(self) -> None:
+        self.carry(ItemInstanceFactory(template=ItemTemplateFactory(name="Plain Mug")))
+        with self.assertRaises(CommandError) as ctx:
+            self.command("convert Drift Dread=Drift Dawnlight with mug").resolve_action_args()
+        self.assertEqual(
+            ctx.exception.msg, "Plain Mug does not count as an offering for Drift Dawnlight."
+        )
+
+    def test_with_and_no_name_is_a_usage_error(self) -> None:
+        with self.assertRaises(CommandError) as ctx:
+            self.command("convert Drift Dread=Drift Dawnlight with ").resolve_action_args()
+        self.assertIn("Usage:", ctx.exception.msg)
 
     def test_unknown_resonance_is_a_command_error_naming_what_you_hold(self) -> None:
         with self.assertRaises(CommandError) as ctx:
@@ -155,6 +232,13 @@ class CommandWiringTests(DriftCommandTestBase):
         item.save(update_fields=["holder_character_sheet"])
         materialize_item_game_object(item, self.sheet)
         self.assertIn("(material)", self.lines(""))
+
+    def test_bare_drift_marks_a_faceted_item_as_spent_only_when_named(self) -> None:
+        self.carry(_tied_item(self.dawnlight))
+        self.faceted("Faceted Cloak")
+        text = self.lines("")
+        self.assertIn("(material).", text)
+        self.assertIn("Spent only if named (|wwith <item>|n): Faceted Cloak (facet).", text)
 
     def test_decline_removes_the_offer(self) -> None:
         from world.magic.models import DriftConversionOffer
