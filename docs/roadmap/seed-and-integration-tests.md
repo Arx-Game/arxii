@@ -174,6 +174,15 @@ the light taper. Journey: `integration_tests/test_every_point_counts_journeys.py
 buffs lifts a character from chart -8 onto chart -2; too few leave her on chart -8 with no
 Success band).
 
+✅ **Check math, slice 9, the vow size step (#4747 of #4551, ADR-4747-A)** - built here:
+`ConditionInstance.modifier_vow_level`, stamped at cast by `caster_vow_step_level` when the
+caster's first engaged vow (or its sub-role or anchor) has a `CovenantRoleTechniqueSpecialty`
+for one of the technique's functions; the level is her vow thread's shown level, uncapped by the
+buff's own level (secondary vows potency-scaled). Each sized modifier of the instance adds
+value(L, size + 1) minus value(L, size) as an untapered `vow_part` on the check lane, the opponent
+path and the stat lane. Points only: #4551 section 5.4's outcome floors and ceilings were dropped
+by the owner on 2026-10-27. Journey: `integration_tests/test_vow_size_step_journeys.py`.
+
 ✅ **Check math, slice 8, the stat lane (#4726 of #4551, ADR-4726-A)** - built here:
 `ModifierLane.STAT`; `TraitHandler._get_stat_modifier` totals a stat target's CHARACTER,
 EQUIPMENT (`modifier_target_contributions`, shared with the check seam) and CONDITION

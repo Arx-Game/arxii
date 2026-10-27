@@ -85,8 +85,8 @@ Readers (`modifier_values.py`): `load_value_table(lane) -> ValueTable` (one quer
 (one query), `level_baseline(level, lane) -> int | None`, `rank_band_share(points, at_total) ->
 Decimal | None` (points as a share of the `CheckRank` band `at_total` sits in).
 
-`ModifierContribution` carries `level`, `size` and `vow_part` (the untapered vow share, empty
-until #4551 slice d). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
+`ModifierContribution` carries `level`, `size` and `vow_part` (the untapered vow share: the
+equipment walk's vow terms, #4628, and a vowed caster's size step on a buff, #4747). `ModifierBreakdown(contributions, tapers)` counts each tapered kind's
 bonuses and penalties as separate piles, largest first, the k-th at `TaperRule.weight(k-1) =
 max(ratio**(k-1), floor)` of `value - vow_part`; `counted()` lists what each contribution counts
 for, and `total` / `extra_modifiers_total` round once, half up. `counted_values()` gives whole numbers
@@ -147,6 +147,19 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
   a size, or the reverse, and Paramount are refused). `_scene_check_contributions` values a
   sized row at its own level, never the roller's; an unsized row keeps its flat value. The SCENE
   pile tapers, though one scene holds at most one row per check type.
+
+**A vowed caster's size step (#4747, ADR-4747-A).** A sized condition instance whose
+`modifier_vow_level` is set (stamped at cast, see `docs/systems/magic.md`) adds, to each of its
+modifiers, value(L, size + 1) minus value(L, size) at that level L, signed like the authored
+modifier, so a debuff's step is a further penalty and lands in the penalty pile. The step is the
+contribution's `vow_part` and is never tapered; the buff's own value (at `modifier_level`) still
+tapers in its pile. L is the caster's vow thread shown level, never capped by the buff's own
+level. No table row for either size means no step. Paramount is reachable only this way. One
+helper prices it, `conditions.services._priced_sized_modifier` -> (value, vow_part), shared by
+the check lane (`_check_modifier_for_target`, `condition_contributions`), the opponent path
+(`opponent_condition_opposition`) and the stat lane (`condition_target_contributions`); it reads
+stored columns only, so no read gains a query. Points only: the step adds no outcome floor or
+ceiling and never touches `_apply_outcome_guarantees`.
 
 ### The stat lane (#4726, ADR-4726-A)
 

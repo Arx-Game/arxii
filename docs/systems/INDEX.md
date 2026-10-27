@@ -1109,6 +1109,10 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `modifier_target_contributions(sheet, target, lane=...)` (CHARACTER + EQUIPMENT, the builder
   the check seam shares) and `conditions.services.condition_target_contributions` (CONDITION),
   so every stat reader sees one buffed number.
+  The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level`, stamped at cast
+  by `magic.services.modifier_sizing.caster_vow_step_level`, adds value(L, size + 1) minus
+  value(L, size) to each sized condition modifier as an untapered `vow_part`
+  (`conditions.services._priced_sized_modifier`), on the check, opponent and stat paths.
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
