@@ -75,7 +75,7 @@ class ConditionContributionsTest(TestCase):
         breakdown = get_check_modifier(self.target.sheet_data, self.combat_attack).breakdown
 
         assert len(contributions) == len(breakdown)
-        for contrib, (_, mod_value) in zip(contributions, breakdown, strict=True):
+        for contrib, (_, mod_value, _vow_part) in zip(contributions, breakdown, strict=True):
             assert contrib.source_kind == ModifierSourceKind.CONDITION
             assert contrib.value == mod_value
 
