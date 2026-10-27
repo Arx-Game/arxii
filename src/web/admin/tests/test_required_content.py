@@ -9,10 +9,19 @@ from django.test import TestCase
 
 from web.admin.tuning import required_content as rc
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.factories import ConditionTemplateFactory, SoulfrayTemplateFactory
+from world.checks.factories import CheckTypeFactory
+from world.conditions.constants import BreakFreeMode
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionCheckModifierFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
+)
 from world.game_clock.factories import GameClockFactory
 from world.magic.constants import GiftKind
 from world.magic.factories import ensure_soulfray_config
+from world.magic.services.drift import get_drift_config
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -1657,38 +1666,60 @@ class TestSettleActionTemplateProbe(TestCase):
 
 
 class TestDriftConfigProbes(TestCase):
-    """The drift configuration's check type, condition and category flag (#4732)."""
+    """The drift configuration's check type, condition and that condition's shape (#4732).
 
-    def _result(self, key: str) -> rc.ProbeResult:
-        return _probe_for(key).resolve(None)
+    U-keep: the dashboard probe has no player path.
+    """
 
-    def test_all_three_report_missing_without_a_config_row(self) -> None:
-        self.assertFalse(self._result("drift-focus-check-type").present)
-        self.assertFalse(self._result("drift-conflict-condition").present)
-        # The category probe leaves the missing-config gap to the other two.
-        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
+    _KEYS = (
+        "drift-focus-check-type",
+        "drift-conflict-condition",
+        "drift-conflict-condition-self-shakeable",
+        "drift-conflict-condition-check-modifier",
+    )
 
-    def test_unset_fields_are_reported(self) -> None:
-        from world.magic.services.drift import get_drift_config
+    def _present(self) -> dict[str, bool]:
+        return {key: _probe_for(key).resolve(None).present for key in self._KEYS}
 
+    def test_missing_or_unset_config_is_reported_once(self) -> None:
+        # With no row, and again with a row whose fields are empty, only the two
+        # field probes report; the condition-shape probes leave that gap to them.
+        expected = {
+            "drift-focus-check-type": False,
+            "drift-conflict-condition": False,
+            "drift-conflict-condition-self-shakeable": True,
+            "drift-conflict-condition-check-modifier": True,
+        }
+        self.assertEqual(self._present(), expected)
         get_drift_config()
-        self.assertFalse(self._result("drift-focus-check-type").present)
-        self.assertFalse(self._result("drift-conflict-condition").present)
-        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
+        self.assertEqual(self._present(), expected)
 
-    def test_set_fields_pass_and_category_flag_is_checked(self) -> None:
-        from world.checks.factories import CheckTypeFactory
-        from world.conditions.factories import ConditionCategoryFactory
-        from world.magic.services.drift import get_drift_config
-
+    def test_conflict_condition_shape_is_checked(self) -> None:
         category = ConditionCategoryFactory(self_shakeable=False)
+        condition = ConditionTemplateFactory(category=category, break_free_mode=BreakFreeMode.NONE)
         config = get_drift_config()
         config.focus_check_type = CheckTypeFactory()
-        config.conflict_condition = ConditionTemplateFactory(category=category)
+        config.conflict_condition = condition
         config.save()
-        self.assertTrue(self._result("drift-focus-check-type").present)
-        self.assertTrue(self._result("drift-conflict-condition").present)
-        self.assertFalse(self._result("drift-conflict-condition-self-shakeable").present)
+        present = self._present()
+        self.assertTrue(present["drift-focus-check-type"])
+        self.assertTrue(present["drift-conflict-condition"])
+        self.assertFalse(present["drift-conflict-condition-self-shakeable"])
+        self.assertFalse(present["drift-conflict-condition-check-modifier"])
+
+        # The flag alone is not enough: a NONE break-free mode still blocks breakfree.
         category.self_shakeable = True
         category.save()
-        self.assertTrue(self._result("drift-conflict-condition-self-shakeable").present)
+        result = _probe_for("drift-conflict-condition-self-shakeable").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("Break free mode", result.detail)
+
+        condition.break_free_mode = BreakFreeMode.SELF_INITIATED
+        condition.save()
+        self.assertTrue(self._present()["drift-conflict-condition-self-shakeable"])
+
+        # A modifier on one of its stages counts as well as one on the condition.
+        ConditionCheckModifierFactory(
+            condition=None, stage=ConditionStageFactory(condition=condition)
+        )
+        self.assertTrue(self._present()["drift-conflict-condition-check-modifier"])

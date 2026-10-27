@@ -25,6 +25,9 @@ resolution to this helper so the logic lives in exactly one place.
 (``CastTechniqueAction.round_declaration`` and
 ``_dispatch_clash_contribution``) call this helper instead of reading
 ``kwargs["cast_pull"]`` directly so both transports converge transparently.
+
+``round_pull_resonance`` reads the committed pull back at resolution, for the
+carried-drift focus roll the cast makes (#4732).
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.covenants.perks.context import SituationContext
+    from world.magic.models import Resonance
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.pull import CastPullDeclaration
 
@@ -164,6 +168,18 @@ def resolve_pull_from_kwargs(
         )
 
     return None
+
+
+def round_pull_resonance(participant: CombatParticipant) -> Resonance | None:
+    """The resonance ``participant`` committed a pull in for this round, if any (#4732).
+
+    A combat cast's pull is committed as a ``CombatPull`` at declaration, so the
+    round resolver hands its resonance to ``use_technique(pulled_resonance=...)``
+    for the cast's carried-drift focus roll.
+    """
+    character = participant.character_sheet.character
+    pulls = character.combat_pulls.active_for_encounter(participant.encounter)
+    return pulls[0].resonance if pulls else None
 
 
 def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belongs to

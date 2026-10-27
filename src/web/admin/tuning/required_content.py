@@ -1312,23 +1312,62 @@ def _probe_drift_conflict_condition() -> ProbeResult:
 
 
 def _probe_drift_conflict_condition_self_shakeable() -> ProbeResult:
-    """The conflict condition's category is `self_shakeable` (#4732).
+    """The conflict condition can be shaken off by the character herself (#4732).
 
-    Without the flag a character cannot shake the conflict off herself with
-    breakfree, so a failed focus roll would leave her stuck until staff step in.
+    Its category must be `self_shakeable` and its `break_free_mode` must not be
+    NONE (the field's default): breakfree, rally and the tick roll all skip a
+    NONE condition. Missing either, a failed focus roll would leave her stuck
+    until staff step in.
+
     A missing config or unset condition is the other probes' gap, so it is not
     reported twice here.
     """
+    from world.conditions.constants import BreakFreeMode  # noqa: PLC0415
+
     config = _drift_config()
     if config is None or config.conflict_condition_id is None:
         return ProbeResult(present=True)
-    if config.conflict_condition.category.self_shakeable:
+    condition = config.conflict_condition
+    gaps = []
+    if not condition.category.self_shakeable:
+        gaps.append(
+            f"The conflict condition's category ({condition.category.name}) "
+            "is not marked self-shakeable."
+        )
+    if condition.break_free_mode == BreakFreeMode.NONE:
+        gaps.append(
+            f"The conflict condition ({condition.name}) has its Break free mode field "
+            "set to none, so breakfree, rally and ticks never lift it."
+        )
+    if not gaps:
+        return ProbeResult(present=True)
+    return ProbeResult(present=False, detail=" ".join(gaps))
+
+
+def _probe_drift_conflict_condition_check_modifier() -> ProbeResult:
+    """The conflict condition carries at least one check modifier (#4732).
+
+    The penalty a failed focus roll costs is the condition's authored
+    `ConditionCheckModifier`, on the condition itself or on one of its stages.
+    With none, the condition lands and changes no roll.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+
+    config = _drift_config()
+    if config is None or config.conflict_condition_id is None:
+        return ProbeResult(present=True)
+    condition_id = config.conflict_condition_id
+    if ConditionCheckModifier.objects.filter(
+        Q(condition_id=condition_id) | Q(stage__condition_id=condition_id)
+    ).exists():
         return ProbeResult(present=True)
     return ProbeResult(
         present=False,
         detail=(
-            f"The conflict condition's category ({config.conflict_condition.category.name}) "
-            "is not marked self-shakeable."
+            f"The conflict condition ({config.conflict_condition.name}) has no check "
+            "modifier, on itself or on any stage."
         ),
     )
 
@@ -2710,7 +2749,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="drift-conflict-condition-self-shakeable",
-            label="Drift conflict condition is in a self-shakeable category",
+            label="Drift conflict condition can be shaken off by the character",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/drift.py check_resonance_focus()",
             consequence=(
@@ -2718,6 +2757,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "off herself with breakfree; only staff can lift it."
             ),
             probe=CustomProbe(fn=_probe_drift_conflict_condition_self_shakeable),
+            admin_model="DriftConfig",
+        ),
+        ContentDependency(
+            key="drift-conflict-condition-check-modifier",
+            label="Drift conflict condition carries a check modifier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/drift.py check_resonance_focus()",
+            consequence=(
+                "A failed focus roll applies the conflict condition, and the condition "
+                "changes no roll, so losing focus costs the character nothing."
+            ),
+            probe=CustomProbe(fn=_probe_drift_conflict_condition_check_modifier),
             admin_model="DriftConfig",
         ),
         ContentDependency(
