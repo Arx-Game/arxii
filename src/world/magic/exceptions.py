@@ -920,3 +920,18 @@ class DriftConversionInvalidError(DriftCorrectionError):
         super().__init__(user_message)
         if user_message:
             self.user_message = user_message
+
+
+class ThreadResonanceChangeError(MagicError):
+    """A thread cannot be moved to the asked-for resonance (slice 6 of #4672).
+
+    The raise site names the reason (no such thread, no target named, a target that is
+    not one of the thread's options).
+    """
+
+    user_message = "That thread cannot be moved to that resonance."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message

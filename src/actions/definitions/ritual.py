@@ -74,6 +74,7 @@ class PerformRitualAction(Action):
             ResonanceInsufficient,
             RitualComponentError,
             RitualPoolError,
+            ThreadResonanceChangeError,
             UltimateNotLearnable,
             XPInsufficient,
         )
@@ -100,7 +101,13 @@ class PerformRitualAction(Action):
 
         try:
             with transaction.atomic():
-                self._validate_components(ritual, components, sheet)
+                # Refusals that need no roll run before anything is spent: a raise after
+                # consumption rolls the tables back but leaves the identity map's cached
+                # items ahead of them.
+                self._precheck(ritual, sheet, kwargs)
+                self._validate_components(
+                    ritual, components, sheet, resonance_context=kwargs.get("target_resonance")
+                )
 
                 # #3001: a solo perform auto-channels the performer's own anima
                 # toward the requirement, then gates. Spent like components —
@@ -142,6 +149,7 @@ class PerformRitualAction(Action):
             FallRedemptionError,
             HonorRefused,
             UltimateNotLearnable,
+            ThreadResonanceChangeError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -208,16 +216,46 @@ class PerformRitualAction(Action):
             data={"execution_kind": ritual.execution_kind, "result": outcome},
         )
 
+    def _precheck(self, ritual: Any, performer_sheet: Any, kwargs: dict[str, Any]) -> None:
+        """Refuse a ritual whose service would refuse, before components or anima are spent.
+
+        Only the thread retune (slice 6 of #4672) has such a check today: it is found by its
+        service path, the way the Rite of Honors is. Raises ``ThreadResonanceChangeError``.
+        """
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+            check_thread_resonance_change,
+        )
+
+        if ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
+            check_thread_resonance_change(
+                performer_sheet,
+                thread=kwargs.get("thread"),
+                target_resonance=kwargs.get("target_resonance"),
+            )
+
     def _validate_components(
-        self, ritual: Any, components: list[Any], performer_sheet: Any
+        self,
+        ritual: Any,
+        components: list[Any],
+        performer_sheet: Any,
+        *,
+        resonance_context: Any = None,
     ) -> None:
-        """Validate and consume ``ritual``'s components via the shared helper."""
+        """Validate and consume ``ritual``'s components via the shared helper.
+
+        ``resonance_context`` is the ``target_resonance`` the performer named, if any: a
+        target-resonance requirement is paid toward it, and a touchstone must tie to it.
+        """
         from world.magic.services.ritual_components import (  # noqa: PLC0415
             resolve_and_consume_ritual_components,
         )
 
         resolve_and_consume_ritual_components(
-            ritual=ritual, components=components, performer_sheet=performer_sheet
+            ritual=ritual,
+            components=components,
+            performer_sheet=performer_sheet,
+            resonance_context=resonance_context,
         )
 
     def _resolve_anima_pool(self, ritual: Any, performer_sheet: Any) -> Any:

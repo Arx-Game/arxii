@@ -24,6 +24,7 @@ from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
+    from world.magic.types.threads import ThreadResonanceOption
 from world.conditions.models import (
     CapabilityType,
     ConditionTemplate,
@@ -4407,3 +4408,48 @@ class TrainTechniqueRequestSerializer(serializers.Serializer):
     """Request shape for ``POST .../technique-progress/<technique_id>/train/``."""
 
     ap_to_invest = serializers.IntegerField(required=False, min_value=1)
+
+
+# =============================================================================
+# Thread resonance change (slice 6 of #4672)
+# =============================================================================
+
+
+class ThreadResonanceOptionSerializer(serializers.Serializer):
+    """One resonance a thread may move to, with the carried items that pay the rite (read-only).
+
+    ``qualifying`` needs ``context["ritual"]`` (the retune rite, or None), ``context["sheet"]``
+    and ``context["items"]`` (what the owner carries, fetched once by the view).
+    ``conversion_type`` is null for a retune within the thread's own affinity.
+    """
+
+    resonance_id = serializers.IntegerField(source="resonance.pk")
+    resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME)
+    affinity_name = serializers.CharField(source="resonance.affinity.name")
+    conversion_type = serializers.CharField(allow_null=True)
+    projected_points = serializers.IntegerField()
+    qualifying = serializers.SerializerMethodField()
+
+    @extend_schema_field(DriftQualifyingComponentSerializer(many=True))
+    def get_qualifying(self, option: "ThreadResonanceOption") -> list[dict]:
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            offered_target_components,
+        )
+
+        ritual = self.context["ritual"]
+        if ritual is None:
+            return []
+        components = offered_target_components(
+            ritual, self.context["sheet"], option.resonance, self.context["items"]
+        )
+        return DriftQualifyingComponentSerializer(components, many=True).data
+
+
+class ThreadResonanceOptionsSerializer(serializers.Serializer):
+    """GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+
+    ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+    """
+
+    ritual_id = serializers.IntegerField(allow_null=True)
+    options = ThreadResonanceOptionSerializer(many=True)

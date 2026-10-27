@@ -9,7 +9,9 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual anima``                        — perform your personal anima ritual in the
         scene you stand in (also ``ritual <its name>``); once per scene (#4451)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
-        e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``)
+        e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
+        ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
+        resonance to move a thread to: ``ritual <rite> thread=5 resonance=12``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
         — amplify a witnessed deed; free-text grammar special-cased for the Rite
         of Honors (#3466); see ``_resolve_honors_args`` below for why this one
@@ -48,6 +50,10 @@ if TYPE_CHECKING:
 
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
+# ``resonance=<id>`` (alias ``target_resonance=<id>``) names the resonance a ritual works
+# toward, e.g. the thread retune (slice 6 of #4672); it reaches the action as a Resonance.
+_RESONANCE_KWARG = "resonance"
+_TARGET_RESONANCE_KWARG = "target_resonance"
 #: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
 #: its authored name is.
 _ANIMA_SHORTHAND = "anima"
@@ -172,6 +178,8 @@ class CmdRitual(ArxCommand):
         ``ritual <name>``
         ``ritual <name> key=value [key=value]``
         Example: ``ritual Rite of Imbuing thread=5``
+        Example: ``ritual <retune rite> thread=5 resonance=12`` - move a thread
+            to another resonance (leave out ``resonance=`` to list where it can go)
         ``ritual anima`` - perform your personal anima ritual in the scene you
             are in (once per scene; it eases Soulfray, then restores anima)
 
@@ -541,10 +549,34 @@ class CmdRitual(ArxCommand):
             except UnknownAffinity as err:
                 raise CommandError(err.user_message) from err
 
+        self._move_target_resonance(raw_kwargs, service_kwargs)
+
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
+
+    def _move_target_resonance(
+        self, raw_kwargs: dict[str, int], service_kwargs: dict[str, Any]
+    ) -> None:
+        """Pop ``resonance=`` (alias ``target_resonance=``) into ``service_kwargs`` as a Resonance.
+
+        Under the ``target_resonance`` key; nothing when neither was given; an unknown id is
+        refused.
+        """
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance_id = raw_kwargs.pop(_RESONANCE_KWARG, None)
+        alias_id = raw_kwargs.pop(_TARGET_RESONANCE_KWARG, None)
+        if resonance_id is None:
+            resonance_id = alias_id
+        if resonance_id is None:
+            return
+        resonance = Resonance.objects.filter(pk=resonance_id).first()
+        if resonance is None:
+            msg = f"No resonance with id {resonance_id}."
+            raise CommandError(msg)
+        service_kwargs[_TARGET_RESONANCE_KWARG] = resonance
 
     def _split_name_and_rest(self, args: str) -> tuple[str, str]:
         """Split into ritual name + the raw (unparsed) trailing ``key=value`` text.

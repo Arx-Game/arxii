@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Literal
 from django.db import models
 
 if TYPE_CHECKING:
-    from world.magic.models import Thread
+    from decimal import Decimal
+
+    from world.magic.models import Resonance, Thread
 
 
 class ThreadAxis(models.TextChoices):
@@ -56,3 +58,37 @@ class ThreadSurvivabilitySaves:
     wound: int
     death: int
     knockout: int
+
+
+@dataclass(frozen=True)
+class ThreadResonanceOption:
+    """One resonance a thread may be moved to (slice 6 of #4672).
+
+    ``conversion_type`` is None for a retune within the thread's own affinity (rate 1),
+    else the authored pair's Fall / Redemption type. ``projected_points`` is what the
+    thread's ``developed_points`` become at ``multiplier``.
+    """
+
+    resonance: Resonance
+    conversion_type: str | None
+    multiplier: Decimal
+    projected_points: int
+
+
+@dataclass(frozen=True)
+class ThreadResonanceChangeResult:
+    """The outcome of moving a thread to another resonance.
+
+    ``thread_id`` is the surviving thread: the moved thread itself, or, when ``merged``,
+    the live thread on the same anchor that took its points (the moved one is retired).
+    ``points_after`` is the survivor's ``developed_points``.
+    """
+
+    thread_id: int
+    from_resonance_id: int
+    to_resonance_id: int
+    points_before: int
+    points_moved: int
+    points_after: int
+    merged: bool
+    conversion_type: str | None

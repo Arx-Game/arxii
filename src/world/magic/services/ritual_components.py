@@ -8,6 +8,7 @@ must be callable independently of that action, not buried inside it).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from world.items.exceptions import InsufficientMaterials
@@ -19,6 +20,24 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import Resonance, Ritual, RitualComponentRequirement
+    from world.magic.types.drift import QualifyingComponent
+
+
+def offered_target_components(
+    ritual: Ritual, sheet: CharacterSheet, target: Resonance, items: Iterable[ItemInstance]
+) -> list[QualifyingComponent]:
+    """The ``items`` that count toward ``ritual``'s offering for ``target``, with their routes.
+
+    The keepsake route is open when any target-resonance requirement of ``ritual`` carries a
+    ``min_item_meaning`` (the lowest such bar applies). Shared by every rite whose offering
+    is matched to the resonance it works toward (drift correction, the thread retune).
+    """
+    bars = list(
+        ritual.requirements.filter(
+            matches_target_resonance=True, min_item_meaning__isnull=False
+        ).values_list("min_item_meaning", flat=True)
+    )
+    return qualifying_components(sheet, target, items, min_item_meaning=min(bars) if bars else None)
 
 
 def _resolve_touchstone_pks(

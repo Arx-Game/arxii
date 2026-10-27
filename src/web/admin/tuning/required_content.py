@@ -1511,6 +1511,30 @@ def _probe_drift_correction_config() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_thread_resonance_ritual() -> ProbeResult:
+    """A SERVICE ritual moves a thread to another resonance (slice 6 of #4672).
+
+    Consumer: `world/magic/services/thread_resonance.py thread_resonance_ritual()`, which
+    finds the rite by its `service_function_path` (`THREAD_RESONANCE_SERVICE_PATH`). The
+    probe reads the same function.
+    """
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        THREAD_RESONANCE_SERVICE_PATH,
+        thread_resonance_ritual,
+    )
+
+    if thread_resonance_ritual() is None:
+        return ProbeResult(
+            present=False,
+            missing=("the thread retune ritual",),
+            detail=(
+                "No ritual changes a thread's resonance: no SERVICE ritual has the service "
+                f"path {THREAD_RESONANCE_SERVICE_PATH}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -2938,6 +2962,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual",
+            label="Thread retune ritual",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/thread_resonance.py thread_resonance_ritual(), "
+                "change_thread_resonance()"
+            ),
+            consequence=(
+                "No ritual changes a thread's resonance: the Spellbook's Retune thread "
+                "button has no rite to perform and telnet has no rite to name, so no player "
+                "can move a thread to another resonance until staff author the SERVICE "
+                "ritual (and its offering requirements)."
+            ),
+            probe=CustomProbe(fn=_probe_thread_resonance_ritual),
+            admin_model="Ritual",
         ),
         ContentDependency(
             key="stakes-escalation-curves",

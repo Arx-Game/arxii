@@ -1516,6 +1516,33 @@ class DriftCorrectionRiteFactory(RitualFactory):
             )
 
 
+class ThreadRetuneRiteFactory(RitualFactory):
+    """Test factory for the rite that moves a thread to another resonance (slice 6 of #4672).
+
+    A SERVICE ritual found by its service path, carrying one target-resonance component
+    requirement: the offering must tie to the resonance the thread moves to. Staff author the
+    real row; the name here is a test stand-in.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Retuning"
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.thread_resonance.change_thread_resonance"
+    flow = None
+
+    @factory.post_generation
+    def target_resonance_requirement(self, create, extracted, **kwargs):
+        if not create:
+            return
+        if not self.requirements.filter(matches_target_resonance=True).exists():
+            RitualComponentRequirement.objects.create(
+                ritual=self, matches_target_resonance=True, quantity=1
+            )
+
+
 class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     """Factory for RitualCheckConfig.
 
