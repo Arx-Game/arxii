@@ -14,15 +14,21 @@ way the real commit would.
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, transaction
+from django.urls import reverse
 from evennia.objects.models import ObjectDB
 from rest_framework import status
 
 from integration_tests.harness import JourneyCase
+from integration_tests.test_refused_admin_saves_journeys import RefusedAdminSaveCase
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.models import CombatEncounter
 from world.combat.services import cleanup_completed_encounter
 from world.conditions.constants import BreakFreeMode
 from world.conditions.factories import (
@@ -38,7 +44,7 @@ from world.forms.factories import (
     CharacterFormFactory,
     CharacterFormStateFactory,
 )
-from world.forms.models import ActiveAlternateSelf, FormType
+from world.forms.models import ActiveAlternateSelf, AlternateSelf, FormType
 from world.magic.audere import PendingAudereOffer
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -52,7 +58,7 @@ from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.scenes.factories import PersonaFactory
-from world.traits.factories import CheckOutcomeFactory
+from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 
 
 class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
@@ -111,7 +117,7 @@ class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
             self.telnet(self.character, "accept surge")
         return self.said(self.character)
 
-    def _end_the_fight(self) -> None:
+    def _end_the_fight(self) -> CombatEncounter:
         """End a fight she took part in.
 
         No player command ends a fight: the round resolver calls
@@ -121,6 +127,7 @@ class _AudereSelfJourney(ResonanceCacheIsolationMixin, JourneyCase):
         encounter = CombatEncounterFactory()
         CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
         cleanup_completed_encounter(encounter)
+        return encounter
 
     def _audere_held(self) -> bool:
         return ConditionInstance.objects.filter(
@@ -181,7 +188,9 @@ class AnAutomaticSelfComesAndGoesWithAudere(_AudereSelfJourney):
         self.assertIsNone(self._worn())
 
 
-class ATalkedDownSelfStaysUntilSheBreaksFree(_AudereSelfJourney):
+class _ATalkedDownSelf(_AudereSelfJourney):
+    """Her flagged self must be talked down: it holds an Ashen Fury condition."""
+
     def setUp(self) -> None:
         super().setUp()
         behavior = ConditionCategoryFactory(name="Ashen Fury", alters_behavior=True)
@@ -196,6 +205,8 @@ class ATalkedDownSelfStaysUntilSheBreaksFree(_AudereSelfJourney):
             revert_kind=AlternateSelfRevertKind.TALKED_DOWN, emergence_condition=self.fury
         )
 
+
+class ATalkedDownSelfStaysUntilSheBreaksFree(_ATalkedDownSelf):
     def test_she_stays_transformed_until_the_fury_is_broken(self) -> None:
         self._accept()
         self.assertEqual(self._worn(), self.alt)
@@ -250,3 +261,161 @@ class ADifferentSelfAlreadyWornIsNotSwapped(_AudereSelfJourney):
 
         self._end_the_fight()
         self.assertEqual(self._worn(), other)
+
+
+class AFriendRalliesHerOutOfTheFury(_ATalkedDownSelf):
+    """Hobb talks her down: his rally backs her break-free, and once the fury is broken
+    `form revert` works."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.watch(self.hobb)
+
+    def _fury_held(self) -> bool:
+        return ConditionInstance.objects.filter(
+            target=self.character, condition=self.fury, resolved_at__isnull=True
+        ).exists()
+
+    def test_the_rally_backs_her_break_free_and_she_reverts(self) -> None:
+        self._accept()
+        self._end_the_fight()
+        refused = self.telnet(self.character, "form revert")
+        self.assertIn("You can't revert while not in control of yourself.", refused)
+
+        with patch("world.checks.services.random.randint", return_value=95):
+            rallied = self.telnet(self.hobb, "rally Ysmay")
+        self.assertIn(
+            "You rally Ysmay, granting them +5 to their next attempt to break free.", rallied
+        )
+        self.assertTrue(self._fury_held())
+        self.assertEqual(self._worn(), self.alt)
+
+        with force_check_outcome(CheckOutcomeFactory(name="Broke Free", success_level=2)):
+            freed = self.telnet(self.character, "breakfree")
+        self.assertIn("You shatter the effect gripping your mind!", freed)
+        self.assertFalse(self._fury_held())
+
+        self.assertIn("You revert to your true self.", self.telnet(self.character, "form revert"))
+        self.assertIsNone(self._worn())
+
+
+class ABlockedRevertDoesNotStopTheFightEnding(_AudereSelfJourney):
+    """An automatic self wants to drop at fight's end, but an unrelated charm holds her."""
+
+    def test_the_fight_ends_and_she_stays_in_the_self_with_the_refusal_logged(self) -> None:
+        alt = self._flag()
+        self._accept()
+        self.assertEqual(self._worn(), alt)
+        charm = ConditionTemplateFactory(
+            name="Honeyed Words",
+            category=ConditionCategoryFactory(name="Charm", alters_behavior=True),
+        )
+        ConditionInstanceFactory(target=self.character, condition=charm)
+        self.assertFalse(self.sheet.in_control)
+
+        with self.assertLogs("world.forms.services", level="INFO") as logged:
+            self._end_the_fight()
+
+        self.assertFalse(self._audere_held())
+        self.assertEqual(self._worn(), alt)
+        # end_audere and the encounter cleanup each try the revert; both are refused.
+        self.assertEqual(
+            set(logged.output),
+            {
+                "INFO:world.forms.services:Audere ended but Ysmay is not in control; "
+                "alternate self The Ashen Ysmay stays until reverted."
+            },
+        )
+
+
+class StaffAuthorTheAudereSelfInTheAdmin(RefusedAdminSaveCase):
+    """Staff flag a character's alternate self and set how it ends, on the stock admin page."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sheet = CharacterSheetFactory()
+        self.fury = ConditionTemplateFactory(
+            name="Ashen Fury",
+            category=ConditionCategoryFactory(name="Ashen Fury", alters_behavior=True),
+        )
+        self.first = AlternateSelfFactory(character=self.sheet, display_name="The Ashen Ysmay")
+        self.url = reverse("admin:arxii_alternateself_change", args=[self.first.pk])
+
+    def test_the_change_form_shows_the_three_fields(self) -> None:
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        form = page.context["adminform"].form
+        self.assertEqual(form.fields["emerges_at_audere"].label, "Emerges at audere")
+        self.assertEqual(form.fields["revert_kind"].label, "Revert kind")
+        self.assertEqual(form.fields["emergence_condition"].label, "Emergence condition")
+        for name in ("emerges_at_audere", "revert_kind", "emergence_condition"):
+            self.assertContains(page, f'name="{name}"')
+
+    def test_staff_flag_a_talked_down_self_with_a_condition_and_the_row_holds_it(self) -> None:
+        data = self.change_post(self.url)
+        data["emerges_at_audere"] = "on"
+        data["revert_kind"] = AlternateSelfRevertKind.TALKED_DOWN
+        data["emergence_condition"] = str(self.fury.pk)
+
+        saved = self.client.post(self.url, data)
+
+        self.assertEqual(saved.status_code, 302, saved.content[:2000])
+        row = AlternateSelf.objects.get(pk=self.first.pk)
+        self.assertTrue(row.emerges_at_audere)
+        self.assertEqual(row.revert_kind, "talked_down")
+        self.assertEqual(row.emergence_condition, self.fury)
+
+    def test_a_second_flagged_self_on_the_same_character_is_refused_with_a_form_error(
+        self,
+    ) -> None:
+        AlternateSelf.objects.filter(pk=self.first.pk).update_with_reason(
+            reason="flag the first self without the admin", emerges_at_audere=True
+        )
+        second = AlternateSelfFactory(character=self.sheet, display_name="The Quiet Ysmay")
+        url = reverse("admin:arxii_alternateself_change", args=[second.pk])
+        data = self.change_post(url)
+        data["emerges_at_audere"] = "on"
+
+        refused = self.client.post(url, data)
+
+        self.assertEqual(refused.status_code, 200)
+        self.assertContains(
+            refused, "Constraint \u201cone_audere_alternate_self_per_character\u201d is violated."
+        )
+        self.assertFalse(AlternateSelf.objects.get(pk=second.pk).emerges_at_audere)
+        self.assertFalse(
+            AlternateSelf.objects.filter(pk=second.pk, emerges_at_audere=True).exists()
+        )
+
+
+class TheDatabaseRefusesAnUnendableSelf(JourneyCase):
+    """Whatever staff or a script does, the rows cannot describe a self that never ends
+    or an automatic self that a condition holds in place."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sheet = CharacterSheetFactory()
+        self.fury = ConditionTemplateFactory(
+            name="Ashen Fury",
+            category=ConditionCategoryFactory(name="Ashen Fury", alters_behavior=True),
+        )
+
+    def test_a_talked_down_self_without_a_condition_is_refused(self) -> None:
+        alt = AlternateSelfFactory(character=self.sheet)
+        with self.assertRaises(IntegrityError) as ctx, transaction.atomic():
+            AlternateSelf.objects.filter(pk=alt.pk).update_with_reason(
+                reason="a journey writing past clean() to reach the database constraint",
+                revert_kind=AlternateSelfRevertKind.TALKED_DOWN,
+            )
+        self.assertIn("alternate_self_talked_down_needs_condition", str(ctx.exception))
+
+    def test_an_automatic_self_with_a_condition_is_refused(self) -> None:
+        alt = AlternateSelfFactory(character=self.sheet)
+        with self.assertRaises(IntegrityError) as ctx, transaction.atomic():
+            AlternateSelf.objects.filter(pk=alt.pk).update_with_reason(
+                reason="a journey writing past clean() to reach the database constraint",
+                emergence_condition=self.fury,
+            )
+        self.assertIn("alternate_self_talked_down_needs_condition", str(ctx.exception))
