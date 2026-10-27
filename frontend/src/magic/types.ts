@@ -308,6 +308,7 @@ export type DriftConversionCap = components['schemas']['DriftConversionCap'];
 export type DriftSourceOption = components['schemas']['DriftSourceOption'];
 export type ThreadResonanceOptions = components['schemas']['ThreadResonanceOptions'];
 export type ThreadResonanceOption = components['schemas']['ThreadResonanceOption'];
+export type ConversionType = components['schemas']['ConversionTypeEnum'];
 export type DriftQualifyingComponent = components['schemas']['DriftQualifyingComponent'];
 export type PaginatedDriftConversionOfferList =
   components['schemas']['PaginatedDriftConversionOfferList'];

@@ -13,9 +13,15 @@ vi.mock('@/rituals/api', async (orig) => ({
   performRitual: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const navigate = vi.fn();
+vi.mock('react-router-dom', async (orig) => ({
+  ...(await orig<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
+}));
 
 import * as magicApi from '@/magic/api';
 import * as ritualsApi from '@/rituals/api';
+import { throwApiError } from '@/lib/errors';
 import { toast } from 'sonner';
 import { ThreadResonanceDialog } from '../ThreadResonanceDialog';
 
@@ -39,6 +45,9 @@ const thread = {
 
 const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadResonanceOptions => ({
   ritual_id: 9,
+  offering_required: true,
+  offering_count: 1,
+  unavailable_reason: '',
   options: [
     {
       resonance_id: 2,
@@ -46,7 +55,11 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Celestial',
       conversion_type: null,
       projected_points: 40,
-      qualifying: [{ item_id: 55, name: 'Silver ring', mode: 'keepsake' }],
+      merges_into_thread_id: null,
+      qualifying: [
+        { item_id: 55, name: 'Silver ring', mode: 'keepsake' },
+        { item_id: 56, name: 'Lumen candle', mode: 'material' },
+      ],
     },
     {
       resonance_id: 3,
@@ -54,6 +67,7 @@ const makeOptions = (overrides: Partial<ThreadResonanceOptions> = {}): ThreadRes
       affinity_name: 'Abyssal',
       conversion_type: 'FALL',
       projected_points: 30,
+      merges_into_thread_id: 12,
       qualifying: [],
     },
   ],
@@ -112,6 +126,100 @@ describe('ThreadResonanceDialog', () => {
     renderDialog();
     await screen.findByText('Lumen (same affinity)');
     fireEvent.click(screen.getByTestId('resonance-component-55'));
+    expect(screen.getByTestId('resonance-retune')).toBeDisabled();
+  });
+
+  it('marks an option that merges and opens the surviving thread afterwards', async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+      makeOptions({ offering_required: false, offering_count: 0 })
+    );
+    vi.mocked(ritualsApi.performRitual).mockResolvedValue({
+      ritual_id: 9,
+      execution_kind: 'SERVICE',
+      message: 'Merged.',
+      result: { thread_id: 12, merged: true },
+    });
+    renderDialog();
+    expect(await screen.findByTestId('resonance-merges-3')).toHaveTextContent('merges');
+    expect(screen.queryByTestId('resonance-merges-2')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('resonance-option-3'));
+    fireEvent.click(screen.getByTestId('resonance-retune'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/threads/12'));
+  });
+
+  it('asks for no offering when the rite needs none', async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+      makeOptions({ offering_required: false, offering_count: 0 })
+    );
+    vi.mocked(ritualsApi.performRitual).mockResolvedValue({
+      ritual_id: 9,
+      execution_kind: 'SERVICE',
+      message: 'Retuned.',
+      result: { thread_id: 7 },
+    });
+    renderDialog();
+    await screen.findByText('Lumen (same affinity)');
+    expect(screen.queryByTestId('resonance-component-55')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('resonance-retune'));
+    await waitFor(() =>
+      expect(ritualsApi.performRitual).toHaveBeenCalledWith(
+        expect.objectContaining({ components: [] })
+      )
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('takes exactly as many offerings as the rite asks for', async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+      makeOptions({ offering_count: 2 })
+    );
+    vi.mocked(ritualsApi.performRitual).mockResolvedValue({
+      ritual_id: 9,
+      execution_kind: 'SERVICE',
+    });
+    renderDialog();
+    fireEvent.click(await screen.findByTestId('resonance-component-55'));
+    expect(screen.getByTestId('resonance-retune')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('resonance-component-56'));
+    fireEvent.click(screen.getByTestId('resonance-retune'));
+    await waitFor(() =>
+      expect(ritualsApi.performRitual).toHaveBeenCalledWith(
+        expect.objectContaining({ components: [55, 56] })
+      )
+    );
+  });
+
+  it("shows the server's refusal when the rite is refused", async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(makeOptions());
+    vi.mocked(ritualsApi.performRitual).mockImplementation(() =>
+      throwApiError(
+        new Response(JSON.stringify({ detail: 'This thread cannot move to Lumen.' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        'Failed to perform ritual'
+      )
+    );
+    renderDialog();
+    fireEvent.click(await screen.findByTestId('resonance-component-55'));
+    fireEvent.click(screen.getByTestId('resonance-retune'));
+    expect(await screen.findByTestId('resonance-error')).toHaveTextContent(
+      'This thread cannot move to Lumen.'
+    );
+  });
+
+  it('shows why the thread cannot move in place of the options', async () => {
+    vi.mocked(magicApi.getThreadResonanceOptions).mockResolvedValue(
+      makeOptions({
+        options: [],
+        unavailable_reason: 'This thread has no resonance it can move to.',
+      })
+    );
+    renderDialog();
+    expect(await screen.findByTestId('resonance-unavailable')).toHaveTextContent(
+      'This thread has no resonance it can move to.'
+    );
+    expect(screen.queryByText('Change to')).not.toBeInTheDocument();
     expect(screen.getByTestId('resonance-retune')).toBeDisabled();
   });
 });
