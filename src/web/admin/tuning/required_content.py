@@ -1328,16 +1328,15 @@ def _probe_drift_correction_config() -> ProbeResult:
     """The drift correction rite has a rite, a check type, and a share for every tier (#4733).
 
     Consumer: `world/magic/services/drift_correction.py perform_drift_correction_rite()`.
-    It refuses with "not set up yet" while `DriftCorrectionConfig.rite` or `.check_type`
-    is empty, and `_require_every_share` refuses before consuming anything unless a
-    `DriftCorrectionOutcomeShare` row exists for every `CheckOutcome`, since the roll can
-    land on any of them. The probe reads the same two conditions.
+    It refuses with "not set up yet" unless `rite_is_ready()`: `DriftCorrectionConfig.rite`
+    and `.check_type` set and a `DriftCorrectionOutcomeShare` row for every `CheckOutcome`
+    (`outcome_tiers_without_a_share()` empty), since the roll can land on any of them. The
+    probe reads the same conditions, through the same tier query.
     """
-    from world.magic.models import (  # noqa: PLC0415
-        DriftCorrectionConfig,
-        DriftCorrectionOutcomeShare,
+    from world.magic.models import DriftCorrectionConfig  # noqa: PLC0415
+    from world.magic.services.drift_correction import (  # noqa: PLC0415
+        outcome_tiers_without_a_share,
     )
-    from world.traits.models import CheckOutcome  # noqa: PLC0415
 
     config = DriftCorrectionConfig.objects.cached_singleton()
     # (the label the panel lists as missing, the bare noun the detail sentence uses)
@@ -1354,11 +1353,7 @@ def _probe_drift_correction_config() -> ProbeResult:
             detail=f"The drift correction configuration has no {nouns}.",
         )
     missing = tuple(
-        CheckOutcome.objects.exclude(
-            pk__in=DriftCorrectionOutcomeShare.objects.values("outcome_tier_id")
-        )
-        .order_by("success_level")
-        .values_list("name", flat=True)
+        outcome_tiers_without_a_share().order_by("success_level").values_list("name", flat=True)
     )
     if missing:
         return ProbeResult(
@@ -2705,14 +2700,14 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Drift correction rite, check and outcome shares",
             tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/magic/services/drift_correction.py perform_drift_correction_rite(), "
-                "_require_every_share()"
+                "world/magic/services/drift_correction.py rite_is_ready(), "
+                "perform_drift_correction_rite()"
             ),
             consequence=(
-                "A deed still opens a conversion offer and tells the player, but the rite "
-                "refuses with 'not set up yet' while the rite or check type is empty, or "
-                "while any outcome tier has no share row; nothing is consumed or converted "
-                "until staff author them."
+                "A deed still opens a conversion offer and tells the player, but telnet "
+                "drift, the web dialog and the rite say 'not set up yet' while the rite, "
+                "the check type or any outcome tier's share is missing; nothing is consumed "
+                "or converted until staff author them."
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",

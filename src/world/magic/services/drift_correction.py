@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, QuerySet
 
 from world.checks.services import perform_check_with_modifiers
 from world.items.services.materials import consume_materials
@@ -62,14 +62,30 @@ if TYPE_CHECKING:
 RITE_NOT_READY_MESSAGE = DriftCorrectionNotConfiguredError.user_message
 
 
-def rite_is_ready() -> bool:
-    """Whether staff have set the rite and its check type, so the rite can be performed.
+def outcome_tiers_without_a_share() -> QuerySet[CheckOutcome]:
+    """Every ``CheckOutcome`` with no ``DriftCorrectionOutcomeShare`` row.
 
-    While either is unset the rite refuses with ``RITE_NOT_READY_MESSAGE``, and every
-    surface that shows an offer says that instead of listing an offering.
+    The roll can land on any tier, so one missing here leaves the rite unready. The
+    Required content probe lists these by name; ``rite_is_ready`` asks whether any exist.
     """
-    config = get_drift_correction_config()
-    return config.rite_id is not None and config.check_type_id is not None
+    return CheckOutcome.objects.exclude(
+        pk__in=DriftCorrectionOutcomeShare.objects.values("outcome_tier_id")
+    )
+
+
+def rite_is_ready(config: DriftCorrectionConfig | None = None) -> bool:
+    """Whether the rite can be performed: a rite, a check type and a share for every tier.
+
+    Costs one query (the share check), and none when the rite or check type is unset.
+    While this is false the rite refuses with ``RITE_NOT_READY_MESSAGE``, and every
+    surface that shows an offer says that instead of listing an offering. Pass the
+    ``config`` the caller already holds to skip fetching it again.
+    """
+    if config is None:
+        config = get_drift_correction_config()
+    if config.rite_id is None or config.check_type_id is None:
+        return False
+    return not outcome_tiers_without_a_share().exists()
 
 
 def focus_bonus(sheet: CharacterSheet, target: Resonance) -> int:
@@ -199,18 +215,6 @@ def _locked_offer(offer: DriftConversionOffer) -> DriftConversionOffer:
     return locked[0]
 
 
-def _require_every_share() -> None:
-    """Refuse before anything is consumed unless every outcome tier has a share row.
-
-    The roll can land on any ``CheckOutcome``; a tier with no share would otherwise only be
-    found after the offering is gone.
-    """
-    if CheckOutcome.objects.exclude(
-        pk__in=DriftCorrectionOutcomeShare.objects.values("outcome_tier_id")
-    ).exists():
-        raise DriftCorrectionNotConfiguredError
-
-
 def _validated_source(
     sheet: CharacterSheet, source: Resonance, target: Resonance, amount: int, cap_value: int
 ) -> AffinityInteraction:
@@ -258,7 +262,8 @@ def perform_drift_correction_rite(
     granting it as ``DRIFT_CORRECTION``, and only then spends the offering. The cap shrinks
     by what converted; an exhausted cap row is deleted, and the offer with it once no cap is
     left. A tier whose share is 0.00 still spends the offering and moves nothing; a tier with
-    no share row at all is refused up front (``_require_every_share``).
+    no share row at all is refused up front (``rite_is_ready``), before the offer's cap and
+    the request are checked.
 
     Raises:
         DriftOfferNotFoundError: The offer is gone, its scene finished, or no cap targets
@@ -273,9 +278,9 @@ def perform_drift_correction_rite(
     """
     offer = _locked_offer(offer)
     sheet = offer.character_sheet
-    if not rite_is_ready():
-        raise DriftCorrectionNotConfiguredError
     config = get_drift_correction_config()
+    if not rite_is_ready(config):
+        raise DriftCorrectionNotConfiguredError
     cap = _cap_for(offer, target_resonance)
     if cap is None:
         raise DriftOfferNotFoundError
@@ -283,7 +288,6 @@ def perform_drift_correction_rite(
     # writers, and the identity map would not refresh a cached row's value.
     cap_value = DriftConversionCap.objects.filter(pk=cap.pk).values_list("cap", flat=True)[0]
     pair = _validated_source(sheet, source_resonance, target_resonance, amount, cap_value)
-    _require_every_share()
 
     # Every step that can refuse runs before anything is written: the offering is only
     # chosen here, and spent after the roll, the share and the conversion. A raise after a
@@ -303,7 +307,7 @@ def perform_drift_correction_rite(
         extra_modifiers=bonus,
     )
     outcome = check.outcome
-    # Safety net: _require_every_share already refused a table with a missing tier.
+    # Safety net: rite_is_ready already refused a table with a missing tier.
     if outcome is None:
         raise DriftCorrectionNotConfiguredError
     share_row = DriftCorrectionOutcomeShare.objects.filter(outcome_tier=outcome).first()

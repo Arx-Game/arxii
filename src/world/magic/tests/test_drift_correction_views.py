@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -14,7 +16,8 @@ from world.magic.factories import (
     DriftConversionOfferFactory,
     set_aura_split,
 )
-from world.magic.models import DriftConversionOffer
+from world.magic.models import DriftConversionOffer, DriftCorrectionOutcomeShare
+from world.magic.services.drift_correction import RITE_NOT_READY_MESSAGE
 from world.magic.tests.test_drift_correction_rite import (
     DriftRiteTestBase,
     _balance,
@@ -116,6 +119,30 @@ class PendingOfferTests(DriftCorrectionViewTestBase):
         self.assertEqual(response.data["results"], [])
         detail = self.client.get(f"{_PENDING_URL}{self.offer.pk}/")
         self.assertEqual(detail.status_code, 404)
+
+    def test_a_tier_with_no_share_makes_every_offer_not_ready(self) -> None:
+        DriftCorrectionOutcomeShare.objects.filter(
+            outcome_tier=self.outcomes["Partial Success"]
+        ).delete()
+        (row,) = self.client.get(_PENDING_URL).data["results"]
+        self.assertEqual(
+            (row["rite_ready"], row["rite_not_ready_message"]), (False, RITE_NOT_READY_MESSAGE)
+        )
+
+    def test_readiness_is_asked_once_however_many_offers_are_listed(self) -> None:
+        for _ in range(2):
+            extra = DriftConversionOfferFactory(
+                character_sheet=self.sheet, scene=SceneFactory(is_active=True)
+            )
+            DriftConversionCapFactory(offer=extra, target_resonance=self.dawnlight, cap=3)
+        share_table = DriftCorrectionOutcomeShare._meta.db_table
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(_PENDING_URL)
+        rows = response.data["results"]
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(row["rite_ready"] for row in rows))
+        share_queries = [q for q in queries.captured_queries if share_table in q["sql"]]
+        self.assertEqual(len(share_queries), 1, share_queries)
 
     def test_detail_of_another_accounts_offer_is_404(self) -> None:
         response = self.client.get(f"{_PENDING_URL}{self.other_offer.pk}/")

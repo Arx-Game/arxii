@@ -3978,8 +3978,9 @@ stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
 `OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of the
 requested amount that converts (not a fraction of the cap); `clean` keeps a better tier
 from converting less than a worse one. `perform_drift_correction_rite` (`drift_correction.py`),
-in one transaction: locks the offer; refuses an unset rite or check type or any `CheckOutcome`
-with no share row (`DriftCorrectionNotConfiguredError`, before anything is consumed); validates
+in one transaction: locks the offer; refuses unless `rite_is_ready(config)` (an unset rite or
+check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`,
+before anything is consumed); validates
 the amount against the cap and the held balance and the source against `convertible_drift`;
 picks the offering with `resolve_ritual_components` (no writes) with the target as
 `resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
@@ -3989,7 +3990,7 @@ never rounds to zero); and only then spends the offering with `consume_materials
 that can raise runs before the first item write, so a refusal never leaves a cached item or
 balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
 deleted, and the offer with it when no cap is left. A tier with no share row is refused up
-front by `_require_every_share`; a tier whose share is 0.00 converts nothing, spends the
+front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
 offering and leaves the cap intact. Source and target lifetime move by the proportional share, so the
 aura follows (`recompute_aura`). `_move_partial` (`conversion.py`, shared with the Rite of
 Atonement) works that share out in integers as `amount x lifetime // balance`: exact when the
@@ -4028,11 +4029,14 @@ scene it displays. See `frontend/src/magic/CLAUDE.md`.
 the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
-While the rite or the check type is unset (`rite_is_ready()` false), telnet `drift` and
-`drift convert` refuse with the same sentence (`RITE_NOT_READY_MESSAGE`, the exception's
-`user_message`) instead of listing an offering, and the pending serializer carries
-`rite_ready: false` and `rite_not_ready_message`, which the dialog shows in place of the
-offering pills, with "Perform the rite" disabled.
+While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
+the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
+`drift` and `drift convert` refuse with the same sentence (`RITE_NOT_READY_MESSAGE`, the
+exception's `user_message`) instead of listing an offering, the rite refuses with it before
+checking the cap or the request, and the pending serializer carries `rite_ready: false` and
+`rite_not_ready_message`, which the dialog shows in place of the offering pills, with
+"Perform the rite" disabled. The pending view works readiness out once per request and
+hands it to the serializer as `context["rite_ready"]`.
 `max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
 pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
 the per-point rate; the one floored point a new cap row opens with sits on top of it, once per

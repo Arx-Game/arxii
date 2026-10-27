@@ -29,6 +29,7 @@ from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
+from web.admin.tuning.required_content import _probe_drift_correction_config
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.factories import ItemFacetFactory, ItemInstanceFactory, ItemTemplateFactory
@@ -538,6 +539,17 @@ class WhenStaffHaveNotSetUpTheRite(DriftJourneyCase):
         self.unset("rite")
         self.deed(self.ysmay)
         self.assert_not_ready_everywhere(thread)
+
+    def test_a_tier_with_no_share_is_named_on_telnet_and_the_web(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        # The rite and its check type are set; only the Partial Success share is missing.
+        DriftCorrectionOutcomeShare.objects.filter(
+            outcome_tier=self.outcomes["Partial Success"]
+        ).delete()
+        self.deed(self.ysmay)
+        self.assert_not_ready_everywhere(thread)
+        probe = _probe_drift_correction_config()
+        self.assertEqual((probe.present, probe.missing), (False, ("Partial Success",)))
 
     def test_no_check_type_is_named_on_telnet_and_the_web(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")

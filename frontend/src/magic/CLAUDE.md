@@ -630,7 +630,7 @@ correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
 - `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
   Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
   `{ id, scene_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
-  staff have not set the rite or its check type; the message is the rite's own refusal, empty
+  the rite, its check type or a tier's share is missing; the message is the rite's own refusal, empty
   while ready); each cap is `{ target_resonance {id, name, affinity},
 cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
   `{ resonance_id, resonance_name, balance, multiplier (decimal string), conversion_type

@@ -2221,6 +2221,12 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_class(self) -> type:
         return DriftConversionOfferSerializer
 
+    def get_serializer_context(self) -> dict:
+        """Add ``rite_ready``, worked out once for the request, not once per offer."""
+        from world.magic.services.drift_correction import rite_is_ready  # noqa: PLC0415
+
+        return {**super().get_serializer_context(), "rite_ready": rite_is_ready()}
+
     def get_queryset(self) -> QuerySet:
         from world.magic.models import DriftConversionOffer  # noqa: PLC0415
 
