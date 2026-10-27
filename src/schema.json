@@ -93654,7 +93654,7 @@ components:
         condition:
           type: string
           nullable: true
-          description: Name of the condition the band carries.
+          description: Name of the condition the surge actually applied.
         roll:
           type: string
           description: The roll line the surged player was shown, e.g. 'Composure

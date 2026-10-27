@@ -52097,7 +52097,7 @@ export interface components {
       /** @description What the roll was made against, if anything. */
       potency?: number | null;
       control_change?: number;
-      /** @description Name of the condition the band carries. */
+      /** @description Name of the condition the surge actually applied. */
       condition?: string | null;
       /** @description The roll line the surged player was shown, e.g. 'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.' */
       roll?: string;
