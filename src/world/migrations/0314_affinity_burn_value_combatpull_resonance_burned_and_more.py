@@ -44,7 +44,7 @@ class Migration(migrations.Migration):
                 blank=True,
                 choices=[("cast", "Focused cast"), ("clash", "Clash contribution")],
                 default="",
-                help_text="The declared action the burn strains (a focused cast or a clash contribution); blank when nothing was burned.",
+                help_text="The declared action the burn strains (a focused cast or a clash contribution); blank when no burn was asked for.",
                 max_length=8,
             ),
         ),

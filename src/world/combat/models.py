@@ -2240,7 +2240,7 @@ class CombatPull(SharedMemoryModel):
         default="",
         help_text=(
             "The declared action the burn strains (a focused cast or a clash "
-            "contribution); blank when nothing was burned."
+            "contribution); blank when no burn was asked for."
         ),
     )
     committed_at = models.DateTimeField(auto_now_add=True)

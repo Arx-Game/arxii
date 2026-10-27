@@ -52,14 +52,19 @@ def burn_ceiling(runtime_intensity: int, config: StrainConfig) -> int:
     return int(Decimal(max(runtime_intensity, 0)) * config.burn_per_intensity)
 
 
+def _caster_affinity(sheet: CharacterSheet) -> Affinity | None:
+    """The caster's affinity: her acting aura's dominant affinity, or None."""
+    aura = acting_aura(sheet)
+    return aura.dominant_affinity if aura is not None else None
+
+
 def _hasty_fall_affinity(sheet: CharacterSheet, resonance: Resonance) -> Affinity | None:
     """The Abyssal affinity when burning ``resonance`` is a hasty fall, else None.
 
     A hasty fall is an Abyssal caster (by her acting aura's dominant affinity) burning
     resonance of any other affinity.
     """
-    aura = acting_aura(sheet)
-    caster_affinity = aura.dominant_affinity if aura is not None else None
+    caster_affinity = _caster_affinity(sheet)
     if caster_affinity is None:
         return None
     try:
@@ -174,8 +179,21 @@ def resolve_resonance_burn(  # noqa: PLR0913 - one burn request and the action i
 
 
 def burn_message(result: ResonanceBurnResult) -> str:
-    """The one system line that tells the caster what she burned."""
-    line = f"You burn {result.reached} of {result.requested} {result.resonance.name} resonance"
+    """The one system line that tells the caster what she burned.
+
+    A burn that reached nothing says why: the ceiling at her intensity is 0, she has no
+    balance left once the pull is paid, or her strain check reached none of it.
+    """
+    name = result.resonance.name
+    if result.reached == 0 and result.requested > 0:
+        if result.ceiling == 0:
+            reason = "your burn ceiling is 0 at this intensity"
+        elif result.capped == 0:
+            reason = f"you have no {name} resonance left once the pull is paid"
+        else:
+            reason = "your strain check reached none of it"
+        return f"You burn none of the {result.requested} {name} resonance you asked for: {reason}."
+    line = f"You burn {result.reached} of {result.requested} {name} resonance"
     if result.hasty_fall and result.reached > 0:
         return f"{line}; it falls at the pair rate to {result.valuation.valued_points}."
     return f"{line}."
@@ -190,13 +208,36 @@ def announce_burn(character: ObjectDB, result: ResonanceBurnResult) -> None:
     transaction.on_commit(lambda: character.msg(message))
 
 
+def _intensity_tier_name(runtime_intensity: int) -> str | None:
+    """The name of the highest ``IntensityTier`` she has reached, or None below them all."""
+    from world.magic.models import IntensityTier  # noqa: PLC0415
+
+    reached = [t for t in IntensityTier.objects.cached_all() if t.threshold <= runtime_intensity]
+    if not reached:
+        return None
+    return max(reached, key=lambda t: t.threshold).name
+
+
+def _corruption_affinity(resonance: Resonance, hasty_fall_into: Affinity | None) -> Affinity | None:
+    """The affinity whose corruption a burn of ``resonance`` leaves, or None.
+
+    A hasty fall leaves the Abyssal corruption it fell into; a raw burn leaves its own
+    affinity's corruption, unless that affinity never corrupts (coefficient 0).
+    """
+    if hasty_fall_into is not None:
+        return hasty_fall_into
+    if resonance.affinity.corruption_coefficient > 0:
+        return resonance.affinity
+    return None
+
+
 def preview_burn(
     sheet: CharacterSheet,
     resonance: Resonance,
     technique: Technique,
     pull_cost: int,
 ) -> BurnPreview:
-    """The burn ceiling and per-point value the pull preview shows for ``technique``."""
+    """The burn numbers and labels the pull preview shows for ``technique``."""
     from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
     from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
     from world.magic.services.techniques import get_runtime_technique_stats  # noqa: PLC0415
@@ -207,15 +248,32 @@ def preview_burn(
         burn_ceiling(stats.intensity, config),
         _available_balance(sheet, resonance, pull_cost),
     )
+    caster_affinity = _caster_affinity(sheet)
+    off_affinity = caster_affinity is not None and caster_affinity.pk != resonance.affinity_id
+    hasty_fall_into = _hasty_fall_affinity(sheet, resonance)
+    corruption_affinity = _corruption_affinity(resonance, hasty_fall_into)
+    corruption_affinity_name = corruption_affinity.name if corruption_affinity is not None else None
+    ceiling_tier_name = _intensity_tier_name(stats.intensity)
     try:
         conversion, burn_value, hasty_fall = _burn_rate(sheet, resonance)
     except ConversionMappingError:
         return BurnPreview(
-            ceiling=0, strain_units_per_point=Decimal(0), hasty_fall=True, available=False
+            ceiling=0,
+            strain_units_per_point=Decimal(0),
+            hasty_fall=True,
+            available=False,
+            resonance_name=resonance.name,
+            off_affinity=off_affinity,
+            corruption_affinity_name=corruption_affinity_name,
+            ceiling_tier_name=ceiling_tier_name,
         )
     return BurnPreview(
         ceiling=ceiling,
         strain_units_per_point=conversion * burn_value,
         hasty_fall=hasty_fall,
         available=config.strain_check_type_id is not None,
+        resonance_name=resonance.name,
+        off_affinity=off_affinity,
+        corruption_affinity_name=corruption_affinity_name,
+        ceiling_tier_name=ceiling_tier_name,
     )

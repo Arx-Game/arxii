@@ -260,7 +260,11 @@ class BurningResonanceOutOfCombat(_BurningResonance):
 
         told, units = self.cast_with_outcome(ysmay, self.cast_line(thread, 6), "Critical Failure")
 
-        self.assertIn(f"You burn 0 of 6 {resonance.name} resonance.", told)
+        self.assertIn(
+            f"You burn none of the 6 {resonance.name} resonance you asked for: "
+            "your strain check reached none of it.",
+            told,
+        )
         self.assertEqual(self.balance(ysmay, resonance), 9)
         self.assertEqual(units, [])
 

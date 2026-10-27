@@ -1255,11 +1255,13 @@ def _share_strain_with_engagement(*, sheet: CharacterSheet | None, strain_power_
     share = strain_power_bonus * get_strain_config().engagement_share_percent // 100
     if share <= 0:
         return
-    engagement = CharacterEngagement.objects.filter(character=sheet).first()
-    if engagement is None:
-        return
-    engagement.intensity_modifier += share
-    engagement.save(update_fields=["intensity_modifier"])
+    with transaction.atomic():
+        # Locked so two casts resolving at once cannot both read the old modifier.
+        engagement = CharacterEngagement.objects.select_for_update().filter(character=sheet).first()
+        if engagement is None:
+            return
+        engagement.intensity_modifier += share
+        engagement.save(update_fields=["intensity_modifier"])
 
 
 def _resolve_cast_burn(
@@ -1267,8 +1269,13 @@ def _resolve_cast_burn(
     character: ObjectDB,
     cast_pull: CastPullDeclaration | None,
     runtime_intensity: int,
+    situation_ctx: object | None = None,
 ) -> ResonanceBurnResult | None:
     """Resolve the burn a non-combat cast pull asks for, or None when it asks for none.
+
+    The strain check reads situational perks like the combat burn does: the cast's own
+    ``situation_ctx`` when the caller threaded one, else a context for the caster with
+    no target and no live resolution (there is no combat round to read).
 
     Raises ``ResonanceBurnUnavailable`` when no strain check is designated, so the
     cast is refused before anything is spent.
@@ -1278,15 +1285,22 @@ def _resolve_cast_burn(
     sheet = _get_character_sheet(character)
     if sheet is None:
         return None
+    from world.covenants.perks.context import SituationContext  # noqa: PLC0415
     from world.magic.services.burn import resolve_resonance_burn  # noqa: PLC0415
     from world.magic.services.threads import get_pull_cost  # noqa: PLC0415
 
+    burn_ctx = (
+        situation_ctx
+        if isinstance(situation_ctx, SituationContext)
+        else SituationContext(holder=sheet, subject=sheet, target=None, resolution=None)
+    )
     return resolve_resonance_burn(
         sheet=sheet,
         resonance=cast_pull.resonance,
         requested=cast_pull.burn,
         runtime_intensity=runtime_intensity,
         pull_cost=get_pull_cost(cast_pull.tier, None).resonance_cost,
+        situation_ctx=burn_ctx,
     )
 
 
@@ -1609,7 +1623,10 @@ def use_technique(  # noqa: PLR0913
     )
 
     burn_result = _resolve_cast_burn(
-        character=character, cast_pull=cast_pull, runtime_intensity=stats.intensity
+        character=character,
+        cast_pull=cast_pull,
+        runtime_intensity=stats.intensity,
+        situation_ctx=situation_ctx,
     )
     burn_units = (
         burn_result.strain_units

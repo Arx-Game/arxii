@@ -1286,7 +1286,7 @@ def _persist_combat_pull(  # noqa: PLR0913
         burn_valued_points=burn_valuation.valued_points if burn_valuation else 0,
         burn_strain_units=burn_valuation.strain_units if burn_valuation else 0,
         burn_hasty_fall=burn_valuation.hasty_fall if burn_valuation else False,
-        burned_for=burned_for if resonance_burned > 0 else "",
+        burned_for=burned_for,
     )
     pull.threads.set(threads)
     for r in resolved:
@@ -1387,7 +1387,9 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             must cover the pull cost plus the burn, or nothing is debited.
         burn_valuation: What the burn is worth, valued at declaration; a combat pull
             stores it so the action reads it at resolution without re-valuing.
-        burned_for: The declared action a combat burn strains (``PullBurnAction``).
+        burned_for: The declared action a combat burn strains (``PullBurnAction``);
+            the caller passes it whenever a burn was asked for, even one that reached
+            nothing, and blank otherwise.
 
     Returns:
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.

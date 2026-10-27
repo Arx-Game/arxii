@@ -314,7 +314,9 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
             beseech_bonus=applied_bonus,
             burn=burn_result.reached if burn_result is not None else 0,
             burn_valuation=burn_result.valuation if burn_result is not None else None,
-            burned_for=burned_for,
+            # Recorded whenever a burn was asked for (even one that reached nothing),
+            # so a resubmitted declaration can be matched against it.
+            burned_for=burned_for if cast_pull.burn > 0 else "",
         )
     except IntegrityError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc

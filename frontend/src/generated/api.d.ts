@@ -29584,6 +29584,9 @@ export interface components {
      *     left after the pull). ``strain_units_per_point`` is what one burned point adds to
      *     her strain. ``hasty_fall`` is True when the burn falls at the pair rate.
      *     ``available`` is False when no strain check is designated, so a burn is refused.
+     *     ``off_affinity`` is True when the resonance is not of the caster's affinity;
+     *     ``corruption_affinity_name`` names the affinity whose corruption the burn leaves
+     *     (null when none); ``ceiling_tier_name`` is the intensity tier the ceiling is read at.
      */
     BurnPreview: {
       ceiling: number;
@@ -29591,6 +29594,10 @@ export interface components {
       strain_units_per_point: string;
       hasty_fall: boolean;
       available: boolean;
+      resonance_name: string;
+      off_affinity: boolean;
+      corruption_affinity_name: string | null;
+      ceiling_tier_name: string | null;
     };
     /**
      * @description Gift row for the CG gift-options list (#2426).

@@ -1691,12 +1691,19 @@ class BurnPreviewSerializer(serializers.Serializer):
     left after the pull). ``strain_units_per_point`` is what one burned point adds to
     her strain. ``hasty_fall`` is True when the burn falls at the pair rate.
     ``available`` is False when no strain check is designated, so a burn is refused.
+    ``off_affinity`` is True when the resonance is not of the caster's affinity;
+    ``corruption_affinity_name`` names the affinity whose corruption the burn leaves
+    (null when none); ``ceiling_tier_name`` is the intensity tier the ceiling is read at.
     """
 
     ceiling = serializers.IntegerField()
     strain_units_per_point = serializers.DecimalField(max_digits=8, decimal_places=4)
     hasty_fall = serializers.BooleanField()
     available = serializers.BooleanField()
+    resonance_name = serializers.CharField()
+    off_affinity = serializers.BooleanField()
+    corruption_affinity_name = serializers.CharField(allow_null=True)
+    ceiling_tier_name = serializers.CharField(allow_null=True)
 
 
 class ThreadPullPreviewResponseSerializer(serializers.Serializer):

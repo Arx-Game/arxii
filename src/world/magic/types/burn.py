@@ -66,9 +66,19 @@ class BurnPreview:
     point is worth to her for this resonance (after a hasty fall's conversion).
     ``available`` is False when no strain check is designated, so a burn would be
     refused.
+
+    The labels the Strain area shows: ``resonance_name``; ``off_affinity`` (the
+    resonance is not of the caster's affinity); ``corruption_affinity_name`` (the
+    affinity whose corruption the burn leaves, the Abyssal on a hasty fall, None when
+    it leaves none); ``ceiling_tier_name`` (the intensity tier the ceiling is read at,
+    None below every tier).
     """
 
     ceiling: int
     strain_units_per_point: Decimal
     hasty_fall: bool
     available: bool
+    resonance_name: str = ""
+    off_affinity: bool = False
+    corruption_affinity_name: str | None = None
+    ceiling_tier_name: str | None = None

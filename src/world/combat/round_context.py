@@ -38,11 +38,12 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ParticipantStatus
+from world.combat.constants import ParticipantStatus, PullBurnAction
 from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
+    CombatPull,
     CombatRoundAction,
     CombatRoundActionTarget,
     RoundChallengeDeclaration,
@@ -51,6 +52,8 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.magic.types.pull import CastPullDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
 _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
@@ -314,7 +317,6 @@ class CombatRoundContext(RoundContext):
         declaration here rather than through ``CastTechniqueAction.round_declaration``;
         without this the pull was dropped. Same commit as the telnet seam.
         """
-        from world.combat.constants import PullBurnAction  # noqa: PLC0415
         from world.combat.pull_helpers import (  # noqa: PLC0415
             commit_combat_pull,
             resolve_pull_from_kwargs,
@@ -328,6 +330,10 @@ class CombatRoundContext(RoundContext):
         except MagicError as exc:
             raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
         if cast_pull is None:
+            return
+        if self._focused_pull_already_committed(participant, cast_pull):
+            # A resubmit of the declaration whose pull already committed (a later job
+            # in the same submit failed): the pull stands, nothing is charged again.
             return
         # The Soulfray gate, as on telnet (``CastTechniqueAction._combat_soulfray_gate``):
         # no resonance or anima is charged for a cast whose Soulfray risk she has not
@@ -347,6 +353,44 @@ class CombatRoundContext(RoundContext):
             target=resolve_focused_target_objectdb(self._encounter, kwargs),
             cast_check=resolve_cast_check(sheet.character, technique),
         )
+
+    def _focused_pull_already_committed(
+        self,
+        participant: CombatParticipant,
+        cast_pull: CastPullDeclaration,
+    ) -> bool:
+        """True when this round's committed pull is the one ``cast_pull`` declares (#4736).
+
+        A pull is one per participant per round. When the web resubmits a focused cast
+        whose pull already committed, the same resonance, tier, threads and burn are a
+        no-op. Any other pull already committed this round is refused.
+
+        The burn matches when one was asked for both times (``burned_for`` is the focused
+        cast) and the committed reach is no more than the request; the stored amount is
+        what the strain check reached, so it can be less than what was asked.
+
+        Raises:
+            ActionDispatchError(PULL_ALREADY_COMMITTED): A different pull is committed.
+        """
+        existing = CombatPull.objects.filter(
+            participant=participant,
+            encounter=self._encounter,
+            round_number=self._encounter.round_number,
+        ).first()
+        if existing is None:
+            return False
+        expected_burned_for = PullBurnAction.CAST if cast_pull.burn > 0 else ""
+        same = (
+            existing.resonance_id == cast_pull.resonance.pk
+            and existing.tier == cast_pull.tier
+            and set(existing.threads.values_list("pk", flat=True))
+            == {thread.pk for thread in cast_pull.threads}
+            and existing.burned_for == expected_burned_for
+            and existing.resonance_burned <= cast_pull.burn
+        )
+        if not same:
+            raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED)
+        return True
 
     @transaction.atomic
     def _record_combat_declaration(

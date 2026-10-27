@@ -1169,7 +1169,10 @@ class ThreadPullPreviewView(APIView):
         technique = None
         technique_id = data.get("technique_id")
         if technique_id is not None:
-            technique = get_object_or_404(Technique, pk=technique_id)
+            # Only a technique she knows: the preview reads its runtime intensity.
+            technique = get_object_or_404(
+                Technique, pk=technique_id, character_grants__character=sheet
+            )
 
         try:
             result = preview_resonance_pull(
