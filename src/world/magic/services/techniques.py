@@ -54,6 +54,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
     from world.magic.models import Resonance, Restriction, Technique
     from world.magic.services.power_terms import ApplicableThread
@@ -182,13 +183,14 @@ class _PullSpend:
             self.raw += points
 
 
-def _pull_spends_for_cast(
+def _pull_spends_for_cast(  # noqa: PLR0913 - the cast, its charged pull, the read gate
     *,
     character: ObjectDB,
     cast_pull: CastPullDeclaration | None,
     cast_pull_spent: int,
     burn_result: ResonanceBurnResult | None,
     combat_burn_for: str = "",
+    read_combat_pulls: bool = True,
 ) -> dict[int, tuple[Resonance, _PullSpend]]:
     """Resonance pk -> what the pulls of this cast spent, burns included.
 
@@ -196,15 +198,20 @@ def _pull_spends_for_cast(
     contributions) and the non-combat cast pull charged with this cast, so a pull's
     spend reaches corruption on both paths. A combat burn is paid once: it counts only
     for the action it was declared with (``combat_burn_for``), valued as it was then.
+
+    ``read_combat_pulls=False`` skips the combat-pull read (one query per caster) when
+    the caller knows no combat pull can add an involvement.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     spends: dict[int, tuple[Resonance, _PullSpend]] = {}
-    try:
-        active_pulls = character.combat_pulls.active()
-    except ObjectDoesNotExist:
-        # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
-        active_pulls = []
+    active_pulls: list[CombatPull] = []
+    if read_combat_pulls:
+        try:
+            active_pulls = character.combat_pulls.active()
+        except ObjectDoesNotExist:
+            # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
+            active_pulls = []
     for pull in active_pulls:
         spend = spends.setdefault(pull.resonance_id, (pull.resonance, _PullSpend()))[1]
         spend.raw += pull.resonance_spent
@@ -278,6 +285,10 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
         cast_pull_spent=cast_pull_spent,
         burn_result=burn_result,
         combat_burn_for=combat_burn_for,
+        # Combat pulls exist only in a combat encounter, whose casts and clash
+        # contributions name ``combat_burn_for``. Any other cast reads them only to add
+        # to its gift's resonances, so with none it skips the per-caster query (#1846).
+        read_combat_pulls=bool(resonances) or bool(combat_burn_for),
     )
     if not resonances and not spends:
         return ()
