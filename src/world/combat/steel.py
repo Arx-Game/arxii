@@ -18,7 +18,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
-from world.combat.models import CombatEncounter, StrainConfig
+from world.combat.models import CombatEncounter
+from world.combat.services.encounter.config import get_strain_config
 from world.combat.surge_rolls import (
     apply_rolled_surge,
     persona_name_of,
@@ -28,7 +29,7 @@ from world.combat.surge_rolls import (
 )
 from world.combat.types import SteelResult
 from world.fatigue.constants import EffortLevel
-from world.fatigue.services import apply_fatigue
+from world.fatigue.services import apply_fatigue, get_or_create_fatigue_pool
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.scenes.constants import RoundStatus
@@ -59,11 +60,6 @@ def combat_engagement_of(participant: CombatParticipant) -> CharacterEngagement 
         source_content_type=ContentType.objects.get_for_model(CombatEncounter),
         source_id=participant.encounter_id,
     ).first()
-
-
-def steel_config() -> StrainConfig:
-    """The ``StrainConfig`` singleton, or an unsaved one carrying the model defaults."""
-    return StrainConfig.objects.filter(pk=1).first() or StrainConfig()
 
 
 def grant_free_steels(engagement: CharacterEngagement, count: int, giver: CharacterSheet) -> None:
@@ -135,11 +131,15 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
     ):
         raise SteelRefusedError(ALREADY_STEELED_MESSAGE)
 
-    config = steel_config()
+    config = get_strain_config()
+    pool = get_or_create_fatigue_pool(participant.character_sheet)
+    held_pool = pool.get_current(config.steel_fatigue_category)
     held = (
         engagement.free_steels,
         engagement.free_steels_given_by,
         engagement.last_steeled_round,
+        engagement.intensity_modifier,
+        engagement.control_modifier,
     )
     committed = False
     try:
@@ -168,15 +168,21 @@ def steel_yourself(participant: CombatParticipant) -> SteelResult:
         committed = True
     finally:
         if not committed:
-            # The database rolled back; the identity-mapped row must say the same.
+            # The database rolled back; the identity-mapped engagement and fatigue pool
+            # must say the same. (An outer transaction that rolls back later is not
+            # covered; the steel itself commits with the request.)
             (
                 engagement.free_steels,
                 engagement.free_steels_given_by,
                 engagement.last_steeled_round,
+                engagement.intensity_modifier,
+                engagement.control_modifier,
             ) = held
+            pool.set_current(config.steel_fatigue_category, held_pool)
     return SteelResult(
         outcome=result.outcome,
         surge_amount=beat.amount if beat is not None else 0,
         used_free_steel=used_free,
         fatigue_spent=fatigue_spent,
+        fatigue_category=config.steel_fatigue_category,
     )

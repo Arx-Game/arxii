@@ -455,6 +455,9 @@ class SteelOfferSerializer(serializers.Serializer):
     free_steels = serializers.IntegerField(help_text="Free steels she holds.")
     fatigue_category = serializers.CharField(help_text="Fatigue pool a steel is paid from.")
     fatigue_cost = serializers.IntegerField(help_text="Fatigue a steel costs without a free one.")
+    steeled_this_round = serializers.BooleanField(
+        help_text="Whether she has already steeled herself this round."
+    )
     given_by = serializers.CharField(
         allow_null=True,
         help_text="Name of the ally whose encouragement gave her free steels, if any.",
@@ -522,14 +525,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """What steeling costs the viewer's own character (#4738); None for anyone else."""
         if not self._is_viewers_own(obj):
             return None
-        from world.combat.steel import steel_config  # noqa: PLC0415
+        from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
 
         engagement = self._combat_engagement(obj)
-        config = steel_config()
+        config = get_strain_config()
         return {
             "free_steels": engagement.free_steels if engagement is not None else 0,
             "fatigue_category": config.steel_fatigue_category,
             "fatigue_cost": config.steel_fatigue_cost,
+            "steeled_this_round": engagement is not None
+            and engagement.last_steeled_round == obj.encounter.round_number,
             "given_by": self._steel_giver_name(engagement),
         }
 

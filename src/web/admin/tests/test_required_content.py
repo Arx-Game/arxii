@@ -1192,10 +1192,12 @@ class TestSurgeTuningProbe(TestCase):
 
     @staticmethod
     def _author(kind: str, *, with_band: bool = True):
+        from world.combat.constants import SurgeTriggerKind
         from world.combat.factories import SurgeDegreeBandFactory, SurgeTuningFactory
         from world.traits.factories import CheckOutcomeFactory
 
-        tuning = SurgeTuningFactory(trigger_kind=kind)
+        potency = 5 if kind == SurgeTriggerKind.STEELED else 0
+        tuning = SurgeTuningFactory(trigger_kind=kind, potency_base=potency)
         if with_band:
             outcome = CheckOutcomeFactory(name=f"Probe Outcome {kind}", success_level=0)
             SurgeDegreeBandFactory(tuning=tuning, outcome=outcome, intensity=3)
@@ -1208,6 +1210,20 @@ class TestSurgeTuningProbe(TestCase):
 
         self.assertEqual(len(result.missing), len(ROLLED_SURGE_TRIGGER_KINDS))
         self.assertTrue(all(line.startswith("SurgeTuning for ") for line in result.missing))
+
+    def test_a_steeled_tuning_with_no_difficulty_is_reported(self) -> None:
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
+
+        for kind in ROLLED_SURGE_TRIGGER_KINDS:
+            self._author(kind)
+        from world.combat.models import SurgeTuning
+
+        SurgeTuning.objects.filter(trigger_kind=SurgeTriggerKind.STEELED).update_with_reason(
+            reason="test setup: strip the difficulty", potency_base=0
+        )
+        result = rc._probe_surge_tuning()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("SurgeTuning for Steeled has no difficulty",))
 
     def test_present_when_every_rolled_kind_has_a_sane_tuning_with_bands(self) -> None:
         from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS

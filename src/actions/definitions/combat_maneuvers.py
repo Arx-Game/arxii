@@ -901,10 +901,15 @@ class SteelYourselfAction(Action):
 
 def _steel_message(result: SteelResult) -> str:
     """The line the player reads after steeling: the outcome and what it cost."""
-    outcome = result.outcome.name if result.outcome is not None else "No result"
-    gain = f"intensity +{result.surge_amount}" if result.surge_amount else "no surge"
-    cost = "a free steel" if result.used_free_steel else f"{result.fatigue_spent} fatigue"
-    return f"You steel yourself. {outcome}: {gain}. Cost: {cost}."
+    gain = (
+        f"Intensity +{result.surge_amount}." if result.surge_amount else "The roll gave no surge."
+    )
+    outcome = f"{result.outcome.name}. " if result.outcome is not None else ""
+    if result.used_free_steel:
+        cost = "a free steel"
+    else:
+        cost = f"{result.fatigue_category} fatigue {result.fatigue_spent}"
+    return f"You steel yourself. {outcome}{gain} Cost: {cost}."
 
 
 @dataclass

@@ -92497,6 +92497,9 @@ components:
         fatigue_cost:
           type: integer
           description: Fatigue a steel costs without a free one.
+        steeled_this_round:
+          type: boolean
+          description: Whether she has already steeled herself this round.
         given_by:
           type: string
           nullable: true
@@ -92507,6 +92510,7 @@ components:
       - fatigue_cost
       - free_steels
       - given_by
+      - steeled_this_round
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.

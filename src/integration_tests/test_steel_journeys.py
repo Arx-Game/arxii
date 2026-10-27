@@ -11,6 +11,8 @@ Rolls are forced with ``force_check_outcome`` so each outcome is the test's choi
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from integration_tests.test_surge_rolls_journeys import _SurgeField
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import SurgeTriggerKind
@@ -68,6 +70,7 @@ class SteelingYourself(_SteelField):
         told = self.steel(self.success)
 
         self.assertIn("You steel yourself.", told)
+        self.assertIn("Cost: mental fatigue 3.", told)
         self.assertEqual(self.intensity(self.mira), SUCCESS_STEEL)
         self.assertEqual(self.mental_fatigue(), FATIGUE_COST)
         self.assertTold(
@@ -138,6 +141,7 @@ class SteelingYourself(_SteelField):
                 "free_steels": 0,
                 "fatigue_category": "mental",
                 "fatigue_cost": FATIGUE_COST,
+                "steeled_this_round": True,
                 "given_by": None,
             },
         )
@@ -159,6 +163,9 @@ class AFailedSteel(_SteelField):
             outcome=self.failure,
             intensity=0,
         )
+
+    def test_the_zero_band_reads_plainly(self) -> None:
+        self.assertIn("The roll gave no surge.", self.steel(self.failure))
 
     def test_a_failure_costs_fatigue_and_cannot_be_rerolled_the_same_round(self) -> None:
         self.steel(self.failure)
@@ -213,6 +220,7 @@ class BeingEncouraged(_SteelField):
         offer = self._mira_s_offer(self.mira)
         self.assertEqual((offer["free_steels"], offer["given_by"]), (1, "Tomas"))
         self.assertIsNone(self._mira_s_offer(self.tomas))
+        self.assertEqual(self.free_steels(self.tomas), 0)
 
         self.close_round()
         self.steel(self.success)
@@ -257,3 +265,45 @@ class SteelingWhereYouCannot(_SteelField):
         self.assertIn("There is nothing to steel yourself with yet.", told)
         self.assertEqual(self.mental_fatigue(), 0)
         self.assertEqual(self.intensity(self.mira), 0)
+
+
+class ARoundThatRollsBack(BeingEncouraged):
+    def test_a_rolled_back_round_leaves_no_free_steel_to_see_or_spend(self) -> None:
+        self.telnet(self.tomas, "combat rally Mira")
+        with (
+            patch(
+                "world.combat.services.declarations.rally._surge_rallied_ally",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            self.resolve(self.success)
+
+        self.assertEqual(self.free_steels(self.mira), 0)
+        self.assertEqual(self._mira_s_offer(self.mira)["free_steels"], 0)
+        self.assertIsNone(self._mira_s_offer(self.mira)["given_by"])
+        self.assertNotTold(self.mira, "free steel")
+
+
+class AFailedSteelWrite(_SteelField):
+    def test_a_steel_that_fails_midway_leaves_the_cached_rows_as_the_database_has_them(
+        self,
+    ) -> None:
+        with (
+            patch("world.combat.steel.apply_rolled_surge", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+            force_check_outcome(self.success),
+        ):
+            self.telnet(self.mira, "combat steel")
+
+        engagement = CharacterEngagement.objects.get(character=self.mira.sheet_data)
+        stored = CharacterEngagement.objects.filter(pk=engagement.pk).values(
+            "last_steeled_round", "intensity_modifier", "control_modifier"
+        )[0]
+        self.assertIsNone(stored["last_steeled_round"])
+        self.assertEqual(engagement.last_steeled_round, stored["last_steeled_round"])
+        self.assertEqual(engagement.intensity_modifier, stored["intensity_modifier"])
+        self.assertEqual(self.mental_fatigue(), 0)
+        # And she may steel afterwards: nothing was spent.
+        self.steel(self.success)
+        self.assertEqual(self.mental_fatigue(), FATIGUE_COST)

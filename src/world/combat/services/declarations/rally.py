@@ -115,22 +115,33 @@ def _grant_free_steels(rallier: CombatParticipant, ally: CombatParticipant) -> N
 
     The count is ``StrainConfig.free_steels_per_encouragement``. A quiet no-op for an ally
     with no combat engagement here or when the count is 0.
-    """
-    from world.combat.steel import (  # noqa: PLC0415
-        combat_engagement_of,
-        grant_free_steels,
-        steel_config,
-    )
 
-    count = steel_config().free_steels_per_encouragement
-    engagement = combat_engagement_of(ally)
-    if count <= 0 or engagement is None:
+    The grant, the cached engagement and the message all wait for the round's transaction
+    to commit (``transaction.on_commit``). The round resolves inside one atomic block, and a
+    round that rolls back would leave the identity-mapped engagement holding a free steel
+    the database never kept; written after the commit, nothing is there to undo and a player
+    never sees or spends a free steel the database does not hold.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
+    from world.combat.steel import combat_engagement_of, grant_free_steels  # noqa: PLC0415
+
+    count = get_strain_config().free_steels_per_encouragement
+    if count <= 0:
         return
-    grant_free_steels(engagement, count, rallier.character_sheet)
-    noun = "a free steel" if count == 1 else f"{count} free steels"
-    ally.character_sheet.character.msg(
-        f"{persona_name_of(rallier)}'s encouragement gives you {noun}."
-    )
+    giver_sheet = rallier.character_sheet
+    giver_name = persona_name_of(rallier)
+
+    def _grant() -> None:
+        engagement = combat_engagement_of(ally)
+        if engagement is None:
+            return
+        grant_free_steels(engagement, count, giver_sheet)
+        noun = "a free steel" if count == 1 else f"{count} free steels"
+        ally.character_sheet.character.msg(f"{giver_name}'s encouragement gives you {noun}.")
+
+    transaction.on_commit(_grant)
 
 
 def _resolve_rally(

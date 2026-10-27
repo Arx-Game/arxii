@@ -4127,8 +4127,9 @@ class SurgeTuning(SharedMemoryModel):
         related_name="surge_tunings",
         help_text=(
             "The check rolled when this beat fires. Staff pick it; the surge service rolls "
-            "it for the surged player character (Taunt Received, Ally Hurt) and for the "
-            "player character doing the rallying (Rallied)."
+            "it for the surged player character (Taunt Received, Ally Hurt), for the "
+            "player character doing the rallying (Rallied) and for the player character "
+            "steeling herself (Steeled)."
         ),
     )
     potency_base = models.PositiveIntegerField(

@@ -465,13 +465,14 @@ class SteelResult:
     ``outcome`` is the resolve roll's outcome (None when the check could not run),
     ``surge_amount`` the intensity the band gave (0 when it gave none), ``used_free_steel``
     whether a free steel was spent in place of fatigue, and ``fatigue_spent`` the fatigue
-    actually charged (0 when a free steel paid).
+    actually charged (0 when a free steel paid) from the pool ``fatigue_category``.
     """
 
     outcome: CheckOutcome | None
     surge_amount: int
     used_free_steel: bool
     fatigue_spent: int
+    fatigue_category: str
 
 
 @dataclass(frozen=True)
