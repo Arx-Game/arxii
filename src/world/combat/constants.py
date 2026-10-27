@@ -113,9 +113,9 @@ class SurgeTriggerKind(models.TextChoices):
 # Surge kinds resolved by a roll with degrees (#4737). Each has one SurgeTuning row
 # and a band per outcome; every other kind is a fixed amount from the EscalationCurve.
 ROLLED_SURGE_TRIGGER_KINDS: tuple[str, ...] = (
-    SurgeTriggerKind.TAUNT_RECEIVED.value,
-    SurgeTriggerKind.RALLIED.value,
-    SurgeTriggerKind.ALLY_HURT.value,
+    SurgeTriggerKind.TAUNT_RECEIVED,
+    SurgeTriggerKind.RALLIED,
+    SurgeTriggerKind.ALLY_HURT,
 )
 
 
