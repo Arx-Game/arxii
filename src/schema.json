@@ -9418,6 +9418,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/steel/:
+    post:
+      operationId: combat_steel_create
+      description: |-
+        Steel yourself: roll resolve to raise your own intensity (#4738).
+
+        An immediate act, once a round. A refusal carries the rules' own message.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/taunt/:
     post:
       operationId: combat_taunt_create
@@ -78228,6 +78259,11 @@ components:
           - $ref: '#/components/schemas/DodgePlan'
           nullable: true
           readOnly: true
+        steel:
+          allOf:
+          - $ref: '#/components/schemas/SteelOffer'
+          nullable: true
+          readOnly: true
       required:
       - active_conditions
       - aftermath
@@ -78246,6 +78282,7 @@ components:
       - intensity_modifier
       - max_health
       - reactions_used
+      - steel
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -92446,6 +92483,24 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    SteelOffer:
+      type: object
+      description: What steeling herself costs the viewer's own character right now
+        (#4738); read-only.
+      properties:
+        free_steels:
+          type: integer
+          description: Free steels she holds.
+        fatigue_category:
+          type: string
+          description: Fatigue pool a steel is paid from.
+        fatigue_cost:
+          type: integer
+          description: Fatigue a steel costs without a free one.
+      required:
+      - fatigue_category
+      - fatigue_cost
+      - free_steels
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.

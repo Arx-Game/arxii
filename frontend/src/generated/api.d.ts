@@ -6459,6 +6459,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/steel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Steel yourself: roll resolve to raise your own intensity (#4738).
+     *
+     *     An immediate act, once a round. A refusal carries the rules' own message.
+     */
+    post: operations['combat_steel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/taunt/': {
     parameters: {
       query?: never;
@@ -44527,6 +44548,7 @@ export interface components {
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
       readonly dodge_plan: components['schemas']['DodgePlan'] | null;
+      readonly steel: components['schemas']['SteelOffer'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -51594,6 +51616,15 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description What steeling herself costs the viewer's own character right now (#4738); read-only. */
+    SteelOffer: {
+      /** @description Free steels she holds. */
+      free_steels: number;
+      /** @description Fatigue pool a steel is paid from. */
+      fatigue_category: string;
+      /** @description Fatigue a steel costs without a free one. */
+      fatigue_cost: number;
+    };
     /** @description What the panel's send or dismiss reports back. */
     StewardActionResult: {
       detail: string;
@@ -63223,6 +63254,32 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['StandoffMoraleRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_steel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
       };
     };
     responses: {

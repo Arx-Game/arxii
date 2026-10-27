@@ -285,6 +285,7 @@ function makeParticipant(
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    steel: null,
   };
 }
 

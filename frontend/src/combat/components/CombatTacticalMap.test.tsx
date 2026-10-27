@@ -282,6 +282,7 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            steel: null,
           },
         ],
         opponents: [
@@ -383,6 +384,7 @@ describe('CombatTacticalMap', () => {
       aftermath: null,
       reactions_used: null,
       dodge_plan: null,
+      steel: null,
     },
     {
       id: 3,
@@ -405,6 +407,7 @@ describe('CombatTacticalMap', () => {
       aftermath: null,
       reactions_used: null,
       dodge_plan: null,
+      steel: null,
     },
   ];
   const overlayOpponents = [
@@ -822,6 +825,7 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            steel: null,
           },
         ],
         opponents: [],
@@ -967,6 +971,7 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            steel: null,
             current_square: null,
             current_position: { id: 101, name: 'North Wall' },
           },
