@@ -123,9 +123,10 @@ def _move_partial(  # noqa: PLR0913
     share. Returns ``(granted_balance, granted_lifetime)``.
     """
     if cr.balance > 0:
-        lifetime_fraction = int(
-            (Decimal(amount_to_convert) / Decimal(cr.balance)) * Decimal(cr.lifetime_earned)
-        )
+        # Integer arithmetic: exact when the ratio is whole (4 of a 30 balance with 30
+        # lifetime moves 4), rounded down on a true fraction. Dividing first in Decimal
+        # gave 3.999... and truncated to 3.
+        lifetime_fraction = amount_to_convert * cr.lifetime_earned // cr.balance
     else:
         lifetime_fraction = 0
 

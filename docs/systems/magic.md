@@ -3991,7 +3991,9 @@ balance ahead of the rolled-back table. The cap shrinks by what converted; an em
 deleted, and the offer with it when no cap is left. A tier with no share row is refused up
 front by `_require_every_share`; a tier whose share is 0.00 converts nothing, spends the
 offering and leaves the cap intact. Source and target lifetime move by the proportional share, so the
-aura follows (`recompute_aura`).
+aura follows (`recompute_aura`). `_move_partial` (`conversion.py`, shared with the Rite of
+Atonement) works that share out in integers as `amount x lifetime // balance`: exact when the
+ratio is whole (4 of a 30 balance with 30 lifetime moves 4), rounded down on a true fraction.
 
 **Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`
 (exclusive with `item_template` and `min_touchstone_tier`), with optional `min_item_meaning`

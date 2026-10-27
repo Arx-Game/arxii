@@ -87,3 +87,49 @@ class ConvertResonanceAmountTests(TestCase):
             ).exists()
         )
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
+
+
+class ProportionalLifetimeIsExactTests(TestCase):
+    """The lifetime share moved is ``amount x lifetime // balance``, never one short."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+        cls.celestial = ResonanceFactory(affinity=AffinityFactory(name="Celestial"))
+
+    def _hold(self, balance: int, lifetime: int) -> None:
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.abyssal,
+            balance=balance,
+            lifetime_earned=lifetime,
+        )
+
+    def _convert(self, amount: int) -> tuple[int, int]:
+        return convert_resonance_amount(
+            self.sheet,
+            source_resonance=self.abyssal,
+            target_resonance=self.celestial,
+            amount=amount,
+            multiplier=Decimal("0.5"),
+            gain_source=GainSource.DRIFT_CORRECTION,
+        )
+
+    def _lifetime(self, resonance: Resonance) -> int:
+        return CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=resonance
+        ).lifetime_earned
+
+    def test_four_of_a_thirty_balance_with_thirty_lifetime_moves_four(self) -> None:
+        # 4/30 x 30 in Decimal is 3.999... and truncated to 3; 4 x 30 // 30 is 4.
+        self._hold(30, 30)
+        self.assertEqual(self._convert(4), (2, 4))
+        self.assertEqual(self._lifetime(self.abyssal), 26)
+        self.assertEqual(self._lifetime(self.celestial), 4)
+
+    def test_a_true_fraction_rounds_down(self) -> None:
+        # 4 x 40 / 30 is 5.33..., so 5 moves.
+        self._hold(30, 40)
+        self.assertEqual(self._convert(4), (2, 5))
+        self.assertEqual(self._lifetime(self.abyssal), 35)
