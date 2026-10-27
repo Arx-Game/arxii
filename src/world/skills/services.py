@@ -638,12 +638,9 @@ def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> s
     # Pay off rust first — always, even when parked at a boundary.
     remaining = dev_points
     if skill_value.rust_points > 0:
-        if remaining >= skill_value.rust_points:
-            remaining -= skill_value.rust_points
-            skill_value.rust_points = 0
-        else:
-            skill_value.rust_points -= remaining
-            remaining = 0
+        rust_paid = min(remaining, skill_value.rust_points)
+        skill_value.rust_points -= rust_paid
+        remaining -= rust_paid
 
     if cap is not None and skill_value.value >= cap:
         message = skill_cap_message(skill_value.skill.name, cap) if remaining else None
