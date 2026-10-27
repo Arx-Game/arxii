@@ -2871,6 +2871,7 @@ class DriftCorrectionOutcomeShareAdmin(admin.ModelAdmin):
 
 class DriftConversionCapInline(admin.TabularInline):
     model = DriftConversionCap
+    formset = OneRowPerFormSet
     extra = 0
     can_delete = False
     raw_id_fields = ("target_resonance", "grants")
