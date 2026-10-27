@@ -310,6 +310,7 @@ describe('SurgeBeats', () => {
     expect(screen.getByTestId('surge-beat-line')).toHaveTextContent(
       "Kira's power surges with sudden, dramatic force."
     );
+    expect(screen.getByTestId('surge-beat-narration')).toBeInTheDocument();
   });
 
   it('shows the roll line under a surge beat for the owner', () => {
@@ -348,6 +349,44 @@ describe('SurgeBeats', () => {
 
     expect(screen.getByTestId('surge-beat-line')).toBeInTheDocument();
     expect(screen.queryByTestId('surge-beat-roll')).not.toBeInTheDocument();
+  });
+
+  it('shows only the roll line when a beat has no narration', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [
+        {
+          id: 4,
+          narration: '',
+          trigger_kind: 'rallied',
+          amount: 0,
+          participant: 1,
+          outcome: 'Partial',
+          potency: null,
+          control_change: -2,
+          condition: null,
+          roll: 'Rally check. Partial. Intensity +0, control -2.',
+        },
+      ],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-roll')).toHaveTextContent(
+      'Rally check. Partial. Intensity +0, control -2.'
+    );
+    expect(screen.queryByTestId('surge-beat-narration')).not.toBeInTheDocument();
+  });
+
+  it('renders no card for a beat with neither narration nor roll line', () => {
+    const encounter = makeEncounter([], [], 1, {
+      surge_beats: [{ id: 5, narration: '' }],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('surge-beat-line')).not.toBeInTheDocument();
   });
 
   it('renders nothing when there are no surge beats this round', () => {

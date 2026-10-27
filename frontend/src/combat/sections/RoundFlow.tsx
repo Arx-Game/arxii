@@ -109,18 +109,27 @@ function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
 
 function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
   const beats: SurgeBeatTyped[] = encounter.surge_beats ?? [];
-  if (beats.length === 0) {
+  // A beat with neither a narration line nor a roll line has nothing to show.
+  const shown = beats.filter((beat) => beat.narration || beat.roll);
+  if (shown.length === 0) {
     return null;
   }
   return (
     <div className="space-y-1" data-testid="surge-beats">
-      {beats.map((beat) => (
+      {shown.map((beat) => (
         <div
           key={beat.id}
           className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1"
           data-testid="surge-beat-line"
         >
-          <p className="text-xs font-semibold italic text-rose-300">{beat.narration}</p>
+          {beat.narration && (
+            <p
+              className="text-xs font-semibold italic text-rose-300"
+              data-testid="surge-beat-narration"
+            >
+              {beat.narration}
+            </p>
+          )}
           {beat.roll && (
             <p
               className="mt-0.5 font-mono text-[10px] text-muted-foreground"
