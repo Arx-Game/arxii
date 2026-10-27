@@ -242,7 +242,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         # Convert 12 Ruin at a full share: 12 x 0.5 = 6 Dawnlight.
         with force_check_outcome(self.outcomes["Success"]):
             told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 12")
-        self.assertIn("12 Ruin became 6 Dawnlight.", told)
+        self.assertIn("Success: 12 Ruin became 6 Dawnlight.", told)
         self.assertEqual(balance(self.ysmay, self.ruin), 30 - 12)
         # 20 + 20 from the two deeds, +6 from the rite.
         self.assertEqual(balance(self.ysmay, self.dawnlight), 46)
@@ -265,7 +265,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
             told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight")
         # Cap 10, 30 Ruin held: 10 Ruin -> int(10 x 0.5) = 5 Dawnlight; the cap is spent,
         # so the offer is gone.
-        self.assertIn("10 Ruin became 5 Dawnlight.", told)
+        self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
         self.assertEqual(balance(self.ysmay, self.ruin), 20)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 25)
         self.assertIsNone(self.offer_of(self.ysmay))
@@ -321,7 +321,7 @@ class CorrectingDriftAtTheKeyboard(DriftJourneyCase):
         cloak_pk = cloak.pk
         with force_check_outcome(self.outcomes["Success"]):
             told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10 with cloak")
-        self.assertIn("10 Ruin became 5 Dawnlight.", told)
+        self.assertIn("Success: 10 Ruin became 5 Dawnlight.", told)
         self.assertTrue(consumed(cloak_pk))
         self.assertEqual(balance(self.ysmay, self.ruin), 20)
 
@@ -357,12 +357,13 @@ class LettingTheChancePassOrFailingTheRite(DriftJourneyCase):
 
     def test_a_half_share_converts_half_and_keeps_the_rest_of_the_cap(self) -> None:
         thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
-        self.set_shares(Success="0.50")
+        self.set_shares(**{"Partial Success": "0.50"})
         self.deed(self.ysmay)
-        with force_check_outcome(self.outcomes["Success"]):
+        with force_check_outcome(self.outcomes["Partial Success"]):
             told = self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 10")
         # Half of 10 is 5 Ruin, which is 5 x 0.5 = 2 Dawnlight (floored); the cap falls by 5.
-        self.assertIn("5 Ruin became 2 Dawnlight.", told)
+        # The tier leads the line, so a partial conversion never reads as a full one.
+        self.assertIn("Partial Success: 5 Ruin became 2 Dawnlight.", told)
         self.assertTrue(consumed(thread))
         self.assertEqual(balance(self.ysmay, self.ruin), 25)
         self.assertEqual(balance(self.ysmay, self.dawnlight), 22)
@@ -674,7 +675,7 @@ class AFallingCharacterCorrectsTheOtherWay(DriftJourneyCase):
 
         with force_check_outcome(self.outcomes["Success"]):
             told = self.telnet(bram, "drift convert Dawnlight=Ruin 10")
-        self.assertIn("10 Dawnlight became 15 Ruin.", told)
+        self.assertIn("Success: 10 Dawnlight became 15 Ruin.", told)
         self.assertEqual(balance(bram, self.dawnlight), 20)
         # 20 from the deed + 15 from the rite.
         self.assertEqual(balance(bram, self.ruin), 35)

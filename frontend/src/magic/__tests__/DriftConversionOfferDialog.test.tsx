@@ -256,10 +256,10 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
         component_ids: [502],
       });
     });
-    const line = await screen.findByTestId('drift-result');
-    expect(line).toHaveTextContent('Partial Success');
-    expect(line).toHaveTextContent('8 Ruin');
-    expect(line).toHaveTextContent('4 Dawnlight');
+    // The same words the telnet verb and the action send: the tier leads the line.
+    expect(await screen.findByTestId('drift-result')).toHaveTextContent(
+      /^Partial Success: 8 Ruin became 4 Dawnlight\.$/
+    );
   });
 
   it('says the rite fails, in the telnet words, when nothing converted', async () => {

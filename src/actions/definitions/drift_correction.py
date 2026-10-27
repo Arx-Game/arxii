@@ -90,7 +90,7 @@ class PerformDriftCorrectionAction(Action):
             message = "The rite fails; nothing is converted."
         else:
             message = (
-                f"{result.converted_amount} {source_resonance.name} became "
+                f"{result.outcome_name}: {result.converted_amount} {source_resonance.name} became "
                 f"{result.granted_amount} {target_resonance.name}."
             )
         return ActionResult(

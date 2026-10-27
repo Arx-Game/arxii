@@ -40,10 +40,17 @@ class PerformDriftCorrectionActionTests(DriftActionTestBase):
         self.assertIsInstance(get_action("perform_drift_correction"), PerformDriftCorrectionAction)
         self.assertIsInstance(get_action("decline_drift_correction"), DeclineDriftCorrectionAction)
 
+    def test_a_partial_success_is_named_so_it_does_not_read_as_a_full_conversion(self) -> None:
+        self.set_shares(**{"Partial Success": "0.50"})
+        result = self.perform(tier="Partial Success")
+        self.assertTrue(result.success, result.message)
+        # Half of 12 is 6 Drift Dread, which is 6 x 0.5 = 3 Drift Dawnlight.
+        self.assertEqual(result.message, "Partial Success: 6 Drift Dread became 3 Drift Dawnlight.")
+
     def test_success_states_what_moved(self) -> None:
         result = self.perform()
         self.assertTrue(result.success, result.message)
-        self.assertEqual(result.message, "12 Drift Dread became 6 Drift Dawnlight.")
+        self.assertEqual(result.message, "Success: 12 Drift Dread became 6 Drift Dawnlight.")
         rite = result.data["drift_correction_result"]
         self.assertEqual((rite.converted_amount, rite.granted_amount), (12, 6))
         self.assertTrue(_consumed(self.component_pk))

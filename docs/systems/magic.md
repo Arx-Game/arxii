@@ -4010,7 +4010,9 @@ modifier target + `touchstone_cast_bonus`. It adds to the check, not to the outp
 `ConversionMappingError` for an unauthored pair; `RitualComponentError` for the offering.
 
 **Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
-(`actions/definitions/drift_correction.py`); telnet `drift`, `drift convert <from>=<into>
+(`actions/definitions/drift_correction.py`); the rite's result line leads with the outcome tier
+("Partial Success: 4 Ruin became 2 Dawnlight.", or "The rite fails; nothing is converted." when
+nothing converts), and the web dialog composes the same words from the result; telnet `drift`, `drift convert <from>=<into>
 [<amount>] [with <item>]` (by default offers every carried item except those that count only
 as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
 keepsake to spend instead), `drift decline`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
