@@ -1055,10 +1055,6 @@ def learn_style(
     )
 
 
-def _self_name(alt: AlternateSelf) -> str:
-    return alt.display_name or "an alternate self"
-
-
 def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) -> bool:
     """Put her in the alternate self whose reveal card she chose at Audere (#4731).
 
@@ -1080,7 +1076,9 @@ def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) 
     from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
     active = (
-        ActiveAlternateSelf.objects.filter(character=sheet).select_related("alternate_self").first()
+        ActiveAlternateSelf.objects.filter(character=sheet)
+        .select_related("alternate_self__persona")
+        .first()
     )
     worn = None if active is None else active.alternate_self
     if worn is not None and worn.pk == alt.pk:
@@ -1091,8 +1089,8 @@ def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) 
                 revert_alternate_self(sheet)
         except RevertBlockedError:
             sheet.character.msg(
-                f"You cannot leave {_self_name(worn)} while not in control of yourself, "
-                f"so {_self_name(alt)} does not come out."
+                f"You cannot leave {worn.shown_name} while not in control of yourself, "
+                f"so {alt.shown_name} does not come out."
             )
             return False
         except (AlternateSelfActiveError, FormOwnershipError, ActivePersonaError):
@@ -1128,7 +1126,7 @@ def assume_alternate_self_for_audere(sheet: CharacterSheet, alt: AlternateSelf) 
             exc_info=True,
         )
         return False
-    sheet.character.msg(f"You assume {_self_name(alt)}.")
+    sheet.character.msg(f"You assume {alt.shown_name}.")
     return True
 
 

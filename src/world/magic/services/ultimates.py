@@ -270,7 +270,7 @@ def _alternate_self_pools(sheet: CharacterSheet) -> list[_Pool]:
         AlternateSelf.ultimate_techniques.through.objects.filter(
             alternateself__character=sheet, technique__is_ultimate=True
         )
-        .select_related("alternateself", "technique")
+        .select_related("alternateself__persona", "technique")
         .order_by("alternateself__display_name", "alternateself_id")
     )
     selves: dict[int, AlternateSelf] = {}

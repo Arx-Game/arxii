@@ -2703,7 +2703,7 @@ class UltimateRevealGroupSerializer(serializers.Serializer):
         return group.companion.name if group.companion is not None else ""
 
     def get_alternate_self_name(self, group) -> str:
-        return group.alternate_self.display_name if group.alternate_self is not None else ""
+        return group.alternate_self.shown_name if group.alternate_self is not None else ""
 
 
 class UltimateRevealSerializer(serializers.Serializer):

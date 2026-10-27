@@ -665,6 +665,16 @@ class AlternateSelf(SharedMemoryModel):
     def __str__(self) -> str:
         return self.display_name or f"{self.character} alt-self"
 
+    @property
+    def shown_name(self) -> str:
+        """The name a player reads for this self: its display name, else its persona's
+        name, else "an alternate self" (#4731). Never ``__str__``, which names the sheet."""
+        if self.display_name:
+            return self.display_name
+        if self.persona is not None:
+            return self.persona.name
+        return "an alternate self"
+
     def clean(self) -> None:
         super().clean()
         if self.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:

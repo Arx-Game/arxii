@@ -229,6 +229,28 @@ class EverySelfWithUltimatesIsABondCard(_AudereSelfJourney):
         self.assertEqual(self._worn(), ashen)
         self.assertEqual(acting_aura(self.sheet).percent_for(self.abyssal), Decimal(100))
 
+    def test_a_self_with_no_display_name_is_named_by_its_persona_or_generically(
+        self,
+    ) -> None:
+        self.quiet.display_name = ""
+        self.quiet.persona = PersonaFactory(name="Wren of the Ash")
+        self.quiet.save(update_fields=["display_name", "persona"])
+        nameless = AlternateSelfFactory(character=self.sheet, display_name="")
+        nameless.ultimate_techniques.add(self.cinder_crown)
+
+        listing = self._surge()
+
+        self.assertIn("(undiscovered; bond: Wren of the Ash)", listing)
+        self.assertIn("(undiscovered; bond: an alternate self)", listing)
+        self.assertNotIn("bond: )", listing)
+        state = self.api(self.account_of(self.character)).get(
+            _ULTIMATES_URL, {"character_sheet_id": self.sheet.pk}
+        )
+        self.assertEqual(
+            sorted(g["alternate_self_name"] for g in state.json()["reveal"]["groups"]),
+            ["Wren of the Ash", "an alternate self"],
+        )
+
     def test_a_character_whose_selves_carry_no_ultimates_sees_no_self_card(self) -> None:
         self.quiet.ultimate_techniques.clear()
         listing = self._surge()
