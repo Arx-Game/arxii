@@ -8553,6 +8553,24 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
   `integration_tests/test_surge_rolls_journeys.py`, `test_taunt_targets_journeys.py`.
   Architecture: `docs/architecture/runtime-modifiers-audere.md`.
+- **Emotional conditions feed intensity (#4739, ADR-4737 amendment) [BUILT & WIRED, INERT
+  UNTIL STAFF AUTHOR CONTENT]:** `world/combat/condition_surges.py`:
+  `condition_intensity_by_target(character_ids) -> dict[int, tuple[int, list[str]]]` (one
+  query: per character the summed `current_stage.intensity_per_round` of active,
+  unsuppressed, unresolved instances, and the condition names), `condition_feeds_intensity(
+  condition_ids) -> set[int]` (templates with any stage above 0), and
+  `apply_condition_intensity_surges(encounter) -> list[DramaticSurgeBeat]`, called by
+  `begin_declaration_phase` right after `apply_escalation_tick` and only when the encounter
+  has an escalation curve. One `CONDITION_FED` record per ACTIVE player character per round
+  (`repeat_round` = round, no outcome; nothing for a sum of 0; NPC opponents never), with
+  `narrate=False` and cause "<names> feed(s) <persona>'s intensity."; the player is sent
+  "<names> · Intensity +<total>" on commit and the web reads the same record in
+  `surge_beats`. Which conditions feed is the stage field, never a name.
+  `validate_surge_bands(bands, *, feeding_condition_ids=None)` treats a feeding condition
+  as a benefit (a better outcome may add one, may not drop one) and refuses one on a band
+  whose outcome has success level below 1 (model `clean`, admin inline formset and
+  `check_stored_surge_bands` alike). Journey:
+  `integration_tests/test_emotional_condition_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT; call sites move in later #4739 tasks]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the

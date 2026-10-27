@@ -189,8 +189,12 @@ The authored `SurgeTuning` row for one rolled surge kind (unique per `trigger_ki
 _Avoid_: surge config, surge rule
 
 **Degree Band** (#4737):
-A `SurgeDegreeBand` row: what one roll outcome does for one Surge Tuning (`intensity`, `control_change`, an optional `condition`). One band per outcome; a roll with no band of its own takes the nearest worse band, or the lowest. A better outcome never gives a lower beneficial number, checked as a set on save (`surge_bands.validate_surge_bands`, the model `clean` and the admin inline formset). A compulsion such as Goaded is an ordinary authored `ConditionTemplate` attached to a band; it is a debuff with its own effects, not a code term and not a targeting lock.
+A `SurgeDegreeBand` row: what one roll outcome does for one Surge Tuning (`intensity`, `control_change`, an optional `condition`). One band per outcome; a roll with no band of its own takes the nearest worse band, or the lowest. A better outcome never gives a lower beneficial number, checked as a set on save (`surge_bands.validate_surge_bands`, the model `clean` and the admin inline formset). A compulsion such as Goaded is an ordinary authored `ConditionTemplate` attached to a band; it is a debuff with its own effects, not a code term and not a targeting lock. A band's condition is a cost unless it is a **Feeding Condition** (#4739): that one is a benefit, and a band on a failed roll (success level below 1) may not carry it.
 _Avoid_: tier, step, result row
+
+**Feeding Condition** (#4739, ADR-4737 amendment):
+An emotional condition whose current stage has `intensity_per_round` above 0 (Anger, at that stage). At each round opening of an encounter with an escalation curve, every active player character gets one `CONDITION_FED` Dramatic Surge for the plain sum over their active, unsuppressed, unresolved feeding conditions (`condition_surges.apply_condition_intensity_surges`), is told "<names> · Intensity +<total>", and reads the record's cause in the round payload; nothing is written for a sum of 0 and NPC opponents never surge. Found by the stage field, never by name. On a Degree Band it is a benefit, never on a failed roll.
+_Avoid_: emotion buff, rage meter, mood
 
 **Taunt Potency** (#4737):
 `ThreatPoolEntry.taunt_potency`: the number a targeted player character rolls Composure against when an NPC opponent uses that entry. An entry with a taunt potency deals no damage and carries no defense check, on-hit pool or applied conditions (`clean` rejects them), the NPC does not roll, and it acts on player characters only. It is per pool entry because the entry is what an opponent does. Between players the potency is the taunter's check rating for the Taunt check type, clamped at 0 (an owner call of 2026-10-27), not a rolled result.
