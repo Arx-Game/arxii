@@ -50,9 +50,7 @@ def build_audere_gate_fixture(*, tier_suffix: str) -> AudereGateFixture:
     )
 
     minor_tier = IntensityTierFactory(name=f"Minor_{tier_suffix}", threshold=1, control_modifier=0)
-    major_tier = IntensityTierFactory(
-        name=f"Major_{tier_suffix}", threshold=15, control_modifier=-5
-    )
+    major_tier = IntensityTierFactory(name=f"Major_{tier_suffix}", threshold=15, control_modifier=0)
     threshold = AudereThresholdFactory(
         minimum_intensity_tier=major_tier,
         minimum_warp_stage=soulfray_stage,

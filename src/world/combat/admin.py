@@ -1,6 +1,8 @@
 """Django admin configuration for the combat system."""
 
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 
 from world.admin_utils import OneRowPerFormSet
 from world.combat.constants import COMBO_MIN_SLOTS
@@ -45,10 +47,13 @@ from world.combat.models import (
     StakesLevelRequirement,
     StrainBurnReach,
     StrainConfig,
+    SurgeDegreeBand,
+    SurgeTuning,
     ThreatPool,
     ThreatPoolEntry,
     ThreatRecord,
 )
+from world.combat.surge_bands import validate_surge_bands
 
 
 class CombatOpponentInline(admin.TabularInline):
@@ -136,6 +141,7 @@ class ThreatPoolEntryInline(admin.TabularInline):
         "name",
         "attack_category",
         "base_damage",
+        "taunt_potency",
         "defense_check_type",
         "weight",
         "targeting_mode",
@@ -158,6 +164,7 @@ class ThreatPoolEntryAdmin(admin.ModelAdmin):
         "pool",
         "attack_category",
         "base_damage",
+        "taunt_potency",
         "defense_check_type",
         "weight",
         "targeting_mode",
@@ -438,6 +445,52 @@ class ClashConfigAdmin(admin.ModelAdmin):
 class EscalationCurveAdmin(admin.ModelAdmin):
     list_display = ("name", "start_round", "intensity_step", "max_escalation_level")
     search_fields = ("name",)
+
+
+class SurgeDegreeBandForm(forms.ModelForm):
+    """Inline row form: the formset owns the cross-row rule, so skip the stored-sibling check."""
+
+    def _post_clean(self) -> None:
+        self.instance.validate_against_stored_siblings = False
+        try:
+            super()._post_clean()
+        finally:
+            # Drop the instance attribute so the idmapper-shared row reverts to the class
+            # default for any later plain full_clean().
+            del self.instance.validate_against_stored_siblings
+
+
+class SurgeDegreeBandFormSet(OneRowPerFormSet):
+    """Checks the in-flight set of bands is monotonic before it is saved (#4737)."""
+
+    def clean(self) -> None:
+        super().clean()
+        if any(self.errors):
+            return
+        bands = [
+            form.instance
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("outcome") is not None
+        ]
+        problems = validate_surge_bands(bands)
+        if problems:
+            raise ValidationError(problems)
+
+
+class SurgeDegreeBandInline(admin.TabularInline):
+    model = SurgeDegreeBand
+    form = SurgeDegreeBandForm
+    formset = SurgeDegreeBandFormSet
+    extra = 0
+    fields = ["outcome", "intensity", "control_change", "condition"]
+
+
+@admin.register(SurgeTuning)
+class SurgeTuningAdmin(admin.ModelAdmin):
+    list_display = ("trigger_kind", "check_type", "potency_base", "potency_per_depth")
+    inlines = [SurgeDegreeBandInline]
 
 
 # =============================================================================

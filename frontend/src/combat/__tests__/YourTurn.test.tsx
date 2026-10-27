@@ -1232,6 +1232,51 @@ describe('YourTurn — cover declaration', () => {
     expect(screen.queryByTestId('cover-control')).not.toBeInTheDocument();
   });
 
+  it('shows a taunt-declared badge naming the ally a taunt is aimed at', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5), makeParticipant(7, 'Tomas')],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'taunt',
+          is_ready: true,
+          focused_ally_target: 7,
+          focused_opponent_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('taunt-declared-badge')).toHaveTextContent('Taunting Tomas');
+  });
+
+  it('names the opponent when the taunt is aimed at one', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      opponents: [makeOpponentFixture({ id: 20, name: 'Bandit' })],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'taunt',
+          is_ready: true,
+          focused_ally_target: null,
+          focused_opponent_target: 20,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('taunt-declared-badge')).toHaveTextContent('Taunting Bandit');
+  });
+
   it('cover confirm posts ally participant id via useCoverMutation', async () => {
     setupMocks();
     const encounter = makeEncounter({

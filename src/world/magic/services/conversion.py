@@ -106,29 +106,30 @@ def _resolve_target_resonance(
 
 
 @transaction.atomic
-def _convert_partial(
+def _move_partial(  # noqa: PLR0913
     cr: CharacterResonance,
     character_sheet: CharacterSheet,
     target_resonance: Resonance,
-    multiplier: Decimal,
-    penance_amount: int | None,
-) -> tuple[int, int] | None:
-    """Partial conversion: convert a portion of balance back (Atonement)."""
-    amount_to_convert = min(
-        penance_amount if penance_amount is not None else cr.balance,
-        cr.balance,
-    )
-    if amount_to_convert <= 0:
-        return None
+    *,
+    amount_to_convert: int,
+    granted_balance: int,
+    gain_source: str,
+) -> tuple[int, int]:
+    """Move ``amount_to_convert`` of ``cr``'s balance, with its share of lifetime, across.
 
+    The lifetime share is proportional to the fraction of balance moved. The target
+    receives ``granted_balance`` through ``grant_resonance`` (which writes the audit
+    row under ``gain_source``), then its lifetime is corrected to the transferred
+    share. Returns ``(granted_balance, granted_lifetime)``.
+    """
     if cr.balance > 0:
-        lifetime_fraction = int(
-            (Decimal(amount_to_convert) / Decimal(cr.balance)) * Decimal(cr.lifetime_earned)
-        )
+        # Integer arithmetic: exact when the ratio is whole (4 of a 30 balance with 30
+        # lifetime moves 4), rounded down on a true fraction. Dividing first in Decimal
+        # gave 3.999... and truncated to 3.
+        lifetime_fraction = amount_to_convert * cr.lifetime_earned // cr.balance
     else:
         lifetime_fraction = 0
 
-    granted_balance = int(Decimal(amount_to_convert) * multiplier)
     granted_lifetime = lifetime_fraction
 
     cr.balance -= amount_to_convert
@@ -140,7 +141,7 @@ def _convert_partial(
             character_sheet,
             target_resonance,
             granted_balance,
-            source=GainSource.PENANCE,
+            source=gain_source,
         )
         # grant_resonance added granted_balance to lifetime_earned;
         # we want the transferred fraction instead.
@@ -153,6 +154,77 @@ def _convert_partial(
             target_cr.save(update_fields=["lifetime_earned"])
 
     return granted_balance, granted_lifetime
+
+
+def _convert_partial(  # noqa: PLR0913
+    cr: CharacterResonance,
+    character_sheet: CharacterSheet,
+    target_resonance: Resonance,
+    multiplier: Decimal,
+    penance_amount: int | None,
+    gain_source: str = GainSource.PENANCE,
+) -> tuple[int, int] | None:
+    """Partial conversion: convert a portion of balance back (Atonement)."""
+    amount_to_convert = min(
+        penance_amount if penance_amount is not None else cr.balance,
+        cr.balance,
+    )
+    if amount_to_convert <= 0:
+        return None
+
+    return _move_partial(
+        cr,
+        character_sheet,
+        target_resonance,
+        amount_to_convert=amount_to_convert,
+        granted_balance=int(Decimal(amount_to_convert) * multiplier),
+        gain_source=gain_source,
+    )
+
+
+@transaction.atomic
+def convert_resonance_amount(  # noqa: PLR0913
+    character_sheet: CharacterSheet,
+    *,
+    source_resonance: Resonance,
+    target_resonance: Resonance,
+    amount: int,
+    multiplier: Decimal,
+    gain_source: str,
+) -> tuple[int, int]:
+    """Convert ``amount`` of one resonance's balance into another resonance.
+
+    A proportional share of the source's lifetime_earned moves with it, so
+    ``recompute_aura`` follows the move. Unlike the Atonement path, an uphill
+    conversion always leaves the target more than zero: a multiplier that floors
+    the grant to 0 still grants 1. Returns ``(granted_balance, granted_lifetime)``.
+
+    Raises ValueError when ``amount`` is not positive, exceeds the source balance,
+    or the character holds no row for the source resonance.
+    """
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    try:
+        cr = CharacterResonance.objects.get(
+            character_sheet=character_sheet, resonance=source_resonance
+        )
+    except CharacterResonance.DoesNotExist as exc:
+        msg = f"The character holds no {source_resonance.name} resonance to convert."
+        raise ValueError(msg) from exc
+    if amount <= 0 or amount > cr.balance:
+        msg = f"Cannot convert {amount} of a {cr.balance} balance."
+        raise ValueError(msg)
+
+    result = _move_partial(
+        cr,
+        character_sheet,
+        target_resonance,
+        amount_to_convert=amount,
+        granted_balance=max(1, int(Decimal(amount) * multiplier)),
+        gain_source=gain_source,
+    )
+    recompute_aura(character_sheet)
+    return result
 
 
 def _convert_full(

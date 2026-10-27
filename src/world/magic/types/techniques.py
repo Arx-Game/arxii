@@ -22,7 +22,7 @@ class RuntimeTechniqueStats:
     - Identity modifiers (CharacterModifier targeting technique_stat category)
     - Process modifiers (CharacterEngagement.intensity_modifier / control_modifier)
     - Social safety bonus (+10 control when character is not engaged)
-    - IntensityTier control modifier (penalty applied based on final runtime intensity)
+    - IntensityTier control modifier (a bonus, never a penalty, by final runtime intensity)
     """
 
     intensity: int

@@ -891,3 +891,32 @@ class ResonanceBurnInvalid(MagicError):
     """A burn amount that is not a whole number from 0 up (#4736)."""
 
     user_message = "A burn must be a whole number of resonance, 0 or more."
+
+
+class DriftCorrectionError(MagicError):
+    """Base for refusals of the drift correction rite (#4733, slice 4 of #4672)."""
+
+    user_message = "The rite of correction cannot be performed."
+
+
+class DriftCorrectionNotConfiguredError(DriftCorrectionError):
+    """The rite, its check type, or the outcome share for the rolled tier is unauthored."""
+
+    user_message = "The rite of correction is not set up yet; tell staff."
+
+
+class DriftOfferNotFoundError(DriftCorrectionError):
+    """The offer is gone, its scene has finished, or it holds no cap toward the target."""
+
+    user_message = "You have no open chance to correct drift toward that resonance."
+
+
+class DriftConversionInvalidError(DriftCorrectionError):
+    """The requested conversion breaks a rule; the raise site names which one."""
+
+    user_message = "That conversion cannot be made."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message

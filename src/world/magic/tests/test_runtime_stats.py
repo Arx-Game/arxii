@@ -197,15 +197,19 @@ class RuntimeStatsEngagementTests(TestCase):
 
 
 class RuntimeStatsIntensityTierTests(TestCase):
-    """IntensityTier.control_modifier integration."""
+    """IntensityTier.control_modifier integration.
+
+    U-keep: pure tier arithmetic. No player seam shows the computed control alone, so a
+    journey cannot reach these sums.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.technique = TechniqueFactory(intensity=12, control=5)
         # Create tiers: Minor at 5, Moderate at 10, Major at 20
         IntensityTierFactory(name="Minor", threshold=5, control_modifier=0)
-        IntensityTierFactory(name="Moderate", threshold=10, control_modifier=-2)
-        IntensityTierFactory(name="Major", threshold=20, control_modifier=-5)
+        IntensityTierFactory(name="Moderate", threshold=10, control_modifier=2)
+        IntensityTierFactory(name="Major", threshold=20, control_modifier=5)
         # Shared category/target for test_tier_modifier_with_identity_modifiers.
         # Use get_or_create to avoid conflict with RuntimeStatsIdentityModifierTests
         # when both test classes run in the same suite (same DB transaction).
@@ -227,9 +231,10 @@ class RuntimeStatsIntensityTierTests(TestCase):
 
         result = get_runtime_technique_stats(self.technique, character=sheet.character)
 
-        # intensity=12 hits "Moderate" tier (threshold 10), control_modifier=-2
+        # intensity=12 hits "Moderate" tier (threshold 10), control_modifier=+2. A tier
+        # can only add control (#4740, #4727 decision 5).
         assert result.intensity == 12
-        assert result.control == 3  # 5 base + (-2) tier
+        assert result.control == 7  # 5 base + 2 tier
 
     def test_no_tier_match_below_all_thresholds(self) -> None:
         """When intensity is below all thresholds, no tier modifier applies."""
@@ -249,8 +254,8 @@ class RuntimeStatsIntensityTierTests(TestCase):
 
         result = get_runtime_technique_stats(high_technique, character=sheet.character)
 
-        # intensity=25 hits "Major" tier (threshold 20), control_modifier=-5
-        assert result.control == 5  # 10 + (-5)
+        # intensity=25 hits "Major" tier (threshold 20), control_modifier=+5
+        assert result.control == 15  # 10 + 5
 
     def test_tier_modifier_stacks_with_social_safety(self) -> None:
         """Tier modifier and social safety both apply when unengaged."""
@@ -259,9 +264,9 @@ class RuntimeStatsIntensityTierTests(TestCase):
 
         result = get_runtime_technique_stats(self.technique, character=sheet.character)
 
-        # intensity=12, "Moderate" tier: control_modifier=-2
-        # control = 5 base + 10 social safety + (-2) tier = 13
-        assert result.control == 13
+        # intensity=12, "Moderate" tier: control_modifier=+2
+        # control = 5 base + 10 social safety + 2 tier = 17
+        assert result.control == 17
 
     def test_tier_modifier_with_identity_modifiers(self) -> None:
         """Tier is calculated from final runtime intensity including identity."""
@@ -279,8 +284,8 @@ class RuntimeStatsIntensityTierTests(TestCase):
         result = get_runtime_technique_stats(self.technique, character=sheet.character)
 
         assert result.intensity == 22  # 12 + 10
-        # Major tier (threshold 20), control_modifier=-5
-        assert result.control == 0  # 5 + (-5)
+        # Major tier (threshold 20), control_modifier=+5
+        assert result.control == 10  # 5 + 5
 
 
 class RuntimeStatsSocialSafetyConfigTests(TestCase):

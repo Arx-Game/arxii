@@ -34,12 +34,17 @@ import type {
   CrossXPLockRequest,
   CrossXPLockResponse,
   DissolveRequest,
+  DriftCorrectionConvertRequest,
+  DriftCorrectionDeclineRequest,
+  DriftCorrectionDeclined,
+  DriftCorrectionResult,
   EntryFlourishRespondRequest,
   EntryFlourishResult,
   GlimpseDistinctionLinkRequest,
   ImbueRequest,
   ImbueResponse,
   MotifStyleBindingsResponse,
+  PaginatedDriftConversionOfferList,
   PaginatedPendingAlterationList,
   PaginatedPendingAudereOfferList,
   PaginatedPendingAudereMajoraOfferList,
@@ -108,6 +113,7 @@ const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
 const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
 const ENTRY_FLOURISH_URL = '/api/magic/entry-flourish';
+const DRIFT_CORRECTION_URL = '/api/magic/drift-correction';
 const PATH_INTENT_URL = '/api/progression/path-intent/';
 const PATH_OPTIONS_URL = '/api/progression/path-options/';
 const MOTIF_STYLES_URL = '/api/magic/motif-styles';
@@ -881,6 +887,60 @@ export async function respondToEntryFlourish(
   }
 
   return res.json() as Promise<EntryFlourishResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Drift conversion offers, #4733
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/drift-correction/pending/
+ *
+ * Account-scoped inbox: open drift conversion offers for the caller's characters.
+ */
+export async function getPendingDriftConversionOffers(): Promise<PaginatedDriftConversionOfferList> {
+  const res = await apiFetch(`${DRIFT_CORRECTION_URL}/pending/`);
+  if (!res.ok) throw new Error('Failed to load pending drift conversion offers');
+  return res.json() as Promise<PaginatedDriftConversionOfferList>;
+}
+
+/**
+ * POST /api/magic/drift-correction/convert/
+ *
+ * Perform the drift correction rite under an open offer. A refusal is a 400
+ * `{detail}`, surfaced as the thrown error's message.
+ */
+export async function convertDrift(
+  body: DriftCorrectionConvertRequest
+): Promise<DriftCorrectionResult> {
+  const res = await apiFetch(`${DRIFT_CORRECTION_URL}/convert/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to perform the rite');
+  }
+
+  return res.json() as Promise<DriftCorrectionResult>;
+}
+
+/** POST /api/magic/drift-correction/decline/ - let an open offer go. */
+export async function declineDriftConversion(
+  body: DriftCorrectionDeclineRequest
+): Promise<DriftCorrectionDeclined> {
+  const res = await apiFetch(`${DRIFT_CORRECTION_URL}/decline/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to decline the offer');
+  }
+
+  return res.json() as Promise<DriftCorrectionDeclined>;
 }
 
 // ---------------------------------------------------------------------------

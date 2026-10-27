@@ -1062,11 +1062,36 @@ function GuardUnaffordableHint({
   );
 }
 
+/**
+ * The name a declared taunt is aimed at (#4737): an ally participant (focused_ally_target)
+ * or an opponent (focused_opponent_target). Null when no taunt is declared.
+ */
+function tauntTargetName(
+  declaredManeuver: string | null,
+  ownRoundAction: RoundActionTyped | null,
+  participants: Participant[],
+  opponents: Opponent[]
+): string | null {
+  if (declaredManeuver !== 'taunt' || ownRoundAction == null) {
+    return null;
+  }
+  if (ownRoundAction.focused_ally_target != null) {
+    const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
+    return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
+  }
+  if (ownRoundAction.focused_opponent_target != null) {
+    const foe = opponents.find((o) => o.id === ownRoundAction.focused_opponent_target);
+    return foe?.name ?? `opponent #${ownRoundAction.focused_opponent_target}`;
+  }
+  return null;
+}
+
 /** What this round's already-declared maneuver is, when there is one. */
 function DeclaredManeuverBadge({
   declaredManeuver,
   coveredAllyName,
   guardedAllyName,
+  tauntedName,
   guardTechnique,
   animaCurrent,
   guardSoulfrayAccepted,
@@ -1074,10 +1099,21 @@ function DeclaredManeuverBadge({
   declaredManeuver: string | null;
   coveredAllyName: string | null | undefined;
   guardedAllyName: string | null | undefined;
+  tauntedName: string | null | undefined;
   guardTechnique: PlayerAction | undefined;
   animaCurrent: number | null;
   guardSoulfrayAccepted: boolean;
 }) {
+  if (declaredManeuver === 'taunt') {
+    return (
+      <div
+        className="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300"
+        data-testid="taunt-declared-badge"
+      >
+        Taunting {tauntedName ?? 'a foe'}
+      </div>
+    );
+  }
   if (declaredManeuver === 'flee') {
     return (
       <div
@@ -1503,6 +1539,7 @@ interface ManeuverDeclarationSectionProps {
   declaredManeuver: string | null;
   coveredAllyName: string | null | undefined;
   guardedAllyName: string | null | undefined;
+  tauntedName: string | null | undefined;
   selectedGuardTechnique: PlayerAction | undefined;
   coverableAllies: Participant[];
   protectiveTechniques: PlayerAction[];
@@ -1542,6 +1579,7 @@ function ManeuverDeclarationSection({
   declaredManeuver,
   coveredAllyName,
   guardedAllyName,
+  tauntedName,
   selectedGuardTechnique,
   coverableAllies,
   protectiveTechniques,
@@ -1588,6 +1626,7 @@ function ManeuverDeclarationSection({
         declaredManeuver={declaredManeuver}
         coveredAllyName={coveredAllyName}
         guardedAllyName={guardedAllyName}
+        tauntedName={tauntedName}
         guardTechnique={selectedGuardTechnique}
         animaCurrent={animaCurrent}
         guardSoulfrayAccepted={guardSoulfrayAccepted}
@@ -2131,6 +2170,13 @@ export function YourTurn({
     declaredManeuver,
     ownRoundAction,
     participants
+  );
+
+  const tauntedName = tauntTargetName(
+    declaredManeuver,
+    ownRoundAction,
+    participants,
+    encounter?.opponents ?? []
   );
 
   // Techniques offered as a Guard's optional protective technique (#2207): any
@@ -2871,6 +2917,7 @@ export function YourTurn({
           declaredManeuver={declaredManeuver}
           coveredAllyName={coveredAllyName}
           guardedAllyName={guardedAllyName}
+          tauntedName={tauntedName}
           selectedGuardTechnique={selectedGuardTechnique}
           coverableAllies={coverableAllies}
           protectiveTechniques={protectiveTechniques}

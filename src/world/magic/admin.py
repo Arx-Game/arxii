@@ -55,6 +55,11 @@ from world.magic.models import (
     DistinctionResonanceGrant,
     DistinctionResonanceRankThreshold,
     DistinctionRitualGrant,
+    DriftConfig,
+    DriftConversionCap,
+    DriftConversionOffer,
+    DriftCorrectionConfig,
+    DriftCorrectionOutcomeShare,
     EffectType,
     Facet,
     FacetAlias,
@@ -210,6 +215,7 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
         "kind",
         "aggressor",
         "severity_multiplier",
+        "conflict_weight",
         "conversion_type",
         "conversion_multiplier",
     ]
@@ -1350,6 +1356,7 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                 "fields": (
                     "minimum_intensity_tier",
                     "minimum_warp_stage",
+                    "control_per_stage_earlier",
                     "intensity_bonus",
                     "anima_pool_bonus",
                     "warp_multiplier",
@@ -1409,7 +1416,18 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "social_safety_bonus",
     ]
     list_select_related = ["condition", "resilience_check_type"]
+    # anima_zero_stage stays a plain select: an autocomplete widget searches every
+    # ConditionStage through ConditionStageAdmin and ignores the queryset below.
     autocomplete_fields = ["condition"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # The anima-0 stage picker offers Soulfray stages only (#4740); clean() also
+        # refuses a stage of another condition.
+        if db_field.name == "anima_zero_stage":  # noqa: STRING_LITERAL
+            from world.magic.services.soulfray import soulfray_stages  # noqa: PLC0415
+
+            kwargs["queryset"] = soulfray_stages()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(AnimaRitualBudgetAward)
@@ -1694,7 +1712,14 @@ class RitualAnimaContributionAdmin(admin.ModelAdmin):
 
 @admin.register(RitualComponentRequirement)
 class RitualComponentRequirementAdmin(admin.ModelAdmin):
-    list_display = ["ritual", "item_template", "quantity", "min_quality_tier"]
+    list_display = [
+        "ritual",
+        "item_template",
+        "matches_target_resonance",
+        "min_item_meaning",
+        "quantity",
+        "min_quality_tier",
+    ]
     list_filter = ["ritual"]
     autocomplete_fields = ["ritual", "item_template"]
     raw_id_fields = ["min_quality_tier"]
@@ -2836,3 +2861,79 @@ class CastOutcomeLevelShiftAdmin(admin.ModelAdmin):
     list_display = ["success_level", "level_shift"]
     list_editable = ["level_shift"]
     ordering = ["success_level"]
+
+
+@admin.register(DriftConfig)
+class DriftConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for carried drift and the focus contest (#4732)."""
+
+    autocomplete_fields = ["focus_check_type", "conflict_condition", "updated_by"]
+
+    list_display = (
+        "pk",
+        "threshold_percent",
+        "threshold_floor",
+        "severity_step",
+        "off_aura_pull_steps",
+        "focus_check_type",
+        "conflict_condition",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not DriftConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(DriftCorrectionConfig)
+class DriftCorrectionConfigAdmin(admin.ModelAdmin):
+    """The drift correction tuning singleton (#4733)."""
+
+    list_display = ("id", "rite", "check_type", "check_difficulty", "cap_percent")
+    list_select_related = ("rite", "check_type")
+    autocomplete_fields = ("rite", "check_type")
+
+    def has_add_permission(self, request) -> bool:
+        return not DriftCorrectionConfig.objects.exists() and super().has_add_permission(request)
+
+
+@admin.register(DriftCorrectionOutcomeShare)
+class DriftCorrectionOutcomeShareAdmin(admin.ModelAdmin):
+    """Share of the cap the rite converts per outcome tier (#4733, staff-tunable)."""
+
+    list_display = ("outcome_tier", "converted_share")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
+
+
+class DriftConversionCapInline(admin.TabularInline):
+    model = DriftConversionCap
+    formset = OneRowPerFormSet
+    extra = 0
+    can_delete = False
+    raw_id_fields = ("target_resonance", "grants")
+    readonly_fields = ("target_resonance", "cap", "grants")
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(DriftConversionOffer)
+class DriftConversionOfferAdmin(admin.ModelAdmin):
+    """Read-only provenance of drift correction offers (#4733)."""
+
+    list_display = ("character_sheet", "scene", "created_at")
+    list_select_related = ("character_sheet", "scene")
+    raw_id_fields = ("character_sheet", "scene")
+    inlines = [DriftConversionCapInline]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

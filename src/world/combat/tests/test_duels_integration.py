@@ -32,7 +32,7 @@ SetUp pattern
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, tag
 from evennia import create_object
@@ -695,3 +695,61 @@ class DuelReachGatingTests(TestCase):
             focused_opponent_target=self.mirror_b,
         )
         self.assertEqual(action.focused_opponent_target_id, self.mirror_b.pk)
+
+
+class DuelMirrorPcReductionTests(TestCase):
+    """A hit on a duelist's mirror takes the same thread DR and armor soak as a PC hit (#4758)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet_a = CharacterSheetFactory()
+        cls.sheet_b = CharacterSheetFactory()
+        _seed_damage_multipliers()
+
+    def setUp(self):
+        idmapper.models.flush_cache()
+        self.room = create_object("typeclasses.rooms.Room", key="Mirror Room", nohome=True)
+
+    def _mirror_b(self):
+        enc = create_pvp_duel(self.sheet_a, self.sheet_b, self.room)
+        return enc.opponents.get(mirrors_participant__character_sheet=self.sheet_b)
+
+    def test_mirror_hit_takes_mirrored_pcs_thread_dr_and_armor_soak(self):
+        mirror_b = self._mirror_b()
+        start = mirror_b.health
+
+        with (
+            patch(
+                "world.magic.services.apply_damage_reduction_from_threads",
+                side_effect=lambda _character, damage: damage - 2,
+            ) as thread_dr,
+            patch(
+                "world.combat.services.equipment.armor_soak.apply_equipped_armor_soak",
+                side_effect=lambda _character, damage: damage - 3,
+            ) as armor_soak,
+        ):
+            result = apply_damage_to_opponent(mirror_b, 10)
+        mirror_b.refresh_from_db()
+
+        self.assertEqual(result.damage_dealt, 5)
+        self.assertEqual(mirror_b.health, start - 5)
+        self.assertEqual(thread_dr.call_args.args[0], self.sheet_b.character)
+        self.assertEqual(armor_soak.call_args.args[0], self.sheet_b.character)
+
+    def test_bypass_soak_skips_mirrored_armor_but_keeps_thread_dr(self):
+        mirror_b = self._mirror_b()
+
+        with (
+            patch(
+                "world.magic.services.apply_damage_reduction_from_threads",
+                side_effect=lambda _character, damage: damage - 2,
+            ) as thread_dr,
+            patch(
+                "world.combat.services.equipment.armor_soak.apply_equipped_armor_soak",
+            ) as armor_soak,
+        ):
+            result = apply_damage_to_opponent(mirror_b, 10, bypass_soak=True)
+
+        self.assertEqual(result.damage_dealt, 8)
+        thread_dr.assert_called_once()
+        armor_soak.assert_not_called()

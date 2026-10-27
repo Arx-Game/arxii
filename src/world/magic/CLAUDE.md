@@ -122,7 +122,9 @@ The magic system for Arx II. Power flows from identity and connection.
   consumption). `TechniqueSerializer
   .restriction_ids` and the builder's `Restriction.objects.filter(...)` call sites scope to
   `kind=DESIGN`; `CharacterTechnique.clean()` enforces a price can only be `kind=PRICE`.
-- `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
+- `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major).
+  `control_modifier` is 0 or more: a tier only adds control (#4740); the Required content
+  row `intensity-tiers-never-lower-control` lists a negative one
 - `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
 - `TechniqueFunctionTag` - Content-authored `(technique, function)` join recording which
   fine-grained `TechniqueFunction` labels (`constants.py`, 12-value `TextChoices`) a
@@ -850,8 +852,12 @@ admin all converge on the same service layer.
   creates `PendingRitualEffect` (finisher command completes the ritual);
   `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
   `site_property` optionally gates where it can be performed.
-- `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
-  `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+- `RitualComponentRequirement` - FK to `Ritual`, `quantity`, optional `min_quality_tier`,
+  and exactly one of three modes (DB `CheckConstraint`): `item_template` (template mode),
+  `min_touchstone_tier` (touchstone mode, #707), or `matches_target_resonance` (target-resonance
+  mode, #4733; optional `min_item_meaning` opens the keepsake route, allowed only in this mode).
+  Resolved by `resolve_ritual_components` (no writes) and consumed by
+  `resolve_and_consume_ritual_components` during ritual dispatch.
 - `PendingRitualEffect` - In-progress CEREMONY record. Unique per
   `(character, ritual)`. Created by `PerformRitualAction` on CEREMONY invocation;
   consumed (deleted) by the finisher action (`WeaveThreadAction`, `ImbueThreadAction`)
@@ -1686,7 +1692,12 @@ To add a new handler: implement the `OfferHandler` protocol and call
 
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global
 config), `PendingAudereOffer` (poll-able offer, one per character),
-`check_audere_eligibility` (intensity tier + Soulfray stage + engagement),
+`check_audere_eligibility` (intensity tier + Soulfray stage + engagement; high runtime
+control steps the stage needed back along the Soulfray ladder, one stage per
+`AudereThreshold.control_per_stage_earlier`, never below the first stage, via
+`required_stage_order`; the offer keeps `fired_control` for the accept re-check, and the
+offer surfaces tell the player via `stages_lowered_by_control` / `control_lowered_line`,
+#4740),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
 **Surge broadcast (#3451):** `AudereThreshold.surge_manifestation_text` (blank
 default) is EMITted to the active scene by `_broadcast_surge` when a surge is
@@ -1707,6 +1718,26 @@ reverts, a TALKED_DOWN one stays with its `emergence_condition`. `acting_aura(sh
 ACTS with (cast alignment, place of power on arrival and during a cast, defilement, covenant
 attacker affinity); `working_affinities` puts a cast in the worn self's affinity. Fall, Soul
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
+
+**Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
+off-aura balance against `acting_aura(sheet).dominant_affinity`, via
+`AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
+pulled_resonance=None)`, called once per cast from `_complete_technique_cast` inside
+`use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
+part of its cast. The pulled resonance is the cast's own `cast_pull`, else the
+`use_technique(pulled_resonance=...)` the combat round resolver and clash pass from the round's
+committed pull; nothing else reads combat pulls. Scene casts, combat casts, clash
+contributions and standoffs gather modifiers inside `resolve_fn` (scene casts after the
+PRE_CAST triggers too), so the conflict counts on the same roll. Technique-enhanced social
+actions gather modifiers before `use_technique`, so the penalty counts from her next roll;
+battles roll focus but their roll reads no condition modifiers (pre-existing,
+`BattleTechniqueResolver`); the joust is not a cast. Every number and both designations
+(focus check type, conflict condition) are on the `DriftConfig` singleton
+(`get_drift_config()`); unset designations skip the check and show on the Required content
+dashboard, which also flags a conflict condition with `break_free_mode` NONE or no
+`ConditionCheckModifier`. The penalty is the conflict condition's authored
+`ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
+Stirring it up is an authored social action applying the condition at a severity (the higher wins), not code.
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
 shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored
@@ -2006,6 +2037,44 @@ Repeatable (not a Fall); each conversion loses half the value.
 **New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
 `COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
 (MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
+`DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
+
+**Drift correction (#4733, slice 4 of #4672).** "Drift" here is `CharacterResonance` balance
+held off the aura's dominant affinity (`drift_holdings`); `AuraDrift` / `recompute_aura` is the
+older sense (shift in aura percentages). Do not mix the two in names.
+- Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
+  staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
+  `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
+  not of the cap; `clean` keeps it monotonic by success level),
+  `DriftConversionOffer` (one per sheet and scene), `DriftConversionCap` (per offer and target
+  resonance; `grants` names the deed grants it was measured from; `cap` is a snapshot).
+  `RitualComponentRequirement` has a third mode, `matches_target_resonance` (optional
+  `min_item_meaning`, minimum 1), exclusive with `item_template` and `min_touchstone_tier`.
+- Deeds: every `GainSource` is in exactly one of `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES`
+  (test-enforced); a new member must be placed. `grant_resonance` ends with
+  `open_or_extend_conversion_offer(grant)` (`services/drift.py`): deed, own-affinity target,
+  convertible drift, and the grantee standing in a live scene (room scene at grant time, so a
+  deed settled away from a scene opens nothing). `Scene.finish_scene` calls
+  `lapse_conversion_offers`.
+- The rite (`services/drift_correction.py`): `perform_drift_correction_rite` refuses before it
+  consumes anything unless the config has a rite, a check type and a share for every
+  `CheckOutcome`; converts `floor(amount x share)` through `convert_resonance_amount` as
+  `DRIFT_CORRECTION`; failure consumes the offering and leaves the cap. The check type is NOT a
+  `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
+  `rite_is_ready(config=None)` (rite, check type and a tier's share all present; one query,
+  through `outcome_tiers_without_a_share()`, which the Required content probe reads too) is the
+  one readiness test; while it is false the rite, telnet `drift`/`drift convert` and the
+  pending serializer (`rite_ready`, `rite_not_ready_message`, from the view's
+  `context["rite_ready"]`, once per request) say `RITE_NOT_READY_MESSAGE`, the exception's own
+  `user_message`.
+- Components: `qualifying_components` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that order).
+  `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
+  estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed
+  that creates the cap row is floored at 1; `cap_percent` 0 opens no offer.
+- Surfaces: actions in `actions/definitions/drift_correction.py`, telnet `drift`
+  (`commands/drift_correction.py`), REST `/api/magic/drift-correction/`, React gate on the scene
+  and game pages (`frontend/src/magic/CLAUDE.md`). Required content row `drift-correction-config`.
+  Details: `docs/systems/magic.md` "Drift correction".
 
 **Seed content:** `wire_fall_redemption_content()` in `factories.py`,
 called by `seed_magic_dev()`. Seeds the "Ritual of Falling" Ritual row

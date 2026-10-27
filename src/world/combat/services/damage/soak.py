@@ -18,6 +18,30 @@ def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) ->
     return opponent.soak_value
 
 
+def _duel_mirror_pc_reduction(
+    opponent: CombatOpponent, damage: int, *, armor_soak_applies: bool
+) -> int:
+    """Reduce a duel mirror's hit by the mirrored PC's own thread DR and armor soak (#4758).
+
+    A duelist is hit through her mirror, which carries no soak of its own. The PC path
+    (``apply_damage_to_participant``) applies the thread damage reduction and worn-armor
+    soak; the mirror must apply the same two, or an armored duelist takes the full hit.
+    Non-mirror opponents pass through unchanged.
+    """
+    if not opponent.is_duel_mirror or damage <= 0:
+        return damage
+    from world.combat.services.equipment.armor_soak import (  # noqa: PLC0415
+        apply_equipped_armor_soak,
+    )
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
+    character = opponent.mirrors_participant.character_sheet.character
+    damage = apply_damage_reduction_from_threads(character, damage)
+    if armor_soak_applies:
+        damage = apply_equipped_armor_soak(character, damage)
+    return damage
+
+
 def _effective_resistance_for_opponent(
     opponent: CombatOpponent, damage_type: DamageType | None, resistance_shift: int = 0
 ) -> int:

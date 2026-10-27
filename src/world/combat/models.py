@@ -40,6 +40,7 @@ from world.combat.constants import (
     NPC_DEFAULT_TACTICS,
     NPC_DEFAULT_TRAVERSAL,
     RETREAT_ROUNDS_LIMIT,
+    ROLLED_SURGE_TRIGGER_KINDS,
     SCALING_CONFIG_BASELINE_PARTY_SIZE,
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
@@ -447,6 +448,19 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "Null = flat base_damage with no defense roll (backward-compatible)."
         ),
     )
+    taunt_potency = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Makes this entry a taunt (#4737). Set by staff on the pool entry; read when the "
+            "opponent uses it. A taunt does no damage (leave base_damage at 0): the targeted "
+            "player character rolls the Taunt Received check against this potency, and the "
+            "degree of the roll picks the surge band. A taunt applies nothing but the surge, "
+            "so leave the defense check, the on-hit pool and the applied conditions empty. "
+            "The delivery decides who is in reach (melee reaches nobody at range). A taunt "
+            "acts on player characters only. Blank = an ordinary attack."
+        ),
+    )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
     windup_rounds = models.PositiveSmallIntegerField(
@@ -568,6 +582,21 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["sustained_duration_rounds"] = (
                 "sustained_duration_rounds is required when is_sustained_attack=True."
             )
+        if self.taunt_potency is not None and self.base_damage > 0:
+            errors["taunt_potency"] = (
+                "A taunt does no damage: set base_damage to 0 or clear taunt_potency."
+            )
+        if self.taunt_potency is not None:
+            taunt_extras = {
+                "defense_check_type": self.defense_check_type_id is not None,
+                "on_hit_consequence_pool": self.on_hit_consequence_pool_id is not None,
+                "conditions_applied": self.pk is not None and self.conditions_applied.exists(),
+            }
+            for field_name, is_set in taunt_extras.items():
+                if is_set:
+                    errors[field_name] = (
+                        "A taunt applies nothing but the surge: clear this or clear taunt_potency."
+                    )
         try:
             validate_outcome_narration(self.hit_narration, "hit_narration")
         except ValidationError as exc:
@@ -4050,13 +4079,180 @@ class EscalationCurve(SharedMemoryModel):
         return self.name
 
 
+class SurgeTuning(SharedMemoryModel):
+    """Authored tuning for one rolled surge kind (#4737).
+
+    One row per rolled ``SurgeTriggerKind`` (taunt received, rallied, ally hurt).
+    Staff set it in the admin; ``world.combat.surge_rolls`` reads it when a beat
+    fires, rolls ``check_type`` for the player character, and looks the outcome up
+    in this row's ``bands``. No row for a kind means that beat does not surge.
+    """
+
+    trigger_kind = models.CharField(
+        max_length=20,
+        choices=[
+            (kind.value, kind.label)
+            for kind in SurgeTriggerKind
+            if kind.value in ROLLED_SURGE_TRIGGER_KINDS
+        ],
+        unique=True,
+        help_text="Which beat this tuning is for. Staff pick it once; one row per beat.",
+    )
+    check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="surge_tunings",
+        help_text=(
+            "The check rolled when this beat fires. Staff pick it; the surge service rolls "
+            "it for the surged player character (Taunt Received, Ally Hurt) and for the "
+            "player character doing the rallying (Rallied)."
+        ),
+    )
+    potency_base = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ally Hurt only: base difficulty of the roll. Staff set it; the surge service "
+            "reads it. A taunt takes its potency from the pool entry or the taunter's check "
+            "rating, and Rally uses its fixed difficulty, so leave this at 0 for those."
+        ),
+    )
+    potency_per_depth = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ally Hurt only: difficulty added per point of relationship depth, so difficulty "
+            "= potency_base + potency_per_depth * depth. Staff set it; the surge service "
+            "reads it. Leave at 0 for the other beats, which never read it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Surge Tuning"
+        verbose_name_plural = "Surge Tunings"
+        ordering = ["trigger_kind"]
+
+    def clean(self) -> None:
+        """Reject potency numbers on a beat that never reads them (only Ally Hurt does)."""
+        super().clean()
+        if self.trigger_kind == SurgeTriggerKind.ALLY_HURT:
+            return
+        errors: dict[str, str] = {}
+        if self.potency_base:
+            errors["potency_base"] = (
+                "Only the Ally Hurt beat reads this number; leave it at 0 for this beat."
+            )
+        if self.potency_per_depth:
+            errors["potency_per_depth"] = (
+                "Only the Ally Hurt beat reads this number; leave it at 0 for this beat."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return self.get_trigger_kind_display()
+
+
+class SurgeDegreeBand(SharedMemoryModel):
+    """What one roll outcome does to intensity, control and conditions (#4737).
+
+    One row per (tuning, outcome). A better outcome never gives a lower beneficial
+    number, so ``validate_surge_bands`` rejects a set where it would. ``intensity`` is
+    unsigned (a surge only ever adds intensity); ``control_change`` may be negative (a
+    loss of control) and positive is a gain. A band's ``condition`` is a cost (a
+    debuff), which is what that validator assumes.
+    """
+
+    tuning = models.ForeignKey(
+        SurgeTuning,
+        on_delete=models.CASCADE,
+        related_name="bands",
+        help_text="The surge tuning this band belongs to. Set by staff in the tuning's inline.",
+    )
+    outcome = models.ForeignKey(
+        CHECK_OUTCOME_MODEL,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The roll outcome this band answers. Staff pick it; the surge service looks the "
+            "rolled outcome up here."
+        ),
+    )
+    intensity = models.PositiveIntegerField(
+        help_text=(
+            "Intensity the surged player character gains at this outcome. Staff set it; the "
+            "surge service applies it."
+        ),
+    )
+    control_change = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Control change at this outcome; negative loses control, positive gains it. Staff "
+            "set it; the surge service applies it."
+        ),
+    )
+    condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Condition applied to the surged player character at this outcome (a compulsion "
+            "such as Goaded is just a condition with ordinary effects). It is a cost, a "
+            "debuff: a better outcome must never carry a heavier one. Staff attach it; the "
+            "surge service applies it. Blank = none."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Surge Degree Band"
+        verbose_name_plural = "Surge Degree Bands"
+        ordering = ["tuning", "outcome__success_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tuning", "outcome"],
+                name="unique_surge_band_per_tuning_outcome",
+            ),
+        ]
+
+    # The admin inline's form turns this off for the length of its own validation: the
+    # inline formset checks the whole in-flight set, and comparing one edited row to the
+    # still-stored values of its siblings would refuse a valid edit of two rows at once.
+    validate_against_stored_siblings: bool = True
+
+    def clean(self) -> None:
+        """Reject a band that breaks monotonic order against its tuning's other bands."""
+        from world.combat.surge_bands import validate_surge_bands  # noqa: PLC0415
+
+        super().clean()
+        if not self.validate_against_stored_siblings:
+            return
+        if self.tuning_id is None or self.outcome_id is None:
+            return
+        siblings = [
+            band
+            for band in SurgeDegreeBand.objects.filter(tuning_id=self.tuning_id).select_related(
+                "outcome"
+            )
+            if band.pk is None or band.pk != self.pk
+        ]
+        problems = validate_surge_bands([*siblings, self])
+        if problems:
+            raise ValidationError(problems)
+
+    def __str__(self) -> str:
+        return f"{self.tuning}: {self.outcome.name}"
+
+
 class DramaticSurgeRecord(SharedMemoryModel):
     """Audit + dedup record for one dramatic-surge event (#2013).
 
     Created by ``apply_dramatic_surge``; a given (encounter, participant,
     trigger_kind, subject_sheet) tuple surges at most once — a bonded ally's
     peril surges you once per encounter; their later fall is a different
-    trigger_kind and surges again. Two partial UniqueConstraints (mirroring
+    trigger_kind and surges again. The exception is a rolled kind (#4737,
+    ADR-4737), which sets ``repeat_round`` and so surges once per round per
+    subject instead; the once-per-encounter constraints below apply only where
+    ``repeat_round`` is null. Two partial UniqueConstraints (mirroring
     the ``NpcRegard`` precedent, ``world/npc_services/models.py``) because
     Postgres never matches NULL=NULL — a single constraint spanning the
     nullable subject_sheet column would let subjectless (HIGH_STAKES)
@@ -4133,6 +4329,65 @@ class DramaticSurgeRecord(SharedMemoryModel):
     )
     amount = models.PositiveIntegerField()
     round_number = models.PositiveIntegerField()
+    outcome = models.ForeignKey(
+        CHECK_OUTCOME_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The roll outcome that picked this surge's band (#4737); null for a fixed-amount "
+            "kind. Written by the surge service. PROTECT: a null outcome means a "
+            "fixed-amount record, so deleting an outcome row must not silently turn a "
+            "rolled record into one."
+        ),
+    )
+    potency = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The difficulty the roll was made against (#4737); null for a fixed-amount kind. "
+            "Written by the surge service so the roll line can be reproduced."
+        ),
+    )
+    control_change = models.SmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "Control change this surge applied (#4737); 0 for every fixed-amount kind. "
+            "Written by the surge service from the band."
+        ),
+    )
+    condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The condition this surge actually applied to the participant (#4737); null when "
+            "the band carried none or it did not take hold. Written by the surge service. "
+            "SET_NULL: the record is history, so it outlives the template."
+        ),
+    )
+    cause = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "The line the surged player, GMs and staff read for this surge (#4737), written "
+            "when the surge happened (who taunted or rallied, or the wound). Written by the "
+            "surge service; never shown to other viewers, who get the generic line."
+        ),
+    )
+    repeat_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Null for the once-per-encounter kinds. Set to the round number for a rolled "
+            "kind (#4737), which may surge again each round; it is the dedup discriminator "
+            "so the same beat cannot surge twice in one round. Written by the surge service."
+        ),
+    )
     reason = models.TextField(
         blank=True,
         default="",
@@ -4151,7 +4406,7 @@ class DramaticSurgeRecord(SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["encounter", "participant", "trigger_kind", "subject_sheet"],
-                condition=models.Q(subject_sheet__isnull=False),
+                condition=models.Q(subject_sheet__isnull=False, repeat_round__isnull=True),
                 name="unique_surge_with_subject",
             ),
             models.UniqueConstraint(
@@ -4160,6 +4415,7 @@ class DramaticSurgeRecord(SharedMemoryModel):
                     subject_sheet__isnull=True,
                     subject_opponent__isnull=True,
                     subject_companion__isnull=True,
+                    repeat_round__isnull=True,
                 ),
                 name="unique_surge_without_subject",
             ),
@@ -4178,6 +4434,39 @@ class DramaticSurgeRecord(SharedMemoryModel):
                 fields=["encounter", "participant", "trigger_kind", "subject_companion"],
                 condition=models.Q(subject_companion__isnull=False),
                 name="unique_surge_companion_subject",
+            ),
+            # A rolled kind may recur each round (#4737): one per round per subject. One
+            # constraint; nulls_distinct=False makes two subject-less rows collide.
+            models.UniqueConstraint(
+                fields=[
+                    "encounter",
+                    "participant",
+                    "trigger_kind",
+                    "repeat_round",
+                    "subject_sheet",
+                ],
+                condition=models.Q(repeat_round__isnull=False),
+                nulls_distinct=False,
+                name="unique_surge_rolled_per_round",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(repeat_round__isnull=True) | models.Q(repeat_round=F("round_number"))
+                ),
+                name="surge_repeat_round_is_round_number",
+            ),
+            # A rolled record has both a repeat_round and an outcome; an old-kind has neither.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(repeat_round__isnull=True, outcome__isnull=True)
+                    | models.Q(repeat_round__isnull=False, outcome__isnull=False)
+                ),
+                name="surge_rolled_has_round_and_outcome",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(repeat_round__isnull=True)
+                | models.Q(subject_opponent__isnull=True, subject_companion__isnull=True),
+                name="surge_rolled_has_no_boss_or_companion_subject",
             ),
             # At most one subject kind (#2013 sheet, #3445 opponent, #3575 companion).
             models.CheckConstraint(

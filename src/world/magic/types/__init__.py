@@ -9,6 +9,7 @@ Submodules:
 - ``threads``     — thread axis enum and Imbuing / XP-lock result types
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
 - ``alterations`` — Mage Scar exception classes and pending/resolution results
+- ``drift``       — QualifyingComponent: an item counting toward a drift-correction offering (#4733)
 - ``magic_skills`` — CastCheck: a cast's check type plus its skill terms (#4450)
 - ``pull``        — resonance-pull action context and resolved / preview results
 - ``ultimates``   — Audere ultimate reveal cards/groups and owner-facing state (#4098)
@@ -22,6 +23,7 @@ from world.magic.types.alterations import (
     PendingAlterationTierReduction,
 )
 from world.magic.types.aura import AffinityShare, AuraDrift, AuraPercentages
+from world.magic.types.drift import QualifyingComponent
 from world.magic.types.gain import (
     ResonanceDailyTickSummary,
     ResonanceWeeklySettlementSummary,
@@ -81,6 +83,7 @@ __all__ = [
     "PendingAlterationTierReduction",
     "PullActionContext",
     "PullPreviewResult",
+    "QualifyingComponent",
     "ResolvedPullEffect",
     "ResonanceDailyTickSummary",
     "ResonanceInvolvement",

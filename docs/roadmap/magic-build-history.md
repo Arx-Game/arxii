@@ -49,10 +49,14 @@ character to the Audere/Audere Majora gates. Things only escalate, never reset;
 curves authored with `start_round >= 2` keep round one calm. Relationship events
 (ally falls — bonds on `fuels_escalation_spikes` tracks) spike intensity through
 the reactive layer (CHARACTER_INCAPACITATED / CHARACTER_KILLED room triggers);
-control does not keep pace with a spike. See `docs/roadmap/combat.md` (#872
-entry) for the full surface. Remaining design intent not yet built:
-emotional-state intensity feeds and near-death (bonded-partner-threatened)
-spikes.
+control does not keep pace with a spike. See `docs/roadmap/combat-build-history.md` (#872
+entry) for the full surface. Since then dramatic surges have added near-death (ally in
+peril), hated-foe, high-stakes and boss-beat spikes (#2013, #3445), and #4737 (slice 1 of
+#4727) built the rolled surges: a taunt, a rally and a hurt bonded ally raise a player
+character's intensity through a roll with degrees (inert until staff author the tuning
+rows). Remaining design intent not yet built
+(slices 2 to 4 of #4727): strain and steeling feeding intensity, emotional-condition
+intensity feeds, covenant vow scaling of surges given, and the Audere control step.
 
 ### No Healing, Shielding Instead
 Restoration mechanics are counter to the tension-building combat design. Shielding prevents damage without undoing escalation. Healing is absent by design.

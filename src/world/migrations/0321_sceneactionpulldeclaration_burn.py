@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0314_affinity_burn_value_combatpull_resonance_burned_and_more"),
+        ("arxii", "0320_affinity_burn_value_combatpull_resonance_burned_and_more"),
     ]
 
     operations = [

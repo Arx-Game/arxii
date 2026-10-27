@@ -9,7 +9,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0313_set_physical_damage_type"),
+        ("arxii", "0319_affinityinteraction_conflict_weight_and_more"),
     ]
 
     operations = [
@@ -139,6 +139,7 @@ class Migration(migrations.Migration):
                     ("companion_binding", "Companion binding"),
                     ("dream_peril", "Dream peril"),
                     ("pushing_hard", "Pushing hard by burning resonance"),
+                    ("keeping_focus", "Keeping focus against carried drift"),
                 ],
                 db_index=True,
                 help_text="The kind of magical roll this skill is added to.",

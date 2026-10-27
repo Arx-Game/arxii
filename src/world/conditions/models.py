@@ -83,6 +83,14 @@ class ConditionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    self_shakeable = models.BooleanField(
+        default=False,
+        help_text=(
+            "The character may shake this off herself with breakfree, without it "
+            "altering her behaviour."
+        ),
+    )
+
     grants_intangibility = models.BooleanField(
         default=False,
         help_text=(

@@ -337,6 +337,9 @@ class GainSource(models.TextChoices):
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
     # #3777: a worship rite performed in a scene
     WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
+    # #4733: a drift correction moves some of one resonance into another the
+    # character chose; no typed source FK (like PENANCE).
+    DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -377,6 +380,46 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         # award table; a live scene is its prerequisite, not its witness, and
         # its resonance is uncapped, so it is never accelerated.
         GainSource.WORSHIP_RITE,
+        # #4733: a correction converts resonance the character already holds;
+        # accelerating it would mint resonance from a move.
+        GainSource.DRIFT_CORRECTION,
+    }
+)
+
+# #4733 (slice 4 of #4672): total classification of GainSource into DEEDS (things
+# a character did or had witnessed, whose resonance their conduct earned) vs
+# NON-DEEDS (passive trickles, staff and system grants, and conversions). A
+# total-classification test guards that every GainSource member lands in exactly
+# one of the two sets.
+DEED_GAIN_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.POSE_ENDORSEMENT,
+        GainSource.SCENE_ENTRY,
+        GainSource.ENTRY_FLOURISH,
+        GainSource.DRAMATIC_MOMENT,
+        GainSource.STYLE_PRESENTATION,
+        GainSource.MISSION_REWARD,
+        GainSource.MISSION_REPORT,
+        GainSource.STAKE_REWARD,
+        GainSource.PROJECT_CONTRIBUTION,
+        GainSource.COMBO_DISCOVERY,
+        GainSource.WORSHIP_RITE,
+    }
+)
+
+NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.ROOM_RESIDENCE,
+        GainSource.OUTFIT_TRICKLE,
+        GainSource.STAFF_GRANT,
+        GainSource.SANCTUM_WEAVING,
+        GainSource.SANCTUM_OWNER_BONUS,
+        GainSource.SANCTUM_DISSOLUTION_RECOVERY,
+        GainSource.DISTINCTION,
+        GainSource.COMPROMISE,
+        GainSource.PENANCE,
+        GainSource.FALL_CONVERSION,
+        GainSource.DRIFT_CORRECTION,
     }
 )
 
@@ -799,6 +842,7 @@ class MagicActivity(models.TextChoices):
     COMPANION_BINDING = "companion_binding", "Companion binding"
     DREAM_PERIL = "dream_peril", "Dream peril"
     PUSHING_HARD = "pushing_hard", "Pushing hard by burning resonance"
+    KEEPING_FOCUS = "keeping_focus", "Keeping focus against carried drift"
 
 
 # Names of the three canonical Affinity rows. Looked up by the
@@ -820,3 +864,14 @@ class FeedingTaintRole(models.TextChoices):
 #: request is stored in (a pending cast's pull declaration). The intensity ceiling and the
 #: balance cap a real burn far below it; this only refuses absurd input.
 MAX_RESONANCE_BURN = 2**31 - 1
+
+
+class ComponentMode(models.TextChoices):
+    """The route by which an item counts toward a target-resonance ritual component (#4733).
+
+    Checked in this order; an item qualifies at most once, under the first that matches.
+    """
+
+    MATERIAL = "material", "Tied to the resonance"
+    FACET = "facet", "Carries a motif facet of the resonance"
+    KEEPSAKE = "keepsake", "Means enough to the performer"

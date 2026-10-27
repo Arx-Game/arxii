@@ -300,6 +300,23 @@ export type EntryFlourishRespondRequest = components['schemas']['EntryFlourishRe
 export type EntryFlourishResult = components['schemas']['EntryFlourishResult'];
 
 // ---------------------------------------------------------------------------
+// Drift conversion offers, #4733
+// ---------------------------------------------------------------------------
+
+export type DriftConversionOffer = components['schemas']['DriftConversionOffer'];
+export type DriftConversionCap = components['schemas']['DriftConversionCap'];
+export type DriftSourceOption = components['schemas']['DriftSourceOption'];
+export type DriftQualifyingComponent = components['schemas']['DriftQualifyingComponent'];
+export type PaginatedDriftConversionOfferList =
+  components['schemas']['PaginatedDriftConversionOfferList'];
+
+// Bodies for POST /api/magic/drift-correction/convert/ and /decline/ + results.
+export type DriftCorrectionConvertRequest = components['schemas']['DriftCorrectionConvertRequest'];
+export type DriftCorrectionDeclineRequest = components['schemas']['DriftCorrectionDeclineRequest'];
+export type DriftCorrectionResult = components['schemas']['DriftCorrectionResult'];
+export type DriftCorrectionDeclined = components['schemas']['DriftCorrectionDeclined'];
+
+// ---------------------------------------------------------------------------
 // Audere offers, #873
 // ---------------------------------------------------------------------------
 

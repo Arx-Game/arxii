@@ -1046,6 +1046,35 @@ from the check type, once as the technique skill.
 check-type rows that weight them; staff rename, repoint or remove them in admin as part of the skill
 revamp, working from the new dashboard row.
 
+## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27)
+
+A character who earns resonance from a deed while holding resonance that sits off their aura can
+turn some of it into the resonance the deed grew, once per scene, with a rite.
+
+**Built:**
+- Deed classification: `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` beside the accelerated sets,
+  with a total-classification test; `GainSource.DRIFT_CORRECTION` for the conversion itself.
+- Offers: `DriftConversionOffer` (one per character and scene) with a `DriftConversionCap` per
+  target resonance, opened or extended from `grant_resonance` and lapsed in `Scene.finish_scene`.
+  An offer needs the grantee standing in a live scene at grant time, so a deed settled away from a
+  scene (the weekly pose-endorsement settlement) opens none; accepted as the cost of a one-scene
+  window. Telnet players get a line on open and on lapse; web players poll.
+- The rite: `DriftCorrectionConfig` (rite, check type, difficulty, cap percent) and
+  `DriftCorrectionOutcomeShare` (share of the request converted per outcome tier, never lower at
+  a better tier), run by `perform_drift_correction_rite` at the authored Fall and Redemption pair
+  rates through the new `convert_resonance_amount`. A failed roll spends the offering and keeps the
+  cap. Worn focus adds to the check. `max_yield_per_earned_point` estimates farm risk for tuning.
+- Offering: a third `RitualComponentRequirement` mode (`matches_target_resonance`,
+  `min_item_meaning`) accepting an item tied to the target resonance, carrying a motif facet of it,
+  or meaning enough to the performer.
+- Surfaces: two actions, telnet `drift`, REST `/api/magic/drift-correction/`, and the React gate
+  and dialog on the scene page and game page; admin pages for the tuning rows; Required content row
+  `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
+
+**Not built:** drift thresholds (slice 3, #4732) and the acting persona's aura (slice 2, #4731).
+Nothing is authored yet: until staff set the rite, check type and a share for every outcome tier,
+the rite refuses and the dashboard row says so.
+
 ---
 
 ## Acting aura and the Audere alternate self (#4731, slice 2 of #4672, BUILT 2026-10-27)
@@ -1085,6 +1114,37 @@ the web now sends the pull on one job (the clash when chosen) and a resubmit nev
 twice. Not built: the demo's intensity-after and anima-cost projection rows. Journeys in
 `integration_tests/test_resonance_strain_journeys.py`. Unauthored until staff set a strain check
 type, the `StrainBurnReach` rows and the `burn_value` of each affinity.
+
+## Drift and Resonance Conflict (#4732, slice 3 of #4672, BUILT 2026-10-27)
+
+Resonance carried outside the affinity she acts with is drift. Drift strictly past an authored
+threshold makes casting call for a focus check (once per cast inside `use_technique`, before modifiers, on every cast path); a failed check applies the authored Resonance Conflict condition for its authored duration (the scene), whose
+check modifier is a labelled penalty on that same roll, severity rising with a worse roll.
+Built: `DriftConfig` singleton (every number plus the focus check type and conflict condition
+designations), `AffinityInteraction.conflict_weight`, `MagicActivity.KEEPING_FOCUS`, `drift_for`,
+`check_resonance_focus`, `ConditionCategory.self_shakeable` with `breakable_condition_filter()`
+so `breakfree`, `rally` and the break-free tick reach it while `in_control` stays on
+`alters_behavior`, Required content probes, and journeys in
+`integration_tests/test_resonance_conflict_journeys.py` (including an unset condition rolling nothing and an enchanted flirt rolling focus) and
+`integration_tests/test_conditions_journeys.py`. Stirring it up is authored content (a social
+action's consequence pool applying the condition). Content (the condition, its modifier, the
+check type, weights) is for staff to author.
+
+## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
+
+High control now lets a character reach the Audere offer at an earlier Soulfray stage, the
+dangerous Soulfray stages need anima at 0, and no intensity tier reads as a control penalty.
+Built: `AudereThreshold.control_per_stage_earlier` (default 0, off) and
+`required_stage_order` (steps back along the actual ladder, so non-contiguous stage orders
+work), the player told on the web dialog and the telnet `accept` listing when control
+lowered the stage (`stages_lowered_by_control`), the control passed from the cast hook (`stats.control`, after Fury)
+through `maybe_create_audere_offer` and stored as `PendingAudereOffer.fired_control` for the
+accept re-check; `SoulfrayConfig.anima_zero_stage` and its cap in
+`_handle_soulfray_accumulation` (lower of it and the non-lethal cap); `IntensityTier
+.control_modifier` refusing negatives, the seed's Moderate and Major at 0, and the Required
+content row "Intensity tiers never lower control". Audere Majora is unchanged. Staff still
+set the step and the anima-0 stage; both default off. Journeys in
+`integration_tests/test_audere_control_journeys.py`.
 
 ## Deeper design & history
 
