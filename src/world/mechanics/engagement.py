@@ -67,6 +67,13 @@ class CharacterEngagement(SharedMemoryModel):
         default=0,
         help_text="Process-derived control bonus (process state only).",
     )
+    free_steels = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Steels this character may take in combat without paying fatigue, granted by "
+            "an ally's successful Rally. Spent one per steel; ends with the engagement."
+        ),
+    )
     started_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When the engagement began.",

@@ -2647,6 +2647,29 @@ class StrainConfig(SharedMemoryModel):
             "into her engagement."
         ),
     )
+    steel_fatigue_category = models.CharField(
+        max_length=20,
+        choices=ActionCategory.choices,
+        default=ActionCategory.MENTAL,
+        help_text=(
+            "Which fatigue pool a character pays from when she steels herself in combat "
+            "and holds no free steel. Staff set it; the steel service reads it."
+        ),
+    )
+    steel_fatigue_cost = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Fatigue a character pays each time she steels herself without a free steel, "
+            "whatever the roll gives. Staff set it; the steel service reads it."
+        ),
+    )
+    free_steels_per_encouragement = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Free steels an ally gains for each successful Rally aimed at her. Staff set "
+            "it; the Rally resolution reads it. 0 means a Rally grants none."
+        ),
+    )
     strain_check_difficulty = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -4111,9 +4134,10 @@ class SurgeTuning(SharedMemoryModel):
     potency_base = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Ally Hurt only: base difficulty of the roll. Staff set it; the surge service "
-            "reads it. A taunt takes its potency from the pool entry or the taunter's check "
-            "rating, and Rally uses its fixed difficulty, so leave this at 0 for those."
+            "Ally Hurt and Steeled: base difficulty of the roll. Staff set it; the surge "
+            "service reads it. A taunt takes its potency from the pool entry or the "
+            "taunter's check rating, and Rally uses its fixed difficulty, so leave this "
+            "at 0 for those."
         ),
     )
     potency_per_depth = models.PositiveIntegerField(
@@ -4131,14 +4155,18 @@ class SurgeTuning(SharedMemoryModel):
         ordering = ["trigger_kind"]
 
     def clean(self) -> None:
-        """Reject potency numbers on a beat that never reads them (only Ally Hurt does)."""
+        """Reject potency numbers on a beat that never reads them.
+
+        Ally Hurt reads both; Steeled reads the base only.
+        """
         super().clean()
         if self.trigger_kind == SurgeTriggerKind.ALLY_HURT:
             return
         errors: dict[str, str] = {}
-        if self.potency_base:
+        if self.potency_base and self.trigger_kind != SurgeTriggerKind.STEELED:
             errors["potency_base"] = (
-                "Only the Ally Hurt beat reads this number; leave it at 0 for this beat."
+                "Only the Ally Hurt and Steeled beats read this number; leave it at 0 "
+                "for this beat."
             )
         if self.potency_per_depth:
             errors["potency_per_depth"] = (
