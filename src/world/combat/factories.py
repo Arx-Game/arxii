@@ -33,6 +33,7 @@ from world.combat.constants import (
     SpectacleKind,
     SpectacleReaction,
     StakesLevel,
+    SurgeTriggerKind,
     SustainedKind,
     TargetingMode,
     TargetSelection,
@@ -72,6 +73,8 @@ from world.combat.models import (
     SpectacleRecord,
     StakesLevelRequirement,
     StrainConfig,
+    SurgeDegreeBand,
+    SurgeTuning,
     SustainedAction,
     ThreatPool,
     ThreatPoolEntry,
@@ -1566,6 +1569,31 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
         return check_type
 
 
+class SurgeTuningFactory(factory_django.DjangoModelFactory):
+    """Factory for SurgeTuning (#4737). Pass ``trigger_kind``; it is unique per row."""
+
+    class Meta:
+        model = SurgeTuning
+
+    trigger_kind = SurgeTriggerKind.TAUNT_RECEIVED
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    potency_base = 0
+    potency_per_depth = 0
+
+
+class SurgeDegreeBandFactory(factory_django.DjangoModelFactory):
+    """Factory for SurgeDegreeBand (#4737)."""
+
+    class Meta:
+        model = SurgeDegreeBand
+
+    tuning = factory.SubFactory(SurgeTuningFactory)
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    intensity = 1
+    control_change = 0
+    condition = None
+
+
 def wire_flee_config():
     """Seed the FleeConfig singleton (pk=1) + tier modifier rows + starter pool (#878).
 
@@ -1789,6 +1817,52 @@ class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.Django
     base_filter_condition = None  # all filtering happens in the service function
 
 
+def _build_ally_hurt_spike_flow() -> object:
+    """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the hurt-ally handler.
+
+    ``flows.FlowDefinition``/``FlowStepDefinition`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. Returns ``None`` when the FlowDefinition isn't authored (#4737).
+    """
+    from flows.consts import FlowActionChoices
+    from flows.models import FlowDefinition, FlowStepDefinition
+    from world.seeds.sample_content import authored_or_sample
+
+    flow = authored_or_sample(FlowDefinition, {}, name="escalation_ally_hurt_spike")
+    if flow is None:
+        return None
+    if not flow.steps.exists():
+        authored_or_sample(
+            FlowStepDefinition,
+            {
+                "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
+                "parameters": {"payload": _PAYLOAD_PARAM},
+            },
+            flow=flow,
+            variable_name="world.combat.escalation.ally_hurt_spike_handler",
+            parent=None,
+        )
+    return flow
+
+
+class EscalationSpikeOnDamageTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the DAMAGE_APPLIED hurt-ally surge (#4737).
+
+    Installed on encounter rooms by ``install_escalation_room_triggers``; all filtering
+    happens in ``ally_hurt_spike_handler``.
+    """
+
+    class Meta:
+        model = _TRIGGER_DEFINITION_MODEL
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_damage"
+    event_name = "damage_applied"
+    flow_definition = factory.LazyFunction(_build_ally_hurt_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
 def _build_encounter_beat_flow() -> object:
     """Look up the FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
 
@@ -1922,6 +1996,8 @@ def wire_escalation_content() -> None:
     - "escalation_spike_on_killed" TriggerDefinition
     - "escalation_peril_spike" FlowDefinition + "escalation_spike_on_mortal_peril"
       TriggerDefinition (#2013)
+    - "escalation_ally_hurt_spike" FlowDefinition + "escalation_spike_on_damage"
+      TriggerDefinition (#4737)
 
     ``flows.FlowDefinition``/``FlowStepDefinition``/``TriggerDefinition`` are
     all content-repo-owned (#2698) — looked up rather than invented unless
@@ -1971,6 +2047,19 @@ def wire_escalation_content() -> None:
                 "base_filter_condition": None,
             },
             name="escalation_spike_on_mortal_peril",
+        )
+
+    ally_hurt_flow = _build_ally_hurt_spike_flow()
+    if ally_hurt_flow is not None:
+        authored_or_sample(
+            TriggerDefinition,
+            {
+                "event_name": "damage_applied",
+                "flow_definition": ally_hurt_flow,
+                "priority": 50,
+                "base_filter_condition": None,
+            },
+            name="escalation_spike_on_damage",
         )
 
 

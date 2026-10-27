@@ -9422,9 +9422,10 @@ paths:
     post:
       operationId: combat_taunt_create
       description: |-
-        Declare a taunting maneuver against an opponent (#2015).
+        Declare a taunting maneuver against an opponent or an ally (#2015, #4737).
 
-        Requires ``opponent_id`` — the PK of the active opponent to taunt.
+        Requires exactly one of ``opponent_id`` (an active opponent, drawing its aggro)
+        or ``participant_id`` (an active ally, goaded into a rolled surge).
       parameters:
       - in: path
         name: id
@@ -9438,8 +9439,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
-        required: true
+              $ref: '#/components/schemas/TauntTargetRequest'
       security:
       - cookieAuth: []
       responses:
@@ -56605,15 +56605,7 @@ components:
         surge_beats:
           type: array
           items:
-            type: object
-            additionalProperties: {}
-          description: |-
-            Return this round's dramatic-surge beats (#2013).
-
-            Every viewer sees the generic ``narration`` line (never names the
-            bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
-            added only for the surging participant's own owner, GMs, and staff —
-            mirrors ``get_current_round_actions``'s covenant-scoped pattern.
+            $ref: '#/components/schemas/SurgeBeat'
           readOnly: true
         is_participant:
           type: boolean
@@ -93650,6 +93642,48 @@ components:
       description: |-
         * `pattern` - pattern
         * `gem` - gem
+    SurgeBeat:
+      type: object
+      description: |-
+        Shape of one dramatic-surge beat in a round payload (#2013, #4737); read-only.
+
+        Everyone gets ``id`` and ``narration``. The rest appear only for the surged
+        participant's owner, GMs and staff, and the roll fields only for a rolled surge.
+      properties:
+        id:
+          type: integer
+        narration:
+          type: string
+        trigger_kind:
+          type: string
+        amount:
+          type: integer
+        participant:
+          type: integer
+        outcome:
+          type: string
+          description: Name of the roll's outcome.
+        potency:
+          type: integer
+          nullable: true
+          description: What the roll was made against, if anything.
+        control_change:
+          type: integer
+        condition:
+          type: string
+          nullable: true
+          description: Name of the condition the surge actually applied.
+        roll:
+          type: string
+          description: The roll caption the surged player was shown, e.g. 'Composure
+            check vs taunt potency 14 · Partial · Intensity +5'.
+        cause:
+          type: string
+          description: What caused the surge, e.g. 'Mira taunts Tomas.'. Only the
+            surged player, GMs and staff get it; everyone else reads the generic narration.
+      required:
+      - id
+      - narration
     SustainedAction:
       type: object
       description: Observable countdown and erosion for a multi-round commitment.
@@ -94668,6 +94702,22 @@ components:
       required:
       - duration
       - name
+    TauntTargetRequest:
+      type: object
+      description: |-
+        Write serializer for declaring a taunt (#2015, #4737).
+
+        Name exactly one target: ``opponent_id`` (a ``CombatOpponent``, draws its aggro) or
+        ``participant_id`` (a ``CombatParticipant``, goads that player character into a rolled
+        surge). Encounter membership is checked in the view (``get_object_or_404``) and in
+        ``declare_taunt``.
+      properties:
+        opponent_id:
+          type: integer
+          minimum: 1
+        participant_id:
+          type: integer
+          minimum: 1
     TavernGame:
       type: object
       properties:

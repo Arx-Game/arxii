@@ -42,6 +42,7 @@ NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
 NO_ACTION_DECLARED_MESSAGE = "You have not declared an action yet."
 _NO_SUCH_OPPONENT_MSG = "No such opponent in this encounter."
 _NO_SUCH_ALLY_MSG = "No such ally in this encounter."
+_TAUNT_ONE_TARGET_MSG = "Name one target to taunt: an opponent or an ally."
 
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
@@ -900,7 +901,11 @@ class DemoralizeAction(Action):
 
 @dataclass
 class TauntAction(Action):
-    """Taunt an opponent — draw their aggro (wraps ``declare_taunt``)."""
+    """Taunt an opponent or another player character (wraps ``declare_taunt``).
+
+    Name an opponent with ``opponent_id`` to draw its aggro, or an ally with
+    ``ally_participant_id`` to goad them into a rolled surge (#4737). Exactly one.
+    """
 
     key: str = "combat_taunt"
     name: str = "Taunt"
@@ -914,6 +919,7 @@ class TauntAction(Action):
         actor: ObjectDB,
         context: ActionContext | None = None,
         opponent_id: int | None = None,
+        ally_participant_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.services import declare_taunt  # noqa: PLC0415
@@ -922,14 +928,24 @@ class TauntAction(Action):
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
-        opponent = _resolve_opponent(participant, opponent_id)
-        if opponent is None:
-            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
+        if (opponent_id is None) == (ally_participant_id is None):
+            return ActionResult(success=False, message=_TAUNT_ONE_TARGET_MSG)
+        target: CombatOpponent | CombatParticipant | None
+        if ally_participant_id is not None:
+            target = _resolve_ally(participant, ally_participant_id)
+            if target is None:
+                return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
+            success_message = "You taunt your ally."
+        else:
+            target = _resolve_opponent(participant, opponent_id)
+            if target is None:
+                return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
+            success_message = "You taunt your foe."
         try:
-            declare_taunt(participant, opponent)
+            declare_taunt(participant, target)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
-        return ActionResult(success=True, message="You taunt your foe.")
+        return ActionResult(success=True, message=success_message)
 
 
 @dataclass
