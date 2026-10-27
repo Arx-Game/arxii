@@ -6,6 +6,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import ParticipantStatus
+from world.combat.escalation import ESCALATION_SPIKE_TRIGGER_NAMES
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -164,7 +165,7 @@ class EscalationRoundWiringTests(TestCase):
         CombatOpponentFactory(encounter=self.encounter)
 
     def _seed_trigger_definitions(self):
-        """Create the two TriggerDefinitions the install helper looks up.
+        """Create a TriggerDefinition for every name the install helper looks up.
 
         Task 8 ships the real seeded content; for these wiring tests a minimal
         TriggerDefinition (name + event_name + any FlowDefinition) suffices.
@@ -172,12 +173,10 @@ class EscalationRoundWiringTests(TestCase):
         from flows.models import FlowDefinition, TriggerDefinition
 
         flow, _ = FlowDefinition.objects.get_or_create(name="escalation-test-noop-flow")
-        for name, event_name in (
-            ("escalation_spike_on_incapacitated", "character_incapacitated"),
-            ("escalation_spike_on_killed", "character_killed"),
-        ):
+        for name in ESCALATION_SPIKE_TRIGGER_NAMES:
             TriggerDefinition.objects.get_or_create(
-                name=name, defaults={"event_name": event_name, "flow_definition": flow}
+                name=name,
+                defaults={"event_name": "character_incapacitated", "flow_definition": flow},
             )
 
     def _run_rounds(self, count):
@@ -211,10 +210,7 @@ class EscalationRoundWiringTests(TestCase):
         self._seed_trigger_definitions()
         self._run_rounds(2)
         room = self.encounter.room
-        for name in (
-            "escalation_spike_on_incapacitated",
-            "escalation_spike_on_killed",
-        ):
+        for name in ESCALATION_SPIKE_TRIGGER_NAMES:
             self.assertEqual(
                 Trigger.objects.filter(obj=room, trigger_definition__name=name).count(),
                 1,

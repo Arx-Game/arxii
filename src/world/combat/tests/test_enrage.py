@@ -8,9 +8,12 @@ from world.combat.constants import OpponentTier
 from world.combat.factories import (
     BossPhaseFactory,
     CombatEncounterFactory,
+    CombatOpponentActionFactory,
     CombatOpponentFactory,
+    ThreatPoolEntryFactory,
 )
 from world.combat.services import check_and_advance_boss_phase
+from world.combat.services.npc.npc_action import _flat_threat_damage
 
 
 class EnrageTests(TestCase):
@@ -97,3 +100,30 @@ class EnrageTests(TestCase):
         opp.refresh_from_db()
         self.assertEqual(opp.damage_multiplier, Decimal("1.0"))
         self.assertEqual(opp.actions_per_round, 2)
+
+
+class FlatThreatEnrageTests(TestCase):
+    """A flat threat entry (no defense check) carries the attacker's enrage (#4756)."""
+
+    def _flat_action(self, *, multiplier, damage_scale=1.0):
+        opp = CombatOpponentFactory(
+            encounter=CombatEncounterFactory(),
+            tier=OpponentTier.BOSS,
+            damage_multiplier=Decimal(multiplier),
+        )
+        entry = ThreatPoolEntryFactory(base_damage=10)
+        return CombatOpponentActionFactory(
+            opponent=opp, threat_entry=entry, damage_scale=damage_scale
+        )
+
+    def test_enraged_attacker_deals_more_flat_damage(self):
+        action = self._flat_action(multiplier="1.5")
+        self.assertEqual(_flat_threat_damage(action, action.opponent), 15)
+
+    def test_unenraged_attacker_keeps_base_flat_damage(self):
+        action = self._flat_action(multiplier="1.0")
+        self.assertEqual(_flat_threat_damage(action, action.opponent), 10)
+
+    def test_wind_up_downgrade_still_applies_after_enrage(self):
+        action = self._flat_action(multiplier="1.5", damage_scale=0.5)
+        self.assertEqual(_flat_threat_damage(action, action.opponent), 7)
