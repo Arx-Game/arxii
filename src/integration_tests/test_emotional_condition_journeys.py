@@ -5,12 +5,12 @@ authored Anger with one stage that adds 2 intensity a round. Mira is angry (a su
 her so; the condition is granted directly here, since how she became angry is not this
 journey); Tomas is not.
 
-- Each round opening tells Mira "Anger · Intensity +2" and raises her combat intensity by 2,
-  one record a round; Tomas is told nothing and gains nothing.
+- Each round opening (the staff GM's ``encounter begin``) tells Mira "Anger · Intensity +2"
+  and raises her combat intensity by 2, one record a round; Tomas is told nothing and gains
+  nothing.
 - Staff rename Anger in the admin; the next round feeds her the same 2, now under the new
   name. Which conditions feed is read from the stage, never the name.
-- The round payload gives Mira the beat's kind, amount and cause; Tomas sees only the
-  generic beat.
+- The round payload gives Mira the beat's kind, amount and cause; Tomas gets no beat.
 - The surge tuning admin page refuses a Failure band carrying Anger and accepts it on a
   Success band.
 """
@@ -30,7 +30,6 @@ from world.combat.factories import (
     SurgeTuningFactory,
 )
 from world.combat.models import DramaticSurgeRecord, SurgeDegreeBand
-from world.combat.services import begin_declaration_phase
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
@@ -83,15 +82,21 @@ class AngerFeedsHerIntensity(RefusedAdminSaveCase):
         ConditionInstanceFactory(
             target=self.mira, condition=self.anger, current_stage=stage, rounds_remaining=20
         )
+        # The GM runs the fight from the road; staff may run any encounter.
+        self.gm = self.make_player("Warden", room=self.road)
+        gm_account = self.account_of(self.gm)
+        gm_account.is_staff = True
+        gm_account.save(update_fields=["is_staff"])
         self.watch(self.mira, self.tomas)
 
     def next_round(self) -> None:
-        """Open the next round the way the game does once the last one has resolved."""
+        """The staff GM types ``encounter begin`` once the last round has resolved."""
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         # The private line is sent once the round-opening commits; a test's never does.
         with self.captureOnCommitCallbacks(execute=True):
-            begin_declaration_phase(self.encounter)
+            told = self.telnet(self.gm, "encounter begin")
+        self.assertIn("Round begins.", told)
         self.encounter.refresh_from_db()
 
     def intensity(self, character) -> int:
@@ -142,10 +147,9 @@ class AngerFeedsHerIntensity(RefusedAdminSaveCase):
         self.assertEqual(own["amount"], ANGER_PER_ROUND)
         self.assertEqual(own["cause"], "Anger feeds Mira's intensity.")
         self.assertNotIn("outcome", own)
-        for beat in self.beats_seen_by(self.tomas):
-            self.assertNotIn("trigger_kind", beat)
-            self.assertNotIn("amount", beat)
-            self.assertNotIn("cause", beat)
+        # Tomas is not told of her feed at all: no beat, not even the generic line.
+        self.assertEqual(self.beats_seen_by(self.tomas), [])
+        self.assertNotTold(self.tomas, "Mira surges.")
 
     def test_the_tuning_admin_refuses_anger_on_a_failure_band(self) -> None:
         tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)

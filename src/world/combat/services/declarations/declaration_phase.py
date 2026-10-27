@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -12,17 +14,43 @@ from world.combat.services.encounter.engagement import _ensure_combat_engagement
 from world.combat.services.encounter.pulls import expire_pulls_for_round
 from world.scenes.constants import RoundStatus
 
+if TYPE_CHECKING:
+    from web.admin.authoring.identity_map import CacheGuard
 
-@transaction.atomic
+
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
     """Advance round_number by 1 and set status to DECLARING.
 
     Uses select_for_update to prevent concurrent calls.
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
+
+    The round opening runs in one transaction. If it raises, the database rolls back, and
+    the identity-mapped rows it changed in memory (the encounter, its participants, their
+    engagements' intensity and control from the escalation tick and the emotional-condition
+    feed) are put back as they were, and engagements and surge records it created are
+    evicted, so no later reader sees a surge the database never kept (#4739).
     """
+    from web.admin.authoring.identity_map import CacheGuard  # noqa: PLC0415
+    from world.combat.models import DramaticSurgeRecord  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    guard = CacheGuard()
+    guard.watch_created(CharacterEngagement, DramaticSurgeRecord)
+    try:
+        with transaction.atomic():
+            _open_round(encounter, guard)
+    except BaseException:
+        guard.restore()
+        raise
+
+
+def _open_round(encounter: CombatEncounter, guard: CacheGuard) -> None:
+    """The round opening itself; ``guard`` keeps each cached row before it changes."""
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
 
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    guard.keep(enc, encounter)
     if is_in_standoff(enc):
         msg = "The standoff has not broken yet."
         raise ValueError(msg)
@@ -68,7 +96,18 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     # identity-mapped instances directly, then persist with one bulk_update
     # query — correct in-memory state AND a single query, not a per-
     # participant save() loop.
-    reset_participants = list(CombatParticipant.objects.filter(encounter=enc))
+    reset_participants = list(
+        CombatParticipant.objects.filter(encounter=enc).select_related("character_sheet")
+    )
+    guard.keep(*reset_participants)
+    # A sheet caches its engagement (a reverse one-to-one) once one is begun here, and the
+    # escalation tick and the condition feed change these engagements in memory.
+    guard.keep(*(participant.character_sheet for participant in reset_participants))
+    guard.keep(
+        *CharacterEngagement.objects.filter(
+            character_id__in=[participant.character_sheet_id for participant in reset_participants]
+        )
+    )
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
         reset_participant.hops_used = 0

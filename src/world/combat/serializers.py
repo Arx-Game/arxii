@@ -32,6 +32,7 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    SurgeTriggerKind,
 )
 from world.combat.models import (
     Clash,
@@ -1784,7 +1785,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         ``condition`` and the ready-made ``roll`` line; a beat of a kind that is not rolled
         carries none of them. A surge that was never announced to the room (it added no
         intensity) has an empty ``narration`` and is left out for everyone but those same
-        viewers.
+        viewers, and so is an emotional condition's feed (``CONDITION_FED``, #4739), which
+        is never announced to the room.
         """
         request = self.context.get("request")
         records = list(
@@ -1813,9 +1815,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             }
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
-            if not sees_detail and not beat["narration"]:
+            if not sees_detail and (
+                not beat["narration"] or record.trigger_kind == SurgeTriggerKind.CONDITION_FED
+            ):
                 # Nothing was announced to the room (a control-only or condition-only
-                # surge), so a bystander has no beat to show.
+                # surge, or an emotional condition's feed, #4739, which is never
+                # announced), so a bystander has no beat to show.
                 continue
             if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind

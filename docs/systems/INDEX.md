@@ -8566,7 +8566,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (`repeat_round` = round, no outcome; nothing for a sum of 0; NPC opponents never), with
   `narrate=False` and cause "<names> feed(s) <persona>'s intensity."; the player is sent
   "<names> · Intensity +<total>" on commit and the web reads the same record in
-  `surge_beats`. Which conditions feed is the stage field, never a name.
+  `surge_beats` (the surged player, GMs and staff only; a bystander gets no beat for a
+  `CONDITION_FED` row). Which conditions feed is the stage field, never a name. If the round
+  opening raises, `begin_declaration_phase` puts the cached encounter, participants, sheets
+  and engagements back (`web.admin.authoring.identity_map.CacheGuard`) and evicts
+  engagements and surge records it created, so the escalation tick and the feed never leave
+  the identity map ahead of the database.
   `validate_surge_bands(bands, *, feeding_condition_ids=None)` treats a feeding condition
   as a benefit (a better outcome may add one, may not drop one) and refuses one on a band
   whose outcome has success level below 1 (model `clean`, admin inline formset and

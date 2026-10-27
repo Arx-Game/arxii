@@ -24,6 +24,7 @@ from world.combat.factories import (
     EscalationCurveFactory,
 )
 from world.combat.models import DramaticSurgeRecord
+from world.combat.services import begin_declaration_phase
 from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionStageFactory,
@@ -153,3 +154,61 @@ class ConditionIntensitySurgeTests(TestCase):
         ConditionStageFactory(condition=anger, stage_order=2, intensity_per_round=1)
         plain = ConditionTemplateFactory(name="Unit Plain")
         self.assertEqual(condition_feeds_intensity([anger.pk, plain.pk, None]), {anger.pk})
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
+class RoundOpeningRollbackTests(TestCase):
+    """A round opening that raises after the feed leaves the cached rows as stored."""
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(
+            escalation_curve=EscalationCurveFactory(start_round=50),
+            round_number=1,
+            status=RoundStatus.BETWEEN_ROUNDS,
+        )
+        CombatOpponentFactory(encounter=self.encounter)
+        self.seat = CombatParticipantFactory(
+            encounter=self.encounter, status=ParticipantStatus.ACTIVE
+        )
+        self.character = self.seat.character_sheet.character
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
+        template = ConditionTemplateFactory(name="Rollback Anger", has_progression=True)
+        stage = ConditionStageFactory(condition=template, stage_order=1, intensity_per_round=2)
+        ConditionInstanceFactory(target=self.character, condition=template, current_stage=stage)
+
+    def test_a_raise_after_the_feed_restores_the_cached_engagement(self) -> None:
+        engagement = CharacterEngagement.objects.get(character=self.seat.character_sheet)
+        fed_in_memory: list[int] = []
+
+        def feed_then_note(encounter):
+            beats = apply_condition_intensity_surges(encounter)
+            fed_in_memory.append(engagement.intensity_modifier)
+            return beats
+
+        with (
+            patch(
+                "world.combat.services.declarations.declaration_phase._dissolve_graduated_bonds",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "world.combat.condition_surges.apply_condition_intensity_surges",
+                side_effect=feed_then_note,
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            begin_declaration_phase(self.encounter)
+
+        # The feed did raise the cached engagement before the round opening failed.
+        self.assertEqual(fed_in_memory, [2])
+        stored = CharacterEngagement.objects.filter(pk=engagement.pk).values_list(
+            "intensity_modifier", "control_modifier"
+        )
+        self.assertEqual((engagement.intensity_modifier, engagement.control_modifier), stored.get())
+        self.assertEqual(engagement.intensity_modifier, 0)
+        self.assertIs(
+            CharacterEngagement.objects.get(character=self.seat.character_sheet), engagement
+        )
+        self.assertFalse(DramaticSurgeRecord.objects.exists())
+        self.assertEqual(list(DramaticSurgeRecord.get_all_cached_instances()), [])
+        self.assertEqual(self.encounter.round_number, 1)
+        self.assertEqual(self.encounter.status, RoundStatus.BETWEEN_ROUNDS)
