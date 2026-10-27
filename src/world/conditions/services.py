@@ -2301,6 +2301,56 @@ def get_condition_modifier_breakdown(
     return rows
 
 
+def condition_target_contributions(
+    character_sheet: "CharacterSheet",
+    modifier_target: "ModifierTarget",
+    *,
+    lane: str,
+) -> list[ModifierContribution]:
+    """One CONDITION contribution per active ConditionModifierEffect on a target (#4726).
+
+    The same walk as ``get_condition_modifier_total``, kept per effect so a pile tapers.
+    An effect on a sized instance (a technique buff with a level and a size) reads
+    ``lane``'s value table (``ValueTable.signed_value``), signed like its authored value,
+    and is never scaled again by severity or stage, as on the check lane
+    (``_check_modifier_for_target``). An unsized instance, or a pair no table row covers,
+    keeps ``scaled_condition_effect_value``. The table loads only when a sized instance
+    has a matching effect, so an ordinary read adds no query.
+    """
+    matched: list[tuple[ConditionInstance, ConditionModifierEffect]] = []
+    for instance in get_active_conditions(character_sheet.character):
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        matched.extend(
+            (instance, effect)
+            for effect in ConditionModifierEffect.objects.filter(
+                query, modifier_target=modifier_target
+            )
+        )
+
+    value_table = None
+    if any(_is_sized(instance) for instance, _effect in matched):
+        value_table = load_value_table(lane)
+
+    contributions: list[ModifierContribution] = []
+    for instance, effect in matched:
+        sized = _sized_modifier_value(instance, effect.value, value_table)
+        label = instance.condition.name
+        if instance.current_stage is not None:
+            label = f"{label} ({instance.current_stage.name})"
+        contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.CONDITION,
+                source_label=label,
+                value=scaled_condition_effect_value(effect, instance) if sized is None else sized,
+                level=instance.modifier_level if sized is not None else None,
+                size=instance.modifier_size if sized is not None else None,
+            )
+        )
+    return contributions
+
+
 def active_condition_instances_by_sheet(sheet_ids: Iterable[int]) -> list[ConditionInstance]:
     """Active condition instances on many sheets, in one query and with no teardown (#4090).
 
@@ -2685,12 +2735,15 @@ def _is_sized(instance: ConditionInstance) -> bool:
     return instance.modifier_level is not None and instance.modifier_size is not None
 
 
-def _sized_check_value(
+def _sized_modifier_value(
     instance: ConditionInstance,
     authored_value: int,
     value_table: ValueTable | None,
 ) -> int | None:
-    """The value-table number for one of ``instance``'s check modifiers, or None (#4594).
+    """The value-table number for one of ``instance``'s modifiers, or None (#4594).
+
+    ``value_table`` is the lane's: check modifiers read the check lane's, stat
+    modifiers the stat lane's (#4726).
 
     The magnitude comes from the table at the instance's level and size; the authored
     row's sign says bonus or penalty, so a debuff stays a penalty. None (keep the flat
@@ -2747,7 +2800,7 @@ def _check_modifier_for_target(
 
         for mod in modifiers:
             modifier_value = mod.modifier_value
-            sized_value = _sized_check_value(instance, mod.modifier_value, value_table)
+            sized_value = _sized_modifier_value(instance, mod.modifier_value, value_table)
 
             # effective_severity already folds in the stage multiplier, so scaling
             # by severity and by the stage are mutually exclusive — if/elif, not two

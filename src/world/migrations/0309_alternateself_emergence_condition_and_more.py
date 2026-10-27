@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0307_affinity_rows_contract"),
+        ("arxii", "0308_stat_modifier_lane"),
     ]
 
     operations = [

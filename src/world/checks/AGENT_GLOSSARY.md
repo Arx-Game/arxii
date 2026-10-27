@@ -191,7 +191,7 @@ _Avoid_: magnitude, strength, small/big buff
 
 **Value table** (#4594, ADR-4594-A):
 The `ModifierValue` rows: what a modifier of each size is worth at each level, in its lane's units
-(check points for the check lane). Sparse rows read as steps: a level reads the row at the highest
+(check points for the check lane, stored stat units for the stat lane). Sparse rows read as steps: a level reads the row at the highest
 authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
 _Avoid_: buff table, modifier curve
 
@@ -212,7 +212,7 @@ _Avoid_: diminishing returns (too broad; ADR-0158's vow-keyed grouping is a diff
 stacking penalty, soft cap
 
 **Lane** (#4594, #4551 section 5.5):
-One kind of quantity a modifier can change (`ModifierLane`). Only the check lane exists so far;
-later lanes (stats, cast power, damage, soak, healing and more) add a choice and rows to the same
-tables.
+One kind of quantity a modifier can change (`ModifierLane`). The check lane and the stat lane
+(#4726, ADR-4726-A: a buff to a stat, in stored units, applied wherever the stat is read) exist;
+later lanes (cast power, damage, soak, healing and more) add a choice and rows to the same tables.
 _Avoid_: channel, track

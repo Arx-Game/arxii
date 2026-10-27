@@ -5,11 +5,12 @@ The TraitHandler implements a multi-layer caching system similar to Arx I
 for fast trait value lookups and updates. The primary purpose is caching
 CharacterTraitValues with case-insensitive trait name lookups.
 
-Stat modifiers from distinctions are automatically applied when getting
-trait values for stats (strength, dexterity, etc.).
+Stat modifiers (distinctions, conditions, equipment) are automatically applied
+when getting trait values for stats (strength, dexterity, etc.), valued and
+tapered in the stat lane (#4726).
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -193,7 +194,7 @@ class TraitHandler:
 
     def _get_stat_modifier(self, trait: "Trait") -> int:
         """
-        Get the total modifier for a stat from character's distinctions etc.
+        Get the total modifier for a stat, valued and tapered in the stat lane (#4726).
 
         Uses the ModifierTarget.target_trait FK for type-safe lookup
         instead of string matching. Takes the already-resolved ``Trait``
@@ -204,10 +205,22 @@ class TraitHandler:
         trait nor the target lookup re-queries per call. This kept fatigue
         capacity (which resolves 6 stat values per participant) from firing
         a per-stat N+1 on the combat detail hot path (#552).
+
+        The total is a checks ``ModifierBreakdown`` over the stat target's CHARACTER,
+        EQUIPMENT and CONDITION contributions, so a sized technique buff or distinction
+        effect reads the stat lane's value table and a pile of one kind tapers by the
+        stat lane's ``ModifierTaper`` rows. Every reader of ``get_trait_value`` (checks,
+        fatigue, stamina, carrying capacity, scandal, the stat sheet) sees this one
+        number. Hot path: the value table loads only when a source is sized, and the
+        taper rules only when some kind has two or more contributions, so a read with
+        nothing sized and no pile runs no query beyond the sources themselves.
         """
-        from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
+        from world.checks.constants import ModifierLane  # noqa: PLC0415
+        from world.checks.modifier_values import load_taper_rules  # noqa: PLC0415
+        from world.checks.services import modifier_target_contributions  # noqa: PLC0415
+        from world.checks.types import ModifierBreakdown  # noqa: PLC0415
+        from world.conditions.services import condition_target_contributions  # noqa: PLC0415
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
         sheet = self.character.character_sheet
         if sheet is None:
@@ -216,7 +229,13 @@ class TraitHandler:
         target = ModifierTarget.get_for_trait(trait)
         if target is None:
             return 0
-        return get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
+        contributions = modifier_target_contributions(
+            sheet, target, lane=ModifierLane.STAT
+        ) + condition_target_contributions(sheet, target, lane=ModifierLane.STAT)
+        kinds = Counter(contribution.source_kind for contribution in contributions)
+        has_pile = any(count >= 2 for count in kinds.values())  # noqa: PLR2004
+        tapers = load_taper_rules(ModifierLane.STAT) if has_pile else {}
+        return ModifierBreakdown(contributions=contributions, tapers=tapers).total
 
     def get_trait_display_value(self, trait_name: str) -> int:
         """

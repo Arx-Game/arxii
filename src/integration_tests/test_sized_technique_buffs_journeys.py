@@ -362,8 +362,8 @@ class StaffSeeTheSizeCheck(JourneyCase):
         messages = self.resave(technique)
 
         self.assertIn(
-            "Hollow is sized Large, but it changes no check, so its size has nothing to act "
-            "on yet.",
+            "Hollow is sized Large, but it changes no check or stat, so its size has nothing "
+            "to act on yet.",
             messages,
         )
 

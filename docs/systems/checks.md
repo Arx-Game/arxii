@@ -69,8 +69,8 @@ practice, even though the schema doesn't enforce it (#2501 content-pipeline audi
 
 ### Modifier value table, level baselines and the taper (#4594, ADR-4594-A)
 
-Staff-tuned rows, all keyed by a `ModifierLane` column (only `check` so far) so later lanes add
-rows, not models. Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
+Staff-tuned rows, all keyed by a `ModifierLane` column (`check`, and `stat` since #4726) so later
+lanes add rows, not models. Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
 pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (cluster
 `modifier_values`); an empty table leaves behavior unchanged.
 
@@ -135,8 +135,9 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
   (`amplifies_sources_by`) and immunity then apply to the table number exactly as they did to the
   flat one. The detail row, and so the contribution, carries `level`/`size` (the stepped size)
   only when the table priced it. No class level (level 0),
-  no value row or no size keeps the flat `CharacterModifier.value`. Every other caller of
-  `get_modifier_breakdown` (stats, power, soak, levers) passes no lane and reads flat values.
+  no value row or no size keeps the flat `CharacterModifier.value`. The stat read passes the
+  stat lane (see "The stat lane" below); every other caller of `get_modifier_breakdown` (power,
+  soak, levers) passes no lane and reads flat values.
 - *Source kind.* Distinction rows stay in the CHARACTER kind and taper in its pile with the other
   `CharacterModifier` rows that can reach a check-scoped target: achievement rewards
   (`ModifierSource.achievement_reward`) and form combat profiles (`form_combat_profile`), both
@@ -146,6 +147,42 @@ The walk only reaches a check whose scoped `ModifierTarget` is in an
   a size, or the reverse, and Paramount are refused). `_scene_check_contributions` values a
   sized row at its own level, never the roller's; an unsized row keeps its flat value. The SCENE
   pile tapers, though one scene holds at most one row per check type.
+
+### The stat lane (#4726, ADR-4726-A)
+
+A modifier on a stat target (a `ModifierTarget` whose `target_trait` is a STAT trait) is valued
+and tapered in the `stat` lane, in internal stat units (stats are stored x10, so 10 is one shown
+point). The lane applies wherever a stat is read: the change is in
+`TraitHandler._get_stat_modifier`, so checks (inside trait points), fatigue capacity, stamina's
+health term, carrying capacity and scandal all read the same buffed number. The web sheet
+shows the stored, unbuffed stats (`_build_stats` in `world/character_sheets/serializers.py`).
+
+- **Contributions.** The stat read builds the stat target's CHARACTER and EQUIPMENT
+  contributions with `modifier_target_contributions(sheet, target, lane=ModifierLane.STAT)`
+  (`services.py`), the same builder the check seam calls with the check lane (fashion stays in
+  the check seam only), and its CONDITION contributions with
+  `world.conditions.services.condition_target_contributions(sheet, target, lane=...)`: one per
+  matching `ConditionModifierEffect`. A sized condition instance (`modifier_level` and
+  `modifier_size` set by the applying cast) reads the stat lane's table and is not scaled again
+  by severity or stage; an unsized one keeps `scaled_condition_effect_value`. A sized
+  distinction effect on a stat reads the table at its holder's level and held-rank size.
+  `get_condition_modifier_total` keeps its flat sum for its other callers.
+- **The taper.** The total is a checks `ModifierBreakdown` with `load_taper_rules(ModifierLane.STAT)`:
+  CONDITION, CHARACTER and EQUIPMENT piles, bonuses and penalties apart, the walk's vow terms
+  untapered as `vow_part`. No stat-lane rows means a plain sum, as before.
+- **Hot path (#552).** The value table loads only when a source is sized, and the taper rules
+  only when some kind has two or more contributions, so a stat read with nothing sized and no
+  pile runs exactly the queries it ran before.
+- **Separate piles.** A check reads the buffed stat through its trait points; the stat lane's
+  piles and the check lane's piles never share a contribution, so nothing tapers twice.
+- **Seed.** `world/seeds/modifier_values.py` adds stat-lane rows. Under the seeded STAT
+  `PointConversionRange` (1 point per stored unit across 1-100), a stat buff of N units moves a
+  weight-1 check by N points, so the stat lane's values equal the check lane's for each size and
+  level (`world/seeds/tests/test_stat_lane_universality.py` holds the relation). The taper is the
+  check lane's ratio and floor for the three kinds a stat read gathers.
+- **Admin.** A technique whose sized condition changes only a stat no longer gets the "changes
+  no check" size warning (`applied_condition_size_warnings`); the warning now reads "changes no
+  check or stat".
 
 ### Authoring guardrail: one channel per condition/check pair (#2505)
 

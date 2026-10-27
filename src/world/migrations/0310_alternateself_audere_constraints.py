@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0308_alternateself_emergence_condition_and_more"),
+        ("arxii", "0309_alternateself_emergence_condition_and_more"),
     ]
 
     operations = [

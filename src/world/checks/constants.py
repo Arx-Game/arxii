@@ -114,11 +114,14 @@ class ModifierLane(models.TextChoices):
 
     Every lane values its modifiers from the same rows (``ModifierValue``,
     ``ModifierLevelBaseline``, ``ModifierTaper``) keyed by this column, so a later
-    lane adds rows and a choice here, never a new model. Only the check lane is
-    wired so far; the other lanes in #4551's inventory join one at a time.
+    lane adds rows and a choice here, never a new model. The check lane and the stat
+    lane (#4726) are wired; the other lanes in #4551's inventory join one at a time.
+    The stat lane values a modifier on a stat target in internal stat units (stats are
+    stored x10), and applies wherever a stat is read (``TraitHandler._get_stat_modifier``).
     """
 
     CHECK = "check", "Check points"
+    STAT = "stat", "Stats"
 
 
 class ModifierSize(models.IntegerChoices):

@@ -5,11 +5,19 @@ Tests models, handlers, and check resolution functionality.
 """
 
 from django.core.exceptions import ValidationError
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 import pytest
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.modifier_models import ModifierTaper, ModifierValue
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionModifierEffectFactory,
+    ConditionTemplateFactory,
+)
 from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction, DistinctionEffect
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
@@ -822,6 +830,48 @@ class TraitHandlerStatModifierTests(TestCase):
 
         # 0 base + 10 (Giant's Blood modifier) = 10
         assert value == 10
+
+
+class StatLaneReadQueryTests(TestCase):
+    """The stat read loads stat-lane rows only when it needs them (#4726, #552 hot path)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.strength = TraitFactory(
+            name="strength", trait_type=TraitType.STAT, category=TraitCategory.PHYSICAL
+        )
+        cls.target = ModifierTargetFactory(
+            category=ModifierCategoryFactory(name="stat"),
+            name="strength",
+            target_trait=cls.strength,
+        )
+        CharacterTraitValueFactory(character=cls.sheet, trait=cls.strength, value=30)
+
+    def buff(self, name: str) -> None:
+        condition = ConditionTemplateFactory(name=name)
+        ConditionModifierEffectFactory(condition=condition, modifier_target=self.target, value=10)
+        ConditionInstanceFactory(target=self.character, condition=condition)
+
+    def lane_queries(self) -> list[str]:
+        tables = (ModifierValue._meta.db_table, ModifierTaper._meta.db_table)
+        handler = TraitHandler(self.character)
+        handler.setup_cache()
+        with CaptureQueriesContext(connection) as captured:
+            handler.get_trait_value("strength")
+        return [q["sql"] for q in captured.captured_queries if any(t in q["sql"] for t in tables)]
+
+    def test_one_unsized_buff_reads_no_lane_rows(self):
+        self.buff("Dockside Cheer")
+        self.assertEqual(self.lane_queries(), [])
+
+    def test_a_pile_reads_the_taper_rows_only(self):
+        self.buff("Dockside Cheer")
+        self.buff("Second Wind")
+        queries = self.lane_queries()
+        self.assertEqual(len(queries), 1)
+        self.assertIn(ModifierTaper._meta.db_table, queries[0])
 
 
 class GiantsBloodModifierCreationTests(TestCase):
