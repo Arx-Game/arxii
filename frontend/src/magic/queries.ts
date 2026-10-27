@@ -23,6 +23,8 @@ import type {
   ChooseUltimateRequest,
   CrossXPLockRequest,
   DissolveRequest,
+  DriftCorrectionConvertRequest,
+  DriftCorrectionDeclineRequest,
   EntryFlourishRespondRequest,
   GlimpseDistinctionLinkRequest,
   PatchThreadRequest,
@@ -94,6 +96,8 @@ export const magicKeys = {
   audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
 
   entryFlourishPending: () => [...magicKeys.all, 'entry-flourish', 'pending'] as const,
+
+  driftConversionPending: () => [...magicKeys.all, 'drift-correction', 'pending'] as const,
 
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 
@@ -802,6 +806,54 @@ export function useRespondToEntryFlourish(_characterSheetId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.entryFlourishPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Drift conversion offers, #4733
+// ---------------------------------------------------------------------------
+
+/**
+ * Open drift conversion offers for the account. Offers exist only inside a live
+ * scene, so the 5 s poll runs only where the gate is mounted (the scene page and
+ * the game page). throwOnError deliberately NOT set: same rationale as
+ * usePendingEntryFlourishOffers.
+ */
+export function usePendingDriftConversionOffers(enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.driftConversionPending(),
+    queryFn: () => api.getPendingDriftConversionOffers(),
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+/**
+ * Perform the drift correction rite under an open offer.
+ *
+ * On success invalidates the pending inbox (the cap shrinks or the offer closes)
+ * and magicKeys.characterResonanceList() (the source loses and the target gains
+ * balance; prefix match covers every per-sheet entry).
+ */
+export function useConvertDrift() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DriftCorrectionConvertRequest) => api.convertDrift(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
+    },
+  });
+}
+
+/** Let an open drift conversion offer go; clears it from the pending inbox. */
+export function useDeclineDriftConversion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DriftCorrectionDeclineRequest) => api.declineDriftConversion(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.driftConversionPending() }).catch(() => {});
     },
   });
 }

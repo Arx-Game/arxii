@@ -620,6 +620,57 @@ non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractiona
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 
+### Drift conversion offers (#4733, slice 4 of #4672)
+
+A deed in a live scene opens a conversion offer; the player answers it with the drift
+correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
+
+**Wire contract** (`/api/magic/drift-correction/`, generated types, re-exported in `types.ts`):
+
+- `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
+  Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
+  `{ id, scene_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
+  the rite, its check type or a tier's share is missing; the message is the rite's own refusal, empty
+  while ready); each cap is `{ target_resonance {id, name, affinity},
+cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
+  `{ resonance_id, resonance_name, balance, multiplier (decimal string), conversion_type
+('FALL' | 'REDEMPTION'), max_amount, projected_output }` (`projected_output` is for
+  `max_amount`); a component is `{ item_id, name, mode ('material' | 'facet' | 'keepsake') }`.
+- `convertDrift(body)` - POST `convert/`, body `{ offer_id, source_resonance_id,
+target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
+  (`attempted_amount`, `converted_amount`, `granted_amount`, `outcome_name`,
+  `success_level`, `conversion_type`, `focus_bonus`). A refusal is 400 `{detail}` (the view returns its request-validation failures in the same
+  shape, field names dropped, so the player only ever reads the sentence), thrown by
+  `readErrorDetail` so the dialog shows `error.message`.
+- `declineDriftConversion({ offer_id })` - POST `decline/` -> `{ detail }`.
+
+**Hooks:** `usePendingDriftConversionOffers(enabled?)` (`magicKeys.driftConversionPending()`,
+polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pending key and
+`characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
+
+**Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
+`useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches it,
+polling only once the scene is known; keeps the result line after an exhausted
+offer leaves the inbox; only an `aria-hidden` glow behind the strip pulses, so its words
+keep full contrast) and `DriftConversionOfferDialog` (Screen 5, one framed box: the small-caps
+title "Conversion offer · this scene"; per cap a system line "You hold <sources with a balance,
+joined with commas and 'and'> that does not fit you. Convert it to <target>." beside the cap
+remaining; a quiet row with the source picker (a plain chip when there is one source) and an
+amount bounded by the chosen source's `max_amount`, defaulting to it; single-select component
+pills `<name> · <mode>`, the chosen one filled `bg-primary text-primary-foreground`, the rest
+outlined; a rate line built from the source's `multiplier` ("Redemption: 12 Ruin becomes about
+6 Dawnlight", plus "; a focus adds N" only when `focus_bonus > 0`); the result and error lines;
+and one right-aligned row with Decline and "Perform the rite" (primary), Perform disabled until
+a component is chosen and the amount is valid; with several caps Decline sits in the last cap's
+row). While `rite_ready` is false each block shows `rite_not_ready_message` in place of the
+component pills and the button stays disabled. The yield for a typed amount is
+`max(1, floor(amount * multiplier))`, the server's own rounding.
+
+**Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
+`EntryFlourishOfferGate`, `sceneId` from the scene) and `GamePage`'s `GameCenter` (when the
+session has a scene, `sceneId` from the session's scene). Tests that
+mock `@/magic/queries` wholesale (`SceneDetailPage.test.tsx`) must add the three drift hooks.
+
 ## Data Flow
 
 - **GET soul-tether detail:** `useSoulTetherDetail(relationshipId)` → `SoulTetherDetail`

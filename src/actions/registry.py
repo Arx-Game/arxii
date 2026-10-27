@@ -194,6 +194,10 @@ from actions.definitions.dreams import (
     DreamwalkAction,
     SleepAction,
 )
+from actions.definitions.drift_correction import (
+    DeclineDriftCorrectionAction,
+    PerformDriftCorrectionAction,
+)
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -836,6 +840,8 @@ _ALL_ACTIONS: list[Action] = [
     SetSituationAction(),
     PlaceChallengeAction(),
     PerformRitualAction(),
+    PerformDriftCorrectionAction(),
+    DeclineDriftCorrectionAction(),
     # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
     OpenGameAction(),
     JoinGameAction(),

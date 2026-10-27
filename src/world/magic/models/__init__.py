@@ -34,6 +34,8 @@ Submodules (see Scope 6 §4.4):
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 - progression_milestone: MagicProgressionMilestone
+- drift: DriftCorrectionConfig, DriftCorrectionOutcomeShare, DriftConversionOffer,
+  DriftConversionCap (#4733)
 - sanctum: SanctumDetails, SanctumOwnerMode, SanctumPendingPayout,
   SanctumHomecomingGainAward, SanctumPurgingRetentionAward,
   SanctumDissolutionRecoveryAward (#1207)
@@ -97,6 +99,12 @@ from world.magic.models.crossings import ThreadCrossingThreshold
 from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
+)
+from world.magic.models.drift import (
+    DriftConversionCap,
+    DriftConversionOffer,
+    DriftCorrectionConfig,
+    DriftCorrectionOutcomeShare,
 )
 from world.magic.models.endorsement import (
     EntryFlourishRecord,
@@ -345,6 +353,11 @@ __all__ = [
     "DistinctionRitualGrant",
     "DramaticMomentTag",
     "DramaticMomentType",
+    # drift correction (#4733)
+    "DriftConversionCap",
+    "DriftConversionOffer",
+    "DriftCorrectionConfig",
+    "DriftCorrectionOutcomeShare",
     "EffectType",
     "EffectTypeManager",
     # endorsement — entry flourish (#545)

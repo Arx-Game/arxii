@@ -75,7 +75,7 @@ and the 5-axis Thread model no longer exist.
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
 | `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
-| `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
+| `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier` (0 or more: a tier only adds control, #4740), `description` |
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
@@ -1732,7 +1732,7 @@ All SharedMemoryModel lookups.
 | `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. `regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL, default NEUTRAL, #1831) — how Court-role (COVENANT_ROLE) pull modulation responds to the Court leader's signed regard for the live target; ignored for every other `target_kind`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload |
-| `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, either `item_template` FK (template-mode) or `min_touchstone_tier` FK to `ResonanceTier` (touchstone-mode — exactly one of the two set, enforced by `CheckConstraint`), `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
+| `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK; exactly one of three modes (`CheckConstraint` `ritualcomponentrequirement_exactly_one_mode`): `item_template` FK (template-mode), `min_touchstone_tier` FK to `ResonanceTier` (touchstone-mode), or `matches_target_resonance` (target-resonance mode, #4733: an item tied to the resonance being converted toward, an item with a motif facet tied to it, or an item at or over `min_item_meaning`, which only this mode may set and blank turns off); `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
 | `ResonanceTier` | Ordered potency tier for resonance-tied items/touchstones (independent of `items.QualityTier` — potency and crafting quality are orthogonal axes) | `name` (unique), `tier_level` (unique, ordering/threshold value), `description` |
 
 **Touchstones + reagents (#707 — ADR-0087).** `ItemTemplate.tied_resonance` (FK to `Resonance`) +
@@ -2816,6 +2816,17 @@ one, and the checkpoint never warned of it. Both now read `get_effective_consequ
 (`get_soulfray_warning`) or `soulfray_ladder_summary()` (`nonlethal_severity_ceiling`),
 which merge in the inherited rows the same way the draw itself does.
 
+**The anima-0 stage (#4740, #4727 decision 7).** `SoulfrayConfig.anima_zero_stage`
+(nullable FK to a Soulfray `ConditionStage`, PROTECT; `clean()` requires a stage of
+`condition` with a `severity_threshold`, and the admin picker offers Soulfray stages only)
+is the stage the dangerous part of the ladder starts at. While she has anima left after a
+cast's deduction, `_handle_soulfray_accumulation` keeps the cumulative severity at or below
+`anima_zero_ceiling(current) = anima_zero_stage.severity_threshold - 1`, on both the
+first-creation and the advance branch, through the same bound the non-lethal cap uses
+(`_bounded_advance`); when both caps apply, the lower wins. At anima 0, or with the field
+unset, there is no anima cap. `accumulate_soulfray` passes the refreshed `anima.current`;
+a direct caller that passes none gets no anima cap.
+
 **Authoring path.** A Soulfray stage's own fields, its on-entry conditions, its
 resilience-check penalty, its consequence pool (own rows and an optional one-level-deep
 shared parent) and each own row's effects are authored on the **Soulfray Stage Builder**
@@ -2850,6 +2861,31 @@ audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-
 ---
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
+
+**High control opens Audere earlier (#4740, #4727 decision 6).**
+`AudereThreshold.control_per_stage_earlier` (PositiveSmallIntegerField, default 0 = off):
+each full step of runtime control steps the Soulfray stage the plain Audere offer needs back
+one stage along the actual Soulfray ladder (stage orders need not be contiguous: on a
+10/20/30 ladder one step from 30 is 20), never below the first Soulfray stage.
+`required_stage_order(threshold, runtime_control)` (`world/magic/audere.py`) computes it;
+negative control lowers nothing, and the ladder is read (one query) only when control
+lowers the requirement. `stages_lowered_by_control(threshold, runtime_control)` counts the
+stages taken off; `PendingAudereOfferSerializer.stages_lowered_by_control` exposes it from
+the offer's `fired_control`, the web offer dialog renders "Your control lets you break
+through one Soulfray stage earlier than usual." (or "N Soulfray stages") when it is above
+0, and the telnet `accept` listing appends the same line (`control_lowered_line`). `_evaluate_audere_gates`,
+`check_audere_eligibility(character, runtime_intensity, runtime_control=0)` and
+`maybe_create_audere_offer(character, runtime_intensity, *, runtime_control=0, sheet=None)`
+take the control; the cast hook in `use_technique` passes `stats.control` (the control as
+cast, after any Fury penalty). `PendingAudereOffer.fired_control` stores it so
+`resolve_audere_offer`'s stale re-check asks for the same stage the cast did. Audere Majora's
+own `minimum_warp_stage` gate is unchanged (by default it also requires an active Audere).
+
+**Intensity tiers never lower control (#4740, #4727 decisions 5 and 13).**
+`IntensityTier.control_modifier` has `MinValueValidator(0)` (the admin refuses a negative
+value), the bootstrap seed sets Moderate and Major to 0, and the Required content row
+`intensity-tiers-never-lower-control` lists any tier still below 0 (rows authored before the
+rule are not migrated; staff fix them).
 
 **Audere check level bonus (#4147).** `AudereThreshold.check_level_bonus` and
 `AudereMajoraThreshold.check_level_bonus` (PositiveSmallIntegerField, default 0) are the
@@ -3926,6 +3962,8 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `DISTINCTION` — a distinction's authored `DistinctionResonanceGrant` flat seed
   (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
   (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
+- `DRIFT_CORRECTION` - the target side of a drift correction conversion (#4733); no typed source
+  FK (`res_grant_drift_correction_shape`), never accelerated, not a deed. See "Drift correction".
 
 **Telnet visibility (#2032).** Balances were earnable/spendable via telnet (pulls, imbuing,
 sanctum weaving) but had no telnet surface showing `CharacterResonance.balance` at all. Two
@@ -3992,6 +4030,127 @@ remains a separate, still-open stub).
 Note: `get_aura_percentages()`/`CharacterAffinityTotal` — unwired legacy code from
 before `CharacterAura`'s stored-percentage mechanism existed — were removed in
 #1739. `recompute_aura` never used them.
+
+### Drift correction (#4733, slice 4 of #4672) [BUILT & WIRED]
+
+**Vocabulary.** "Drift" here is resonance a character holds that sits off their aura: a
+`CharacterResonance` with `balance > 0` whose resonance's affinity differs from the aura's
+`dominant_affinity` (`drift_holdings`, `world/magic/services/drift.py`). It has no threshold in
+this slice. `AuraDrift` / `recompute_aura` (the section above) is the older, different sense:
+the shift in the aura's stored percentages. Drift correction converts held drift into the
+character's own resonances through deeds; it is separate from Fall and Redemption, which change
+affinity. Drift correction reuses their pair rates (`AffinityInteraction.conversion_multiplier`).
+
+**Deed classification.** `DEED_GAIN_SOURCES` / `NON_DEED_GAIN_SOURCES` (`constants.py`)
+partition every `GainSource`; `test_deed_classification.py` fails when a member is in neither or
+both. Deeds are the poses and scene entries others endorsed, entry flourishes, dramatic
+moments, style presentations, mission rewards and reports, stake rewards, project
+contributions, combo discoveries and worship rites. Passive trickles (room residence, outfit),
+staff grants, sanctum sources, distinction seeds, compromise, penance and both conversions
+(`FALL_CONVERSION`, `DRIFT_CORRECTION`) are not deeds. Casting never counts. A new `GainSource`
+member must be placed in one set.
+
+**When an offer opens.** `grant_resonance` calls `open_or_extend_conversion_offer(grant)` after
+the aura recompute. It does nothing unless all of these hold: the source is a deed; the
+character has an aura with shares; the granted resonance's affinity is the aura's own; the
+character holds convertible drift (drift with an authored conversion pair into the granted
+resonance's affinity); and the character stands in a live scene. The scene is the one cached on
+the grantee's current room at grant time (`get_active_scene`, which skips a Battle's backing
+scene), not the scene the deed came from. A deed settled away
+from a scene, such as the weekly pose-endorsement settlement, therefore opens no offer. This is
+an accepted consequence, not an error. A finished scene cached on a room counts as no scene.
+
+One `DriftConversionOffer` exists per character and scene (unique constraint); it holds one
+`DriftConversionCap` per target resonance. Each qualifying grant adds `amount x cap_percent
+// 100` to that cap and is linked in `cap.grants`, which stops a grant counting twice. Only the
+grant that creates the cap row is floored at 1, so a first small deed opens a usable cap while
+later small deeds can add 0; a cap never exceeds `cap_percent / 100` of its linked deed points
+plus that one point. A `cap_percent` of 0 opens no offer at all. `cap` is a snapshot: a later
+change to `cap_percent` does not rewrite it. The offer row is locked with `select_for_update`
+while a cap changes, and the cap is re-read from the table under that lock; if a decline or a
+lapse deleted the offer before the lock, the grant retries once and opens a fresh offer.
+
+**Notices.** A new offer or a new cap row sends a telnet-only line on commit
+(`send_text_to_non_web`, after `transaction.on_commit`); web players learn from the polled
+pending endpoint. A cap bump says nothing. `lapse_conversion_offers(scene)` deletes the scene's
+offers and sends the lapse line; `Scene.finish_scene` calls it, so every finish route lapses
+them, and the rite refuses an offer whose scene has finished.
+
+**The rite.** `DriftCorrectionConfig` (singleton, pk 1, created lazily) designates the rite
+(`rite` FK to `Ritual`) and the roll (`check_type` FK to `CheckType`, `check_difficulty`), plus
+`cap_percent`. The check type is deliberately not a `RitualCheckConfig` sidecar, which needs a
+stat and a skill and looks up by ritual name. `DriftCorrectionOutcomeShare` (an
+`OutcomeTierAward`) maps each `CheckOutcome` to `converted_share`, the fraction of the
+requested amount that converts (not a fraction of the cap); `clean` keeps a better tier
+from converting less than a worse one. `perform_drift_correction_rite` (`drift_correction.py`),
+in one transaction: locks the offer; refuses unless `rite_is_ready(config)` (an unset rite or
+check type, or any `CheckOutcome` with no share row: `DriftCorrectionNotConfiguredError`,
+before anything is consumed); validates
+the amount against the cap and the held balance and the source against `convertible_drift`;
+picks the offering with `resolve_ritual_components` (no writes) with the target as
+`resonance_context`; rolls the check with `focus_bonus` as extra modifiers; converts
+`floor(amount x share)` of the source through `convert_resonance_amount`, granted as
+`GainSource.DRIFT_CORRECTION` at `max(1, floor(converted x pair multiplier))` (an uphill pair
+never rounds to zero); and only then spends the offering with `consume_materials`. Every step
+that can raise runs before the first item write, so a refusal never leaves a cached item or
+balance ahead of the rolled-back table. The cap shrinks by what converted; an empty cap row is
+deleted, and the offer with it when no cap is left. A tier with no share row is refused up
+front by `rite_is_ready`; a tier whose share is 0.00 converts nothing, spends the
+offering and leaves the cap intact. Source and target lifetime move by the proportional share, so the
+aura follows (`recompute_aura`). `_move_partial` (`conversion.py`, shared with the Rite of
+Atonement) works that share out in integers as `amount x lifetime // balance`: exact when the
+ratio is whole (4 of a 30 balance with 30 lifetime moves 4), rounded down on a true fraction.
+
+**Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`
+(exclusive with `item_template` and `min_touchstone_tier`), with optional `min_item_meaning`
+(minimum 1; blank turns the third route off). `qualifying_components` admits an item under the
+first matching `ComponentMode`: `MATERIAL` (template tied to the target resonance), `FACET`
+(a live item facet in the performer's motif for the target), `KEEPSAKE` (item meaning to the
+performer at or over the bar). Results are ordered material, facet, keepsake, so spending in
+order burns a plain material first. Items already allocated to a template or touchstone row are
+not offered again.
+
+**Focus.** `focus_bonus(sheet, target)` = `equipment_walk_total` on the target resonance's
+modifier target + `touchstone_cast_bonus`. It adds to the check, not to the output.
+
+**Exceptions** (`exceptions.py`): `DriftCorrectionError` (base) with
+`DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`, `DriftConversionInvalidError`;
+`ConversionMappingError` for an unauthored pair; `RitualComponentError` for the offering.
+
+**Surfaces.** Actions `perform_drift_correction` and `decline_drift_correction`
+(`actions/definitions/drift_correction.py`); the rite's result line leads with the outcome tier
+("Partial Success: 4 Ruin became 2 Dawnlight.", or "The rite fails; nothing is converted." when
+nothing converts), and the web dialog composes the same words from the result; telnet `drift`, `drift convert <from>=<into>
+[<amount>] [with <item>]` (by default offers every carried item except those that count only
+as a facet or a keepsake, so a plain material is spent; `with <item>` names a faceted item or
+keepsake to spend instead), `drift decline`; REST `GET /api/magic/drift-correction/pending/` (+ `{id}/`), `POST .../convert/`,
+`POST .../decline/`, all scoped to the caller's own characters. React:
+`DriftConversionOfferGate` polls the inbox and `DriftConversionOfferDialog` answers it; the gate
+is mounted on `SceneDetailPage` and `GamePage`, keyed by scene id so each shows the offer of the
+scene it displays. See `frontend/src/magic/CLAUDE.md`.
+
+**Authoring and tuning.** Staff author `DriftCorrectionConfig`, one
+`DriftCorrectionOutcomeShare` per outcome tier, the rite's `RitualComponentRequirement` rows and
+the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
+the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
+though offers still open; the `drift-correction-config` Required content probe reports it.
+While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
+the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
+`drift` and `drift convert` refuse with the same sentence (`RITE_NOT_READY_MESSAGE`, the
+exception's `user_message`) instead of listing an offering, the rite refuses with it before
+checking the cap or the request, and the pending serializer carries `rite_ready: false` and
+`rite_not_ready_message`, which the dialog shows in place of the offering pills, with
+"Perform the rite" disabled. The pending view works readiness out once per request and
+hands it to the serializer as `context["rite_ready"]`.
+`max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
+pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
+the per-point rate; the one floored point a new cap row opens with sits on top of it, once per
+offer and target resonance.
+
+**Tests.** `test_deed_classification.py`, `test_drift_models.py`, `test_drift_offer.py`,
+`test_drift_correction_rite.py`, `test_conversion_amount.py`,
+`test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
+`integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 

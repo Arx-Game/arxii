@@ -1088,6 +1088,7 @@ class CharacterSheet(SharedMemoryModel):
     # test/NPC sheets outside the roster flow.
     roster_entry_or_none = ReverseOneToOneOrNone("roster_entry")
     vitals_or_none = ReverseOneToOneOrNone("vitals")
+    aura_or_none = ReverseOneToOneOrNone("aura")
     fatigue_or_none = ReverseOneToOneOrNone("fatigue")
     active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")

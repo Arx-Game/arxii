@@ -60,6 +60,28 @@
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
 
+- **Drift correction (#4733, slice 4 of #4672):** a deed (`DEED_GAIN_SOURCES` /
+  `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
+  a resonance of the character's own affinity, made in a live scene by a character holding
+  convertible off-aura resonance ("drift", not the older `AuraDrift`), opens a
+  `DriftConversionOffer` (one per sheet and scene) with a `DriftConversionCap` per target
+  resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
+  `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
+  `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
+  and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
+  `perform_drift_correction_rite` (`services/drift_correction.py`), which converts through
+  `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
+  `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
+  `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
+  `qualifying_components`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
+  `preview_conversion`, `offer_options`, `max_yield_per_earned_point`. Exceptions:
+  `DriftCorrectionError` with `DriftCorrectionNotConfiguredError`, `DriftOfferNotFoundError`,
+  `DriftConversionInvalidError`. Actions `perform_drift_correction` and
+  `decline_drift_correction`; telnet `drift`; REST `/api/magic/drift-correction/`
+  (`pending/`, `convert/`, `decline/`); React `DriftConversionOfferGate` and
+  `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
+  `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
@@ -81,6 +103,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
+- **Audere control step and Soulfray anima-0 stage (#4740):**
+  `AudereThreshold.control_per_stage_earlier` + `required_stage_order(threshold,
+  runtime_control)` (`world/magic/audere.py`) let high control open the Audere offer at an
+  earlier Soulfray stage (steps back along the ladder, never below the first;
+  `stages_lowered_by_control` feeds the offer's "break through earlier" line on web and
+  telnet); `check_audere_eligibility` /
+  `maybe_create_audere_offer` take `runtime_control`, stored as
+  `PendingAudereOffer.fired_control`. `SoulfrayConfig.anima_zero_stage` +
+  `anima_zero_ceiling(current_anima)` keep Soulfray below that stage while anima is left
+  (`_handle_soulfray_accumulation`, lower of it and the non-lethal cap).
+  `IntensityTier.control_modifier` is 0 or more; Required content row
+  `intensity-tiers-never-lower-control`. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
@@ -186,9 +220,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PendingRitualEffect` (in-progress CEREMONY record; unique per `(character, ritual)`;
     created by `PerformRitualAction`, consumed by finisher action `WeaveThreadAction`
     or `ImbueThreadAction`),
-    `RitualComponentRequirement` (touchstone-mode: nullable `min_touchstone_tier` FK to
-    `ResonanceTier`, mutually exclusive with `item_template` via `CheckConstraint`, #707 —
-    see ADR-0087), `ResonanceTier` (ordered potency lookup for resonance-tied items,
+    `RitualComponentRequirement` (exactly one of three modes, by `CheckConstraint`:
+    template-mode `item_template`; touchstone-mode `min_touchstone_tier` FK to
+    `ResonanceTier`, #707, ADR-0087; target-resonance mode `matches_target_resonance` with
+    optional `min_item_meaning`, #4733), `ResonanceTier` (ordered potency lookup for resonance-tied items,
     independent of `items.QualityTier` — `name`, `tier_level`, `description`),
     `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
@@ -806,7 +841,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `POST /api/magic/rituals/perform/` / `CmdRitual` path every SERVICE ritual uses. The shared
   `resolve_and_consume_ritual_components(*, ritual, components, performer_sheet,
   resonance_context=None)` (`world.magic.services.ritual_components`) validates/consumes
-  touchstone-mode + template-mode requirements atomically (all-or-nothing); called from both
+  template-mode, touchstone-mode and target-resonance-mode requirements atomically
+  (all-or-nothing); it is `resolve_ritual_components` (the no-write resolver, returning the
+  `(item, amount)` allocations; the drift rite calls it directly so nothing is spent before
+  its roll) followed by `consume_materials`. Called from both
   `PerformRitualAction._validate_components` and `SanctumInstallAction.execute()` (Sanctification
   is `client_hosted=True` and does not dispatch through `PerformRitualAction` at all — see the
   Sanctum entry above and ADR-0087).

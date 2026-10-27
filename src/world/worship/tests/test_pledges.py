@@ -426,6 +426,21 @@ class DeedTests(PledgeTestBase):
         self.assertEqual(PledgeCredit.objects.count(), credits_before)
         self.assertEqual(self._favor(), favor_before)
 
+    def test_a_drift_correction_grant_credits_no_favor_while_a_deed_does(self) -> None:
+        take_pledge(self.sheet, self.pledge)
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        self._grant(self.favored, 3, source=GainSource.DRIFT_CORRECTION)
+
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
+
+        self._grant(self.favored, 3)
+
+        self.assertEqual(PledgeCredit.objects.count(), credits_before + 1)
+        self.assertGreater(self._favor(), favor_before)
+
 
 class SacrificeTests(PledgeTestBase):
     def _sacrifice(self, outcome_name: str, *items, **kwargs):

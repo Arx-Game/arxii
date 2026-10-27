@@ -6,12 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        (
-            "arxii",
-            "0315_dramaticsurgerecord_surge_repeat_round_is_round_number_and_more",
-        )
-    ]
+    dependencies = [("arxii", "0318_audere_control_and_soulfray_anima_zero")]
 
     operations = [
         migrations.AddField(
