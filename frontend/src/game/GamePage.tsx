@@ -402,7 +402,7 @@ function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCent
   return (
     <>
       {sceneId && <ConsentPrompt sceneId={sceneId} />}
-      {sceneId && <DriftConversionOfferGate />}
+      {sceneId && <DriftConversionOfferGate sceneId={Number(sceneId)} />}
       {sceneId && mapEncounterId ? (
         <CombatMainMap sceneId={Number(sceneId)} encounterId={mapEncounterId} />
       ) : null}

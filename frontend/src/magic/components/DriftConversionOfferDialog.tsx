@@ -84,8 +84,19 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
   const canPerform = source !== undefined && componentId !== null && amountValid;
 
   function pickSource(next: number) {
+    convert.reset();
     setSourceId(next);
     setAmountText(null);
+  }
+
+  function pickComponent(next: number) {
+    convert.reset();
+    setComponentId(next);
+  }
+
+  function changeAmount(next: string) {
+    convert.reset();
+    setAmountText(next);
   }
 
   function handlePerform() {
@@ -108,8 +119,7 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
     );
   }
 
-  const focusClause =
-    cap.focus_bonus > 0 ? `; a focus in hand adds ${cap.focus_bonus} to the check` : '';
+  const focusClause = cap.focus_bonus > 0 ? `; a focus adds ${cap.focus_bonus}` : '';
 
   return (
     <section
@@ -129,7 +139,11 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Source">
+      <div
+        className="flex flex-wrap gap-2"
+        role="group"
+        aria-label={`Source for ${cap.target_resonance.name}`}
+      >
         {cap.sources.map((s) => (
           <button
             key={s.resonance_id}
@@ -154,20 +168,25 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
             min={1}
             max={maxAmount}
             value={amountText ?? String(maxAmount)}
-            onChange={(e) => setAmountText(e.target.value)}
+            onChange={(e) => changeAmount(e.target.value)}
+            aria-invalid={!amountValid}
             className="w-24"
             data-testid={`drift-amount-${targetId}`}
           />
         </label>
       ) : null}
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Components">
+      <div
+        className="flex flex-wrap gap-2"
+        role="group"
+        aria-label={`Components for ${cap.target_resonance.name}`}
+      >
         {cap.qualifying_components.map((c) => (
           <button
             key={c.item_id}
             type="button"
             aria-pressed={componentId === c.item_id}
-            onClick={() => setComponentId(c.item_id)}
+            onClick={() => pickComponent(c.item_id)}
             data-testid={`drift-component-${c.item_id}`}
             className={pillClass(componentId === c.item_id)}
           >
@@ -179,7 +198,7 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
       {source && amountValid ? (
         <p className="text-sm" data-testid={`drift-rate-${targetId}`}>
           {conversionLabel(source.conversion_type)}: {amount} {source.resonance_name} becomes about{' '}
-          {projectedOutput(amount, source.multiplier)} {cap.target_resonance.name} at the pair rate
+          {projectedOutput(amount, source.multiplier)} {cap.target_resonance.name}
           {focusClause}
         </p>
       ) : null}
@@ -260,7 +279,7 @@ export function DriftConversionOfferDialog({
 
         {offer?.caps.map((cap) => (
           <CapBlock
-            key={cap.target_resonance.id}
+            key={`${offer.id}-${cap.target_resonance.id}`}
             offerId={offer.id}
             cap={cap}
             onResult={onResult}

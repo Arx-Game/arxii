@@ -267,6 +267,11 @@ vi.mock('../../hooks/usePendingUnlinkedActions', () => ({
 // Mock magic queries — both inbox components self-fetch with these hooks
 // ---------------------------------------------------------------------------
 
+// #4733: the drift conversion inbox; the real gate runs against it. The enabled
+// flag is recorded so a test can see the poll is held until the scene is known.
+const mockDriftOffers = vi.hoisted(() => ({ results: [] as unknown[] }));
+const mockUsePendingDriftConversionOffers = vi.hoisted(() => vi.fn());
+
 const mockUsePendingSineatingOffers = vi.fn(() => ({
   data: { count: 0, next: null, previous: null, results: [] },
   isLoading: false,
@@ -286,7 +291,10 @@ vi.mock('@/magic/queries', () => ({
   useRespondToStageAdvance: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),
   useRespondToEntryFlourish: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  usePendingDriftConversionOffers: () => ({ data: { results: [] } }),
+  usePendingDriftConversionOffers: (enabled?: boolean) => {
+    mockUsePendingDriftConversionOffers(enabled);
+    return { data: { results: mockDriftOffers.results } };
+  },
   useConvertDrift: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useDeclineDriftConversion: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
@@ -516,6 +524,41 @@ describe('SceneDetailPage', () => {
     // the common case on this page, since nothing here ever calls connect()).
     mockGameSessions = undefined;
     mockAccountFlags = {};
+    mockDriftOffers.results = [];
+  });
+
+  describe('drift conversion gate (#4733)', () => {
+    function renderScene() {
+      renderWithProviders(
+        <Routes>
+          <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        </Routes>,
+        { initialEntries: ['/scenes/1'] }
+      );
+    }
+
+    it('shows the strip for an offer opened in this scene', () => {
+      mockDriftOffers.results = [{ id: 12, scene_id: 1, caps: [] }];
+      renderScene();
+
+      expect(screen.getByTestId('drift-conversion-gate-strip')).toBeInTheDocument();
+      expect(mockUsePendingDriftConversionOffers).toHaveBeenCalledWith(true);
+    });
+
+    it('ignores an offer opened in another scene', () => {
+      mockDriftOffers.results = [{ id: 12, scene_id: 2, caps: [] }];
+      renderScene();
+
+      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
+    });
+
+    it('does not mount the gate once the scene is over', () => {
+      mockSceneData = { id: '1', name: 'Test Scene', is_active: false, description: '' };
+      mockDriftOffers.results = [{ id: 12, scene_id: 1, caps: [] }];
+      renderScene();
+
+      expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
+    });
   });
 
   describe('cast panel gating (#4418)', () => {

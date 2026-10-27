@@ -646,16 +646,19 @@ polls every 5 s, no `throwOnError`), `useConvertDrift()` (invalidates the pendin
 `characterResonanceList()`), `useDeclineDriftConversion()` (invalidates the pending key).
 
 **Components:** `DriftConversionOfferGate` (strip + auto-open once per offer id via
-`useAutoOpenOncePerOffer`; shows the first open offer; keeps the result line after an exhausted
+`useAutoOpenOncePerOffer`; takes `sceneId` and shows the offer whose `scene_id` matches it,
+polling only once the scene is known; keeps the result line after an exhausted
 offer leaves the inbox) and `DriftConversionOfferDialog` (Screen 5: one block per cap with the
 cap remaining, source pills, an amount bounded by the chosen source's `max_amount` defaulting to
 it, single-select component pills `<name> · <mode>`, a rate line built from the source's
-`multiplier` with the focus clause only when `focus_bonus > 0`, "Perform the rite" disabled until
+`multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a focus adds N" only
+when `focus_bonus > 0`), "Perform the rite" disabled until
 a component is chosen and the amount is valid, and Decline). The yield for a typed amount is
 `max(1, floor(amount * multiplier))`, the server's own rounding.
 
 **Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside
-`EntryFlourishOfferGate`) and `GamePage`'s `GameCenter` (when the session has a scene). Tests that
+`EntryFlourishOfferGate`, `sceneId` from the scene) and `GamePage`'s `GameCenter` (when the
+session has a scene, `sceneId` from the session's scene). Tests that
 mock `@/magic/queries` wholesale (`SceneDetailPage.test.tsx`) must add the three drift hooks.
 
 ## Data Flow

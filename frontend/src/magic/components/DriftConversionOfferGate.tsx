@@ -5,7 +5,8 @@
  *
  * Mounted on every surface a live player sits on (the scene page and the game
  * page), once per surface. The inbox is account-scoped and carries no character
- * id, so the gate shows the first open offer.
+ * id, so the gate shows the offer opened in the scene the surface is showing
+ * (`sceneId`), and does not poll until that scene is known.
  *
  * An exhausted offer leaves the inbox the moment the rite finishes, so the gate
  * keeps the result line the dialog hands back until the player closes it.
@@ -17,11 +18,16 @@ import { usePendingDriftConversionOffers } from '@/magic/queries';
 import { useAutoOpenOncePerOffer } from '@/magic/hooks';
 import { DriftConversionOfferDialog } from './DriftConversionOfferDialog';
 
-export function DriftConversionOfferGate() {
-  const { data } = usePendingDriftConversionOffers();
+interface DriftConversionOfferGateProps {
+  sceneId: number | null;
+}
+
+export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGateProps) {
+  const { data } = usePendingDriftConversionOffers(sceneId !== null);
   const [resultLine, setResultLine] = useState<string | null>(null);
 
-  const offer = data?.results?.[0] ?? null;
+  const offer =
+    sceneId === null ? null : (data?.results?.find((o) => o.scene_id === sceneId) ?? null);
 
   const { dialogOpen, setDialogOpen } = useAutoOpenOncePerOffer(offer?.id ?? null);
 

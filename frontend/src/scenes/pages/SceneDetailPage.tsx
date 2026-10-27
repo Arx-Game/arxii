@@ -403,7 +403,7 @@ export function SceneDetailPage() {
             {isActive && <SineatingInbox />}
             {isActive && <SoulTetherRescuePrompt />}
             {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
-            {isActive && <DriftConversionOfferGate />}
+            {isActive && <DriftConversionOfferGate sceneId={scene ? Number(scene.id) : null} />}
             {isActive && <WitnessReactionOfferGate personaId={personaId} />}
             {/* #3557 combat layout. Everything above this line either needs an
             answer (consent, sineating, soul-tether, flourish, witness) or is the scene's

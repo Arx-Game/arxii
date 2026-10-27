@@ -83,7 +83,7 @@ function paginated(results: DriftConversionOffer[]): PaginatedDriftConversionOff
   return { count: results.length, next: null, previous: null, results };
 }
 
-function renderGate(offers: DriftConversionOffer[]) {
+function renderGate(offers: DriftConversionOffer[], sceneId: number | null = 101) {
   vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(paginated(offers));
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
@@ -91,7 +91,7 @@ function renderGate(offers: DriftConversionOffer[]) {
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }
-  const view = render(<DriftConversionOfferGate />, { wrapper: Wrapper });
+  const view = render(<DriftConversionOfferGate sceneId={sceneId} />, { wrapper: Wrapper });
   return { ...view, client };
 }
 
@@ -133,7 +133,7 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     await screen.findByRole('dialog');
     expect(screen.getByTestId('drift-amount-20')).toHaveValue(12);
     expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Redemption: 12 Ruin becomes about 6 Dawnlight at the pair rate'
+      'Redemption: 12 Ruin becomes about 6 Dawnlight'
     );
     expect(screen.getByTestId('drift-rate-20')).not.toHaveTextContent('focus');
 
@@ -141,7 +141,7 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     await user.click(screen.getByTestId('drift-source-20-31'));
     expect(screen.getByTestId('drift-amount-20')).toHaveValue(5);
     expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Fall: 5 Spite becomes about 7 Dawnlight at the pair rate'
+      'Fall: 5 Spite becomes about 7 Dawnlight'
     );
   });
 
@@ -154,7 +154,7 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     await user.clear(amount);
     await user.type(amount, '4');
     expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'Redemption: 4 Ruin becomes about 2 Dawnlight at the pair rate'
+      'Redemption: 4 Ruin becomes about 2 Dawnlight'
     );
   });
 
@@ -163,7 +163,7 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
 
     await screen.findByRole('dialog');
     expect(screen.getByTestId('drift-rate-20')).toHaveTextContent(
-      'a focus in hand adds 2 to the check'
+      'Redemption: 12 Ruin becomes about 6 Dawnlight; a focus adds 2'
     );
   });
 
@@ -281,6 +281,91 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     });
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows the offer for its own scene when the account holds offers in two scenes', async () => {
+    const other: DriftConversionOffer = {
+      ...OFFER,
+      id: 99,
+      scene_id: 202,
+      caps: [
+        {
+          ...OFFER.caps[0],
+          target_resonance: { id: 77, name: 'Hearthfire', affinity: 'Primal' },
+        },
+      ],
+    };
+    renderGate([other, OFFER], 101);
+
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('drift-cap-20')).toBeInTheDocument();
+    expect(screen.queryByTestId('drift-cap-77')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing when no offer belongs to the scene', async () => {
+    renderGate([OFFER], 303);
+
+    await waitFor(() => {
+      expect(api.getPendingDriftConversionOffers).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
+  });
+
+  it('does not poll until the scene is known', () => {
+    renderGate([OFFER], null);
+
+    expect(api.getPendingDriftConversionOffers).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('drift-conversion-gate-strip')).not.toBeInTheDocument();
+  });
+
+  it('names the target in the pill groups and flags an invalid amount', async () => {
+    const user = userEvent.setup();
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    expect(screen.getByRole('group', { name: 'Source for Dawnlight' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Components for Dawnlight' })).toBeInTheDocument();
+    const amount = screen.getByTestId('drift-amount-20');
+    expect(amount).toHaveAttribute('aria-invalid', 'false');
+    await user.clear(amount);
+    await user.type(amount, '99');
+    expect(amount).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('clears a refusal when the selection changes', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.convertDrift).mockRejectedValue(new Error('Nope.'));
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-501'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+    await screen.findByTestId('drift-error');
+
+    await user.click(screen.getByTestId('drift-component-502'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('drift-error')).not.toBeInTheDocument();
+    });
+  });
+
+  it("resets a block's picks when the offer changes", async () => {
+    const user = userEvent.setup();
+    const { client } = renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-501'));
+    expect(screen.getByTestId('drift-perform-20')).not.toBeDisabled();
+
+    vi.mocked(api.getPendingDriftConversionOffers).mockResolvedValue(
+      paginated([{ ...OFFER, id: 13 }])
+    );
+    await act(async () => {
+      await client.refetchQueries();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('drift-perform-20')).toBeDisabled();
     });
   });
 
