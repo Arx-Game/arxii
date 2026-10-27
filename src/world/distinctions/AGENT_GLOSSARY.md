@@ -35,8 +35,8 @@ description, and can hold the presence axes. Say "made distinctive", never
 _Avoid_: enhanced, upgraded, special.
 
 **Presence axis** (#3739):
-Alluring, Menacing or Regal — a `Distinction` with `requires_feature_opened`, bought
-on a distinctive feature, adding to the `allure` / `menace` / `regal`
+Alluring, Menacing or Majestic — a `Distinction` with `requires_feature_opened`, bought
+on a distinctive feature, adding to the `allure` / `menace` / `majesty`
 `mechanics.ModifierTarget` the item accents share (#2886). "Tier" is the unit
 (1 to 3 in character creation); a rank of an ordinary distinction is a "rank".
 _Avoid_: aura, presence stat, accent (that word belongs to items).

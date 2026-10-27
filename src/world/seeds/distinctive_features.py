@@ -8,7 +8,7 @@ marking), not once per character:
   every option the trait carries including the off-species Unnatural umbrella
   (a strange colour is assumed to have a magical explanation), and opens the
   three axis rows below it.
-* **Alluring / Menacing / Regal** (``requires_feature_opened``, 2 points a tier,
+* **Alluring / Menacing / Majestic** (``requires_feature_opened``, 2 points a tier,
   ``+_AXIS_PER_TIER`` to the axis a tier) — bought on an already-distinctive
   feature, in any combination: one scar can be all three. They reach rank 5 in
   play and stop at ``_CG_MAX_RANK`` in character creation, which is what
@@ -16,7 +16,7 @@ marking), not once per character:
 
 The axes are the same three ``ModifierTarget`` rows item accents use (#2886), so
 a feature and a garment push on the same number: allure through the directed-
-allure engine, menace through Intimidation, regal through the Command check
+allure engine, menace through Intimidation, majesty through the Command check
 (#3739, ``world.seeds.governance_checks``). A feature is worth more than a
 garment on purpose — an accent rung is +1, a feature tier is +2.
 
@@ -51,10 +51,10 @@ _OPENER_COST = 1
 
 #: (slug, name, accent target, player line). The accent target is the
 #: ``ModifierTarget`` the tier value lands on; each is seeded elsewhere
-#: (``allure`` by ``social_relationships``, ``menace``/``regal`` by
+#: (``allure`` by ``social_relationships``, ``menace``/``majesty`` by
 #: ``crafting_materials``) and skipped here when a clone has none.
 #: The four rows' names, for the admin's required-content probe (#4104).
-FEATURE_ROW_NAMES: tuple[str, ...] = ("Make It Distinctive", "Alluring", "Menacing", "Regal")
+FEATURE_ROW_NAMES: tuple[str, ...] = ("Make It Distinctive", "Alluring", "Menacing", "Majestic")
 
 _AXES: tuple[tuple[str, str, str, str], ...] = (
     (
@@ -70,9 +70,9 @@ _AXES: tuple[tuple[str, str, str, str], ...] = (
         "PLACEHOLDER: this feature is the one people flinch from.",
     ),
     (
-        "regal-feature",
-        "Regal",
-        "regal",
+        "majestic-feature",
+        "Majestic",
+        "majesty",
         "PLACEHOLDER: this feature is the one people take orders from.",
     ),
 )
@@ -186,7 +186,7 @@ def seed_distinctive_features() -> None:
     """Cluster entry — the four per-feature Appearance rows and their offers (#3739).
 
     Runs after ``social_relationships`` (the allure target), ``crafting_materials``
-    (menace, regal) and ``governance`` (the Command check the regal axis binds to),
+    (menace, majesty) and ``governance`` (the Command check the majesty axis binds to),
     so every effect this seeds finds its target on the first pass.
     """
     category = _feature_category()

@@ -358,7 +358,7 @@ other:
 2. **Opens its description.** `PersonaTraitDescriptor` is written at finalize
    only for a trait the draft made distinctive; a marking's own name and
    description were always free and are unaffected.
-3. **Opens the presence axes.** Alluring, Menacing and Regal
+3. **Opens the presence axes.** Alluring, Menacing and Majestic
    (`requires_feature_opened`) may then be bought on that feature, in any
    combination, at up to `cg_max_rank` tiers in character creation.
 

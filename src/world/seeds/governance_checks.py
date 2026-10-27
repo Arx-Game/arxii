@@ -54,11 +54,11 @@ _GOVERNANCE_CHECK_COMPOSITION: dict[str, tuple[str, str, str]] = {
     # direction bonus atop dispatched functionary agents (#672 seam).
     "Household Command": ("presence", "Leadership", "Stewardship"),
     "Domain Investment": ("intellect", "Scholarship", "Economics"),
-    # #3739 — the check a regal bearing plays into: rallying troops to make a stand,
+    # #3739 — the check a majestic bearing plays into: rallying troops to make a stand,
     # appealing to the people on your right to rule. Presence + Leadership with no
     # specialization, because the ask is command itself rather than any one office;
-    # this is also the target the ``regal`` accent axis binds to, for items and for
-    # the Regal distinctive feature alike (``world.seeds.crafting_materials``).
+    # this is also the target the ``majesty`` accent axis binds to, for items and for
+    # the Majestic distinctive feature alike (``world.seeds.crafting_materials``).
     "Command": ("presence", "Leadership", ""),
 }
 
@@ -215,8 +215,8 @@ def ensure_governance_check_compositions(
     return check_types
 
 
-def _bind_regal_accent_to_command() -> None:
-    """Point the ``regal`` accent axis at the Command CheckType (#3739).
+def _bind_majesty_accent_to_command() -> None:
+    """Point the ``majesty`` accent axis at the Command CheckType (#3739).
 
     The ``crafting_materials`` cluster seeds the accent ``ModifierTarget`` rows and
     runs *before* this one, so when it asks for "Command" the check does not exist
@@ -225,13 +225,13 @@ def _bind_regal_accent_to_command() -> None:
     second. Fill-if-empty: a target a content repo already pointed somewhere keeps
     its binding.
 
-    The axis is read by item accents (#2886) and by the Regal distinctive feature
+    The axis is read by item accents (#2886) and by the Majestic distinctive feature
     (#3739) alike — both are "how commanding you read", and both land on one check.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
-    target = ModifierTarget.objects.filter(name="regal", target_check_type__isnull=True).first()
+    target = ModifierTarget.objects.filter(name="majesty", target_check_type__isnull=True).first()
     if target is None:
         return
     command = CheckType.objects.filter(name="Command").first()
@@ -247,4 +247,4 @@ def seed_governance_check_content() -> None:
     skills = ensure_governance_skills()
     specs = ensure_governance_specializations(skills)
     ensure_governance_check_compositions(skills, specs)
-    _bind_regal_accent_to_command()
+    _bind_majesty_accent_to_command()

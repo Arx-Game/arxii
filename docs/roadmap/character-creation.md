@@ -23,11 +23,11 @@ A feature is any trait row or any marking, species-required markers included.
 One CG point on "Make It Distinctive" opens that feature's description, widens
 its palette to every option the trait carries (including a new off-species
 "Unnatural" umbrella on hair, eyes and skin), and puts Alluring, Menacing and
-Regal up for sale on it at 2 a tier for +2 a tier, up to three tiers in
+Majestic up for sale on it at 2 a tier for +2 a tier, up to three tiers in
 character creation and five in play. A marking's name and description stay free,
 so the point buys only its axes. Mechanically a distinction can now be held once
 per feature (`taken_per_feature`), so `CharacterDistinction` names the feature and
-every draft-entry reader keys by `(distinction, feature)`. Regal is bound at last,
+every draft-entry reader keys by `(distinction, feature)`. Majesty (formerly regal) is bound at last,
 to a newly seeded Command check (presence + Leadership), which also wakes the item
 accent that has been dormant since #2886. A bonus travels with visibility: a
 marking-bound modifier drops out while the worn layers cover its region. "In your
