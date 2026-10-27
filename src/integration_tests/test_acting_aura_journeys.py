@@ -1,134 +1,221 @@
 """Journeys for the aura a character ACTS with while wearing an alternate self (#4731).
 
-A character whose true aura is Celestial 80 / Abyssal 20 wears an alternate self whose
-resonance is Abyssal. What she casts and what a place of power or a covenant perk reads
-follows the alternate self (100% Abyssal); who she IS (Fall threshold, Soul Tether gate,
-the sheet's aura display) keeps reading the true aura. An alternate self with no
-resonance changes nothing. Expected numbers come from the ruled split and the
-affinity-alignment bonus: bonus x percent / 100. Names are invented.
+Ysmay's true aura is Celestial 80 / Abyssal 20; she can shift into "the Ashen Ysmay",
+an alternate self whose resonance is Abyssal. She shifts by typing ``form shift``.
+What she casts and what a place of power reads follow the alternate self (100%
+Abyssal); who she IS (Fall threshold, Soul Tether gate, the sheet's aura display)
+keeps reading the true aura. Her own gift's techniques work in the affinity she acts
+with, as her techniques' variants already do, so a Celestial gift cast in the Abyssal
+self keeps the full alignment term. An alternate self with no resonance changes
+nothing.
+
+Expected numbers come from the ruled split and the affinity-alignment bonus of 100:
+bonus x percent / 100. Names are invented.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import patch
 
+from django.urls import reverse
 from rest_framework import status
 
-from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatOpponentFactory
-from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.capability_content import AT_WILL_SHIFTING
+from world.conditions.factories import CapabilityTypeFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.evaluators import SITUATION_EVALUATORS
-from world.forms.factories import AlternateSelfFactory
-from world.forms.models import ActiveAlternateSelf
+from world.forms.factories import (
+    AlternateSelfFactory,
+    CharacterFormFactory,
+    CharacterFormStateFactory,
+)
+from world.forms.models import ActiveAlternateSelf, FormType
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
     ResonanceValence,
+    RitualExecutionKind,
 )
-from world.magic.exceptions import AffinityGateError, FallEligibilityError
 from world.magic.factories import (
     AffinityInteractionFactory,
     AuraPowerConfigFactory,
+    CharacterAnimaFactory,
     CharacterAuraFactory,
     GiftFactory,
     ResonanceFactory,
+    RitualFactory,
     ensure_canonical_affinities,
+    ensure_conversion_pairs,
 )
-from world.magic.models import Affinity
+from world.magic.models import Affinity, FallRedemptionRecord
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.acting_aura import acting_aura
-from world.magic.services.fall_redemption import perform_fall
 from world.magic.services.gain import tag_room_resonance
-from world.magic.services.soul_tether import accept_soul_tether
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
-from world.magic.types.soul_tether import SoulTetherRole
-from world.scenes.cast_services import request_technique_cast
-from world.scenes.factories import PersonaFactory
-from world.scenes.tests.cast_test_helpers import (
-    CastScenarioMixin,
-    grant_technique,
-    make_benign_castable_technique,
-)
+from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFactory
+from world.mechanics.models import CharacterModifier, ModifierTarget
+from world.scenes.factories import SceneFactory
+from world.scenes.tests.cast_test_helpers import grant_technique, make_benign_castable_technique
+from world.traits.factories import CheckSystemSetupFactory
+from world.vitals.models import CharacterVitals
 
 ALIGNMENT_BONUS = 100
+ASHEN = "the Ashen Ysmay"
+_FALL_PATH = "world.magic.services.fall_redemption.perform_fall"
 
 
-def _wear(sheet, alt) -> None:
-    """The character assumes ``alt`` (None clears it, as a revert does)."""
-    ActiveAlternateSelf.objects.update_or_create(character=sheet, defaults={"alternate_self": alt})
-
-
-def _true_aura(sheet, *, celestial: str = "80.00", abyssal: str = "20.00") -> None:
+def _true_aura(
+    sheet, *, celestial: str = "80.00", primal: str = "0.00", abyssal: str = "20.00"
+) -> None:
     """Celestial 80 / Abyssal 20 unless told otherwise."""
     CharacterAuraFactory(
         character=sheet,
         celestial=Decimal(celestial),
-        primal=Decimal("0.00"),
+        primal=Decimal(primal),
         abyssal=Decimal(abyssal),
     )
 
 
-class AlignmentFollowsTheAlternateSelfOnACast(CastScenarioMixin):
-    """She casts an Abyssal technique with and without the Abyssal alternate self."""
+class _AShifter(ResonanceCacheIsolationMixin, JourneyCase):
+    """A played character who may shift at will into an alternate self."""
 
     def setUp(self) -> None:
         super().setUp()
         Affinity.objects.clear_cache()
         self.celestial, self.primal, self.abyssal = ensure_canonical_affinities()
-        self.sheet = self.caster.character_sheet
-        _true_aura(self.sheet)
-        AuraPowerConfigFactory(affinity_alignment_bonus=ALIGNMENT_BONUS)
-        self.resonance = ResonanceFactory(affinity=self.abyssal)
-        gift = GiftFactory()
-        gift.resonances.add(self.resonance)
-        self.technique = make_benign_castable_technique()
-        self.technique.gift = gift
-        self.technique.save()
-        grant_technique(self.caster, self.technique)
-        self.alt = AlternateSelfFactory(character=self.sheet, resonance=self.resonance)
+        self.room = self.make_room("The Lantern")
 
-    def _alignment_term(self) -> int:
-        cast = request_technique_cast(
-            scene=self.scene, initiator_persona=self.caster, technique=self.technique
+    def make_shifter(self, name: str, *, room, mask_affinity, **aura) -> tuple:
+        """A player with the true aura, a true form, the at-will shift capability and
+        one alternate self, ``ASHEN``, resonant with ``mask_affinity``."""
+        character = self.make_player(name, room=room)
+        sheet = character.sheet_data
+        _true_aura(sheet, **aura)
+        true_form = CharacterFormFactory(character=sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormStateFactory(character=sheet, active_form=true_form)
+        capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
+        target = ModifierTarget.objects.get_or_create(
+            name=f"capability_{capability.pk}",
+            defaults={
+                "category": ModifierCategoryFactory(name="capability"),
+                "target_capability": capability,
+            },
+        )[0]
+        CharacterModifier.objects.create(
+            character=sheet, target=target, source=ModifierSourceFactory(), value=1
         )
-        entries = [e for e in cast.power_ledger.entries if e.source_label == "aura power"]
-        self.assertEqual(len(entries), 1, cast.power_ledger.entries)
-        return entries[0].amount
+        alt = AlternateSelfFactory(
+            character=sheet,
+            display_name=ASHEN,
+            resonance=ResonanceFactory(affinity=mask_affinity),
+        )
+        return character, sheet, alt
 
-    def test_the_alignment_term_is_the_alternate_selfs_while_worn(self) -> None:
-        self.assertEqual(self._alignment_term(), 20)  # true aura: 20% Abyssal
-        _wear(self.sheet, self.alt)
-        self.assertEqual(self._alignment_term(), 100)  # the alternate self: 100% Abyssal
-        _wear(self.sheet, None)
-        self.assertEqual(self._alignment_term(), 20)  # reverted
+    def shift(self, character) -> None:
+        self.assertIn(f"You assume {ASHEN}.", self.telnet(character, f"form shift {ASHEN}"))
+
+    def revert(self, character) -> None:
+        self.assertIn("You revert to your true self.", self.telnet(character, "form revert"))
 
 
-class TheTrueAuraStillAnswersWhoSheIs(ResonanceCacheIsolationMixin, JourneyCase):
+class AlignmentFollowsTheAlternateSelfOnACast(_AShifter):
+    """She casts through the web cast endpoint, as herself and as the Ashen Ysmay."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        self.ysmay, self.sheet, self.alt = self.make_shifter(
+            "Ysmay", room=self.room, mask_affinity=self.abyssal
+        )
+        self.scene = SceneFactory(room=self.room)
+        CharacterAnimaFactory(character=self.sheet, current=30, maximum=30)
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
+        )
+        AuraPowerConfigFactory(affinity_alignment_bonus=ALIGNMENT_BONUS)
+        # Kudos accrual reads game-week rows this journey does not build.
+        accrue = patch("world.scenes.action_services.accrue")
+        accrue.start()
+        self.addCleanup(accrue.stop)
+
+    def technique_of(self, affinity):
+        """A benign technique of a gift whose one resonance has ``affinity``."""
+        gift = GiftFactory()
+        gift.resonances.add(ResonanceFactory(affinity=affinity))
+        technique = make_benign_castable_technique()
+        technique.gift = gift
+        technique.save()
+        grant_technique(self.sheet.primary_persona, technique)
+        return technique
+
+    def alignment_term(self, technique) -> int:
+        """The "aura power" line of the power ledger the cast endpoint returns."""
+        response = self.api(self.account_of(self.ysmay)).post(
+            reverse("sceneactionrequest-cast"),
+            {
+                "scene": self.scene.pk,
+                "initiator_persona": self.sheet.primary_persona.pk,
+                "technique_id": technique.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        entries = [
+            entry
+            for entry in response.json()["result"]["power_ledger"]["entries"]
+            if entry["source_label"] == "aura power"
+        ]
+        self.assertEqual(len(entries), 1, response.content)
+        return entries[0]["amount"]
+
+    def test_an_abyssal_cast_reads_the_alternate_selfs_aura_while_worn(self) -> None:
+        technique = self.technique_of(self.abyssal)
+        self.assertEqual(self.alignment_term(technique), 20)  # true aura: 20% Abyssal
+        self.shift(self.ysmay)
+        self.assertEqual(self.alignment_term(technique), 100)  # the Ashen Ysmay: 100%
+        self.revert(self.ysmay)
+        self.assertEqual(self.alignment_term(technique), 20)
+
+    def test_her_own_celestial_gift_cast_in_the_abyssal_self_keeps_full_alignment(self) -> None:
+        """The worn self's resonance replaces the gift's, as it does for variants."""
+        technique = self.technique_of(self.celestial)
+        self.assertEqual(self.alignment_term(technique), 80)  # true aura: 80% Celestial
+        self.shift(self.ysmay)
+        self.assertEqual(self.alignment_term(technique), 100)  # works in Abyssal, 100%
+
+
+class TheTrueAuraStillAnswersWhoSheIs(_AShifter):
     """Fall threshold, the sheet's aura display and the Soul Tether gate ignore the mask."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.celestial, self.primal, self.abyssal = ensure_canonical_affinities()
-        self.sheet = CharacterSheetFactory()
-        _true_aura(self.sheet)
-        self.alt = AlternateSelfFactory(
-            character=self.sheet, resonance=ResonanceFactory(affinity=self.abyssal)
+        ensure_conversion_pairs()
+        RitualFactory(
+            name="Ritual of Falling",
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path=_FALL_PATH,
         )
-        _wear(self.sheet, self.alt)
-        self.staff = AccountFactory(is_staff=True)
+        self.ysmay, self.sheet, self.alt = self.make_shifter(
+            "Ysmay", room=self.room, mask_affinity=self.abyssal
+        )
+        self.shift(self.ysmay)
 
     def test_the_fall_threshold_reads_the_true_aura(self) -> None:
-        with self.assertRaises(FallEligibilityError) as raised:
-            perform_fall(self.sheet, target_affinity=self.abyssal)
-        self.assertIn("only 20", raised.exception.user_message)
+        told = self.telnet(
+            self.ysmay, f"ritual Ritual of Falling target_affinity={self.abyssal.pk}"
+        )
+        self.assertIn("only 20", told)
+        self.assertFalse(FallRedemptionRecord.objects.filter(character_sheet=self.sheet).exists())
 
     def test_the_sheet_display_shows_the_true_aura(self) -> None:
-        response = self.api(self.staff).get(
+        response = self.api(self.account_of(self.ysmay)).get(
             f"/api/magic/character-auras/?character={self.sheet.pk}"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
@@ -139,39 +226,35 @@ class TheTrueAuraStillAnswersWhoSheIs(ResonanceCacheIsolationMixin, JourneyCase)
 
     def test_the_soul_tether_gate_still_sees_a_celestial_sinner(self) -> None:
         sineater = CharacterSheetFactory()
-        CharacterAuraFactory(
-            character=sineater,
-            celestial=Decimal("0.00"),
-            primal=Decimal("80.00"),
-            abyssal=Decimal("20.00"),
+        _true_aura(sineater, celestial="0.00", primal="80.00", abyssal="20.00")
+        response = self.api(self.account_of(self.ysmay)).post(
+            "/api/magic/soul-tether/accept/",
+            {
+                "actor_sheet_id": self.sheet.pk,
+                "partner_sheet_id": sineater.pk,
+                "sinner_role": "SINNER",
+                "resonance_id": ResonanceFactory().pk,
+            },
+            format="json",
         )
-        with self.assertRaises(AffinityGateError):
-            accept_soul_tether(
-                initiator_sheet=self.sheet,
-                partner_sheet=sineater,
-                sinner_role=SoulTetherRole.SINNER,
-                resonance=ResonanceFactory(),
-                ritual_components=[],
-            )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertIn("Sinner cannot be Celestial-affinity primary.", response.content.decode())
 
 
-class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, JourneyCase):
-    """Resonance of place and the covenant affinity situation read the acting aura."""
+class APlaceOfPowerFollowsTheAlternateSelf(_AShifter):
+    """Walking into a Celestial place grants its alignment boon only to the mask."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.celestial, self.primal, self.abyssal = ensure_canonical_affinities()
-        self.persona = PersonaFactory()
-        self.sheet = self.persona.character_sheet
-        _true_aura(self.sheet)
-        self.alt = AlternateSelfFactory(
-            character=self.sheet, resonance=ResonanceFactory(affinity=self.abyssal)
+        self.shrine = self.make_room("The Bright Shrine")
+        for name, here, there in (("in", self.room, self.shrine), ("out", self.shrine, self.room)):
+            exit_obj = ObjectDBFactory(db_key=name, db_typeclass_path="typeclasses.exits.Exit")
+            exit_obj.location = here
+            exit_obj.destination = there
+            exit_obj.save()
+        mod = tag_room_resonance(
+            RoomProfileFactory(objectdb=self.shrine), ResonanceFactory(affinity=self.celestial)
         )
-
-    def test_the_place_of_power_buff_follows_the_alternate_self(self) -> None:
-        """Arriving in a Celestial place grants its alignment boon only to the mask."""
-        room_profile = RoomProfileFactory()
-        mod = tag_room_resonance(room_profile, ResonanceFactory(affinity=self.celestial))
         mod.value = 1
         mod.save(update_fields=["value"])
         interaction = AffinityInteractionFactory(
@@ -182,31 +265,42 @@ class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, Journey
             aggressor=AffinityInteractionAggressor.ENVIRONMENT,
             severity_multiplier=Decimal("1.00"),
         )
-        boon = ConditionTemplateFactory(name="Celestial Warmth")
+        self.boon = ConditionTemplateFactory(name="Celestial Warmth")
         ResonanceAlignmentBoonTier.objects.create(
-            affinity_interaction=interaction, min_magnitude=1, condition_template=boon
+            affinity_interaction=interaction, min_magnitude=1, condition_template=self.boon
         )
-        # An Abyssal-dominant character has no authored reaction to a Celestial place.
-        sheet = CharacterSheetFactory()
-        _true_aura(sheet, celestial="20.00", abyssal="80.00")
-        mask = AlternateSelfFactory(
-            character=sheet, resonance=ResonanceFactory(affinity=self.celestial)
+        # Abyssal-dominant: a Celestial place has no authored reaction to her own aura.
+        self.hobb, self.sheet, _alt = self.make_shifter(
+            "Hobb", room=self.room, mask_affinity=self.celestial, celestial="20.00", abyssal="80.00"
         )
-        character = sheet.character
-        character.db_location = room_profile.objectdb
-        character.save(update_fields=["db_location"])
 
-        def boons() -> int:
-            return ConditionInstance.objects.filter(target=character, condition=boon).count()
+    def warmed(self) -> bool:
+        return ConditionInstance.objects.filter(target=self.hobb, condition=self.boon).exists()
 
-        character.at_post_move(source_location=None)
-        self.assertEqual(boons(), 0)
-        _wear(sheet, mask)
-        character.at_post_move(source_location=None)
-        self.assertEqual(boons(), 1)
+    def walk(self, exit_name: str, *, to) -> None:
+        self.telnet(self.hobb, exit_name)
+        self.assertEqual(self.hobb.location, to)
 
-    def test_the_covenant_attacker_affinity_follows_the_alternate_self(self) -> None:
-        opponent = CombatOpponentFactory(persona=self.persona)
+    def test_only_the_celestial_mask_is_warmed_by_the_shrine(self) -> None:
+        """A walk through an exit tells a telnet player no text (the room reaches the
+        web client as state) and the boon carries no message of its own, so the
+        journey asserts where she stands and what she holds."""
+        self.walk("in", to=self.shrine)
+        self.assertFalse(self.warmed())
+
+        self.walk("out", to=self.room)
+        self.shift(self.hobb)
+        self.walk("in", to=self.shrine)
+        self.assertTrue(self.warmed())
+
+
+class TheCovenantAttackerAffinityFollowsTheAlternateSelf(_AShifter):
+    """A unit on the registered ATTACKER_AFFINITY evaluator: the only journey to it is a
+    full combat round with a covenant perk holder, which buries the one read under test."""
+
+    def test_the_evaluator_reads_the_attackers_acting_aura(self) -> None:
+        ysmay, sheet, _alt = self.make_shifter("Ysmay", room=self.room, mask_affinity=self.abyssal)
+        opponent = CombatOpponentFactory(persona=sheet.primary_persona)
         params = SituationParams(affinity=self.abyssal)
         ctx = SituationContext(
             holder=CharacterSheetFactory(),
@@ -216,18 +310,21 @@ class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, Journey
             attacker=opponent,
         )
         self.assertFalse(SITUATION_EVALUATORS[Situation.ATTACKER_AFFINITY](ctx, params))
-        _wear(self.sheet, self.alt)
+        self.shift(ysmay)
         self.assertTrue(SITUATION_EVALUATORS[Situation.ATTACKER_AFFINITY](ctx, params))
 
 
 class AnAlternateSelfWithoutAResonance(JourneyCase):
-    """Wearing it changes nothing about the aura she acts with."""
+    """A unit on ``acting_aura``: every reader of it is covered by a journey above, and a
+    resonance-less self only shows there as the absence of a change."""
 
     def test_the_acting_aura_is_the_true_aura(self) -> None:
         celestial, _primal, abyssal = ensure_canonical_affinities()
         sheet = CharacterSheetFactory()
         _true_aura(sheet)
-        _wear(sheet, AlternateSelfFactory(character=sheet, resonance=None))
+        ActiveAlternateSelf.objects.create(
+            character=sheet, alternate_self=AlternateSelfFactory(character=sheet, resonance=None)
+        )
         acting = acting_aura(sheet)
         self.assertFalse(acting.is_alternate_self)
         self.assertEqual(acting.percent_for(celestial), Decimal(80))

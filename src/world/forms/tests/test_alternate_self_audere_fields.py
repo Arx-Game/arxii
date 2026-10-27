@@ -11,6 +11,9 @@ from world.forms.models import AlternateSelf
 
 
 class AlternateSelfAudereFieldsTests(TestCase):
+    """Staff-admin validation (``clean()``), no journey reaches it; and the database
+    constraints behind it, kept because the constraints are our rules too."""
+
     @classmethod
     def setUpTestData(cls):
         cls.behavior = ConditionTemplateFactory(
@@ -21,9 +24,19 @@ class AlternateSelfAudereFieldsTests(TestCase):
         )
 
     def test_one_flagged_row_per_character(self):
+        self.assertIn(
+            "one_audere_alternate_self_per_character",
+            {constraint.name for constraint in AlternateSelf._meta.constraints},
+        )
         first = AlternateSelfFactory(emerges_at_audere=True)
-        with self.assertRaises(IntegrityError), transaction.atomic():
+        with self.assertRaises(IntegrityError) as ctx, transaction.atomic():
             AlternateSelfFactory(character=first.character, emerges_at_audere=True)
+        # SQLite names the column of a failed unique index, PostgreSQL the index.
+        message = str(ctx.exception)
+        self.assertTrue(
+            "one_audere_alternate_self_per_character" in message or "character_id" in message,
+            message,
+        )
 
     def test_unflagged_rows_unrestricted(self):
         first = AlternateSelfFactory(emerges_at_audere=True)

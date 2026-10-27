@@ -192,7 +192,7 @@ class AltSelfResonanceShiftTests(TestCase):
         resonances = gift_resonances_for(self.sheet.character, self.gift)
         self.assertEqual([r.pk for r in resonances], [self.celestial.pk])
 
-    def testactive_alt_self_resonance_helper(self) -> None:
+    def test_active_alt_self_resonance_helper(self) -> None:
         """The active_alt_self_resonance helper returns None / resonance correctly."""
         self._provision_and_level_thread()
 
