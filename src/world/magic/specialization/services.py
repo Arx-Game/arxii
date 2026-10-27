@@ -232,13 +232,14 @@ def grant_gift_to_character(
     return character_gift, created
 
 
-def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
+def active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
     """Return the resonance of the character's active alternate self, if any.
 
     When a character has assumed an ``AlternateSelf`` that carries a
-    ``resonance`` FK, that resonance overrides the GIFT thread's own
-    resonance for variant resolution (#1619). The thread's *level* still
-    gates which variant tier unlocks — only the resonance axis shifts.
+    ``resonance`` FK, that resonance replaces the GIFT thread's own
+    resonance in variant resolution only (#1619); ``gift_resonances_for`` is
+    unchanged by it. The thread's *level* still gates which variant tier
+    unlocks. Also read by ``acting_aura`` for the aura the character acts with.
 
     Derive-on-read (ADR-0014): no snapshot, no write-on-assume. Uses a
     direct DB query rather than the cached reverse OneToOne accessor
@@ -438,7 +439,7 @@ def _effective_variant_resonance(sheet, thread, preferred_resonance):
     """Choose cast-time, alt-self, or thread resonance in priority order."""
     if preferred_resonance is not None:
         return preferred_resonance
-    resonance = _active_alt_self_resonance(sheet)
+    resonance = active_alt_self_resonance(sheet)
     return thread.resonance if resonance is None else resonance
 
 

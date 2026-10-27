@@ -28,7 +28,7 @@ from world.magic.factories import (
 from world.magic.models import Thread
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import (
-    _active_alt_self_resonance,
+    active_alt_self_resonance,
     gift_resonances_for,
     provision_latent_gift_thread,
     resolve_specialized_variant,
@@ -192,12 +192,12 @@ class AltSelfResonanceShiftTests(TestCase):
         resonances = gift_resonances_for(self.sheet.character, self.gift)
         self.assertEqual([r.pk for r in resonances], [self.celestial.pk])
 
-    def test_active_alt_self_resonance_helper(self) -> None:
-        """The _active_alt_self_resonance helper returns None / resonance correctly."""
+    def testactive_alt_self_resonance_helper(self) -> None:
+        """The active_alt_self_resonance helper returns None / resonance correctly."""
         self._provision_and_level_thread()
 
         # No active alt-self → None.
-        self.assertIsNone(_active_alt_self_resonance(self.sheet))
+        self.assertIsNone(active_alt_self_resonance(self.sheet))
 
         # Alt-self with resonance → that resonance.
         alt = AlternateSelfFactory(
@@ -205,11 +205,11 @@ class AltSelfResonanceShiftTests(TestCase):
             resonance=self.abyssal,
         )
         assume_alternate_self(self.sheet, alt)
-        self.assertEqual(_active_alt_self_resonance(self.sheet), self.abyssal)
+        self.assertEqual(active_alt_self_resonance(self.sheet), self.abyssal)
 
         # After revert → None.
         revert_alternate_self(self.sheet)
-        self.assertIsNone(_active_alt_self_resonance(self.sheet))
+        self.assertIsNone(active_alt_self_resonance(self.sheet))
 
     def test_alt_self_resonance_with_no_matching_variant(self) -> None:
         """If the alt-self's resonance has no variant, the parent technique resolves."""

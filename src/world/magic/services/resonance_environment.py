@@ -405,7 +405,7 @@ def _caster_acting_aura(caster: DefaultObject) -> ActingAura | None:
 
 
 def _working_affinity_presence_time(
-    caster: DefaultObject,
+    aura: ActingAura | None,
     place_affinity: Affinity,
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for presence-time evaluation (technique=None).
@@ -413,7 +413,6 @@ def _working_affinity_presence_time(
     Uses the caster's acting-aura dominant affinity. Returns (None, None)
     if the caster has no CharacterAura or no interaction row exists.
     """
-    aura = _caster_acting_aura(caster)
     if aura is None or not aura.has_shares:
         return None, None
     working_affinity = aura.dominant_affinity
@@ -486,14 +485,16 @@ def evaluate_resonance_environment(
     if place_affinity is None:
         return _inert()
 
-    # Step 1b: Determine working affinity and look up AffinityInteraction.
+    # Step 1b: Determine working affinity and look up AffinityInteraction. The aura the
+    # caster acts with is resolved once and used by every later step.
+    aura = _caster_acting_aura(caster)
     if technique is not None:
         working_affinity, interaction = _working_affinity_cast_time(
             technique, place_affinity, caster=caster
         )
     else:
         # Presence-time: _working_affinity_presence_time handles missing aura gracefully.
-        working_affinity, interaction = _working_affinity_presence_time(caster, place_affinity)
+        working_affinity, interaction = _working_affinity_presence_time(aura, place_affinity)
 
     # Step 3: Missing interaction row → inert.
     if interaction is None or working_affinity is None:
@@ -503,7 +504,6 @@ def evaluate_resonance_environment(
     p_magnitude = _place_magnitude(room, place_affinity, room_resonances)
 
     # Step 5: caster_alignment for the primary working affinity (used in direction, Step 7).
-    aura = _caster_acting_aura(caster)
     if aura is None:
         return _inert()
 

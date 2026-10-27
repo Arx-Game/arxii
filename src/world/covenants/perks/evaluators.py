@@ -802,10 +802,7 @@ def _attacker_aura(attacker: object) -> ActingAura | None:
 
     from world.magic.services.acting_aura import acting_aura  # noqa: PLC0415
 
-    try:
-        sheet = objectdb.character_sheet
-    except AttributeError:
-        return None
+    sheet = objectdb.character_sheet
     if sheet is None:
         return None
     return acting_aura(sheet)

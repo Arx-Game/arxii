@@ -18,8 +18,11 @@ from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatOpponentFactory
-from world.covenants.perks import evaluators
+from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.models import ConditionInstance
+from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext, SituationParams
+from world.covenants.perks.evaluators import SITUATION_EVALUATORS
 from world.forms.factories import AlternateSelfFactory
 from world.forms.models import ActiveAlternateSelf
 from world.magic.constants import (
@@ -37,15 +40,20 @@ from world.magic.factories import (
     ensure_canonical_affinities,
 )
 from world.magic.models import Affinity
+from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.acting_aura import acting_aura
 from world.magic.services.fall_redemption import perform_fall
 from world.magic.services.gain import tag_room_resonance
-from world.magic.services.resonance_environment import evaluate_resonance_environment
-from world.magic.services.soul_tether import _validate_affinity_gates
+from world.magic.services.soul_tether import accept_soul_tether
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.magic.types.soul_tether import SoulTetherRole
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.factories import PersonaFactory
-from world.scenes.tests.cast_test_helpers import CastScenarioMixin, grant_technique
+from world.scenes.tests.cast_test_helpers import (
+    CastScenarioMixin,
+    grant_technique,
+    make_benign_castable_technique,
+)
 
 ALIGNMENT_BONUS = 100
 
@@ -55,13 +63,13 @@ def _wear(sheet, alt) -> None:
     ActiveAlternateSelf.objects.update_or_create(character=sheet, defaults={"alternate_self": alt})
 
 
-def _true_aura(sheet) -> None:
-    """Celestial 80 / Abyssal 20."""
+def _true_aura(sheet, *, celestial: str = "80.00", abyssal: str = "20.00") -> None:
+    """Celestial 80 / Abyssal 20 unless told otherwise."""
     CharacterAuraFactory(
         character=sheet,
-        celestial=Decimal("80.00"),
+        celestial=Decimal(celestial),
         primal=Decimal("0.00"),
-        abyssal=Decimal("20.00"),
+        abyssal=Decimal(abyssal),
     )
 
 
@@ -78,8 +86,6 @@ class AlignmentFollowsTheAlternateSelfOnACast(CastScenarioMixin):
         self.resonance = ResonanceFactory(affinity=self.abyssal)
         gift = GiftFactory()
         gift.resonances.add(self.resonance)
-        from world.scenes.tests.cast_test_helpers import make_benign_castable_technique
-
         self.technique = make_benign_castable_technique()
         self.technique.gift = gift
         self.technique.save()
@@ -140,7 +146,13 @@ class TheTrueAuraStillAnswersWhoSheIs(ResonanceCacheIsolationMixin, JourneyCase)
             abyssal=Decimal("20.00"),
         )
         with self.assertRaises(AffinityGateError):
-            _validate_affinity_gates(self.sheet, sineater)
+            accept_soul_tether(
+                initiator_sheet=self.sheet,
+                partner_sheet=sineater,
+                sinner_role=SoulTetherRole.SINNER,
+                resonance=ResonanceFactory(),
+                ritual_components=[],
+            )
 
 
 class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, JourneyCase):
@@ -156,28 +168,42 @@ class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, Journey
             character=self.sheet, resonance=ResonanceFactory(affinity=self.abyssal)
         )
 
-    def test_the_place_of_power_reacts_to_the_alternate_self(self) -> None:
+    def test_the_place_of_power_buff_follows_the_alternate_self(self) -> None:
+        """Arriving in a Celestial place grants its alignment boon only to the mask."""
         room_profile = RoomProfileFactory()
-        mod = tag_room_resonance(room_profile, ResonanceFactory(affinity=self.abyssal))
-        mod.value = 40
+        mod = tag_room_resonance(room_profile, ResonanceFactory(affinity=self.celestial))
+        mod.value = 1
         mod.save(update_fields=["value"])
-        AffinityInteractionFactory(
-            source_affinity=self.abyssal,
-            environment_affinity=self.abyssal,
+        interaction = AffinityInteractionFactory(
+            source_affinity=self.celestial,
+            environment_affinity=self.celestial,
             valence=ResonanceValence.ALIGNED,
             kind=AffinityInteractionKind.AMPLIFY,
             aggressor=AffinityInteractionAggressor.ENVIRONMENT,
             severity_multiplier=Decimal("1.00"),
         )
-        caster, room = self.sheet.character, room_profile.objectdb
-        # A Celestial-dominant caster has no authored reaction to an Abyssal place.
-        before = evaluate_resonance_environment(caster=caster, room=room)
-        self.assertEqual(before.magnitude, 0)
-        _wear(self.sheet, self.alt)
-        after = evaluate_resonance_environment(caster=caster, room=room)
-        self.assertEqual(after.source_affinity, self.abyssal)
-        self.assertEqual(after.valence, ResonanceValence.ALIGNED)
-        self.assertGreater(after.magnitude, 0)
+        boon = ConditionTemplateFactory(name="Celestial Warmth")
+        ResonanceAlignmentBoonTier.objects.create(
+            affinity_interaction=interaction, min_magnitude=1, condition_template=boon
+        )
+        # An Abyssal-dominant character has no authored reaction to a Celestial place.
+        sheet = CharacterSheetFactory()
+        _true_aura(sheet, celestial="20.00", abyssal="80.00")
+        mask = AlternateSelfFactory(
+            character=sheet, resonance=ResonanceFactory(affinity=self.celestial)
+        )
+        character = sheet.character
+        character.db_location = room_profile.objectdb
+        character.save(update_fields=["db_location"])
+
+        def boons() -> int:
+            return ConditionInstance.objects.filter(target=character, condition=boon).count()
+
+        character.at_post_move(source_location=None)
+        self.assertEqual(boons(), 0)
+        _wear(sheet, mask)
+        character.at_post_move(source_location=None)
+        self.assertEqual(boons(), 1)
 
     def test_the_covenant_attacker_affinity_follows_the_alternate_self(self) -> None:
         opponent = CombatOpponentFactory(persona=self.persona)
@@ -189,9 +215,9 @@ class PlacesAndPerksFollowTheAlternateSelf(ResonanceCacheIsolationMixin, Journey
             resolution=None,
             attacker=opponent,
         )
-        self.assertFalse(evaluators.attacker_affinity(ctx, params))
+        self.assertFalse(SITUATION_EVALUATORS[Situation.ATTACKER_AFFINITY](ctx, params))
         _wear(self.sheet, self.alt)
-        self.assertTrue(evaluators.attacker_affinity(ctx, params))
+        self.assertTrue(SITUATION_EVALUATORS[Situation.ATTACKER_AFFINITY](ctx, params))
 
 
 class AnAlternateSelfWithoutAResonance(JourneyCase):

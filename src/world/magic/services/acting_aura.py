@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.magic.specialization.services import _active_alt_self_resonance
+from world.magic.specialization.services import active_alt_self_resonance
 from world.magic.types.aura import ActingAura
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ def acting_aura(sheet: CharacterSheet) -> ActingAura | None:
     ``None`` when the sheet has no ``CharacterAura`` and no active alternate self
     carrying a resonance.
     """
-    resonance = _active_alt_self_resonance(sheet)
+    resonance = active_alt_self_resonance(sheet)
     alternate_affinity = resonance.affinity if resonance is not None else None
     try:
         true_aura = sheet.aura
