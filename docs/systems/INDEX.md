@@ -68,7 +68,7 @@
   resonance (`open_or_extend_conversion_offer`, called from `grant_resonance`;
   `lapse_conversion_offers` from `Scene.finish_scene`). The player performs a configured rite:
   `DriftCorrectionConfig` (singleton: `rite`, `check_type`, `check_difficulty`, `cap_percent`)
-  and `DriftCorrectionOutcomeShare` (share of the cap converted per `CheckOutcome`) feed
+  and `DriftCorrectionOutcomeShare` (share of the requested amount converted per `CheckOutcome`) feed
   `perform_drift_correction_rite` (`services/drift_correction.py`), which converts through
   `convert_resonance_amount` (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the
   `AffinityInteraction` pair rate. `RitualComponentRequirement.matches_target_resonance` +
@@ -200,9 +200,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PendingRitualEffect` (in-progress CEREMONY record; unique per `(character, ritual)`;
     created by `PerformRitualAction`, consumed by finisher action `WeaveThreadAction`
     or `ImbueThreadAction`),
-    `RitualComponentRequirement` (touchstone-mode: nullable `min_touchstone_tier` FK to
-    `ResonanceTier`, mutually exclusive with `item_template` via `CheckConstraint`, #707 —
-    see ADR-0087), `ResonanceTier` (ordered potency lookup for resonance-tied items,
+    `RitualComponentRequirement` (exactly one of three modes, by `CheckConstraint`:
+    template-mode `item_template`; touchstone-mode `min_touchstone_tier` FK to
+    `ResonanceTier`, #707, ADR-0087; target-resonance mode `matches_target_resonance` with
+    optional `min_item_meaning`, #4733), `ResonanceTier` (ordered potency lookup for resonance-tied items,
     independent of `items.QualityTier` — `name`, `tier_level`, `description`),
     `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
@@ -818,7 +819,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `POST /api/magic/rituals/perform/` / `CmdRitual` path every SERVICE ritual uses. The shared
   `resolve_and_consume_ritual_components(*, ritual, components, performer_sheet,
   resonance_context=None)` (`world.magic.services.ritual_components`) validates/consumes
-  touchstone-mode + template-mode requirements atomically (all-or-nothing); called from both
+  template-mode, touchstone-mode and target-resonance-mode requirements atomically
+  (all-or-nothing); it is `resolve_ritual_components` (the no-write resolver, returning the
+  `(item, amount)` allocations; the drift rite calls it directly so nothing is spent before
+  its roll) followed by `consume_materials`. Called from both
   `PerformRitualAction._validate_components` and `SanctumInstallAction.execute()` (Sanctification
   is `client_hosted=True` and does not dispatch through `PerformRitualAction` at all — see the
   Sanctum entry above and ADR-0087).

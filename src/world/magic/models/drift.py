@@ -58,7 +58,7 @@ class DriftCorrectionConfig(SharedMemoryModel):
     cap_percent = models.PositiveSmallIntegerField(
         default=50,
         validators=[MaxValueValidator(100)],
-        help_text="Percent of a deed's resonance grant that may be converted.",
+        help_text="Percent of a deed's resonance grant that may be converted; 0 opens no offer.",
     )
 
     class Meta:
@@ -70,7 +70,11 @@ class DriftCorrectionConfig(SharedMemoryModel):
 
 
 class DriftCorrectionOutcomeShare(OutcomeTierAward):
-    """Share of the cap a rite converts, per outcome tier of its check (decision 15).
+    """Share of the requested amount a rite converts, per outcome tier of its check (decision 15).
+
+    The rite converts ``floor(amount x converted_share)`` of what the player asked to move
+    (never more than the cap allows). A share of 0.00 converts nothing; a tier with no row at
+    all makes the rite refuse before anything is spent.
 
     A better outcome never converts a smaller share than a worse one; ``clean`` enforces it.
     """
@@ -78,7 +82,7 @@ class DriftCorrectionOutcomeShare(OutcomeTierAward):
     converted_share = models.DecimalField(
         max_digits=4,
         decimal_places=2,
-        help_text="Fraction of the cap converted, from 0.00 to 1.00.",
+        help_text="Fraction of the requested amount converted, from 0.00 to 1.00.",
     )
 
     class Meta(OutcomeTierAward.Meta):

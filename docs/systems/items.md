@@ -658,9 +658,12 @@ them) — `GMAdjudicationPanel`'s Stage tab (`frontend/src/scenes/components/`).
 - **Items as thread anchors** — The `Thread` model in `world.magic` supports an `ITEM`
   anchor kind (`thread.item` FK → `ItemInstance`). Thread-bearing items accrue
   resonance and level independently of their wielder.
-- **Ritual components** — `RitualComponentRequirement` FKs to `ItemTemplate` with an
-  optional `QualityTier` (template-mode), or to a `magic.ResonanceTier` floor
-  (touchstone-mode — see below), declaring what the ritual consumes on cast.
+- **Ritual components** — `RitualComponentRequirement` takes exactly one of three modes:
+  an FK to `ItemTemplate` with an optional `QualityTier` (template-mode), a
+  `magic.ResonanceTier` floor (touchstone-mode, see below), or `matches_target_resonance`
+  (target-resonance mode, #4733: an item tied to the resonance being converted toward, an
+  item with a motif facet tied to it, or an item meaning at least `min_item_meaning` to the
+  performer), declaring what the ritual consumes on cast.
 
 See `docs/systems/magic.md` for the full thread and ritual model lineup.
 

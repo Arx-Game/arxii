@@ -573,9 +573,10 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),
-            # #4733 — DRIFT_CORRECTION: no typed source FK, untyped like COMPROMISE and
-            # PENANCE. The offer and its caps are deleted on accept, decline or scene end,
-            # so the ledger row carries no provenance link afterwards.
+            # #4733 DRIFT_CORRECTION: no typed source FK, untyped like COMPROMISE and
+            # PENANCE. A cap row is deleted once a conversion exhausts it, and the offer
+            # (with its caps) on decline, when its last cap is spent, or at scene end, so
+            # the ledger row carries no provenance link afterwards.
             models.CheckConstraint(
                 name="res_grant_drift_correction_shape",
                 check=(

@@ -843,8 +843,12 @@ admin all converge on the same service layer.
   creates `PendingRitualEffect` (finisher command completes the ritual);
   `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
   `site_property` optionally gates where it can be performed.
-- `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
-  `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+- `RitualComponentRequirement` - FK to `Ritual`, `quantity`, optional `min_quality_tier`,
+  and exactly one of three modes (DB `CheckConstraint`): `item_template` (template mode),
+  `min_touchstone_tier` (touchstone mode, #707), or `matches_target_resonance` (target-resonance
+  mode, #4733; optional `min_item_meaning` opens the keepsake route, allowed only in this mode).
+  Resolved by `resolve_ritual_components` (no writes) and consumed by
+  `resolve_and_consume_ritual_components` during ritual dispatch.
 - `PendingRitualEffect` - In-progress CEREMONY record. Unique per
   `(character, ritual)`. Created by `PerformRitualAction` on CEREMONY invocation;
   consumed (deleted) by the finisher action (`WeaveThreadAction`, `ImbueThreadAction`)
@@ -1992,7 +1996,8 @@ held off the aura's dominant affinity (`drift_holdings`); `AuraDrift` / `recompu
 older sense (shift in aura percentages). Do not mix the two in names.
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
   staff author them; `check_difficulty`; `cap_percent`), `DriftCorrectionOutcomeShare` (an
-  `OutcomeTierAward`; `clean` keeps `converted_share` monotonic by success level),
+  `OutcomeTierAward`; `converted_share` is the fraction of the requested amount that converts,
+  not of the cap; `clean` keeps it monotonic by success level),
   `DriftConversionOffer` (one per sheet and scene), `DriftConversionCap` (per offer and target
   resonance; `grants` names the deed grants it was measured from; `cap` is a snapshot).
   `RitualComponentRequirement` has a third mode, `matches_target_resonance` (optional

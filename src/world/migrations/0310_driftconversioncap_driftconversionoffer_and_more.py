@@ -76,7 +76,7 @@ class Migration(migrations.Migration):
                     "cap_percent",
                     models.PositiveSmallIntegerField(
                         default=50,
-                        help_text="Percent of a deed's resonance grant that may be converted.",
+                        help_text="Percent of a deed's resonance grant that may be converted; 0 opens no offer.",
                         validators=[django.core.validators.MaxValueValidator(100)],
                     ),
                 ),
@@ -102,7 +102,7 @@ class Migration(migrations.Migration):
                     "converted_share",
                     models.DecimalField(
                         decimal_places=2,
-                        help_text="Fraction of the cap converted, from 0.00 to 1.00.",
+                        help_text="Fraction of the requested amount converted, from 0.00 to 1.00.",
                         max_digits=4,
                     ),
                 ),
