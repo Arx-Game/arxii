@@ -229,6 +229,13 @@ def grant_resonance(  # noqa: PLR0913
     if drift is not None:
         fire_aura_threshold_crossings(character_sheet, drift)
 
+    # #4733: a deed that grew the character's own affinity while they hold convertible drift
+    # opens (or extends) the scene's drift conversion offer. Runs after the aura recompute so
+    # the offer reads the aura this grant just produced.
+    from world.magic.services.drift import open_or_extend_conversion_offer  # noqa: PLC0415
+
+    open_or_extend_conversion_offer(grant)
+
     # Endorsement/resonance-threshold distinction rank-up (#2037 Decision 8) — only
     # for the "sustained endorsements" identity-reinforcing-play sources. Gating on
     # ACCELERATED_GAIN_SOURCES also prevents a feedback loop: the DISTINCTION source
