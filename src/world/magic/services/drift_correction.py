@@ -59,6 +59,19 @@ if TYPE_CHECKING:
     from world.magic.models.affinity import Resonance
 
 
+RITE_NOT_READY_MESSAGE = DriftCorrectionNotConfiguredError.user_message
+
+
+def rite_is_ready() -> bool:
+    """Whether staff have set the rite and its check type, so the rite can be performed.
+
+    While either is unset the rite refuses with ``RITE_NOT_READY_MESSAGE``, and every
+    surface that shows an offer says that instead of listing an offering.
+    """
+    config = get_drift_correction_config()
+    return config.rite_id is not None and config.check_type_id is not None
+
+
 def focus_bonus(sheet: CharacterSheet, target: Resonance) -> int:
     """What the character's worn focus adds to the rite's check toward ``target``.
 
@@ -260,9 +273,9 @@ def perform_drift_correction_rite(
     """
     offer = _locked_offer(offer)
     sheet = offer.character_sheet
-    config = get_drift_correction_config()
-    if config.rite_id is None or config.check_type_id is None:
+    if not rite_is_ready():
         raise DriftCorrectionNotConfiguredError
+    config = get_drift_correction_config()
     cap = _cap_for(offer, target_resonance)
     if cap is None:
         raise DriftOfferNotFoundError

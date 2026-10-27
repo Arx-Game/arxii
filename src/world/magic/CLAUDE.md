@@ -2013,6 +2013,9 @@ older sense (shift in aura percentages). Do not mix the two in names.
   `CheckOutcome`; converts `floor(amount x share)` through `convert_resonance_amount` as
   `DRIFT_CORRECTION`; failure consumes the offering and leaves the cap. The check type is NOT a
   `RitualCheckConfig` sidecar. Never match the rite, check or affinities by name.
+  `rite_is_ready()` (rite and check type set) is the one readiness test; while it is false
+  telnet `drift`/`drift convert` and the pending serializer (`rite_ready`,
+  `rite_not_ready_message`) say `RITE_NOT_READY_MESSAGE`, the exception's own `user_message`.
 - Components: `qualifying_components` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that order).
   `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the anti-farm
   estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the deed

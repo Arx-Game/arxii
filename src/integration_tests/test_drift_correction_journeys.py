@@ -70,6 +70,7 @@ from world.traits.services import ensure_canonical_check_outcome
 NO_OFFER = "You have no open chance to correct drift."
 NOTICE = "You carry resonance that does not fit you. Use drift to see what you can correct."
 LAPSE = "The chance to correct drift passes with the scene."
+NOT_READY = "The rite of correction is not set up yet; tell staff."
 PENDING = "/api/magic/drift-correction/pending/"
 CONVERT = "/api/magic/drift-correction/convert/"
 DECLINE = "/api/magic/drift-correction/decline/"
@@ -384,6 +385,7 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         self.assertEqual(response.status_code, 200)
         (offer,) = response.data["results"]
         self.assertEqual(offer["scene_id"], self.scene.pk)
+        self.assertEqual((offer["rite_ready"], offer["rite_not_ready_message"]), (True, ""))
         (cap,) = offer["caps"]
         self.assertEqual(cap["target_resonance"]["name"], "Dawnlight")
         self.assertEqual(cap["target_resonance"]["affinity"], "Celestial")
@@ -502,6 +504,45 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
         self.assertFalse(consumed(mine))
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
         self.assertEqual(post(ysmay_api, DECLINE, {"offer_id": offer_id}).status_code, 404)
+
+
+class WhenStaffHaveNotSetUpTheRite(DriftJourneyCase):
+    """A deed still opens the chance, but every surface says the rite is not ready."""
+
+    def unset(self, field: str) -> None:
+        config = get_drift_correction_config()
+        setattr(config, field, None)
+        config.save(update_fields=[field])
+
+    def assert_not_ready_everywhere(self, thread: int) -> None:
+        shown = strip_ansi(self.telnet(self.ysmay, "drift"))
+        self.assertIn(NOT_READY, shown)
+        # She carries a thread tied to Dawnlight; the old display wrongly said she had none.
+        self.assertNotIn("You carry nothing that counts as the offering.", shown)
+        self.assertNotIn("Toward Dawnlight", shown)
+        self.assertIn(
+            NOT_READY, strip_ansi(self.telnet(self.ysmay, "drift convert Ruin=Dawnlight 2"))
+        )
+
+        (offer,) = self.api(self.account_of(self.ysmay)).get(PENDING).data["results"]
+        self.assertEqual((offer["rite_ready"], offer["rite_not_ready_message"]), (False, NOT_READY))
+
+        self.assertFalse(consumed(thread))
+        self.assertEqual(balance(self.ysmay, self.ruin), 30)
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+        self.assertEqual(drift_grants(), [])
+
+    def test_no_rite_is_named_on_telnet_and_the_web(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.unset("rite")
+        self.deed(self.ysmay)
+        self.assert_not_ready_everywhere(thread)
+
+    def test_no_check_type_is_named_on_telnet_and_the_web(self) -> None:
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.unset("check_type")
+        self.deed(self.ysmay)
+        self.assert_not_ready_everywhere(thread)
 
 
 class TheChanceLapsesWithTheScene(DriftJourneyCase):

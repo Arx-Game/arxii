@@ -60,6 +60,16 @@ const OFFER: DriftConversionOffer = {
       ],
     },
   ],
+  rite_ready: true,
+  rite_not_ready_message: '',
+};
+
+const NOT_READY = 'The rite of correction is not set up yet; tell staff.';
+
+const OFFER_NOT_READY: DriftConversionOffer = {
+  ...OFFER,
+  rite_ready: false,
+  rite_not_ready_message: NOT_READY,
 };
 
 const OFFER_WITH_FOCUS: DriftConversionOffer = {
@@ -190,6 +200,31 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     await user.clear(amount);
     await user.type(amount, '9');
     expect(perform).not.toBeDisabled();
+  });
+
+  it('says the rite is not set up in place of the pills while it is not ready', async () => {
+    renderGate([OFFER_NOT_READY]);
+
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('drift-not-ready-20')).toHaveTextContent(
+      new RegExp(`^${NOT_READY}$`)
+    );
+    expect(
+      screen.queryByRole('group', { name: 'Components for Dawnlight' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('drift-component-501')).not.toBeInTheDocument();
+    expect(screen.getByTestId('drift-perform-20')).toBeDisabled();
+    // What the offer holds is still shown.
+    expect(screen.getByTestId('drift-cap-remaining-20')).toHaveTextContent('12');
+    expect(screen.getByTestId('drift-source-20-30')).toBeInTheDocument();
+  });
+
+  it('shows the pills and no not-ready line while the rite is ready', async () => {
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    expect(screen.queryByTestId('drift-not-ready-20')).not.toBeInTheDocument();
+    expect(screen.getByTestId('drift-component-501')).toBeInTheDocument();
   });
 
   it('components are single-select', async () => {

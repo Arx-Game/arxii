@@ -4121,14 +4121,36 @@ class DriftConversionCapSerializer(serializers.Serializer):
 
 
 class DriftConversionOfferSerializer(serializers.ModelSerializer):
-    """Player-facing view of an open drift conversion offer. Read-only."""
+    """Player-facing view of an open drift conversion offer. Read-only.
+
+    ``rite_ready`` is false while staff have not set the rite or its check type; the rite
+    then refuses with ``rite_not_ready_message``, which the dialog shows in place of the
+    offering picker. The message is empty while the rite is ready.
+    """
 
     caps = serializers.SerializerMethodField()
+    rite_ready = serializers.SerializerMethodField()
+    rite_not_ready_message = serializers.SerializerMethodField()
 
     class Meta:
         model = DriftConversionOffer
-        fields = ["id", "scene_id", "caps"]
+        fields = ["id", "scene_id", "caps", "rite_ready", "rite_not_ready_message"]
         read_only_fields = fields
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_rite_ready(self, _offer: DriftConversionOffer) -> bool:
+        from world.magic.services.drift_correction import rite_is_ready  # noqa: PLC0415
+
+        return rite_is_ready()
+
+    @extend_schema_field(serializers.CharField())
+    def get_rite_not_ready_message(self, _offer: DriftConversionOffer) -> str:
+        from world.magic.services.drift_correction import (  # noqa: PLC0415
+            RITE_NOT_READY_MESSAGE,
+            rite_is_ready,
+        )
+
+        return "" if rite_is_ready() else RITE_NOT_READY_MESSAGE
 
     @extend_schema_field(DriftConversionCapSerializer(many=True))
     def get_caps(self, offer: DriftConversionOffer) -> list[dict]:

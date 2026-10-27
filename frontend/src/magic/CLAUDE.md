@@ -629,7 +629,9 @@ correction rite. Mirrors the entry-flourish front end (gate, dialog, 5 s poll).
 
 - `getPendingDriftConversionOffers()` - GET `pending/` -> `PaginatedDriftConversionOfferList`.
   Account-scoped (the row carries no character id). Each `DriftConversionOffer` is
-  `{ id, scene_id, caps[] }`; each cap is `{ target_resonance {id, name, affinity},
+  `{ id, scene_id, caps[], rite_ready, rite_not_ready_message }` (`rite_ready` is false while
+  staff have not set the rite or its check type; the message is the rite's own refusal, empty
+  while ready); each cap is `{ target_resonance {id, name, affinity},
 cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
   `{ resonance_id, resonance_name, balance, multiplier (decimal string), conversion_type
 ('FALL' | 'REDEMPTION'), max_amount, projected_output }` (`projected_output` is for
@@ -653,7 +655,9 @@ cap remaining, source pills, an amount bounded by the chosen source's `max_amoun
 it, single-select component pills `<name> · <mode>`, a rate line built from the source's
 `multiplier` ("Redemption: 12 Ruin becomes about 6 Dawnlight", plus "; a focus adds N" only
 when `focus_bonus > 0`), "Perform the rite" disabled until
-a component is chosen and the amount is valid, and Decline). The yield for a typed amount is
+a component is chosen and the amount is valid, and Decline). While `rite_ready` is false each
+block shows `rite_not_ready_message` in place of the component pills and the button stays
+disabled. The yield for a typed amount is
 `max(1, floor(amount * multiplier))`, the server's own rounding.
 
 **Mounts (once per surface):** `SceneDetailPage` (`isActive` guard, beside

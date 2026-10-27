@@ -14492,7 +14492,9 @@ export interface paths {
      *     GET /api/magic/drift-correction/pending/
      *     GET /api/magic/drift-correction/pending/{id}/
      *
-     *     Scoped to the authenticated user's character sheets (active tenures).
+     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
+     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
      */
     get: operations['magic_drift_correction_pending_list'];
     put?: never;
@@ -14516,7 +14518,9 @@ export interface paths {
      *     GET /api/magic/drift-correction/pending/
      *     GET /api/magic/drift-correction/pending/{id}/
      *
-     *     Scoped to the authenticated user's character sheets (active tenures).
+     *     Scoped to the authenticated user's character sheets (active tenures), and to offers
+     *     whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+     *     that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
      */
     get: operations['magic_drift_correction_pending_retrieve'];
     put?: never;
@@ -32960,11 +32964,19 @@ export interface components {
       sources: components['schemas']['DriftSourceOption'][];
       qualifying_components: components['schemas']['DriftQualifyingComponent'][];
     };
-    /** @description Player-facing view of an open drift conversion offer. Read-only. */
+    /**
+     * @description Player-facing view of an open drift conversion offer. Read-only.
+     *
+     *     ``rite_ready`` is false while staff have not set the rite or its check type; the rite
+     *     then refuses with ``rite_not_ready_message``, which the dialog shows in place of the
+     *     offering picker. The message is empty while the rite is ready.
+     */
     DriftConversionOffer: {
       readonly id: number;
       readonly scene_id: number;
       readonly caps: components['schemas']['DriftConversionCap'][];
+      readonly rite_ready: boolean;
+      readonly rite_not_ready_message: string;
     };
     /**
      * @description Request shape for POST /api/magic/drift-correction/convert/.

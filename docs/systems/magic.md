@@ -4024,6 +4024,11 @@ scene it displays. See `frontend/src/magic/CLAUDE.md`.
 the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
+While the rite or the check type is unset (`rite_is_ready()` false), telnet `drift` and
+`drift convert` refuse with the same sentence (`RITE_NOT_READY_MESSAGE`, the exception's
+`user_message`) instead of listing an offering, and the pending serializer carries
+`rite_ready: false` and `rite_not_ready_message`, which the dialog shows in place of the
+offering pills, with "Perform the rite" disabled.
 `max_yield_per_earned_point(config)` is the anti-farm estimator: `cap_percent / 100 x largest
 pair multiplier x largest share`, kept below 1 so correcting never out-earns the deed. It is
 the per-point rate; the one floored point a new cap row opens with sits on top of it, once per

@@ -68,10 +68,12 @@ function resultText(
 interface CapBlockProps {
   offerId: number;
   cap: DriftConversionCap;
+  /** Null while the rite is ready; else the server's sentence saying it is not set up. */
+  notReadyMessage: string | null;
   onResult: (line: string) => void;
 }
 
-function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
+function CapBlock({ offerId, cap, notReadyMessage, onResult }: CapBlockProps) {
   const targetId = cap.target_resonance.id;
   const [sourceId, setSourceId] = useState<number | null>(cap.sources[0]?.resonance_id ?? null);
   // null = "the source's max"; typed text is kept as typed so a half-edited amount is not snapped.
@@ -83,7 +85,8 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
   const maxAmount = source?.max_amount ?? 0;
   const amount = amountText === null ? maxAmount : Number(amountText);
   const amountValid = Number.isInteger(amount) && amount >= 1 && amount <= maxAmount;
-  const canPerform = source !== undefined && componentId !== null && amountValid;
+  const canPerform =
+    notReadyMessage === null && source !== undefined && componentId !== null && amountValid;
 
   function pickSource(next: number) {
     convert.reset();
@@ -178,24 +181,30 @@ function CapBlock({ offerId, cap, onResult }: CapBlockProps) {
         </label>
       ) : null}
 
-      <div
-        className="flex flex-wrap gap-2"
-        role="group"
-        aria-label={`Components for ${cap.target_resonance.name}`}
-      >
-        {cap.qualifying_components.map((c) => (
-          <button
-            key={c.item_id}
-            type="button"
-            aria-pressed={componentId === c.item_id}
-            onClick={() => pickComponent(c.item_id)}
-            data-testid={`drift-component-${c.item_id}`}
-            className={pillClass(componentId === c.item_id)}
-          >
-            {c.name} · {c.mode}
-          </button>
-        ))}
-      </div>
+      {notReadyMessage !== null ? (
+        <p className="text-sm text-muted-foreground" data-testid={`drift-not-ready-${targetId}`}>
+          {notReadyMessage}
+        </p>
+      ) : (
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label={`Components for ${cap.target_resonance.name}`}
+        >
+          {cap.qualifying_components.map((c) => (
+            <button
+              key={c.item_id}
+              type="button"
+              aria-pressed={componentId === c.item_id}
+              onClick={() => pickComponent(c.item_id)}
+              data-testid={`drift-component-${c.item_id}`}
+              className={pillClass(componentId === c.item_id)}
+            >
+              {c.name} · {c.mode}
+            </button>
+          ))}
+        </div>
+      )}
 
       {source && amountValid ? (
         <p className="text-sm" data-testid={`drift-rate-${targetId}`}>
@@ -284,6 +293,7 @@ export function DriftConversionOfferDialog({
             key={`${offer.id}-${cap.target_resonance.id}`}
             offerId={offer.id}
             cap={cap}
+            notReadyMessage={offer.rite_ready ? null : offer.rite_not_ready_message}
             onResult={onResult}
           />
         ))}

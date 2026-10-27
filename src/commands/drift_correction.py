@@ -70,6 +70,17 @@ def _open_offer(sheet: CharacterSheet) -> DriftConversionOffer:
     return offer
 
 
+def _require_rite_ready() -> None:
+    """Refuse, the way the rite itself does, while staff have not set the rite up."""
+    from world.magic.services.drift_correction import (  # noqa: PLC0415
+        RITE_NOT_READY_MESSAGE,
+        rite_is_ready,
+    )
+
+    if not rite_is_ready():
+        raise CommandError(RITE_NOT_READY_MESSAGE)
+
+
 def _carried(caller: ObjectDB, sheet: CharacterSheet) -> list[ItemInstance]:
     """The caller's own items among what they carry (as ``CmdRitual`` gathers them).
 
@@ -168,7 +179,7 @@ class CmdDrift(ArxCommand):
     items you carry that count as the offering. `convert` performs the rite; with no
     amount it converts the most you may. It spends a plain material you carry; to spend
     a faceted item or a keepsake instead, name it with `with <item>`. `decline` lets the
-    chance pass.
+    chance pass. While staff have not set the rite up, `drift` and `drift convert` say so.
     """
 
     key = "drift"
@@ -181,7 +192,9 @@ class CmdDrift(ArxCommand):
         word, _, rest = args.partition(" ")
         sheet = _own_sheet(self.caller)
         if not args:
-            self.msg(self._describe_offer(_open_offer(sheet), sheet))
+            offer = _open_offer(sheet)
+            _require_rite_ready()
+            self.msg(self._describe_offer(offer, sheet))
         elif word.lower() == _DECLINE and not rest.strip():
             result = self.decline_action.run(actor=self.caller, offer=_open_offer(sheet))
             self.send_result(result.message or "", failed=not result.success)
@@ -209,6 +222,7 @@ class CmdDrift(ArxCommand):
         target_text, amount = _split_amount(target_part.strip())
         sheet = _own_sheet(self.caller)
         offer = _open_offer(sheet)
+        _require_rite_ready()
         source = _own_resonance(sheet, source_text.strip())
         target = _own_resonance(sheet, target_text)
         if amount is None:
