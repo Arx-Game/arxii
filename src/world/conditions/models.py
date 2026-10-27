@@ -1580,8 +1580,9 @@ class ConditionInstance(SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "The level this condition's check modifiers count at (#4594): resolved from "
-            "the applying cast's power and outcome. Null keeps the flat authored values."
+            "The level this condition's check and stat modifiers count at (#4594, #4726): "
+            "resolved from the applying cast's power and outcome. Null keeps the flat "
+            "authored values."
         ),
     )
     modifier_size = models.PositiveSmallIntegerField(
@@ -1590,8 +1591,8 @@ class ConditionInstance(SharedMemoryModel):
         blank=True,
         help_text=(
             "The size the applying technique authored for this buff or debuff (#4594). "
-            "With modifier_level, its check modifiers read the value table instead of "
-            "their flat values."
+            "With modifier_level, its check modifiers read the check lane's value table "
+            "and its stat modifiers the stat lane's (#4726), instead of their flat values."
         ),
     )
     soulfray_consented = models.BooleanField(

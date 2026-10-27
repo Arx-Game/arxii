@@ -59,6 +59,15 @@ and looks up the same `ResultChartOutcome` row the engine would land in.
   total), the plain and tapered pile, the rank before and after, and the whole-rank Success odds
   unbuffed and buffed (the slide, #4551 slice b, replaces whole ranks later). `None` when no value
   or baseline row covers the inputs.
+- The stat lane (#4726, ADR-4726-A) has its own `ModifierValue` and `ModifierTaper` rows
+  (`lane=stat`), edited on the same admin pages as the check lane's. Its values are in stored
+  stat units (x10 the shown stat) and apply wherever a stat is read
+  (`TraitHandler._get_stat_modifier`). The rule staff tune it by is #4551 section 5.5's
+  universality: a stat buff of a size and level should move a check, through the stat's
+  `PointConversionRange`, by about the check lane's value for that size and level. The seed
+  meets it exactly (1 check point per stored stat unit, so equal values), and
+  `world/seeds/tests/test_stat_lane_universality.py` holds the relation until the simulator's
+  universality guard is built. The modifier pile above reads the check lane only.
 
 The panel template (`_checks_panel.html`) hosts the `roll_modifier` / `roller_points` /
 `target_difficulty` / `modifier_points` / `target_modifier_points` slider form itself,

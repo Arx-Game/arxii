@@ -240,8 +240,13 @@ block calls `get_modifier_breakdown(..., value_lane=ModifierLane.CHECK)`, which 
 names (`DistinctionEffectRankSize`, #4660, ADR-4660-A; rank never multiplies it), before
 amplification and immunity; the rows stay in the CHARACTER kind (achievement rewards and form
 profiles on the same path stay flat). `_scene_check_contributions` prices a sized
-`SceneCheckModifier` at its authored `modifier_level`. Only this seam passes a lane: every other
-`get_modifier_breakdown` caller reads flat values.
+`SceneCheckModifier` at its authored `modifier_level`. The CHARACTER, crafted and walk block is
+`modifier_target_contributions(sheet, target, lane=...)`, shared with the stat read (#4726,
+ADR-4726-A): `TraitHandler._get_stat_modifier` calls it with the stat lane, adds
+`condition_target_contributions`, and tapers by the stat lane's rows, so a stat buff is one
+number wherever the stat is read. The stat lane's piles are separate from the check lane's; a
+check reads the buffed stat through its trait points. Every other `get_modifier_breakdown`
+caller reads flat values.
 
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`

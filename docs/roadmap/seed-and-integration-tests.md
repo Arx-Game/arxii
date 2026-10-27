@@ -174,6 +174,17 @@ the light taper. Journey: `integration_tests/test_every_point_counts_journeys.py
 buffs lifts a character from chart -8 onto chart -2; too few leave her on chart -8 with no
 Success band).
 
+✅ **Check math, slice 8, the stat lane (#4726 of #4551, ADR-4726-A)** - built here:
+`ModifierLane.STAT`; `TraitHandler._get_stat_modifier` totals a stat target's CHARACTER,
+EQUIPMENT (`modifier_target_contributions`, shared with the check seam) and CONDITION
+(`condition_target_contributions`) contributions as a tapered `ModifierBreakdown`, so a sized
+technique buff or distinction effect on a stat reads the stat lane's table and a pile of one kind
+tapers, wherever the stat is read (checks, fatigue, stamina, carrying capacity, scandal, the
+sheet). The table and taper rows load only when needed (the #552 hot path runs the same queries
+as before). Example stat-lane rows in the `modifier_values` seed cluster equal the check lane's
+(1 check point per stored stat unit). Journey:
+`integration_tests/test_stat_buffs_valued_and_tapered_journeys.py`.
+
 ✅ **Check math, slice c1 (#4594 of #4551, ADR-4594-A)** — the tuning-curve design pass 2F asked
 for is spec #4551. Built here: modifiers carry a level and a size (`ModifierSize`); the
 `ModifierValue` table, `ModifierLevelBaseline` and `ModifierTaper` rows (one lane column, check

@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
     from world.items.models import ItemCheckModifier
-    from world.mechanics.models import CharacterChallengeRecord
+    from world.mechanics.models import CharacterChallengeRecord, ModifierTarget
     from world.scenes.models import Interaction, Scene, SceneCheckModifier
     from world.skills.models import Specialization
     from world.traits.handlers import TraitHandler
@@ -1805,57 +1805,41 @@ def _equipment_check_contributions(
     return contributions
 
 
-def _character_and_equipment_contributions(
+def modifier_target_contributions(
     character_sheet: "CharacterSheet",
-    check_type: "CheckType",
-    scene: "Scene | None",
-    skip_fashion: bool = False,
+    target: "ModifierTarget",
+    *,
+    lane: str,
 ) -> list[ModifierContribution]:
-    """Contributions keyed off the check's scoped ModifierTarget (#767, #512).
+    """A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.
 
-    Resolves ``check_type.modifier_target`` ONCE and shares it between three
-    sources that all target the same scoped ModifierTarget:
+    The one builder for these sources (#4726), shared by the check seam (the check
+    type's scoped target, lane CHECK) and the stat read (``TraitHandler``, a stat's
+    target, lane STAT):
 
-    * CHARACTER — persistent CharacterModifier rows (e.g. a distinction-granted
-      "+penetration vs warded foes" buff). The EAGER ``get_modifier_breakdown``
-      rows.
-    * EQUIPMENT walk (Spec D §5.5) — facet + covenant-role + mantle passive
-      bonuses via ``equipment_walk_total``.
-    * FASHION — the perception-relative outfit bonus for the scene's societies
-      (max across them), added only when a ``scene`` is supplied.
+    * CHARACTER: persistent CharacterModifier rows, one each (``get_modifier_breakdown``).
+      A sized distinction effect is valued from ``lane``'s table at its holder's level
+      and held-rank size (#4638, #4660); the other rows on this path (achievement
+      rewards, form profiles, unsized distinctions) keep their flat values. Rows
+      immunity blocks are left out.
+    * EQUIPMENT, crafted: one per worn piece (#1567, #4628), so several pieces taper
+      against each other.
+    * EQUIPMENT, walk: facet, covenant-role, covenant-level, mantle and motif passive
+      bonuses (Spec D section 5.5) as one contribution. The vow terms (covenant role,
+      covenant level, vow stat scaling) ride as the untapered ``vow_part`` (#4628).
 
-    **No double count:** ``equipment_walk_total`` / ``fashion_outfit_bonus`` are
-    called DIRECTLY, never ``get_modifier_total`` (which would re-add the eager
-    breakdown total already emitted as CHARACTER contributions).
-
-    The caller guards this with ``isinstance(check_type, Model)``; the reverse
-    OneToOne lookup here would raise on a MagicMock.
+    **No double count:** ``equipment_walk_parts`` is called directly, never
+    ``get_modifier_total`` (which would re-add the rows emitted as CHARACTER).
     """
     # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct from
-    # this module's checks ModifierBreakdown — import aliased.
+    # this module's checks ModifierBreakdown, so the import is aliased.
     from world.mechanics.services import (  # noqa: PLC0415
         equipment_walk_parts,
-        fashion_outfit_bonus,
         get_modifier_breakdown as get_character_modifier_breakdown,
     )
 
-    try:
-        scoped_target = check_type.modifier_target
-    except ObjectDoesNotExist:
-        scoped_target = None
-    if scoped_target is None or not scoped_target.is_active:
-        return []
-
-    contributions: list[ModifierContribution] = []
-
-    # CHARACTER: eager CharacterModifier rows. #4638: a distinction effect with a size
-    # is valued from the check lane's table at its holder's level (scaled by rank); the
-    # other rows on this path (achievement rewards, form profiles, unsized distinctions)
-    # keep their flat values. All taper together in the CHARACTER pile.
-    character_breakdown = get_character_modifier_breakdown(
-        character_sheet, scoped_target, value_lane=ModifierLane.CHECK
-    )
-    contributions.extend(
+    character_breakdown = get_character_modifier_breakdown(character_sheet, target, value_lane=lane)
+    contributions = [
         ModifierContribution(
             source_kind=ModifierSourceKind.CHARACTER,
             source_label=detail.source_name,
@@ -1865,15 +1849,12 @@ def _character_and_equipment_contributions(
         )
         for detail in character_breakdown.sources
         if not detail.blocked_by_immunity and detail.final_value != 0
-    )
+    ]
 
-    # EQUIPMENT-INSTANCE — per-instance crafted mods (#1567). One contribution per worn
-    # piece (#4628), so several crafted pieces taper against each other like any other
-    # pile of worn items instead of counting as one.
     character = character_sheet.character
     if character is not None:
         try:
-            crafted_pieces = character.equipped_items.crafted_modifier_by_piece(scoped_target)
+            crafted_pieces = character.equipped_items.crafted_modifier_by_piece(target)
         except AttributeError:
             crafted_pieces = []
         contributions.extend(
@@ -1885,10 +1866,7 @@ def _character_and_equipment_contributions(
             for piece, value in crafted_pieces
         )
 
-    # EQUIPMENT walk — facet + covenant-role + mantle passive bonuses. The covenant
-    # role, covenant level and vow stat scaling terms are the character's vow, so they
-    # ride as the untapered ``vow_part`` (#4628, #4551 decision 1).
-    walk = equipment_walk_parts(character_sheet, scoped_target)
+    walk = equipment_walk_parts(character_sheet, target)
     if walk.total:
         contributions.append(
             ModifierContribution(
@@ -1898,6 +1876,38 @@ def _character_and_equipment_contributions(
                 vow_part=walk.vow_part,
             )
         )
+    return contributions
+
+
+def _character_and_equipment_contributions(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+    scene: "Scene | None",
+    skip_fashion: bool = False,
+) -> list[ModifierContribution]:
+    """Contributions keyed off the check's scoped ModifierTarget (#767, #512).
+
+    Resolves ``check_type.modifier_target`` ONCE and shares it between the
+    CHARACTER and EQUIPMENT sources (``modifier_target_contributions``, priced from
+    the check lane) and FASHION: the perception-relative outfit bonus for the
+    scene's societies (max across them), added only when a ``scene`` is supplied.
+    Fashion is the check seam's alone; a stat read passes no perceiving society.
+
+    The caller guards this with ``isinstance(check_type, Model)``; the reverse
+    OneToOne lookup here would raise on a MagicMock.
+    """
+    from world.mechanics.services import fashion_outfit_bonus  # noqa: PLC0415
+
+    try:
+        scoped_target = check_type.modifier_target
+    except ObjectDoesNotExist:
+        scoped_target = None
+    if scoped_target is None or not scoped_target.is_active:
+        return []
+
+    contributions = modifier_target_contributions(
+        character_sheet, scoped_target, lane=ModifierLane.CHECK
+    )
 
     # FASHION — perception-relative outfit bonus (best across scene societies).
     if scene is not None and not skip_fashion:
