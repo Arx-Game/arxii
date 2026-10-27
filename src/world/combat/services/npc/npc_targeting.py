@@ -215,21 +215,17 @@ def _targetable_participants(encounter: CombatEncounter) -> list[CombatParticipa
     Unconscious PCs (awareness 0) are "down" and not picked as targets; a
     dying-but-conscious PC remains in the fight and is targetable. can_act is
     the same coarse agency gate used for declaration eligibility.
-    Intangible PCs (incorporeal, sunk, phased) are also excluded (#1584 Task 8).
+    Intangible PCs (incorporeal, sunk) stay targetable (#4742): their protection is
+    severity-scaled resistance, never untargetability. Held ground filters them itself.
     """
     from world.combat.constants import ParticipantStatus  # noqa: PLC0415
-    from world.conditions.services import is_untargetable  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     candidates = CombatParticipant.objects.filter(
         encounter=encounter,
         status=ParticipantStatus.ACTIVE,
     ).select_related("character_sheet__character")
-    return [
-        p
-        for p in candidates
-        if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
-    ]
+    return [p for p in candidates if can_act(p.character_sheet)]
 
 
 def _npc_action_target_pool(
@@ -244,30 +240,24 @@ def _npc_action_target_pool(
 
     * **ALLY_OF_CASTER** (a #1584 ALLY summon, or a charmed NPC) targets
       ``combatants_hostile_to``'s opponent pool — ACTIVE opponents whose
-      effective allegiance is ENEMY or TURNED — minus untargetable
-      (intangible) opponents; never a PC.
+      effective allegiance is ENEMY or TURNED; never a PC.
     * **TURNED** targets other ACTIVE opponents still on its former
       (stored-ENEMY, effectively ENEMY) side; never a PC, never itself.
     * **NEUTRAL** (calmed) skips the round: empty opponent pool.
     * **ENEMY** (the common case) targets the PC side as today — enemies
       ignore charmed/turned NPCs (Decision 3).
 
-    ``active_participants`` is already intangibility- and can_act-filtered by
-    ``select_npc_actions``.
+    ``active_participants`` is already can_act-filtered by ``select_npc_actions``.
 
     Returns ``(target_pool, targeting_participants)``.
     """
     side = allegiances.get(opponent.pk, Allegiance.ENEMY)
     if side in (Allegiance.ALLY_OF_CASTER, Allegiance.TURNED):
-        from world.conditions.services import is_untargetable  # noqa: PLC0415
-
-        opponent_pool = [
-            opp
-            for opp in combatants_hostile_to(
-                opponent, allegiances=allegiances, opponents=active_opponents
-            )["opponents"]
-            if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
-        ]
+        opponent_pool = list(
+            combatants_hostile_to(opponent, allegiances=allegiances, opponents=active_opponents)[
+                "opponents"
+            ]
+        )
         return opponent_pool, False
     if side == Allegiance.NEUTRAL:
         return [], True

@@ -11,6 +11,7 @@ from world.conditions.models import (
     ConditionCategory,
     ConditionCheckModifier,
     ConditionConditionInteraction,
+    ConditionDamageDealtModifier,
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
@@ -114,6 +115,14 @@ class ConditionCheckModifierInline(admin.TabularInline):
 
 class ConditionResistanceModifierInline(admin.TabularInline):
     model = ConditionResistanceModifier
+    extra = 0
+    autocomplete_fields = ["damage_type", "stage"]
+
+
+class ConditionDamageDealtModifierInline(admin.TabularInline):
+    """The bearer's outgoing damage of one type, as a percent (#4742)."""
+
+    model = ConditionDamageDealtModifier
     extra = 0
     autocomplete_fields = ["damage_type", "stage"]
 
@@ -296,6 +305,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         ConditionCapabilityEffectInline,
         ConditionCheckModifierInline,
         ConditionResistanceModifierInline,
+        ConditionDamageDealtModifierInline,
         ConditionDamageOverTimeInline,
         ConditionDamageInteractionInline,
         ConditionConditionInteractionInline,

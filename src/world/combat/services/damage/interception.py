@@ -235,6 +235,11 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         del source_sheet
         return _apply_swarm_damage(opponent, raw_damage)
 
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
+
+    # Untyped damage is Physical (#4742): resolve once so every read below agrees.
+    damage_type = resolved_damage_type(damage_type)
+
     # DAMAGE_PRE_APPLY (cancellable, amount mutable). bypass_pre_apply=True skips
     # emit + mutation; the bounced-reflect path uses this to terminate re-emission
     # (loop guard).

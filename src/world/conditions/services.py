@@ -57,6 +57,7 @@ from world.conditions.models import (
     ConditionCategory,
     ConditionCheckModifier,
     ConditionConditionInteraction,
+    ConditionDamageDealtModifier,
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
@@ -136,6 +137,21 @@ def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB
 # =============================================================================
 
 
+def resolved_damage_type(damage_type: "DamageType | None") -> "DamageType | None":
+    """The damage type a hit really is: untyped damage is Physical (#4742).
+
+    Code finds the Physical row through ``VitalsConsequenceConfig.physical_damage_type``,
+    never by name. Every damage seam calls this at entry so resistance, cover, property
+    bonuses, damage interactions and consequence pools all see Physical. Returns None
+    only when the hit is untyped and no Physical row is configured (an empty database).
+    """
+    if damage_type is not None:
+        return damage_type
+    from world.vitals.services import get_vitals_consequence_config  # noqa: PLC0415
+
+    return get_vitals_consequence_config().physical_damage_type
+
+
 def resolve_damage_type_resistance(
     character: "ObjectDB",  # noqa: OBJECTDB_PARAM
     damage_amount: int,
@@ -148,7 +164,8 @@ def resolve_damage_type_resistance(
     The single source of truth for damage-type resistance across every damage seam
     (#1588). Mirrors the netting that previously lived inlined in
     ``combat.services.apply_damage_to_participant``. When ``damage_type`` is None
-    (untyped damage) resistance does not apply — the amount is returned unchanged.
+    (untyped damage) it is resolved as Physical (``resolved_damage_type``, #4742); only
+    when no Physical row is configured is the amount returned unchanged.
 
     A negative resistance total (a vulnerability, e.g. a species drawback) *increases*
     damage above the base; a large positive total (high resistance, functioning as
@@ -158,12 +175,13 @@ def resolve_damage_type_resistance(
         character: the ObjectDB character taking damage (must expose ``.conditions``
             and be passable to ``gift_thread_resistance``).
         damage_amount: the incoming damage before resistance.
-        damage_type: a ``DamageType`` instance, or None for untyped damage.
+        damage_type: a ``DamageType`` instance, or None for untyped (Physical) damage.
         resistance_shift: Per-hit points shifting resistance toward vulnerability.
 
     Returns:
         The damage after subtracting total resistance, clamped to >= 0.
     """
+    damage_type = resolved_damage_type(damage_type)
     if damage_type is None:
         return damage_amount
     from world.magic.services import gift_thread_resistance  # noqa: PLC0415
@@ -311,12 +329,13 @@ def get_condition_instance(
     ).first()
 
 
-def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+def is_intangible(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
     """True if *target* holds any active intangibility condition.
 
     Mirrors the derive-on-read pattern: aggregate over the bearer's active,
     non-suppressed, unresolved ConditionInstances whose category grants
-    intangibility. Gates target resolution in cast + combat.
+    intangibility. Read by held ground: an intangible PC blocks nobody. It no
+    longer gates targeting (#4742); incorporeal protection is resistance.
     """
     return target.condition_instances.filter(
         condition__category__grants_intangibility=True,
@@ -328,7 +347,7 @@ def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
 def is_concealed(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
     """True if *target* holds any active perception-concealing condition.
 
-    Mirrors is_untargetable's derive-on-read pattern (#1225).
+    Mirrors is_intangible's derive-on-read pattern (#1225).
     """
     return active_concealments(target).exists()
 
@@ -2276,6 +2295,39 @@ def scaled_resistance_value(
     if modifier.scales_with_severity:
         return int(modifier.modifier_value * instance.effective_severity)
     return modifier.modifier_value
+
+
+def scaled_outgoing_damage(
+    attacker: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - PC body or NPC opponent body
+    amount: int,
+    damage_type: "DamageType | None",
+) -> int:
+    """*amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).
+
+    The one outgoing-damage seam: PC technique profiles, PC combo riders and joust
+    strikes, and NPC attacks all call it with the hit's type (untyped is Physical).
+    No attacker, or one with no condition handler, leaves the amount unchanged.
+    Floored at 0.
+    """
+    if attacker is None or not hasattr(attacker, "conditions"):
+        return amount
+    percent = attacker.conditions.damage_dealt_percent(resolved_damage_type(damage_type))
+    if percent == 0:
+        return amount
+    return max(0, int(amount * (100 + percent) / 100))
+
+
+def scaled_damage_dealt_percent(
+    modifier: "ConditionDamageDealtModifier", instance: ConditionInstance
+) -> int:
+    """One ConditionDamageDealtModifier's percent on one active instance (#4742).
+
+    Same rule as ``scaled_resistance_value``: the severity flag multiplies by effective
+    severity; otherwise the row is flat (stage rows are authored per stage).
+    """
+    if modifier.scales_with_severity:
+        return int(modifier.modifier_percent * instance.effective_severity)
+    return modifier.modifier_percent
 
 
 def get_condition_modifier_total(

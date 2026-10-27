@@ -16,6 +16,7 @@ from world.conditions.constants import BreakFreeMode
 from world.conditions.models import (
     ConditionCapabilityEffect,
     ConditionCheckModifier,
+    ConditionDamageDealtModifier,
     ConditionDamageOverTime,
     ConditionModifierEffect,
     ConditionResistanceModifier,
@@ -74,6 +75,7 @@ _CHANNEL_LABELS = {
     "modifier_effect": "stat modifier",
     "check_modifier": "check modifier",
     "resistance_modifier": "resistance modifier",
+    "damage_dealt_modifier": "damage dealt modifier",
     "damage_over_time": "damage over time",
     "category.alters_behavior": "category alters behavior",
     "category.grants_intangibility": "category grants intangibility",
@@ -141,6 +143,10 @@ def condition_template_prefetches(*, prefix: str = "") -> list[Prefetch]:
             queryset=ConditionResistanceModifier.objects.all(),
         ),
         Prefetch(
+            f"{prefix}conditiondamagedealtmodifier_set",
+            queryset=ConditionDamageDealtModifier.objects.all(),
+        ),
+        Prefetch(
             f"{prefix}conditiondamageovertime_set",
             queryset=ConditionDamageOverTime.objects.all(),
         ),
@@ -181,6 +187,7 @@ def inspect_condition_template(template: ConditionTemplate) -> ConditionMechanic
         ("conditionmodifiereffect_set", "modifier_effect"),
         ("conditioncheckmodifier_set", "check_modifier"),
         ("conditionresistancemodifier_set", "resistance_modifier"),
+        ("conditiondamagedealtmodifier_set", "damage_dealt_modifier"),
         ("conditiondamageovertime_set", "damage_over_time"),
         ("properties", "property"),
         ("reactive_triggers", "reactive_trigger"),

@@ -171,6 +171,17 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         related_name="+",
         help_text="Fallback death pool when DamageType.death_pool is null.",
     )
+    physical_damage_type = models.ForeignKey(
+        "arxii.DamageType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The damage type that untyped damage is (#4742). Set to Physical. "
+            "Code finds the Physical row through this field, never by its name."
+        ),
+    )
     # ------------------------------------------------------------------
     # Survivability difficulty tuning — authored here, read by services.py
     # ------------------------------------------------------------------

@@ -3777,7 +3777,7 @@ point calls all nine sub-builders:
 | Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; outside an NPC attack, avoids the hit and lands her on her dodge plan (else she stays); against an NPC attack it is a dodge source instead (#4676) |
 | Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 | Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
-| Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
+| Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; holds no ground via `is_intangible`, protected by a severity-scaled Physical resistance row, stays targetable (#4742) |
 | Earthmeld | Earthmeld | intangibility category only (1-round duration) | `ConditionCategory`; as Ghostform |
 | Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; **runtime destination wired for combat, #2206** |
 

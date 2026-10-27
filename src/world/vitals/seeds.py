@@ -738,6 +738,16 @@ def _wire_consequence_config() -> None:
         update_fields.append("knockout_pool")
     else:
         ensure_knockout_pool()
+    if config.physical_damage_type_id is None:
+        from world.conditions.constants import PHYSICAL_DAMAGE_TYPE_NAME  # noqa: PLC0415
+        from world.conditions.models import DamageType  # noqa: PLC0415
+        from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+        # Untyped damage is Physical (#4742); skipped until the row is authored.
+        physical = authored_or_sample(DamageType, {}, name=PHYSICAL_DAMAGE_TYPE_NAME)
+        if physical is not None:
+            config.physical_damage_type = physical
+            update_fields.append("physical_damage_type")
     if config.default_death_pool_id is None:
         config.default_death_pool = ensure_default_death_pool()
         update_fields.append("default_death_pool")
