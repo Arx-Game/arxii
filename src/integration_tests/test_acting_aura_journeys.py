@@ -9,6 +9,11 @@ with, as her techniques' variants already do, so a Celestial gift cast in the Ab
 self keeps the full alignment term. An alternate self with no resonance changes
 nothing.
 
+The Rite of Atonement reads the true aura too (its Abyssal-lead gate), but no journey
+drives it: the ritual dispatch calls a SERVICE ritual with ``character_sheet=`` and
+``ritual=``, while ``perform_atonement_rite`` takes ``performer_sheet=`` and
+``target_sheet=``, so the rite cannot be performed from ``ritual`` or the web client yet.
+
 Expected numbers come from the ruled split and the affinity-alignment bonus of 100:
 bonus x percent / 100. Names are invented.
 """
@@ -23,6 +28,7 @@ from rest_framework import status
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
+from integration_tests.test_academy_skill_course_journeys import _AcademyCourseCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatOpponentFactory
 from world.conditions.capability_content import AT_WILL_SHIFTING
@@ -37,6 +43,7 @@ from world.forms.factories import (
     CharacterFormStateFactory,
 )
 from world.forms.models import ActiveAlternateSelf, FormType
+from world.locations.services import effective_value
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -48,9 +55,12 @@ from world.magic.factories import (
     AuraPowerConfigFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
+    CharacterGiftFactory,
     GiftFactory,
     ResonanceFactory,
     RitualFactory,
+    TraditionFactory,
+    TraditionGiftGrantFactory,
     ensure_canonical_affinities,
     ensure_conversion_pairs,
 )
@@ -83,6 +93,21 @@ def _true_aura(
     )
 
 
+def _grant_at_will_shifting(sheet) -> None:
+    """The at-will shifting capability, so ``form shift`` needs no other grant."""
+    capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
+    target = ModifierTarget.objects.get_or_create(
+        name=f"capability_{capability.pk}",
+        defaults={
+            "category": ModifierCategoryFactory(name="capability"),
+            "target_capability": capability,
+        },
+    )[0]
+    CharacterModifier.objects.create(
+        character=sheet, target=target, source=ModifierSourceFactory(), value=1
+    )
+
+
 class _AShifter(ResonanceCacheIsolationMixin, JourneyCase):
     """A played character who may shift at will into an alternate self."""
 
@@ -100,17 +125,7 @@ class _AShifter(ResonanceCacheIsolationMixin, JourneyCase):
         _true_aura(sheet, **aura)
         true_form = CharacterFormFactory(character=sheet, name="True", form_type=FormType.TRUE)
         CharacterFormStateFactory(character=sheet, active_form=true_form)
-        capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
-        target = ModifierTarget.objects.get_or_create(
-            name=f"capability_{capability.pk}",
-            defaults={
-                "category": ModifierCategoryFactory(name="capability"),
-                "target_capability": capability,
-            },
-        )[0]
-        CharacterModifier.objects.create(
-            character=sheet, target=target, source=ModifierSourceFactory(), value=1
-        )
+        _grant_at_will_shifting(sheet)
         alt = AlternateSelfFactory(
             character=sheet,
             display_name=ASHEN,
@@ -125,8 +140,8 @@ class _AShifter(ResonanceCacheIsolationMixin, JourneyCase):
         self.assertIn("You revert to your true self.", self.telnet(character, "form revert"))
 
 
-class AlignmentFollowsTheAlternateSelfOnACast(_AShifter):
-    """She casts through the web cast endpoint, as herself and as the Ashen Ysmay."""
+class _ACaster(_AShifter):
+    """A shifter who casts through the web cast endpoint."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -155,8 +170,8 @@ class AlignmentFollowsTheAlternateSelfOnACast(_AShifter):
         grant_technique(self.sheet.primary_persona, technique)
         return technique
 
-    def alignment_term(self, technique) -> int:
-        """The "aura power" line of the power ledger the cast endpoint returns."""
+    def cast(self, technique) -> dict:
+        """Cast ``technique`` through the web endpoint; the response body."""
         response = self.api(self.account_of(self.ysmay)).post(
             reverse("sceneactionrequest-cast"),
             {
@@ -167,12 +182,21 @@ class AlignmentFollowsTheAlternateSelfOnACast(_AShifter):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        return response.json()
+
+
+class AlignmentFollowsTheAlternateSelfOnACast(_ACaster):
+    """She casts through the web cast endpoint, as herself and as the Ashen Ysmay."""
+
+    def alignment_term(self, technique) -> int:
+        """The "aura power" line of the power ledger the cast endpoint returns."""
+        body = self.cast(technique)
         entries = [
             entry
-            for entry in response.json()["result"]["power_ledger"]["entries"]
+            for entry in body["result"]["power_ledger"]["entries"]
             if entry["source_label"] == "aura power"
         ]
-        self.assertEqual(len(entries), 1, response.content)
+        self.assertEqual(len(entries), 1, body)
         return entries[0]["amount"]
 
     def test_an_abyssal_cast_reads_the_alternate_selfs_aura_while_worn(self) -> None:
@@ -189,6 +213,56 @@ class AlignmentFollowsTheAlternateSelfOnACast(_AShifter):
         self.assertEqual(self.alignment_term(technique), 80)  # true aura: 80% Celestial
         self.shift(self.ysmay)
         self.assertEqual(self.alignment_term(technique), 100)  # works in Abyssal, 100%
+
+
+class DefilementReadsTheWornSelf(_ACaster):
+    """An Abyssal cast defiles a Celestial place only while she is the Ashen Ysmay.
+
+    Defilement fires when the caster's strength (alignment x 100 x the 0.5 power scalar)
+    beats the place's magnitude by more than the balanced band of 10. The place holds 20
+    Celestial. As herself she is 20% Abyssal: strength 10, so 10 - 20 is inside the band
+    and nothing is defiled. In the Ashen Ysmay she is 100% Abyssal: strength 50, so
+    50 - 20 = 30 beats the band and the cast degrades the place by the default 6 and
+    spreads 6 of the gift's Abyssal resonance onto the room. The interaction row is
+    authored here with the seeded Abyssal-onto-Celestial defiling flag; its valence is
+    aligned so the not-defiling cast skips the hallowed-ground backfire check the
+    journey does not build.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.place = ResonanceFactory(affinity=self.celestial)
+        mod = tag_room_resonance(RoomProfileFactory(objectdb=self.room), self.place)
+        mod.value = 20
+        mod.save(update_fields=["value"])
+        AffinityInteractionFactory(
+            source_affinity=self.abyssal,
+            environment_affinity=self.celestial,
+            valence=ResonanceValence.ALIGNED,
+            kind=AffinityInteractionKind.CORRUPT,
+            aggressor=AffinityInteractionAggressor.CASTER,
+            severity_multiplier=Decimal("1.00"),
+            caster_dominance_defiles=True,
+        )
+        self.technique = self.technique_of(self.abyssal)
+        self.taint = self.technique.gift.resonances.get()
+
+    def place_value(self) -> int:
+        return effective_value(self.room, resonance=self.place)
+
+    def test_the_place_is_defiled_only_by_the_cast_made_as_the_ashen_ysmay(self) -> None:
+        self.cast(self.technique)
+        self.assertEqual(self.place_value(), 20)  # as herself: 20% Abyssal, strength 10
+        self.assertEqual(effective_value(self.room, resonance=self.taint), 0)
+
+        self.shift(self.ysmay)
+        self.cast(self.technique)
+        self.assertEqual(self.place_value(), 14)  # as the Ashen Ysmay: strength 50, -6
+        self.assertEqual(effective_value(self.room, resonance=self.taint), 6)
+
+        self.revert(self.ysmay)
+        self.cast(self.technique)
+        self.assertEqual(self.place_value(), 14)  # herself again: no further defilement
 
 
 class TheTrueAuraStillAnswersWhoSheIs(_AShifter):
@@ -295,8 +369,11 @@ class APlaceOfPowerFollowsTheAlternateSelf(_AShifter):
 
 
 class TheCovenantAttackerAffinityFollowsTheAlternateSelf(_AShifter):
-    """A unit on the registered ATTACKER_AFFINITY evaluator: the only journey to it is a
-    full combat round with a covenant perk holder, which buries the one read under test."""
+    """A unit on the registered ATTACKER_AFFINITY evaluator, kept because no journey
+    reaches the read. The evaluator runs only on a defense-side resolution with a
+    ``CombatOpponent`` attacker whose persona belongs to a character who shifts; an
+    opponent is an NPC target and a player character is a participant, never an
+    opponent, so no combat a player can run puts a shifter in that seat."""
 
     def test_the_evaluator_reads_the_attackers_acting_aura(self) -> None:
         ysmay, sheet, _alt = self.make_shifter("Ysmay", room=self.room, mask_affinity=self.abyssal)
@@ -330,3 +407,51 @@ class AnAlternateSelfWithoutAResonance(JourneyCase):
         self.assertEqual(acting.percent_for(celestial), Decimal(80))
         self.assertEqual(acting.percent_for(abyssal), Decimal(20))
         self.assertEqual(acting.dominant_affinity, celestial)
+
+
+class TeachingFitKeepsReadingTheTrueAura(_AcademyCourseCase):
+    """The Academy fit line reads who she is, not the self she wears.
+
+    Her true aura is 80% Primal and the House of Dawn favors Primal, so Magister Cadwen's
+    menu says the course fits her Lantern Gift and its Primal affinity. She then shifts
+    into the Ashen Ysmay, an Abyssal self, and the menu says the same.
+    """
+
+    FIT = "Fits your Lantern Gift and its Primal affinity. Sessions are easier for you."
+
+    def setUp(self) -> None:
+        super().setUp()
+        Affinity.objects.clear_cache()
+        _celestial, self.primal, self.abyssal = ensure_canonical_affinities()
+        gift = GiftFactory(name="Lantern Gift")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        tradition = TraditionFactory(name="House of Dawn")
+        TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        tradition.favored_affinities.add(self.primal)
+        self.role.teaches_tradition = tradition
+        self.role.save()
+        _true_aura(self.sheet, celestial="0.00", primal="80.00", abyssal="20.00")
+        true_form = CharacterFormFactory(character=self.sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormStateFactory(character=self.sheet, active_form=true_form)
+        _grant_at_will_shifting(self.sheet)
+        AlternateSelfFactory(
+            character=self.sheet,
+            display_name=ASHEN,
+            resonance=ResonanceFactory(affinity=self.abyssal),
+        )
+
+    def fit_line(self) -> str:
+        """The fit line the web client is sent for the Occult course when she starts."""
+        client = self.api(self.account_of(self.ysmay))
+        response = client.post(
+            "/api/npc-services/interactions/start/", {"role_id": self.role.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        client.post("/api/npc-services/interactions/end/", {}, format="json")
+        offers = {offer["label"]: offer for offer in response.data["available_offers"]}
+        return offers["Course: Occult"]["price"]["fit_line"]
+
+    def test_the_fit_line_is_the_same_in_the_abyssal_self(self) -> None:
+        self.assertEqual(self.fit_line(), self.FIT)
+        self.assertIn(f"You assume {ASHEN}.", self.telnet(self.ysmay, f"form shift {ASHEN}"))
+        self.assertEqual(self.fit_line(), self.FIT)
