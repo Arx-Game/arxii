@@ -172,8 +172,7 @@ jobs:
               world.societies world.npc_services world.character_sheets
               world.distinctions world.skills evennia_extensions typeclasses
               world.instances world.realms
-          # shard-2 (~344s): world.magic half 2 (~208s) + integration_tests (51)
-          #   + world.mechanics (33) + world.room_features (17) + world.travel (12)
+          # shard-2: world.magic half 2 + world.mechanics + world.room_features + world.travel
           #   + world.classes (8) + world.weather (6) + world.projects (5)
           #   + world.boundaries (3)
           - name: shard-2
@@ -181,7 +180,7 @@ jobs:
             split_part: 2
             split_of: 2
             apps: >-
-              integration_tests world.mechanics world.room_features world.travel
+              world.mechanics world.room_features world.travel
               world.classes world.weather world.projects world.boundaries
           # shard-3: world.combat half 1 + world.items + world.gm
           #   + world.fatigue (10) + world.assets (7) + world.action_points (5)
@@ -226,14 +225,17 @@ jobs:
             apps: >-
               world.covenants world.conditions world.locations world.justice
               world.game_clock world.narrative world.consent world.predicates
-          # shard-5 (~344s): actions (199) + world.progression (56) + world.forms (35)
+          # shard-5: integration tests part 2 + world.progression + world.forms
           #   + world.events (21) + world.currency (11) + world.clues (7)
           #   + world.species (6) + world.captivity (6) + world.military (2)
           - name: shard-5
+            split_app: integration_tests
+            split_part: 2
+            split_of: 2
             apps: >-
-              actions world.progression world.forms world.events world.currency
+              world.progression world.forms world.events world.currency
               world.clues world.species world.captivity world.military
-          # shard-6: the smaller half of world.stories + battles and the
+          # shard-6: the smaller half of world.stories + actions, battles and the
           # remaining small apps. web and character_creation move to shard-9
           # so this shard no longer carries three oversized suites together.
           - name: shard-6
@@ -241,7 +243,7 @@ jobs:
             split_part: 1
             split_of: 2
             apps: >-
-              world.battles world.codex world.companions world.ships
+              actions world.battles world.codex world.companions world.ships
               world.achievements world.dreams world.tidings behaviors
           # shard-7 (~344s): world.scenes (150) + world.areas (78) + flows (37)
           #   + world.buildings (30) + world.vitals (17) + core_management (10)
@@ -252,16 +254,21 @@ jobs:
               world.scenes world.areas flows world.buildings world.vitals
               core_management world.player_submissions world.staff_inbox
               world.estates world.traits
-          # shard-8 (~344s): commands (150) + world.missions (70)
+          # shard-8: integration tests part 1 + world.missions
           #   + world.relationships (50) + world.roster (24) + world.secrets (17)
           #   + world.goals (11) + world.agriculture (8) + world.journals (6)
           #   + world.tarot (5) + world.ceremonies (2) + world.worship (1)
           - name: shard-8
+            split_app: integration_tests
+            split_part: 1
+            split_of: 2
             apps: >-
-              commands world.missions world.relationships world.roster world.secrets
+              world.missions world.relationships world.roster world.secrets
               world.goals world.agriculture world.journals world.tarot
               world.ceremonies world.worship
-          # shard-9: the second half of world.stories + world.seeds.
+          # shard-9: the second half of world.stories, world.seeds and commands.
+          # Integration tests are split across shards 5 and 8: putting the
+          # entire suite here made this shard the critical path (PR #4750).
           # split_test_labels.py keeps the story halves complete and disjoint as
           # test modules change. world.seeds moved here from shard-3
           # (2026-10-03, #4139): its seeder tests take 13-26s each, and with
@@ -271,7 +278,7 @@ jobs:
             split_app: world.stories
             split_part: 2
             split_of: 2
-            apps: world.seeds world.standoffs
+            apps: world.seeds world.standoffs commands
           # shard-10: web and character_creation. Their old estimate was small,
           # but both suites are now large enough to keep off the story shards.
           # world.checks moved here from shard-3 (2026-10-03, #4139): its
@@ -368,6 +375,15 @@ jobs:
         run: |
           LABELS="${{ matrix.shard.apps }}"
           if [ -n "${{ matrix.shard.split_app }}" ]; then
+            # Django discovers test*.py; the splitter currently discovers only
+            # test_*.py. Fail rather than silently drop a differently named test.
+            SPLIT_DIR="src/${{ matrix.shard.split_app }}"
+            SPLIT_DIR="${SPLIT_DIR//./\/}"
+            UNDISCOVERED="$(find "$SPLIT_DIR" -type f -name 'test*.py' ! -name 'test_*.py' -print -quit)"
+            if [ -n "$UNDISCOVERED" ]; then
+              echo "Split test module must match test_*.py: $UNDISCOVERED" >&2
+              exit 1
+            fi
             PART_LABELS="$(uv run python tools/split_test_labels.py ${{ matrix.shard.split_app }} \
               --part ${{ matrix.shard.split_part }} --of ${{ matrix.shard.split_of }})"
             test -n "$PART_LABELS"

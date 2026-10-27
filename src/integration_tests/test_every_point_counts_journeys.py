@@ -1,17 +1,16 @@
 """Journeys for the slide, and big buffs lifting a check off an impossible chart (#4601, #4723).
 
-Ysmay, a level-1 character, rolls the same check again and again through the real check
-pipeline (``perform_check_with_modifiers``, which gathers her conditions), with the
+Ysmay, a level-1 character, checks through the real check pipeline
+(``perform_check_with_modifiers``, which gathers her conditions), with the
 seeded rank ladder and result charts. Her own total is 5 points: Incompetent (rank 0),
 50% toward Novice (rank 1). Buffs are real conditions on her with check modifiers. The
-dice are seeded so each run is the same, and each rate is far from what whole-rank
-charts would give.
+returned chart exposes the exact odds, without estimating them from repeated rolls.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-import random
+from unittest.mock import patch
 
 from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierLane, ModifierSourceKind
@@ -29,7 +28,6 @@ from world.mechanics.services import difficulty_indicator_for_rank_difference
 from world.seeds.checks import seed_check_resolution_tables
 from world.traits.models import ResultChart
 
-ROLLS = 800
 NOVICE = 10  # Novice (rank 1), 0% through its band
 EXPERT = 50  # Expert (rank 3)
 LEGENDARY = 200  # Legendary (rank 7)
@@ -46,7 +44,6 @@ class EveryPointCounts(JourneyCase):
         self.climbing = CheckTypeFactory(name="Climbing", description="Scale a wall or a cliff.")
         self.lantern = self.make_room("The Lantern")
         self.ysmay = self.make_player("Ysmay", room=self.lantern)
-        random.seed(4601)
 
     def buff(self, value: int, name: str) -> None:
         """A condition on Ysmay that adds ``value`` to her Climbing checks."""
@@ -59,19 +56,12 @@ class EveryPointCounts(JourneyCase):
         )
         ConditionInstanceFactory(target=self.ysmay, condition=condition)
 
-    def roll(self, difficulty: int) -> dict[int, float]:
-        """Roll ``ROLLS`` times; the share of each success level."""
-        counts: dict[int, int] = {}
-        for _ in range(ROLLS):
-            level = perform_check_with_modifiers(
-                self.ysmay, self.climbing, target_difficulty=difficulty
-            ).success_level
-            counts[level] = counts.get(level, 0) + 1
-        return {level: count / ROLLS for level, count in counts.items()}
-
-    @staticmethod
-    def at_least(shares: dict[int, float], level: int) -> float:
-        return sum(share for lv, share in shares.items() if lv >= level)
+    def success_odds(self, difficulty: int) -> float:
+        """Get the exact odds returned by the real check with Ysmay's conditions."""
+        result = perform_check_with_modifiers(
+            self.ysmay, self.climbing, target_difficulty=difficulty
+        )
+        return result.standing.slid.at_least(1)
 
     def test_her_result_says_where_she_stood(self) -> None:
         result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=NOVICE)
@@ -94,17 +84,30 @@ class EveryPointCounts(JourneyCase):
     def test_halfway_through_a_band_she_gets_the_halfway_odds(self) -> None:
         # Chart -1 (22% Success or better) slid 50% toward chart 0 (40% once its
         # Critical Success counts as Success): 31%. Whole ranks would give 22%.
-        shares = self.roll(NOVICE)
-        self.assertAlmostEqual(self.at_least(shares, 1), 0.31, delta=0.045)
-        self.assertEqual(shares.get(2, 0), 0)
+        result = perform_check_with_modifiers(self.ysmay, self.climbing, target_difficulty=NOVICE)
+        self.assertAlmostEqual(result.standing.slid.at_least(1), 0.31)
+        self.assertEqual(result.standing.slid.at_least(2), 0)
+
+    def test_rolls_on_either_side_of_the_success_boundary(self) -> None:
+        # 31% success puts the boundary at 69. Positions are face minus fraction.
+        for face, fraction, expected_success in ((69, 0.01, False), (70, 0.99, True)):
+            with (
+                self.subTest(face=face, fraction=fraction),
+                patch("world.checks.services.random.randint", return_value=face),
+                patch("world.checks.services.random.random", return_value=fraction),
+            ):
+                result = perform_check_with_modifiers(
+                    self.ysmay, self.climbing, target_difficulty=NOVICE
+                )
+                self.assertEqual(result.success_level >= 1, expected_success)
 
     def test_one_small_buff_moves_the_odds(self) -> None:
-        plain = self.at_least(self.roll(NOVICE), 1)
+        plain = self.success_odds(NOVICE)
         # +3 keeps her in Incompetent (rank 0); whole ranks would ignore it.
         self.buff(3, "A word of encouragement")
-        buffed = self.at_least(self.roll(NOVICE), 1)
+        buffed = self.success_odds(NOVICE)
         # 80% through the band: 22% + 0.8 x 18% = 36.4%.
-        self.assertAlmostEqual(buffed, 0.364, delta=0.045)
+        self.assertAlmostEqual(buffed, 0.364)
         self.assertGreater(buffed, plain + 0.02)
 
     def test_a_crowd_of_buffs_lifts_her_off_the_impossible_chart(self) -> None:
@@ -126,7 +129,6 @@ class EveryPointCounts(JourneyCase):
         self.assertEqual(
             result.standing.slid.at_least(1), resolve_standing(155, MYTHIC).slid.at_least(1)
         )
-        self.assertGreater(self.at_least(self.roll(MYTHIC), 1), 0)
 
     def test_too_few_buffs_leave_her_on_the_impossible_chart(self) -> None:
         # +3 points: 80% through Incompetent (rank 0), -7.2. Short of the next rank, so the
@@ -139,16 +141,16 @@ class EveryPointCounts(JourneyCase):
         self.assertFalse(
             [band for band in result.standing.slid.bands if band.outcome.success_level >= 1]
         )
-        self.assertEqual(self.at_least(self.roll(MYTHIC), 1), 0)
+        self.assertEqual(result.standing.slid.at_least(1), 0)
 
     def test_at_a_three_rank_gap_the_buffs_count_in_full(self) -> None:
         # Own standing against Expert (rank 3): chart -3 at 50%, 13.5% Success or better.
-        alone = self.at_least(self.roll(EXPERT), 1)
+        alone = self.success_odds(EXPERT)
         self.buff(40, "A rousing speech")
-        buffed = self.at_least(self.roll(EXPERT), 1)
+        buffed = self.success_odds(EXPERT)
         # 45 points: Competent (rank 2), 80% toward Expert; chart -1 at 80%: 36.4%.
-        self.assertAlmostEqual(alone, 0.135, delta=0.04)
-        self.assertAlmostEqual(buffed, 0.364, delta=0.045)
+        self.assertAlmostEqual(alone, 0.135)
+        self.assertAlmostEqual(buffed, 0.364)
 
     def test_the_preview_grades_on_her_full_total(self) -> None:
         """The grade the action lists and standoff cards show: Impossible at her total,
@@ -185,4 +187,4 @@ class EveryPointCounts(JourneyCase):
             result.standing.roller.text, "Master (rank 4), 37% toward Grandmaster (rank 5)"
         )
         self.assertEqual(result.rank_difference, -3)
-        self.assertGreater(self.at_least(self.roll(LEGENDARY), 1), 0)
+        self.assertGreater(result.standing.slid.at_least(1), 0)

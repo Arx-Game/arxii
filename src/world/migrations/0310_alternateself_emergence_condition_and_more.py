@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0308_stat_modifier_lane"),
+        ("arxii", "0309_condition_instance_modifier_vow_step"),
     ]
 
     operations = [
