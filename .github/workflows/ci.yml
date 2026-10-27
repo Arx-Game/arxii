@@ -375,6 +375,15 @@ jobs:
         run: |
           LABELS="${{ matrix.shard.apps }}"
           if [ -n "${{ matrix.shard.split_app }}" ]; then
+            # Django discovers test*.py; the splitter currently discovers only
+            # test_*.py. Fail rather than silently drop a differently named test.
+            SPLIT_DIR="src/${{ matrix.shard.split_app }}"
+            SPLIT_DIR="${SPLIT_DIR//./\/}"
+            UNDISCOVERED="$(find "$SPLIT_DIR" -type f -name 'test*.py' ! -name 'test_*.py' -print -quit)"
+            if [ -n "$UNDISCOVERED" ]; then
+              echo "Split test module must match test_*.py: $UNDISCOVERED" >&2
+              exit 1
+            fi
             PART_LABELS="$(uv run python tools/split_test_labels.py ${{ matrix.shard.split_app }} \
               --part ${{ matrix.shard.split_part }} --of ${{ matrix.shard.split_of }})"
             test -n "$PART_LABELS"
