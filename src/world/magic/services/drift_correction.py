@@ -36,10 +36,14 @@ from world.magic.models.drift import (
 )
 from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
-from world.magic.services.drift import convertible_drift, get_drift_correction_config
+from world.magic.services.drift import (
+    convertible_drift,
+    get_drift_correction_config,
+    qualifying_components,
+)
 from world.magic.services.ritual_components import (
-    offered_target_components,
     resolve_ritual_components,
+    target_resonance_meaning_bar,
 )
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
@@ -155,7 +159,9 @@ def offered_components(
     config = get_drift_correction_config()
     if config.rite_id is None:
         return []
-    return offered_target_components(config.rite, sheet, target, items)
+    return qualifying_components(
+        sheet, target, items, min_item_meaning=target_resonance_meaning_bar(config.rite)
+    )
 
 
 def offer_options(

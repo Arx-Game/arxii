@@ -16,16 +16,22 @@ Celestial a Redemption at 0.50. Expected numbers are worked out by hand from tho
 
 from __future__ import annotations
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from evennia.utils.ansi import strip_ansi
 
 from integration_tests.harness import JourneyCase
-from web.admin.tuning.required_content import _probe_thread_resonance_ritual
+from web.admin.tuning.required_content import (
+    _probe_single_thread_resonance_ritual,
+    _probe_thread_resonance_ritual,
+)
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
 from world.magic.constants import GainSource, RitualExecutionKind
 from world.magic.factories import (
+    CharacterAnimaFactory,
     CharacterAuraFactory,
     ResonanceFactory,
     ResonanceTierFactory,
@@ -35,7 +41,7 @@ from world.magic.factories import (
     ensure_conversion_pairs,
     set_aura_split,
 )
-from world.magic.models import ResonanceConversion, Thread
+from world.magic.models import CharacterAnima, ResonanceConversion, Thread
 from world.magic.services.resonance import grant_resonance
 
 PERFORM_URL = "/api/magic/rituals/perform/"
@@ -219,6 +225,33 @@ class RetuningAtTheKeyboard(ThreadRetuneCase):
         self.assertEqual(stored(hers)["resonance_id"], self.bene.pk)
         self.assertFalse(consumed(candle))
 
+    def test_a_resonance_that_is_not_a_number_is_refused_plainly(self) -> None:
+        told = strip_ansi(
+            self.telnet(self.ysmay, f"ritual {RITE} thread={self.thread.pk} resonance=abc")
+        )
+        self.assertIn("Ritual parameter 'resonance' must be a number.", told)
+        self.assertEqual(stored(self.thread)["resonance_id"], self.bene.pk)
+
+    def test_a_refused_retune_leaves_her_anima_and_a_good_one_spends_it(self) -> None:
+        self.rite.anima_requirement = 4
+        self.rite.save(update_fields=["anima_requirement"])
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+
+        def anima() -> int:
+            return CharacterAnima.objects.filter(character=self.sheet).values_list(
+                "current", flat=True
+            )[0]
+
+        self.carry(self.ysmay, self.sylvan, "Sylvan Moss")
+        told = self.retune(self.thread, self.sylvan)
+        self.assertIn("This thread cannot move to Sylvan.", told)
+        self.assertEqual(anima(), 10)
+
+        self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        told = self.retune(self.thread, self.lumen)
+        self.assertIn(f"You perform {RITE}.", told)
+        self.assertEqual(anima(), 6)
+
     def test_an_unknown_resonance_id_is_refused_plainly(self) -> None:
         told = strip_ansi(
             self.telnet(self.ysmay, f"ritual {RITE} thread={self.thread.pk} resonance=999999")
@@ -263,6 +296,41 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
         self.assertIn("This thread cannot move to Sylvan.", response.data["detail"])
         self.assertFalse(consumed(moss))
 
+    def test_ids_that_are_not_numbers_are_a_plain_400(self) -> None:
+        for kwargs, detail in (
+            (
+                {"thread_id": self.thread.pk, "target_resonance": "abc"},
+                "No resonance with id abc.",
+            ),
+            (
+                {"thread_id": "abc", "target_resonance": self.lumen.pk},
+                "You have no active thread with that id.",
+            ),
+            ({"thread_id": True, "target_resonance": self.lumen.pk}, NO_THREAD),
+        ):
+            with self.subTest(kwargs=kwargs):
+                response = self.post(
+                    self.ysmay,
+                    {
+                        "character_sheet_id": self.sheet.pk,
+                        "ritual_id": self.rite.pk,
+                        "kwargs": kwargs,
+                    },
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(response.data["detail"], detail)
+        # A list is not a primitive: the request serializer refuses it before the resolver.
+        response = self.post(
+            self.ysmay,
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.rite.pk,
+                "kwargs": {"thread_id": self.thread.pk, "target_resonance": [1]},
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(stored(self.thread)["resonance_id"], self.bene.pk)
+
     def test_the_web_client_is_refused_another_characters_thread(self) -> None:
         hers = ThreadFactory(owner=self.hobb.sheet_data, resonance=self.bene, developed_points=9)
         response = self.perform(hers, self.lumen, [])
@@ -294,6 +362,27 @@ class RetuningThroughTheWebClient(ThreadRetuneCase):
             },
         )
 
+    def test_the_options_cost_the_same_queries_however_many_there_are(self) -> None:
+        for requirement in self.rite.requirements.all():
+            requirement.min_item_meaning = 1
+            requirement.save(update_fields=["min_item_meaning"])
+        self.carry(self.ysmay, self.lumen, "Lumen Candle")
+        self.carry(self.ysmay, self.ruin, "Ruin Shard")
+        client = self.api(self.account_of(self.ysmay))
+        url = f"/api/magic/threads/{self.thread.pk}/resonance-options/"
+        # Warm the per-process caches (pair rates, devotion config, session) first.
+        client.get(url)
+        client.get(url)
+        with CaptureQueriesContext(connection) as three:
+            response = client.get(url)
+        self.assertEqual(len(response.data["options"]), 3)
+
+        for name in ("Aurum", "Candor", "Dulcis", "Fides"):
+            ResonanceFactory(name=name, affinity=self.celestial)
+        with self.assertNumQueries(len(three.captured_queries)):
+            response = client.get(url)
+        self.assertEqual(len(response.data["options"]), 7)
+
     def test_the_options_of_another_characters_thread_are_hidden(self) -> None:
         hers = ThreadFactory(owner=self.hobb.sheet_data, resonance=self.bene, developed_points=9)
         response = self.api(self.account_of(self.ysmay)).get(
@@ -313,6 +402,16 @@ class TheRiteOnTheRequiredContentDashboard(ThreadRetuneCase):
             f"/api/magic/threads/{self.thread.pk}/resonance-options/"
         )
         self.assertIsNone(response.data["ritual_id"])
+
+
+class TheDashboardFlagsASecondRetuneRite(ThreadRetuneCase):
+    def test_a_second_rite_on_the_retune_path_is_listed(self) -> None:
+        self.assertTrue(_probe_single_thread_resonance_ritual().present)
+        ThreadRetuneRiteFactory(name="Rite of Second Tuning")
+        result = _probe_single_thread_resonance_ritual()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Rite of Second Tuning",))
+        self.assertIn(f"the Spellbook offers only {RITE}", result.detail)
 
 
 class AFallAfterAMergeReanchorsOntoTheRetiredPlace(JourneyCase):

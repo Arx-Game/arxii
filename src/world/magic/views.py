@@ -1109,6 +1109,12 @@ class ThreadViewSet(viewsets.ModelViewSet):
         ``ritual_id`` is null while no retune rite is authored; perform it through
         ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
         """
+        from world.magic.services.drift import (  # noqa: PLC0415
+            qualifying_components_by_target,
+        )
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            target_resonance_meaning_bar,
+        )
         from world.magic.services.thread_resonance import (  # noqa: PLC0415
             thread_resonance_options,
             thread_resonance_ritual,
@@ -1116,17 +1122,23 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         thread = self.get_object()
         ritual = thread_resonance_ritual()
-        items = list(
-            ItemInstance.objects.filter(holder_character_sheet_id=thread.owner_id).select_related(
-                "template"
+        options = thread_resonance_options(thread)
+        qualifying = {}
+        if ritual is not None:
+            items = list(
+                ItemInstance.objects.filter(
+                    holder_character_sheet_id=thread.owner_id
+                ).select_related("template")
             )
-        )
+            qualifying = qualifying_components_by_target(
+                thread.owner,
+                [option.resonance for option in options],
+                items,
+                min_item_meaning=target_resonance_meaning_bar(ritual),
+            )
         serializer = ThreadResonanceOptionsSerializer(
-            {
-                "ritual_id": ritual.pk if ritual is not None else None,
-                "options": thread_resonance_options(thread),
-            },
-            context={"ritual": ritual, "sheet": thread.owner, "items": items},
+            {"ritual_id": ritual.pk if ritual is not None else None, "options": options},
+            context={"qualifying": qualifying},
         )
         return Response(serializer.data)
 
@@ -1437,35 +1449,43 @@ class RitualPerformView(APIView):
     def _resolve_owned_thread_kwargs(sheet: CharacterSheet, kwargs: dict) -> Response | None:
         """Resolve an optional ``thread_id`` into the performer's own live Thread, in place.
 
-        Absent is left to the ritual to refuse; an id that is not one of the performer's
-        live threads is a 400.
+        Absent is left to the ritual to refuse; anything else that is not one of the
+        performer's live threads (another's, a retired one, a non-integer) is a 400. Shares
+        ``resolve_owned_thread`` with the telnet ``ritual`` command.
         """
+        from world.magic.exceptions import UnknownOwnedThread  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_owned_thread,
+        )
+
         if _KWARG_THREAD_ID not in kwargs:
             return None
-        thread = Thread.objects.filter(
-            pk=kwargs.pop(_KWARG_THREAD_ID), owner=sheet, retired_at__isnull=True
-        ).first()
-        if thread is None:
-            return Response({"detail": _ERR_THREAD_NOT_FOUND}, status=status.HTTP_400_BAD_REQUEST)
-        kwargs["thread"] = thread
+        try:
+            kwargs["thread"] = resolve_owned_thread(sheet, kwargs.pop(_KWARG_THREAD_ID))
+        except UnknownOwnedThread as err:
+            return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return None
 
     @staticmethod
     def _resolve_target_resonance_kwargs(kwargs: dict) -> Response | None:
         """Resolve a ``target_resonance`` id into a ``Resonance`` in place (slice 6 of #4672).
 
-        The same rule as telnet's ``resonance=``: an unknown id is a 400.
+        Shares ``resolve_target_resonance`` with telnet's ``resonance=``: a non-integer or
+        unknown id is a 400.
         """
+        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
+
         if _KWARG_TARGET_RESONANCE not in kwargs:
             return None
-        resonance_id = kwargs[_KWARG_TARGET_RESONANCE]
-        resonance = Resonance.objects.filter(pk=resonance_id).first()
-        if resonance is None:
-            return Response(
-                {"detail": f"No resonance with id {resonance_id}."},
-                status=status.HTTP_400_BAD_REQUEST,
+        try:
+            kwargs[_KWARG_TARGET_RESONANCE] = resolve_target_resonance(
+                kwargs[_KWARG_TARGET_RESONANCE]
             )
-        kwargs[_KWARG_TARGET_RESONANCE] = resonance
+        except UnknownResonance as err:
+            return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return None
 
     def _run_imbue_finisher(self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict) -> Response:

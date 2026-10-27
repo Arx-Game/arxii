@@ -935,3 +935,21 @@ class ThreadResonanceChangeError(MagicError):
         super().__init__(user_message)
         if user_message:
             self.user_message = user_message
+
+
+class UnknownResonance(MagicError):
+    """No Resonance row has the id a ritual was given (telnet and web share this refusal)."""
+
+    def __init__(self, resonance_id: object) -> None:
+        super().__init__(resonance_id)
+        self.user_message = f"No resonance with id {resonance_id}."
+
+
+class UnknownOwnedThread(MagicError):
+    """The id a ritual was given is not one of the performer's live threads."""
+
+    user_message = "You have no active thread with that id."
+
+    def __init__(self, thread_id: object = None) -> None:
+        super().__init__(thread_id)
+        self.user_message = UnknownOwnedThread.user_message

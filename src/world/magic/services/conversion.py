@@ -419,7 +419,16 @@ def _reanchor_thread(thread: Thread, target_resonance_id: int, new_points: int) 
     """
     existing = _find_existing_target_thread(thread, target_resonance_id)
     if existing is not None:
-        existing.developed_points += new_points
+        from world.magic.models import Thread  # noqa: PLC0415
+
+        # Lock the survivor and add to the points the database holds, not the shared cached
+        # instance's: two merges into the same thread then both count.
+        held = (
+            Thread.objects.select_for_update()
+            .filter(pk=existing.pk)
+            .values_list("developed_points", flat=True)[0]
+        )
+        existing.developed_points = held + new_points
         existing.save(update_fields=["developed_points"])
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])

@@ -1535,6 +1535,41 @@ def _probe_thread_resonance_ritual() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_single_thread_resonance_ritual() -> ProbeResult:
+    """At most one SERVICE ritual carries the retune service path (slice 6 of #4672).
+
+    Consumer: `thread_resonance_ritual()` hands the Spellbook the lowest-pk one, while
+    `PerformRitualAction` performs whichever a player names, so a second row is a rite the
+    web never offers, with its own offering requirements. Missing: the names of every row
+    past the first.
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models import Ritual  # noqa: PLC0415
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        THREAD_RESONANCE_SERVICE_PATH,
+    )
+
+    names = list(
+        Ritual.objects.filter(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path=THREAD_RESONANCE_SERVICE_PATH,
+        )
+        .order_by("pk")
+        .values_list("name", flat=True)
+    )
+    if len(names) > 1:
+        extra = tuple(names[1:])
+        return ProbeResult(
+            present=False,
+            missing=extra,
+            detail=(
+                f"{len(names)} rituals change a thread's resonance; the Spellbook offers only "
+                f"{names[0]}. Remove or repoint: {', '.join(extra)}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -2978,6 +3013,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "ritual (and its offering requirements)."
             ),
             probe=CustomProbe(fn=_probe_thread_resonance_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual-single",
+            label="Only one thread retune ritual",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/thread_resonance.py thread_resonance_ritual() "
+                "(lowest pk wins)"
+            ),
+            consequence=(
+                "Telnet can perform any ritual with the retune service path, but the "
+                "Spellbook's Retune thread button only ever offers the first one, with that "
+                "one's offering; a second row is reachable by name only."
+            ),
+            probe=CustomProbe(fn=_probe_single_thread_resonance_ritual),
             admin_model="Ritual",
         ),
         ContentDependency(

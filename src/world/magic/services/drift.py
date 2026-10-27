@@ -362,44 +362,69 @@ def qualifying_components(
     performer; the route is off when that is None). An item qualifies at most once. The list
     is ordered by route (material, facet, keepsake), then as given, so an offering that is
     spent in order burns a plain material before a keepsake. A destroyed or empty item never
-    qualifies.
+    qualifies. One target of ``qualifying_components_by_target``.
+    """
+    return qualifying_components_by_target(
+        sheet, [target], items, min_item_meaning=min_item_meaning
+    )[target.pk]
+
+
+def qualifying_components_by_target(
+    sheet: CharacterSheet,
+    targets: Iterable[Resonance],
+    items: Iterable[ItemInstance],
+    *,
+    min_item_meaning: int | None = None,
+) -> dict[int, list[QualifyingComponent]]:
+    """``qualifying_components`` for several targets at once, keyed by resonance pk.
+
+    The query count does not grow with the number of targets: one motif-facet query, one
+    item-facet query, and (with a keepsake bar) one meaning reading per carried item, read
+    once and shared by every target.
     """
     from world.items.models import ItemFacet  # noqa: PLC0415
     from world.items.services.meaning import item_meaning  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
 
+    target_list = list(targets)
     live = [item for item in items if item.destroyed_at is None and item.quantity > 0]
-    motif_facet_ids = set(
-        MotifResonanceAssociation.objects.filter(
-            motif_resonance__motif__character=sheet, motif_resonance__resonance=target
-        ).values_list("facet_id", flat=True)
-    )
-    faceted_item_ids = (
-        set(
-            ItemFacet.objects.filter(
-                item_instance__in=live, facet_id__in=motif_facet_ids, removed_at__isnull=True
-            ).values_list("item_instance_id", flat=True)
-        )
-        if motif_facet_ids
-        else set()
-    )
-    config = get_devotion_config() if min_item_meaning is not None else None
+    facets_by_target: dict[int, set[int]] = {target.pk: set() for target in target_list}
+    for resonance_id, facet_id in MotifResonanceAssociation.objects.filter(
+        motif_resonance__motif__character=sheet,
+        motif_resonance__resonance_id__in=list(facets_by_target),
+    ).values_list("motif_resonance__resonance_id", "facet_id"):
+        facets_by_target[resonance_id].add(facet_id)
+    all_facet_ids = set().union(*facets_by_target.values())
+    facets_by_item: dict[int, set[int]] = {}
+    if all_facet_ids and live:
+        for item_id, facet_id in ItemFacet.objects.filter(
+            item_instance__in=live, facet_id__in=all_facet_ids, removed_at__isnull=True
+        ).values_list("item_instance_id", "facet_id"):
+            facets_by_item.setdefault(item_id, set()).add(facet_id)
+    keepsake_ids: set[int] = set()
+    if min_item_meaning is not None:
+        config = get_devotion_config()
+        keepsake_ids = {
+            item.pk
+            for item in live
+            if item_meaning(item, sheet, config=config).points >= min_item_meaning
+        }
 
-    qualifying: list[QualifyingComponent] = []
-    for item in live:
-        if item.template.tied_resonance_id == target.pk:
-            mode = ComponentMode.MATERIAL
-        elif item.pk in faceted_item_ids:
-            mode = ComponentMode.FACET
-        elif (
-            config is not None
-            and min_item_meaning is not None
-            and item_meaning(item, sheet, config=config).points >= min_item_meaning
-        ):
-            mode = ComponentMode.KEEPSAKE
-        else:
-            continue
-        qualifying.append(QualifyingComponent(item=item, mode=mode))
     route_rank = {mode: rank for rank, mode in enumerate(ComponentMode)}
-    qualifying.sort(key=lambda component: route_rank[component.mode])
-    return qualifying
+    result: dict[int, list[QualifyingComponent]] = {}
+    for target in target_list:
+        target_facets = facets_by_target[target.pk]
+        qualifying: list[QualifyingComponent] = []
+        for item in live:
+            if item.template.tied_resonance_id == target.pk:
+                mode = ComponentMode.MATERIAL
+            elif facets_by_item.get(item.pk, set()) & target_facets:
+                mode = ComponentMode.FACET
+            elif item.pk in keepsake_ids:
+                mode = ComponentMode.KEEPSAKE
+            else:
+                continue
+            qualifying.append(QualifyingComponent(item=item, mode=mode))
+        qualifying.sort(key=lambda component: route_rank[component.mode])
+        result[target.pk] = qualifying
+    return result

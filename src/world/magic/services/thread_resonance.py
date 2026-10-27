@@ -23,7 +23,12 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.magic.constants import RitualExecutionKind
-from world.magic.exceptions import ConversionMappingError, ThreadResonanceChangeError
+from world.magic.exceptions import (
+    ConversionMappingError,
+    ThreadResonanceChangeError,
+    UnknownOwnedThread,
+    UnknownResonance,
+)
 from world.magic.models import Resonance, Ritual, Thread
 from world.magic.models.fall_redemption import ConversionType, ResonanceConversion
 from world.magic.services.conversion import _reanchor_thread, conversion_pair
@@ -34,8 +39,50 @@ if TYPE_CHECKING:
 
 THREAD_RESONANCE_SERVICE_PATH = "world.magic.services.thread_resonance.change_thread_resonance"
 
-NO_THREAD_MESSAGE = "You have no active thread with that id."
+NO_THREAD_MESSAGE = UnknownOwnedThread.user_message
+THREAD_MOVED_MESSAGE = "That thread has just changed resonance; look at it again."
 NAME_A_THREAD_MESSAGE = "Name the thread to move: thread=<id>."
+
+
+def _id_from(raw: object) -> int | None:
+    """``raw`` as an integer id, or None when it is not one (a bool, a list, "abc")."""
+    if isinstance(raw, bool) or not isinstance(raw, int | str):
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def resolve_target_resonance(resonance_id: object) -> Resonance:
+    """Resolve the ``target_resonance`` id a ritual caller sends to its ``Resonance``.
+
+    The one resolver the telnet ``ritual`` command and the web ritual-perform view share
+    (the ``resolve_target_affinity`` shape). Raises ``UnknownResonance`` for a non-integer or
+    unknown id.
+    """
+    pk = _id_from(resonance_id)
+    resonance = None if pk is None else Resonance.objects.filter(pk=pk).first()
+    if resonance is None:
+        raise UnknownResonance(resonance_id)
+    return resonance
+
+
+def resolve_owned_thread(character_sheet: CharacterSheet, thread_id: object) -> Thread:
+    """Resolve a ritual's thread id to one of ``character_sheet``'s live threads.
+
+    Shared by the telnet ``ritual`` command and the web ritual-perform view. Raises
+    ``UnknownOwnedThread`` for a non-integer id, someone else's thread, or a retired one.
+    """
+    pk = _id_from(thread_id)
+    thread = (
+        None
+        if pk is None
+        else Thread.objects.filter(pk=pk, owner=character_sheet, retired_at__isnull=True).first()
+    )
+    if thread is None:
+        raise UnknownOwnedThread(thread_id)
+    return thread
 
 
 def thread_resonance_ritual() -> Ritual | None:
@@ -110,9 +157,9 @@ def thread_resonance_options(thread: Thread) -> list[ThreadResonanceOption]:
 
 def _thread_label(thread: Thread) -> str:
     """The thread's own name, else "Your <anchor> thread"."""
-    from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
+    from world.magic.crossing.handlers import anchor_label_for  # noqa: PLC0415
 
-    return thread.name or f"Your {_anchor_label_for(thread)} thread"
+    return thread.name or f"Your {anchor_label_for(thread)} thread"
 
 
 def change_message(  # noqa: PLR0913 - every number the line names
@@ -206,9 +253,13 @@ def change_thread_resonance(
         raise ThreadResonanceChangeError(NAME_A_THREAD_MESSAGE)
     # A filter, not get(): the identity map would answer get() without the lock.
     locked = Thread.objects.select_for_update().filter(pk=thread.pk)
-    row = locked.values("owner_id", "retired_at", "developed_points").first()
+    row = locked.values("owner_id", "retired_at", "developed_points", "resonance_id").first()
     if row is None or row["owner_id"] != character_sheet.pk or row["retired_at"] is not None:
         raise ThreadResonanceChangeError(NO_THREAD_MESSAGE)
+    if row["resonance_id"] != thread.resonance_id:
+        # Moved by another process since this one read it: the options were worked out
+        # from a resonance the thread no longer channels.
+        raise ThreadResonanceChangeError(THREAD_MOVED_MESSAGE)
     thread.developed_points = row["developed_points"]
     chosen = check_thread_resonance_change(
         character_sheet, thread=thread, target_resonance=target_resonance

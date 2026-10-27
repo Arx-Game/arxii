@@ -477,7 +477,7 @@ class CmdRitual(ArxCommand):
     def resolve_action_args(self) -> dict[str, Any]:
         """Parse ``ritual <name> [k=v ...]`` into action kwargs."""
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-        from world.magic.models import Ritual, Thread  # noqa: PLC0415
+        from world.magic.models import Ritual  # noqa: PLC0415
         from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
         from world.societies.honors import HONORS_SERVICE_PATH  # noqa: PLC0415
 
@@ -517,15 +517,15 @@ class CmdRitual(ArxCommand):
         service_kwargs: dict[str, Any] = {}
         thread_id = raw_kwargs.pop(_THREAD_ID_KEY, None)
         if thread_id is not None:
-            thread = Thread.objects.filter(
-                pk=thread_id,
-                owner=self.caller.sheet_data,
-                retired_at__isnull=True,
-            ).first()
-            if thread is None:
-                msg = "You have no active thread with that id."
-                raise CommandError(msg)
-            service_kwargs["thread"] = thread
+            from world.magic.exceptions import UnknownOwnedThread  # noqa: PLC0415
+            from world.magic.services.thread_resonance import (  # noqa: PLC0415
+                resolve_owned_thread,
+            )
+
+            try:
+                service_kwargs["thread"] = resolve_owned_thread(self.caller.sheet_data, thread_id)
+            except UnknownOwnedThread as err:
+                raise CommandError(err.user_message) from err
 
         tradition_id = raw_kwargs.pop("tradition_id", None)
         if tradition_id is not None:
@@ -564,7 +564,10 @@ class CmdRitual(ArxCommand):
         Under the ``target_resonance`` key; nothing when neither was given; an unknown id is
         refused.
         """
-        from world.magic.models import Resonance  # noqa: PLC0415
+        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
 
         resonance_id = raw_kwargs.pop(_RESONANCE_KWARG, None)
         alias_id = raw_kwargs.pop(_TARGET_RESONANCE_KWARG, None)
@@ -572,11 +575,10 @@ class CmdRitual(ArxCommand):
             resonance_id = alias_id
         if resonance_id is None:
             return
-        resonance = Resonance.objects.filter(pk=resonance_id).first()
-        if resonance is None:
-            msg = f"No resonance with id {resonance_id}."
-            raise CommandError(msg)
-        service_kwargs[_TARGET_RESONANCE_KWARG] = resonance
+        try:
+            service_kwargs[_TARGET_RESONANCE_KWARG] = resolve_target_resonance(resonance_id)
+        except UnknownResonance as err:
+            raise CommandError(err.user_message) from err
 
     def _split_name_and_rest(self, args: str) -> tuple[str, str]:
         """Split into ritual name + the raw (unparsed) trailing ``key=value`` text.

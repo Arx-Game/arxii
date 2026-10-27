@@ -247,13 +247,18 @@ class PerformRitualAction(Action):
     ) -> None:
         """Validate and consume ``ritual``'s components via the shared helper.
 
-        ``resonance_context`` is the ``target_resonance`` the performer named, if any: a
-        target-resonance requirement is paid toward it, and a touchstone must tie to it.
+        ``resonance_context`` is the ``target_resonance`` the performer named, if any. It is
+        passed on only for a ritual that carries a target-resonance requirement (the offering
+        is paid toward it, and a touchstone must tie to it); on any other ritual a stray
+        ``resonance=`` changes nothing about its components.
         """
         from world.magic.services.ritual_components import (  # noqa: PLC0415
+            has_target_resonance_requirement,
             resolve_and_consume_ritual_components,
         )
 
+        if resonance_context is not None and not has_target_resonance_requirement(ritual):
+            resonance_context = None
         resolve_and_consume_ritual_components(
             ritual=ritual,
             components=components,

@@ -4418,8 +4418,9 @@ class TrainTechniqueRequestSerializer(serializers.Serializer):
 class ThreadResonanceOptionSerializer(serializers.Serializer):
     """One resonance a thread may move to, with the carried items that pay the rite (read-only).
 
-    ``qualifying`` needs ``context["ritual"]`` (the retune rite, or None), ``context["sheet"]``
-    and ``context["items"]`` (what the owner carries, fetched once by the view).
+    ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
+    resonance pk, worked out once for every option by the view
+    (``qualifying_components_by_target``), so this serializer queries nothing per option.
     ``conversion_type`` is null for a retune within the thread's own affinity.
     """
 
@@ -4432,16 +4433,7 @@ class ThreadResonanceOptionSerializer(serializers.Serializer):
 
     @extend_schema_field(DriftQualifyingComponentSerializer(many=True))
     def get_qualifying(self, option: "ThreadResonanceOption") -> list[dict]:
-        from world.magic.services.ritual_components import (  # noqa: PLC0415
-            offered_target_components,
-        )
-
-        ritual = self.context["ritual"]
-        if ritual is None:
-            return []
-        components = offered_target_components(
-            ritual, self.context["sheet"], option.resonance, self.context["items"]
-        )
+        components = self.context["qualifying"].get(option.resonance.pk, [])
         return DriftQualifyingComponentSerializer(components, many=True).data
 
 

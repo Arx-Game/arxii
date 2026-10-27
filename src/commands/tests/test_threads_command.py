@@ -85,7 +85,7 @@ class CmdThreadsListTests(TestCase):
 class CmdThreadsListRelationshipLabelQueryCountTests(TestCase):
     """`threads list` prefetches RELATIONSHIP_TRACK anchor labels (#3957 review Important 4).
 
-    `_anchor_label_for` used to call `side.open_labels().first()` per thread — a fresh
+    `anchor_label_for` used to call `side.open_labels().first()` per thread — a fresh
     filtered query per RELATIONSHIP_TRACK thread listed. Pins the query count flat
     across N such threads.
     """

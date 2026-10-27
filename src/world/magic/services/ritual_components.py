@@ -8,8 +8,9 @@ must be callable independently of that action, not buried inside it).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import TYPE_CHECKING
+
+from django.db.models import Min
 
 from world.items.exceptions import InsufficientMaterials
 from world.items.services.materials import consume_materials, gather_consumable_pks
@@ -20,24 +21,24 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import Resonance, Ritual, RitualComponentRequirement
-    from world.magic.types.drift import QualifyingComponent
 
 
-def offered_target_components(
-    ritual: Ritual, sheet: CharacterSheet, target: Resonance, items: Iterable[ItemInstance]
-) -> list[QualifyingComponent]:
-    """The ``items`` that count toward ``ritual``'s offering for ``target``, with their routes.
+def target_resonance_meaning_bar(ritual: Ritual) -> int | None:
+    """The keepsake bar for ``ritual``'s target-resonance offering, or None (no keepsake route).
 
-    The keepsake route is open when any target-resonance requirement of ``ritual`` carries a
-    ``min_item_meaning`` (the lowest such bar applies). Shared by every rite whose offering
-    is matched to the resonance it works toward (drift correction, the thread retune).
+    The lowest ``min_item_meaning`` on its ``matches_target_resonance`` requirements. Shared
+    by every rite whose offering is matched to the resonance it works toward (drift
+    correction, the thread retune); the caller reads it once and passes it to
+    ``qualifying_components`` / ``qualifying_components_by_target``.
     """
-    bars = list(
-        ritual.requirements.filter(
-            matches_target_resonance=True, min_item_meaning__isnull=False
-        ).values_list("min_item_meaning", flat=True)
-    )
-    return qualifying_components(sheet, target, items, min_item_meaning=min(bars) if bars else None)
+    return ritual.requirements.filter(
+        matches_target_resonance=True, min_item_meaning__isnull=False
+    ).aggregate(bar=Min("min_item_meaning"))["bar"]
+
+
+def has_target_resonance_requirement(ritual: Ritual) -> bool:
+    """Whether ``ritual`` carries a requirement paid toward a chosen resonance."""
+    return ritual.requirements.filter(matches_target_resonance=True).exists()
 
 
 def _resolve_touchstone_pks(
