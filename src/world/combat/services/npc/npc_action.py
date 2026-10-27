@@ -59,6 +59,17 @@ def _npc_action_target_label(
     return ", ".join(names)
 
 
+def _flat_threat_damage(npc_action: CombatOpponentAction, opponent: CombatOpponent) -> int:
+    """Damage for a flat threat entry (no defense check), scaled like a defended hit.
+
+    The attacker's ``damage_multiplier`` (a boss enrage, a per-opponent scale) applies
+    here as it does in ``resolve_npc_attack``. Two steps, so the Decimal multiplier
+    never meets the float ``damage_scale`` in one multiplication (npc_attack.py).
+    """
+    base_damage = int(npc_action.threat_entry.base_damage * opponent.damage_multiplier)
+    return int(base_damage * npc_action.damage_scale)
+
+
 def _resolve_npc_taunt_on_target(
     target_participant: CombatParticipant,
     *,
@@ -118,12 +129,12 @@ def _resolve_npc_taunt_on_target(
 
 
 def _npc_outgoing_damage(opponent: CombatOpponent, npc_action: CombatOpponentAction) -> int:
-    """An undefended NPC hit's amount, after the attacker's damage-dealt rows (#4742)."""
+    """An undefended NPC hit's amount, after the attacker's damage-dealt rows (#4742, #4756)."""
     from world.conditions.services import scaled_outgoing_damage  # noqa: PLC0415
 
     return scaled_outgoing_damage(
         opponent.objectdb,
-        int(npc_action.threat_entry.base_damage * npc_action.damage_scale),
+        _flat_threat_damage(npc_action, opponent),
         npc_action.threat_entry.damage_type,
     )
 
