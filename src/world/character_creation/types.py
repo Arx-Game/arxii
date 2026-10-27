@@ -54,7 +54,7 @@ class VisibleOffer:
     #: opens that feature's description, its full palette, and the axis lines below it.
     opens_feature: bool = False
     #: Offerable on a feature only where ``opens_feature`` is already held there
-    #: (#3739): the Alluring / Menacing / Regal axes.
+    #: (#3739): the Alluring / Menacing / Majestic axes.
     requires_feature_opened: bool = False
     #: The rank ceiling character creation applies, when lower than ``max_rank``
     #: (#3739: the axes reach 5 in play but stop at 3 in CG). ``0`` means

@@ -31,7 +31,9 @@ from world.magic.models import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterAura
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
+from world.magic.services.acting_aura import acting_aura, working_affinities
 from world.magic.services.magic_skills import activity_skill_terms
+from world.magic.types.aura import ActingAura
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -299,25 +301,20 @@ def _working_affinities_for_raw(
 ) -> list[Affinity]:
     """Return the ordered list of working affinities for the enriched raw sum.
 
-    Cast-time: all distinct affinities from the character's GIFT-thread resonance,
-    preserving encounter order (the caller's loop is deterministic).
+    Cast-time: the cast's working affinities (``working_affinities``: the distinct
+    affinities of the character's GIFT-thread resonance, or the worn alternate self's
+    resonance, #4731), preserving encounter order (the caller's loop is deterministic).
     Presence-time: just the single dominant aura affinity.
     """
     if technique is None:
         return [working_affinity]
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
-    seen: set[int] = set()
-    result: list[Affinity] = []
-    for r in gift_resonances_for(caster, technique.gift):
-        if r.affinity.pk not in seen:
-            seen.add(r.affinity.pk)
-            result.append(r.affinity)
-    return result
+    return working_affinities(caster.character_sheet, gift_resonances_for(caster, technique.gift))
 
 
 def _enriched_raw(
-    aura: CharacterAura,
+    aura: ActingAura,
     all_working: list[Affinity],
     place_magnitudes: dict[Affinity, int],
     primary_valence: str,
@@ -355,24 +352,20 @@ def _working_affinity_cast_time(
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for cast-time evaluation.
 
-    Collect distinct affinities from the character's GIFT-thread resonance. For
-    each, look up AffinityInteraction vs place_affinity. Pick the interaction with
-    the highest severity_multiplier; tiebreak by Affinity.name ascending.
+    Collect the cast's working affinities (``working_affinities``: the distinct
+    affinities of the character's GIFT-thread resonance, or the worn alternate self's
+    resonance, #4731). For each, look up AffinityInteraction vs place_affinity. Pick
+    the interaction with the highest severity_multiplier; tiebreak by Affinity.name
+    ascending.
 
     Returns (chosen_affinity, chosen_interaction). Returns (None, None) if
     no interactions are found.
     """
-    # Collect distinct affinities from the character's GIFT-thread resonance
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
-    gift_resonances = list(gift_resonances_for(caster, technique.gift))
-    seen_affinity_pks: set[int] = set()
-    affinities: list[Affinity] = []
-    for r in gift_resonances:
-        aff = r.affinity
-        if aff.pk not in seen_affinity_pks:
-            seen_affinity_pks.add(aff.pk)
-            affinities.append(aff)
+    affinities = working_affinities(
+        caster.character_sheet, gift_resonances_for(caster, technique.gift)
+    )
 
     if not affinities:
         return None, None
@@ -394,21 +387,24 @@ def _working_affinity_cast_time(
     return chosen_affinity, chosen_interaction
 
 
+def _caster_acting_aura(caster: DefaultObject) -> ActingAura | None:
+    """The aura ``caster`` acts with (alternate self if active), None without a sheet."""
+    sheet = caster.character_sheet
+    if sheet is None:
+        return None
+    return acting_aura(sheet)
+
+
 def _working_affinity_presence_time(
-    caster: DefaultObject,
+    aura: ActingAura | None,
     place_affinity: Affinity,
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for presence-time evaluation (technique=None).
 
-    Uses the caster's dominant CharacterAura affinity. Returns (None, None)
+    Uses the caster's acting-aura dominant affinity. Returns (None, None)
     if the caster has no CharacterAura or no interaction row exists.
     """
-    try:
-        aura = caster.aura
-    except CharacterAura.DoesNotExist:
-        return None, None
-
-    if not aura.cached_shares:
+    if aura is None or not aura.has_shares:
         return None, None
     working_affinity = aura.dominant_affinity
 
@@ -480,14 +476,16 @@ def evaluate_resonance_environment(
     if place_affinity is None:
         return _inert()
 
-    # Step 1b: Determine working affinity and look up AffinityInteraction.
+    # Step 1b: Determine working affinity and look up AffinityInteraction. The aura the
+    # caster acts with is resolved once and used by every later step.
+    aura = _caster_acting_aura(caster)
     if technique is not None:
         working_affinity, interaction = _working_affinity_cast_time(
             technique, place_affinity, caster=caster
         )
     else:
         # Presence-time: _working_affinity_presence_time handles missing aura gracefully.
-        working_affinity, interaction = _working_affinity_presence_time(caster, place_affinity)
+        working_affinity, interaction = _working_affinity_presence_time(aura, place_affinity)
 
     # Step 3: Missing interaction row → inert.
     if interaction is None or working_affinity is None:
@@ -497,9 +495,7 @@ def evaluate_resonance_environment(
     p_magnitude = _place_magnitude(room, place_affinity, room_resonances)
 
     # Step 5: caster_alignment for the primary working affinity (used in direction, Step 7).
-    try:
-        aura = caster.aura
-    except CharacterAura.DoesNotExist:
+    if aura is None:
         return _inert()
 
     caster_aura_value: Decimal = aura.percent_for(working_affinity)

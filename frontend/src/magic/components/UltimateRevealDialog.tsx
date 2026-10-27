@@ -44,11 +44,11 @@ interface UltimateRevealDialogProps {
 
 // The generated schema types `source` as a plain `string` (drf-spectacular
 // doesn't carry the backend TextChoices as a literal enum here), but
-// `UltimateSource` (src/world/magic/constants.py) has exactly these three
-// members — narrowed locally so the switch below is exhaustive and a fourth
+// `UltimateSource` (src/world/magic/constants.py) has exactly these
+// members — narrowed locally so the switch below is exhaustive and a new
 // value fails loudly instead of falling through a silent `default` (fix
 // round 1 item 3).
-type GroupSource = 'owned' | 'patron' | 'companion' | 'gift';
+type GroupSource = 'owned' | 'patron' | 'companion' | 'alternate_self' | 'gift';
 
 function assertNeverGroupSource(source: never): never {
   throw new Error(`Unknown UltimateRevealGroup source: ${String(source)}`);
@@ -62,6 +62,8 @@ function groupHeading(group: UltimateReveal['groups'][number]): string {
       return `Bond · ${group.being_name} (patron)`;
     case 'companion':
       return `Bond · ${group.companion_name} (companion)`;
+    case 'alternate_self':
+      return `Bond · ${group.alternate_self_name} (alternate self)`;
     case 'gift':
       return `Gift · ${group.gift_name}`;
     default:

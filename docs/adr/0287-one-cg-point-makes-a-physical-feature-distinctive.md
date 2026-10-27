@@ -15,7 +15,7 @@ whether they had anything to say or not, and the reviewer found the label itself
 condescending. And nothing let a player have a feature that is *actually* unusual:
 an off-species colour, a scar people react to, horns that read as a crown. Meanwhile
 `ModifierTarget.is_styleable` already carried three presence axes for item accents
-(allure, menace, regal), of which regal had never been wired to anything, because no
+(allure, menace, majesty), of which majesty (then called regal) had never been wired to anything, because no
 courtly check existed to bind it to.
 
 **Decision.** A **feature** is any trait row or any marking, species-required markers
@@ -29,7 +29,7 @@ its axis a tier, in any combination on one feature; they reach 5 in play and sto
 point buys only its axes. Mechanically this makes `Distinction` a thing a character
 can hold **once per feature** (`taken_per_feature`), so `CharacterDistinction` carries
 the feature it names and every draft-entry reader keys by `(distinction, feature)`
-instead of by distinction. Regal is bound at last, to a newly seeded **Command**
+instead of by distinction. Majesty (then Regal) is bound at last, to a newly seeded **Command**
 CheckType (presence + Leadership): rallying troops to make a stand, appealing to the
 people on your right to rule. A bonus travels with visibility — a marking-bound
 modifier drops out while the worn layers cover that marking's region.

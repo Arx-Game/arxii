@@ -236,6 +236,7 @@ def seed_social_check_content() -> None:
     _rename_legacy_deception()
     ensure_social_check_compositions(skills, specs)
     ensure_menace_target()
+    ensure_poise_target()
 
 
 def ensure_menace_target() -> None:
@@ -275,4 +276,47 @@ def ensure_menace_target() -> None:
         return
     if target.target_check_type_id is None and intimidation is not None:
         target.target_check_type = intimidation
+        target.save(update_fields=["target_check_type"])
+
+
+POISE_DESCRIPTION = (
+    "Poise is a modifier to composure checks that test a character's ability to keep "
+    "their cool in social situations."
+)
+
+
+def ensure_poise_target() -> None:
+    """Look up the ``poise`` ModifierTarget, scoped to the Composure CheckType (#4754).
+
+    Named by ApostateCD 2026-10-26 so character-creation cards stop leaning on the broad
+    Composure stat. Scoping it to Composure (``target_check_type``, a OneToOne) lets a
+    ``+N poise`` effect reach every Composure roll the character makes through the
+    ``collect_check_modifiers`` seam, as menace reaches Intimidation. Social-only
+    narrowing, and making the defender's resist honor it, are #4720.
+
+    ``mechanics.ModifierCategory``/``ModifierTarget`` are content-repo-owned (#2698):
+    looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on, so on
+    production staff author the row. No-ops when either isn't authored.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    category = authored_or_sample(ModifierCategory, {}, name="roll_modifier")
+    if category is None:
+        return
+    composure = CheckType.objects.filter(name="Composure").first()
+    target = authored_or_sample(
+        ModifierTarget,
+        {
+            "category": category,
+            "description": POISE_DESCRIPTION,
+            "target_check_type": composure,
+        },
+        name="poise",
+    )
+    if target is None:
+        return
+    if target.target_check_type_id is None and composure is not None:
+        target.target_check_type = composure
         target.save(update_fields=["target_check_type"])

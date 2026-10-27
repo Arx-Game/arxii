@@ -666,7 +666,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Distinctive physical features (#3739): "Make It Distinctive" plus the three
     # presence axes, each offered on every trait row and marking of the Appearance
     # chapter. After "social_relationships" (allure), "crafting_materials"
-    # (menace/regal) and "governance" (the Command check regal binds to), so every
+    # (menace/majesty) and "governance" (the Command check majesty binds to), so every
     # effect finds its ModifierTarget on the first pass.
     "distinctive_features": _seed_distinctive_features,
     # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes

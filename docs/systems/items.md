@@ -1072,7 +1072,7 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 ### Accent lifecycle & recycling (#2886)
 
 - **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):
-  allure, menace, regal (the courtly family on one axis), dramatic, stealthy,
+  allure, menace, majesty (the courtly family on one axis), dramatic, stealthy,
   unassuming, nimble. CheckType wiring is fill-if-found; unmatched families
   stay authored-but-dormant (flagged skill-list holes).
 - **`AccentExclusion`** (data rows): symmetric oppositions — Dramatic ⊥

@@ -554,6 +554,13 @@ def end_audere(character: ObjectDB) -> None:
             anima.pre_audere_maximum = None
             anima.save(update_fields=["maximum", "current", "pre_audere_maximum"])
 
+    # A self she took on by choosing its card in the reveal drops away with Audere when it
+    # reverts on its own (#4731).
+    if sheet is not None:
+        from world.forms.services import revert_audere_alternate_self
+
+        revert_audere_alternate_self(sheet)
+
 
 def maybe_create_audere_offer(
     character: ObjectDB, runtime_intensity: int, *, sheet: CharacterSheet | None = None
