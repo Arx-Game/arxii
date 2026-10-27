@@ -73,7 +73,8 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     threshold = max(cfg.threshold_floor, main * cfg.threshold_percent // 100)
     steps_past = 0
     if drift > threshold:
-        # A severity_step of 0 would divide by zero; it reads as "every point is a step".
+        # The field's validator keeps severity_step at 1 or more; max() guards rows
+        # written past validation.
         step = max(cfg.severity_step, 1)
         steps_past = 1 + (drift - threshold - 1) // step
     return DriftReading(

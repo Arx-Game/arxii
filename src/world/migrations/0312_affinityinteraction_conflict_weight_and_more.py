@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+import django.core.validators
 from django.db import migrations, models
 import django.db.models.deletion
 
@@ -95,6 +96,7 @@ class Migration(migrations.Migration):
                     models.PositiveIntegerField(
                         default=20,
                         help_text="Drift points past the threshold that add one step of severity.",
+                        validators=[django.core.validators.MinValueValidator(1)],
                     ),
                 ),
                 (

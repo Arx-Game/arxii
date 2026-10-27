@@ -5,6 +5,7 @@ is contested once the drift passes a threshold. Every number that decides that
 lives here, so staff retune it in the admin rather than in code.
 """
 
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -33,6 +34,7 @@ class DriftConfig(SharedMemoryModel):
     )
     severity_step = models.PositiveIntegerField(
         default=20,
+        validators=[MinValueValidator(1)],
         help_text="Drift points past the threshold that add one step of severity.",
     )
     off_aura_pull_steps = models.PositiveSmallIntegerField(
