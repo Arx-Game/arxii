@@ -37,7 +37,9 @@ def get_strain_config() -> StrainConfig:
 
     cfg = StrainConfig.objects.cached_singleton()
     if cfg is None:
-        cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+        StrainConfig.objects.get_or_create(pk=1)
+        # Read it back through the cache so later calls (every encounter payload) are free.
+        cfg = StrainConfig.objects.cached_singleton()
     return cfg
 
 
