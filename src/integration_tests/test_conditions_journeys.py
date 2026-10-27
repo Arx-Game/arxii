@@ -13,6 +13,7 @@ from django.test import tag
 
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
+from world.checks.models import ConsequenceEffect
 from world.conditions.constants import BreakFreeMode, TreatmentTargetKind
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -29,10 +30,12 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     RestoreToSenseActionTemplateFactory,
 )
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, Scene
+from world.seeds.game_content.social import SocialContent
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.constants import SLEEPING_CONDITION_NAME
 from world.vitals.models import CharacterVitals, WoundDetails
@@ -112,6 +115,96 @@ class ShakingOffACharm(JourneyCase):
     def test_rallying_someone_with_nothing_to_fight(self) -> None:
         told = self.telnet(self.ysmay, "rally Hobb")
         self.assertIn("They don't seem to be fighting anything.", told)
+
+
+class ShakingOffAResonanceConflict(JourneyCase):
+    """Ysmay carries a self-shakeable condition (Resonance Conflict's category).
+
+    The category sets ``self_shakeable`` and not ``alters_behavior``: she can
+    ``breakfree`` and be rallied, and she stays in control throughout.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        fresh_check_system()
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.watch(self.hobb)
+        self.conflict = ConditionTemplateFactory(
+            name="Test Conflict",
+            category=ConditionCategoryFactory(
+                name="Conflict", alters_behavior=False, self_shakeable=True
+            ),
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(name="Focus"),
+            break_free_difficulty=10,
+        )
+        self.held = ConditionInstanceFactory(target=self.ysmay, condition=self.conflict, severity=3)
+
+    def test_she_shakes_it_off_and_never_leaves_control(self) -> None:
+        self.assertTrue(self.ysmay.sheet_data.in_control)
+        with ROLL_WELL:
+            told = self.telnet(self.ysmay, "breakfree")
+        self.assertIn("You push back against the effect, weakening its hold.", told)
+        self.assertEqual(severity_of(self.held), 2)
+        self.assertTrue(self.ysmay.sheet_data.in_control)
+
+    def test_a_friend_rallies_her(self) -> None:
+        with ROLL_WELL:
+            told = self.telnet(self.hobb, "rally Ysmay")
+        self.assertIn(
+            "You rally Ysmay, granting them +5 to their next attempt to break free.", told
+        )
+        self.assertTrue(self.ysmay.sheet_data.in_control)
+
+
+class StirringUpAResonanceConflict(JourneyCase):
+    """An authored social action applies the condition again and advances its hold.
+
+    No new code path: the Intimidate template's pool applies the condition to its
+    target through the ordinary APPLY_CONDITION effect.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        content = SocialContent.create_all()
+        seed_social_engagement_kudos_category()
+        self.room = self.make_room("The Lantern")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.scene = SceneFactory(
+            room=self.room,
+            participants=[self.account_of(self.ysmay), self.account_of(self.hobb)],
+        )
+        self.conflict = ConditionTemplateFactory(
+            name="Test Conflict",
+            category=ConditionCategoryFactory(
+                name="Conflict", alters_behavior=False, self_shakeable=True
+            ),
+            break_free_mode=BreakFreeMode.SELF_INITIATED,
+            break_free_check_type=CheckTypeFactory(name="Focus"),
+            break_free_difficulty=10,
+        )
+        pool = content.templates["intimidate"].consequence_pool
+        for effect in ConsequenceEffect.objects.filter(
+            consequence__pool_entries__pool=pool, condition_template__isnull=False
+        ):
+            effect.condition_template = self.conflict
+            effect.condition_severity = 2
+            effect.save()
+        self.held = ConditionInstanceFactory(target=self.hobb, condition=self.conflict, severity=1)
+
+    def test_being_stirred_advances_the_hold_and_she_can_still_shake_it(self) -> None:
+        self.telnet(self.ysmay, "intimidate Hobb")
+        with ROLL_WELL:
+            self.telnet(self.hobb, "accept")
+        self.assertEqual(severity_of(self.held), 2)
+        self.assertTrue(self.hobb.sheet_data.in_control)
+        with ROLL_WELL:
+            told = self.telnet(self.hobb, "breakfree")
+        self.assertIn("You push back against the effect, weakening its hold.", told)
+        self.assertEqual(severity_of(self.held), 1)
 
 
 class TreatingAFeverAtTheClinic(JourneyCase):
