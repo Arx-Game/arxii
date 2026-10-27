@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+from django.db.models import F
+
 from world.magic.constants import DEED_GAIN_SOURCES
 from world.magic.exceptions import ConversionMappingError
 from world.magic.models.aura import CharacterResonance
@@ -99,19 +102,27 @@ def open_or_extend_conversion_offer(grant: ResonanceGrant) -> DriftConversionOff
     own = own_affinity(sheet)
     if own is None or grant.resonance.affinity_id != own.pk:
         return None
+    # The scene lookup is cached on the room, so a character outside a scene costs no
+    # query; the drift query below only runs for someone who could hold an offer.
+    scene = get_active_scene(sheet.character.location)
+    # The room's cached scene can outlive the scene's end; a finished scene is no scene.
+    if scene is None or not scene.is_active or scene.is_finished:
+        return None
     if not convertible_drift(sheet, grant.resonance):
         return None
-    scene = get_active_scene(sheet.character.location)
-    if scene is None:
-        return None
-    offer, _ = DriftConversionOffer.objects.get_or_create(character_sheet=sheet, scene=scene)
-    cap, _ = DriftConversionCap.objects.get_or_create(
-        offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
-    )
-    percent = get_drift_correction_config().cap_percent
-    cap.cap += max(1, grant.amount * percent // 100)
-    cap.save(update_fields=["cap"])
-    cap.grants.add(grant)
+    with transaction.atomic():
+        offer, _ = DriftConversionOffer.objects.get_or_create(character_sheet=sheet, scene=scene)
+        cap, _ = DriftConversionCap.objects.get_or_create(
+            offer=offer, target_resonance=grant.resonance, defaults={"cap": 0}
+        )
+        if cap.grants.filter(pk=grant.pk).exists():
+            return offer
+        percent = get_drift_correction_config().cap_percent
+        cap.cap = F("cap") + max(1, grant.amount * percent // 100)
+        cap.save(update_fields=["cap"])
+        # The identity-mapped instance still holds the expression; read the stored value back.
+        cap.cap = DriftConversionCap.objects.values_list("cap", flat=True).get(pk=cap.pk)
+        cap.grants.add(grant)
     return offer
 
 

@@ -9,6 +9,7 @@ from world.magic.factories import (
     CharacterAuraFactory,
     DramaticMomentTagFactory,
     ResonanceFactory,
+    SceneEntryEndorsementFactory,
     ensure_conversion_pairs,
     set_aura_split,
 )
@@ -29,7 +30,7 @@ from world.magic.services.drift import (
 )
 from world.magic.services.resonance import grant_resonance
 from world.scenes.factories import SceneFactory
-from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
 
 
 def _hold(sheet, resonance, balance, lifetime=None):
@@ -114,6 +115,30 @@ class OpenOfferTests(DriftOfferTestBase):
         self.assertEqual(DriftConversionOffer.objects.count(), 1)
         caps = {c.target_resonance_id: c.cap for c in DriftConversionCap.objects.all()}
         self.assertEqual(caps, {self.dawnlight.pk: 10, self.sunrise.pk: 5})
+
+    def test_scene_entry_deed_opens_an_offer_too(self) -> None:
+        endorsement = SceneEntryEndorsementFactory(
+            endorsee_sheet=self.sheet, scene=self.scene, resonance=self.dawnlight
+        )
+        grant_resonance(
+            self.sheet,
+            self.dawnlight,
+            12,
+            source=GainSource.SCENE_ENTRY,
+            scene_entry_endorsement=endorsement,
+        )
+        cap = DriftConversionCap.objects.get()
+        self.assertEqual(
+            (cap.offer.scene, cap.target_resonance, cap.cap), (self.scene, self.dawnlight, 6)
+        )
+
+    def test_finished_scene_still_cached_on_the_room_opens_nothing(self) -> None:
+        self.assertEqual(get_active_scene(self.room), self.scene)
+        self.scene.finish_scene()
+        self.assertEqual(get_active_scene(self.room), self.scene)  # stale cache, not invalidated
+        self.deed()
+        self.assertFalse(DriftConversionOffer.objects.exists())
+        self.assertTrue(ResonanceGrant.objects.filter(resonance=self.dawnlight).exists())
 
     def test_tiny_grant_still_adds_at_least_one(self) -> None:
         self.deed(amount=1)
@@ -207,10 +232,14 @@ class HoldingsTests(DriftOfferTestBase):
 
 
 class LapseTests(DriftOfferTestBase):
-    def test_open_or_extend_returns_the_offer(self) -> None:
+    def test_same_grant_twice_increments_the_cap_once(self) -> None:
         self.deed()
         grant = ResonanceGrant.objects.get(resonance=self.dawnlight)
-        self.assertEqual(open_or_extend_conversion_offer(grant), DriftConversionOffer.objects.get())
+        offer = open_or_extend_conversion_offer(grant)
+        self.assertEqual(offer, DriftConversionOffer.objects.get())
+        cap = DriftConversionCap.objects.get()
+        self.assertEqual(cap.cap, 10)
+        self.assertEqual(cap.grants.count(), 1)
 
     def test_lapse_conversion_offers_deletes_scene_offers(self) -> None:
         self.deed()
@@ -220,6 +249,15 @@ class LapseTests(DriftOfferTestBase):
         self.assertEqual(lapse_conversion_offers(self.scene), 1)
         self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
         self.assertFalse(DriftConversionCap.objects.exists())
+
+    def test_finish_scene_directly_lapses_only_that_scenes_offers(self) -> None:
+        # The event-completion route calls scene.finish_scene() without finish_scene_full.
+        self.deed()
+        other = DriftConversionOffer.objects.create(
+            character_sheet=self.sheet, scene=SceneFactory()
+        )
+        self.scene.finish_scene()
+        self.assertEqual(list(DriftConversionOffer.objects.all()), [other])
 
     def test_finish_scene_full_lapses_only_that_scenes_offers(self) -> None:
         from world.scenes.scene_admin_services import finish_scene_full

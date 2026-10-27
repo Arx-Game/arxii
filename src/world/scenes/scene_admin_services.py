@@ -161,9 +161,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     2. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``, and
        ends the loans made for the scene (``end_scene_loans``, #4418): NPCs lent for
        the scene go back.
-    2a. ``lapse_conversion_offers(scene)`` (#4733) — the drift conversion offers the scene
-        opened are deleted with it.
-    3.``close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)`` (#3567) —
+    3. ``close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)`` (#3567) —
        clocks opened in this scene stop with it; a battle scene running the same
        beat has its own row and keeps the GM scene's clock alive.
     4. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
@@ -210,11 +208,6 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     expire_scene_prompts(scene)
 
     scene.finish_scene()
-
-    # #4733: drift conversion offers open and lapse with the scene.
-    from world.magic.services.drift import lapse_conversion_offers  # noqa: PLC0415
-
-    lapse_conversion_offers(scene)
 
     # #3567: clocks opened in this scene stop with it; a battle scene running the
     # same beat has its own row and keeps the GM scene's clock alive.
