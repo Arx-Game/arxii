@@ -1724,7 +1724,8 @@ def _probe_surge_tuning() -> ProbeResult:
     Consumer: `world/combat/surge_rolls.py` (`surge_tuning_for`, `apply_rolled_surge`). A kind
     with no row never surges, so a taunt, a rally or a hurt ally does nothing to engagement
     intensity; a band set where a better outcome gives less than a worse one (`SurgeDegreeBand`
-    stored through a path that skipped the admin form's check) is reported by line.
+    stored through a path that skipped the admin form's check) is reported by line. A tuning
+    with no bands never surges (`band_for_outcome` finds nothing), so it is reported too.
     """
     from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind  # noqa: PLC0415
     from world.combat.models import SurgeTuning  # noqa: PLC0415
@@ -1736,6 +1737,14 @@ def _probe_surge_tuning() -> ProbeResult:
         for kind in ROLLED_SURGE_TRIGGER_KINDS
         if kind not in authored
     ]
+    bandless = set(
+        SurgeTuning.objects.filter(bands__isnull=True).values_list("trigger_kind", flat=True)
+    )
+    missing.extend(
+        f"SurgeTuning for {SurgeTriggerKind(kind).label} has no bands"
+        for kind in ROLLED_SURGE_TRIGGER_KINDS
+        if kind in bandless
+    )
     missing.extend(check_stored_surge_bands())
     detail = f"Rolled surge content to fix: {'; '.join(missing)}." if missing else ""
     return ProbeResult(present=not missing, missing=tuple(missing), detail=detail)

@@ -705,8 +705,8 @@ class AnAllyBeingWounded(_SurgeField):
         self.resolve(self.success)
 
         # The second round's wound is a fresh surge of its own: twenty percent of the Success
-        # band's 15, as in the smaller-wound journey. Her total intensity also carries the
-        # per-round escalation tick, so the surge record is what is pinned here.
+        # band's 15, as in the smaller-wound journey. The record's own amount is pinned, so
+        # the assertion does not depend on the rest of her engagement intensity.
         surges = list(self.records(SurgeTriggerKind.ALLY_HURT).order_by("repeat_round"))
         self.assertEqual(len(surges), 2)
         self.assertEqual(surges[1].amount, 3)

@@ -98,7 +98,7 @@ def _resolve_taunt_on_participant(
     participant: CombatParticipant,
     target: CombatParticipant,
 ) -> None:
-    """A player character taunts another: the taunter's roll is the taunt's potency (#4737).
+    """A player character taunts another: the taunter's check rating is the potency (#4737).
 
     The potency is the taunter's check RATING for the Taunt check type (no dice, nothing
     spent for the taunter: the player character who is taunted is the one who rolls). The

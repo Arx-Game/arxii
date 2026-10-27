@@ -33,7 +33,7 @@ A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war
 _Avoid_: willpower, resolve (as a field name — `morale` is the canonical column)
 
 **Rally**:
-The social-combat maneuver by which a PC inspires an ally — rolling presence + Performance + Oratory to apply a short-lived `Inspired` buff, and on a great success restoring morale to ally-side summon opponents. A benefit, so consent-free (ADR-0024). Whatever the roll, the ally then gets a **Rolled surge** (`RALLIED`) banded by the Rally roll's outcome (#4737). Rally is the only encouragement verb built; implore and challenge are not.
+The social-combat maneuver by which a PC inspires an ally by rolling presence + Performance + Oratory to apply a short-lived `Inspired` buff, and on a great success restoring morale to ally-side summon opponents. A benefit, so consent-free (ADR-0024). Whatever the roll, the ally then gets a **Rolled surge** (`RALLIED`) banded by the Rally roll's outcome (#4737). Rally is the only encouragement verb built; implore and challenge are not.
 _Avoid_: inspire (as the maneuver name), buff, motivate
 
 **Demoralize**:
@@ -41,7 +41,7 @@ The social-combat maneuver by which a PC breaks an opponent's nerve — rolling 
 _Avoid_: intimidate (that name is the CheckType), frighten, cow
 
 **Taunt**:
-The social-combat maneuver by which a PC draws an NPC's aggro — rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round. Aimed at another player character it is instead one roll, the target's: the **Taunt Potency** is the taunter's check rating for the Taunt check type (no dice, nothing spent), the target rolls the tuned check (Composure) against it and gets a **Rolled surge** (`TAUNT_RECEIVED`) (#4737).
+The social-combat maneuver by which a PC draws an NPC's aggro by rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round. Aimed at another player character it is instead one roll, the target's: the **Taunt Potency** is the taunter's check rating for the Taunt check type (no dice, nothing spent), the target rolls the tuned check (Composure) against it and gets a **Rolled surge** (`TAUNT_RECEIVED`) (#4737).
 _Avoid_: mock, aggro (colloquial). Not **Provoke** (below): Taunt biases an NPC's choice through threat, Provoke removes the choice.
 
 **Provoke** (#4584):
@@ -177,7 +177,7 @@ The reserved combat primitive for a multi-round contest in which two sides pour 
 _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects
 
 **Dramatic Surge**:
-A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a bonded companion falling (its ALLY `CombatOpponent` defeated, #3575), a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`) — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`: once per encounter for the fixed-amount kinds, but once per round per subject for the three rolled kinds (`DramaticSurgeRecord.repeat_round` is set, ADR-4737; see **Rolled surge**). A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, label, subject, or (for a manual trigger) the GM's stated reason.
+A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat: a bonded ally entering mortal peril, a bonded companion falling (its ALLY `CombatOpponent` defeated, #3575), a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`), written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`: once per encounter for the fixed-amount kinds, but once per round per subject for the three rolled kinds (`DramaticSurgeRecord.repeat_round` is set, ADR-4737; see **Rolled surge**). A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, label, subject, or (for a manual trigger) the GM's stated reason.
 _Avoid_: clash (reserved, see above), spike (ambiguous with the pre-existing #872 grief "spike" internals — "surge" is the player-facing term), burst, power-up
 
 **Rolled surge** (#4737, ADR-4737):

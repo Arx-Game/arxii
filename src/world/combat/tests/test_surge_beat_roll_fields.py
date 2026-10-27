@@ -31,7 +31,7 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import RoundStatus
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
 
 GENERIC_KEYS = {"id", "narration"}
@@ -63,6 +63,8 @@ class SurgeBeatRollFieldTests(TestCase):
         cls.owner_account, cls.owner_sheet = _player("surge_owner", "Surgeowner")
         cls.other_account, cls.other_sheet = _player("surge_other", "Surgeother")
         cls.staff_account = AccountFactory(username="surge_staff", is_staff=True)
+        cls.gm_account = AccountFactory(username="surge_gm")
+        SceneParticipationFactory(scene=cls.scene, account=cls.gm_account, is_gm=True)
         cls.owner_seat = CombatParticipantFactory(
             encounter=cls.encounter,
             character_sheet=cls.owner_sheet,
@@ -170,10 +172,13 @@ class SurgeBeatRollFieldTests(TestCase):
         SurgeDegreeBandFactory(tuning=tuning, outcome=self.partial, intensity=0, control_change=-2)
         self._rallied_surge()
 
-        (other_beat,) = self._beats_seen_by(self.other_account)
-        self.assertEqual(other_beat["narration"], "")
-        (owner_beat,) = self._beats_seen_by(self.owner_account)
-        self.assertEqual(owner_beat["roll"], "Rally check. Partial. Intensity +0, control -2.")
+        # Nothing was announced to the room, so a bystander has no beat at all.
+        self.assertEqual(self._beats_seen_by(self.other_account), [])
+        for account in (self.owner_account, self.staff_account, self.gm_account):
+            (beat,) = self._beats_seen_by(account)
+            self.assertEqual(beat["narration"], "")
+            self.assertEqual(beat["amount"], 0)
+            self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +0, control -2.")
 
     def test_old_kind_surge_beat_unchanged(self) -> None:
         """Kept: the older kinds are written by their own triggers, not by these journeys."""

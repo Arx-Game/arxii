@@ -392,7 +392,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   telnet `combat taunt <opponent or ally>`, the surged player's character is sent a roll
   line, `surge_beats` carries the roll fields for the surged player's owner, GMs and
   staff, and the web round log shows the line with an ally taunt in the Combatants row menu.
-  Migrations 0310 and 0311. Owner rulings: Rally is the only encouragement verb built
+  Migrations 0312 and 0313. Owner rulings: Rally is the only encouragement verb built
   (implore and challenge are not); the surge is `Inspired`'s effect; Goaded on a player
   character is an authored debuff condition on a degree band, not a targeting lock; no
   Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py` and

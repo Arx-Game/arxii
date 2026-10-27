@@ -1776,7 +1776,9 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         mirrors ``get_current_round_actions``'s covenant-scoped pattern. A rolled surge
         (#4737) adds the same way ``outcome``, ``potency``, ``control_change``,
         ``condition`` and the ready-made ``roll`` line; a beat of a kind that is not rolled
-        carries none of them.
+        carries none of them. A surge that was never announced to the room (it added no
+        intensity) has an empty ``narration`` and is left out for everyone but those same
+        viewers.
         """
         request = self.context.get("request")
         records = list(
@@ -1804,7 +1806,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "narration": self._render_surge_beat_narration(record),
             }
             character_id = record.participant.character_sheet.character_id
-            if is_gm_or_staff or character_id in viewer_character_ids:
+            sees_detail = is_gm_or_staff or character_id in viewer_character_ids
+            if not sees_detail and not beat["narration"]:
+                # Nothing was announced to the room (a control-only or condition-only
+                # surge), so a bystander has no beat to show.
+                continue
+            if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind
                 beat["amount"] = record.amount
                 beat["participant"] = record.participant_id
