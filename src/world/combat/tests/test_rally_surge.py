@@ -1,8 +1,8 @@
 """Rally raises the rallied ally's intensity through a rolled surge (#4737).
 
 The journey ``BeingRallied`` types ``combat rally`` and plays the round (the roll line, the
-record, Inspired, the next round). What stays here: the tuned-check and name fallbacks,
-degrees across every band, a failed rally, and the missing-tuning and no-curve edges.
+record, Inspired, the next round). What stays here: the tuned check (no name fallback,
+#4739), degrees across every band, a failed rally, and the missing-tuning and no-curve edges.
 """
 
 from unittest.mock import patch
@@ -22,7 +22,7 @@ from world.combat.factories import (
 from world.combat.models import DramaticSurgeRecord
 from world.combat.services import _resolve_rally, declare_rally
 from world.combat.social_combat_content import (
-    INSPIRED_CONDITION_NAME,
+    INSPIRED_SEED_TEMPLATE_NAME,
     ensure_social_combat_content,
 )
 from world.conditions.models import ConditionInstance
@@ -98,12 +98,13 @@ class RallySurgeTests(TestCase):
             f"Rally Surge check vs rally difficulty {RALLY_BASE_DIFFICULTY} · Rally Success", line
         )
 
-    def test_rally_without_a_tuning_still_rolls_the_rally_check_by_name(self) -> None:
+    def test_rally_without_a_tuning_rolls_nothing_even_with_a_rally_check(self) -> None:
+        """A CheckType named Rally exists (the seed made it); no tuning, no roll (#4739)."""
         self.tuning.delete()
         action = declare_rally(self.rallier, self.ally)
         with force_check_outcome(self.success) as capture:
             _resolve_rally(self.rallier, action)
-        self.assertEqual(capture.check_type.name, "Rally")
+        self.assertIsNone(capture.check_type)
 
     def test_rally_failure_gives_smaller_or_no_surge_never_more(self) -> None:
         amounts = {}
@@ -123,19 +124,18 @@ class RallySurgeTests(TestCase):
         self.assertFalse(
             ConditionInstance.objects.filter(
                 target=self.ally.character_sheet.character,
-                condition__name=INSPIRED_CONDITION_NAME,
+                condition__name=INSPIRED_SEED_TEMPLATE_NAME,
             ).exists()
         )
 
-    def test_rally_with_no_tuning_still_inspires_and_does_not_crash(self) -> None:
+    def test_rally_with_no_tuning_does_nothing_and_does_not_crash(self) -> None:
         self.tuning.delete()
-        with self.assertLogs("world.combat.surge_rolls", level="WARNING"):
-            self._rally(self.success)
+        self._rally(self.success)
         self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
-        self.assertTrue(
+        self.assertFalse(
             ConditionInstance.objects.filter(
                 target=self.ally.character_sheet.character,
-                condition__name=INSPIRED_CONDITION_NAME,
+                condition__name=INSPIRED_SEED_TEMPLATE_NAME,
             ).exists()
         )
 

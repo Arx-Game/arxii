@@ -11,6 +11,7 @@ from world.combat.constants import (
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import _social_verb_success_level
+from world.combat.services.encounter.config import get_social_maneuver_config
 from world.combat.services.encounter.threat import accumulate_threat
 from world.combat.surge_rolls import (
     apply_rolled_surge,
@@ -105,11 +106,11 @@ def _resolve_taunt_on_participant(
     spent for the taunter: the player character who is taunted is the one who rolls). The
     target then rolls the tuned check (Composure) against that potency, and the roll's
     degree picks the surge band. A target who left the encounter or died since the
-    declaration, an encounter with no escalation curve, a missing Taunt check or tuning,
+    declaration, an encounter with no escalation curve, an unset or inactive Taunt check
+    designation or a missing tuning,
     and a target who could not surge this round (no combat engagement, or already surged by
     this taunter) are all quiet no-ops: no roll is made and no condition is spent.
     """
-    from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import compute_check_rating  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -121,8 +122,10 @@ def _resolve_taunt_on_participant(
     ):
         return
     tuning = surge_tuning_for(SurgeTriggerKind.TAUNT_RECEIVED)
-    taunt_check = CheckType.objects.filter(name="Taunt", is_active=True).first()
-    if tuning is None or taunt_check is None:
+    # The taunter's own check is designated on SocialManeuverConfig (#4739); the tuning's
+    # check is the target's composure. An unset designation is listed on the dashboard.
+    taunt_check = get_social_maneuver_config().taunt_check_type
+    if tuning is None or taunt_check is None or not taunt_check.is_active:
         return
     if not rolled_surge_possible(
         encounter, target, SurgeTriggerKind.TAUNT_RECEIVED, participant.character_sheet
@@ -162,7 +165,9 @@ def _resolve_taunt(
 
     target = action.focused_opponent_target
     if target is not None:
-        success_level = _social_verb_success_level(participant, "Taunt", action, target)
+        success_level = _social_verb_success_level(
+            participant, get_social_maneuver_config().taunt_check_type, action, target
+        )
 
         if success_level >= 1:
             accumulate_threat(

@@ -13,11 +13,13 @@ from world.combat.constants import (
     RALLY_MORALE_PER_LEVEL,
     CombatAllegiance,
     CombatManeuver,
+    SurgeTriggerKind,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    SurgeTuningFactory,
     ThreatPoolFactory,
 )
 from world.combat.services import (
@@ -326,6 +328,10 @@ class ResolveSocialVerbTests(TestCase):
             target_covenant_role=role,
             target_trait=None,
             level=10,
+        )
+        # Rally rolls the check the RALLIED surge tuning names (#4739).
+        SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckType.objects.get(name="Rally")
         )
         action = declare_rally(self.participant, self.ally)
         great_success = CheckOutcomeFactory(

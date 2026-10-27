@@ -15,7 +15,8 @@ Success 6 (taunt and rally), and a Success on a hurt ally's roll is worth 15 at 
 - The round payload gives the surged player, a GM and staff the roll, and a bystander only
   the generic beat; the roll is the line the surged player was told.
 - Mira rallies Tomas through ``combat rally``; the Rally roll's result picks Tomas's surge,
-  he ends up Inspired, and the next round's rally surges him again.
+  he ends up with the condition staff designated for a rally (Inspired), and the next
+  round's rally surges him again.
 - Mira is bonded to Tomas. The captain wounds Tomas through a real round; the damage event
   reaches the escalation trigger the round-opening installed in the room, and Mira's surge
   is in proportion to the wound.
@@ -50,6 +51,7 @@ from world.combat.factories import (
     CombatOpponentFactory,
     CombatParticipantFactory,
     EscalationCurveFactory,
+    SocialManeuverConfigFactory,
     SurgeDegreeBandFactory,
     SurgeTuningFactory,
     ThreatPoolEntryFactory,
@@ -57,7 +59,6 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction, DramaticSurgeRecord
 from world.combat.services import begin_declaration_phase, resolve_round
-from world.combat.social_combat_content import INSPIRED_CONDITION_NAME
 from world.conditions.factories import ConditionCheckModifierFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.mechanics.constants import EngagementType
@@ -181,16 +182,19 @@ class _SurgeField(JourneyCase):
         return goaded
 
     def give_mira_a_taunt_check(self) -> None:
-        """Mira's Taunt check: her presence stat alone, so her rating is ``TAUNT_RATING``."""
+        """Mira's Taunt check: her presence stat alone, so her rating is ``TAUNT_RATING``.
+
+        Staff designate it as the taunter's check on the social maneuver config (#4739).
+        """
         presence = StatTraitFactory(name="presence")
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.STAT,
             min_value=1,
             defaults={"max_value": 100, "points_per_level": 1},
         )
-        CheckTypeTraitFactory(
-            check_type=CheckTypeFactory(name="Taunt"), trait=presence, weight=Decimal("1.0")
-        )
+        taunt_check = CheckTypeFactory(name="Taunt")
+        CheckTypeTraitFactory(check_type=taunt_check, trait=presence, weight=Decimal("1.0"))
+        SocialManeuverConfigFactory(taunt_check_type=taunt_check)
         CharacterTraitValueFactory(character=self.mira.sheet_data, trait=presence, value=PRESENCE)
 
     def composure_penalty(self, character, check_type) -> int:
@@ -574,7 +578,9 @@ class BeingRallied(_SurgeField):
     def setUp(self) -> None:
         super().setUp()
         self.enter_combat(self.mira, self.tomas)
-        self.inspired = ConditionTemplateFactory(name=INSPIRED_CONDITION_NAME)
+        # Staff designate Rally's success condition; its name does not matter (#4739).
+        self.inspired = ConditionTemplateFactory(name="Heartened")
+        SocialManeuverConfigFactory(rally_success_condition=self.inspired)
         # The tuning names the check the Rally rolls and picks the bands.
         self.author_tuning(
             SurgeTriggerKind.RALLIED,

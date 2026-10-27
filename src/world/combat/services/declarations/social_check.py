@@ -98,18 +98,17 @@ def _social_combat_difficulty(
 
 def _social_verb_success_level(
     participant: CombatParticipant,
-    check_type_name: str,
+    check_type: CheckType | None,
     action: CombatRoundAction,
     target: CombatOpponent,
 ) -> int:
-    """Look up a social verb's CheckType, grade it against ``target`` and roll it (#4145).
+    """Grade a social verb's designated CheckType against ``target`` and roll it (#4145).
 
-    A missing or inactive CheckType resolves as a failed roll (success level 0).
+    ``check_type`` is the verb's designation on ``SocialManeuverConfig`` (#4739). An unset
+    designation (None) or an inactive CheckType resolves as a failed roll (success level 0)
+    with nothing rolled; the Required content dashboard lists the unset designation.
     """
-    from world.checks.models import CheckType  # noqa: PLC0415
-
-    check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
-    if check_type is None:
+    if check_type is None or not check_type.is_active:
         return 0
     graded = _social_combat_difficulty(
         target, actor_sheet=participant.character_sheet, check_type=check_type

@@ -12,6 +12,10 @@ Idempotently seeds the content the four social/mental combat verbs need:
 * An ``Inspired`` ``ConditionTemplate`` (``alters_behavior=False``) — the
   short-lived benefit ``RALLY`` applies to an ally, consumed by the ally's
   next resolved action this round. Mirrors ``conditions/charm_content.py``.
+* ``SocialManeuverConfig`` (#4739): each designation still unset is pointed at
+  the row just seeded (Taunt/Demoralize/Parley check types, Inspired as Rally's
+  success condition); a designation staff already set is left alone. Rally's
+  check is the ``RALLIED`` ``SurgeTuning``'s, which this seed does not author.
 * A ``Charming Word`` ``Technique`` carrying a ``TechniqueAppliedCondition``
   targeting ``ENEMY`` with the already-seeded ``Charmed`` template — so the
   Charm → allegiance flip (``derive_allegiance`` → ``ALLY_OF_CASTER``) is
@@ -46,19 +50,25 @@ if TYPE_CHECKING:
     from world.checks.models import CheckCategory
     from world.traits.models import Trait
 
-# Identity keys
-INSPIRED_CONDITION_NAME: str = "Inspired"
+# Identity keys for the seed only (#4739): the game finds Inspired and the verb checks by
+# their SocialManeuverConfig designation, never by name; nothing outside seeds, factories
+# and tests imports these.
+INSPIRED_SEED_TEMPLATE_NAME: str = "Inspired"
 CHARM_TECHNIQUE_NAME: str = "Charming Word"
+RALLY_SEED_CHECK_NAME: str = "Rally"
+DEMORALIZE_SEED_CHECK_NAME: str = "Demoralize"
+TAUNT_SEED_CHECK_NAME: str = "Taunt"
+PARLEY_SEED_CHECK_NAME: str = "Parley"
 
 # (check_type_name, stat_trait_name, skill_name, specialization_name | None).
 # Reuses the social skills/specializations from seeds/social_checks.py:
 # Persuasion + (Intimidation/Seduction) specs, Performance + Oratory spec.
 # Taunt rolls wits + Persuasion + Intimidation (a provoking jab).
 _SOCIAL_COMBAT_COMPOSITION: tuple[tuple[str, str, str, str | None], ...] = (
-    ("Rally", "presence", "Performance", "Oratory"),
-    ("Demoralize", "presence", "Persuasion", "Intimidation"),
-    ("Taunt", "wits", "Persuasion", "Intimidation"),
-    ("Parley", "charm", "Persuasion", "Seduction"),
+    (RALLY_SEED_CHECK_NAME, "presence", "Performance", "Oratory"),
+    (DEMORALIZE_SEED_CHECK_NAME, "presence", "Persuasion", "Intimidation"),
+    (TAUNT_SEED_CHECK_NAME, "wits", "Persuasion", "Intimidation"),
+    (PARLEY_SEED_CHECK_NAME, "charm", "Persuasion", "Seduction"),
 )
 
 
@@ -192,7 +202,7 @@ def _ensure_inspired_condition() -> ConditionTemplate | None:
             "is_stackable": False,
             "can_be_dispelled": True,
         },
-        name=INSPIRED_CONDITION_NAME,
+        name=INSPIRED_SEED_TEMPLATE_NAME,
     )
 
 
@@ -271,15 +281,50 @@ def _ensure_charm_technique() -> Technique | None:
     return technique
 
 
+def _designate_unset(check_types: dict[str, object], inspired: ConditionTemplate | None) -> None:
+    """Point each unset ``SocialManeuverConfig`` designation at the row just seeded (#4739).
+
+    A designation staff already set is never overwritten (precedent: the Soulfray seed in
+    ``world/magic/factories.py``). A row the seed skipped (not authored) leaves its
+    designation unset for the Required content dashboard to list.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.combat.services.encounter.config import (  # noqa: PLC0415
+        get_social_maneuver_config,
+    )
+
+    config = get_social_maneuver_config()
+    taunt = check_types.get(TAUNT_SEED_CHECK_NAME)
+    demoralize = check_types.get(DEMORALIZE_SEED_CHECK_NAME)
+    parley = check_types.get(PARLEY_SEED_CHECK_NAME)
+    changed: list[str] = []
+    if isinstance(taunt, CheckType) and config.taunt_check_type_id is None:
+        config.taunt_check_type = taunt
+        changed.append("taunt_check_type")
+    if isinstance(demoralize, CheckType) and config.demoralize_check_type_id is None:
+        config.demoralize_check_type = demoralize
+        changed.append("demoralize_check_type")
+    if isinstance(parley, CheckType) and config.parley_check_type_id is None:
+        config.parley_check_type = parley
+        changed.append("parley_check_type")
+    if inspired is not None and config.rally_success_condition_id is None:
+        config.rally_success_condition = inspired
+        changed.append("rally_success_condition")
+    if changed:
+        config.save(update_fields=changed)
+
+
 def ensure_social_combat_content() -> None:
     """Idempotently seed the social-combat content (#2015).
 
     Seeds the 4 CheckTypes (Rally/Demoralize/Taunt/Parley) with stat + skill
     (+ spec) compositions, the ``Inspired`` condition, and the ``Charming Word``
-    charm technique. Safe to call repeatedly — every write goes through
-    ``get_or_create`` or ``authored_or_sample``.
+    charm technique, then points any unset ``SocialManeuverConfig`` designation at
+    the seeded rows (#4739). Safe to call repeatedly — every write goes through
+    ``get_or_create`` or ``authored_or_sample``, and a set designation is kept.
     """
     skills, specs = _ensure_social_skills_and_specs()
-    _ensure_social_combat_check_types(skills, specs)
-    _ensure_inspired_condition()
+    check_types = _ensure_social_combat_check_types(skills, specs)
+    inspired = _ensure_inspired_condition()
+    _designate_unset(check_types, inspired)
     _ensure_charm_technique()

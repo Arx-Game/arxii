@@ -14,6 +14,7 @@ from world.combat.constants import (
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import _social_verb_success_level
+from world.combat.services.encounter.config import get_social_maneuver_config
 from world.combat.types import ActionOutcome
 from world.conditions.constants import Allegiance
 from world.fatigue.constants import EffortLevel
@@ -164,7 +165,9 @@ def _resolve_parley(
     if target is None:
         return outcome
 
-    success_level = _social_verb_success_level(participant, "Parley", action, target)
+    success_level = _social_verb_success_level(
+        participant, get_social_maneuver_config().parley_check_type, action, target
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "it has no mind to reach."

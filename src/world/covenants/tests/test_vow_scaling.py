@@ -21,7 +21,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from world.covenants.constants import CovenantType
+from world.covenants.constants import CovenantScaledAction, CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantRoleActionScalingFactory,
@@ -126,7 +126,7 @@ class CovenantRoleActionScalingTests(TestCase):
             thread_level_multiplier=Decimal("0.10"),
         )
 
-        bonus = covenant_role_action_scaling_bonus(character, "combat_interpose")
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
         self.assertEqual(bonus, 0.0)
 
     def test_no_bonus_when_no_scaling_row(self):
@@ -137,7 +137,7 @@ class CovenantRoleActionScalingTests(TestCase):
 
         set_engaged_membership(membership=membership)
 
-        bonus = covenant_role_action_scaling_bonus(character, "combat_interpose")
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
         self.assertEqual(bonus, 0.0)
 
     def test_bonus_scales_by_thread_level(self):
@@ -167,7 +167,7 @@ class CovenantRoleActionScalingTests(TestCase):
 
         set_engaged_membership(membership=membership)
 
-        bonus = covenant_role_action_scaling_bonus(character, "combat_interpose")
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
         self.assertEqual(bonus, 1.0)  # 10 * 0.10 = 1.0
 
     def test_sub_role_scaling_resolves_via_parent_row(self):
@@ -213,9 +213,54 @@ class CovenantRoleActionScalingTests(TestCase):
         engaged = character.covenant_roles.currently_engaged_roles()
         self.assertEqual(engaged, [subrole])
 
-        bonus = covenant_role_action_scaling_bonus(character, "combat_interpose")
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
         # 30 * 0.10, via the parent's scaling row; the multiplier reads the stored level.
         self.assertEqual(bonus, 3.0)
+
+
+class SurgesGivenScalingTests(TestCase):
+    """A ``SURGES_GIVEN`` row scales only the surges a rallier gives (#4739)."""
+
+    def _engaged_with_thread(self, level: int):
+        from world.magic.constants import TargetKind
+        from world.magic.models import Thread
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, crown_weight=1)
+        membership = CharacterCovenantRoleFactory(covenant_role=role)
+        sheet = membership.character_sheet
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=ResonanceFactory(),
+            level=level,
+        )
+        set_engaged_membership(membership=membership)
+        return role, sheet.character
+
+    def test_a_surges_given_row_scales_by_thread_level(self):
+        role, character = self._engaged_with_thread(level=2)
+        CovenantRoleActionScalingFactory(
+            covenant_role=role,
+            action_key=CovenantScaledAction.SURGES_GIVEN,
+            thread_level_multiplier=Decimal("0.5"),
+        )
+
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.SURGES_GIVEN)
+
+        self.assertEqual(bonus, 1.0)  # 2 * 0.5
+
+    def test_a_row_for_another_action_does_not_scale_surges(self):
+        role, character = self._engaged_with_thread(level=2)
+        CovenantRoleActionScalingFactory(
+            covenant_role=role,
+            action_key=CovenantScaledAction.RALLY,
+            thread_level_multiplier=Decimal("0.5"),
+        )
+
+        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.SURGES_GIVEN)
+
+        self.assertEqual(bonus, 0.0)
 
 
 class RoleSourceVariantResolutionTests(TestCase):
