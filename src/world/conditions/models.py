@@ -1595,6 +1595,17 @@ class ConditionInstance(SharedMemoryModel):
             "and its stat modifiers the stat lane's (#4726), instead of their flat values."
         ),
     )
+    modifier_vow_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The level the caster's vow size step is valued at (#4747): her vow thread's "
+            "shown level, fixed when the buff was cast (never capped by modifier_level). "
+            "Set only when her engaged vow has a technique specialty for one of the "
+            "technique's functions. Each modifier then adds value(this level, size + 1) "
+            "minus value(this level, size), never tapered. Null means no step."
+        ),
+    )
     soulfray_consented = models.BooleanField(
         default=False,
         help_text=(

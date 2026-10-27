@@ -5,6 +5,9 @@
   rows). The applied condition keeps that level and its authored size, and the check
   lane's value table turns the pair into points (the stat lane's for a stat, #4726).
   The target's level is never read.
+* ``caster_vow_step_level`` - the level a vowed caster's size step is valued at
+  (#4747): her vow thread's shown level, when her engaged vow has a technique specialty
+  for one of the cast technique's functions.
 * ``applied_condition_size_warnings`` - the admin size check: a buff's authored size
   should match how its technique spends its power.
 """
@@ -15,6 +18,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from world.checks.constants import ModifierSize
@@ -24,6 +28,8 @@ from world.magic.models.techniques import TechniqueAppliedCondition
 from world.traits.models import TraitType
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.magic.models.techniques import Technique
 
 
@@ -84,6 +90,73 @@ def sized_modifier_level(
     if level is None:
         return None, None
     return level, size
+
+
+def caster_vow_step_level(
+    caster: ObjectDB | None,  # noqa: OBJECTDB_PARAM - the cast's source_character
+    technique: Technique,
+) -> int | None:
+    """The level ``caster``'s vow size step is valued at on this cast, or None (#4747).
+
+    The vow is the one ``_resolve_source_vow_anchor`` stamps as ``source_vow``: the
+    first of her currently engaged roles. It steps when that role, its resolved
+    resonance sub-role or its anchor has a ``CovenantRoleTechniqueSpecialty`` row
+    whose function is one of ``technique``'s function tags. The level is the shown
+    level of her COVENANT_ROLE thread on the anchor, never capped by the buff's own
+    level (the owner's 2026-10-27 ruling): a weak cast from a deep vow still steps at
+    the vow's depth.
+
+    A secondary vow can be that first role (a primary left disengaged), and it follows
+    the secondary convention of the technique-specialty layer it is keyed on:
+    ``SecondaryVowConfig.potency_tenths`` scales it, here applied to the level
+    (floored), so a secondary vow steps at a lower level than the same primary would.
+
+    None when there is no caster or engaged vow, no matching specialty, no thread, or
+    the level is 0. Called once per cast, and only when a row is sized.
+    """
+    if caster is None:
+        return None
+    functions = {tag.function for tag in technique.cached_function_tags}
+    if not functions:
+        return None
+    try:
+        engaged = caster.covenant_roles.currently_engaged_roles_with_flags()
+    except (AttributeError, ObjectDoesNotExist):
+        # No covenant_roles handler (a test double) or no CharacterSheet (an NPC):
+        # no engaged vow, as in _resolve_source_vow_anchor.
+        return None
+    if not engaged:
+        return None
+    role, is_secondary = engaged[0]
+    anchor_id = role.parent_role_id or role.pk
+
+    from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+    if not CovenantRoleTechniqueSpecialty.objects.filter(
+        covenant_role_id__in={role.pk, anchor_id}, function__in=functions
+    ).exists():
+        return None
+    stored = (
+        Thread.objects.filter(
+            owner_id=caster.pk,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role_id=anchor_id,
+            retired_at__isnull=True,
+        )
+        .values_list("level", flat=True)
+        .first()
+    )
+    if not stored:
+        return None
+    level = shown_thread_level(stored)
+    if is_secondary:
+        from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+
+        level = level * secondary_vow_config().potency_tenths // 10
+    return level or None
 
 
 def _technique_effect_count(technique: Technique) -> int:

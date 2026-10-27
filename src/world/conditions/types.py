@@ -93,6 +93,8 @@ class BulkConditionApplication:
     # check modifiers read the value table. None keeps the flat authored values.
     modifier_level: int | None = None
     modifier_size: int | None = None
+    # #4747: the level the caster's vow size step is valued at, or None for no step.
+    modifier_vow_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -161,7 +163,9 @@ class CheckModifierResult:
     """Total modifier for a check type."""
 
     total_modifier: int = 0
-    breakdown: list[tuple["ConditionInstance", int]] = field(default_factory=list)
+    # (instance, value, vow_part): vow_part is the share of value the caster's vow size
+    # step supplies (#4747), 0 when the instance has no step.
+    breakdown: list[tuple["ConditionInstance", int, int]] = field(default_factory=list)
 
 
 @dataclass
