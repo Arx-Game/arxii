@@ -318,7 +318,7 @@ describe('SurgeBeats', () => {
         {
           id: 2,
           narration: "Kira's temper breaks loose.",
-          trigger_kind: 'taunt',
+          trigger_kind: 'taunt_received',
           amount: 5,
           participant: 1,
           outcome: 'Partial',

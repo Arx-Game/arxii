@@ -571,7 +571,7 @@ describe('CombatantsList', () => {
       void label;
     });
 
-    it('taunting an opponent still sends opponent_id only', async () => {
+    it('pins the component-to-dispatch contract: taunting an opponent sends opponent_id only', async () => {
       const user = userEvent.setup();
       const encounter = makeEncounter(
         [makeParticipant({ id: 1, character_sheet_id: 7 })],
@@ -968,7 +968,7 @@ describe('ally taunt menu', () => {
   const aerande = makeParticipant({ id: 1, character_sheet_id: 7, character_name: 'Aerande' });
   const kira = makeParticipant({ id: 2, character_sheet_id: 8, character_name: 'Kira' });
 
-  it('taunting an ally sends the ally participant id only', async () => {
+  it('pins the component-to-dispatch contract: taunting an ally sends the ally participant id only', async () => {
     const user = userEvent.setup();
     const encounter = makeEncounter([aerande, kira], [makeOpponent({ id: 10 })]);
 
