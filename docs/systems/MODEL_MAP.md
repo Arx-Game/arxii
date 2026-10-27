@@ -2008,6 +2008,7 @@
   - situational_perks <- covenants.VowSituationalPerk
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - strain_configs <- combat.StrainConfig
   - escalation_curves <- combat.EscalationCurve
   - professions <- currency.Profession
   - dream_peril_configs <- dreams.DreamPerilConfig
@@ -2780,8 +2781,13 @@
 
 ### StakesLevelRequirement
 
+### StrainBurnReach
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### StrainConfig
 **Foreign Keys:**
+  - strain_check_type -> checks.CheckType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### SustainedAction
@@ -6783,7 +6789,7 @@
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None, technique: 'Technique | None' = None) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None, resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' - Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None - Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
@@ -6794,7 +6800,7 @@
 - `seed_thread_survivability_tuning() -> 'None' - Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' - Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' - Deduct resonance balance and greedily advance thread level.`
-- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None) -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
+- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '') -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' - Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `strain_to_intensity(*, strain_commitment: 'int', config: 'StrainCurve') -> 'int' - Convert committed anima into a diminishing-return power bonus.`
 - `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' - Universal soft-capped survivability baseline from thread investment (#1175),`
@@ -6802,7 +6808,7 @@
 - `technique_skill_term(character: 'ObjectDB', technique: 'Technique') -> 'ExtraTraitTerm | None' - The technique skill as a roll term for ``character``, or None.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '') -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -11082,6 +11088,7 @@
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
   - arxii_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
   - arxii_trainingoutcomeaward <- magic.TrainingOutcomeAward
+  - arxii_strainburnreach <- combat.StrainBurnReach
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution

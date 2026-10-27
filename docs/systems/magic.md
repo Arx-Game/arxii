@@ -1970,6 +1970,87 @@ with different curved values.
 **Dispel:** the Thread Surge condition has `can_be_dispelled=True`; a dispel
 technique can end the surge early via the existing `remove_condition` path.
 
+### Burning Resonance as a Strain Option (#4736, slice 7 of #4672) [BUILT & WIRED]
+
+A character who pulls a thread may also **burn** resonance from that thread's resonance to
+push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnNeedsPull`,
+`ActionDispatchError.BURN_NEEDS_PULL`). Code: `world/magic/services/burn.py`, types in
+`world/magic/types/burn.py`.
+
+- **Ceiling.** `burn_ceiling(runtime_intensity, config)` = floor(runtime intensity x
+  `StrainConfig.burn_per_intensity`, default 0.50). A request is capped by the ceiling and by
+  the balance left once the pull's own cost is paid.
+- **Strain check and reach.** If anything is left to burn, `resolve_resonance_burn` rolls
+  `StrainConfig.strain_check_type` (target difficulty `StrainConfig.strain_check_difficulty`,
+  default 0) with the `MagicActivity.PUSHING_HARD` skill terms. The outcome tier selects a
+  `StrainBurnReach` row (`world/combat/models.py`, an `OutcomeTierAward`): `reach_percent` of the
+  capped request is what she **reaches** and the only amount debited. `clean()` enforces that a
+  better tier never reaches less than a worse one. A tier with no row reaches 0%; the Required
+  content page lists the missing tiers. A zero cap rolls nothing (`check_result` is None).
+- **Strain units.** Reached points become strain units at the burned resonance's
+  `Affinity.burn_value` (default 1.00), added to the anima strain before the one diminishing
+  curve (`strain_to_intensity`) in `use_technique`. Anima strain stays deterministic; only the
+  burn is rolled.
+- **Hasty fall.** A caster whose acting aura (`acting_aura`) is dominantly Abyssal who burns
+  resonance of any other affinity falls hastily: the points are first converted at the Fall pair
+  rate (`conversion_pair(source, abyssal).conversion_multiplier`) and valued at the Abyssal
+  `burn_value`. With no Fall pair authored the burn is refused (`BURN_NO_FALL_RATE`, "No Fall
+  rate is set up for burning that resonance."). Corruption for the fallen points accrues on the
+  burned resonance at the Abyssal coefficient times `CorruptionConfig.hasty_fall_multiplier`
+  (integer tenths, default 20 = 2.0x), even when the burned resonance's own affinity (Celestial)
+  has coefficient 0. It does not move to a mapped Abyssal resonance. Every other pairing burns
+  raw.
+- **Corruption.** `_build_resonance_involvements` counts the active combat pulls and the
+  non-combat cast pull plus burned points (`ResonanceInvolvement.add_burn`,
+  `hasty_fall_points`), which also closes a gap: a non-combat pull's resonance spend never
+  reached corruption before. A pull on a resonance outside the gift's set still involves that
+  resonance. Celestial's coefficient 0 means no corruption.
+- **Engagement share.** After every cast whose strain bonus is above 0 (anima-only strain
+  included), `_share_strain_with_engagement` adds
+  `StrainConfig.engagement_share_percent` (default 50) of the bonus, floored, to
+  `CharacterEngagement.intensity_modifier`. Out of an engagement nothing is added. #4738 reuses
+  it.
+- **One burn per declared action.** A combat burn is resolved, valued and debited at
+  declaration (`commit_combat_pull` -> `_resolve_combat_burn`), stored on `CombatPull`
+  (`resonance_burned`, `burn_valued_points`, `burn_strain_units`, `burn_hasty_fall`, `burned_for`
+  = `PullBurnAction` CAST or CLASH) and read back at resolution without re-valuing. Only the
+  action it was declared with (`use_technique(combat_burn_for=)`) gets its strain units and burn
+  corruption, so a focused cast plus a clash contribution in one round is strained once; the
+  engagement share follows it once. The pull's own cost still counts toward corruption for every
+  cast in the round, as before. A non-combat cast resolves the burn inside `use_technique`,
+  after the Soulfray gate; a pending (consent-gated) scene cast stores it on
+  `SceneActionPullDeclaration.burn`.
+- **Refusals.** No strain check type designated: `ResonanceBurnUnavailable` /
+  `BURN_UNAVAILABLE` (a pending cast refused at accept time degrades to the pull-fizzle path).
+  Bad web value (non-integer, bool, negative, above `MAX_RESONANCE_BURN` = 2**31-1):
+  `BURN_INVALID` / `ResonanceBurnInvalid`, "A burn must be a whole number of resonance, 0 or
+  more." Balance below cost plus burn: `spend_resonance_for_pull(burn=)` refuses under the same
+  lock and debits nothing. A web focused pull with a Soulfray warning and no
+  `confirm_soulfray_risk` is refused (`PULL_NEEDS_SOULFRAY_CONSENT`) before anything is charged;
+  telnet instead holds the declaration for `accept soulfray`.
+- **Telling her.** `announce_burn` sends, on commit, "You burn {reached} of {requested}
+  {Resonance} resonance." (a hasty fall adds "; it falls at the pair rate to {valued}.").
+- **Surfaces.** Telnet `cast` and `clash` take `burn=<n>`, valid only beside `pull=`. Web combat
+  dispatch takes `pull_burn` beside `pull_resonance_id` / `pull_tier` / `pull_thread_ids`
+  (`_parse_pull_burn` in `world/combat/pull_helpers.py`). Web scene cast
+  `POST /api/action-requests/cast/` takes `pull.burn` (`CastPullWithBurnRequestSerializer`); the
+  social action endpoint takes none. The pull preview (`POST /api/magic/thread-pull-preview/`)
+  takes an optional `technique_id` and returns `burn` = `{ceiling, strain_units_per_point,
+  hasty_fall, available}` (null without a technique); `ceiling` is already capped by the balance
+  left after the pull's cost, and `available` is False when no strain check is designated or the
+  hasty fall has no Fall pair. The frontend `PullBurnInput` (`ThreadPullDialog`, the scene
+  cast panel) renders only when the preview's burn is available.
+- **Authored numbers.** `StrainConfig.burn_per_intensity`, `engagement_share_percent`,
+  `strain_check_type`, `strain_check_difficulty`; `StrainBurnReach` rows; `Affinity.burn_value`;
+  `CorruptionConfig.hasty_fall_multiplier`. Migrations 0314 (fields, `CombatPull` burn columns)
+  and 0315 (`SceneActionPullDeclaration.burn`).
+- **Web combat fix.** `CombatRoundContext._record_combat_declaration` used to drop the web
+  declaration card's `pull_*` kwargs, so a pull declared from the web focused cast was never
+  committed (only the telnet registry path and clash committed pulls). It now commits the
+  focused slot's pull, with its burn, through `_commit_focused_pull`.
+
+Journeys: `src/integration_tests/test_resonance_strain_journeys.py`.
+
 ### Target-Aware Pulls — Court Regard Modulation (#1831 — ADR-0086) [BUILT & WIRED]
 
 Thread pulls are **target-aware**: the live target the pull's action is directed at

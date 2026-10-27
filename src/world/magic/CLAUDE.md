@@ -26,6 +26,13 @@ The magic system for Arx II. Power flows from identity and connection.
   `resolve_pull_from_kwargs`. Non-combat cast uses `request_technique_cast(cast_pull=…)`.
   Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) — read-only,
   unchanged.
+- **Burning resonance (#4736)**: a pull may also burn resonance as a Strain option
+  (`services/burn.py`: `resolve_resonance_burn`, `value_burn`, `preview_burn`). The burn rides the
+  pull and is debited with it in `spend_resonance_for_pull(burn=)`; a combat burn is resolved and
+  valued at declaration, stored on `CombatPull`, and strains only the action it was declared with
+  (`use_technique(combat_burn_for=)`). A hasty fall (Abyssal acting aura burning another affinity)
+  converts at the Fall pair rate and corrupts at `CorruptionConfig.hasty_fall_multiplier`.
+  `docs/systems/magic.md` "Burning Resonance as a Strain Option" has the full flow.
 - **ThreadWeaving**: Acquisition layer. `ThreadWeavingUnlock` is the authored
   catalog (per anchor scope); `CharacterThreadWeavingUnlock` is the per-character
   purchase record; `ThreadWeavingTeachingOffer` is the teacher-facing offer
