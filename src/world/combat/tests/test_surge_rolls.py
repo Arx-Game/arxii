@@ -25,6 +25,7 @@ from world.combat.surge_rolls import (
 )
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.conditions.types import ApplyConditionResult
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
@@ -210,6 +211,38 @@ class EffectTests(SurgeRollTestCase):
         beat = self._surge(self.partial, intensity_scale=0.37)
         self.assertEqual(beat.amount, 4)
         self.assertEqual(self._engagement().intensity_modifier, 4)
+
+    def test_scale_rounds_ties_up(self) -> None:
+        for intensity, expected in ((1, 1), (3, 2), (5, 3), (7, 4)):
+            with self.subTest(intensity=intensity):
+                DramaticSurgeRecord.objects.all().delete()
+                self.tuning.bands.all().delete()
+                self._band(self.partial, intensity)
+                beat = self._surge(self.partial, intensity_scale=0.5)
+                self.assertEqual(beat.amount, expected)
+
+    def test_resisted_condition_is_not_claimed(self) -> None:
+        goaded = ConditionTemplateFactory(name="Surge Goaded Resisted")
+        self._band(self.fail, 2, condition=goaded)
+        refused = ApplyConditionResult(success=False, instance=None, message="resisted")
+        with (
+            patch("world.conditions.services.apply_condition", return_value=refused),
+            patch.object(self.character, "msg") as own_msg,
+        ):
+            beat = self._surge(self.fail)
+        self.assertEqual(beat.condition_name, "")
+        self.assertNotIn("Goaded", own_msg.call_args.args[0])
+        self.assertEqual(self._engagement().intensity_modifier, 2)
+
+    def test_condition_failure_rolls_the_surge_back(self) -> None:
+        goaded = ConditionTemplateFactory(name="Surge Goaded Raises")
+        self._band(self.fail, 2, condition=goaded)
+        with (
+            patch("world.conditions.services.apply_condition", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            self._surge(self.fail)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
 
 class NarrationTests(SurgeRollTestCase):

@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 import logging
+import math
 from typing import TYPE_CHECKING
+
+from django.db import transaction
 
 from world.combat.constants import SurgeTriggerKind
 from world.combat.escalation import apply_dramatic_surge
@@ -120,7 +123,9 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     ``repeat_round`` set to the encounter's round: a later round surges again, the same
     round and subject surges once. ``intensity_scale`` scales the band's intensity (a
     hurt ally's depth, say). A band's condition is applied to the participant's character
-    when the surge was written, with ``source_character`` as its source.
+    when the surge was written, with ``source_character`` as its source; the roll line and
+    the beat name it only if it actually applied. The surge and the condition are written
+    in one transaction.
 
     The roll line goes to the surged player's character only; the room still gets just
     the generic narration ``apply_dramatic_surge`` sends.
@@ -138,33 +143,39 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         logger.warning("SurgeTuning %s has no band for the roll outcome; no surge.", trigger_kind)
         return None
 
-    amount = round(band.intensity * intensity_scale)
-    beat = apply_dramatic_surge(
-        encounter=encounter,
-        participant=participant,
-        amount=amount,
-        trigger_kind=trigger_kind,
-        subject_sheet=subject_sheet,
-        outcome=outcome,
-        potency=potency,
-        control_change=band.control_change,
-        repeat_round=encounter.round_number,
-    )
-    if beat is None:
-        return None
-
+    # Half-up, not round(): banker's rounding turns an intensity-1 band at half scale to 0.
+    amount = math.floor(band.intensity * intensity_scale + 0.5)
     character = participant.character_sheet.character
     condition_name = ""
-    if band.condition is not None:
-        from world.conditions.services import apply_condition  # noqa: PLC0415
-
-        apply_condition(
-            character,
-            band.condition,
-            source_character=source_character,
-            source_description="Surge roll",
+    # One transaction: if applying the condition raises, the surge record rolls back too,
+    # so a retry is not swallowed by the dedup with the condition lost.
+    with transaction.atomic():
+        beat = apply_dramatic_surge(
+            encounter=encounter,
+            participant=participant,
+            amount=amount,
+            trigger_kind=trigger_kind,
+            subject_sheet=subject_sheet,
+            outcome=outcome,
+            potency=potency,
+            control_change=band.control_change,
+            repeat_round=encounter.round_number,
         )
-        condition_name = band.condition.name
+        if beat is None:
+            return None
+        if band.condition is not None:
+            from world.conditions.services import apply_condition  # noqa: PLC0415
+
+            applied = apply_condition(
+                character,
+                band.condition,
+                source_character=source_character,
+                source_description="Surge roll",
+            )
+            # A trigger can cancel it, a resist can turn it away, another condition can
+            # prevent it; only name it when an instance exists.
+            if applied.success and applied.instance is not None:
+                condition_name = band.condition.name
     character.msg(
         _roll_line(
             check_type=tuning.check_type,
