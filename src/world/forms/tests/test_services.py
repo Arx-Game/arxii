@@ -761,6 +761,7 @@ class RevertAlternateSelfTests(TestCase):
 
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = None
         with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
             with self.assertRaises(RevertBlockedError):
                 revert_alternate_self(self.sheet)
@@ -773,6 +774,7 @@ class RevertAlternateSelfTests(TestCase):
 
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = None
         with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
             active = assume_alternate_self(self.sheet, alt_self)
 

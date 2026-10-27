@@ -85,6 +85,7 @@ from world.combat.serializers import (
     RemoveParticipantSerializer,
     RoundActionSerializer,
     RoundComboSerializer,
+    TauntTargetSerializer,
     ThreatPoolSerializer,
     UpgradeComboSerializer,
     UseItemSerializer,
@@ -1346,11 +1347,13 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(request=TauntTargetSerializer, responses=EncounterDetailSerializer)
     @action(detail=True, methods=[HTTPMethod.POST])
     def taunt(self, request: Request, pk: int | None = None) -> Response:
-        """Declare a taunting maneuver against an opponent (#2015).
+        """Declare a taunting maneuver against an opponent or an ally (#2015, #4737).
 
-        Requires ``opponent_id`` — the PK of the active opponent to taunt.
+        Requires exactly one of ``opponent_id`` (an active opponent, drawing its aggro)
+        or ``participant_id`` (an active ally, goaded into a rolled surge).
         """
         encounter = self.get_object()
         participant = self._get_participant(request, encounter)
@@ -1359,14 +1362,20 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        serializer = OpponentTargetSerializer(data=request.data)
+        serializer = TauntTargetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         opponent_id = serializer.validated_data.get("opponent_id")
-        get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+        ally_id = serializer.validated_data.get("participant_id")
+        if ally_id is not None:
+            ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
+            action_kwargs: dict = {"ally_participant_id": ally.pk}
+        else:
+            get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+            action_kwargs = {"opponent_id": opponent_id}
         result = self._dispatch_combat_action(
             participant.character_sheet.character,
             "combat_taunt",
-            {"opponent_id": opponent_id},
+            action_kwargs,
         )
         if not self._action_succeeded(result):
             return Response(

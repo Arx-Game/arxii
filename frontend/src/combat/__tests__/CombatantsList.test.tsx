@@ -571,6 +571,27 @@ describe('CombatantsList', () => {
       void label;
     });
 
+    it('pins the component-to-dispatch contract: taunting an opponent sends opponent_id only', async () => {
+      const user = userEvent.setup();
+      const encounter = makeEncounter(
+        [makeParticipant({ id: 1, character_sheet_id: 7 })],
+        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+      );
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await user.click(await screen.findByTestId('opponent-combat_taunt-10'));
+
+      expect(mockManeuverMutateAsync).toHaveBeenCalledTimes(1);
+      expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+        registryKey: 'combat_taunt',
+        kwargs: { opponent_id: 10 },
+      });
+    });
+
     it('shows a toast (not a crash) when a maneuver dispatch fails', async () => {
       const user = userEvent.setup();
       mockManeuverMutateAsync.mockResolvedValueOnce({
@@ -940,5 +961,64 @@ describe('opponent morale state chips (#4147)', () => {
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
 
     expect(screen.queryByTestId('morale-state-chip')).toBeNull();
+  });
+});
+
+describe('ally taunt menu', () => {
+  const aerande = makeParticipant({ id: 1, character_sheet_id: 7, character_name: 'Aerande' });
+  const kira = makeParticipant({ id: 2, character_sheet_id: 8, character_name: 'Kira' });
+
+  it('pins the component-to-dispatch contract: taunting an ally sends the ally participant id only', async () => {
+    const user = userEvent.setup();
+    const encounter = makeEncounter([aerande, kira], [makeOpponent({ id: 10 })]);
+
+    render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('participant-menu-trigger-2'));
+    await user.click(await screen.findByTestId('participant-combat_taunt-2'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_taunt',
+      kwargs: { ally_participant_id: 2 },
+    });
+  });
+
+  it('offers no menu on the viewer, on an inactive ally, or without maneuver rights', () => {
+    const fled = makeParticipant({ id: 3, character_sheet_id: 9, status: 'fled' });
+    const encounter = makeEncounter([aerande, kira, fled], []);
+
+    const { rerender } = render(
+      <CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByTestId('participant-menu-trigger-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('participant-menu-trigger-3')).not.toBeInTheDocument();
+    expect(screen.getByTestId('participant-menu-trigger-2')).toBeInTheDocument();
+
+    rerender(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={false} />);
+    expect(screen.queryByTestId('participant-menu-trigger-2')).not.toBeInTheDocument();
+  });
+
+  it('shows a toast when the ally taunt is refused', async () => {
+    const user = userEvent.setup();
+    mockManeuverMutateAsync.mockResolvedValueOnce({
+      success: false,
+      message: 'Cannot taunt yourself.',
+    });
+    const encounter = makeEncounter([aerande, kira], []);
+
+    render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('participant-menu-trigger-2'));
+    await user.click(await screen.findByTestId('participant-combat_taunt-2'));
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith('Cannot taunt yourself.');
+    });
   });
 });

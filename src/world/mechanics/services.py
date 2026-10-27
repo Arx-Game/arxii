@@ -919,6 +919,26 @@ def _facet_effect_contribution(
 # =============================================================================
 
 
+def _carries_gear_stat(item: ItemInstance, target: ModifierTarget) -> bool:
+    """Whether a worn item is gear that carries ``target``'s mundane stat (#4757).
+
+    weapon_damage and armor_soak blend the role bonus per carrying item: a weapon for
+    weapon damage, armor for soak. A ring or cloak carries neither, so it adds no role
+    bonus; counting it repeated the bonus once per worn item. Other targets have no gear
+    stat and keep the per-item walk unchanged.
+    """
+    from world.items.constants import (  # noqa: PLC0415
+        ARMOR_SOAK_TARGET_NAME,
+        WEAPON_DAMAGE_TARGET_NAME,
+    )
+
+    if target.name == WEAPON_DAMAGE_TARGET_NAME:
+        return item.template.base_weapon_damage > 0
+    if target.name == ARMOR_SOAK_TARGET_NAME:
+        return item.template.base_armor_soak > 0
+    return True
+
+
 def covenant_role_bonus(
     sheet: object, target: ModifierTarget, level_override: int | None = None
 ) -> int:
@@ -972,6 +992,8 @@ def covenant_role_bonus(
         role_bonus = role_base_bonus_for_target(role, target, character_level)
         for equipped in char.equipped_items:
             item = equipped.item_instance
+            if not _carries_gear_stat(item, target):
+                continue  # a ring or cloak adds no weapon damage or soak: no repeat (#4757)
             gear_stat = item_mundane_stat_for_target(item, target)
             archetype = item.template.gear_archetype
             if is_gear_compatible(role, archetype):

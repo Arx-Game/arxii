@@ -45,6 +45,7 @@ from world.combat.models import (
     DuelChallenge,
     EscalationCurve,
     PendingSelection,
+    SurgeTuning,
     SustainedAction,
     ThreatPool,
 )
@@ -62,6 +63,8 @@ from world.standoffs.services.gm_view import build_gm_standoff_view, build_stand
 from world.standoffs.services.view import build_standoff_view
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.combat.types import ComboSlotFill
@@ -1333,6 +1336,86 @@ class CompanionOrderSummarySerializer(serializers.Serializer):
     defending_participant_id = serializers.IntegerField(allow_null=True)
 
 
+class SurgeBeatSerializer(serializers.Serializer):
+    """Shape of one dramatic-surge beat in a round payload (#2013, #4737); read-only.
+
+    Everyone gets ``id`` and ``narration``. The rest appear only for the surged
+    participant's owner, GMs and staff, and the roll fields only for a rolled surge.
+    """
+
+    id = serializers.IntegerField()
+    narration = serializers.CharField()
+    trigger_kind = serializers.CharField(required=False)
+    amount = serializers.IntegerField(required=False)
+    participant = serializers.IntegerField(required=False)
+    outcome = serializers.CharField(required=False, help_text="Name of the roll's outcome.")
+    potency = serializers.IntegerField(
+        required=False, allow_null=True, help_text="What the roll was made against, if anything."
+    )
+    control_change = serializers.IntegerField(required=False)
+    condition = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Name of the condition the surge actually applied.",
+    )
+    roll = serializers.CharField(
+        required=False,
+        help_text="The roll caption the surged player was shown, e.g. "
+        "'Composure check vs taunt potency 14 · Partial · Intensity +5'.",
+    )
+    cause = serializers.CharField(
+        required=False,
+        help_text="What caused the surge, e.g. 'Mira taunts Tomas.'. Only the surged player, "
+        "GMs and staff get it; everyone else reads the generic narration.",
+    )
+
+
+def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict[str, Any]]:
+    """The roll fields of each rolled surge record, keyed by record pk (#4737).
+
+    A record with no ``outcome`` (a kind that is not rolled) has no entry. The outcome,
+    potency, control change, amount and the condition the surge applied all come from the
+    record, so a later retune of the band changes none of them. The ``roll`` line is the
+    shared ``roll_line`` over those and the check type name of the surge tuning authored for
+    the record's kind; with that tuning gone there is no ``roll``. One query however many
+    records, none when no record is rolled.
+    """
+    from world.combat.surge_rolls import roll_line  # noqa: PLC0415
+
+    rolled = [record for record in records if record.outcome is not None]
+    if not rolled:
+        return {}
+    tunings = {
+        tuning.trigger_kind: tuning
+        for tuning in SurgeTuning.objects.select_related("check_type").filter(
+            trigger_kind__in={record.trigger_kind for record in rolled}
+        )
+    }
+    fields: dict[int, dict[str, Any]] = {}
+    for record in rolled:
+        outcome = record.outcome
+        condition_name = record.condition.name if record.condition is not None else None
+        entry: dict[str, Any] = {
+            "outcome": outcome.name,
+            "potency": record.potency,
+            "control_change": record.control_change,
+            "condition": condition_name,
+        }
+        tuning = tunings.get(record.trigger_kind)
+        if tuning is not None:
+            entry["roll"] = roll_line(
+                check_type=tuning.check_type,
+                trigger_kind=record.trigger_kind,
+                potency=record.potency,
+                outcome=outcome,
+                amount=record.amount,
+                control_change=record.control_change,
+                condition_name=condition_name or "",
+            )
+        fields[record.pk] = entry
+    return fields
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -1688,25 +1771,40 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         )
         return RoundActionSerializer(own_actions, many=True).data  # type: ignore[return-value]
 
+    @extend_schema_field(SurgeBeatSerializer(many=True))
     def get_surge_beats(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return this round's dramatic-surge beats (#2013).
 
         Every viewer sees the generic ``narration`` line (never names the
-        bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
+        bond/track/subject — the leak rule). ``trigger_kind``/``amount`` and, when the
+        surge stored one, the ``cause`` line (who taunted or rallied, or the wound) are
         added only for the surging participant's own owner, GMs, and staff —
-        mirrors ``get_current_round_actions``'s covenant-scoped pattern.
+        mirrors ``get_current_round_actions``'s covenant-scoped pattern. A rolled surge
+        (#4737) adds the same way ``outcome``, ``potency``, ``control_change``,
+        ``condition`` and the ready-made ``roll`` line; a beat of a kind that is not rolled
+        carries none of them. A surge that was never announced to the room (it added no
+        intensity) has an empty ``narration`` and is left out for everyone but those same
+        viewers.
         """
         request = self.context.get("request")
-        records = DramaticSurgeRecord.objects.filter(
-            encounter=obj,
-            round_number=obj.round_number,
-        ).select_related("participant__character_sheet__character", "encounter__escalation_curve")
+        records = list(
+            DramaticSurgeRecord.objects.filter(
+                encounter=obj,
+                round_number=obj.round_number,
+            ).select_related(
+                "participant__character_sheet__character",
+                "encounter__escalation_curve",
+                "outcome",
+                "condition",
+            )
+        )
 
         is_gm_or_staff = self.context.get("is_gm", False) or (
             request is not None and request.user.is_staff
         )
         viewer_character_ids = self.context.get("viewer_character_ids", set())
 
+        rolls = _surge_roll_fields(records)
         beats: list[dict[str, Any]] = []
         for record in records:
             beat: dict[str, Any] = {
@@ -1714,10 +1812,18 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "narration": self._render_surge_beat_narration(record),
             }
             character_id = record.participant.character_sheet.character_id
-            if is_gm_or_staff or character_id in viewer_character_ids:
+            sees_detail = is_gm_or_staff or character_id in viewer_character_ids
+            if not sees_detail and not beat["narration"]:
+                # Nothing was announced to the room (a control-only or condition-only
+                # surge), so a bystander has no beat to show.
+                continue
+            if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind
                 beat["amount"] = record.amount
                 beat["participant"] = record.participant_id
+                beat.update(rolls.get(record.pk, {}))
+                if record.cause:
+                    beat["cause"] = record.cause
             beats.append(beat)
         return beats
 
@@ -1727,13 +1833,15 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         The record itself stores only trigger_kind/amount/subject (audit
         data) — narration is derived at read time from the encounter's
-        current curve, same as the live broadcast at write time.
+        current curve, same as the live broadcast at write time. A record that
+        added no intensity (a control-only or condition-only surge) was never
+        announced, so it renders nothing.
         """
         from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
 
         curve = record.encounter.escalation_curve
         character_name = record.participant.character_sheet.character.db_key
-        if curve is None:
+        if curve is None or record.amount == 0:
             return ""
         return _render_surge_narration(curve, character_name)
 
@@ -2133,6 +2241,27 @@ class OpponentTargetSerializer(serializers.Serializer):
     """
 
     opponent_id = serializers.IntegerField(min_value=1)
+
+
+class TauntTargetSerializer(serializers.Serializer):
+    """Write serializer for declaring a taunt (#2015, #4737).
+
+    Name exactly one target: ``opponent_id`` (a ``CombatOpponent``, draws its aggro) or
+    ``participant_id`` (a ``CombatParticipant``, goads that player character into a rolled
+    surge). Encounter membership is checked in the view (``get_object_or_404``) and in
+    ``declare_taunt``.
+    """
+
+    opponent_id = serializers.IntegerField(min_value=1, required=False)
+    participant_id = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        has_opponent = attrs.get("opponent_id") is not None
+        has_participant = attrs.get("participant_id") is not None
+        if has_opponent == has_participant:
+            msg = "Name exactly one target to taunt: an opponent or a participant."
+            raise serializers.ValidationError(msg)
+        return attrs
 
 
 class PhaseSpecSerializer(serializers.Serializer):

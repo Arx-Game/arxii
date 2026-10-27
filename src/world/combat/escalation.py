@@ -10,6 +10,7 @@ cast pipeline — this module only writes engagement process modifiers.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     )
     from world.combat.types import PerformCheckFn
     from world.companions.models import Companion
+    from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +199,7 @@ ESCALATION_SPIKE_TRIGGER_NAMES = (
     "escalation_spike_on_incapacitated",
     "escalation_spike_on_killed",
     "escalation_spike_on_mortal_peril",
+    "escalation_spike_on_damage",
 )
 
 
@@ -284,6 +287,12 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     subject_opponent: CombatOpponent | None = None,
     subject_phase_number: int | None = None,
     subject_companion: Companion | None = None,
+    outcome: CheckOutcome | None = None,
+    potency: int | None = None,
+    control_change: int = 0,
+    repeat_round: int | None = None,
+    narrate: bool = True,
+    cause: str = "",
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -307,6 +316,14 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     A companion fall (#3575) passes ``subject_companion`` and dedups on
     (encounter, participant, trigger_kind, subject_companion).
+
+    A rolled surge (#4737) passes ``repeat_round`` (the encounter's round), so the same
+    kind and subject can surge again in a later round while the same round still dedups.
+    ``outcome`` and ``potency`` are the roll that picked the amount, kept on the record;
+    ``control_change`` is added to the engagement's control modifier in the same save.
+    ``narrate=False`` skips the room line (a surge whose intensity scaled to 0 would
+    announce a power surge that added none). ``cause`` is stored on the record for the
+    surged player, GMs and staff to read (#4737); it is never broadcast.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -324,7 +341,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     if engagement is None:
         return None
 
-    _record, created = DramaticSurgeRecord.objects.get_or_create(
+    record, created = DramaticSurgeRecord.objects.get_or_create(
         encounter=encounter,
         participant=participant,
         trigger_kind=trigger_kind,
@@ -332,21 +349,32 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         subject_opponent=subject_opponent,
         subject_phase_number=subject_phase_number,
         subject_companion=subject_companion,
+        repeat_round=repeat_round,
         defaults={
             "amount": amount,
             "round_number": encounter.round_number,
             "reason": reason,
+            "outcome": outcome,
+            "potency": potency,
+            "control_change": control_change,
+            "cause": cause,
         },
     )
     if not created:
         return None
 
     engagement.intensity_modifier += amount
-    engagement.save(update_fields=["intensity_modifier"])
+    updated_fields = ["intensity_modifier"]
+    if control_change:
+        engagement.control_modifier += control_change
+        updated_fields.append("control_modifier")
+    engagement.save(update_fields=updated_fields)
 
     curve = encounter.escalation_curve
     character_name = participant.character_sheet.character.db_key
-    narration = _render_surge_narration(curve, character_name) if curve is not None else ""
+    narration = (
+        _render_surge_narration(curve, character_name) if curve is not None and narrate else ""
+    )
     room = encounter.room
     if room is not None and narration:
         room.msg_contents(narration)
@@ -357,6 +385,10 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         amount=amount,
         narration=narration,
         round_number=encounter.round_number,
+        outcome_name=outcome.name if outcome is not None else "",
+        potency=potency,
+        control_change=control_change,
+        record_id=record.pk,
     )
 
 
@@ -534,6 +566,189 @@ def peril_spike_handler(*, payload: Any) -> None:
     if room is None:
         return
     apply_peril_escalation_spike(victim_character=payload.target, room=room)
+
+
+def _hurt_ally_rollers(
+    encounter: CombatEncounter,
+    victim_sheet: CharacterSheet,
+) -> list[tuple[CombatParticipant, int]]:
+    """The participants who roll for a hurt ``victim_sheet`` this round, with bond depth (#4737).
+
+    Four queries for the whole encounter whatever its size: its active participants, their
+    qualifying bonds to the victim, the surge rows already written this round, and the
+    COMBAT engagements sourced to this encounter. A participant rolls only when they have a
+    qualifying bond (the peril-leg rule), have not surged for this victim this round, and
+    have the engagement ``apply_dramatic_surge`` needs, so a roll that could not surge never
+    spends a contributing condition.
+    """
+    from world.combat.models import (  # noqa: PLC0415
+        CombatEncounter as _CombatEncounter,
+        CombatParticipant,
+        DramaticSurgeRecord,
+    )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        .exclude(character_sheet=victim_sheet)
+        .select_related("character_sheet__character")
+    )
+    if not participants:
+        return []
+    depth_by_sheet: dict[int, int] = {}
+    bonds = (
+        CharacterRelationship.objects.filter(
+            source__in=[p.character_sheet for p in participants],
+            target=victim_sheet,
+            is_active=True,
+            labels__ended_at__isnull=True,
+            labels__type__fuels_escalation_spikes=True,
+        )
+        .annotate(_depth=F("scene_depth") + F("invested_depth"))
+        .filter(_depth__gte=encounter.escalation_curve.spike_minimum_track_points)
+        .values_list("source_id", "_depth")
+    )
+    for source_id, depth in bonds:
+        depth_by_sheet[source_id] = max(depth, depth_by_sheet.get(source_id, 0))
+    candidates = [p for p in participants if p.character_sheet_id in depth_by_sheet]
+    if not candidates:
+        return []
+    # Must mirror apply_dramatic_surge's dedup key (encounter, participant, kind,
+    # subject_sheet, repeat_round); a row here means this hit would be swallowed there.
+    surged = set(
+        DramaticSurgeRecord.objects.filter(
+            encounter=encounter,
+            trigger_kind=SurgeTriggerKind.ALLY_HURT,
+            repeat_round=encounter.round_number,
+            subject_sheet=victim_sheet,
+        ).values_list("participant_id", flat=True)
+    )
+    engaged = set(
+        CharacterEngagement.objects.filter(
+            character__in=[p.character_sheet for p in candidates],
+            engagement_type=EngagementType.COMBAT,
+            source_content_type=ContentType.objects.get_for_model(_CombatEncounter),
+            source_id=encounter.pk,
+        ).values_list("character_id", flat=True)
+    )
+    return [
+        (p, depth_by_sheet[p.character_sheet_id])
+        for p in candidates
+        if p.pk not in surged and p.character_sheet_id in engaged
+    ]
+
+
+def apply_ally_hurt_surge(
+    *,
+    victim_character: ObjectDB,  # noqa: OBJECTDB_PARAM - payload carries ObjectDB
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - emit location is the room ObjectDB
+    damage: int,
+    max_health: int,
+) -> None:
+    """Roll a rolled surge for each bonded co-combatant of a hurt ally (#4737).
+
+    Qualification mirrors ``apply_peril_escalation_spike`` (an open relationship label of a
+    ``fuels_escalation_spikes`` type, depth at or above the curve's
+    ``spike_minimum_track_points``, never the victim). Each qualifying player character
+    rolls the authored ``ALLY_HURT`` check against a difficulty of
+    ``potency_base + potency_per_depth * depth``; the band the outcome picks is scaled by
+    the wound (``damage / max_health``, at most 1) and written through ``apply_rolled_surge``.
+    Dedup is per round per ally in the surge record, so a second hit on the same ally in
+    the same round does nothing, and the roll is skipped when that row already exists or the
+    participant has no COMBAT engagement sourced to the encounter (``_hurt_ally_rollers``).
+
+    DAMAGE_APPLIED fires on every hit, so the cheap exits (no damage, no sheet, no live
+    escalating encounter, no tuning) all come before any per-participant query, and the
+    tuning is read quietly (a row staff have not authored yet is not a per-hit log line). An
+    exception from the surge write is not caught: it is atomic and a swallowed failure
+    would leave the cached engagement stale.
+    """
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.combat.surge_rolls import (  # noqa: PLC0415
+        apply_rolled_surge,
+        surge_roll_for_participant,
+        surge_tuning_for,
+    )
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    if damage <= 0 or max_health <= 0:
+        return
+    victim_sheet = victim_character.character_sheet
+    if victim_sheet is None:
+        return
+    encounters = list(
+        CombatEncounter.objects.filter(room=room, escalation_curve__isnull=False)
+        .exclude(status=RoundStatus.COMPLETED)
+        .select_related("escalation_curve")
+    )
+    if not encounters:
+        return
+    # Quiet: an unauthored row is not worth a log line on every hit.
+    tuning = surge_tuning_for(SurgeTriggerKind.ALLY_HURT, warn=False)
+    if tuning is None:
+        return
+    wound = min(1.0, damage / max_health)
+    # Half up, at most 100: the percent of their health the ally lost, in the cause line.
+    percent = min(100, math.floor(wound * 100 + 0.5))
+    ally_name = persona_names_for_sheets([victim_sheet.pk]).get(
+        victim_sheet.pk, victim_character.key
+    )
+
+    for encounter in encounters:
+        rollers = _hurt_ally_rollers(encounter, victim_sheet)
+        # One persona lookup for the surged players of this encounter (never a query each).
+        surged_names = persona_names_for_sheets(p.character_sheet_id for p, _ in rollers)
+        for participant, depth in rollers:
+            surged_name = surged_names.get(
+                participant.character_sheet_id, participant.character_sheet.character.key
+            )
+            cause = f"{ally_name}, bonded to {surged_name}, loses {percent}% of their health."
+            potency = tuning.potency_base + tuning.potency_per_depth * depth
+            result = surge_roll_for_participant(participant, tuning.check_type, potency)
+            apply_rolled_surge(
+                encounter=encounter,
+                participant=participant,
+                trigger_kind=SurgeTriggerKind.ALLY_HURT,
+                outcome=result.outcome,
+                potency=potency,
+                subject_sheet=victim_sheet,
+                intensity_scale=wound,
+                tuning=tuning,
+                cause=cause,
+            )
+
+
+def ally_hurt_spike_handler(*, payload: Any) -> None:
+    """Flow-callable subscriber for DAMAGE_APPLIED (#4737).
+
+    The wound is the damage actually dealt this hit (``amount_dealt``) against the
+    victim's ``CharacterVitals.max_health``. Exits before any vitals read when nothing
+    was dealt or the victim is nowhere.
+    """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    if payload.amount_dealt <= 0:
+        return
+    victim = payload.target
+    room = victim.location
+    sheet = victim.character_sheet
+    if room is None or sheet is None:
+        return
+    max_health = (
+        CharacterVitals.objects.filter(character_sheet=sheet)
+        .values_list("max_health", flat=True)
+        .first()
+    )
+    if not max_health:
+        return
+    apply_ally_hurt_surge(
+        victim_character=victim,
+        room=room,
+        damage=payload.amount_dealt,
+        max_health=max_health,
+    )
 
 
 def _maybe_surge_hated_foe(

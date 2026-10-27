@@ -1467,8 +1467,11 @@ class CharacterSheet(SharedMemoryModel):
         A benign shift (bird-to-fly) has no alters_behavior conditions, so this
         stays True and the form is self-revertible anytime.
         """
+        # A condition decayed to severity 0 carries resolved_at and no longer holds the
+        # character (#4752). The handler's active list has no resolved gate, so skip here.
         return not any(
-            inst.condition.category.alters_behavior for inst in self.character.conditions.active()
+            inst.condition.category.alters_behavior and inst.resolved_at is None
+            for inst in self.character.conditions.active()
         )
 
     def display_ic(self) -> str:

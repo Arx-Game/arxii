@@ -1177,6 +1177,76 @@ class TestRiskCalibrationsProbe(TestCase):
         self.assertEqual(result.missing, (RenownRisk.EXTREME,))
 
 
+class TestSurgeTuningProbe(TestCase):
+    """`surge-tuning` (#4737): a row with bands per rolled surge kind, and band sets that obey
+    the better-roll-never-pays-less rule."""
+
+    @staticmethod
+    def _author(kind: str, *, with_band: bool = True):
+        from world.combat.factories import SurgeDegreeBandFactory, SurgeTuningFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        tuning = SurgeTuningFactory(trigger_kind=kind)
+        if with_band:
+            outcome = CheckOutcomeFactory(name=f"Probe Outcome {kind}", success_level=0)
+            SurgeDegreeBandFactory(tuning=tuning, outcome=outcome, intensity=3)
+        return tuning
+
+    def test_missing_every_rolled_kind_with_no_rows(self) -> None:
+        result = rc._probe_surge_tuning()
+        self.assertFalse(result.present)
+        self.assertEqual(len(result.missing), 3)
+        self.assertTrue(all(line.startswith("SurgeTuning for ") for line in result.missing))
+
+    def test_present_when_every_rolled_kind_has_a_sane_tuning_with_bands(self) -> None:
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS
+
+        for kind in ROLLED_SURGE_TRIGGER_KINDS:
+            self._author(kind)
+        result = rc._probe_surge_tuning()
+        self.assertTrue(result.present, result.detail)
+        self.assertEqual(result.missing, ())
+
+    def test_reports_only_the_kind_without_a_row(self) -> None:
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
+
+        for kind in ROLLED_SURGE_TRIGGER_KINDS:
+            if kind != SurgeTriggerKind.RALLIED:
+                self._author(kind)
+        result = rc._probe_surge_tuning()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("SurgeTuning for Rallied",))
+
+    def test_reports_a_tuning_with_no_bands_naming_its_kind(self) -> None:
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
+
+        for kind in ROLLED_SURGE_TRIGGER_KINDS:
+            self._author(kind, with_band=kind != SurgeTriggerKind.ALLY_HURT)
+        result = rc._probe_surge_tuning()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("SurgeTuning for Ally Hurt has no bands",))
+
+    def test_reports_a_band_set_where_a_better_roll_pays_less(self) -> None:
+        from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
+        from world.combat.factories import SurgeDegreeBandFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        tunings = {kind: self._author(kind, with_band=False) for kind in ROLLED_SURGE_TRIGGER_KINDS}
+        for kind in ROLLED_SURGE_TRIGGER_KINDS:
+            if kind != SurgeTriggerKind.TAUNT_RECEIVED:
+                outcome = CheckOutcomeFactory(name=f"Probe Plain {kind}", success_level=0)
+                SurgeDegreeBandFactory(tuning=tunings[kind], outcome=outcome, intensity=3)
+        worse = CheckOutcomeFactory(name="Probe Worse", success_level=-1)
+        better = CheckOutcomeFactory(name="Probe Better", success_level=2)
+        tuning = tunings[SurgeTriggerKind.TAUNT_RECEIVED]
+        SurgeDegreeBandFactory(tuning=tuning, outcome=worse, intensity=5)
+        SurgeDegreeBandFactory(tuning=tuning, outcome=better, intensity=1)
+        result = rc._probe_surge_tuning()
+        self.assertFalse(result.present)
+        self.assertEqual(len(result.missing), 1)
+        self.assertIn("Probe Better", result.missing[0])
+
+
 class TestPathMajorGiftUltimatesProbe(TestCase):
     def test_major_gift_grant_without_ultimate_is_missing(self) -> None:
         from web.admin.tuning.required_content import _probe_path_major_gift_ultimates
