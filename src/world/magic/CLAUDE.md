@@ -1704,12 +1704,20 @@ Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/ma
 **Drift and Resonance Conflict (#4732):** `services/drift.py` holds `drift_for(sheet)` (weighted
 off-aura balance against `acting_aura(sheet).dominant_affinity`, via
 `AffinityInteraction.conflict_weight`) and `check_resonance_focus(character, technique, *,
-cast_pull=None)`, called once per cast from `_complete_technique_cast` inside `use_technique`
-(after anima, before `resolve_fn` gathers modifiers), so every cast path rolls it; a pull is
-part of its cast. On technique-enhanced social actions modifiers are gathered before
-`use_technique`, so the penalty counts from her next roll; the joust is not a cast. Every number and both designations (focus check type, conflict condition) are on the
-`DriftConfig` singleton (`get_drift_config()`); unset designations skip the check and show on the
-Required content dashboard. The penalty is the conflict condition's authored
+pulled_resonance=None)`, called once per cast from `_complete_technique_cast` inside
+`use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
+part of its cast. The pulled resonance is the cast's own `cast_pull`, else the
+`use_technique(pulled_resonance=...)` the combat round resolver and clash pass from the round's
+committed pull; nothing else reads combat pulls. Scene casts, combat casts, clash
+contributions and standoffs gather modifiers inside `resolve_fn` (scene casts after the
+PRE_CAST triggers too), so the conflict counts on the same roll. Technique-enhanced social
+actions gather modifiers before `use_technique`, so the penalty counts from her next roll;
+battles roll focus but their roll reads no condition modifiers (pre-existing,
+`BattleTechniqueResolver`); the joust is not a cast. Every number and both designations
+(focus check type, conflict condition) are on the `DriftConfig` singleton
+(`get_drift_config()`); unset designations skip the check and show on the Required content
+dashboard, which also flags a conflict condition with `break_free_mode` NONE or no
+`ConditionCheckModifier`. The penalty is the conflict condition's authored
 `ConditionCheckModifier`; never set `alters_behavior` for it (use `ConditionCategory.self_shakeable`).
 Stirring it up is an authored social action applying the condition at a severity (the higher wins), not code.
 

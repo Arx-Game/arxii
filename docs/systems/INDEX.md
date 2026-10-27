@@ -83,7 +83,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   work in the worn self's affinity. See magic.md.
 - **Drift and Resonance Conflict (#4732):** `DriftConfig` (singleton, `get_drift_config()`),
   `AffinityInteraction.conflict_weight`, `drift_for(sheet)`, and `check_resonance_focus` (once per
-  cast, inside `use_technique`'s `_complete_technique_cast`, so every cast path rolls it); the conflict condition is authored and
+  cast, inside `use_technique`'s `_complete_technique_cast`, so every cast path rolls it; the combat
+  round and clash name their committed pull through `use_technique(pulled_resonance=...)`, read by
+  `world/combat/pull_helpers.py` `round_pull_resonance`); the conflict condition is authored and
   `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
