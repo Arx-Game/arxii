@@ -10,7 +10,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0313_set_physical_damage_type"),
+        ("arxii", "0318_audere_control_and_soulfray_anima_zero"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

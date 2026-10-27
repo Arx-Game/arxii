@@ -26,6 +26,16 @@ import type { PendingAudereOffer } from '@/magic/types';
 /** Accessible name for the offer when the server's authored title or strip label is blank. */
 export const AUDERE_OFFER_FALLBACK_NAME = 'Audere offer';
 
+/**
+ * The system line telling the player their control lowered the Soulfray stage the
+ * offer needed (#4740). Mirrors the telnet `accept` listing's `control_lowered_line`.
+ */
+function controlLoweredLine(stagesLowered: number): string {
+  if (stagesLowered <= 0) return '';
+  const amount = stagesLowered === 1 ? 'one Soulfray stage' : `${stagesLowered} Soulfray stages`;
+  return `Your control lets you break through ${amount} earlier than usual.`;
+}
+
 interface AudereOfferDialogProps {
   offer: PendingAudereOffer;
   open: boolean;
@@ -46,6 +56,7 @@ export function AudereOfferDialog({
   isPending,
   errorMessage = null,
 }: AudereOfferDialogProps) {
+  const controlLine = controlLoweredLine(offer.stages_lowered_by_control);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="border-fuchsia-500/60 shadow-[0_0_60px_-12px] shadow-fuchsia-500/50">
@@ -64,6 +75,12 @@ export function AudereOfferDialog({
             ) : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
+
+        {controlLine ? (
+          <p data-testid="audere-control-line" className="text-sm italic text-fuchsia-200">
+            {controlLine}
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-950/20 p-3 text-sm">
           <div>

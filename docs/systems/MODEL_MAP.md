@@ -1733,6 +1733,7 @@
   - aura <- magic.CharacterAura
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - drift_conversion_offers <- magic.DriftConversionOffer
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
   - sceneentryendorsement_given <- magic.SceneEntryEndorsement
@@ -2009,6 +2010,7 @@
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
+  - surge_tunings <- combat.SurgeTuning
   - professions <- currency.Profession
   - dream_peril_configs <- dreams.DreamPerilConfig
   - situation_fits <- gm.CheckTypeSituationFit
@@ -2680,6 +2682,8 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_opponent -> combat.CombatOpponent [FK] (nullable)
   - subject_companion -> companions.Companion [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**
@@ -2784,6 +2788,18 @@
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
+### SurgeDegreeBand
+**Foreign Keys:**
+  - tuning -> combat.SurgeTuning [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - condition -> conditions.ConditionTemplate [FK] (nullable)
+
+### SurgeTuning
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - bands <- combat.SurgeDegreeBand
+
 ### SustainedAction
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
@@ -2865,7 +2881,7 @@
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
-- `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
+- `declare_taunt(participant: 'CombatParticipant', target: 'CombatOpponent | CombatParticipant') -> 'CombatRoundAction' - Declare a taunting maneuver, auto-ready (#2015, #4737).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
 - `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
@@ -5828,6 +5844,28 @@
   - conflict_condition -> conditions.ConditionTemplate [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
+### DriftConversionCap
+**Foreign Keys:**
+  - offer -> magic.DriftConversionOffer [FK]
+  - target_resonance -> magic.Resonance [FK]
+  - grants -> magic.ResonanceGrant [M2M]
+
+### DriftConversionOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK]
+**Pointed to by:**
+  - caps <- magic.DriftConversionCap
+
+### DriftCorrectionConfig
+**Foreign Keys:**
+  - rite -> magic.Ritual [FK] (nullable)
+  - check_type -> checks.CheckType [FK] (nullable)
+
+### DriftCorrectionOutcomeShare
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### EffectType
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -6145,6 +6183,7 @@
   - character_resonances <- magic.CharacterResonance
   - crossing_options <- magic.CrossingOption
   - dramatic_moment_types <- magic.DramaticMomentType
+  - drift_conversion_caps <- magic.DriftConversionCap
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
@@ -6217,6 +6256,7 @@
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
 **Pointed to by:**
+  - drift_conversion_caps <- magic.DriftConversionCap
   - pledge_credit <- worship.PledgeCredit
 
 ### ResonanceTier
@@ -6397,6 +6437,7 @@
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
   - condition -> conditions.ConditionTemplate [FK] (nullable)
+  - anima_zero_stage -> conditions.ConditionStage [FK] (nullable)
 
 ### StandingCapBand
 
@@ -6809,7 +6850,7 @@
 - `technique_skill_term(character: 'ObjectDB', technique: 'Technique') -> 'ExtraTraitTerm | None' - The technique skill as a roll term for ``character``, or None.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, pulled_resonance: 'Resonance | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -9138,6 +9179,7 @@
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - feedings <- magic.FeedingRecord
   - dramatic_moment_tags <- magic.DramaticMomentTag
+  - drift_conversion_offers <- magic.DriftConversionOffer
   - entry_endorsements <- magic.SceneEntryEndorsement
   - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
@@ -11084,6 +11126,7 @@
   - arxii_gangturfreputationaward <- societies.GangTurfReputationAward
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - arxii_driftcorrectionoutcomeshare <- magic.DriftCorrectionOutcomeShare
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward

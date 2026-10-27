@@ -390,7 +390,11 @@ class IntensityTier(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     control_modifier = models.IntegerField(
         default=0,
-        help_text="Modifier to control rolls at this intensity.",
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Control this tier adds to a cast at this intensity. It can only add "
+            "control: higher intensity never costs control (#4727 decision 5)."
+        ),
     )
     description = models.TextField(
         blank=True,

@@ -273,7 +273,12 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         super().save(*args, **kwargs)
 
     def finish_scene(self) -> None:
-        """Mark the scene as finished and stop recording new messages"""
+        """Mark the scene as finished and stop recording new messages.
+
+        Also runs the finish side effects every route needs: the power ledger purge, Very
+        Attracted clearing, scene depth credit, NPC loans ending, and the drift conversion
+        offers the scene's deeds opened lapsing (#4733).
+        """
         if not self.is_finished:
             self.date_finished = timezone.now()
             self.is_active = False
@@ -302,6 +307,12 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             from world.roster.services.npc_lending import end_scene_loans  # noqa: PLC0415
 
             end_scene_loans(self)
+
+            # #4733: the drift conversion offers a scene's deeds opened lapse with it, on
+            # every route that finishes it (the GM's finish, an event's completion).
+            from world.magic.services.drift import lapse_conversion_offers  # noqa: PLC0415
+
+            lapse_conversion_offers(self)
 
 
 class SceneClock(SharedMemoryModel):

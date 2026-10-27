@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import ModifierBreakdown, PendingResolution
+    from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
     from world.scenes.models import Interaction
 
 
@@ -132,10 +132,32 @@ def _resolve_social_check(
 ) -> int:
     """Roll a social-combat check and return the success_level (#2015).
 
+    A thin wrapper over ``roll_social_check``; see it for the modifier handling.
+    """
+    result = roll_social_check(
+        participant,
+        check_type,
+        target_difficulty,
+        target=target,
+        extra_contributions=extra_contributions,
+    )
+    return result.success_level or 0
+
+
+def roll_social_check(
+    participant: CombatParticipant,
+    check_type: CheckType,
+    target_difficulty: int,
+    target: CharacterSheet | None = None,
+    extra_contributions: list[ModifierContribution] | None = None,
+) -> CheckResult:
+    """Roll a social-combat check and return the whole ``CheckResult`` (#2015, #4737).
+
     Routes modifiers through ``collect_check_modifiers`` (the same seam combat uses),
     folding in ``extra_contributions`` (the actor-side terms from
     ``social_target_difficulty``), then ``perform_check``. Returns
-    ``check_result.success_level``.
+    the ``CheckResult`` (``_resolve_social_check`` keeps only its success_level; the
+    surge roll (#4737) also needs the outcome).
 
     ``target`` (#2536 Task 6 fold-in fix, extended to Parley on review): the
     acting participant's declared opponent, when this social action has one
@@ -176,4 +198,4 @@ def _resolve_social_check(
         situation_ctx=situation_ctx,
     )
     spend_contributing_conditions(breakdown)
-    return result.success_level or 0
+    return result

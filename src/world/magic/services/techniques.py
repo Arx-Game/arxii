@@ -1339,7 +1339,11 @@ def _complete_technique_cast(  # noqa: PLR0913
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
-    maybe_create_audere_offer(character, stats.intensity, sheet=sheet)
+    # stats.control is the control as cast, after any Fury penalty: high control lets the
+    # offer open at an earlier Soulfray stage (#4740).
+    maybe_create_audere_offer(
+        character, stats.intensity, runtime_control=stats.control, sheet=sheet
+    )
     from world.magic.audere_majora import maybe_create_audere_majora_offer  # noqa: PLC0415
 
     maybe_create_audere_majora_offer(character, stats.intensity, sheet=sheet)

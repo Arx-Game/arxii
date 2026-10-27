@@ -1088,6 +1088,7 @@ class CharacterSheet(SharedMemoryModel):
     # test/NPC sheets outside the roster flow.
     roster_entry_or_none = ReverseOneToOneOrNone("roster_entry")
     vitals_or_none = ReverseOneToOneOrNone("vitals")
+    aura_or_none = ReverseOneToOneOrNone("aura")
     fatigue_or_none = ReverseOneToOneOrNone("fatigue")
     active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
@@ -1466,8 +1467,11 @@ class CharacterSheet(SharedMemoryModel):
         A benign shift (bird-to-fly) has no alters_behavior conditions, so this
         stays True and the form is self-revertible anytime.
         """
+        # A condition decayed to severity 0 carries resolved_at and no longer holds the
+        # character (#4752). The handler's active list has no resolved gate, so skip here.
         return not any(
-            inst.condition.category.alters_behavior for inst in self.character.conditions.active()
+            inst.condition.category.alters_behavior and inst.resolved_at is None
+            for inst in self.character.conditions.active()
         )
 
     def display_ic(self) -> str:

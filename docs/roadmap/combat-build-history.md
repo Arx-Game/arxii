@@ -371,6 +371,39 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   `DramaticSurgeRecord` gained `subject_opponent`/`subject_phase_number` and a third
   partial unique constraint - a boss beat dedups per boss per phase, not once per
   encounter (ADR-0250).
+- **Rolled surges (#4737, slice 1 of #4727) - DONE:** taunts, encouragement and a hurt
+  bonded ally raise a player character's intensity through a roll with degrees instead of
+  a fixed curve amount. New trigger kinds `TAUNT_RECEIVED`, `RALLIED`, `ALLY_HURT`; staff
+  author a `SurgeTuning` per kind and a `SurgeDegreeBand` per roll outcome (intensity,
+  control change, optional condition), validated as a set so a better outcome never gives a
+  lower beneficial number (`surge_bands.py`, model `clean`, admin inline formset). The new
+  service `world/combat/surge_rolls.py` rolls, picks the band and writes through
+  `apply_dramatic_surge`. Sources: a player character's taunt of another sets the target's
+  difficulty from the taunter's check rating for the Taunt check type (no dice, nothing
+  spent; an owner call of 2026-10-27) and the target rolls Composure against it; an NPC
+  taunt entry (`ThreatPoolEntry.taunt_potency`, per pool entry, no damage) supplies the
+  potency and never rolls, one per player character per round; Rally rolls the tuning's
+  check at the fixed rally difficulty and surges the ally by its outcome; a hurt bonded ally
+  surges its bonded
+  co-combatants through the new `escalation_spike_on_damage` room trigger, scaled by the
+  wound. `DramaticSurgeRecord` gained `outcome`, `potency`, `control_change`, `condition`,
+  `cause` and `repeat_round`; a rolled kind surges once per round per subject, the older kinds stay
+  once per encounter (ADR-4737). Surfaces: `TauntAction` and REST `taunt` take an ally,
+  telnet `combat taunt <opponent or ally>`, the surged player's character is sent a roll
+  caption, `surge_beats` carries the roll fields and the cause line for the surged player's
+  owner, GMs and staff, and the web round log shows them in the demo's card shape with an
+  ally taunt in the Combatants row menu and a "Taunting" badge in Your Turn.
+  Migrations 0314 and 0315. Owner rulings: Rally is the only encouragement verb built
+  (implore and challenge are not); the surge is `Inspired`'s effect; Goaded on a player
+  character is an authored debuff condition on a degree band, not a targeting lock; no
+  Pressure card. Journeys: `integration_tests/test_surge_rolls_journeys.py` and
+  `test_taunt_targets_journeys.py`. All three rolled surges are inert until staff author a
+  `SurgeTuning` per kind with bands (the Required content `surge-tuning` probe reports what
+  is missing); the hurt-ally surge also needs the staff-authored flow and trigger definition
+  rows (`wire_escalation_content` invents them only under `SEED_SAMPLE_CONTENT`; owner call:
+  no data migration). A band that scales to nothing with no control change or condition
+  writes nothing. The remaining slices of #4727 (strain and steeling, emotional conditions and vows, the Audere
+  control step) are not built.
 - **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
   `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
   endpoints (`/api/magic/audere/`) and the combat-panel ceremony dialog (auto-opens on

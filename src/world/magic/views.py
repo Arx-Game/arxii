@@ -14,7 +14,7 @@ from dataclasses import asdict
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch, Q, QuerySet
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -126,6 +126,10 @@ from world.magic.serializers import (
     DissolveSerializer,
     DramaticMomentTagSerializer,
     DramaticMomentTypeSerializer,
+    DriftConversionOfferSerializer,
+    DriftCorrectionConvertSerializer,
+    DriftCorrectionDeclineSerializer,
+    DriftCorrectionResultSerializer,
     EffectTypeSerializer,
     EntryFlourishRespondSerializer,
     EntryFlourishResultSerializer,
@@ -2193,6 +2197,132 @@ class EntryFlourishRespondView(APIView):
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         entry_result = result.data["entry_flourish_result"]
         return Response(EntryFlourishResultSerializer(entry_result).data)
+
+
+# =============================================================================
+# Drift correction REST surface (#4733, slice 4 of #4672)
+# =============================================================================
+
+
+class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of open drift conversion offers (#4733).
+
+    GET /api/magic/drift-correction/pending/
+    GET /api/magic/drift-correction/pending/{id}/
+
+    Scoped to the authenticated user's character sheets (active tenures), and to offers
+    whose scene has not finished, the same rule telnet's ``drift`` uses. A finish route
+    that skips ``Scene.finish_scene`` can leave an offer row behind; it is never listed.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        return DriftConversionOfferSerializer
+
+    def get_serializer_context(self) -> dict:
+        """Add ``rite_ready``, worked out once for the request, not once per offer."""
+        from world.magic.services.drift_correction import rite_is_ready  # noqa: PLC0415
+
+        return {**super().get_serializer_context(), "rite_ready": rite_is_ready()}
+
+    def get_queryset(self) -> QuerySet:
+        from world.magic.models import DriftConversionOffer  # noqa: PLC0415
+
+        return _account_scoped_offer_queryset(
+            DriftConversionOffer, self.request.user, "character_sheet", "scene"
+        ).filter(scene__is_active=True, scene__date_finished__isnull=True)
+
+
+def _plain_detail(errors: object) -> str:
+    """Every message in DRF validation ``errors``, field names dropped, joined by spaces."""
+    if isinstance(errors, dict):
+        parts = [_plain_detail(value) for value in errors.values()]
+    elif isinstance(errors, list):
+        parts = [_plain_detail(value) for value in errors]
+    else:
+        return str(errors)
+    return " ".join(part for part in parts if part)
+
+
+class DriftCorrectionConvertView(APIView):
+    """Perform the drift correction rite under an open offer (#4733).
+
+    POST /api/magic/drift-correction/convert/
+    Body: {offer_id, source_resonance_id, target_resonance_id, amount, component_ids}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=DriftCorrectionConvertSerializer,
+        responses={200: DriftCorrectionResultSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        """Dispatch the rite through its action (telnet + web converge)."""
+        from actions.definitions.drift_correction import (  # noqa: PLC0415
+            PerformDriftCorrectionAction,
+        )
+
+        serializer = DriftCorrectionConvertSerializer(
+            data=request.data, context={"request": request}
+        )
+        if not serializer.is_valid():
+            # The same {detail} shape an action refusal has: the player reads the sentence,
+            # never the request field it came from.
+            return Response(
+                {"detail": _plain_detail(serializer.errors)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        data = serializer.validated_data
+        offer = data["offer"]
+        result = PerformDriftCorrectionAction().run(
+            actor=offer.character_sheet.character,
+            offer=offer,
+            source_resonance=data["source_resonance"],
+            target_resonance=data["target_resonance"],
+            amount=data["amount"],
+            components_provided=data["components"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            DriftCorrectionResultSerializer(result.data["drift_correction_result"]).data
+        )
+
+
+class DriftCorrectionDeclineView(APIView):
+    """Let an open drift conversion offer go (#4733).
+
+    POST /api/magic/drift-correction/decline/  {offer_id}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=DriftCorrectionDeclineSerializer,
+        responses={
+            200: inline_serializer("DriftCorrectionDeclined", {"detail": serializers.CharField()})
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Dispatch the decline through its action."""
+        from actions.definitions.drift_correction import (  # noqa: PLC0415
+            DeclineDriftCorrectionAction,
+        )
+
+        serializer = DriftCorrectionDeclineSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        offer = serializer.validated_data["offer"]
+        result = DeclineDriftCorrectionAction().run(
+            actor=offer.character_sheet.character, offer=offer
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message})
 
 
 # =============================================================================

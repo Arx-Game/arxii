@@ -420,6 +420,26 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     return _assemble_hit_line(head, tail, suffix)
 
 
+def render_taunt_narration(
+    *,
+    actor_label: str,
+    target_label: str | None,
+    hit_text: str = "",
+) -> str:
+    """One plain outcome line for an NPC taunt entry (#4737).
+
+    A taunt deals no damage, so the damage-shaped sentence ("misses", "strikes for N")
+    does not fit it. The entry's authored ``hit_narration`` fills in ``{actor}`` and
+    ``{target}`` when it has one; otherwise the line is "<actor> taunts <target>." It
+    never says how the target's roll went: the room gets only the generic surge line.
+    """
+    if hit_text and target_label is not None:
+        return fill_narration_placeholders(hit_text, actor=actor_label, target=target_label)
+    if target_label is None:
+        return f"{actor_label} taunts."
+    return f"{actor_label} taunts {target_label}."
+
+
 def render_unattributed_action_narration(
     *,
     target_label: str | None,

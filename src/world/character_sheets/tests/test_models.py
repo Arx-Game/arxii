@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 import pytest
 
 from world.character_sheets.factories import (
@@ -19,7 +20,12 @@ from world.character_sheets.factories import (
 )
 from world.character_sheets.models import CharacterSheet, MoodOption
 from world.classes.factories import CharacterClassLevelFactory
-from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.conditions.services import get_effective_capability_value
 from world.mechanics.factories import ObjectPropertyFactory, PropertyFactory
 
@@ -272,14 +278,46 @@ class InControlPropertyTests(TestCase):
     def test_in_control_false_with_alters_behavior_condition(self):
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = None
         with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
             self.assertIs(self.sheet.in_control, False)
+
+    def test_in_control_true_once_alters_behavior_condition_is_resolved(self):
+        """A rally that decays the condition to severity 0 sets resolved_at (#4752)."""
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = True
+        fake_condition.resolved_at = timezone.now()
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            self.assertIs(self.sheet.in_control, True)
 
     def test_in_control_true_when_only_non_altering_conditions(self):
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = False
         with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
             self.assertIs(self.sheet.in_control, True)
+
+
+class InControlRealConditionTests(TestCase):
+    """in_control against real condition rows, not mocks (#4752)."""
+
+    def setUp(self):
+        CharacterSheet.flush_instance_cache()
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        category = ConditionCategoryFactory(alters_behavior=True)
+        self.template = ConditionTemplateFactory(category=category)
+
+    def test_unresolved_altering_condition_takes_control(self):
+        ConditionInstanceFactory(target=self.character, condition=self.template)
+        self.character.conditions.invalidate()
+        self.assertIs(self.sheet.in_control, False)
+
+    def test_resolved_altering_condition_returns_control(self):
+        ConditionInstanceFactory(
+            target=self.character, condition=self.template, resolved_at=timezone.now()
+        )
+        self.character.conditions.invalidate()
+        self.assertIs(self.sheet.in_control, True)
 
 
 class CachedAchievementsHeldTests(TestCase):

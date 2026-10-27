@@ -1142,6 +1142,38 @@ def _probe_check_types_weight_no_magic_skill() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
 
 
+def _probe_intensity_tiers_never_lower_control() -> ProbeResult:
+    """No intensity tier lowers control (#4740, #4727 decision 5).
+
+    Consumer: `world/magic/services/techniques.py` `_get_intensity_tier_control_modifier`,
+    which adds the tier's `control_modifier` to every cast's runtime control. Control is
+    never a penalty for casting harder, so a negative value is an authoring error. The
+    field refuses one in admin; this lists rows written before that rule or past the form.
+    Each row is `tier: value`; the link opens the admin list filtered to those tiers.
+    """
+    from urllib.parse import urlencode  # noqa: PLC0415
+
+    from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+    from world.magic.models import IntensityTier  # noqa: PLC0415
+
+    rows = list(
+        IntensityTier.objects.filter(control_modifier__lt=0)
+        .order_by("threshold")
+        .values_list("pk", "name", "control_modifier")
+    )
+    if not rows:
+        return ProbeResult(present=True)
+    missing = tuple(f"{name}: {value}" for _pk, name, value in rows)
+    changelist = admin_changelist_url("IntensityTier")
+    link = None
+    if changelist:
+        link = f"{changelist}?{urlencode({'id__in': ','.join(str(pk) for pk, _n, _v in rows)})}"
+    detail = (
+        f"{len(missing)} intensity tier(s) lower control; set each control modifier to 0 or more."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
 _ULTIMATE_COPY_FIELDS = (
     "reveal_framing_text",
     "deferred_death_text",
@@ -1416,6 +1448,46 @@ def _probe_soulfray_death_risk() -> ProbeResult:
         detail="No Soulfray stage's pool holds a consequence marked Can kill.",
         admin_url=link,
     )
+
+
+def _probe_drift_correction_config() -> ProbeResult:
+    """The drift correction rite has a rite, a check type, and a share for every tier (#4733).
+
+    Consumer: `world/magic/services/drift_correction.py perform_drift_correction_rite()`.
+    It refuses with "not set up yet" unless `rite_is_ready()`: `DriftCorrectionConfig.rite`
+    and `.check_type` set and a `DriftCorrectionOutcomeShare` row for every `CheckOutcome`
+    (`outcome_tiers_without_a_share()` empty), since the roll can land on any of them. The
+    probe reads the same conditions, through the same tier query.
+    """
+    from world.magic.models import DriftCorrectionConfig  # noqa: PLC0415
+    from world.magic.services.drift_correction import (  # noqa: PLC0415
+        outcome_tiers_without_a_share,
+    )
+
+    config = DriftCorrectionConfig.objects.cached_singleton()
+    # (the label the panel lists as missing, the bare noun the detail sentence uses)
+    gaps: list[tuple[str, str]] = []
+    if config is None or config.rite_id is None:
+        gaps.append(("the rite", "rite"))
+    if config is None or config.check_type_id is None:
+        gaps.append(("the check type", "check type"))
+    if gaps:
+        nouns = " and no ".join(noun for _label, noun in gaps)
+        return ProbeResult(
+            present=False,
+            missing=tuple(label for label, _noun in gaps),
+            detail=f"The drift correction configuration has no {nouns}.",
+        )
+    missing = tuple(
+        outcome_tiers_without_a_share().order_by("success_level").values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No drift correction share for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
 
 
 def _probe_standoff_cause_glosses() -> ProbeResult:
@@ -1810,6 +1882,38 @@ def _probe_risk_calibrations() -> ProbeResult:
         else ""
     )
     return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_surge_tuning() -> ProbeResult:
+    """Every rolled surge kind has a `SurgeTuning` row, and every stored band set is sane (#4737).
+
+    Consumer: `world/combat/surge_rolls.py` (`surge_tuning_for`, `apply_rolled_surge`). A kind
+    with no row never surges, so a taunt, a rally or a hurt ally does nothing to engagement
+    intensity; a band set where a better outcome gives less than a worse one (`SurgeDegreeBand`
+    stored through a path that skipped the admin form's check) is reported by line. A tuning
+    with no bands never surges (`band_for_outcome` finds nothing), so it is reported too.
+    """
+    from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.models import SurgeTuning  # noqa: PLC0415
+    from world.combat.surge_bands import check_stored_surge_bands  # noqa: PLC0415
+
+    authored = set(SurgeTuning.objects.values_list("trigger_kind", flat=True))
+    missing = [
+        f"SurgeTuning for {SurgeTriggerKind(kind).label}"
+        for kind in ROLLED_SURGE_TRIGGER_KINDS
+        if kind not in authored
+    ]
+    bandless = set(
+        SurgeTuning.objects.filter(bands__isnull=True).values_list("trigger_kind", flat=True)
+    )
+    missing.extend(
+        f"SurgeTuning for {SurgeTriggerKind(kind).label} has no bands"
+        for kind in ROLLED_SURGE_TRIGGER_KINDS
+        if kind in bandless
+    )
+    missing.extend(check_stored_surge_bands())
+    detail = f"Rolled surge content to fix: {'; '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=tuple(missing), detail=detail)
 
 
 def _declarations() -> tuple[ContentDependency, ...]:
@@ -2798,6 +2902,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_soulfray_death_risk),
         ),
         ContentDependency(
+            key="drift-correction-config",
+            label="Drift correction rite, check and outcome shares",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/drift_correction.py rite_is_ready(), "
+                "perform_drift_correction_rite()"
+            ),
+            consequence=(
+                "A deed still opens a conversion offer and tells the player, but telnet "
+                "drift, the web dialog and the rite say 'not set up yet' while the rite, "
+                "the check type or any outcome tier's share is missing; nothing is consumed "
+                "or converted until staff author them."
+            ),
+            probe=CustomProbe(fn=_probe_drift_correction_config),
+            admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
             key="stakes-escalation-curves",
             label="Stakes escalation curves",
             tier=DependencyTier.REQUIRED,
@@ -2920,6 +3041,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_capability_bridges),
         ),
         # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
+        ContentDependency(
+            key="surge-tuning",
+            label="Rolled surge tuning",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/surge_rolls.py surge_tuning_for(), apply_rolled_surge()",
+            consequence=(
+                "A taunt, a rally or a hurt bonded ally with no tuning row raises nobody's "
+                "intensity, and a band set where a better roll gives less than a worse one "
+                "pays a better roll less."
+            ),
+            probe=CustomProbe(fn=_probe_surge_tuning),
+            admin_model="SurgeTuning",
+        ),
         ContentDependency(
             key="audere-ultimate-copy",
             label="Audere reveal labels and lines",
@@ -3214,6 +3348,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error, so players believe the offer failed for no reason."
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
+        ),
+        ContentDependency(
+            key="intensity-tiers-never-lower-control",
+            label="Intensity tiers never lower control",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/techniques.py _get_intensity_tier_control_modifier() "
+                "(every cast's runtime control)"
+            ),
+            consequence=(
+                "Casting at that intensity costs the caster control: more anima spent, more "
+                "mishaps, and a later Audere offer, the opposite of what intensity should do."
+            ),
+            probe=CustomProbe(fn=_probe_intensity_tiers_never_lower_control),
+            admin_model="IntensityTier",
         ),
         ContentDependency(
             key="typeclassed-accounts",

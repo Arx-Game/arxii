@@ -7,6 +7,7 @@ fallback prose keyed on (resonance, target_kind).
 """
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from core.descriptors import ReverseOneToOneOrNone
@@ -255,7 +256,26 @@ class RitualComponentRequirement(SharedMemoryModel):
         help_text=(
             "Touchstone mode: any attuned item whose tied_resonance matches the "
             "performer's own claimed Resonance, at or above this tier, satisfies "
-            "this requirement. Exactly one of item_template/min_touchstone_tier is set."
+            "this requirement. Exactly one of item_template, min_touchstone_tier or "
+            "matches_target_resonance is set."
+        ),
+    )
+    matches_target_resonance = models.BooleanField(
+        default=False,
+        help_text=(
+            "Target-resonance mode: the requirement is met by any one of three routes, an "
+            "item tied to the resonance the performer is converting toward, an item with a "
+            "motif facet tied to that resonance, or an item at or over the min_item_meaning "
+            "bar. Exclusive with item_template and min_touchstone_tier."
+        ),
+    )
+    min_item_meaning = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Target-resonance mode only: the meaning bar for the item-meaning route. "
+            "Blank turns that route off; 0 is not allowed, since it would admit every item."
         ),
     )
     quantity = models.PositiveSmallIntegerField(default=1)
@@ -275,18 +295,38 @@ class RitualComponentRequirement(SharedMemoryModel):
                     (
                         models.Q(item_template__isnull=False)
                         & models.Q(min_touchstone_tier__isnull=True)
+                        & models.Q(matches_target_resonance=False)
                     )
                     | (
                         models.Q(item_template__isnull=True)
                         & models.Q(min_touchstone_tier__isnull=False)
+                        & models.Q(matches_target_resonance=False)
+                    )
+                    | (
+                        models.Q(item_template__isnull=True)
+                        & models.Q(min_touchstone_tier__isnull=True)
+                        & models.Q(matches_target_resonance=True)
                     )
                 ),
                 name="ritualcomponentrequirement_exactly_one_mode",
             ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(min_item_meaning__isnull=True)
+                    | models.Q(matches_target_resonance=True)
+                ),
+                name="ritualcomponentrequirement_min_item_meaning_needs_target_mode",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"
+        if self.matches_target_resonance:
+            needed = f"{self.quantity}x item tied to the target resonance"
+        elif self.min_touchstone_tier_id is not None:
+            needed = f"{self.quantity}x touchstone of tier {self.min_touchstone_tier_id}"
+        else:
+            needed = f"{self.quantity}x {self.item_template_id}"
+        return f"{self.ritual.name} needs {needed}"
 
 
 class PendingRitualEffect(SharedMemoryModel):

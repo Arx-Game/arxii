@@ -73,7 +73,19 @@ def _nonlethal_bounded_advance(
     proceeds with ``bounded_severity``. When no death-risk stage exists the advance is
     returned unchanged.
     """
-    ceiling = nonlethal_severity_ceiling()
+    return _bounded_advance(severity_to_add, soulfray_instance, nonlethal_severity_ceiling())
+
+
+def _bounded_advance(
+    severity_to_add: int,
+    soulfray_instance: object | None,
+    ceiling: int | None,
+) -> tuple[int, SoulfrayResult | None]:
+    """Bound a severity advance so the cumulative severity stays at or below ``ceiling``.
+
+    The shared shape behind the non-lethal cap and the anima-0 cap (#4740); see
+    ``_nonlethal_bounded_advance`` for the return contract. ``None`` = no cap.
+    """
     if ceiling is None:
         return severity_to_add, None
     existing = soulfray_instance.severity if soulfray_instance is not None else 0
@@ -264,15 +276,21 @@ def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:
     return max(candidates, key=lambda t: t.min_deficit).consequence_pool
 
 
-def _handle_soulfray_accumulation(
+def _handle_soulfray_accumulation(  # noqa: PLR0913
     *,
     character: ObjectDB,
     soulfray_severity: int,
     soulfray_config: SoulfrayConfig,
     technique_check_result: CheckResult | None,
     lethal: bool = True,
+    anima_current: int = 0,
 ) -> SoulfrayResult:
-    """Handle Soulfray severity accumulation, stage advancement, and consequence pool."""
+    """Handle Soulfray severity accumulation, stage advancement, and consequence pool.
+
+    ``anima_current`` is her anima after this cast's deduction. While it is above 0,
+    the cumulative severity stays below ``SoulfrayConfig.anima_zero_stage`` (#4740);
+    the default 0 applies no such cap.
+    """
     from world.conditions.models import (  # noqa: PLC0415
         ConditionInstance,
         ConditionTemplate,
@@ -300,9 +318,15 @@ def _handle_soulfray_accumulation(
     # Non-lethal: bound the CUMULATIVE severity below the first death-risk stage so a
     # non-lethal cast can never advance into (or past) a stage that can kill. The
     # per-cast severity clamp alone is insufficient because advancement accumulates.
+    # Anima-0 stage (#4740): while she has anima left, the cumulative severity also
+    # stays below the authored anima-0 stage. The lower of the two caps wins.
+    ceilings = [soulfray_config.anima_zero_ceiling(anima_current)]
     if not lethal:
-        soulfray_severity, short_circuit = _nonlethal_bounded_advance(
-            soulfray_severity, soulfray_instance
+        ceilings.append(nonlethal_severity_ceiling())
+    set_ceilings = [ceiling for ceiling in ceilings if ceiling is not None]
+    if set_ceilings:
+        soulfray_severity, short_circuit = _bounded_advance(
+            soulfray_severity, soulfray_instance, min(set_ceilings)
         )
         if short_circuit is not None:
             return short_circuit
@@ -388,6 +412,7 @@ def accumulate_soulfray(  # noqa: PLR0913
         soulfray_config=soulfray_config,
         technique_check_result=check_result,
         lethal=lethal,
+        anima_current=anima.current,
     )
     if result.reveal is not None and not defer_reveal:
         reveal = result.reveal

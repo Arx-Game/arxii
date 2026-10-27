@@ -45,6 +45,13 @@ class AudereThreshold(SharedMemoryModel):
         on_delete=models.PROTECT,
         help_text="Soulfray must be at this stage or higher.",
     )
+    control_per_stage_earlier = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Each this much runtime control lowers the Soulfray stage the Audere offer "
+            "needs by one, never below the first stage. 0 turns this off."
+        ),
+    )
     check_level_bonus = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -175,6 +182,13 @@ class PendingAudereOffer(AbstractPendingOffer):
         on_delete=models.CASCADE,
         related_name="audere_offers",
     )
+    fired_control = models.IntegerField(
+        default=0,
+        help_text=(
+            "Runtime control of the cast that opened the gate, so the re-check on "
+            "accept asks for the same Soulfray stage the cast did (#4740)."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -212,8 +226,72 @@ def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -
     return runtime_intensity >= minimum_tier_threshold
 
 
+def _control_lowered_stage(threshold: AudereThreshold, runtime_control: int) -> tuple[int, int]:
+    """The Soulfray ``stage_order`` this cast's Audere offer needs, and how many stages
+    control lowered it (#4740, decision 6).
+
+    Each full ``control_per_stage_earlier`` of runtime control steps the threshold's
+    ``minimum_warp_stage`` back one stage on the actual Soulfray ladder (stage orders
+    need not be contiguous), never below the first stage. A step of 0 turns this off,
+    and negative control lowers nothing. The ladder is read only when control actually
+    lowers the requirement (one query).
+    """
+    from world.magic.services.soulfray import soulfray_stages
+
+    authored = threshold.minimum_warp_stage.stage_order
+    step = threshold.control_per_stage_earlier
+    if not step or runtime_control <= 0:
+        return authored, 0
+    steps_earlier = runtime_control // step
+    if not steps_earlier:
+        return authored, 0
+    orders = list(
+        soulfray_stages().filter(stage_order__lte=authored).values_list("stage_order", flat=True)
+    )
+    if not orders:
+        return authored, 0
+    authored_index = len(orders) - 1
+    index = max(0, authored_index - steps_earlier)
+    return orders[index], authored_index - index
+
+
+def required_stage_order(threshold: AudereThreshold, runtime_control: int) -> int:
+    """The Soulfray ``stage_order`` this cast's Audere offer needs (#4740, decision 6).
+
+    See ``_control_lowered_stage``: control steps the authored stage back along the
+    Soulfray ladder, one stage per full ``control_per_stage_earlier``, never below the
+    first stage.
+    """
+    return _control_lowered_stage(threshold, runtime_control)[0]
+
+
+def stages_lowered_by_control(threshold: AudereThreshold, runtime_control: int) -> int:
+    """How many Soulfray stages ``runtime_control`` took off the offer's requirement.
+
+    0 when control lowered nothing. The offer surfaces tell the player about it.
+    """
+    return _control_lowered_stage(threshold, runtime_control)[1]
+
+
+def control_lowered_line(stages_lowered: int) -> str:
+    """The line that tells the player control lowered the stage; '' when it did not.
+
+    The web dialog renders the same sentence from ``stages_lowered_by_control``.
+    """
+    if stages_lowered <= 0:
+        return ""
+    if stages_lowered == 1:
+        amount = "one Soulfray stage"
+    else:
+        amount = f"{stages_lowered} Soulfray stages"
+    return f"Your control lets you break through {amount} earlier than usual."
+
+
 def _evaluate_audere_gates(
-    character: ObjectDB, runtime_intensity: int, threshold: AudereThreshold
+    character: ObjectDB,
+    runtime_intensity: int,
+    threshold: AudereThreshold,
+    runtime_control: int = 0,
 ) -> int | None:
     """Run all Audere eligibility gates cheapest-first.
 
@@ -224,7 +302,9 @@ def _evaluate_audere_gates(
 
     Gates:
     1. Intensity — zero-query arithmetic (runtime_intensity >= minimum tier)
-    2. Soulfray — 1 query (ConditionInstance + current_stage)
+    2. Soulfray — 1 query (ConditionInstance + current_stage), at the stage
+       ``required_stage_order`` asks for given ``runtime_control`` (+1 query when
+       control lowers it)
     3. Engagement — 1 exists() query
     4. Already-in-Audere — 1 exists() query
     """
@@ -246,7 +326,7 @@ def _evaluate_audere_gates(
     if soulfray_instance is None or soulfray_instance.current_stage is None:
         return None
     stage_order = soulfray_instance.current_stage.stage_order
-    if stage_order < threshold.minimum_warp_stage.stage_order:
+    if stage_order < required_stage_order(threshold, runtime_control):
         return None
 
     if not CharacterEngagement.objects.filter(character_id=character.pk).exists():
@@ -261,20 +341,25 @@ def _evaluate_audere_gates(
     return stage_order
 
 
-def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> bool:
+def check_audere_eligibility(
+    character: ObjectDB, runtime_intensity: int, runtime_control: int = 0
+) -> bool:
     """Check whether a character meets all gates for Audere activation.
 
     Five gates -- all must be true:
     1. AudereThreshold config exists
     2. Runtime intensity resolves to a tier at or above the threshold's minimum
-    3. Character has an active Soulfray at the required stage or higher
+    3. Character has an active Soulfray at the required stage or higher (high
+       ``runtime_control`` can lower the required stage, see ``required_stage_order``)
     4. Character has a CharacterEngagement
     5. Character is NOT already in Audere
     """
     threshold = AudereThreshold.objects.cached_singleton()
     if threshold is None:
         return False
-    return _evaluate_audere_gates(character, runtime_intensity, threshold) is not None
+    return (
+        _evaluate_audere_gates(character, runtime_intensity, threshold, runtime_control) is not None
+    )
 
 
 def corruption_advisory_for_character(character: ObjectDB) -> str:
@@ -563,7 +648,11 @@ def end_audere(character: ObjectDB) -> None:
 
 
 def maybe_create_audere_offer(
-    character: ObjectDB, runtime_intensity: int, *, sheet: CharacterSheet | None = None
+    character: ObjectDB,
+    runtime_intensity: int,
+    *,
+    runtime_control: int = 0,
+    sheet: CharacterSheet | None = None,
 ) -> PendingAudereOffer | None:
     """Persist a poll-able offer when the Audere gate opens for this cast.
 
@@ -586,7 +675,7 @@ def maybe_create_audere_offer(
     if threshold is None:
         return None
 
-    stage_order = _evaluate_audere_gates(character, runtime_intensity, threshold)
+    stage_order = _evaluate_audere_gates(character, runtime_intensity, threshold, runtime_control)
     if stage_order is None:
         return None
 
@@ -594,6 +683,7 @@ def maybe_create_audere_offer(
         character_sheet=sheet,
         defaults={
             "fired_intensity": runtime_intensity,
+            "fired_control": runtime_control,
             "soulfray_stage_order": stage_order,
         },
     )
@@ -616,7 +706,7 @@ def resolve_audere_offer(offer_id: int, *, accept: bool) -> AudereOfferResult:
         raise AudereOfferNotFoundError
 
     character = offer.character_sheet.character
-    if not check_audere_eligibility(character, offer.fired_intensity):
+    if not check_audere_eligibility(character, offer.fired_intensity, offer.fired_control):
         offer.delete()
         raise AudereOfferStaleError
 
