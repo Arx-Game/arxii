@@ -4215,7 +4215,9 @@ class SurgeDegreeBand(SharedMemoryModel):
     number, so ``validate_surge_bands`` rejects a set where it would. ``intensity`` is
     unsigned (a surge only ever adds intensity); ``control_change`` may be negative (a
     loss of control) and positive is a gain. A band's ``condition`` is a cost (a
-    debuff), which is what that validator assumes.
+    debuff), which is what that validator assumes, unless the condition feeds intensity
+    (an emotional condition, #4739): that one is a benefit, and a band on a failed roll
+    (success level below 1) may not carry it.
     """
 
     tuning = models.ForeignKey(

@@ -112,6 +112,13 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     if enc.escalation_curve is not None:
         install_escalation_room_triggers(enc)
         apply_escalation_tick(enc)
+        # Emotional conditions feed intensity (#4739): one surge per player character per
+        # round, the sum of their conditions' current-stage intensity_per_round.
+        from world.combat.condition_surges import (  # noqa: PLC0415
+            apply_condition_intensity_surges,
+        )
+
+        apply_condition_intensity_surges(enc)
 
     # --- Mentor's Vow (#1165): persist graduated bond dissolution at round start ---
     # Bonds that have graduated (adjusted party leveled into band) are dissolved
