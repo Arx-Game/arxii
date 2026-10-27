@@ -1,1 +1,1 @@
-0313_set_physical_damage_type
+0314_affinity_burn_value_combatpull_resonance_burned_and_more

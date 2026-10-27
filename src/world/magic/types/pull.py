@@ -131,6 +131,9 @@ class CastPullDeclaration:
     """Emergency thread-bond draw bonus (#1718): added to the single COVENANT_ROLE
     thread's effective level for this pull's multiplier only — never persisted to
     Thread.level. 0 (default) means no emergency draw was invoked."""
+    burn: int = 0
+    """Resonance points the caster asks to burn on top of the pull, for strain (#4736).
+    0 (default) means no burn. The reached amount is resolved at cast time."""
 
 
 @dataclass(frozen=True)

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from world.combat.types import MovementProfile
     from world.companions.models import CompanionOrder
 
+from world.checks.models import OutcomeTierAward
 from world.combat.constants import (
     BASH_ROUNDS_LIMIT,
     COMBO_MIN_SLOTS,
@@ -2212,6 +2213,10 @@ class CombatPull(SharedMemoryModel):
     )
     resonance_spent = models.PositiveIntegerField()
     anima_spent = models.PositiveIntegerField()
+    resonance_burned = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance burned on top of the pull for strain; 0 when none was.",
+    )
     committed_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -2568,6 +2573,37 @@ class StrainConfig(SharedMemoryModel):
         ),
     )
 
+    burn_per_intensity = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("0.50"),
+        help_text=(
+            "Resonance a character may burn per point of her runtime intensity when she "
+            "strains with a thread pull (the burn ceiling = floor(intensity x this)). "
+            "Higher lets stronger casts burn more."
+        ),
+    )
+    engagement_share_percent = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percentage (0-100) of the strain bonus a cast earns that is also added to "
+            "the caster's engagement intensity modifier, so strained intensity feeds back "
+            "into her engagement."
+        ),
+    )
+    strain_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="strain_configs",
+        help_text=(
+            "The check a character rolls to push hard when she burns resonance. Unset "
+            "means a burn is refused with a message; the Required content page lists it."
+        ),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         ACCOUNT_DB_MODEL,
@@ -2579,6 +2615,52 @@ class StrainConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"StrainConfig(pk={self.pk})"
+
+
+class StrainBurnReach(OutcomeTierAward):
+    """How much of the resonance a character asked to burn she reaches, per outcome tier.
+
+    The strain check's outcome tier selects one row; ``reach_percent`` of the requested
+    (ceiling- and balance-capped) burn is what she reaches and is debited. A better tier
+    never reaches less than a worse one. Every canonical CheckOutcome tier needs a row:
+    the Required content page lists any that are missing.
+    """
+
+    reach_percent = models.PositiveSmallIntegerField(
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percentage (0-100) of the requested burn that is reached at this outcome "
+            "tier. A better tier never reaches a lower percentage than a worse one."
+        ),
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.outcome_tier_id is None or self.reach_percent is None:
+            return
+        level = self.outcome_tier.success_level
+        others = StrainBurnReach.objects.exclude(pk=self.pk).select_related("outcome_tier")
+        for other in others:
+            other_level = other.outcome_tier.success_level
+            if other_level < level and other.reach_percent > self.reach_percent:
+                msg = (
+                    f"A better outcome tier cannot reach less: {other.outcome_tier} "
+                    f"(worse) already reaches {other.reach_percent}%."
+                )
+                raise ValidationError({"reach_percent": msg})
+            if other_level > level and other.reach_percent < self.reach_percent:
+                msg = (
+                    f"A worse outcome tier cannot reach more: {other.outcome_tier} "
+                    f"(better) only reaches {other.reach_percent}%."
+                )
+                raise ValidationError({"reach_percent": msg})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier}: {self.reach_percent}%"
 
 
 class ClashConfig(SharedMemoryModel):
