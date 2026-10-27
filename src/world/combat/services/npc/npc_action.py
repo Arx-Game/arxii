@@ -64,6 +64,7 @@ def _resolve_npc_taunt_on_target(
     *,
     opponent: CombatOpponent,
     potency: int,
+    hit_narration: str = "",
 ) -> None:
     """An NPC taunt entry against one player character: they roll, the NPC does not (#4737).
 
@@ -72,10 +73,15 @@ def _resolve_npc_taunt_on_target(
     band. A quiet no-op with no escalation curve (ADR-0098) or no tuning authored, and
     when the target could not surge this round (no combat engagement, or already taunted
     this round): no roll is made, nothing is spent, nothing is printed.
+
+    The surged player reads a cause line: the entry's authored ``hit_narration`` rendered
+    as the room is told it, else "<opponent> taunts you."
     """
     from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.interaction_services import render_taunt_narration  # noqa: PLC0415
     from world.combat.surge_rolls import (  # noqa: PLC0415
         apply_rolled_surge,
+        persona_name_of,
         rolled_surge_possible,
         surge_roll_for_participant,
         surge_tuning_for,
@@ -92,6 +98,14 @@ def _resolve_npc_taunt_on_target(
     ):
         return
     result = surge_roll_for_participant(target_participant, tuning.check_type, potency)
+    if hit_narration:
+        cause = render_taunt_narration(
+            actor_label=opponent.name,
+            target_label=persona_name_of(target_participant),
+            hit_text=hit_narration,
+        )
+    else:
+        cause = f"{opponent.name} taunts you."
     apply_rolled_surge(
         encounter=encounter,
         participant=target_participant,
@@ -101,6 +115,7 @@ def _resolve_npc_taunt_on_target(
         subject_sheet=None,
         source_character=opponent.objectdb,
         tuning=tuning,
+        cause=cause,
     )
 
 
@@ -152,7 +167,10 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
     # against its potency instead.
     if npc_action.threat_entry.taunt_potency is not None:
         _resolve_npc_taunt_on_target(
-            target_participant, opponent=opponent, potency=npc_action.threat_entry.taunt_potency
+            target_participant,
+            opponent=opponent,
+            potency=npc_action.threat_entry.taunt_potency,
+            hit_narration=npc_action.threat_entry.hit_narration,
         )
         return
 

@@ -115,13 +115,14 @@ class SurgeBeatRollFieldTests(TestCase):
             tuning=tuning, outcome=self.partial, intensity=4, control_change=0, condition=None
         )
 
-    def _rallied_surge(self) -> None:
+    def _rallied_surge(self, cause: str = "") -> None:
         beat = apply_rolled_surge(
             encounter=self.encounter,
             participant=self.owner_seat,
             trigger_kind=SurgeTriggerKind.RALLIED,
             outcome=self.partial,
             potency=None,
+            cause=cause,
         )
         self.assertIsNotNone(beat)
 
@@ -133,7 +134,7 @@ class SurgeBeatRollFieldTests(TestCase):
         (beat,) = self._beats_seen_by(self.owner_account)
         self.assertIsNone(beat["condition"])
         self.assertIsNone(beat["potency"])
-        self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0.")
+        self.assertEqual(beat["roll"], "Rally check · Partial · Intensity +4")
 
     def test_a_condition_that_did_not_take_hold_is_not_named(self) -> None:
         """Kept: a refused condition needs a patched ``apply_condition``."""
@@ -144,7 +145,8 @@ class SurgeBeatRollFieldTests(TestCase):
         (beat,) = self._beats_seen_by(self.owner_account)
         self.assertIsNone(beat["condition"])
         self.assertEqual(
-            beat["roll"], "Composure check vs taunt potency 14. Partial. Intensity +5, control -1."
+            beat["roll"],
+            "Composure check vs taunt potency 14 · Partial · Intensity +5 · control -1",
         )
 
     def test_the_condition_that_applied_is_shown_after_the_band_is_retuned(self) -> None:
@@ -162,7 +164,7 @@ class SurgeBeatRollFieldTests(TestCase):
 
         (beat,) = self._beats_seen_by(self.owner_account)
         self.assertEqual(beat["condition"], "Goaded")
-        self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +4, control 0. Goaded.")
+        self.assertEqual(beat["roll"], "Rally check · Partial · Intensity +4 · Goaded")
 
     def test_a_control_only_surge_beat_has_no_power_surges_narration(self) -> None:
         """Kept: a zero-intensity band is a hand-authored shape no played round reaches."""
@@ -170,15 +172,44 @@ class SurgeBeatRollFieldTests(TestCase):
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Rally")
         )
         SurgeDegreeBandFactory(tuning=tuning, outcome=self.partial, intensity=0, control_change=-2)
-        self._rallied_surge()
+        self._rallied_surge(cause="Mira rallies you.")
 
-        # Nothing was announced to the room, so a bystander has no beat at all.
+        # Nothing was announced to the room, so a bystander has no beat at all, even
+        # though the surged player's beat carries a cause line.
         self.assertEqual(self._beats_seen_by(self.other_account), [])
         for account in (self.owner_account, self.staff_account, self.gm_account):
             (beat,) = self._beats_seen_by(account)
             self.assertEqual(beat["narration"], "")
+            self.assertEqual(beat["cause"], "Mira rallies you.")
             self.assertEqual(beat["amount"], 0)
-            self.assertEqual(beat["roll"], "Rally check. Partial. Intensity +0, control -2.")
+            self.assertEqual(beat["roll"], "Rally check · Partial · Intensity +0 · control -2")
+
+    def test_cause_is_read_by_the_owner_gm_and_staff_never_a_bystander(self) -> None:
+        self._rolled_surge_with_cause("Bandit Captain taunts you.")
+
+        for account in (self.owner_account, self.staff_account, self.gm_account):
+            (beat,) = self._beats_seen_by(account)
+            self.assertEqual(beat["cause"], "Bandit Captain taunts you.")
+            # The generic line stays for everyone.
+            self.assertEqual(beat["narration"], "Surgeowner surges.")
+        (bystander,) = self._beats_seen_by(self.other_account)
+        self.assertEqual(bystander, {"id": bystander["id"], "narration": "Surgeowner surges."})
+
+    def test_a_surge_with_no_cause_has_no_cause_key(self) -> None:
+        self._rolled_surge()
+
+        (beat,) = self._beats_seen_by(self.owner_account)
+        self.assertNotIn("cause", beat)
+
+    def _rolled_surge_with_cause(self, cause: str) -> None:
+        apply_rolled_surge(
+            encounter=self.encounter,
+            participant=self.owner_seat,
+            trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED,
+            outcome=self.partial,
+            potency=14,
+            cause=cause,
+        )
 
     def test_old_kind_surge_beat_unchanged(self) -> None:
         """Kept: the older kinds are written by their own triggers, not by these journeys."""

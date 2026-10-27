@@ -14,7 +14,7 @@ from world.combat.constants import (
 )
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import roll_social_check
-from world.combat.surge_rolls import apply_rolled_surge, surge_tuning_for
+from world.combat.surge_rolls import apply_rolled_surge, persona_name_of, surge_tuning_for
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
@@ -106,6 +106,7 @@ def _surge_rallied_ally(
         subject_sheet=rallier.character_sheet,
         source_character=rallier.character_sheet.character,
         tuning=tuning,
+        cause=f"{persona_name_of(rallier)} rallies you.",
     )
 
 

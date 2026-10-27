@@ -91,6 +91,19 @@ class NpcTauntEntryTests(TestCase):
         self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
         self.assertEqual(self._intensity(), 3)
 
+    def test_the_cause_is_the_authored_line_the_room_gets_or_a_plain_one(self) -> None:
+        name = self.character.key
+        self._resolve(self._taunt_action(hit_narration="{actor} sneers at {target}."), self.partial)
+        self.assertEqual(
+            DramaticSurgeRecord.objects.get().cause, f"{self.opponent.name} sneers at {name}."
+        )
+
+        DramaticSurgeRecord.objects.all().delete()
+        self._resolve(self._taunt_action(), self.partial)
+        self.assertEqual(
+            DramaticSurgeRecord.objects.get().cause, f"{self.opponent.name} taunts you."
+        )
+
     def test_a_target_with_no_combat_engagement_is_not_rolled_for(self) -> None:
         CharacterEngagement.objects.filter(character=self.target.character_sheet).delete()
         with patch("world.combat.surge_rolls.surge_roll_for_participant") as roll:

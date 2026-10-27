@@ -94,7 +94,7 @@ GOADED_PENALTY = -10
 PRESENCE = 12
 TAUNT_RATING = PRESENCE + LEVEL_POINTS_PER_LEVEL * 1
 GENERIC_BEAT_KEYS = {"id", "narration"}
-OWNER_BEAT_KEYS = {"trigger_kind", "amount", "participant"}
+OWNER_BEAT_KEYS = {"trigger_kind", "amount", "participant", "cause"}
 ROLL_BEAT_KEYS = {"outcome", "potency", "control_change", "condition", "roll"}
 
 
@@ -197,6 +197,21 @@ class _SurgeField(JourneyCase):
         """The modifier total the character's next roll of ``check_type`` would carry."""
         return collect_check_modifiers(character.sheet_data, check_type).extra_modifiers_total
 
+    def beats_seen_by(self, account) -> list[dict]:
+        response = self.api(account).get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["surge_beats"]
+
+    def assertCauseReadOnlyBy(  # noqa: N802 - unittest style
+        self, surged, bystander, cause: str
+    ) -> None:
+        """The surged player's round payload carries ``cause``; a bystander's has no cause."""
+        (own,) = self.beats_seen_by(self.account_of(surged))
+        self.assertEqual(own["cause"], cause)
+        (other,) = self.beats_seen_by(self.account_of(bystander))
+        self.assertNotIn("cause", other)
+        self.assertEqual(other["narration"], f"{surged.key} surges.")
+
     def told_roll_line(self, character) -> str:
         """The one roll line the game told ``character`` (a line naming a check)."""
         lines = [line for line in self.mailbox(character).lines if " check vs " in line]
@@ -268,8 +283,8 @@ class BeingTauntedByAnNpc(_SurgeField):
         self.assertEqual(self.intensity(self.mira), PARTIAL_INTENSITY)
         self.assertTold(
             self.mira,
-            f"Composure check vs taunt potency {TAUNT_POTENCY}. Partial. "
-            f"Intensity +{PARTIAL_INTENSITY}, control 0.",
+            f"Composure check vs taunt potency {TAUNT_POTENCY} · Partial "
+            f"· Intensity +{PARTIAL_INTENSITY}",
         )
         record = self.records(SurgeTriggerKind.TAUNT_RECEIVED).get()
         self.assertEqual(record.participant, self.mira_seat)
@@ -299,6 +314,8 @@ class BeingTauntedByAnNpc(_SurgeField):
         self._captain_jibes_at_mira(witty)
         self.resolve(self.partial)
         self.assertShownRow(self.tomas, "Bandit Captain sneers at Mira.")
+        # Mira reads the same words the room was told.
+        self.assertCauseReadOnlyBy(self.mira, self.tomas, "Bandit Captain sneers at Mira.")
 
         self.next_round()
         self._captain_jibes_at_mira()
@@ -317,6 +334,13 @@ class BeingTauntedByAnNpc(_SurgeField):
         self.assertTold(self.mira, "Mira surges.")
         self.assertTold(self.mira, "Composure check vs taunt potency")
 
+    def test_mira_reads_who_taunted_her_and_tomas_does_not(self) -> None:
+        self._captain_jibes_at_mira()
+
+        self.resolve(self.partial)
+
+        self.assertCauseReadOnlyBy(self.mira, self.tomas, "Bandit Captain taunts you.")
+
     def test_a_better_composure_result_surges_her_more(self) -> None:
         self._captain_jibes_at_mira()
         self.resolve(self.partial)
@@ -331,8 +355,8 @@ class BeingTauntedByAnNpc(_SurgeField):
         self.assertEqual(gained_on_success, SUCCESS_INTENSITY)
         self.assertTold(
             self.mira,
-            f"Composure check vs taunt potency {TAUNT_POTENCY}. Success. "
-            f"Intensity +{SUCCESS_INTENSITY}, control 0.",
+            f"Composure check vs taunt potency {TAUNT_POTENCY} · Success "
+            f"· Intensity +{SUCCESS_INTENSITY}",
         )
         self.assertEqual(self.records(SurgeTriggerKind.TAUNT_RECEIVED).count(), 2)
 
@@ -370,14 +394,15 @@ class BeingTauntedByAnotherPlayer(_SurgeField):
         self.assertEqual(self.intensity(self.tomas), PARTIAL_INTENSITY)
         self.assertTold(
             self.tomas,
-            f"Composure check vs taunt potency {TAUNT_RATING}. Partial. "
-            f"Intensity +{PARTIAL_INTENSITY}, control 0.",
+            f"Composure check vs taunt potency {TAUNT_RATING} · Partial "
+            f"· Intensity +{PARTIAL_INTENSITY}",
         )
         record = self.records(SurgeTriggerKind.TAUNT_RECEIVED).get()
         self.assertEqual(record.participant, self.tomas_seat)
         self.assertEqual(record.subject_sheet, self.mira.sheet_data)
         self.assertEqual(record.potency, TAUNT_RATING)
         self.assertEqual(record.outcome, self.partial)
+        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira taunts you.")
         # Mira rolled nothing and is not shown his roll.
         self.assertNotTold(self.mira, "Composure check")
         self.assertEqual(self.intensity_or_zero(self.mira), 0)
@@ -455,8 +480,8 @@ class ADebuffBandHurtsTheNextCheck(_SurgeField):
         )
         self.assertTold(
             self.mira,
-            f"Composure check vs taunt potency {TAUNT_POTENCY}. Partial. "
-            f"Intensity +{PARTIAL_INTENSITY}, control -1. Goaded.",
+            f"Composure check vs taunt potency {TAUNT_POTENCY} · Partial "
+            f"· Intensity +{PARTIAL_INTENSITY} · control -1 · Goaded",
         )
 
     def test_a_failed_roll_to_a_player_s_taunt_leaves_his_next_composure_check_lower(self) -> None:
@@ -475,8 +500,8 @@ class ADebuffBandHurtsTheNextCheck(_SurgeField):
         )
         self.assertTold(
             self.tomas,
-            f"Composure check vs taunt potency {TAUNT_RATING}. Partial. "
-            f"Intensity +{PARTIAL_INTENSITY}, control -1. Goaded.",
+            f"Composure check vs taunt potency {TAUNT_RATING} · Partial "
+            f"· Intensity +{PARTIAL_INTENSITY} · control -1 · Goaded",
         )
         # Mira, who taunted, carries no penalty.
         self.assertEqual(self.composure_penalty(self.mira, self.composure), 0)
@@ -523,11 +548,6 @@ class TheRoundPayloadShowsTheRollToTheRightPeople(_SurgeField):
         )
         action.targets.add(self.mira_seat)
         self.resolve(self.partial)
-
-    def beats_seen_by(self, account) -> list[dict]:
-        response = self.api(account).get(f"/api/combat/{self.encounter.pk}/")
-        self.assertEqual(response.status_code, 200, response.content)
-        return response.json()["surge_beats"]
 
     def test_the_surged_player_a_gm_and_staff_read_the_roll_she_was_told(self) -> None:
         told = self.told_roll_line(self.mira)
@@ -578,13 +598,14 @@ class BeingRallied(_SurgeField):
         )
         self.assertTold(
             self.tomas,
-            f"vs rally difficulty {RALLY_BASE_DIFFICULTY}. Success. "
-            f"Intensity +{SUCCESS_INTENSITY}, control 0.",
+            f"vs rally difficulty {RALLY_BASE_DIFFICULTY} · Success "
+            f"· Intensity +{SUCCESS_INTENSITY}",
         )
         record = self.records(SurgeTriggerKind.RALLIED).get()
         self.assertEqual(record.participant, self.tomas_seat)
         self.assertEqual(record.subject_sheet, self.mira.sheet_data)
         self.assertEqual(record.potency, RALLY_BASE_DIFFICULTY)
+        self.assertCauseReadOnlyBy(self.tomas, self.mira, "Mira rallies you.")
         # The rallier is not the one surged, and is not shown the roll.
         self.assertEqual(self.intensity(self.mira), 0)
         self.assertNotTold(self.mira, "Intensity +")
@@ -666,13 +687,16 @@ class AnAllyBeingWounded(_SurgeField):
         self.assertEqual(self.intensity(self.mira), 9)
         self.assertTold(
             self.mira,
-            f"Composure check vs peril difficulty "
-            f"{HURT_POTENCY_BASE + HURT_POTENCY_PER_DEPTH * BOND_DEPTH}. Success. "
-            "Intensity +9, control 0.",
+            f"Composure check vs bond difficulty "
+            f"{HURT_POTENCY_BASE + HURT_POTENCY_PER_DEPTH * BOND_DEPTH} · Success "
+            "· Intensity +9 (scaled by the wound)",
         )
         record = self.records(SurgeTriggerKind.ALLY_HURT).get()
         self.assertEqual(record.participant, self.mira_seat)
         self.assertEqual(record.subject_sheet, self.tomas.sheet_data)
+        self.assertCauseReadOnlyBy(
+            self.mira, self.tomas, "Tomas, bonded to you, loses 60% of their health."
+        )
         # The one who was hurt is not the one surged.
         self.assertEqual(self.intensity(self.tomas), 0)
 

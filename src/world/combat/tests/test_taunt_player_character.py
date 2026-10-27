@@ -137,6 +137,13 @@ class DeclareTests(PlayerTauntTestCase):
 class ResolveTests(PlayerTauntTestCase):
     """Kept: clamps, dedup and quiet no-ops need a pinned rating, a removed row or a status flip."""
 
+    def test_the_cause_names_the_taunter(self) -> None:
+        self._taunt(self.partial)
+        self.assertEqual(
+            DramaticSurgeRecord.objects.get().cause,
+            f"{self.taunter.character_sheet.character.key} taunts you.",
+        )
+
     def test_a_negative_rating_is_a_potency_of_zero(self) -> None:
         self._taunt(self.partial, rating=-4)
         self.assertEqual(DramaticSurgeRecord.objects.get().potency, 0)

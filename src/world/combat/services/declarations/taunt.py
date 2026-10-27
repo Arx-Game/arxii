@@ -14,6 +14,7 @@ from world.combat.services.declarations.social_check import _social_verb_success
 from world.combat.services.encounter.threat import accumulate_threat
 from world.combat.surge_rolls import (
     apply_rolled_surge,
+    persona_name_of,
     rolled_surge_possible,
     surge_roll_for_participant,
     surge_tuning_for,
@@ -140,6 +141,7 @@ def _resolve_taunt_on_participant(
         subject_sheet=participant.character_sheet,
         source_character=participant.character_sheet.character,
         tuning=tuning,
+        cause=f"{persona_name_of(participant)} taunts you.",
     )
 
 

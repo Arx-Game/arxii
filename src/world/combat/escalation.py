@@ -10,6 +10,7 @@ cast pipeline — this module only writes engagement process modifiers.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
@@ -291,6 +292,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     control_change: int = 0,
     repeat_round: int | None = None,
     narrate: bool = True,
+    cause: str = "",
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -320,7 +322,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     ``outcome`` and ``potency`` are the roll that picked the amount, kept on the record;
     ``control_change`` is added to the engagement's control modifier in the same save.
     ``narrate=False`` skips the room line (a surge whose intensity scaled to 0 would
-    announce a power surge that added none).
+    announce a power surge that added none). ``cause`` is stored on the record for the
+    surged player, GMs and staff to read (#4737); it is never broadcast.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -354,6 +357,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             "outcome": outcome,
             "potency": potency,
             "control_change": control_change,
+            "cause": cause,
         },
     )
     if not created:
@@ -667,6 +671,7 @@ def apply_ally_hurt_surge(
         surge_tuning_for,
     )
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     if damage <= 0 or max_health <= 0:
         return
@@ -685,6 +690,12 @@ def apply_ally_hurt_surge(
     if tuning is None:
         return
     wound = min(1.0, damage / max_health)
+    # Half up, at most 100: the percent of their health the ally lost, in the cause line.
+    percent = min(100, math.floor(wound * 100 + 0.5))
+    ally_name = persona_names_for_sheets([victim_sheet.pk]).get(
+        victim_sheet.pk, victim_character.key
+    )
+    cause = f"{ally_name}, bonded to you, loses {percent}% of their health."
 
     for encounter in encounters:
         for participant, depth in _hurt_ally_rollers(encounter, victim_sheet):
@@ -699,6 +710,7 @@ def apply_ally_hurt_surge(
                 subject_sheet=victim_sheet,
                 intensity_scale=wound,
                 tuning=tuning,
+                cause=cause,
             )
 
 

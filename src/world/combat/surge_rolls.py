@@ -41,8 +41,20 @@ logger = logging.getLogger(__name__)
 POTENCY_LABELS: dict[str, str] = {
     SurgeTriggerKind.TAUNT_RECEIVED: "taunt potency",
     SurgeTriggerKind.RALLIED: "rally difficulty",
-    SurgeTriggerKind.ALLY_HURT: "peril difficulty",
+    SurgeTriggerKind.ALLY_HURT: "bond difficulty",
 }
+
+
+def persona_name_of(participant: CombatParticipant) -> str:
+    """The name other characters know ``participant`` by (never ``str(participant)``).
+
+    The persona name, falling back to the character's key when the sheet has no persona.
+    """
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    sheet_id = participant.character_sheet_id
+    names = persona_names_for_sheets([sheet_id])
+    return names.get(sheet_id, participant.character_sheet.character.key)
 
 
 def rolled_surge_possible(
@@ -166,21 +178,25 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     control_change: int,
     condition_name: str,
 ) -> str:
-    """The system line the surged player sees, for example
-    ``Composure check vs taunt potency 14. Partial. Intensity +5, control 0.``
+    """The caption the surged player sees, for example
+    ``Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded``.
 
-    The surged player's character is sent it live; the round payload rebuilds it from the
-    stored record for the same viewers (#4737).
+    Parts are joined with " · ". Control appears only when it changed, the condition name
+    last and only when it applied, and a hurt ally's intensity says it was scaled by the
+    wound. The surged player's character is sent it live; the round payload rebuilds it
+    from the stored record for the same viewers (#4737).
     """
     label = POTENCY_LABELS.get(trigger_kind, "difficulty")
     against = f" vs {label} {potency}" if potency is not None else ""
-    control = f"{control_change:+d}" if control_change else "0"
-    line = (
-        f"{check_type.name} check{against}. {outcome.name}. Intensity +{amount}, control {control}."
-    )
+    intensity = f"Intensity +{amount}"
+    if trigger_kind == SurgeTriggerKind.ALLY_HURT:
+        intensity += " (scaled by the wound)"
+    parts = [f"{check_type.name} check{against}", outcome.name, intensity]
+    if control_change:
+        parts.append(f"control {control_change:+d}")
     if condition_name:
-        line += f" {condition_name}."
-    return line
+        parts.append(condition_name)
+    return " · ".join(parts)
 
 
 def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
@@ -194,6 +210,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     intensity_scale: float = 1.0,
     source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - the taunter, any object
     tuning: SurgeTuning | None = None,
+    cause: str = "",
 ) -> DramaticSurgeBeat | None:
     """Write one rolled surge from the band the roll's outcome picks (#4737).
 
@@ -212,6 +229,9 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
     looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
+
+    ``cause`` is the line the surged player, GMs and staff read for this surge (who taunted
+    or rallied, or the wound); it is stored on the record and never shown to others.
 
     The roll line goes to the surged player's character only, once the surrounding
     transaction commits; the room still gets just the generic narration
@@ -248,6 +268,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             control_change=band.control_change,
             repeat_round=encounter.round_number,
             narrate=amount > 0,
+            cause=cause,
         )
         if beat is None:
             return None

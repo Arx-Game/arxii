@@ -317,6 +317,20 @@ class ZeroAmountTests(SurgeRollTestCase):
         room_msg.assert_called_once()
 
 
+class CauseTests(SurgeRollTestCase):
+    def test_the_cause_is_stored_on_the_record_and_never_in_the_room_line(self) -> None:
+        self._band(self.partial, 3)
+        with patch.object(self.encounter.room, "msg_contents") as room_msg:
+            self._surge(self.partial, cause="Mira taunts you.")
+        self.assertEqual(DramaticSurgeRecord.objects.get().cause, "Mira taunts you.")
+        self.assertNotIn("taunts", room_msg.call_args.args[0])
+
+    def test_a_surge_with_no_cause_stores_an_empty_one(self) -> None:
+        self._band(self.partial, 3)
+        self._surge(self.partial)
+        self.assertEqual(DramaticSurgeRecord.objects.get().cause, "")
+
+
 class PotencyLabelTests(SurgeRollTestCase):
     """Kept: a new rolled kind without a label would only fail in a journey for that kind."""
 
@@ -334,6 +348,46 @@ class PotencyLabelTests(SurgeRollTestCase):
             condition_name="",
         )
         self.assertIn("vs difficulty 9", line)
+
+
+class RollLineFormatTests(SurgeRollTestCase):
+    def _line(self, **overrides) -> str:
+        fields = {
+            "check_type": self.check_type,
+            "trigger_kind": SurgeTriggerKind.TAUNT_RECEIVED,
+            "potency": 60,
+            "outcome": self.fail,
+            "amount": 2,
+            "control_change": 0,
+            "condition_name": "",
+        }
+        fields.update(overrides)
+        return roll_line(**fields)
+
+    def test_parts_are_joined_with_a_middle_dot_and_unchanged_control_is_left_out(self) -> None:
+        self.assertEqual(
+            self._line(outcome=self.partial, amount=3),
+            "Surge Composure check vs taunt potency 60 · Surge Partial · Intensity +3",
+        )
+
+    def test_changed_control_then_the_condition_come_last(self) -> None:
+        self.assertEqual(
+            self._line(control_change=-1, condition_name="Goaded"),
+            "Surge Composure check vs taunt potency 60 · Surge Failure · Intensity +2 "
+            "· control -1 · Goaded",
+        )
+
+    def test_a_hurt_ally_surge_names_the_bond_difficulty_and_the_wound_scaling(self) -> None:
+        self.assertEqual(
+            self._line(trigger_kind=SurgeTriggerKind.ALLY_HURT, potency=15, outcome=self.success),
+            "Surge Composure check vs bond difficulty 15 · Surge Success "
+            "· Intensity +2 (scaled by the wound)",
+        )
+
+    def test_a_rally_keeps_its_rally_difficulty_label(self) -> None:
+        self.assertIn(
+            "vs rally difficulty 10", self._line(trigger_kind=SurgeTriggerKind.RALLIED, potency=10)
+        )
 
 
 class RolledSurgePossibleTests(SurgeRollTestCase):

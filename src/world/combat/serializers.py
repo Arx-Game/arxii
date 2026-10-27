@@ -1360,8 +1360,13 @@ class SurgeBeatSerializer(serializers.Serializer):
     )
     roll = serializers.CharField(
         required=False,
-        help_text="The roll line the surged player was shown, e.g. "
-        "'Composure check vs taunt potency 14. Partial. Intensity +5, control 0.'",
+        help_text="The roll caption the surged player was shown, e.g. "
+        "'Composure check vs taunt potency 14 · Partial · Intensity +5'.",
+    )
+    cause = serializers.CharField(
+        required=False,
+        help_text="What caused the surge, e.g. 'Mira taunts you.'. Only the surged player, "
+        "GMs and staff get it; everyone else reads the generic narration.",
     )
 
 
@@ -1771,7 +1776,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         """Return this round's dramatic-surge beats (#2013).
 
         Every viewer sees the generic ``narration`` line (never names the
-        bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
+        bond/track/subject — the leak rule). ``trigger_kind``/``amount`` and, when the
+        surge stored one, the ``cause`` line (who taunted or rallied, or the wound) are
         added only for the surging participant's own owner, GMs, and staff —
         mirrors ``get_current_round_actions``'s covenant-scoped pattern. A rolled surge
         (#4737) adds the same way ``outcome``, ``potency``, ``control_change``,
@@ -1816,6 +1822,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 beat["amount"] = record.amount
                 beat["participant"] = record.participant_id
                 beat.update(rolls.get(record.pk, {}))
+                if record.cause:
+                    beat["cause"] = record.cause
             beats.append(beat)
         return beats
 

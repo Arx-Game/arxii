@@ -111,6 +111,25 @@ class AllyHurtSurgeTestCase(TestCase):
 class AllyHurtRollTests(AllyHurtSurgeTestCase):
     """Kept: rounding, caps, the scratch rule, bond gates and depth, called directly."""
 
+    def test_the_cause_names_the_hurt_ally_and_the_wound_percent(self) -> None:
+        self._bond()
+        with force_check_outcome(self.success):
+            self._hurt(damage=60)
+        self.assertEqual(
+            self._records().get().cause,
+            f"{self.victim_char.key}, bonded to you, loses 60% of their health.",
+        )
+
+    def test_the_cause_percent_rounds_half_up_and_caps_at_a_hundred(self) -> None:
+        self._bond()
+        with force_check_outcome(self.success):
+            self._hurt(damage=1, max_health=8)  # 12.5 percent
+        self.assertIn("loses 13% of their health", self._records().get().cause)
+        self._records().delete()
+        with force_check_outcome(self.success):
+            self._hurt(damage=250)
+        self.assertIn("loses 100% of their health", self._records().get().cause)
+
     def test_small_wound_rounds_half_up(self) -> None:
         self._bond()
         with force_check_outcome(self.success):

@@ -75,6 +75,13 @@ class RallySurgeTests(TestCase):
         with force_check_outcome(outcome):
             _resolve_rally(self.rallier, action)
 
+    def test_the_cause_names_the_rallier(self) -> None:
+        self._rally(self.success)
+        self.assertEqual(
+            DramaticSurgeRecord.objects.get().cause,
+            f"{self.rallier.character_sheet.character.key} rallies you.",
+        )
+
     def test_rally_rolls_the_tuned_check_at_the_fixed_difficulty(self) -> None:
         action = declare_rally(self.rallier, self.ally)
         with (
@@ -86,7 +93,9 @@ class RallySurgeTests(TestCase):
         self.assertEqual(capture.check_type, self.tuning.check_type)
         self.assertEqual(capture.target_difficulty, RALLY_BASE_DIFFICULTY)
         line = ally_msg.call_args.args[0]
-        self.assertIn(f"Rally Surge check vs rally difficulty {RALLY_BASE_DIFFICULTY}.", line)
+        self.assertIn(
+            f"Rally Surge check vs rally difficulty {RALLY_BASE_DIFFICULTY} · Rally Success", line
+        )
 
     def test_rally_without_a_tuning_still_rolls_the_rally_check_by_name(self) -> None:
         self.tuning.delete()
