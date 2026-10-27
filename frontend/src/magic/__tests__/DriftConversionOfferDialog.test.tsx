@@ -24,6 +24,7 @@ vi.mock('../api', () => ({
 }));
 
 import * as api from '../api';
+import { throwApiError } from '@/lib/errors';
 
 const OFFER: DriftConversionOffer = {
   id: 12,
@@ -307,6 +308,27 @@ describe('DriftConversionOfferDialog (via DriftConversionOfferGate)', () => {
     expect(screen.getByTestId('drift-result')).toHaveTextContent('Partial Success');
   });
 
+  it('shows a refused offering as the plain sentence, never a field name', async () => {
+    const user = userEvent.setup();
+    const SENTENCE = 'You are not carrying everything you offered.';
+    // The convert view's refusal body, run through the same error reader the api uses.
+    vi.mocked(api.convertDrift).mockImplementation(() =>
+      throwApiError(
+        new Response(JSON.stringify({ detail: SENTENCE }), { status: 400 }),
+        'Failed to perform the rite'
+      )
+    );
+    renderGate([OFFER]);
+
+    await screen.findByRole('dialog');
+    await user.click(screen.getByTestId('drift-component-501'));
+    await user.click(screen.getByTestId('drift-perform-20'));
+
+    const error = await screen.findByTestId('drift-error');
+    expect(error).toHaveTextContent(new RegExp(`^${SENTENCE}$`));
+    expect(error).not.toHaveTextContent('component_ids');
+  });
+
   it('a refusal keeps the dialog open and shows the backend detail', async () => {
     const user = userEvent.setup();
     const DETAIL = 'You are not carrying everything you offered.';
@@ -460,6 +482,19 @@ function lightThemeClasses(element: HTMLElement): string[] {
 describe('DriftConversionOfferDialog - readable in the light theme', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('pulses only the glow behind the strip, never its words', async () => {
+    renderGate([OFFER]);
+
+    const strip = await screen.findByTestId('drift-conversion-gate-strip');
+    const label = screen.getByTestId('drift-conversion-gate-label');
+    const glow = screen.getByTestId('drift-conversion-gate-glow');
+    expect(strip).not.toHaveClass('animate-pulse');
+    expect(label).not.toHaveClass('animate-pulse');
+    expect(label).toHaveTextContent('Conversion offer');
+    expect(glow).toHaveClass('animate-pulse', 'motion-reduce:animate-none');
+    expect(glow).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('keeps the pale amber text and dark tints under dark: on every themed element', async () => {

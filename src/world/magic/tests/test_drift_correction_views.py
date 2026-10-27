@@ -244,6 +244,20 @@ class ConvertTests(DriftCorrectionViewTestBase):
         self.assertFalse(_consumed(self.other_item.pk))
         self.assertEqual(self.cap_value(), 12)
 
+    def test_an_unheld_component_is_refused_with_the_plain_sentence(self) -> None:
+        # The player reads the sentence; the request field it came from is never shown.
+        stray = ItemInstanceFactory()
+        response = self.convert(component_ids=[stray.pk])
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.data, {"detail": "You are not carrying everything you offered."})
+
+    def test_a_malformed_request_is_one_plain_detail_with_no_field_names(self) -> None:
+        response = self.convert(amount=0, component_ids=["x"])
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(set(response.data), {"detail"})
+        for field in ("amount", "component_ids"):
+            self.assertNotIn(field, response.data["detail"])
+
     def test_unheld_item_among_good_ones_is_a_400_and_nothing_is_consumed(self) -> None:
         stray = ItemInstanceFactory()
         response = self.convert(component_ids=[self.component_pk, stray.pk])

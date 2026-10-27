@@ -419,7 +419,9 @@ class TheSameChanceOnTheWeb(DriftJourneyCase):
             missing = post(ysmay_api, CONVERT, {**body, "component_ids": [mine + 9999]})
         for refused in (foreign, missing):
             self.assertEqual(refused.status_code, 400)
-            self.assertIn("You are not carrying everything you offered.", str(refused.data))
+            self.assertEqual(
+                refused.data, {"detail": "You are not carrying everything you offered."}
+            )
         self.assertFalse(consumed(mine))
         self.assertFalse(consumed(hobbs))
 

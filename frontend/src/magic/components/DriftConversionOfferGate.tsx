@@ -44,11 +44,17 @@ export function DriftConversionOfferGate({ sceneId }: DriftConversionOfferGatePr
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="flex w-full animate-pulse items-center gap-2 rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-left text-sm font-semibold text-amber-800 shadow-[0_0_24px_-8px] shadow-amber-500/60 motion-reduce:animate-none dark:bg-amber-950/40 dark:text-amber-300"
+          className="relative flex w-full items-center gap-2 rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-left text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
           data-testid="drift-conversion-gate-strip"
         >
+          {/* Only the glow pulses; the words stay at full strength in both themes. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 animate-pulse rounded-md shadow-[0_0_24px_-8px] shadow-amber-500/60 motion-reduce:animate-none"
+            data-testid="drift-conversion-gate-glow"
+          />
           <Flame className="h-4 w-4 shrink-0" />
-          Conversion offer
+          <span data-testid="drift-conversion-gate-label">Conversion offer</span>
         </button>
       ) : null}
       <DriftConversionOfferDialog

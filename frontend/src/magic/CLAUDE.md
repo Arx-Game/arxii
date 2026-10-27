@@ -639,7 +639,8 @@ cap_remaining, focus_bonus, sources[], qualifying_components[] }`. A source is
 - `convertDrift(body)` - POST `convert/`, body `{ offer_id, source_resonance_id,
 target_resonance_id, amount, component_ids }` -> `DriftCorrectionResult`
   (`attempted_amount`, `converted_amount`, `granted_amount`, `outcome_name`,
-  `success_level`, `conversion_type`, `focus_bonus`). A refusal is 400 `{detail}`, thrown by
+  `success_level`, `conversion_type`, `focus_bonus`). A refusal is 400 `{detail}` (the view returns its request-validation failures in the same
+  shape, field names dropped, so the player only ever reads the sentence), thrown by
   `readErrorDetail` so the dialog shows `error.message`.
 - `declineDriftConversion({ offer_id })` - POST `decline/` -> `{ detail }`.
 

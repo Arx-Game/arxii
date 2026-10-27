@@ -2235,6 +2235,17 @@ class PendingDriftConversionOfferViewSet(viewsets.ReadOnlyModelViewSet):
         ).filter(scene__is_active=True, scene__date_finished__isnull=True)
 
 
+def _plain_detail(errors: object) -> str:
+    """Every message in DRF validation ``errors``, field names dropped, joined by spaces."""
+    if isinstance(errors, dict):
+        parts = [_plain_detail(value) for value in errors.values()]
+    elif isinstance(errors, list):
+        parts = [_plain_detail(value) for value in errors]
+    else:
+        return str(errors)
+    return " ".join(part for part in parts if part)
+
+
 class DriftCorrectionConvertView(APIView):
     """Perform the drift correction rite under an open offer (#4733).
 
@@ -2257,7 +2268,13 @@ class DriftCorrectionConvertView(APIView):
         serializer = DriftCorrectionConvertSerializer(
             data=request.data, context={"request": request}
         )
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            # The same {detail} shape an action refusal has: the player reads the sentence,
+            # never the request field it came from.
+            return Response(
+                {"detail": _plain_detail(serializer.errors)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         data = serializer.validated_data
         offer = data["offer"]
         result = PerformDriftCorrectionAction().run(
