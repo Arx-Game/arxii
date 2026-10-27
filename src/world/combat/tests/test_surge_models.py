@@ -3,9 +3,11 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.forms import inlineformset_factory
-from django.test import TestCase
+from django.test import TestCase, tag
 
+from actions.factories import ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.admin import SurgeDegreeBandForm, SurgeDegreeBandFormSet
 from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind
 from world.combat.factories import (
@@ -17,6 +19,7 @@ from world.combat.factories import (
 )
 from world.combat.models import DramaticSurgeRecord, SurgeDegreeBand, SurgeTuning
 from world.companions.factories import CompanionFactory
+from world.conditions.factories import ConditionTemplateFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -43,6 +46,23 @@ class SurgeTuningModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             SurgeDegreeBandFactory(tuning=tuning, outcome=outcome)
 
+    def test_clean_rejects_potency_on_a_kind_that_never_reads_it(self) -> None:
+        for kind in (SurgeTriggerKind.TAUNT_RECEIVED, SurgeTriggerKind.RALLIED):
+            for field_name in ("potency_base", "potency_per_depth"):
+                with self.subTest(kind=kind, field=field_name):
+                    tuning = SurgeTuningFactory.build(trigger_kind=kind, **{field_name: 3})
+                    with self.assertRaises(ValidationError) as ctx:
+                        tuning.clean()
+                    self.assertIn(field_name, ctx.exception.message_dict)
+
+    def test_clean_accepts_potency_on_ally_hurt_and_zero_elsewhere(self) -> None:
+        SurgeTuningFactory.build(
+            trigger_kind=SurgeTriggerKind.ALLY_HURT, potency_base=4, potency_per_depth=2
+        ).clean()
+        SurgeTuningFactory.build(
+            trigger_kind=SurgeTriggerKind.RALLIED, potency_base=0, potency_per_depth=0
+        ).clean()
+
     def test_band_clean_checks_against_sibling_bands(self) -> None:
         tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED)
         low = CheckOutcomeFactory(name="Surge Clean Low", success_level=-1)
@@ -59,6 +79,7 @@ class DramaticSurgeRecordRepeatTests(TestCase):
         cls.participant = CombatParticipantFactory()
         cls.encounter = cls.participant.encounter
         cls.sheet = CharacterSheetFactory()
+        cls.outcome = CheckOutcomeFactory(name="Surge Record Outcome", success_level=1)
 
     def _record(self, kind: str, *, repeat_round: int | None, sheet=None, round_number=1):
         return DramaticSurgeRecord.objects.create(
@@ -69,19 +90,24 @@ class DramaticSurgeRecordRepeatTests(TestCase):
             amount=2,
             round_number=round_number,
             repeat_round=repeat_round,
+            outcome=self.outcome if repeat_round is not None else None,
         )
 
+    @tag("postgres")  # nulls_distinct=False is unenforced on SQLite
     def test_record_repeat_round_allows_second_round_blocks_same_round(self) -> None:
         self._record(SurgeTriggerKind.ALLY_HURT, repeat_round=1, sheet=self.sheet)
         self._record(SurgeTriggerKind.ALLY_HURT, repeat_round=2, sheet=self.sheet, round_number=2)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self._record(SurgeTriggerKind.ALLY_HURT, repeat_round=2, sheet=self.sheet)
+            self._record(
+                SurgeTriggerKind.ALLY_HURT, repeat_round=2, sheet=self.sheet, round_number=2
+            )
 
+    @tag("postgres")  # nulls_distinct=False is unenforced on SQLite
     def test_record_repeat_round_without_subject_blocks_same_round(self) -> None:
         self._record(SurgeTriggerKind.TAUNT_RECEIVED, repeat_round=1)
         self._record(SurgeTriggerKind.TAUNT_RECEIVED, repeat_round=2, round_number=2)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self._record(SurgeTriggerKind.TAUNT_RECEIVED, repeat_round=2)
+            self._record(SurgeTriggerKind.TAUNT_RECEIVED, repeat_round=2, round_number=2)
 
     def test_record_old_kinds_still_once_per_encounter(self) -> None:
         self._record(SurgeTriggerKind.ALLY_PERIL, repeat_round=None, sheet=self.sheet)
@@ -91,6 +117,30 @@ class DramaticSurgeRecordRepeatTests(TestCase):
                 repeat_round=None,
                 sheet=self.sheet,
                 round_number=2,
+            )
+
+    def test_record_repeat_round_must_equal_the_round_number(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._record(SurgeTriggerKind.TAUNT_RECEIVED, repeat_round=2, round_number=1)
+
+    def test_record_rolled_needs_an_outcome_and_an_old_kind_has_none(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DramaticSurgeRecord.objects.create(
+                encounter=self.encounter,
+                participant=self.participant,
+                trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED,
+                amount=2,
+                round_number=1,
+                repeat_round=1,
+            )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DramaticSurgeRecord.objects.create(
+                encounter=self.encounter,
+                participant=self.participant,
+                trigger_kind=SurgeTriggerKind.HIGH_STAKES,
+                amount=2,
+                round_number=1,
+                outcome=self.outcome,
             )
 
     def test_record_new_fields_default(self) -> None:
@@ -106,6 +156,30 @@ class TauntEntryTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             entry.clean()
         self.assertIn("taunt_potency", ctx.exception.message_dict)
+
+    def test_taunt_entry_cannot_carry_a_defense_check_or_on_hit_pool(self) -> None:
+        entry = ThreatPoolEntryFactory(
+            base_damage=0,
+            taunt_potency=3,
+            defense_check_type=CheckTypeFactory(),
+            on_hit_consequence_pool=ConsequencePoolFactory(),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            entry.clean()
+        self.assertIn("defense_check_type", ctx.exception.message_dict)
+        self.assertIn("on_hit_consequence_pool", ctx.exception.message_dict)
+
+    def test_taunt_entry_cannot_apply_conditions(self) -> None:
+        entry = ThreatPoolEntryFactory(base_damage=0, taunt_potency=3)
+        entry.conditions_applied.add(ConditionTemplateFactory())
+        with self.assertRaises(ValidationError) as ctx:
+            entry.clean()
+        self.assertIn("conditions_applied", ctx.exception.message_dict)
+
+    def test_attack_entry_may_carry_a_defense_check(self) -> None:
+        ThreatPoolEntryFactory(
+            base_damage=5, taunt_potency=None, defense_check_type=CheckTypeFactory()
+        ).clean()
 
     def test_taunt_entry_with_no_damage_is_valid(self) -> None:
         entry = ThreatPoolEntryFactory.build(base_damage=0, taunt_potency=3)
@@ -222,6 +296,7 @@ class SurgeRolledSubjectCheckTests(TestCase):
                 amount=2,
                 round_number=1,
                 repeat_round=1,
+                outcome=CheckOutcomeFactory(name="Surge Boss Subject Outcome", success_level=1),
             )
 
     def test_rolled_row_with_companion_subject_is_rejected(self) -> None:
@@ -234,4 +309,5 @@ class SurgeRolledSubjectCheckTests(TestCase):
                 amount=2,
                 round_number=1,
                 repeat_round=1,
+                outcome=CheckOutcomeFactory(name="Surge Companion Outcome", success_level=1),
             )
