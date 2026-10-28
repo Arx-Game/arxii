@@ -790,6 +790,12 @@ class ResolveSineatingHappyPathTests(TestCase):
             resonance=self.resonance,
         )
         self.assertEqual(cr.lifetime_helped, 3)
+        self.assertEqual(cr.balance, 3)
+        sinner_resonance = CharacterResonance.objects.get(
+            character_sheet=self.sinner,
+            resonance=self.resonance,
+        )
+        self.assertEqual(sinner_resonance.balance, 3)
 
     def test_result_new_lifetime_helped_matches_db(self) -> None:
         from world.magic.models.aura import CharacterResonance

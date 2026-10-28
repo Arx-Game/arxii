@@ -46,6 +46,9 @@ class AssumeAlternateSelfEffectTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.magic.factories import _make_resist_corruption_check_type
+
+        _make_resist_corruption_check_type()
         cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory()
         cls.gift.resonances.add(cls.resonance)

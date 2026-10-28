@@ -89,6 +89,47 @@ class TestAccrueCorruptionForCast(TestCase):
         sheet = caster_sheet or CharacterSheetFactory()
         return accrue_corruption_for_cast(caster_sheet=sheet, **kwargs)
 
+    def test_active_alternate_self_leaks_modest_check_adjusted_corruption(self) -> None:
+        from unittest.mock import patch
+
+        from world.forms.factories import ActiveAlternateSelfFactory, AlternateSelfFactory
+        from world.magic.factories import CorruptionConfigFactory
+
+        sheet = CharacterSheetFactory()
+        alt = AlternateSelfFactory(character=sheet)
+        ActiveAlternateSelfFactory(character=sheet, alternate_self=alt)
+        from world.magic.factories import _make_resist_corruption_check_type
+
+        _make_resist_corruption_check_type()
+        abyssal = ensure_canonical_affinities()[2]
+        resonance = ResonanceFactory(affinity=abyssal)
+        technique = TechniqueFactory(level=1)
+        result_obj = _make_result(
+            technique=technique,
+            resonance_involvements=[
+                ResonanceInvolvement(
+                    resonance=resonance, stat_bonus_contribution=50, thread_pull_resonance_spent=0
+                )
+            ],
+        )
+        config = CorruptionConfigFactory(
+            alternate_self_base_leak_percent=10,
+            alternate_self_leak_percent_per_success_level=2,
+        )
+        with (
+            patch(
+                "world.checks.services.perform_check_with_modifiers",
+                return_value=mock.Mock(success_level=2),
+            ),
+            patch("world.magic.services.corruption.accrue_corruption") as accrue,
+        ):
+            accrue.return_value = mock.sentinel.result
+            summary = accrue_corruption_for_cast(
+                caster_sheet=sheet, technique_use_result=result_obj, config=config
+            )
+        self.assertEqual(accrue.call_args.kwargs["amount"], 3)
+        self.assertEqual(summary.per_resonance, (mock.sentinel.result,))
+
     # ------------------------------------------------------------------
     # Celestial skip
     # ------------------------------------------------------------------

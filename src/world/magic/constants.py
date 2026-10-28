@@ -340,6 +340,8 @@ class GainSource(models.TextChoices):
     # #4733: a drift correction moves some of one resonance into another the
     # character chose; no typed source FK (like PENANCE).
     DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
+    CORRUPTION_CLEANSING = "CORRUPTION_CLEANSING", "Corruption cleansing payout"
+    SINEATING = "SINEATING", "Sineating payout"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -383,6 +385,8 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         # #4733: a correction converts resonance the character already holds;
         # accelerating it would mint resonance from a move.
         GainSource.DRIFT_CORRECTION,
+        GainSource.SINEATING,
+        GainSource.CORRUPTION_CLEANSING,
     }
 )
 
@@ -420,6 +424,8 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
+        GainSource.SINEATING,
+        GainSource.CORRUPTION_CLEANSING,
     }
 )
 
