@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from world.scenes.models import SceneRound
 
 
-def acute_peril_condition_names() -> list[str]:
-    """The condition names subject to the #1479 involved-party HOLD / abandonment.
+def acute_peril_condition_ids() -> list[int]:
+    """Primary keys of the conditions subject to the #1479 involved-party HOLD / abandonment.
 
     This is the HOLD/ABANDONMENT classification — "whose peril depends on who is
     menacing them and whether anyone will rescue them." That is BLEED_OUT only.
@@ -47,22 +47,25 @@ def acute_peril_condition_names() -> list[str]:
     the descent until impact clears the Plummeting condition. The two sets diverge
     on purpose: ``_danger_persists`` = "keep the round alive"; this = "hold/abandon
     a downed victim."
-    """
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
 
-    return [BLEED_OUT_CONDITION_NAME]
+    Found through ``VitalsConsequenceConfig.bleed_out_condition`` (#4739), never by
+    name; an unset designation drops out, so the list is empty and nothing holds.
+    """
+    from world.vitals.peril_designations import bleed_out_condition_id  # noqa: PLC0415
+
+    return [pk for pk in (bleed_out_condition_id(),) if pk is not None]
 
 
 def acute_peril_instances(victim_sheet: "CharacterSheet") -> "QuerySet[ConditionInstance]":
     """Return the victim's active hold/abandonment-eligible ConditionInstances (Bleeding Out).
 
-    Plummeting is excluded by ``acute_peril_condition_names`` — see its docstring.
+    Plummeting is excluded by ``acute_peril_condition_ids`` — see its docstring.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
     return ConditionInstance.objects.filter(
         target_id=victim_sheet.character_id,
-        condition__name__in=acute_peril_condition_names(),
+        condition_id__in=acute_peril_condition_ids(),
     )
 
 

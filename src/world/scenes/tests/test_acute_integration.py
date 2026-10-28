@@ -10,7 +10,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.constants import BLEED_OUT_CONDITION_NAME, DurationType
+from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME, DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
 from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
@@ -18,6 +18,7 @@ from world.scenes.round_services import (
     ensure_round_for_acute_condition,
     maybe_resolve_scene_round,
 )
+from world.vitals.peril_designations import designate_unset_peril_conditions
 
 
 def _make_room():
@@ -69,9 +70,10 @@ class BleedOutDangerRoundTickTest(TestCase):
         )
         # An UNTIL_CURED Bleeding-Out keeps the danger round alive (does not auto-end).
         bleed_template = ConditionTemplateFactory(
-            name=BLEED_OUT_CONDITION_NAME,
+            name=BLEED_OUT_SEED_TEMPLATE_NAME,
             default_duration_type=DurationType.UNTIL_CURED,
         )
+        designate_unset_peril_conditions(bleed_out=bleed_template)
         ConditionInstanceFactory(target=victim.character, condition=bleed_template)
 
         # Both present conscious participants declare -> presence-complete -> resolve.

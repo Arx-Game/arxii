@@ -6,8 +6,10 @@ Idempotently seeds the content the reactive-catch / plummet feature needs:
   bottom of a fall), with null wound/death pools so the config-default
   survivability pools apply — exactly like the poison/exhaustion DamageTypes; and
 * a simple non-expiring "Plummeting" :class:`~world.conditions.models.ConditionTemplate`
-  marker. It carries **no** stages and a ``PERMANENT`` duration so the descent
-  loop alone owns its lifetime: ``advance_plummet`` removes it on impact and
+  marker, designated on ``VitalsConsequenceConfig.plummeting_condition`` when that is
+  unset (#4739; code never finds it by name). It carries **no** stages and a
+  ``PERMANENT`` duration so the descent loop alone owns its lifetime:
+  ``advance_plummet`` removes it on impact and
   ``end_plummet`` removes it on a clean catch — it never auto-expires mid-air.
 
 Descent depth is tracked solely by the condition instance's per-round
@@ -32,7 +34,7 @@ from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
     FALLING_CATEGORY_NAME,
     FLY_CAPABILITY_NAME,
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
     TELEKINESIS_CAPABILITY_NAME,
     TELEPORT_CAPABILITY_NAME,
 )
@@ -105,7 +107,7 @@ def ensure_fall_content() -> None:
     _ensure_fall_damage_type()
     ensure_catch_content()
 
-    authored_or_sample(
+    template = authored_or_sample(
         ConditionTemplate,
         {
             "category": category,
@@ -122,8 +124,14 @@ def ensure_fall_content() -> None:
             "is_stackable": False,
             "default_duration_type": DurationType.PERMANENT,
         },
-        name=PLUMMETING_CONDITION_NAME,
+        name=PLUMMETING_SEED_TEMPLATE_NAME,
     )
+    if template is not None:
+        from world.vitals.peril_designations import (  # noqa: PLC0415
+            designate_unset_peril_conditions,
+        )
+
+        designate_unset_peril_conditions(plummeting=template)
 
 
 # ---------------------------------------------------------------------------

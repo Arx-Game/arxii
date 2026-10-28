@@ -555,10 +555,10 @@ class TestSurroundedConditionBundleProbe(TestCase):
     def test_missing_when_the_designation_is_unset(self) -> None:
         """A template named Surrounded does not count until staff designate it."""
         from actions.factories import ConsequencePoolFactory
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
         from world.vitals.constants import POOL_SURROUNDED_ENTRY
 
-        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        template = ConditionTemplateFactory(name=SURROUNDED_SEED_TEMPLATE_NAME)
         ConditionStageFactory(condition=template, stage_order=1)
         ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
         result = rc._probe_surrounded_condition_bundle()

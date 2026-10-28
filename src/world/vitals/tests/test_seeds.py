@@ -3,7 +3,7 @@
 from django.test import TestCase, override_settings
 
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     UNCONSCIOUS_CONDITION_NAME,
     FoundationalCapability,
 )
@@ -62,7 +62,7 @@ class SurvivabilitySeedTests(TestCase):
 
     def test_bleeding_out_has_three_stages(self) -> None:
         seed_survivability_content()
-        template = ConditionTemplate.objects.get(name=BLEED_OUT_CONDITION_NAME)
+        template = ConditionTemplate.objects.get(name=BLEED_OUT_SEED_TEMPLATE_NAME)
         self.assertTrue(template.has_progression)
         stages = list(template.stages.order_by("stage_order"))
         self.assertEqual(len(stages), 3)

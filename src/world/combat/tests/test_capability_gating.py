@@ -25,7 +25,7 @@ from world.combat.factories import (
 )
 from world.combat.services import declare_action
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     FoundationalCapability,
 )
 from world.conditions.factories import (
@@ -188,7 +188,7 @@ class DeclareActionDyingTests(TestCase):
             condition=bleed_out,
         )
         self.assertTrue(result.success)
-        self.assertEqual(bleed_out.name, BLEED_OUT_CONDITION_NAME)
+        self.assertEqual(bleed_out.name, BLEED_OUT_SEED_TEMPLATE_NAME)
 
         technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type_attack)
         action = declare_action(

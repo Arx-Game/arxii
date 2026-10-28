@@ -8,7 +8,7 @@ from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     POISON_DAMAGE_TYPE_NAME,
     POISONED_CONDITION_NAME,
     SLOW_POISON_CONDITION_NAME,
@@ -319,7 +319,7 @@ class AcutePoisonCrossesDeathThresholdTests(TestCase):
         self.assertLessEqual(vitals.health, 0, "Poison tick must cross the death threshold")
         active_names = {inst.condition.name for inst in get_active_conditions(character)}
         self.assertIn(
-            BLEED_OUT_CONDITION_NAME,
+            BLEED_OUT_SEED_TEMPLATE_NAME,
             active_names,
             "Crossing the death threshold via poison must apply Bleeding-Out",
         )
@@ -387,7 +387,7 @@ class ChronicPoisonTickTests(TestCase):
         vitals.refresh_from_db()
         self.assertGreater(vitals.health_percentage, 0.2)
         active_names = {inst.condition.name for inst in get_active_conditions(character)}
-        self.assertNotIn(BLEED_OUT_CONDITION_NAME, active_names)
+        self.assertNotIn(BLEED_OUT_SEED_TEMPLATE_NAME, active_names)
         self.assertNotIn(UNCONSCIOUS_CONDITION_NAME, active_names)
 
     def test_skips_character_in_active_round(self) -> None:

@@ -21,7 +21,7 @@ from django.test import TestCase, override_settings, tag
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     CATCH_THE_FALLER_NAME,
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
     PositionKind,
 )
 from world.areas.positioning.factories import wire_fall_triggers
@@ -86,7 +86,7 @@ class FellBeginsPlummetTests(TestCase):
 
         self.assertTrue(
             get_active_conditions(self.faller, include_suppressed=False)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
             "faller should carry the Plummeting condition",
         )
@@ -114,7 +114,7 @@ class FellBeginsPlummetTests(TestCase):
         )
         self.assertEqual(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .count(),
             1,
             "re-entry must not stack the Plummeting condition",

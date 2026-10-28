@@ -347,10 +347,12 @@ def _danger_persists(scene_round: SceneRound) -> bool:
     Plummeting (#1228) — the descent must keep advancing until the fall resolves
     (impact removes the Plummeting condition), then the round auto-ends.
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import acute_peril_hand_off_condition_ids  # noqa: PLC0415
 
+    danger_ids = acute_peril_hand_off_condition_ids()
+    if not danger_ids:
+        return False
     char_ids = list(
         scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
             "character_sheet__character_id", flat=True
@@ -360,7 +362,7 @@ def _danger_persists(scene_round: SceneRound) -> bool:
         return False
     return ConditionInstance.objects.filter(
         target_id__in=char_ids,
-        condition__name__in=[BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME],
+        condition_id__in=danger_ids,
     ).exists()
 
 
@@ -371,9 +373,12 @@ def _plummeting_character_ids(scene_round: SceneRound) -> set[int]:
     skip: a fall is environmental and self-completing, so the descent advances on
     every END tick regardless of whether the faller declared an action this round.
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.vitals.peril_designations import plummeting_condition_id  # noqa: PLC0415
 
+    plummeting_id = plummeting_condition_id()
+    if plummeting_id is None:
+        return set()
     char_ids = list(
         scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
             "character_sheet__character_id", flat=True
@@ -384,7 +389,7 @@ def _plummeting_character_ids(scene_round: SceneRound) -> set[int]:
     return set(
         ConditionInstance.objects.filter(
             target_id__in=char_ids,
-            condition__name=PLUMMETING_CONDITION_NAME,
+            condition_id=plummeting_id,
         ).values_list("target_id", flat=True)
     )
 
@@ -563,7 +568,7 @@ def resolve_solo_abandoned_victims(
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.vitals.peril_resolution import (  # noqa: PLC0415
-        acute_peril_condition_names,
+        acute_peril_condition_ids,
         potential_rescuer_present,
     )
     from world.vitals.services import can_act, resolve_abandonment  # noqa: PLC0415
@@ -575,7 +580,7 @@ def resolve_solo_abandoned_victims(
     peril_ids = set(
         ConditionInstance.objects.filter(
             target_id__in=char_ids,
-            condition__name__in=acute_peril_condition_names(),
+            condition_id__in=acute_peril_condition_ids(),
         ).values_list("target_id", flat=True)
     )
     if not peril_ids:
@@ -701,7 +706,7 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     # #1479 (plummet): a falling character's descent is ENVIRONMENTAL and
     # self-completing — it must advance every round regardless of who drove the
     # round, so it is exempt from the #1480 AFK own-peril skip below (and, via
-    # acute_peril_condition_names excluding PLUMMETING, from the downed-victim
+    # acute_peril_condition_ids excluding PLUMMETING, from the downed-victim
     # hold/abandonment). Gravity does not pause for an idle round.
     plummeting_ids = _plummeting_character_ids(rnd)
 

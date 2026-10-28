@@ -32,7 +32,7 @@ from world.checks.factories import (
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     POISON_DAMAGE_TYPE_NAME,
     POISONED_CONDITION_NAME,
     DamageTickTiming,
@@ -189,7 +189,7 @@ class PoisonTickBleedOutTests(TestCase):
         self.assertLessEqual(vitals.health, 0, "Poison tick must cross the death threshold")
         active_names = {inst.condition.name for inst in get_active_conditions(character)}
         self.assertIn(
-            BLEED_OUT_CONDITION_NAME,
+            BLEED_OUT_SEED_TEMPLATE_NAME,
             active_names,
             "Crossing the death threshold via poison must apply Bleeding-Out",
         )
@@ -337,7 +337,7 @@ class TrapHitBleedOutTests(TestCase):
         self.assertLessEqual(self.vitals.health, 0, "Trap damage must cross the death threshold")
         active_names = {inst.condition.name for inst in get_active_conditions(self.character)}
         self.assertIn(
-            BLEED_OUT_CONDITION_NAME,
+            BLEED_OUT_SEED_TEMPLATE_NAME,
             active_names,
             "Trap hit crossing the death threshold must apply Bleeding-Out",
         )
@@ -416,7 +416,7 @@ class ExhaustionStrainBleedOutTests(TestCase):
         self.assertLessEqual(vitals.health, 0, "Exhaustion strain must cross the death threshold")
         active_names = {inst.condition.name for inst in get_active_conditions(sheet.character)}
         self.assertIn(
-            BLEED_OUT_CONDITION_NAME,
+            BLEED_OUT_SEED_TEMPLATE_NAME,
             active_names,
             "Exhaustion strain crossing the death threshold must apply Bleeding-Out",
         )

@@ -361,10 +361,10 @@ class MoveResolutionTests(TestCase):
         self.assertEqual(unit.status, BattleUnitStatus.ROUTED)
 
     def test_surrounded_participant_can_declare_and_resolve_move(self) -> None:
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
         from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 
-        surrounded = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        surrounded = ConditionTemplateFactory(name=SURROUNDED_SEED_TEMPLATE_NAME)
         ConditionInstanceFactory(
             target=self.participant.character_sheet.character,
             condition=surrounded,

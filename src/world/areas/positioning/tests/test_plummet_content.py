@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
     FALLING_CATEGORY_NAME,
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
 )
 from world.areas.positioning.plummet_content import ensure_fall_content
 from world.conditions.constants import DurationType
@@ -42,7 +42,7 @@ class EnsureFallContentTests(TestCase):
 
     def test_seeds_plummeting_condition_non_progressive(self):
         ensure_fall_content()
-        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         # Non-progressive marker: depth lives in the instance's severity
         # accumulator, not in stage progression.
         self.assertFalse(tmpl.has_progression)
@@ -53,20 +53,20 @@ class EnsureFallContentTests(TestCase):
         # duration countdown never expires it mid-air (the I1 regression): the
         # descent loop alone removes it on impact / clean catch.
         ensure_fall_content()
-        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         self.assertEqual(tmpl.default_duration_type, DurationType.PERMANENT)
 
     def test_plummeting_has_no_stages(self):
         # The stage severity_multiplier bands were dead data — descent depth is
         # the raw per-round severity accumulator, so no stages are seeded.
         ensure_fall_content()
-        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         self.assertFalse(ConditionStage.objects.filter(condition=tmpl).exists())
 
     def test_plummeting_has_no_damage_over_time(self):
         # Impact is applied explicitly at the bottom (Task 6), not per-round DoT.
         ensure_fall_content()
-        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         self.assertFalse(ConditionDamageOverTime.objects.filter(condition=tmpl).exists())
 
     def test_is_idempotent(self):
@@ -74,10 +74,10 @@ class EnsureFallContentTests(TestCase):
         ensure_fall_content()
         self.assertEqual(DamageType.objects.filter(name=FALL_DAMAGE_TYPE_NAME).count(), 1)
         self.assertEqual(
-            ConditionTemplate.objects.filter(name=PLUMMETING_CONDITION_NAME).count(),
+            ConditionTemplate.objects.filter(name=PLUMMETING_SEED_TEMPLATE_NAME).count(),
             1,
         )
-        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         # Stages not duplicated on the second call.
         self.assertEqual(
             tmpl.stages.count(),

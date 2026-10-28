@@ -572,15 +572,23 @@ class ConditionRollSiteTests(ActivityTermTestCase):
             resist_difficulty=5,
         )
         ConditionStageFactory(condition=template, stage_order=2)
+        # Bleeding Out and Surrounded are found by designation (#4739), not by name.
+        from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME
+        from world.vitals.peril_designations import designate_unset_peril_conditions
+
+        if name == BLEED_OUT_SEED_TEMPLATE_NAME:
+            designate_unset_peril_conditions(bleed_out=template)
+        else:
+            designate_unset_peril_conditions(surrounded=template)
         sheet = CharacterSheetFactory()
         ConditionInstanceFactory(condition=template, target=sheet.character, current_stage=first)
         return sheet
 
     def test_bleed_out_round_resist_marked(self) -> None:
-        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+        from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME
         from world.vitals.services import advance_bleed_out
 
-        sheet = self.staged_peril(BLEED_OUT_CONDITION_NAME, marked=True)
+        sheet = self.staged_peril(BLEED_OUT_SEED_TEMPLATE_NAME, marked=True)
 
         self.assert_terms_reach(
             "world.vitals.services.perform_check_with_modifiers",
@@ -589,10 +597,10 @@ class ConditionRollSiteTests(ActivityTermTestCase):
         )
 
     def test_bleed_out_round_resist_unmarked(self) -> None:
-        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+        from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME
         from world.vitals.services import advance_bleed_out
 
-        sheet = self.staged_peril(BLEED_OUT_CONDITION_NAME, marked=False)
+        sheet = self.staged_peril(BLEED_OUT_SEED_TEMPLATE_NAME, marked=False)
 
         self.assert_no_terms(
             "world.vitals.services.perform_check_with_modifiers",
@@ -602,10 +610,10 @@ class ConditionRollSiteTests(ActivityTermTestCase):
 
     def test_surrounded_round_resist_marked(self) -> None:
         from world.battles.services import create_battle
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
         from world.vitals.services import advance_surrounded
 
-        sheet = self.staged_peril(SURROUNDED_CONDITION_NAME, marked=True)
+        sheet = self.staged_peril(SURROUNDED_SEED_TEMPLATE_NAME, marked=True)
         battle = create_battle(name="Round Resist Skills")
 
         self.assert_terms_reach(
@@ -616,10 +624,10 @@ class ConditionRollSiteTests(ActivityTermTestCase):
 
     def test_surrounded_round_resist_unmarked(self) -> None:
         from world.battles.services import create_battle
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
         from world.vitals.services import advance_surrounded
 
-        sheet = self.staged_peril(SURROUNDED_CONDITION_NAME, marked=False)
+        sheet = self.staged_peril(SURROUNDED_SEED_TEMPLATE_NAME, marked=False)
         battle = create_battle(name="Round Resist Skills")
 
         self.assert_no_terms(
