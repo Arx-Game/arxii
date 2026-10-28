@@ -42,6 +42,7 @@ POTENCY_LABELS: dict[str, str] = {
     SurgeTriggerKind.TAUNT_RECEIVED: "taunt potency",
     SurgeTriggerKind.RALLIED: "rally difficulty",
     SurgeTriggerKind.ALLY_HURT: "bond difficulty",
+    SurgeTriggerKind.DUG_DEEP: "resolve difficulty",
 }
 
 

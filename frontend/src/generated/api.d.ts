@@ -6068,6 +6068,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/dig-deep/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Dig deep: roll resolve to raise your own intensity (#4738).
+     *
+     *     An immediate act, once a round. A refusal carries the rules' own message.
+     */
+    post: operations['combat_dig_deep_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/end/': {
     parameters: {
       query?: never;
@@ -32501,6 +32522,19 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
+    /** @description What digging deep costs the viewer's own character right now (#4738); read-only. */
+    DigDeepOffer: {
+      /** @description Free dig deeps she holds. */
+      free_dig_deeps: number;
+      /** @description Fatigue pool a dig deep is paid from. */
+      fatigue_category: string;
+      /** @description Fatigue a dig deep costs without a free one. */
+      fatigue_cost: number;
+      /** @description Whether she has already dug deep this round. */
+      dug_deep_this_round: boolean;
+      /** @description Name of the ally whose encouragement gave her free dig deeps, if any. */
+      given_by: string | null;
+    };
     /**
      * @description * `soulfray` - Soulfray active
      *     * `near_death` - Near death
@@ -44567,6 +44601,7 @@ export interface components {
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
       readonly dodge_plan: components['schemas']['DodgePlan'] | null;
+      readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -62803,6 +62838,32 @@ export interface operations {
     };
   };
   combat_demoralize_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_dig_deep_create: {
     parameters: {
       query?: never;
       header?: never;

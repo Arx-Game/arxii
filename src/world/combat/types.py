@@ -459,6 +459,23 @@ class EscalationTickResult:
 
 
 @dataclass(frozen=True)
+class DigDeepResult:
+    """What a character's dig deep did (#4738).
+
+    ``outcome`` is the resolve roll's outcome (None when the check could not run),
+    ``surge_amount`` the intensity the band gave (0 when it gave none), ``used_free_dig_deep``
+    whether a free dig deep was spent in place of fatigue, and ``fatigue_spent`` the fatigue
+    actually charged (0 when a free dig deep paid) from the pool ``fatigue_category``.
+    """
+
+    outcome: CheckOutcome | None
+    surge_amount: int
+    used_free_dig_deep: bool
+    fatigue_spent: int
+    fatigue_category: str
+
+
+@dataclass(frozen=True)
 class DramaticSurgeBeat:
     """One dramatic-surge event produced by ``apply_dramatic_surge`` (#2013).
 
