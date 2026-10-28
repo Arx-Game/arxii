@@ -177,3 +177,20 @@ class CmdRally(ArxCommand):
             return
         result = rally.run(self.caller, target=target)
         self.msg(result.message)
+
+
+class CmdBreathe(ArxCommand):
+    """Take a breath, ending anything that lasts only while you hold it.
+
+    Usage:
+        breathe
+    """
+
+    key = "breathe"
+    help_category = "Conditions"
+
+    def func(self) -> None:
+        from actions.definitions.conditions import take_breath  # noqa: PLC0415
+
+        result = take_breath.run(self.caller)
+        self.msg(result.message)

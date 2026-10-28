@@ -3025,6 +3025,14 @@
 
 ## world.conditions
 
+### BreathHoldConfig
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK] (nullable)
+
+### BreathHoldDurationAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### CapabilityType
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -3165,6 +3173,7 @@
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
+  - breath_runs_out_condition -> conditions.ConditionTemplate [FK] (nullable)
   - break_free_check_type -> checks.CheckType [FK] (nullable)
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
@@ -3305,6 +3314,7 @@
 - `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult - Resolve a single break-free attempt against an applied condition.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary - Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
 - `breakable_condition_filter() -> django.db.models.query_utils.Q - Filter for condition instances a character may fight off or be rallied against.`
+- `breath_hold_rounds(target: 'ObjectDB') -> int | None - Roll *target*'s breath check and return how many rounds she can hold it (#4741).`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
@@ -3323,6 +3333,7 @@
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet - Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int - Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
+- `get_breath_hold_config() -> world.conditions.models.BreathHoldConfig - Return the BreathHoldConfig singleton (pk=1), creating it lazily (#4741).`
 - `get_capability_status(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus - Get the status of a capability for a target based on active conditions.`
 - `get_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int - Get the total value of a capability for a character.`
 - `get_check_modifier(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult - Get the total modifier for a check type from active conditions.`
@@ -3344,6 +3355,7 @@
 - `guardians_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, list[int]] - Guardian ObjectDB pks for each target from active source_guards_bearer conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
+- `held_breath_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active conditions that last only while she holds her breath.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_intangible(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
 - `is_magical_treatment(treatment: world.conditions.models.TreatmentTemplate, *, technique_driven: bool = False) -> bool - Whether ``treatment`` is magical; otherwise it is mundane first aid (#4450, #4600).`
@@ -3380,6 +3392,7 @@
 - `spend_conditions_by_id(instance_ids: collections.abc.Iterable[int]) -> None - Spend the once-only conditions among ``instance_ids`` with one query (#4584).`
 - `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
+- `take_breath(target: 'ObjectDB') -> list[world.conditions.models.ConditionTemplate] - She breathes: every held-breath condition on her ends (#4741).`
 - `turn_order_modifier_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total turn order modifier per target from active conditions (positive = acts earlier).`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
@@ -11119,6 +11132,7 @@
   - cleanup_thresholds <- areas.CleanupTierThreshold
   - consequences <- checks.Consequence
   - treatment_attempts <- conditions.TreatmentAttempt
+  - arxii_breathholddurationaward <- conditions.BreathHoldDurationAward
   - challenge_records <- mechanics.CharacterChallengeRecord
   - battle_outcome_mappings <- battles.BattleOutcomeMapping
   - city_defense_projects <- battles.CityDefenseDetails

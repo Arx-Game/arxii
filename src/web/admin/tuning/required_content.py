@@ -906,6 +906,26 @@ def _probe_allegiance_break_checks() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_breath_hold_check() -> ProbeResult:
+    """Held-breath conditions have a breath check and its rounds (#4741). Three queries."""
+    template = apps.get_model("arxii", "ConditionTemplate")
+    if not template.objects.filter(holds_breath=True).exists():
+        return ProbeResult(present=True)
+    config = apps.get_model("arxii", "BreathHoldConfig").objects.filter(pk=1).first()
+    missing: list[str] = []
+    if config is None or config.check_type_id is None:
+        missing.append("Breath hold config: check type")
+    if not apps.get_model("arxii", "BreathHoldDurationAward").objects.exists():
+        missing.append("Breath hold duration awards")
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=tuple(missing),
+            detail="Held-breath conditions fall back to their own default rounds.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_npc_resist_checks() -> ProbeResult:
     """Every single-target social template names a resist check and a consent category (#4418).
 
@@ -2163,6 +2183,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_allegiance_break_checks),
             admin_model="ConditionTemplate",
+        ),
+        ContentDependency(
+            key="breath-hold-check",
+            label="The breath check and its rounds per outcome",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/conditions/services.py breath_hold_rounds()",
+            consequence=(
+                "Held-breath conditions (a smoke form, being underwater) last their "
+                "authored default rounds for everyone instead of as long as the "
+                "character can hold her breath."
+            ),
+            probe=CustomProbe(fn=_probe_breath_hold_check),
+            admin_model="BreathHoldConfig",
         ),
         ContentDependency(
             key="settle-action-template",

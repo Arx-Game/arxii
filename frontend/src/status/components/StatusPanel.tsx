@@ -80,6 +80,9 @@ export function StatusPanel({ characterId, characterName }: StatusPanelProps) {
     (payload: ActionResultPayload) => {
       if (!payload.success) return;
       queryClient.invalidateQueries({ queryKey: ['status', 'purse', characterId] }).catch(() => {});
+      queryClient
+        .invalidateQueries({ queryKey: ['character-vitals', characterId] })
+        .catch(() => {});
     },
     [characterId, queryClient]
   );
@@ -92,6 +95,11 @@ export function StatusPanel({ characterId, characterName }: StatusPanelProps) {
     executeAction(characterName, 'withdraw_coins', { amount });
     setWithdrawText('');
   }, [characterName, executeAction, withdrawText]);
+
+  const handleTakeBreath = useCallback(() => {
+    if (!characterName) return;
+    executeAction(characterName, 'take_breath', {});
+  }, [characterName, executeAction]);
 
   if (isLoading) {
     return (
@@ -131,6 +139,25 @@ export function StatusPanel({ characterId, characterName }: StatusPanelProps) {
             {vitals.wound_description || 'A healthy appearance.'}
           </p>
         </section>
+
+        {vitals.held_breath.length > 0 && (
+          <section aria-label="Breath" className="space-y-1.5">
+            <p className="text-sm font-medium">Holding your breath</p>
+            <ul className="space-y-0.5 text-sm text-muted-foreground">
+              {vitals.held_breath.map((held) => (
+                <li key={held.name}>
+                  {held.name}
+                  {held.rounds_remaining != null && ` · ${held.rounds_remaining} rounds left`}
+                </li>
+              ))}
+            </ul>
+            {characterName && (
+              <Button size="sm" variant="outline" onClick={handleTakeBreath}>
+                Take a breath
+              </Button>
+            )}
+          </section>
+        )}
 
         <section aria-label="Fatigue" className="space-y-2">
           <p className="text-sm font-medium">Fatigue</p>
