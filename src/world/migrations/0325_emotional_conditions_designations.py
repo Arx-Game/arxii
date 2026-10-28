@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0323_remove_thread_uniq_thread_trait_and_more")]
+    dependencies = [("arxii", "0324_characterengagement_dig_deep_and_more")]
 
     operations = [
         migrations.CreateModel(
@@ -153,6 +153,7 @@ class Migration(migrations.Migration):
                     ("rallied", "Rallied"),
                     ("ally_hurt", "Ally Hurt"),
                     ("condition_fed", "Emotional Condition"),
+                    ("dug_deep", "Dug deep"),
                 ],
                 max_length=20,
             ),

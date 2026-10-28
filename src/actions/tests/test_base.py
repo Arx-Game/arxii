@@ -321,6 +321,7 @@ class ActionRegistryTests(TestCase):
             "combat_engage",
             "combat_disengage",
             "combat_rally",
+            "combat_dig_deep",
             "combat_demoralize",
             "combat_taunt",
             "combat_parley",

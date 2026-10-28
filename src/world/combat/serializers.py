@@ -499,6 +499,23 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class DigDeepOfferSerializer(serializers.Serializer):
+    """What digging deep costs the viewer's own character right now (#4738); read-only."""
+
+    free_dig_deeps = serializers.IntegerField(help_text="Free dig deeps she holds.")
+    fatigue_category = serializers.CharField(help_text="Fatigue pool a dig deep is paid from.")
+    fatigue_cost = serializers.IntegerField(
+        help_text="Fatigue a dig deep costs without a free one."
+    )
+    dug_deep_this_round = serializers.BooleanField(
+        help_text="Whether she has already dug deep this round."
+    )
+    given_by = serializers.CharField(
+        allow_null=True,
+        help_text="Name of the ally whose encouragement gave her free dig deeps, if any.",
+    )
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -528,6 +545,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
     dodge_plan = serializers.SerializerMethodField()
+    dig_deep = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -553,7 +571,38 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "aftermath",
             "reactions_used",
             "dodge_plan",
+            "dig_deep",
         ]
+
+    @extend_schema_field(DigDeepOfferSerializer(allow_null=True))
+    def get_dig_deep(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What digging deep costs the viewer's own character (#4738); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
+
+        engagement = self._combat_engagement(obj)
+        config = get_strain_config()
+        return {
+            "free_dig_deeps": engagement.free_dig_deeps if engagement is not None else 0,
+            "fatigue_category": config.dig_deep_fatigue_category,
+            "fatigue_cost": config.dig_deep_fatigue_cost,
+            "dug_deep_this_round": engagement is not None
+            and engagement.last_dug_deep_round == obj.encounter.round_number,
+            "given_by": self._dig_deep_giver_name(engagement),
+        }
+
+    @staticmethod
+    def _dig_deep_giver_name(engagement: CharacterEngagement | None) -> str | None:
+        """The name others know the free dig deeps' giver by, or None."""
+        if engagement is None or engagement.free_dig_deeps <= 0:
+            return None
+        giver_id = engagement.free_dig_deeps_given_by_id
+        if giver_id is None:
+            return None
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        return persona_names_for_sheets([giver_id]).get(giver_id)
 
     @extend_schema_field(SquareSerializer(allow_null=True))
     def get_current_square(self, obj: CombatParticipant) -> dict[str, int] | None:
