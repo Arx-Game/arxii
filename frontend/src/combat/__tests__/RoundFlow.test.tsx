@@ -44,6 +44,7 @@ function makeParticipant(id: number, name: string): Participant {
     available_strain: null,
     fatigue: null,
     active_conditions: [],
+    audere_state: null,
     thumbnail_url: '',
     thumbnail_media_url: null,
     escalation_level: null,

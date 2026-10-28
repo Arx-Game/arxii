@@ -28373,6 +28373,12 @@ export interface components {
       offer_id: number;
       accept: boolean;
     };
+    /**
+     * @description * `audere` - Audere
+     *     * `audere_majora` - Audere Majora
+     * @enum {string}
+     */
+    AudereStateEnum: 'audere' | 'audere_majora';
     AudereUltimateState: {
       reveal: components['schemas']['UltimateReveal'] | null;
       readied: components['schemas']['ReadiedUltimate'] | null;
@@ -44501,6 +44507,9 @@ export interface components {
       readonly active_conditions: {
         [key: string]: unknown;
       }[];
+      readonly audere_state:
+        | (components['schemas']['AudereStateEnum'] | components['schemas']['NullEnum'])
+        | null;
       /**
        * @description Direct portrait URL via the primary persona (mirrors OpponentSerializer).
        *

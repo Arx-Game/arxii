@@ -211,6 +211,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     available_strain: null,
     fatigue: null,
     active_conditions: [],
+    audere_state: null,
     thumbnail_url: '',
     thumbnail_media_url: null,
     escalation_level: null,
@@ -473,11 +474,48 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
     ]);
   });
 
-  it('shows the Audere active strip when the viewer participant carries the Audere condition', () => {
+  it('shows the Audere active strip from audere_state whatever the condition is called', () => {
+    // Staff renamed the Audere condition; the server still reports audere_state (#4739).
     mockEncounter({
       is_participant: true,
       participants: [
         makeParticipant({
+          audere_state: 'audere',
+          active_conditions: [
+            { id: 7, name: 'Breakthrough', display_priority: 10 } as unknown as {
+              [key: string]: unknown;
+            },
+          ],
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+  });
+
+  it('shows the Audere active strip during Audere Majora', () => {
+    mockEncounter({
+      is_participant: true,
+      participants: [makeParticipant({ audere_state: 'audere_majora' })],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+  });
+
+  it('does not show the strip for a condition merely named Audere', () => {
+    mockEncounter({
+      is_participant: true,
+      participants: [
+        makeParticipant({
+          audere_state: null,
           active_conditions: [
             { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
               [key: string]: unknown;
@@ -491,7 +529,7 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
       wrapper: createWrapper(),
     });
 
-    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+    expect(screen.queryByTestId('audere-active-strip')).not.toBeInTheDocument();
   });
 
   it('hides the Audere active strip when no Audere condition is active', () => {
@@ -527,11 +565,7 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
           id: 2,
           character_sheet_id: 2002,
           character_name: 'Other',
-          active_conditions: [
-            { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
-              [key: string]: unknown;
-            },
-          ],
+          audere_state: 'audere',
         }),
         makeParticipant({ id: 1, character_sheet_id: 100, character_name: 'Self' }),
       ],
@@ -553,11 +587,7 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
           id: 1,
           character_sheet_id: 100,
           character_name: 'Self',
-          active_conditions: [
-            { id: 7, name: 'Audere', display_priority: 10 } as unknown as {
-              [key: string]: unknown;
-            },
-          ],
+          audere_state: 'audere',
         }),
       ],
     });
