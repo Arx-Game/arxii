@@ -1536,6 +1536,7 @@ def _advance_staged_peril_condition(
     Returns:
         True if the character died during this call, else False.
     """
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import (  # noqa: PLC0415
         get_active_conditions,
         loss_of_self_terms,
@@ -1543,6 +1544,8 @@ def _advance_staged_peril_condition(
 
     if character_sheet is None or condition_id is None:
         return False
+    # The designation is a PROTECT FK, so the row exists; idmapper serves it by pk.
+    template = ConditionTemplate.objects.get(pk=condition_id)
 
     # perform_check still operates on ObjectDB; walk back at the boundary.
     # Refactoring that layer is queued for Phase 3 of the OBJECTDB_PARAM rollout.
@@ -1553,9 +1556,9 @@ def _advance_staged_peril_condition(
     # consistent with the rest of the conditions layer when suppression becomes
     # an authored mechanic. Issue #601.
     instances = list(
-        get_active_conditions(character)
-        .filter(condition_id=condition_id)
-        .select_related("current_stage__resist_check_type")
+        get_active_conditions(character, condition=template).select_related(
+            "current_stage__resist_check_type"
+        )
     )
 
     for instance in instances:
@@ -1575,7 +1578,7 @@ def _advance_staged_peril_condition(
             character,
             stage.resist_check_type,
             target_difficulty=stage.resist_difficulty,
-            extra_traits=loss_of_self_terms(instance.condition),
+            extra_traits=loss_of_self_terms(template),
         )
 
         if int(result.success_level) < 0:
