@@ -164,6 +164,9 @@ class _Drifting(_AShifter):
         super().setUp()
         AffinityInteraction.objects.clear_cache()
         self.outcomes = CheckSystemSetupFactory.create()
+        from world.magic.factories import _make_resist_corruption_check_type
+
+        _make_resist_corruption_check_type()
         self.ysmay, self.sheet, self.alt = self.make_shifter(
             "Ysmay", room=self.room, mask_affinity=self.abyssal
         )
