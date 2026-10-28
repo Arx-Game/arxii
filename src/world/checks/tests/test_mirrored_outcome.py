@@ -2,7 +2,9 @@
 
 from django.test import TestCase
 
+from world.checks.factories import CheckTypeFactory
 from world.checks.services import mirrored_outcome
+from world.checks.types import CheckResult
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -13,6 +15,28 @@ class MirroredOutcomeTests(TestCase):
             level: CheckOutcomeFactory(name=f"Mirror {level}", success_level=level)
             for level in (-2, -1, 1, 2)
         }
+
+    def test_mirrored_result_preserves_roll_and_original(self) -> None:
+        result = CheckResult(
+            check_type=CheckTypeFactory(),
+            outcome=self.outcomes[2],
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=3,
+            trait_points=21,
+            aspect_bonus=4,
+            total_points=25,
+            effective_roll=73,
+        )
+        mirrored = result.with_outcome(mirrored_outcome(result.outcome))
+        self.assertIsNot(mirrored, result)
+        self.assertEqual(mirrored.outcome, self.outcomes[-2])
+        self.assertEqual(result.outcome, self.outcomes[2])
+        self.assertEqual(
+            (mirrored.rank_difference, mirrored.total_points, mirrored.effective_roll), (3, 25, 73)
+        )
+        self.assertIs(mirrored.check_type, result.check_type)
 
     def test_success_mirrors_to_failure(self) -> None:
         self.assertEqual(mirrored_outcome(self.outcomes[2]).success_level, -2)

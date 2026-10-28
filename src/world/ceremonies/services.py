@@ -1343,6 +1343,33 @@ def _pay_sacrifice(
     )
 
 
+def _validate_sacrifice_items(
+    sheet: "CharacterSheet", item_instances: "list[ItemInstance]"
+) -> None:
+    """Refuse the whole sacrifice if any item is not carried by its giver."""
+    from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
+
+    for instance in item_instances:
+        if instance.game_object is None or instance.game_object.location != sheet.character:
+            msg = f"You are not carrying {instance}."
+            raise SacrificeRefused(msg)
+
+
+def _roll_counted_sacrifice(
+    sheet: "CharacterSheet",
+    target: "WorshippedBeing",
+    reading: ItemReading,
+    slots_left: int,
+) -> tuple["CheckOutcome | None", int | None, int]:
+    """Roll a qualifying item and close the week's remaining slots on a botch."""
+    from world.worship.sacrifice_services import is_botch  # noqa: PLC0415
+
+    if reading.effective_points <= 0 or slots_left <= 0:
+        return None, None, slots_left
+    outcome, difficulty = _roll_item(sheet, target, reading)
+    return outcome, difficulty, 0 if is_botch(outcome) else slots_left - 1
+
+
 def sacrifice_items(
     sheet: "CharacterSheet",
     item_instances: "list[ItemInstance]",
@@ -1373,7 +1400,6 @@ def sacrifice_items(
     from world.worship.invocation_services import MSG_NOT_CONFIGURED  # noqa: PLC0415
     from world.worship.pledge_services import broadcast_room_line, open_pledge_for  # noqa: PLC0415
     from world.worship.sacrifice_services import (  # noqa: PLC0415
-        is_botch,
         sacrifice_configured,
         sacrifice_slots_left,
     )
@@ -1386,10 +1412,7 @@ def sacrifice_items(
         raise SacrificeRefused
     target, site = _sacrifice_site(sheet, being)
     character = sheet.character
-    for instance in item_instances:
-        if instance.game_object is None or instance.game_object.location != character:
-            msg = f"You are not carrying {instance}."
-            raise SacrificeRefused(msg)
+    _validate_sacrifice_items(sheet, item_instances)
     persona = active_persona_for_sheet(sheet)
     details = open_pledge_for(sheet)
     if details is not None and details.pledge.being_id != target.pk:
@@ -1411,13 +1434,9 @@ def sacrifice_items(
     with transaction.atomic():
         for instance, reading in zip(item_instances, readings, strict=True):
             counted = reading.effective_points > 0 and slots_left > 0
-            outcome = None
-            difficulty = None
-            if counted:
-                slots_left -= 1
-                outcome, difficulty = _roll_item(sheet, target, reading)
-                if is_botch(outcome):
-                    slots_left = 0
+            outcome, difficulty, slots_left = _roll_counted_sacrifice(
+                sheet, target, reading, slots_left
+            )
             where = f"at {target.name}'s {site}" if site else f"to {target.name}"
             offered = give_up_item(
                 instance,

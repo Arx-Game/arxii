@@ -92,27 +92,16 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
         sign = "+" if effect.get_value_at_rank(1) >= 0 else "-"
         return f"{sign}{effect.get_modifier_size_display()} {target_name}"
 
+    scale = 10 if category_name == STAT_CATEGORY_NAME else 1
     if effect.scaling_values:
-        if category_name == STAT_CATEGORY_NAME:
-            values = "/".join(str(int(v) // 10) for v in effect.scaling_values)
-        else:
-            values = "/".join(str(int(v)) for v in effect.scaling_values)
-
+        values = "/".join(str(int(value) // scale) for value in effect.scaling_values)
         sign = "+" if effect.scaling_values[0] >= 0 else ""
-        if category_name in PERCENTAGE_CATEGORIES:
-            return f"{sign}{values}% {target_name}"
-        return f"{sign}{values} {target_name}"
-
-    value = effect.value_per_rank or 0
-    if category_name == STAT_CATEGORY_NAME:
-        display_value = value // 10
     else:
-        display_value = value
-
-    sign = "+" if display_value >= 0 else ""
-    if category_name in PERCENTAGE_CATEGORIES:
-        return f"{sign}{display_value}% {target_name}"
-    return f"{sign}{display_value} {target_name}"
+        value = (effect.value_per_rank or 0) // scale
+        values = str(value)
+        sign = "+" if value >= 0 else ""
+    suffix = "%" if category_name in PERCENTAGE_CATEGORIES else ""
+    return f"{sign}{values}{suffix} {target_name}"
 
 
 class DistinctionListSerializer(serializers.ModelSerializer):

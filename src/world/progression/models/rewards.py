@@ -211,6 +211,24 @@ class DevelopmentPoints(SharedMemoryModel):
             .first()
         )
 
+    def _levels_earned(
+        self, starting_level: int, ceiling: int | None, skill_cap: int | None
+    ) -> list[tuple[int, int]]:
+        """List levels affordable before the language or skill cap."""
+        level_ups: list[tuple[int, int]] = []
+        current_level = starting_level
+        while True:
+            next_level = current_level + 1
+            if ceiling is not None and next_level >= ceiling:
+                break
+            if skill_cap is not None and next_level > skill_cap:
+                break
+            if self.total_earned < cumulative_dp_for_level(next_level):
+                break
+            level_ups.append((current_level, next_level))
+            current_level = next_level
+        return level_ups
+
     def award_points(self, amount: int) -> list[tuple[int, int]]:
         """Award development points and level up the trait when thresholds are crossed.
 
@@ -258,24 +276,11 @@ class DevelopmentPoints(SharedMemoryModel):
             defaults={"value": 10},
         )
 
-        level_ups: list[tuple[int, int]] = []
         starting_level: int = trait_value.value
-        current_level: int = starting_level
         ceiling = self._language_rating_ceiling(starting_level)
         skill_cap = stored_skill_cap(self.character_sheet) if skill is not None else None
-
-        while True:
-            next_level = current_level + 1
-            if ceiling is not None and next_level >= ceiling:
-                break
-            if skill_cap is not None and next_level > skill_cap:
-                break
-            dp_needed = cumulative_dp_for_level(next_level)
-            if self.total_earned >= dp_needed:
-                level_ups.append((current_level, next_level))
-                current_level = next_level
-            else:
-                break
+        level_ups = self._levels_earned(starting_level, ceiling, skill_cap)
+        current_level = level_ups[-1][1] if level_ups else starting_level
 
         # Parked at an XP lock, or at the band's skill cap (#4585): surplus dp
         # dissipates instead of banking (the 2026-07-09 ephemerality ruling skills

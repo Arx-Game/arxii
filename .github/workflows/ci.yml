@@ -100,7 +100,7 @@ jobs:
           python-version: '3.13'
       - run: uv sync
       - run: uv run pre-commit install
-      - run: uv run pre-commit run --all-files
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
       # tools/tests/ had 60 passing tests and no runner before #3548 - they never ran in CI.
       - run: uv run pytest tools/tests -q
 

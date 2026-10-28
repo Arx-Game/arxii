@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
+from world.conditions.services import held_breath_instances
 from world.fatigue.services import get_full_status
 from world.gm.permissions import HasGMTrust
 from world.roster.models import RosterEntry
@@ -114,5 +115,9 @@ class CharacterVitalsView(APIView):
             "wound_description": wound_description,
             "status": vitals_status,
             "fatigue": get_full_status(sheet, pool=fatigue_pool),
+            "held_breath": [
+                {"name": i.condition.name, "rounds_remaining": i.rounds_remaining}
+                for i in held_breath_instances(sheet.character)
+            ],
         }
         return Response(CharacterVitalsSerializer(payload).data)

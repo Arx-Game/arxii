@@ -108,6 +108,39 @@ break_free = BreakFreeAction()
 
 
 @dataclass
+class TakeBreathAction(Action):
+    """Take a breath, ending every held-breath condition on yourself (#4741).
+
+    Always succeeds and never rolls: holding her breath is the bearer's choice, so
+    ending it is too. Ends her smoke form, surfaces her from underwater, and so on.
+    """
+
+    key: str = "take_breath"
+    name: str = "Take a Breath"
+    icon: str = "wind"
+    category: str = "condition"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.conditions.services import take_breath as end_held_breath  # noqa: PLC0415
+
+        ended = end_held_breath(actor)
+        if not ended:
+            return ActionResult(success=False, message="You aren't holding your breath.")
+        names = ", ".join(template.name for template in ended)
+        verb = "ends" if len(ended) == 1 else "end"
+        return ActionResult(success=True, message=f"You take a breath; {names} {verb}.")
+
+
+take_breath = TakeBreathAction()
+
+
+@dataclass
 class RevealConditionAction(Action):
     """Reveal a subtle behavior-altering condition to an unaware target (#2706)."""
 

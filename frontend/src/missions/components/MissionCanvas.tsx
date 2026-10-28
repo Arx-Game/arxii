@@ -207,6 +207,60 @@ const ENDS_WITHOUT_ROUTE = new Set(['branch', 'external_act']);
 /** Options that roll a check; on a track node the track, not a route, decides. */
 const ROLLED_KINDS = new Set(['check', 'contest']);
 
+function appendRandomRouteEdges(
+  specs: EdgeSpec[],
+  route: MissionOptionRoute,
+  opt: MissionOption,
+  candidates: readonly MissionOptionRouteCandidate[],
+  routeLabel: string
+): void {
+  const drawn = candidates.filter((candidate) => candidate.route === route.id);
+  for (const candidate of drawn) {
+    specs.push({
+      id: `c${candidate.id}`,
+      source: opt.node,
+      target: candidate.target_node,
+      label: `${routeLabel} · random`,
+      dashed: true,
+    });
+  }
+  if (drawn.length === 0) {
+    specs.push({ id: `r${route.id}`, source: opt.node, target: END_NODE_ID, label: routeLabel });
+  }
+}
+
+function appendRouteEdges(
+  route: MissionOptionRoute,
+  optionMap: Map<number, MissionOption>,
+  trackNodes: Set<number>,
+  tierNames: Map<number, string>,
+  candidates: readonly MissionOptionRouteCandidate[],
+  specs: EdgeSpec[],
+  tierlessByOption: Set<number>
+): void {
+  const opt = optionMap.get(route.option);
+  if (!opt) return;
+  const label = optionLabel(opt);
+  const tierless = route.outcome_tier === null || route.outcome_tier === undefined;
+  if (tierless) tierlessByOption.add(opt.id);
+  // Branch routes and counted track rolls follow the same rules as the engine.
+  if (!tierless && ENDS_WITHOUT_ROUTE.has(opt.option_kind)) return;
+  if (ROLLED_KINDS.has(opt.option_kind) && trackNodes.has(opt.node)) return;
+  if (tierless && opt.branch_target) return;
+  const tierName = tierless ? null : tierNames.get(route.outcome_tier as number);
+  const routeLabel = tierName ? `${label} · ${tierName}` : label;
+  if (route.is_random_set) {
+    appendRandomRouteEdges(specs, route, opt, candidates, routeLabel);
+    return;
+  }
+  specs.push({
+    id: `r${route.id}`,
+    source: opt.node,
+    target: route.target_node ?? END_NODE_ID,
+    label: routeLabel,
+  });
+}
+
 function collectEdges(
   rawNodes: readonly MissionNode[],
   rawOptions: readonly MissionOption[],
@@ -214,59 +268,17 @@ function collectEdges(
   candidates: readonly MissionOptionRouteCandidate[],
   tiers: readonly OutcomeTier[]
 ): EdgeSpec[] {
-  const optionMap = new Map<number, MissionOption>();
-  for (const opt of rawOptions) optionMap.set(opt.id, opt);
-  const trackNodes = new Set<number>();
-  for (const n of rawNodes) if ((n.track_successes ?? 0) > 0) trackNodes.add(n.id);
-  const tierNames = new Map<number, string>();
-  for (const t of tiers) tierNames.set(t.id, t.name);
+  const optionMap = new Map(rawOptions.map((option) => [option.id, option]));
+  const trackNodes = new Set(
+    rawNodes.filter((node) => (node.track_successes ?? 0) > 0).map((node) => node.id)
+  );
+  const tierNames = new Map(tiers.map((tier) => [tier.id, tier.name]));
 
   const specs: EdgeSpec[] = [];
   const tierlessByOption = new Set<number>();
 
   for (const route of rawRoutes) {
-    const opt = optionMap.get(route.option);
-    if (!opt) continue;
-    const label = optionLabel(opt);
-    const tierless = route.outcome_tier === null || route.outcome_tier === undefined;
-    if (tierless) tierlessByOption.add(opt.id);
-    // The engine reads only a branch option's tier-less route, never a tiered one.
-    if (!tierless && ENDS_WITHOUT_ROUTE.has(opt.option_kind)) continue;
-    // On a track node the track decides where a check goes, not its routes.
-    if (ROLLED_KINDS.has(opt.option_kind) && trackNodes.has(opt.node)) continue;
-    // A branch option's own target wins over its tier-less route, random or not.
-    if (tierless && opt.branch_target) continue;
-    const tierName = tierless ? null : tierNames.get(route.outcome_tier as number);
-    const routeLabel = tierName ? `${label} · ${tierName}` : label;
-
-    if (route.is_random_set) {
-      const drawn = candidates.filter((c) => c.route === route.id);
-      for (const c of drawn) {
-        specs.push({
-          id: `c${c.id}`,
-          source: opt.node,
-          target: c.target_node,
-          label: `${routeLabel} · random`,
-          dashed: true,
-        });
-      }
-      // A random route with no candidates ends the mission (the graph check flags it too).
-      if (drawn.length === 0) {
-        specs.push({
-          id: `r${route.id}`,
-          source: opt.node,
-          target: END_NODE_ID,
-          label: routeLabel,
-        });
-      }
-      continue;
-    }
-    specs.push({
-      id: `r${route.id}`,
-      source: opt.node,
-      target: route.target_node ?? END_NODE_ID,
-      label: routeLabel,
-    });
+    appendRouteEdges(route, optionMap, trackNodes, tierNames, candidates, specs, tierlessByOption);
   }
 
   for (const opt of rawOptions) {

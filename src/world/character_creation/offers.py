@@ -322,10 +322,14 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     ``_context``) already carries every piece of draft state an opener check needs.
     """
     chapter = OfferChapter(offer.chapter)
-    if chapter == OfferChapter.GLIMPSE:
-        return offer.glimpse_tag_id in ctx["tag_ids"]
-    if chapter == OfferChapter.LINEAGE:
-        return offer.origin_choice_id in ctx["choice_ids"]
+    membership = {
+        OfferChapter.GLIMPSE: (offer.glimpse_tag_id, "tag_ids"),
+        OfferChapter.LINEAGE: (offer.origin_choice_id, "choice_ids"),
+        OfferChapter.BACKGROUNDS: (offer.beat_id, "open_beat_ids"),
+    }
+    if chapter in membership:
+        value, context_key = membership[chapter]
+        return value in ctx[context_key]
     if chapter == OfferChapter.TRADITION_STEP:
         # The state decides how many stances it opens (#4457): a living tradition all
         # three, an orphaned one ranks 0 and 1, a self-taught one none. A line saved
@@ -346,10 +350,6 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
-    if chapter == OfferChapter.BACKGROUNDS:
-        # A beat's answers are open while the beat is in the pool and not unknown
-        # (#4124, #4395); marking it unknown closes them, and reconcile drops the picks.
-        return offer.beat_id in ctx["open_beat_ids"]
     return False
 
 

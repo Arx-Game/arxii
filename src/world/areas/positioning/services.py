@@ -1185,6 +1185,30 @@ def _hop_cost(
     return 1
 
 
+def _enqueue_shorter_path(
+    other: int,
+    candidate: tuple[int, int],
+    previous: int,
+    frontier: list[tuple[int, int, int]],
+    paths: tuple[dict[int, tuple[int, int]], dict[int, int]],
+) -> None:
+    """Record and queue an improved route, preserving its predecessor."""
+    best, parent = paths
+    if other not in best or candidate < best[other]:
+        best[other] = candidate
+        parent[other] = previous
+        heapq.heappush(frontier, (*candidate, other))
+
+
+def _enqueue_shorter_cost(
+    other: int, candidate: int, frontier: list[tuple[int, int]], best: dict[int, int]
+) -> None:
+    """Record and queue a lower cost to a position."""
+    if other not in best or candidate < best[other]:
+        best[other] = candidate
+        heapq.heappush(frontier, (candidate, other))
+
+
 def find_path(
     origin: Position,
     goal_test: Callable[[Position], bool],
@@ -1229,10 +1253,7 @@ def find_path(
             if hop is None or other in done:
                 continue
             candidate = (cost + hop, steps + 1)
-            if other not in best or candidate < best[other]:
-                best[other] = candidate
-                parent[other] = pk
-                heapq.heappush(frontier, (*candidate, other))
+            _enqueue_shorter_path(other, candidate, pk, frontier, (best, parent))
     return None
 
 
@@ -1264,9 +1285,7 @@ def path_costs_from(
             hop = graph.cost(edge, traversal)
             if hop is None or other in done:
                 continue
-            if other not in best or cost + hop < best[other]:
-                best[other] = cost + hop
-                heapq.heappush(frontier, (cost + hop, other))
+            _enqueue_shorter_cost(other, cost + hop, frontier, best)
     return best
 
 
