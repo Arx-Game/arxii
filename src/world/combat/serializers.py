@@ -78,17 +78,23 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-# Attribute name the viewset's Prefetch(to_attr=...) lands the active
-# ConditionInstances on (on the participant's character / opponent's
-# objectdb ObjectDB). Read here so the serializer avoids an N+1.
-ACTIVE_CONDITIONS_CACHE_ATTR = "active_condition_instances"
+# Serializer-context key holding the active ConditionInstances for every target
+# in the payload, ``{object id: [ConditionInstance, ...]}``. The viewset loads it
+# once per request (ADR-0260); a bare ``Prefetch(to_attr=...)`` on the
+# idmapper-shared ObjectDB would outlive the request and go stale (ADR-0263).
+ACTIVE_CONDITIONS_CONTEXT_KEY = "active_conditions_by_object_id"
 
 
-def _prefetched_active_conditions(target: ObjectDB) -> list | None:
-    """The viewset's prefetched active ConditionInstances on ``target``, or None."""
-    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache:
-    # (#2401) never a cached_property.
-    return getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
+def _context_active_conditions(target: ObjectDB, context: dict[str, Any]) -> list | None:
+    """The request's preloaded active ConditionInstances on ``target``, or None.
+
+    None means the caller built the serializer outside the viewset (websocket
+    push, telnet, unit tests) and the caller falls back to a query.
+    """
+    by_object_id = context.get(ACTIVE_CONDITIONS_CONTEXT_KEY)
+    if by_object_id is None:
+        return None
+    return by_object_id.get(target.pk, [])
 
 
 def _serialize_active_conditions(
@@ -104,14 +110,14 @@ def _serialize_active_conditions(
     Results are ordered by the template's ``display_priority`` (highest
     first). Reuses ``ConditionInstanceSerializer``.
 
-    Prefers the viewset's ``Prefetch(to_attr=ACTIVE_CONDITIONS_CACHE_ATTR)``
-    cache (built with the same select_related + suppression filter as
+    Prefers the viewset's per-request ``ACTIVE_CONDITIONS_CONTEXT_KEY`` dict
+    (built with the same select_related + suppression filter as
     ``get_active_conditions``) — visibility filter + priority ordering run
-    in Python over the identity-mapped list, so no per-row query fires.
+    in Python over that list, so no per-row query fires.
     Falls back to ``get_active_conditions`` for callers that build the
     serializer directly (e.g. unit tests).
     """
-    cached = _prefetched_active_conditions(target)
+    cached = _context_active_conditions(target, context)
     if cached is not None:
         instances = [
             inst for inst in cached if can_view_hidden or inst.condition.is_visible_to_others
@@ -129,17 +135,18 @@ def _audere_state(
     target: ObjectDB,
     *,
     can_view_hidden: bool,
+    context: dict[str, Any],
 ) -> str | None:
     """``"audere_majora"`` / ``"audere"`` / ``None`` for a participant's character (#4739).
 
     Found by the AudereThreshold's designated templates, never by name, so the web
     client's Audere strip does not care what staff call the conditions. Majora wins
-    when both hold. Reads the same prefetched active-condition list (and visibility
+    when both hold. Reads the same per-request active-condition list (and visibility
     rule) as ``_serialize_active_conditions``; falls back to a query without one.
     """
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
-    cached = _prefetched_active_conditions(target)
+    cached = _context_active_conditions(target, context)
     if cached is None:
         cached = list(get_active_conditions(target).select_related("condition"))
     held = {
@@ -738,7 +745,11 @@ class ParticipantSerializer(serializers.ModelSerializer):
         character_sheet = obj.character_sheet
         if character_sheet is None:
             return None
-        return _audere_state(character_sheet.character, can_view_hidden=self._can_view_vitals(obj))
+        return _audere_state(
+            character_sheet.character,
+            can_view_hidden=self._can_view_vitals(obj),
+            context=self.context,
+        )
 
     def _combat_engagement(self, obj: CombatParticipant) -> CharacterEngagement | None:
         """Resolve the participant's COMBAT CharacterEngagement, if any.
@@ -821,11 +832,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
             character = persona.character_sheet.character
         except AttributeError:
             return None
-        # #2196: use the view's prefetched conditions (ACTIVE_CONDITIONS_CACHE_ATTR)
-        # to avoid N+1 when serializing multiple participants.
-        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
-        # context-over-cache a cached_property.
-        cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
+        # #2196: use the view's per-request conditions dict to avoid N+1 when
+        # serializing multiple participants; None outside the viewset.
+        cached_conditions = _context_active_conditions(character, self.context)
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
 
     @extend_schema_field(AftermathDigestSerializer(allow_null=True))
