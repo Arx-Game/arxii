@@ -67,27 +67,27 @@ class CharacterEngagement(SharedMemoryModel):
         default=0,
         help_text="Process-derived control bonus (process state only).",
     )
-    free_steels = models.PositiveSmallIntegerField(
+    free_dig_deeps = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
-            "Steels this character may take in combat without paying fatigue, granted by "
-            "an ally's successful Rally. Spent one per steel; ends with the engagement."
+            "Dig deeps this character may take in combat without paying fatigue, granted by "
+            "an ally's successful Rally. Spent one per dig deep; ends with the engagement."
         ),
     )
-    free_steels_given_by = models.ForeignKey(
+    free_dig_deeps_given_by = models.ForeignKey(
         "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        help_text="The ally whose encouragement most recently granted free steels.",
+        help_text="The ally whose encouragement most recently granted free dig deeps.",
     )
-    last_steeled_round = models.PositiveIntegerField(
+    last_dug_deep_round = models.PositiveIntegerField(
         null=True,
         blank=True,
         help_text=(
-            "The combat round number in which this character last steeled herself. Set by "
-            "the steel service, which refuses a second steel in the same round whatever "
+            "The combat round number in which this character last dug deep. Set by "
+            "the dig deep service, which refuses a second dig deep in the same round whatever "
             "the roll or band gave."
         ),
     )

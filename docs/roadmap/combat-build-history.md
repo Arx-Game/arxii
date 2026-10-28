@@ -371,15 +371,15 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   `DramaticSurgeRecord` gained `subject_opponent`/`subject_phase_number` and a third
   partial unique constraint - a boss beat dedups per boss per phase, not once per
   encounter (ADR-0250).
-- **Steeling yourself (#4738, slice 2 of #4727) - DONE:** `SurgeTriggerKind.STEELED` joins
+- **Digging deep (#4738, slice 2 of #4727) - DONE:** `SurgeTriggerKind.DUG_DEEP` joins
   `ROLLED_SURGE_TRIGGER_KINDS` (a `SurgeTuning` may carry `potency_base`); `StrainConfig`
-  gains `steel_fatigue_category`, `steel_fatigue_cost`, `free_steels_per_encouragement`;
-  `CharacterEngagement.free_steels` holds free steels until the fight ends,
-  `free_steels_given_by` credits the rallier, `last_steeled_round` is the once-a-round gate. Service
-  `world/combat/steel.py`, action `combat_steel`, telnet `combat steel`, web
-  `POST /api/combat/<id>/steel/`, the `SteelYourself` button. A successful Rally grants free
-  steels. Migration 0322. Journeys: `test_steel_journeys.py`. Inert until staff author the
-  `STEELED` tuning (the Required content `surge-tuning` probe enumerates it).
+  gains `dig_deep_fatigue_category`, `dig_deep_fatigue_cost`, `free_dig_deeps_per_encouragement`;
+  `CharacterEngagement.free_dig_deeps` holds free dig deeps until the fight ends,
+  `free_dig_deeps_given_by` credits the rallier, `last_dug_deep_round` is the once-a-round gate. Service
+  `world/combat/dig_deep.py`, action `combat_dig_deep`, telnet `combat digdeep`, web
+  `POST /api/combat/<id>/dig-deep/`, the `DigDeep` button. A successful Rally grants free
+  dig deeps. Migration 0324. Journeys: `test_dig_deep_journeys.py`. Inert until staff author the
+  `DUG_DEEP` tuning (the Required content `surge-tuning` probe enumerates it).
 - **Rolled surges (#4737, slice 1 of #4727) - DONE:** taunts, encouragement and a hurt
   bonded ally raise a player character's intensity through a roll with degrees instead of
   a fixed curve amount. New trigger kinds `TAUNT_RECEIVED`, `RALLIED`, `ALLY_HURT`; staff

@@ -8839,6 +8839,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/dig-deep/:
+    post:
+      operationId: combat_dig_deep_create
+      description: |-
+        Dig deep: roll resolve to raise your own intensity (#4738).
+
+        An immediate act, once a round. A refusal carries the rules' own message.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/end/:
     post:
       operationId: combat_end_create
@@ -9408,37 +9439,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/StandoffMoraleRequestRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EncounterDetail'
-          description: ''
-  /api/combat/{id}/steel/:
-    post:
-      operationId: combat_steel_create
-      description: |-
-        Steel yourself: roll resolve to raise your own intensity (#4738).
-
-        An immediate act, once a round. A refusal carries the rules' own message.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this combat encounter.
-        required: true
-      tags:
-      - combat
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
         required: true
       security:
       - cookieAuth: []
@@ -55199,6 +55199,34 @@ components:
         * `hard` - Hard
         * `daunting` - Daunting
         * `harrowing` - Harrowing
+    DigDeepOffer:
+      type: object
+      description: What digging deep costs the viewer's own character right now (#4738);
+        read-only.
+      properties:
+        free_dig_deeps:
+          type: integer
+          description: Free dig deeps she holds.
+        fatigue_category:
+          type: string
+          description: Fatigue pool a dig deep is paid from.
+        fatigue_cost:
+          type: integer
+          description: Fatigue a dig deep costs without a free one.
+        dug_deep_this_round:
+          type: boolean
+          description: Whether she has already dug deep this round.
+        given_by:
+          type: string
+          nullable: true
+          description: Name of the ally whose encouragement gave her free dig deeps,
+            if any.
+      required:
+      - dug_deep_this_round
+      - fatigue_category
+      - fatigue_cost
+      - free_dig_deeps
+      - given_by
     DireStraitsEnum:
       enum:
       - soulfray
@@ -78316,9 +78344,9 @@ components:
           - $ref: '#/components/schemas/DodgePlan'
           nullable: true
           readOnly: true
-        steel:
+        dig_deep:
           allOf:
-          - $ref: '#/components/schemas/SteelOffer'
+          - $ref: '#/components/schemas/DigDeepOffer'
           nullable: true
           readOnly: true
       required:
@@ -78331,6 +78359,7 @@ components:
       - control_modifier
       - current_position
       - current_square
+      - dig_deep
       - dodge_plan
       - escalation_level
       - fatigue
@@ -78339,7 +78368,6 @@ components:
       - intensity_modifier
       - max_health
       - reactions_used
-      - steel
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -92540,34 +92568,6 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
-    SteelOffer:
-      type: object
-      description: What steeling herself costs the viewer's own character right now
-        (#4738); read-only.
-      properties:
-        free_steels:
-          type: integer
-          description: Free steels she holds.
-        fatigue_category:
-          type: string
-          description: Fatigue pool a steel is paid from.
-        fatigue_cost:
-          type: integer
-          description: Fatigue a steel costs without a free one.
-        steeled_this_round:
-          type: boolean
-          description: Whether she has already steeled herself this round.
-        given_by:
-          type: string
-          nullable: true
-          description: Name of the ally whose encouragement gave her free steels,
-            if any.
-      required:
-      - fatigue_category
-      - fatigue_cost
-      - free_steels
-      - given_by
-      - steeled_this_round
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.

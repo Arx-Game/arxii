@@ -488,7 +488,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "use_item",
             "leave",
             "rally",
-            "steel",
+            "dig_deep",
             "demoralize",
             "taunt",
             "parley",
@@ -1319,9 +1319,9 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         return self._serialize_encounter(request, encounter)
 
-    @action(detail=True, methods=[HTTPMethod.POST])
-    def steel(self, request: Request, pk: int | None = None) -> Response:
-        """Steel yourself: roll resolve to raise your own intensity (#4738).
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="dig-deep")
+    def dig_deep(self, request: Request, pk: int | None = None) -> Response:
+        """Dig deep: roll resolve to raise your own intensity (#4738).
 
         An immediate act, once a round. A refusal carries the rules' own message.
         """
@@ -1334,7 +1334,7 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         result = self._dispatch_combat_action(
             participant.character_sheet.character,
-            "combat_steel",
+            "combat_dig_deep",
         )
         if not self._action_succeeded(result):
             detail = result.detail.message if isinstance(result.detail, ActionResult) else ""

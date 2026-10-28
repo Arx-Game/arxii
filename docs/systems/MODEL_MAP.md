@@ -6974,7 +6974,7 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
   - source_content_type -> django.ContentType [FK]
-  - free_steels_given_by -> character_sheets.CharacterSheet [FK] (nullable)
+  - free_dig_deeps_given_by -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### CharacterModifier
 **Foreign Keys:**

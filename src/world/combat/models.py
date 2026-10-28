@@ -2647,26 +2647,26 @@ class StrainConfig(SharedMemoryModel):
             "into her engagement."
         ),
     )
-    steel_fatigue_category = models.CharField(
+    dig_deep_fatigue_category = models.CharField(
         max_length=20,
         choices=ActionCategory.choices,
         default=ActionCategory.MENTAL,
         help_text=(
-            "Which fatigue pool a character pays from when she steels herself in combat "
-            "and holds no free steel. Staff set it; the steel service reads it."
+            "Which fatigue pool a character pays from when she digs deep in combat "
+            "and holds no free dig deep. Staff set it; the dig deep service reads it."
         ),
     )
-    steel_fatigue_cost = models.PositiveSmallIntegerField(
+    dig_deep_fatigue_cost = models.PositiveSmallIntegerField(
         default=3,
         help_text=(
-            "Fatigue a character pays each time she steels herself without a free steel, "
-            "whatever the roll gives. Staff set it; the steel service reads it."
+            "Fatigue a character pays each time she digs deep without a free dig deep, "
+            "whatever the roll gives. Staff set it; the dig deep service reads it."
         ),
     )
-    free_steels_per_encouragement = models.PositiveSmallIntegerField(
+    free_dig_deeps_per_encouragement = models.PositiveSmallIntegerField(
         default=1,
         help_text=(
-            "Free steels an ally gains for each successful Rally aimed at her. Staff set "
+            "Free dig deeps an ally gains for each successful Rally aimed at her. Staff set "
             "it; the Rally resolution reads it. 0 means a Rally grants none."
         ),
     )
@@ -4129,13 +4129,13 @@ class SurgeTuning(SharedMemoryModel):
             "The check rolled when this beat fires. Staff pick it; the surge service rolls "
             "it for the surged player character (Taunt Received, Ally Hurt), for the "
             "player character doing the rallying (Rallied) and for the player character "
-            "steeling herself (Steeled)."
+            "digging deep (Dug deep)."
         ),
     )
     potency_base = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Ally Hurt and Steeled: base difficulty of the roll. Staff set it; the surge "
+            "Ally Hurt and Dug deep: base difficulty of the roll. Staff set it; the surge "
             "service reads it. A taunt takes its potency from the pool entry or the "
             "taunter's check rating, and Rally uses its fixed difficulty, so leave this "
             "at 0 for those."
@@ -4158,15 +4158,15 @@ class SurgeTuning(SharedMemoryModel):
     def clean(self) -> None:
         """Reject potency numbers on a beat that never reads them.
 
-        Ally Hurt reads both; Steeled reads the base only.
+        Ally Hurt reads both; Dug deep reads the base only.
         """
         super().clean()
         if self.trigger_kind == SurgeTriggerKind.ALLY_HURT:
             return
         errors: dict[str, str] = {}
-        if self.potency_base and self.trigger_kind != SurgeTriggerKind.STEELED:
+        if self.potency_base and self.trigger_kind != SurgeTriggerKind.DUG_DEEP:
             errors["potency_base"] = (
-                "Only the Ally Hurt and Steeled beats read this number; leave it at 0 "
+                "Only the Ally Hurt and Dug deep beats read this number; leave it at 0 "
                 "for this beat."
             )
         if self.potency_per_depth:

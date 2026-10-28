@@ -8490,7 +8490,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   in the subject-less slice of the dedup index;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK, plus the four rolled kinds TAUNT_RECEIVED /
-  RALLIED / ALLY_HURT / STEELED described in the next bullet). `reason` (#3387) persists onto the
+  RALLIED / ALLY_HURT / DUG_DEEP described in the next bullet). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
   blank; never broadcast to the room. Three new trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
@@ -8512,29 +8512,29 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
   `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
   for a companion (no opponent peril band).
-- **Steeling yourself (#4738, slice 2 of #4727) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR A
-  `STEELED` `SurgeTuning`]:** `combat steel` / `combat_steel` (`SteelYourselfAction`) /
-  `POST /api/combat/<id>/steel/` runs `world/combat/steel.steel_yourself`: an immediate act,
+- **Digging deep (#4738, slice 2 of #4727) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR A
+  `DUG_DEEP` `SurgeTuning`]:** `combat digdeep` / `combat_dig_deep` (`DigDeepAction`) /
+  `POST /api/combat/<id>/dig-deep/` runs `world/combat/dig_deep.dig_deep`: an immediate act,
   once per round, in a declaring round with a COMBAT engagement and an escalation curve. The
-  once-a-round gate is `CharacterEngagement.last_steeled_round` (== the round number),
+  once-a-round gate is `CharacterEngagement.last_dug_deep_round` (== the round number),
   re-checked under `select_for_update` inside the transaction and written there, so it holds
   even when the band gave no surge record; the pre-transaction check is only an early
-  refusal. On a failure the cached engagement (free steels, giver, marker, intensity and
-  control) and the fatigue pool are restored to match the rolled-back database. A free steel (`CharacterEngagement.free_steels`) is spent if held, else
-  `StrainConfig.steel_fatigue_cost` of `steel_fatigue_category` fatigue is charged (a failed
-  roll still costs); then the `STEELED` tuning's check is rolled against its `potency_base`
+  refusal. On a failure the cached engagement (free dig deeps, giver, marker, intensity and
+  control) and the fatigue pool are restored to match the rolled-back database. A free dig deep (`CharacterEngagement.free_dig_deeps`) is spent if held, else
+  `StrainConfig.dig_deep_fatigue_cost` of `dig_deep_fatigue_category` fatigue is charged (a failed
+  roll still costs); then the `DUG_DEEP` tuning's check is rolled against its `potency_base`
   and the outcome's band is written by `apply_rolled_surge`. A successful Rally
-  (success_level >= 1) grants `StrainConfig.free_steels_per_encouragement` free steels to the
-  ally, credited in `CharacterEngagement.free_steels_given_by` (cleared when the last is
+  (success_level >= 1) grants `StrainConfig.free_dig_deeps_per_encouragement` free dig deeps to the
+  ally, credited in `CharacterEngagement.free_dig_deeps_given_by` (cleared when the last is
   spent); the grant, its cache write and her message run in `transaction.on_commit`, so a
-  round that rolls back leaves no free steel anywhere. Refusals are `SteelRefusedError` with a `user_message`. The participant payload
-  carries `steel` (`SteelOffer`: free steels, `given_by` (the giver's persona name),
-  `steeled_this_round`, fatigue pool, cost) to its owner only; the
-  combat panel's `SteelYourself` button reads it. Journeys: `test_steel_journeys`.
+  round that rolls back leaves no free dig deep anywhere. Refusals are `DigDeepRefusedError` with a `user_message`. The participant payload
+  carries `dig_deep` (`DigDeepOffer`: free dig deeps, `given_by` (the giver's persona name),
+  `dug_deep_this_round`, fatigue pool, cost) to its owner only; the
+  combat panel's `DigDeep` button reads it. Journeys: `test_dig_deep_journeys`.
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
   with degrees. `SurgeTriggerKind` has thirteen members: the nine older kinds above and
-  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` / `STEELED` (`ROLLED_SURGE_TRIGGER_KINDS`). **All four are
+  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` / `DUG_DEEP` (`ROLLED_SURGE_TRIGGER_KINDS`). **All four are
   off until staff author a `SurgeTuning` row per kind with bands** (no data migration seeds
   them; the Required content `surge-tuning` probe, `_probe_surge_tuning`, names each kind
   with no row and every stored band set that breaks the monotonic rule). The hurt-ally surge
@@ -8543,8 +8543,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   up and invents them only under `SEED_SAMPLE_CONTENT`; owner call 2026-10-27: staff author
   them, no data migration).
   Staff author one `SurgeTuning` per kind (`check_type`, `potency_base`, `potency_per_depth`,
-  the potency pair only meaningful on `ALLY_HURT`; `STEELED` reads `potency_base` only and the
-  probe reports a Steeled tuning with no difficulty) with `SurgeDegreeBand` rows per
+  the potency pair only meaningful on `ALLY_HURT`; `DUG_DEEP` reads `potency_base` only and the
+  probe reports a Dug deep tuning with no difficulty) with `SurgeDegreeBand` rows per
   `CheckOutcome` (`intensity`, `control_change`, optional `condition`); the monotonic rule is
   `world/combat/surge_bands.validate_surge_bands`, run from the model `clean` and the admin
   inline formset. `world/combat/surge_rolls.py`: `surge_tuning_for`,
