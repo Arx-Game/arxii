@@ -1432,14 +1432,28 @@ def _probe_drift_conflict_condition_check_modifier() -> ProbeResult:
 
 
 def _designation_result(
-    config_exists: bool, designated_id: int | None, *, config_label: str, field_label: str
+    config_exists: bool,
+    designated_id: int | None,
+    *,
+    config_label: str,
+    field_label: str,
+    inactive: bool = False,
 ) -> ProbeResult:
-    """A designation probe's result: no config row, an unset field, or present (#4739)."""
+    """A designation probe's result: no config row, an unset field, or present (#4739).
+
+    ``inactive`` is True when the designated row is a check type staff switched off; the
+    verbs treat that as unset, so the probe reports it as a problem too.
+    """
     if not config_exists:
         return ProbeResult(present=False, detail=f"No {config_label} row exists.")
     if designated_id is None:
         return ProbeResult(
             present=False, detail=f"The {config_label}'s {field_label} field is empty."
+        )
+    if inactive:
+        return ProbeResult(
+            present=False,
+            detail=f"The {config_label}'s {field_label} is inactive, so it is treated as unset.",
         )
     return ProbeResult(present=True)
 
@@ -1462,6 +1476,9 @@ def _probe_social_taunt_check() -> ProbeResult:
         None if config is None else config.taunt_check_type_id,
         config_label=_SOCIAL_CONFIG_LABEL,
         field_label="Taunt check type",
+        inactive=config is not None
+        and config.taunt_check_type is not None
+        and not config.taunt_check_type.is_active,
     )
 
 
@@ -1473,6 +1490,9 @@ def _probe_social_demoralize_check() -> ProbeResult:
         None if config is None else config.demoralize_check_type_id,
         config_label=_SOCIAL_CONFIG_LABEL,
         field_label="Demoralize check type",
+        inactive=config is not None
+        and config.demoralize_check_type is not None
+        and not config.demoralize_check_type.is_active,
     )
 
 
@@ -1484,6 +1504,9 @@ def _probe_social_parley_check() -> ProbeResult:
         None if config is None else config.parley_check_type_id,
         config_label=_SOCIAL_CONFIG_LABEL,
         field_label="Parley check type",
+        inactive=config is not None
+        and config.parley_check_type is not None
+        and not config.parley_check_type.is_active,
     )
 
 
@@ -1501,17 +1524,22 @@ def _probe_social_rally_success_condition() -> ProbeResult:
 def _probe_rallied_tuning_check() -> ProbeResult:
     """Rally rolls the Rallied surge tuning's check type (#4739, Ruling 7).
 
-    `SurgeTuning.check_type` is required, so a Rallied row always names one; the gap
-    is a missing row, and with none Rally rolls nothing.
+    `SurgeTuning.check_type` is required, so a Rallied row always names one; the gaps are
+    a missing row and an inactive check type, and with either Rally rolls nothing.
     """
     from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
     from world.combat.models import SurgeTuning  # noqa: PLC0415
 
-    if SurgeTuning.objects.filter(trigger_kind=SurgeTriggerKind.RALLIED).exists():
+    if SurgeTuning.objects.filter(
+        trigger_kind=SurgeTriggerKind.RALLIED, check_type__is_active=True
+    ).exists():
         return ProbeResult(present=True)
     return ProbeResult(
         present=False,
-        detail="No Rallied surge tuning exists, so Rally has no check to roll.",
+        detail=(
+            "No Rallied surge tuning with an active check type exists, so Rally has no "
+            "check to roll."
+        ),
     )
 
 

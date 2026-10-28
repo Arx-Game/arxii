@@ -150,7 +150,8 @@ def _resolve_rally(
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     surge_tuning = surge_tuning_for(SurgeTriggerKind.RALLIED, warn=False)
-    if surge_tuning is None:
+    # An inactive check type counts as unset, the same rule Taunt follows.
+    if surge_tuning is None or not surge_tuning.check_type.is_active:
         return outcome
     rally_result = roll_social_check(participant, surge_tuning.check_type, RALLY_BASE_DIFFICULTY)
     success_level = rally_result.success_level or 0

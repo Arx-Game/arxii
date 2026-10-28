@@ -1930,6 +1930,31 @@ class TestDesignationProbes(TestCase):
         for key in keys:
             self.assertTrue(self._present(key), key)
 
+    def test_an_inactive_social_check_type_is_reported(self) -> None:
+        from world.combat.factories import SocialManeuverConfigFactory
+
+        keys = (
+            "social-maneuver-taunt-check",
+            "social-maneuver-demoralize-check",
+            "social-maneuver-parley-check",
+        )
+        SocialManeuverConfigFactory(
+            taunt_check_type=CheckTypeFactory(is_active=False),
+            demoralize_check_type=CheckTypeFactory(is_active=False),
+            parley_check_type=CheckTypeFactory(is_active=False),
+        )
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+
+    def test_an_inactive_rallied_check_type_is_reported(self) -> None:
+        from world.combat.constants import SurgeTriggerKind
+        from world.combat.factories import SurgeTuningFactory
+
+        SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(is_active=False)
+        )
+        self.assertFalse(self._present("rallied-tuning-check"))
+
     def test_rallied_tuning_check(self) -> None:
         from world.combat.constants import SurgeTriggerKind
         from world.combat.factories import SurgeTuningFactory

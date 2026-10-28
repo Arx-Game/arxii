@@ -106,6 +106,22 @@ class RallySurgeTests(TestCase):
             _resolve_rally(self.rallier, action)
         self.assertIsNone(capture.check_type)
 
+    def test_rally_with_an_inactive_check_type_rolls_nothing(self) -> None:
+        """An inactive check type counts as unset, the rule Taunt follows (#4739)."""
+        check_type = self.tuning.check_type
+        check_type.is_active = False
+        check_type.save()
+
+        def reactivate() -> None:
+            check_type.is_active = True
+
+        self.addCleanup(reactivate)
+        action = declare_rally(self.rallier, self.ally)
+        with force_check_outcome(self.success) as capture:
+            _resolve_rally(self.rallier, action)
+        self.assertIsNone(capture.check_type)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
+
     def test_rally_failure_gives_smaller_or_no_surge_never_more(self) -> None:
         amounts = {}
         for outcome in (self.fail, self.partial, self.success, self.great):
