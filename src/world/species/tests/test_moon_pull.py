@@ -200,6 +200,35 @@ class BerserkContentTest(TestCase):
         self.assertEqual(template.category.name, "Control")
 
 
+class RenamedBerserkTest(TestCase):
+    """Moon control loss applies the designated Berserk, whatever it is called (#4739)."""
+
+    def setUp(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.berserk_content import ensure_berserk_content
+        from world.magic.services.fury import get_berserk_template
+
+        ensure_berserk_content()
+        self.berserk = get_berserk_template()
+        self.berserk.name = "Red Haze"
+        self.berserk.save(update_fields=["name"])
+        self.character = CharacterSheetFactory().character
+
+    def test_control_loss_applies_the_renamed_berserk(self):
+        from world.species.moon_sensitivity import _apply_berserk
+
+        with patch("world.conditions.services.apply_condition") as apply:
+            _apply_berserk(self.character)
+        self.assertIs(apply.call_args.args[1], self.berserk)
+
+    def test_the_renamed_berserk_is_found_on_the_character(self):
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.species.moon_sensitivity import _active_berserk_instance
+
+        instance = ConditionInstanceFactory(target=self.character, condition=self.berserk)
+        self.assertEqual(_active_berserk_instance(self.character), instance)
+
+
 class LycanBattleFormProvisioningTest(TestCase):
     @classmethod
     def setUpTestData(cls):

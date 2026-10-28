@@ -45,8 +45,15 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     wire_escalation_content,
 )
+from world.conditions.constants import (
+    UNCONSCIOUS_CONDITION_NAME,
+    DurationType,
+    FoundationalCapability,
+)
 from world.conditions.factories import (
     BleedingOutConditionFactory,
+    CapabilityTypeFactory,
+    ConditionCapabilityEffectFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
@@ -65,6 +72,7 @@ from world.relationships.factories import (
     RelationshipTypeFactory,
 )
 from world.scenes.constants import RoundStatus
+from world.scenes.round_services import ensure_round_for_acute_condition
 from world.traits.models import CheckOutcome
 from world.vitals.constants import DERIVED_STATUS_DYING
 from world.vitals.models import CharacterVitals
@@ -224,6 +232,57 @@ class TheDashboardStaysClearAfterRenames(_StaffRenameRows, JourneyCase):
 
         self.assertIn("berserk-condition", missing)
         self.assertNotIn("berserk-condition", present)
+
+
+class ARenamedBleedingOutStillHolds(_StaffRenameRows, JourneyCase):
+    """Tomas lies unconscious and bleeding out in the Hollow under a renamed Bleeding Out.
+
+    The danger round is opened the way the death tier opens it
+    (``ensure_round_for_acute_condition``). Mira passes from the web client; Tomas cannot
+    act, so hers is the only declaration. No hostile party drove the round, so his peril
+    holds (its count does not tick) and, with Mira present to rescue him, he is marked
+    abandoned.
+    """
+
+    ROUNDS_LEFT = 2
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sign_in_staff()
+        self.hollow = self.make_room("The Hollow")
+        self.mira = self.make_player("Mira", room=self.hollow)
+        self.tomas = self.make_player("Tomas", room=self.hollow)
+        self.bleed_out = ConditionTemplateFactory(
+            name="Bleeding Out",
+            default_duration_type=DurationType.ROUNDS,
+            default_duration_value=self.ROUNDS_LEFT,
+        )
+        designate_unset_peril_conditions(bleed_out=self.bleed_out)
+        # Unconscious: awareness zeroed, so Tomas cannot act and never declares.
+        awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
+        unconscious = ConditionTemplateFactory(
+            name=UNCONSCIOUS_CONDITION_NAME, default_duration_type=DurationType.UNTIL_CURED
+        )
+        ConditionCapabilityEffectFactory(condition=unconscious, capability=awareness, value=-100)
+        ConditionInstanceFactory(target=self.tomas, condition=unconscious)
+
+    def test_the_renamed_peril_holds_when_no_hostile_drives(self) -> None:
+        self.rename("conditiontemplate", self.bleed_out.pk, "Lifeblood Ebbing")
+        bleed = ConditionInstanceFactory(
+            target=self.tomas, condition=self.bleed_out, rounds_remaining=self.ROUNDS_LEFT
+        )
+        rnd = ensure_round_for_acute_condition(self.tomas.sheet_data)
+        self.assertIsNotNone(rnd)
+        held_round = rnd.round_number
+
+        self.assertEqual(self.web(self.mira, "pass_round").detail.message, "You pass.")
+
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.round_number, held_round + 1)
+        bleed.refresh_from_db()
+        self.assertEqual(bleed.rounds_remaining, self.ROUNDS_LEFT)
+        self.assertEqual(bleed.abandoned_since_round, held_round)
+        self.assertEqual(bleed.condition.name, "Lifeblood Ebbing")
 
 
 @tag("postgres")  # Bleeding Out is progressive: apply_condition uses DISTINCT ON

@@ -128,3 +128,16 @@ class FellBeginsPlummetTests(TestCase):
             1,
             "re-entry must not create a second catch challenge",
         )
+
+    def test_a_renamed_plummeting_still_carries_the_fall(self) -> None:
+        """Plummeting is the designated template (#4739); its name does not matter."""
+        from world.vitals.peril_designations import plummeting_template
+
+        template = plummeting_template()
+        template.name = "Freefall"
+        template.save(update_fields=["name"])
+
+        maybe_emit_fall(self.faller, self.chasm)
+
+        held = get_active_conditions(self.faller).filter(condition=template)
+        self.assertEqual([i.condition.name for i in held], ["Freefall"])
