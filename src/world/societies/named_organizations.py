@@ -207,6 +207,26 @@ def _mint_exposure_secret(  # noqa: PLR0913 - keyword-only; each is a distinct a
     return secret
 
 
+def _apply_named_reaction(
+    persona: Persona,
+    reaction: NamedReaction,
+    total: int,
+    legend_entry: LegendEntry | None,
+    mission_deed: MissionDeedRecord | None,
+) -> int | None:
+    """Apply one open reaction and return its actual change, if any."""
+    before = _current_value(persona, reaction.organization)
+    new_value = bump_organization_reputation(
+        persona,
+        reaction.organization,
+        total,
+        cause=OrganizationReputationCause.DEED_NAMED,
+        legend_entry=legend_entry,
+        mission_deed=mission_deed,
+    )
+    return new_value - before if new_value is not None and new_value != before else None
+
+
 def react_to_named_organizations(  # noqa: PLR0913 - keyword-only; each is a distinct input
     *,
     persona: Persona,
@@ -240,17 +260,9 @@ def react_to_named_organizations(  # noqa: PLR0913 - keyword-only; each is a dis
         if harmed and (reaction.only_if_exposed or reach == NamedActReach.PRIVATE):
             covert.append((reaction.organization, -total))
         elif reach == NamedActReach.OPEN:
-            before = _current_value(persona, reaction.organization)
-            new_value = bump_organization_reputation(
-                persona,
-                reaction.organization,
-                total,
-                cause=OrganizationReputationCause.DEED_NAMED,
-                legend_entry=legend_entry,
-                mission_deed=mission_deed,
-            )
-            if new_value is not None and new_value != before:
-                applied[reaction.organization.pk] = new_value - before
+            change = _apply_named_reaction(persona, reaction, total, legend_entry, mission_deed)
+            if change is not None:
+                applied[reaction.organization.pk] = change
     if covert:
         _mint_exposure_secret(
             persona,

@@ -94,6 +94,36 @@ interface PlaceHandlers {
   onKey: (positionId: number) => (event: KeyboardEvent) => void;
 }
 
+function placeSquares(
+  node: PositionNodeLike,
+  area: MapArea,
+  onPlace: PlaceHandlers['onPlace']
+): ReactNode[] {
+  const squares: ReactNode[] = [];
+  for (let row = 0; row < area.h; row++) {
+    for (let col = 0; col < area.w; col++) {
+      const sx = area.x + col;
+      const sy = area.y + row;
+      squares.push(
+        <rect
+          key={keyOf(sx, sy)}
+          data-testid={`battle-map-square-${node.id}-${sx}-${sy}`}
+          x={sx * CELL}
+          y={sy * CELL}
+          width={CELL}
+          height={CELL}
+          fill="transparent"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPlace(node.id, { x: sx, y: sy });
+          }}
+        />
+      );
+    }
+  }
+  return squares;
+}
+
 function PlaceArea({
   node,
   area,
@@ -124,28 +154,7 @@ function PlaceArea({
   const heldFull = held ? `Held by ${holders!.join(', ')}` : null;
   const heldText = heldFull ? fitChipText(heldFull, chipRoom) : null;
   const cut = nameText !== node.name || heldText !== heldFull;
-  const squares: ReactNode[] = [];
-  for (let row = 0; row < area.h; row++) {
-    for (let col = 0; col < area.w; col++) {
-      const sx = area.x + col;
-      const sy = area.y + row;
-      squares.push(
-        <rect
-          key={keyOf(sx, sy)}
-          data-testid={`battle-map-square-${node.id}-${sx}-${sy}`}
-          x={sx * CELL}
-          y={sy * CELL}
-          width={CELL}
-          height={CELL}
-          fill="transparent"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPlace(node.id, { x: sx, y: sy });
-          }}
-        />
-      );
-    }
-  }
+  const squares = placeSquares(node, area, onPlace);
   return (
     <g
       role="button"

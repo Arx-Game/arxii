@@ -329,6 +329,17 @@ def reorder_pictures(entry: RosterEntry, link_ids: Sequence[int]) -> None:
 # ---------------------------------------------------------------- adding and removing
 
 
+def _upload_gallery_image(by: AccountDB, image_file: UploadedFile) -> Media:
+    """Upload one picture and translate validation failures for the gallery."""
+    try:
+        return CloudinaryGalleryService.upload_image(
+            player_data=by.player_data, image_file=image_file
+        )
+    except ValidationError as exc:
+        message = exc.messages[0] if exc.messages else "The upload failed."
+        raise GalleryError(str(message), user_message=str(message)) from exc
+
+
 def add_pictures(
     entry: RosterEntry,
     files: Iterable[UploadedFile],
@@ -353,14 +364,7 @@ def add_pictures(
     next_order = 0 if last is None else last + 1
     links: list[TenureMedia] = []
     for image_file in files:
-        try:
-            media = CloudinaryGalleryService.upload_image(
-                player_data=by.player_data,
-                image_file=image_file,
-            )
-        except ValidationError as exc:
-            message = exc.messages[0] if exc.messages else "The upload failed."
-            raise GalleryError(str(message), user_message=str(message)) from exc
+        media = _upload_gallery_image(by, image_file)
         links.append(
             TenureMedia.objects.create(
                 media=media,

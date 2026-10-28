@@ -278,12 +278,12 @@ def _crowd_opponents(scene: Scene) -> list[CombatOpponent]:
     )
 
 
-def _group_key(opponent: CombatOpponent) -> tuple:
+def _group_key(opponent: CombatOpponent) -> tuple[str, int, int | None]:
     if opponent.voice_persona_id is not None:
-        return ("voice", opponent.voice_persona_id)
+        return ("voice", opponent.voice_persona_id, None)
     if opponent.tier == OpponentTier.MOOK and opponent.threat_pool_id is not None:
         return ("pool", opponent.encounter_id, opponent.threat_pool_id)
-    return ("row", opponent.pk)
+    return ("row", opponent.pk, None)
 
 
 def _bodies(opponent: CombatOpponent) -> int:

@@ -137,6 +137,17 @@ function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
  * `character_sheet_id`) nor an opponent (by `objectdb_id`). A persona with no
  * character or no position is skipped.
  */
+function combatantCharacterIds(encounter: EncounterDetail): Set<number> {
+  const ids = new Set<number>();
+  for (const participant of encounter.participants ?? []) {
+    if (participant.character_sheet_id != null) ids.add(participant.character_sheet_id);
+  }
+  for (const opponent of encounter.opponents ?? []) {
+    if (opponent.objectdb_id != null) ids.add(opponent.objectdb_id);
+  }
+  return ids;
+}
+
 function buildBystanders(
   encounter: EncounterDetail,
   scene: SceneDetail | undefined,
@@ -144,13 +155,7 @@ function buildBystanders(
 ): Map<number, BattleOccupant[]> {
   const map = new Map<number, BattleOccupant[]>();
   if (!scene) return map;
-  const combatantIds = new Set<number>();
-  for (const p of encounter.participants ?? []) {
-    if (p.character_sheet_id != null) combatantIds.add(p.character_sheet_id);
-  }
-  for (const o of encounter.opponents ?? []) {
-    if (o.objectdb_id != null) combatantIds.add(o.objectdb_id);
-  }
+  const combatantIds = combatantCharacterIds(encounter);
   const personaById = new Map((scene.personas ?? []).map((p) => [p.id, p]));
   for (const pp of scene.persona_positions ?? []) {
     if (pp.position === null) continue;

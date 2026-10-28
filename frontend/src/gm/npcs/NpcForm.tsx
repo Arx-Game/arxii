@@ -74,6 +74,23 @@ type FoldedSection =
   | 'notes'
   | 'lending';
 
+function settingsForVisibleSections(
+  settings: NpcSettingsPatch,
+  shown: (section: FoldedSection) => boolean
+): NpcSettingsPatch {
+  const sent: NpcSettingsPatch = {};
+  if (shown('notes') && settings.notes_for_player !== undefined) {
+    sent.notes_for_player = settings.notes_for_player;
+  }
+  if (shown('lending')) {
+    if (settings.listed_on_npc_roster !== undefined)
+      sent.listed_on_npc_roster = settings.listed_on_npc_roster;
+    if (settings.lend_policy !== undefined) sent.lend_policy = settings.lend_policy;
+    if (settings.borrow_audience !== undefined) sent.borrow_audience = settings.borrow_audience;
+  }
+  return sent;
+}
+
 const QUICK_CHIPS: { section: FoldedSection; label: string }[] = [
   { section: 'identity', label: 'Who they are' },
   { section: 'background', label: 'Background' },
@@ -309,19 +326,7 @@ export function NpcForm({
       ...(shown('identity') ? IDENTITY_KEYS : []),
       ...(shown('background') ? BACKGROUND_KEYS : []),
     ];
-    const sentSettings: NpcSettingsPatch = {};
-    if (shown('notes') && settings.notes_for_player !== undefined) {
-      sentSettings.notes_for_player = settings.notes_for_player;
-    }
-    if (shown('lending')) {
-      if (settings.listed_on_npc_roster !== undefined) {
-        sentSettings.listed_on_npc_roster = settings.listed_on_npc_roster;
-      }
-      if (settings.lend_policy !== undefined) sentSettings.lend_policy = settings.lend_policy;
-      if (settings.borrow_audience !== undefined) {
-        sentSettings.borrow_audience = settings.borrow_audience;
-      }
-    }
+    const sentSettings = settingsForVisibleSections(settings, shown);
     return {
       name,
       description,

@@ -9,6 +9,7 @@ split is in target resolution, not in condition application.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -430,6 +431,43 @@ def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
     )
 
 
+@dataclass(frozen=True)
+class _TreatmentContext:
+    caster_sheet: Any
+    scene: Scene
+    candidate_threads: list
+    eff_intensity: int
+
+
+def _treat_technique_target(*, row: Any, target: ObjectDB, context: _TreatmentContext) -> Any:
+    """Apply a row to one eligible target, or return None when it cannot be treated."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    target_sheet = CharacterSheet.objects.filter(character=target).first()
+    if target_sheet is None:
+        return None
+    treatment = row.treatment_template
+    target_effect = _find_treatment_target_effect(treatment, target, target_sheet)
+    if target_effect is None:
+        return None
+    bond_thread = _resolve_treatment_bond_thread(
+        treatment, target, target_sheet, context.candidate_threads
+    )
+    if bond_thread is _BOND_NOT_FOUND:
+        return None
+    return _perform_treatment_for_target(
+        treatment=treatment,
+        target=target,
+        caster_sheet=context.caster_sheet,
+        target_sheet=target_sheet,
+        scene=context.scene,
+        target_effect=target_effect,
+        bond_thread=bond_thread,
+        power_intensity=context.eff_intensity,
+        mend_cap_fraction=row.mend_cap_fraction,
+    )
+
+
 def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-application params
     *,
     technique: Technique,
@@ -496,39 +534,13 @@ def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-applicatio
     # get_treatment_candidates' candidate_threads pattern).
     candidate_threads = list(Thread.objects.filter(owner=caster_sheet, retired_at__isnull=True))
 
+    treatment_context = _TreatmentContext(caster_sheet, scene, candidate_threads, eff_intensity)
     results: list = []
     for row in rows:
         if success_level < row.minimum_success_level:
             continue
-        treatment = row.treatment_template
-        targets = targets_by_kind.get(row.target_kind, [])
-        for target in targets:
-            # An NPC opponent has no sheet: skip it rather than raise mid-round.
-            target_sheet = CharacterSheet.objects.filter(character=target).first()
-            if target_sheet is None:
-                continue
-
-            target_effect = _find_treatment_target_effect(treatment, target, target_sheet)
-            if target_effect is None:
-                continue
-
-            bond_thread = _resolve_treatment_bond_thread(
-                treatment, target, target_sheet, candidate_threads
-            )
-            if bond_thread is _BOND_NOT_FOUND:
-                continue
-
-            outcome = _perform_treatment_for_target(
-                treatment=treatment,
-                target=target,
-                caster_sheet=caster_sheet,
-                target_sheet=target_sheet,
-                scene=scene,
-                target_effect=target_effect,
-                bond_thread=bond_thread,
-                power_intensity=eff_intensity,
-                mend_cap_fraction=row.mend_cap_fraction,
-            )
+        for target in targets_by_kind.get(row.target_kind, []):
+            outcome = _treat_technique_target(row=row, target=target, context=treatment_context)
             if outcome is not None:
                 results.append(outcome)
 

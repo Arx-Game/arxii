@@ -148,17 +148,20 @@ def build_tactics_inputs(
             "consequence_id", flat=True
         )
     )
-    grounding: set[int] = set()
-    if grounding_consequences:
-        for entries in ally_entries.values():
-            for entry in entries:
-                if entry.on_hit_consequence_pool_id is None:
-                    continue
-                pool = entry.on_hit_consequence_pool  # identity-mapped; few distinct pools
-                if any(
-                    wc.consequence.pk in grounding_consequences for wc in pool.cached_consequences
-                ):
-                    grounding.add(entry.pk)
+    grounding = (
+        {
+            entry.pk
+            for entries in ally_entries.values()
+            for entry in entries
+            if entry.on_hit_consequence_pool_id is not None
+            and any(
+                wc.consequence.pk in grounding_consequences
+                for wc in entry.on_hit_consequence_pool.cached_consequences
+            )
+        }
+        if grounding_consequences
+        else set()
+    )
 
     return TacticsInputs(
         config=config,
@@ -579,6 +582,22 @@ def _approach_test(
     return strikes
 
 
+def _blocking_barrier(
+    wall: list[Position] | None, free: list[Position] | None, profile: MovementProfile
+) -> PositionEdge | None:
+    """Choose a barrier only when a route through it beats the route around it."""
+    if wall is None:
+        return None
+    blocking = first_closed_edge(wall, traversal=profile.traversal)
+    if (
+        blocking is not None
+        and free is not None
+        and _route_cost(free, profile) <= _route_cost(wall, profile, through=True)
+    ):
+        return None
+    return blocking
+
+
 def plan_approach(  # noqa: PLR0913 - the ladder's steps 4 to 8 read as one table
     opponent: CombatOpponent,
     ctx: NpcRoundContext,
@@ -605,15 +624,7 @@ def plan_approach(  # noqa: PLR0913 - the ladder's steps 4 to 8 read as one tabl
         through_barriers=True,
         stop_at=profile.stop_at,
     )
-    blocking = None
-    if wall is not None:
-        blocking = first_closed_edge(wall, traversal=profile.traversal)
-        if (
-            blocking is not None
-            and free is not None
-            and _route_cost(free, profile) <= _route_cost(wall, profile, through=True)
-        ):
-            blocking = None  # going around costs no more than going through
+    blocking = _blocking_barrier(wall, free, profile)
     advance_to = free[-1] if free is not None else None
     can_advance = free is not None and len(_truncate_to_budget(free, profile)) > 1
     basher = best_bash_entry(eligible, opponent)

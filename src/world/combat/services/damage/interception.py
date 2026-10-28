@@ -539,6 +539,17 @@ def _dispatch_interpose_action(
     return _attempt_guardian_interpose(action.participant, protected, pre_payload, action=action)
 
 
+def _charge_interpose_fatigue(
+    guardian: CombatParticipant, action: CombatRoundAction | None
+) -> None:
+    """Charge only a fired, non-technique interpose."""
+    category = (
+        action.focused_category or ActionCategory.PHYSICAL if action else ActionCategory.PHYSICAL
+    )
+    effort = action.effort_level if action is not None else EffortLevel.VERY_LOW
+    apply_fatigue(guardian.character_sheet, category, INTERPOSE_BASE_FATIGUE_COST, effort)
+
+
 def _attempt_guardian_interpose(
     guardian: CombatParticipant,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -613,21 +624,7 @@ def _attempt_guardian_interpose(
     pre_payload.answers_consumed += 1
 
     if technique_action is None:
-        # Charge fatigue to the interposer ONLY on fire (readiness is free).
-        # Mirror _resolve_pc_action: apply_fatigue(sheet, category, base_cost, effort).
-        # A standing guard declared nothing, so she pays physical at very low effort.
-        if action is not None:
-            fatigue_category = action.focused_category or ActionCategory.PHYSICAL
-            effort_level = action.effort_level
-        else:
-            fatigue_category = ActionCategory.PHYSICAL
-            effort_level = EffortLevel.VERY_LOW
-        apply_fatigue(
-            guardian.character_sheet,
-            fatigue_category,
-            INTERPOSE_BASE_FATIGUE_COST,
-            effort_level,
-        )
+        _charge_interpose_fatigue(guardian, action)
     return True
 
 
