@@ -43,7 +43,7 @@ test('header fits a 400px viewport with and without a selected character', async
           is_staff: false,
           is_gm: false,
           is_guide: false,
-          available_characters: [],
+          available_characters: hasSelection ? [selectedEntry] : [],
           pending_applications: [],
           selected_entry_id: hasSelection ? 1 : null,
           selected_entry: hasSelection ? selectedEntry : null,
@@ -65,8 +65,18 @@ test('header fits a 400px viewport with and without a selected character', async
     if (pathname === '/api/narrative/my-messages/') {
       return route.fulfill({ json: { results: [], next: null, previous: null } });
     }
-    if (pathname === '/api/roster/entries/18/personas/') {
-      return route.fulfill({ json: [] });
+    if (pathname === '/api/personas/') {
+      return route.fulfill({
+        json: {
+          results: [
+            {
+              id: 7,
+              name: 'Anastasia of House Longfellow the Magnificent',
+              persona_type: 'primary',
+            },
+          ],
+        },
+      });
     }
     return route.fulfill({ status: 404, json: { detail: 'fixture only' } });
   });
@@ -77,17 +87,58 @@ test('header fits a 400px viewport with and without a selected character', async
     page.getByRole('banner').getByText('Anastasia of House Longfellow', { exact: true }).first()
   ).toBeAttached();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(400);
+  await expect(page.getByRole('link', { name: 'Enter the world' })).toBeVisible();
+  const selectedName = page
+    .getByRole('banner')
+    .getByText('Anastasia of House Longfellow', { exact: true })
+    .first();
+  await expect(selectedName).toBeVisible();
+  await expect(selectedName).toHaveCSS('text-overflow', 'ellipsis');
+  await expect(selectedName).toHaveCSS('white-space', 'nowrap');
+  const nameFits = await selectedName.evaluate(
+    (element) => element.scrollWidth <= element.clientWidth
+  );
+  expect(nameFits).toBe(false);
+  const selectedPersona = page
+    .getByText('as Anastasia of House Longfellow the Magnificent · Not in the world', {
+      exact: true,
+    })
+    .first();
+  await expect(selectedPersona).toBeVisible();
+  await expect(selectedPersona).toHaveCSS('text-overflow', 'ellipsis');
+  await expect(selectedPersona).toHaveCSS('white-space', 'nowrap');
+  const personaFits = await selectedPersona.evaluate(
+    (element) => element.scrollWidth <= element.clientWidth
+  );
+  expect(personaFits).toBe(false);
+  await page.goto('/threads');
+  await expect(page.getByRole('link', { name: 'Enter the world' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(400);
   await page.screenshot({ path: '../docs/reviews/4781/header-400-selected.png', fullPage: true });
   await page.getByRole('button', { name: 'Open menu' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('link', { name: 'Play' })).toBeVisible();
   await page.keyboard.press('Escape');
 
+  for (const route of ['/', '/threads', '/threads/7']) {
+    await page.goto(route);
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Enter the world' })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(400);
+  }
+
   hasSelection = false;
   await page.reload();
   await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
   await expect(page.getByRole('banner').getByText('Anastasia of House Longfellow')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(400);
+  for (const route of ['/', '/threads', '/threads/7']) {
+    await page.goto(route);
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Enter the world' })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(400);
+  }
+  await page.goto('/threads');
   await page.screenshot({
     path: '../docs/reviews/4781/header-400-no-selection.png',
     fullPage: true,
