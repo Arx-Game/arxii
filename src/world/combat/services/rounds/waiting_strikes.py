@@ -235,6 +235,21 @@ def _fire_npc_waiter(
     return outcome
 
 
+def _fire_waiter(
+    waiter: CombatRoundAction | CombatOpponentMove,
+    mover: Combatant,
+    offense_check_fn: PerformCheckFn | None,
+    defense_check_type: CheckType | None,
+    defense_check_fn: PerformCheckFn | None,
+) -> tuple[bool, ActionOutcome | None]:
+    """Dispatch a waiting strike to the PC or NPC resolver."""
+    if isinstance(waiter, CombatRoundAction) and isinstance(mover, CombatOpponent):
+        return True, _fire_pc_waiter(waiter, mover, offense_check_fn)
+    if isinstance(waiter, CombatOpponentMove):
+        return True, _fire_npc_waiter(waiter, mover, defense_check_type, defense_check_fn)
+    return False, None
+
+
 def fire_waiting_strikes(  # noqa: PLR0913 - the resolve loop's check seams ride along
     encounter: CombatEncounter,
     mover: Combatant,
@@ -287,11 +302,10 @@ def fire_waiting_strikes(  # noqa: PLR0913 - the resolve loop's check seams ride
         if before_fire is not None and not announced:
             before_fire()
         announced = True
-        if isinstance(waiter, CombatRoundAction) and isinstance(mover, CombatOpponent):
-            outcome = _fire_pc_waiter(waiter, mover, offense_check_fn)
-        elif isinstance(waiter, CombatOpponentMove):
-            outcome = _fire_npc_waiter(waiter, mover, defense_check_type, defense_check_fn)
-        else:
+        fired, outcome = _fire_waiter(
+            waiter, mover, offense_check_fn, defense_check_type, defense_check_fn
+        )
+        if not fired:
             continue
         if outcome is not None:
             result.outcomes.append(outcome)

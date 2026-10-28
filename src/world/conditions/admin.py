@@ -6,6 +6,8 @@ from world.conditions.inspection import (
     inspect_condition_template,
 )
 from world.conditions.models import (
+    BreathHoldConfig,
+    BreathHoldDurationAward,
     CapabilityType,
     ConditionCapabilityEffect,
     ConditionCategory,
@@ -181,6 +183,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
     autocomplete_fields = [
         "retaliation_damage_type",
         "retaliation_condition",
+        "breath_runs_out_condition",
         "allegiance_break_check_type",
         "settle_consequence_pool",
         "cure_check_type",
@@ -203,6 +206,12 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
             "Duration",
             {
                 "fields": ["default_duration_type", "default_duration_value"],
+            },
+        ),
+        (
+            "Held Breath",
+            {
+                "fields": ["holds_breath", "breath_runs_out_condition", "breaks_held_breath"],
             },
         ),
         (
@@ -561,6 +570,26 @@ class ConditionStageOnEntryAdmin(admin.ModelAdmin):
     search_fields = ["stage__name", "condition__name"]
     list_select_related = ["stage", "condition"]
     autocomplete_fields = ["stage", "condition"]
+
+
+@admin.register(BreathHoldConfig)
+class BreathHoldConfigAdmin(admin.ModelAdmin):
+    """Singleton (pk=1): the check a character rolls to hold her breath (#4741)."""
+
+    list_display = ["pk", "check_type", "target_difficulty"]
+    autocomplete_fields = ["check_type"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second config; there can be only one."""
+        return not BreathHoldConfig.objects.exists()
+
+
+@admin.register(BreathHoldDurationAward)
+class BreathHoldDurationAwardAdmin(admin.ModelAdmin):
+    """Rounds of held breath per check outcome tier (#4741)."""
+
+    list_display = ["outcome_tier", "rounds"]
+    list_select_related = ["outcome_tier"]
 
 
 @admin.register(SettleConfig)

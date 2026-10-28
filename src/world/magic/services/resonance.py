@@ -361,6 +361,24 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
 }
 
 
+def _crossing_requirements(
+    thread: Thread, next_level: int, character_sheet: CharacterSheet
+) -> tuple[bool, list[str]]:
+    """Check a crossing on the shown scale, allowing non-crossing levels."""
+    if next_level % 10 != 0 or not is_crossing_level(shown_thread_level(next_level)):
+        return True, []
+    from world.progression.services.spends import (  # noqa: PLC0415
+        check_requirements_for_thread_crossing,
+    )
+
+    threshold = ThreadCrossingThreshold.objects.filter(
+        target_kind=thread.target_kind, level=shown_thread_level(next_level)
+    ).first()
+    if threshold is None:
+        return True, []
+    return check_requirements_for_thread_crossing(character_sheet.character, threshold)
+
+
 def _check_imbue_level_advance(  # noqa: PLR0913
     thread: Thread,
     next_level: int,
@@ -389,23 +407,9 @@ def _check_imbue_level_advance(  # noqa: PLR0913
         ).exists()
         if not unlocked:
             return False, "XP_LOCK", []
-    # Crossings are on the shown scale (#4585): stored 30 is shown 3, the first
-    # crossing. Only a whole shown level (next_level % 10 == 0) can be one.
-    if next_level % 10 == 0 and is_crossing_level(shown_thread_level(next_level)):
-        from world.progression.services.spends import (  # noqa: PLC0415
-            check_requirements_for_thread_crossing,
-        )
-
-        threshold = ThreadCrossingThreshold.objects.filter(
-            target_kind=thread.target_kind,
-            level=shown_thread_level(next_level),
-        ).first()
-        if threshold is not None:
-            met, failed = check_requirements_for_thread_crossing(
-                character_sheet.character, threshold
-            )
-            if not met:
-                return False, "CROSSING_REQUIREMENT", failed
+    met, failed = _crossing_requirements(thread, next_level, character_sheet)
+    if not met:
+        return False, "CROSSING_REQUIREMENT", failed
     if next_level > cap:
         blocked_by = (
             "LEVEL_CAP"

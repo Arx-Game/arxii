@@ -51636,10 +51636,15 @@ components:
           $ref: '#/components/schemas/CharacterVitalsStatusEnum'
         fatigue:
           $ref: '#/components/schemas/VitalsFatigue'
+        held_breath:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldBreath'
       required:
       - fatigue
       - health
       - health_percentage
+      - held_breath
       - max_health
       - status
       - wound_description
@@ -62246,6 +62251,19 @@ components:
       - max_inches
       - min_inches
       - name
+    HeldBreath:
+      type: object
+      description: One condition the character keeps only while holding her breath
+        (#4741).
+      properties:
+        name:
+          type: string
+        rounds_remaining:
+          type: integer
+          nullable: true
+      required:
+      - name
+      - rounds_remaining
     HeldClue:
       type: object
       description: One clue a character holds — the journal row (#1575).

@@ -201,6 +201,31 @@ def _expected_size_ceiling(row: TechniqueAppliedCondition, effect_count: int) ->
     return min(ceiling, ModifierSize.EXCEPTIONAL)
 
 
+def _size_budget_warning(
+    row: TechniqueAppliedCondition, technique: Technique, effect_count: int
+) -> str | None:
+    """Explain when a condition's size exceeds or underspends its power budget."""
+    size = row.modifier_size
+    if size is None:
+        return None
+    size_label = ModifierSize(size).label
+    ceiling = _expected_size_ceiling(row, effect_count)
+    if size > ceiling:
+        others = effect_count - 1
+        return (
+            f"{row.condition.name} is sized {size_label}, but {technique.name} does "
+            f"{others} other thing{'s' if others != 1 else ''} as well, so this buff "
+            f"shares the cast's power: at most {ModifierSize(ceiling).label}"
+            f"{' with narrow use' if row.narrow_use else ''}."
+        )
+    if effect_count <= 1 and size < ModifierSize.LARGE:
+        return (
+            f"{row.condition.name} is sized {size_label}, but it is everything "
+            f"{technique.name} does, so it gets the whole power budget: Large."
+        )
+    return None
+
+
 def applied_condition_size_warnings(technique: Technique) -> list[str]:
     """Plain warnings where a buff's size doesn't match how its technique spends power.
 
@@ -241,20 +266,9 @@ def applied_condition_size_warnings(technique: Technique) -> list[str]:
         if row.modifier_size is None:
             continue
         size_label = ModifierSize(row.modifier_size).label
-        ceiling = _expected_size_ceiling(row, effect_count)
-        if row.modifier_size > ceiling:
-            others = effect_count - 1
-            warnings.append(
-                f"{row.condition.name} is sized {size_label}, but {technique.name} does "
-                f"{others} other thing{'s' if others != 1 else ''} as well, so this buff "
-                f"shares the cast's power: at most {ModifierSize(ceiling).label}"
-                f"{' with narrow use' if row.narrow_use else ''}."
-            )
-        elif effect_count <= 1 and row.modifier_size < ModifierSize.LARGE:
-            warnings.append(
-                f"{row.condition.name} is sized {size_label}, but it is everything "
-                f"{technique.name} does, so it gets the whole power budget: Large."
-            )
+        budget_warning = _size_budget_warning(row, technique, effect_count)
+        if budget_warning is not None:
+            warnings.append(budget_warning)
         if row.condition_id not in checked_condition_ids:
             warnings.append(
                 f"{row.condition.name} is sized {size_label}, but it changes no check "

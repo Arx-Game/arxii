@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0321_sceneactionpulldeclaration_burn"),
-    ]
+    dependencies = [("arxii", "0322_held_breath")]
 
     operations = [
         migrations.AddField(

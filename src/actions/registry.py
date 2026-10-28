@@ -133,6 +133,7 @@ from actions.definitions.conditions import (
     break_free,
     rally,
     reveal_condition,
+    take_breath,
     treat_condition,
 )
 from actions.definitions.consent_preferences import (
@@ -1036,6 +1037,7 @@ _ALL_ACTIONS: list[Action] = [
     resolve_crossing_offer,
     treat_condition,
     break_free,
+    take_breath,
     reveal_condition,
     rally,
     SanctumInstallAction(),

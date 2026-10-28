@@ -95,14 +95,8 @@ class CmdPosition(ArxCommand):
             return
 
         raw = (self.args or "").strip()
-        rolled = {_SWITCH_GET_PAST: self._do_pass, _SWITCH_STUNT: self._do_stunt}
-        for switch, handler in rolled.items():
-            if switch in self.switches:
-                try:
-                    handler(raw)
-                except CommandError as err:
-                    self.msg(str(err))
-                return
+        if self._handle_rolled_switch(raw):
+            return
         if not raw:
             self._list_positions()
             return
@@ -111,6 +105,19 @@ class CmdPosition(ArxCommand):
         except CommandError as err:
             self.msg(str(err))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _handle_rolled_switch(self, raw: str) -> bool:
+        """Handle pass or stunt switches and report whether one was selected."""
+        rolled = {_SWITCH_GET_PAST: self._do_pass, _SWITCH_STUNT: self._do_stunt}
+        for switch, handler in rolled.items():
+            if switch not in self.switches:
+                continue
+            try:
+                handler(raw)
+            except CommandError as err:
+                self.msg(str(err))
+            return True
+        return False
 
     def _list_positions(self) -> None:
         from world.areas.positioning.models import (  # noqa: PLC0415
