@@ -11,7 +11,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
-from world.combat.serializers import ParticipantSerializer
+from world.combat.serializers import ACTIVE_CONDITIONS_CONTEXT_KEY, ParticipantSerializer
 from world.combat.views import CombatEncounterViewSet
 from world.roster.factories import MediaFactory
 
@@ -53,11 +53,15 @@ class ParticipantPortraitQueryCountTests(TestCase):
 
         # Load through the real viewset queryset (populates participants_cached
         # + the nested cached_payload_personas prefetch with thumbnail joined).
-        loaded = CombatEncounterViewSet()._base_queryset().get(pk=encounter.pk)
+        view = CombatEncounterViewSet()
+        loaded = view._base_queryset().get(pk=encounter.pk)
         participants = loaded.participants_cached
         self.assertEqual(len(participants), 3)
 
-        serializer = ParticipantSerializer(participants, many=True)
+        # The view loads every fighter's conditions once per request and hands them
+        # over in context; without it each participant would query its own.
+        context = {ACTIVE_CONDITIONS_CONTEXT_KEY: view._active_conditions_by_object_id(loaded)}
+        serializer = ParticipantSerializer(participants, many=True, context=context)
         # 3 queries: one reverse-OneToOne CharacterEngagement resolution per
         # character (#872 escalation fields). The descriptor caches the result
         # (even the no-row case) on the identity-mapped ObjectDB, so the warm
