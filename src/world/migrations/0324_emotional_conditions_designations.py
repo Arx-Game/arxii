@@ -126,6 +126,9 @@ class Migration(migrations.Migration):
                 choices=[
                     ("combat_interpose", "Interpose (partial block)"),
                     ("combat_rally", "Rally (morale restored)"),
+                    ("combat_cover", "Cover"),
+                    ("combat_charge", "Charge"),
+                    ("combat_succor", "Succor"),
                     ("surges_given", "Surges given by Rally"),
                 ],
                 help_text="What this scaling applies to: the Interpose or Rally maneuver, or the surges this role gives by Rally.",
