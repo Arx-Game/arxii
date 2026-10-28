@@ -8525,7 +8525,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   free; with a control change or condition the record is written but the room gets no
   "power surges" line (`narrate=False`) and the round payload narration is "". The record
   stores `outcome`, `potency`, `control_change`, `condition` (the condition only if it
-  took hold) and `cause` (the line the surged player, GMs and staff read, in
+  took hold), `vow_scaling` (#4739: the intensity a rallier's "Surges given by Rally" vow
+  added over the band's unscaled intensity, 0 otherwise) and `cause` (the line the surged player, GMs and staff read, in
   the third person with persona names: "<taunter> taunts <target>.", "<rallier> rallies
   <target>.", the NPC entry's authored taunt text as the room is told it (else "<opponent>
   taunts <target>."), or "<hurt ally>, bonded to <surged player>, loses N% of their
@@ -8539,7 +8540,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `npc_action._resolve_npc_taunt_on_target`; acts on player characters only, so an entry aimed
   at an opponent is skipped; one per target per round), Rally (`rally._surge_rallied_ally`:
   the Rally roll is the tuning's `check_type` against the fixed `RALLY_BASE_DIFFICULTY`, which
-  the roll line shows, and its outcome picks the band), and a hurt bonded ally
+  the roll line shows, and its outcome picks the band; a rallier's `SURGES_GIVEN` vow row
+  scales the intensity by `1 + bonus`, `apply_rolled_surge(vow_scaled=True)`, #4739), and a hurt bonded ally
   (`escalation.apply_ally_hurt_surge`, fired by `ally_hurt_spike_handler` from the
   `escalation_spike_on_damage` room trigger, wound-scaled). Surfaces: `TauntAction`
   (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
@@ -8548,7 +8550,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   GMs and staff (a bystander gets only `id` and `narration`, and no beat at all when the
   narration is empty), the round log (the cause line over the roll caption, which reads
   `Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded`,
-  with "bond difficulty" and "(scaled by the wound)" for a hurt ally), an ally taunt in the
+  with "bond difficulty" and "(scaled by the wound)" for a hurt ally, and
+  `· vow scaling +N` after the intensity when a rallier's vow added N), an ally taunt in the
   Combatants row menu and a "Taunting <name>" badge in Your Turn. On a player character a compulsion such as Goaded is a
   debuff `ConditionTemplate` a band applies (owner call 2026-10-27), never a declaration
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
