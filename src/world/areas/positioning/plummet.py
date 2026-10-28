@@ -10,7 +10,8 @@ flow step. ``begin_plummet`` then:
 
 1. ensures an AFK-safe STRICT ``SceneRound`` (start_reason=DANGER) with the faller and
    any other present characters enrolled (``ensure_round_for_acute_condition``);
-2. applies the seeded "Plummeting" :class:`ConditionTemplate` to the faller; and
+2. applies the Plummeting :class:`ConditionTemplate` (the one
+   ``VitalsConsequenceConfig.plummeting_condition`` designates, #4739) to the faller; and
 3. instantiates the seeded "Catch the Faller" :class:`ChallengeInstance` bound to
    the faller via ``target_object`` (so Task 7's catch action can find "the catch
    challenge for this faller").
@@ -32,7 +33,6 @@ from world.areas.positioning.constants import (
     CATCH_THE_FALLER_NAME,
     FALL_DAMAGE_TYPE_NAME,
     FALL_TRIGGER_NAME,
-    PLUMMETING_CONDITION_NAME,
 )
 
 if TYPE_CHECKING:
@@ -47,12 +47,11 @@ if TYPE_CHECKING:
 
 def _faller_is_plummeting(faller: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
     """True if *faller* already carries an active Plummeting condition."""
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.vitals.peril_designations import plummeting_template  # noqa: PLC0415
 
-    try:
-        template = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
+    template = plummeting_template()
+    if template is None:
         return False
     return get_active_conditions(faller, condition=template).exists()
 
@@ -129,16 +128,21 @@ def begin_plummet(  # noqa: OBJECTDB_PARAM
 
     Idempotent — no-op if the faller is already plummeting.
     """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.scenes.round_services import (  # noqa: PLC0415
         ensure_round_for_acute_condition,
     )
+    from world.vitals.peril_designations import plummeting_template  # noqa: PLC0415
 
+    template = plummeting_template()
+    if template is None:
+        # Plummeting unset (#4739): the fall mechanic does nothing; the Required
+        # content dashboard lists the designation.
+        return None
     if _faller_is_plummeting(faller):
         return None
 
-    apply_condition(faller, ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME))
+    apply_condition(faller, template)
 
     if allow_catch and _potential_catcher_present(faller):
         _create_catch_challenge_for(faller, position)
@@ -191,12 +195,11 @@ def begin_plummet_handler(*, payload: object) -> None:
 
 def _plummeting_instance(target: ObjectDB) -> ConditionInstance | None:  # noqa: OBJECTDB_PARAM
     """Return *target*'s active Plummeting :class:`ConditionInstance`, or None."""
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_condition_instance  # noqa: PLC0415
+    from world.vitals.peril_designations import plummeting_template  # noqa: PLC0415
 
-    try:
-        template = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
+    template = plummeting_template()
+    if template is None:
         return None
     return get_condition_instance(target, template)
 
@@ -254,14 +257,11 @@ def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: OBJ
     Either way the faller stops plummeting and the bound "Catch the Faller"
     challenge is deactivated.
     """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
+    from world.vitals.peril_designations import plummeting_template  # noqa: PLC0415
 
-    try:
-        template = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
-        template = None
+    template = plummeting_template()
     if template is not None:
         remove_condition(faller, template)
     ChallengeInstance.objects.filter(
@@ -393,14 +393,16 @@ def resolve_unattended_plummets(
     catcher check. A single cheap room-bound query short-circuits ordinary rooms.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.vitals.peril_designations import plummeting_condition_id  # noqa: PLC0415
 
-    if room is None:
+    plummeting_condition = plummeting_condition_id()
+    if room is None or plummeting_condition is None:
         return
     objs = list(room.contents)
     plummeting_ids = set(
         ConditionInstance.objects.filter(
             target_id__in=[o.id for o in objs],
-            condition__name=PLUMMETING_CONDITION_NAME,
+            condition_id=plummeting_condition,
         ).values_list("target_id", flat=True)
     )
     if not plummeting_ids:

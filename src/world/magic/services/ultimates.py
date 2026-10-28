@@ -79,19 +79,21 @@ def active_ceremony(character: ObjectDB) -> str | None:  # noqa: OBJECTDB_PARAM 
     """AUDERE_MAJORA when the Majora condition holds, else AUDERE when Audere holds."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.magic.audere import (  # noqa: PLC0415
-        AUDERE_CONDITION_NAME,
-        AUDERE_MAJORA_CONDITION_NAME,
+        audere_condition_id,
+        audere_majora_condition_id,
     )
 
-    names = set(
+    audere_id = audere_condition_id()
+    majora_id = audere_majora_condition_id()
+    held = set(
         ConditionInstance.objects.filter(
             target=character,
-            condition__name__in=[AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME],
-        ).values_list("condition__name", flat=True)
+            condition_id__in=[audere_id, majora_id],
+        ).values_list("condition_id", flat=True)
     )
-    if AUDERE_MAJORA_CONDITION_NAME in names:
+    if majora_id is not None and majora_id in held:
         return AudereCeremony.AUDERE_MAJORA
-    if AUDERE_CONDITION_NAME in names:
+    if audere_id is not None and audere_id in held:
         return AudereCeremony.AUDERE
     return None
 

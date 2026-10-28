@@ -2,6 +2,7 @@
 
 from django.db import models
 
+from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import FuryCheckTrait
@@ -47,6 +48,8 @@ class FuryTier(NaturalKeyMixin, SharedMemoryModel):
 class FuryConfig(SharedMemoryModel):
     """Singleton (pk=1) tuning surface for the Fury lever (mirrors StrainConfig)."""
 
+    objects = ArxSharedMemoryManager()
+
     check_trait = models.CharField(
         max_length=32,
         choices=FuryCheckTrait.choices,
@@ -64,6 +67,19 @@ class FuryConfig(SharedMemoryModel):
     )
     default_berserk_duration_rounds = models.PositiveSmallIntegerField(
         default=3, help_text="Default rounds_remaining for an applied Berserk condition."
+    )
+    berserk_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The condition template that IS Berserk (#4739). Lost Fury control and "
+            "moon-sensitivity fury apply it, and the rampage compulsion finds it, through "
+            "this field, so renaming the template changes nothing. The Required content "
+            "dashboard flags it unset."
+        ),
     )
     updated_at = models.DateTimeField(auto_now=True)
 

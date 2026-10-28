@@ -16,9 +16,8 @@ from unittest.mock import patch
 from integration_tests.test_surge_rolls_journeys import _SurgeField
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import SurgeTriggerKind
-from world.combat.factories import SurgeDegreeBandFactory
+from world.combat.factories import SocialManeuverConfigFactory, SurgeDegreeBandFactory
 from world.combat.models import StrainConfig, SurgeTuning
-from world.combat.social_combat_content import INSPIRED_CONDITION_NAME
 from world.conditions.factories import ConditionTemplateFactory
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.mechanics.engagement import CharacterEngagement
@@ -193,7 +192,10 @@ class AFailedDigDeep(_DigDeepField):
 class BeingEncouraged(_DigDeepField):
     def setUp(self) -> None:
         super().setUp()
-        ConditionTemplateFactory(name=INSPIRED_CONDITION_NAME)
+        # Staff designate Rally's success condition; its name does not matter (#4739).
+        SocialManeuverConfigFactory(
+            rally_success_condition=ConditionTemplateFactory(name="Heartened")
+        )
         self.author_tuning(SurgeTriggerKind.RALLIED, "Rally", partial=1, success=1)
 
     def test_a_successful_rally_grants_a_free_dig_deep_that_costs_no_fatigue(self) -> None:

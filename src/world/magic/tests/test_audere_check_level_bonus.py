@@ -10,11 +10,8 @@ from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.services import _compute_check_breakdown
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    AUDERE_MAJORA_CONDITION_NAME,
-    audere_check_level_bonus,
-)
+from world.magic.audere import audere_check_level_bonus
+from world.magic.constants import AUDERE_MAJORA_SEED_TEMPLATE_NAME, AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import AudereMajoraThresholdFactory, AudereThresholdFactory
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import ResultChart, Trait
@@ -40,8 +37,8 @@ class AudereCheckLevelBonusTests(TestCase):
             name="audere_level_bonus_check",
             category=CheckCategoryFactory(name="audere_level_bonus_check"),
         )
-        cls.audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
-        cls.majora_template = ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME)
+        cls.audere_template = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
+        cls.majora_template = ConditionTemplateFactory(name=AUDERE_MAJORA_SEED_TEMPLATE_NAME)
         cls.audere_threshold = AudereThresholdFactory(check_level_bonus=4)
         cls.majora_threshold = AudereMajoraThresholdFactory(
             boundary_level=CHARACTER_LEVEL, check_level_bonus=8
@@ -82,11 +79,11 @@ class AudereMajoraThresholdChoiceTests(TestCase):
     def setUpTestData(cls):
         cls.character = CharacterSheetFactory().character
         ConditionInstanceFactory(
-            target=cls.character, condition=ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+            target=cls.character, condition=ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
         )
         ConditionInstanceFactory(
             target=cls.character,
-            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
+            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_SEED_TEMPLATE_NAME),
         )
         AudereThresholdFactory(check_level_bonus=4)
 

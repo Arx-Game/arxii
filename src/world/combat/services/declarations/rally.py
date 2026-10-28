@@ -30,8 +30,8 @@ def declare_rally(
 ) -> CombatRoundAction:
     """Declare a rallying maneuver — inspire an ally, auto-ready (#2015).
 
-    RALLY rolls a presence/Performance check at round-tick; on success it applies
-    a short-lived ``Inspired`` condition to the ally (a damage-multiplier buff) and,
+    RALLY rolls the RALLIED surge tuning's check at round-tick; on success it applies
+    the designated short-lived ``Inspired`` condition to the ally (a damage-multiplier buff) and,
     on a great success, restores morale to ally-side summon opponents. This
     function only records the declaration.
     """
@@ -92,11 +92,21 @@ def _surge_rallied_ally(
     A quiet no-op for an ally who left the encounter or died since the declaration.
     ``difficulty`` is the fixed rally difficulty the roll was made against, shown on the
     roll line; ``tuning`` is the already-read ``SurgeTuning`` (None looks it up).
+
+    A rallier whose engaged vow carries a ``SURGES_GIVEN`` scaling row surges the ally by
+    the band's intensity times ``1 + bonus`` (#4739); the band's control change and
+    condition are not scaled. The roll line notes the extra as ``vow scaling +N``.
     """
+    from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
+    from world.covenants.services import covenant_role_action_scaling_bonus  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     if ally.status != ParticipantStatus.ACTIVE or is_dead(ally.character_sheet):
         return
+    rallier_character = rallier.character_sheet.character
+    intensity_scale = 1 + covenant_role_action_scaling_bonus(
+        rallier_character, CovenantScaledAction.SURGES_GIVEN
+    )
     apply_rolled_surge(
         encounter=rallier.encounter,
         participant=ally,
@@ -104,9 +114,11 @@ def _surge_rallied_ally(
         outcome=rally_outcome,
         potency=difficulty,
         subject_sheet=rallier.character_sheet,
-        source_character=rallier.character_sheet.character,
+        intensity_scale=intensity_scale,
+        source_character=rallier_character,
         tuning=tuning,
         cause=f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}.",
+        vow_scaled=intensity_scale != 1,
     )
 
 
@@ -150,44 +162,37 @@ def _resolve_rally(
 ) -> ActionOutcome:
     """Resolve a declared rally — inspire an ally (#2015).
 
-    Rolls the Rally check (presence + Performance + Oratory). On success, applies
-    a short-lived ``Inspired`` condition to the ally. On a great success (SL>=3),
-    also restores morale to ally-side summon opponents.
+    Rolls the check the ``RALLIED`` ``SurgeTuning`` names (#4737, #4739). With no such
+    tuning nothing is rolled and nothing happens; the Required content dashboard lists the
+    missing tuning. On success, applies the condition ``SocialManeuverConfig``
+    designates as Rally's success condition (Inspired) to the ally. On a great success
+    (SL>=3), also restores morale to ally-side summon opponents.
 
     Whatever the roll, the ally then gets a rolled surge (#4737): the Rally check's outcome
-    picks the band, so a better rally never surges the ally less. When staff authored a
-    ``RALLIED`` ``SurgeTuning``, the check it names is the one rolled; without one the
-    Rally check type is found by name, as before.
+    picks the band, so a better rally never surges the ally less.
     """
     from world.combat.constants import (  # noqa: PLC0415
         RALLY_BASE_DIFFICULTY,
         RALLY_GREAT_SUCCESS_LEVEL,
         RALLY_MORALE_PER_LEVEL,
     )
-    from world.combat.social_combat_content import INSPIRED_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.combat.services.encounter.config import (  # noqa: PLC0415
+        get_social_maneuver_config,
+    )
     from world.conditions.services import apply_condition  # noqa: PLC0415
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
-    from world.checks.models import CheckType  # noqa: PLC0415
-
     surge_tuning = surge_tuning_for(SurgeTriggerKind.RALLIED, warn=False)
-    rally_check = (
-        surge_tuning.check_type
-        if surge_tuning is not None
-        else CheckType.objects.filter(name="Rally", is_active=True).first()
-    )
-    rally_result = (
-        None
-        if rally_check is None
-        else roll_social_check(participant, rally_check, RALLY_BASE_DIFFICULTY)
-    )
-    success_level = (rally_result.success_level or 0) if rally_result is not None else 0
+    # An inactive check type counts as unset, the same rule Taunt follows.
+    if surge_tuning is None or not surge_tuning.check_type.is_active:
+        return outcome
+    rally_result = roll_social_check(participant, surge_tuning.check_type, RALLY_BASE_DIFFICULTY)
+    success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
     if success_level >= 1 and ally is not None:
-        # Apply Inspired condition to the ally.
-        inspired = ConditionTemplate.objects.filter(name=INSPIRED_CONDITION_NAME).first()
+        # Apply the designated success condition (Inspired) to the ally.
+        inspired = get_social_maneuver_config().rally_success_condition
         if inspired is not None:
             apply_condition(
                 ally.character_sheet.character,
@@ -200,6 +205,7 @@ def _resolve_rally(
 
         # Great success: restore morale to ally-side summon opponents.
         if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
+            from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
             from world.covenants.services import (  # noqa: PLC0415
                 covenant_role_action_scaling_bonus,
             )
@@ -208,7 +214,7 @@ def _resolve_rally(
             # success level, matching the additive effect scaling used by
             # other universal combat actions such as interpose.
             bonus = covenant_role_action_scaling_bonus(
-                participant.character_sheet.character, "combat_rally"
+                participant.character_sheet.character, CovenantScaledAction.RALLY
             )
             restore = int(success_level * RALLY_MORALE_PER_LEVEL * (1 + bonus))
             ally_summons = CombatOpponent.objects.filter(
@@ -220,7 +226,7 @@ def _resolve_rally(
                 opp.morale = min(opp.max_morale, opp.morale + restore)
                 opp.save(update_fields=["morale"])
 
-    if rally_result is not None and ally is not None:
+    if ally is not None:
         _surge_rallied_ally(
             participant, ally, rally_result.outcome, surge_tuning, RALLY_BASE_DIFFICULTY
         )

@@ -9,7 +9,6 @@ from world.classes.factories import PathFactory
 from world.classes.models import CharacterClassLevel, PathStage
 from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionInstance
-from world.magic.audere import AUDERE_MAJORA_CONDITION_NAME
 from world.magic.audere_majora import (
     AudereMajoraCrossing,
     AudereMajoraCrossingResult,
@@ -19,6 +18,7 @@ from world.magic.audere_majora import (
     end_audere_majora,
     resolve_audere_majora_offer,
 )
+from world.magic.constants import AUDERE_MAJORA_SEED_TEMPLATE_NAME
 from world.magic.exceptions import (
     AudereMajoraOfferNotFoundError,
     AudereMajoraOfferStaleError,
@@ -26,6 +26,7 @@ from world.magic.exceptions import (
     ProtagonismLockedError,
 )
 from world.magic.factories import (
+    AudereThresholdFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -125,7 +126,7 @@ class CrossingAcceptHappyPathTests(TestCase):
         _accept(self.offer, self.puissant_path)
         assert ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=AUDERE_MAJORA_CONDITION_NAME,
+            condition__name=AUDERE_MAJORA_SEED_TEMPLATE_NAME,
         ).exists()
 
     def test_offer_row_deleted(self) -> None:
@@ -435,6 +436,7 @@ class EndAuderaMajoraTests(TestCase):
 
     def setUp(self) -> None:
         _audere, self.majora_template = wire_audere_power_multipliers()
+        AudereThresholdFactory()  # designates the seed-named templates (#4739)
         self.character = CharacterFactory(db_key="end_majora_char")
 
     def test_removes_condition(self) -> None:
@@ -446,7 +448,7 @@ class EndAuderaMajoraTests(TestCase):
         end_audere_majora(self.character)
         assert not ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=AUDERE_MAJORA_CONDITION_NAME,
+            condition__name=AUDERE_MAJORA_SEED_TEMPLATE_NAME,
         ).exists()
 
     def test_safe_noop_when_absent(self) -> None:
@@ -552,10 +554,9 @@ class MidAudereMajoraCrossingTests(TestCase):
         from world.magic.audere_majora import is_mid_audere_majora_crossing
 
         sheet = CharacterSheetFactory()
-        ConditionInstanceFactory(
-            target=sheet.character,
-            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
-        )
+        majora = ConditionTemplateFactory(name="Crossing Afterglow")
+        AudereThresholdFactory(audere_majora_condition=majora)
+        ConditionInstanceFactory(target=sheet.character, condition=majora)
         assert is_mid_audere_majora_crossing(sheet) is True
 
     def test_batched_check_ignores_resolved_crossing(self) -> None:
@@ -569,7 +570,7 @@ class MidAudereMajoraCrossingTests(TestCase):
         mid_crossing = CharacterSheetFactory()
         ConditionInstanceFactory(
             target=mid_crossing.character,
-            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
+            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_SEED_TEMPLATE_NAME),
         )
         assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing]) is False
 

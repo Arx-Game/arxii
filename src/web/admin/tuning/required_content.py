@@ -100,13 +100,10 @@ class NamedRowsProbe(ContentProbe):
     Set `case_insensitive=True` only for a declaration whose consumer resolves
     through a case-insensitive lookup - in this registry, that is exactly the
     `ConditionTemplate` declarations, whose consumers go through
-    `ConditionTemplate.get_by_name` (`world/conditions/models.py:503-511`),
-    which casefolds. One exception even among those: `berserk-condition`'s
-    consumer, `world/species/moon_sensitivity.py:180`, uses `filter(name=...)`
-    case-sensitively - `case_insensitive=True` is kept for it anyway since
-    `get_by_name` is the dominant path for `ConditionTemplate` lookups, and
-    this note exists so the next reader knows that exception was seen, not
-    missed.
+    `ConditionTemplate.get_by_name` (`world/conditions/models.py`), which
+    casefolds. A condition code finds through a config designation (Soulfray,
+    Audere, Berserk, the acute-peril conditions, #4739) is checked by a
+    `CustomProbe` on that field instead, never by name.
     """
 
     label: str
@@ -833,10 +830,12 @@ def _probe_strain_burn_reach_tiers() -> ProbeResult:
 def _probe_audere_condition_shape() -> ProbeResult:
     """Audere and Audere Majora must outlast their own round countdown and defer death.
 
-    Sibling to the plain presence check in the `audere-conditions` declaration below
-    (#4098 final review item 2) - this checks *shape*, not just existence, for the two
-    templates the Audere ultimates ceremony hard-depends on (Soulfray is covered by the
-    `soulfray-condition` check alone; it carries neither of these requirements):
+    Sibling to the `audere-condition` / `audere-majora-condition` designation rows
+    (#4739; before that a name check, #4098 final review item 2) - this checks *shape*
+    on the two templates `AudereThreshold` designates, which the Audere ultimates
+    ceremony hard-depends on (Soulfray is covered by the `soulfray-condition` check
+    alone; it carries neither of these requirements). An unset designation is those
+    rows' gap and is not reported twice here.
 
     - `default_duration_type == ROUNDS` (the model's own default,
       `world/conditions/factories.py`'s `ConditionTemplateFactory`) lets the condition
@@ -845,11 +844,11 @@ def _probe_audere_condition_shape() -> ProbeResult:
       (Task 12 finding, #4098 ledger). The condition must last until the encounter
       itself ends instead, not for a fixed number of rounds.
     - It must carry the `death_deferred` Property (`has_death_deferred`,
-      `world/conditions/services.py:2849`, reads `condition__properties__name=
+      `world/conditions/services.py`, reads `condition__properties__name=
       "death_deferred"`) - Soulfray's `character_loss` consequence depends on this to
       defer certain death to encounter cleanup rather than killing immediately.
 
-    Reads plain `values_list` tuples/names rather than model instances on purpose:
+    Reads plain `values_list` tuples rather than model instances on purpose:
     `ConditionTemplate` is a `SharedMemoryModel` (ADR-0008), and a `prefetch_related`
     onto an identity-mapped instance can silently replay an earlier, now-stale
     `properties` snapshot cached on that same pk's shared Python object instead of
@@ -859,31 +858,38 @@ def _probe_audere_condition_shape() -> ProbeResult:
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.magic.audere import (  # noqa: PLC0415
-        AUDERE_CONDITION_NAME,
-        AUDERE_MAJORA_CONDITION_NAME,
+        audere_condition_id,
+        audere_majora_condition_id,
     )
 
-    names = (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME)
-    durations = dict(
-        ConditionTemplate.objects.filter(name__in=names).values_list(
-            "name", "default_duration_type"
+    designated = {
+        pk: label
+        for pk, label in (
+            (audere_condition_id(), "Audere"),
+            (audere_majora_condition_id(), "Audere Majora"),
         )
-    )
-    death_deferred_names = frozenset(
+        if pk is not None
+    }
+    if not designated:
+        return ProbeResult(present=True)
+    rows = {
+        pk: (name, duration)
+        for pk, name, duration in ConditionTemplate.objects.filter(pk__in=designated).values_list(
+            "pk", "name", "default_duration_type"
+        )
+    }
+    death_deferred_ids = frozenset(
         ConditionTemplate.objects.filter(
-            name__in=names, properties__name="death_deferred"
-        ).values_list("name", flat=True)
+            pk__in=designated, properties__name="death_deferred"
+        ).values_list("pk", flat=True)
     )
     problems: list[str] = []
-    for name in names:
-        duration = durations.get(name)
-        if duration is None:
-            problems.append(f"{name}: missing")
-            continue
+    for pk, label in designated.items():
+        name, duration = rows[pk]
         if duration == DurationType.ROUNDS:
-            problems.append(f"{name}: duration is round-limited, not until encounter end")
-        if name not in death_deferred_names:
-            problems.append(f"{name}: missing the death_deferred property")
+            problems.append(f"{label} ({name}): duration is round-limited, not until encounter end")
+        if pk not in death_deferred_ids:
+            problems.append(f"{label} ({name}): missing the death_deferred property")
     if not problems:
         return ProbeResult(present=True)
     detail = "Audere/Audere Majora condition problem(s): " + "; ".join(problems) + "."
@@ -1445,6 +1451,222 @@ def _probe_drift_conflict_condition_check_modifier() -> ProbeResult:
     )
 
 
+def _designation_result(
+    config_exists: bool,
+    designated_id: int | None,
+    *,
+    config_label: str,
+    field_label: str,
+    inactive: bool = False,
+) -> ProbeResult:
+    """A designation probe's result: no config row, an unset field, or present (#4739).
+
+    ``inactive`` is True when the designated row is a check type staff switched off; the
+    verbs treat that as unset, so the probe reports it as a problem too.
+    """
+    if not config_exists:
+        return ProbeResult(present=False, detail=f"No {config_label} row exists.")
+    if designated_id is None:
+        return ProbeResult(
+            present=False, detail=f"The {config_label}'s {field_label} field is empty."
+        )
+    if inactive:
+        return ProbeResult(
+            present=False,
+            detail=f"The {config_label}'s {field_label} is inactive, so it is treated as unset.",
+        )
+    return ProbeResult(present=True)
+
+
+def _social_maneuver_config():
+    """The social maneuver configuration row, or None (never creates one)."""
+    from world.combat.models import SocialManeuverConfig  # noqa: PLC0415
+
+    return SocialManeuverConfig.objects.cached_singleton()
+
+
+_SOCIAL_CONFIG_LABEL = "social maneuver configuration"
+
+
+def _probe_social_taunt_check() -> ProbeResult:
+    """`SocialManeuverConfig.taunt_check_type` names the taunter's check (#4739)."""
+    config = _social_maneuver_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.taunt_check_type_id,
+        config_label=_SOCIAL_CONFIG_LABEL,
+        field_label="Taunt check type",
+        inactive=config is not None
+        and config.taunt_check_type is not None
+        and not config.taunt_check_type.is_active,
+    )
+
+
+def _probe_social_demoralize_check() -> ProbeResult:
+    """`SocialManeuverConfig.demoralize_check_type` names the Demoralize check (#4739)."""
+    config = _social_maneuver_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.demoralize_check_type_id,
+        config_label=_SOCIAL_CONFIG_LABEL,
+        field_label="Demoralize check type",
+        inactive=config is not None
+        and config.demoralize_check_type is not None
+        and not config.demoralize_check_type.is_active,
+    )
+
+
+def _probe_social_parley_check() -> ProbeResult:
+    """`SocialManeuverConfig.parley_check_type` names the Parley check (#4739)."""
+    config = _social_maneuver_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.parley_check_type_id,
+        config_label=_SOCIAL_CONFIG_LABEL,
+        field_label="Parley check type",
+        inactive=config is not None
+        and config.parley_check_type is not None
+        and not config.parley_check_type.is_active,
+    )
+
+
+def _probe_social_rally_success_condition() -> ProbeResult:
+    """`SocialManeuverConfig.rally_success_condition` names Inspired (#4739)."""
+    config = _social_maneuver_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.rally_success_condition_id,
+        config_label=_SOCIAL_CONFIG_LABEL,
+        field_label="Rally success condition",
+    )
+
+
+def _probe_rallied_tuning_check() -> ProbeResult:
+    """Rally rolls the Rallied surge tuning's check type (#4739, Ruling 7).
+
+    `SurgeTuning.check_type` is required, so a Rallied row always names one; the gaps are
+    a missing row and an inactive check type, and with either Rally rolls nothing.
+    """
+    from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.models import SurgeTuning  # noqa: PLC0415
+
+    if SurgeTuning.objects.filter(
+        trigger_kind=SurgeTriggerKind.RALLIED, check_type__is_active=True
+    ).exists():
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            "No Rallied surge tuning with an active check type exists, so Rally has no "
+            "check to roll."
+        ),
+    )
+
+
+def _audere_threshold():
+    """The Audere threshold row, or None (never creates one)."""
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    return AudereThreshold.objects.cached_singleton()
+
+
+def _probe_audere_condition() -> ProbeResult:
+    """`AudereThreshold.audere_condition` names the Audere template (#4739)."""
+    threshold = _audere_threshold()
+    return _designation_result(
+        threshold is not None,
+        None if threshold is None else threshold.audere_condition_id,
+        config_label="Audere threshold",
+        field_label="Audere condition",
+    )
+
+
+def _probe_audere_majora_condition() -> ProbeResult:
+    """`AudereThreshold.audere_majora_condition` names the Audere Majora template (#4739)."""
+    threshold = _audere_threshold()
+    return _designation_result(
+        threshold is not None,
+        None if threshold is None else threshold.audere_majora_condition_id,
+        config_label="Audere threshold",
+        field_label="Audere Majora condition",
+    )
+
+
+def _probe_berserk_condition() -> ProbeResult:
+    """`FuryConfig.berserk_condition` names the Berserk template (#4739)."""
+    from world.magic.models import FuryConfig  # noqa: PLC0415
+
+    config = FuryConfig.objects.cached_singleton()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.berserk_condition_id,
+        config_label="Fury configuration",
+        field_label="Berserk condition",
+    )
+
+
+def _vitals_config():
+    """The vitals consequence configuration row, or None (never creates one)."""
+    from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415
+
+    return VitalsConsequenceConfig.objects.cached_singleton()
+
+
+def _probe_bleed_out_condition() -> ProbeResult:
+    """`VitalsConsequenceConfig.bleed_out_condition` names Bleeding Out (#4739)."""
+    config = _vitals_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.bleed_out_condition_id,
+        config_label="vitals consequence configuration",
+        field_label="Bleed out condition",
+    )
+
+
+def _probe_plummeting_condition() -> ProbeResult:
+    """`VitalsConsequenceConfig.plummeting_condition` names Plummeting (#4739)."""
+    config = _vitals_config()
+    return _designation_result(
+        config is not None,
+        None if config is None else config.plummeting_condition_id,
+        config_label="vitals consequence configuration",
+        field_label="Plummeting condition",
+    )
+
+
+def _probe_emotional_condition_on_failure_band() -> ProbeResult:
+    """No surge band hands out a feeding condition on a failed roll (#4739, Ruling 6).
+
+    An emotional condition (one with a stage whose `intensity_per_round` is above 0)
+    comes only from a success or a choice. `ConditionStage.clean()` and the band
+    validation refuse the pair at save time; this lists any stored pair that got
+    past them (a fixture load, a shell edit). One query.
+    """
+    from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
+    from world.combat.models import SurgeDegreeBand  # noqa: PLC0415
+
+    rows = (
+        SurgeDegreeBand.objects.filter(
+            outcome__success_level__lt=1, condition__stages__intensity_per_round__gt=0
+        )
+        .order_by("tuning__trigger_kind", "outcome__success_level", "condition__name")
+        .values_list("tuning__trigger_kind", "outcome__name", "condition__name")
+        .distinct()
+    )
+    missing = tuple(
+        f"{SurgeTriggerKind(kind).label} / {outcome}: {condition}"
+        for kind, outcome, condition in rows
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        "Surge band(s) applying an intensity-feeding condition on a failed roll: "
+        + "; ".join(missing)
+        + "."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_soulfray_stage_pools() -> ProbeResult:
     """Every Soulfray stage has a pool that draws at least one consequence (#4089).
 
@@ -1662,44 +1884,38 @@ def _probe_standoff_creature_languages() -> ProbeResult:
 def _probe_surrounded_condition_bundle() -> ProbeResult:
     """All three rows `_apply_surrounded_isolation` needs, not just the template.
 
-    Consumer: `world/battles/resolution.py:1160-1190` (isolation entry). The guard
-    there is `if pool is None or template is None or entry_stage is None: return
-    False`, so a name-only probe on the `Surrounded` `ConditionTemplate` is a false
-    green when either of the other two rows is absent - the template alone is not
-    enough for isolation tagging to fire. This checks all three:
+    Consumer: `world/battles/resolution.py` (isolation entry). The guard there is
+    `if pool is None or template is None or entry_stage is None: return False`, so a
+    check on the template alone is a false green when either of the other two rows
+    is absent - the template alone is not enough for isolation tagging to fire. This
+    checks all three:
 
-    - the `Surrounded` `ConditionTemplate`, resolved via `get_by_name` (case-
-      insensitive), matching how the call site resolves it;
+    - the Surrounded `ConditionTemplate`, designated on
+      `VitalsConsequenceConfig.surrounded_condition` (#4739) - never found by name;
     - a `ConsequencePool` whose `name` is exactly `POOL_SURROUNDED_ENTRY`
       (`world/vitals/constants.py`) - the call site compares `p.name ==
       POOL_SURROUNDED_ENTRY` in Python, case-sensitive, so this probe is too;
-    - a `ConditionStage` with `stage_order=1` whose `condition_id` is that
-      template's pk.
+    - a `ConditionStage` with `stage_order=1` on that designated template.
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
-    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
     from world.vitals.constants import POOL_SURROUNDED_ENTRY  # noqa: PLC0415
+    from world.vitals.peril_designations import surrounded_condition_id  # noqa: PLC0415
 
     missing: list[str] = []
 
-    try:
-        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
-        template = None
-        missing.append(f"ConditionTemplate {SURROUNDED_CONDITION_NAME!r}")
+    template_id = surrounded_condition_id()
+    if template_id is None:
+        missing.append("VitalsConsequenceConfig surrounded condition (unset)")
 
     if not ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).exists():
         missing.append(f"ConsequencePool {POOL_SURROUNDED_ENTRY!r}")
 
-    if template is not None:
-        has_entry_stage = ConditionStage.objects.filter(
-            condition_id=template.pk, stage_order=1
-        ).exists()
-        if not has_entry_stage:
-            missing.append(f"ConditionStage stage_order=1 for {SURROUNDED_CONDITION_NAME!r}")
-    else:
-        missing.append(f"ConditionStage stage_order=1 for {SURROUNDED_CONDITION_NAME!r}")
+    if (
+        template_id is None
+        or not ConditionStage.objects.filter(condition_id=template_id, stage_order=1).exists()
+    ):
+        missing.append("ConditionStage stage_order=1 for the Surrounded condition")
 
     if missing:
         detail = f"Missing row(s) for Surrounded isolation tagging: {', '.join(missing)}."
@@ -2065,7 +2281,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
         AERIAL_PROPERTY_NAME,
         CATCH_THE_FALLER_NAME,
         CONJURED_BARRIER_CHALLENGE_NAME,
-        PLUMMETING_CONDITION_NAME,
     )
     from world.clues.constants import SEARCH_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.combat.constants import (  # noqa: PLC0415
@@ -2081,7 +2296,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
         MOUNTED_CONDITION_NAME,
         UNHORSED_CONDITION_NAME,
     )
-    from world.conditions.berserk_content import BERSERK_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.constants import (  # noqa: PLC0415
         UNCONSCIOUS_CONDITION_NAME,
         FoundationalCapability,
@@ -2096,10 +2310,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
         GATHER_EVIDENCE_CHECK_NAME,
         SCRUTINIZE_EVIDENCE_CHECK_NAME,
     )
-    from world.magic.audere import (  # noqa: PLC0415
-        AUDERE_CONDITION_NAME,
-        AUDERE_MAJORA_CONDITION_NAME,
-    )
     from world.magic.constants import ENDURE_HALLOWED_GROUND_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.magic.seeds_checks import MAGICAL_ENDURANCE_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.magic.services.technique_training import (  # noqa: PLC0415
@@ -2113,26 +2323,31 @@ def _declarations() -> tuple[ContentDependency, ...]:
     return (
         # --- ConditionTemplate: single-feature conditions --------------------------------
         ContentDependency(
-            key="audere-conditions",
-            label="Audere and Audere Majora condition templates",
+            key="audere-condition",
+            label="Audere condition set on the Audere threshold",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/audere.py audere_condition_id(), offer_audere()",
+            consequence=(
+                "Audere cannot be found: accepting the Audere offer has no condition to "
+                "apply, and nothing can tell a character is in Audere."
+            ),
+            probe=CustomProbe(fn=_probe_audere_condition),
+            admin_model="AudereThreshold",
+        ),
+        ContentDependency(
+            key="audere-majora-condition",
+            label="Audere Majora condition set on the Audere threshold",
             tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/magic/audere.py:261 offer_audere(); "
-                "world/magic/audere_majora.py:679 (majora crossing)"
+                "world/magic/audere.py audere_majora_condition_id(); "
+                "world/magic/audere_majora.py (majora crossing)"
             ),
             consequence=(
-                "Accepting an Audere or Audere Majora corruption offer raises "
-                "ConditionTemplate.DoesNotExist and crashes the offer instead of "
-                "applying the condition."
+                "Audere Majora cannot be found: accepting a crossing offer has no "
+                "condition to apply, and nothing can tell a character is in Audere Majora."
             ),
-            probe=NamedRowsProbe(
-                label="ConditionTemplate",
-                names=(
-                    AUDERE_CONDITION_NAME,
-                    AUDERE_MAJORA_CONDITION_NAME,
-                ),
-                case_insensitive=True,
-            ),
+            probe=CustomProbe(fn=_probe_audere_majora_condition),
+            admin_model="AudereThreshold",
         ),
         ContentDependency(
             key="audere-condition-shape",
@@ -2207,10 +2422,10 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Surrounded isolation tagging (template, pool, entry stage)",
             tier=DependencyTier.REQUIRED,
             consumer=(
-                "world/battles/resolution.py:1160-1190 _apply_surrounded_isolation() - "
-                "needs the Surrounded ConditionTemplate, the surrounded_entry "
-                "ConsequencePool, and its stage_order=1 ConditionStage, not the "
-                "template alone"
+                "world/battles/resolution.py _apply_surrounded_isolation() - needs the "
+                "Surrounded condition set on the vitals consequence configuration, the "
+                "surrounded_entry ConsequencePool, and its stage_order=1 ConditionStage, "
+                "not the template alone"
             ),
             consequence=(
                 "A battle participant cut off from their allies never gets tagged "
@@ -2218,6 +2433,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "never applies."
             ),
             probe=CustomProbe(fn=_probe_surrounded_condition_bundle),
+            admin_model="VitalsConsequenceConfig",
+        ),
+        ContentDependency(
+            key="bleed-out-condition",
+            label="Bleeding Out condition set on the vitals configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/vitals/peril_designations.py bleed_out_condition_id()",
+            consequence=(
+                "Bleeding Out cannot be found: a downed character never starts bleeding "
+                "out, and the hold and rescue rules see no one in peril."
+            ),
+            probe=CustomProbe(fn=_probe_bleed_out_condition),
+            admin_model="VitalsConsequenceConfig",
         ),
         ContentDependency(
             key="unconscious-condition",
@@ -2365,35 +2593,92 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="plummeting-condition",
-            label="Plummeting condition template",
+            label="Plummeting condition set on the vitals configuration",
             tier=DependencyTier.REQUIRED,
-            consumer="world/areas/positioning/plummet.py:141 begin_plummet()",
+            consumer=(
+                "world/vitals/peril_designations.py plummeting_condition_id(); "
+                "world/areas/positioning/plummet.py begin_plummet()"
+            ),
             consequence=(
-                "A character who starts falling raises ConditionTemplate.DoesNotExist "
-                "instead of beginning to plummet, crashing movement resolution."
+                "Plummeting cannot be found: a character who starts falling has no "
+                "condition to carry the fall, so it never begins."
             ),
-            probe=NamedRowsProbe(
-                label="ConditionTemplate",
-                names=(PLUMMETING_CONDITION_NAME,),
-                case_insensitive=True,
-            ),
+            probe=CustomProbe(fn=_probe_plummeting_condition),
+            admin_model="VitalsConsequenceConfig",
         ),
         ContentDependency(
             key="berserk-condition",
-            label="Berserk condition template",
+            label="Berserk condition set on the Fury configuration",
             tier=DependencyTier.REQUIRED,
-            consumer="world/species/moon_sensitivity.py:180 _apply_berserk()",
+            consumer=(
+                "world/magic/services/fury.py get_berserk_template(); "
+                "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
+            ),
             consequence=(
-                "A character losing control to moon-sensitivity fury logs a warning "
-                "and never gets the Berserk condition applied - the forced rampage "
-                "compulsion silently never fires."
+                "Berserk cannot be found: losing control to Fury or to moon-sensitivity "
+                "applies no Berserk condition, so the forced rampage never fires."
             ),
-            # case_insensitive=True for consistency with the other ConditionTemplate
-            # declarations, even though this consumer itself (moon_sensitivity.py:180)
-            # uses `filter(name=...)`, case-sensitively - see NamedRowsProbe's docstring.
-            probe=NamedRowsProbe(
-                label="ConditionTemplate", names=(BERSERK_CONDITION_NAME,), case_insensitive=True
+            probe=CustomProbe(fn=_probe_berserk_condition),
+            admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="social-maneuver-taunt-check",
+            label="Taunt check type set on the social maneuver configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/taunt.py (the taunter's roll)",
+            consequence="A taunt has no check for the taunter to roll, so it cannot land.",
+            probe=CustomProbe(fn=_probe_social_taunt_check),
+            admin_model="SocialManeuverConfig",
+        ),
+        ContentDependency(
+            key="social-maneuver-demoralize-check",
+            label="Demoralize check type set on the social maneuver configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/demoralize.py",
+            consequence="Demoralize has no check to roll, so it cannot land.",
+            probe=CustomProbe(fn=_probe_social_demoralize_check),
+            admin_model="SocialManeuverConfig",
+        ),
+        ContentDependency(
+            key="social-maneuver-parley-check",
+            label="Parley check type set on the social maneuver configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/parley.py",
+            consequence="Parley has no check to roll, so it cannot land.",
+            probe=CustomProbe(fn=_probe_social_parley_check),
+            admin_model="SocialManeuverConfig",
+        ),
+        ContentDependency(
+            key="social-maneuver-rally-success-condition",
+            label="Rally success condition set on the social maneuver configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/rally.py",
+            consequence=(
+                "A successful Rally has no condition (Inspired) to give the rallied ally."
             ),
+            probe=CustomProbe(fn=_probe_social_rally_success_condition),
+            admin_model="SocialManeuverConfig",
+        ),
+        ContentDependency(
+            key="rallied-tuning-check",
+            label="Rally's check (the Rallied surge tuning)",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/rally.py surge_tuning_for(RALLIED)",
+            consequence="Rally has no check to roll, so rallying an ally does nothing.",
+            probe=CustomProbe(fn=_probe_rallied_tuning_check),
+            admin_model="SurgeTuning",
+        ),
+        ContentDependency(
+            key="emotional-condition-on-failure-band",
+            label="No intensity-feeding condition on a failed surge roll",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/models.py SurgeDegreeBand, ConditionStage.clean()",
+            consequence=(
+                "A failed surge roll hands out an emotional condition that feeds the "
+                "character intensity every round, so failing pays off."
+            ),
+            probe=CustomProbe(fn=_probe_emotional_condition_on_failure_band),
+            admin_model="SurgeTuning",
         ),
         ContentDependency(
             key="soul-tether-status-conditions",

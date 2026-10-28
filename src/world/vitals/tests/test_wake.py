@@ -12,7 +12,7 @@ from django.utils import timezone
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     UNCONSCIOUS_CONDITION_NAME,
 )
 from world.conditions.factories import (
@@ -24,6 +24,7 @@ from world.conditions.services import SECONDS_PER_ROUND
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import VitalsConsequenceConfig
+from world.vitals.peril_designations import designate_unset_peril_conditions
 from world.vitals.services import (
     _stamp_unconscious_wake_deadline,
     attempt_wake,
@@ -138,7 +139,8 @@ class AttemptWakeTests(TestCase):
 
     def test_dying_blocks_wake(self) -> None:
         self._make_unconscious()
-        bleed_out = ConditionTemplateFactory(name=BLEED_OUT_CONDITION_NAME)
+        bleed_out = ConditionTemplateFactory(name=BLEED_OUT_SEED_TEMPLATE_NAME)
+        designate_unset_peril_conditions(bleed_out=bleed_out)
         ConditionInstanceFactory(target=self.character, condition=bleed_out)
         result = attempt_wake(self.sheet)
         self.assertFalse(result.attempted)

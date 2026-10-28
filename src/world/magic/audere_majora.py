@@ -14,10 +14,11 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.areas.services import area_for_scene
 from world.classes.models import PathStage
 from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    AUDERE_MAJORA_CONDITION_NAME,
     AbstractPendingOffer,
+    AudereThreshold,
     _check_intensity_gate,
+    audere_condition_id,
+    audere_majora_condition_id,
     shake_witnesses,
 )
 from world.magic.models.techniques import (
@@ -231,13 +232,18 @@ def _has_crossed(sheet, threshold: AudereMajoraThreshold) -> bool:
     return AudereMajoraCrossing.objects.filter(character_sheet=sheet, threshold=threshold).exists()
 
 
-def _has_active_condition(character: ObjectDB, condition_name: str) -> bool:
-    """Return True if the character has an active ConditionInstance for the named condition."""
+def _has_active_condition(character: ObjectDB, condition_id: int | None) -> bool:
+    """Return True if the character holds a ConditionInstance of the given template.
+
+    ``None`` (an unset designation, #4739) is never held.
+    """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
+    if condition_id is None:
+        return False
     return ConditionInstance.objects.filter(
         target=character,
-        condition__name=condition_name,
+        condition_id=condition_id,
     ).exists()
 
 
@@ -254,12 +260,7 @@ def is_mid_audere_majora_crossing(character_sheet: CharacterSheet) -> bool:
     """
     if PendingAudereMajoraOffer.objects.filter(character_sheet=character_sheet).exists():
         return True
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-    return ConditionInstance.objects.filter(
-        target=character_sheet.character,
-        condition__name=AUDERE_MAJORA_CONDITION_NAME,
-    ).exists()
+    return _has_active_condition(character_sheet.character, audere_majora_condition_id())
 
 
 def any_character_mid_audere_majora_crossing(
@@ -372,7 +373,7 @@ def _evaluate_majora_gates(
         return None, 0
 
     if threshold.requires_active_audere and not _has_active_condition(
-        character, AUDERE_CONDITION_NAME
+        character, audere_condition_id()
     ):
         return None, 0
 
@@ -783,7 +784,6 @@ def cross_threshold(
     Does not delete the offer row — caller is responsible for that.
     """
     from world.combat.constants import SpectacleKind  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
     from world.progression.services.advancement import (  # noqa: PLC0415
@@ -853,11 +853,14 @@ def cross_threshold(
     # callbacks run in registration order, so this follows _route_crossing's line.
     shake_witnesses(character, SpectacleKind.CROSSING, display_name="Crossing")
 
-    majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
+    audere_threshold = AudereThreshold.objects.cached_singleton()
+    majora_template = None if audere_threshold is None else audere_threshold.audere_majora_condition
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger
     # cancels this today. A future PRE_APPLY cancel would advance the level but
-    # skip the power spike — revisit if such content is ever authored.
-    apply_condition(target=character, condition=majora_template)
+    # skip the power spike; revisit if such content is ever authored. An unset
+    # designation (#4739) skips the spike the same way; the dashboard lists it.
+    if majora_template is not None:
+        apply_condition(target=character, condition=majora_template)
 
     if interaction is not None:
         declaration_id = interaction.pk
@@ -1066,17 +1069,17 @@ def resolve_audere_majora_offer(
 def end_audere_majora(character: ObjectDB) -> None:
     """Remove the Audere Majora condition from a character.
 
-    Safe no-op when the condition is absent or the template doesn't exist.
+    Safe no-op when the condition is absent or its designation is unset (#4739).
 
     Note: unlike end_audere, no engagement/anima reverts are needed —
     Audere Majora's effects are condition-modifier driven and cleared by
     the condition removal itself.
     """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
     from world.magic.services.ultimates import clear_readied_ultimate  # noqa: PLC0415
 
-    template = ConditionTemplate.objects.filter(name=AUDERE_MAJORA_CONDITION_NAME).first()
+    audere_threshold = AudereThreshold.objects.cached_singleton()
+    template = None if audere_threshold is None else audere_threshold.audere_majora_condition
     if template is None:
         return
     remove_condition(character, template)

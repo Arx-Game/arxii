@@ -31,8 +31,9 @@ from world.combat.services import resolve_round
 from world.combat.spectacle import encounter_for_character
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
-from world.magic.audere import AUDERE_CONDITION_NAME, offer_audere
+from world.magic.audere import offer_audere
 from world.magic.audere_majora import cross_threshold
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     EffectTypeFactory,
@@ -268,7 +269,7 @@ class AudereEntryWiringTests(TestCase):
         self.assertTrue(result.accepted)
         self.assertTrue(
             ConditionInstance.objects.filter(
-                target=character, condition__name=AUDERE_CONDITION_NAME
+                target=character, condition__name=AUDERE_SEED_TEMPLATE_NAME
             ).exists()
         )
         self.assertFalse(SpectacleRecord.objects.exists())

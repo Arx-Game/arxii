@@ -6,13 +6,13 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.classes.models import CharacterClassLevel, PathStage
-from world.magic.audere import AUDERE_CONDITION_NAME
 from world.magic.audere_majora import (
     AudereMajoraThreshold,
     PendingAudereMajoraOffer,
     check_audere_majora_eligibility,
     maybe_create_audere_majora_offer,
 )
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.tests.majora_fixtures import build_majora_world
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory
@@ -99,7 +99,7 @@ class AudereMajoraEligibilityGateTests(TestCase):
 
         ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=AUDERE_CONDITION_NAME,
+            condition__name=AUDERE_SEED_TEMPLATE_NAME,
         ).delete()
         assert check_audere_majora_eligibility(self.character, self.passing_intensity) is None
 
@@ -115,7 +115,7 @@ class AudereMajoraEligibilityGateTests(TestCase):
         self.threshold = AudereMajoraThreshold.objects.get(pk=self.threshold.pk)
         ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=AUDERE_CONDITION_NAME,
+            condition__name=AUDERE_SEED_TEMPLATE_NAME,
         ).delete()
         result = check_audere_majora_eligibility(self.character, self.passing_intensity)
         assert result is not None

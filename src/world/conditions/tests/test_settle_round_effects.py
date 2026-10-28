@@ -5,8 +5,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
-from world.conditions.constants import BLEED_OUT_CONDITION_NAME, DurationType, StackBehavior
+from world.areas.positioning.constants import PLUMMETING_SEED_TEMPLATE_NAME
+from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME, DurationType, StackBehavior
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.conditions.services import (
@@ -18,6 +18,7 @@ from world.conditions.services import (
     settled_effects_tick,
 )
 from world.conditions.types import InteractionResult
+from world.vitals.peril_designations import designate_unset_peril_conditions
 
 
 class SettleRoundEffectsTests(TestCase):
@@ -73,11 +74,15 @@ class SettleRoundEffectsTests(TestCase):
 
     def test_acute_peril_rows_keep_their_scene_round_count(self):
         """Bleeding Out and Plummeting stay ROUNDS rows for the scene-round hand-off."""
-        for name in (BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME):
+        for name in (BLEED_OUT_SEED_TEMPLATE_NAME, PLUMMETING_SEED_TEMPLATE_NAME):
             with self.subTest(name=name):
                 template = ConditionTemplateFactory(
                     name=name, default_duration_type=DurationType.ROUNDS
                 )
+                if name == BLEED_OUT_SEED_TEMPLATE_NAME:
+                    designate_unset_peril_conditions(bleed_out=template)
+                else:
+                    designate_unset_peril_conditions(plummeting=template)
                 peril = ConditionInstanceFactory(condition=template, rounds_remaining=2)
                 ordinary = ConditionInstanceFactory(
                     condition=self.rounds_template,

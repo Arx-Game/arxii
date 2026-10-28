@@ -1843,17 +1843,20 @@ def expire_end_of_combat_conditions(
     return removed
 
 
-def acute_peril_hand_off_condition_names() -> list[str]:
-    """Names of the acute-peril conditions combat hands to a scene round at its end.
+def acute_peril_hand_off_condition_ids() -> list[int]:
+    """Primary keys of the acute-peril conditions combat hands to a scene round at its end.
 
-    Bleeding Out and Plummeting. The single source of truth for that set: shared by
+    Bleeding Out and Plummeting, as ``VitalsConsequenceConfig`` designates them (#4739);
+    an unset designation drops out. The single source of truth for that set: shared by
     ``world.combat.aftermath.has_acute_peril`` (which decides the hand-off) and
     ``settle_round_effects`` (which leaves these rows to the scene round).
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+    from world.vitals.peril_designations import (  # noqa: PLC0415
+        bleed_out_condition_id,
+        plummeting_condition_id,
+    )
 
-    return [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+    return [pk for pk in (bleed_out_condition_id(), plummeting_condition_id()) if pk is not None]
 
 
 @transaction.atomic
@@ -1885,7 +1888,7 @@ def settle_round_effects(
             condition__default_duration_type=DurationType.ROUNDS,
             rounds_remaining__isnull=False,
             resolved_at__isnull=True,
-        ).exclude(condition__name__in=acute_peril_hand_off_condition_names())
+        ).exclude(condition_id__in=acute_peril_hand_off_condition_ids())
     )
     if not instances:
         return []
@@ -3794,29 +3797,6 @@ def get_condition_control_percent_modifier(
     """
     return _get_condition_percent_modifier(
         character_sheet, "condition_control_percent", condition_name
-    )
-
-
-def get_condition_intensity_percent_modifier(
-    character_sheet: "CharacterSheet",
-    condition_name: str,
-) -> int:
-    """
-    Get percentage modifier to intensity gain for a condition.
-
-    Used by emotional conditions like anger to determine how much
-    intensity is gained when the condition intensifies. A +50% modifier
-    means 1.5x normal intensity gain.
-
-    Args:
-        target: The character ObjectDB instance
-        condition_name: Condition name (e.g., "anger")
-
-    Returns:
-        Total percentage modifier (e.g., 50 for Wrathful)
-    """
-    return _get_condition_percent_modifier(
-        character_sheet, "condition_intensity_percent", condition_name
     )
 
 

@@ -147,11 +147,12 @@ def _grade_interpose_damage(
         # on a partial block. The bonus reduces the remaining damage further.
         divisor = 2
         if interposer is not None:
+            from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
             from world.covenants.services import (  # noqa: PLC0415
                 covenant_role_action_scaling_bonus,
             )
 
-            bonus = covenant_role_action_scaling_bonus(interposer, "combat_interpose")
+            bonus = covenant_role_action_scaling_bonus(interposer, CovenantScaledAction.INTERPOSE)
             if bonus > 0:
                 # Scale: partial block reduces to amount / (2 + bonus).
                 # A bonus of 1.0 (a deep SHIELD vow) makes the divisor 3,

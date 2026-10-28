@@ -40,6 +40,7 @@ from world.combat.models import (
     OpponentTierTemplate,
     PendingSelection,
     RiskScalingModifier,
+    SocialManeuverConfig,
     SpectacleConfig,
     SpectacleReactionLine,
     SpectacleRecord,
@@ -660,6 +661,43 @@ class MovementConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not MovementConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(SocialManeuverConfig)
+class SocialManeuverConfigAdmin(admin.ModelAdmin):
+    """#4739 - which check types and condition the social maneuvers use."""
+
+    list_display = [
+        "pk",
+        "taunt_check_type",
+        "demoralize_check_type",
+        "parley_check_type",
+        "rally_success_condition",
+    ]
+    list_select_related = [
+        "taunt_check_type",
+        "demoralize_check_type",
+        "parley_check_type",
+        "rally_success_condition",
+    ]
+    autocomplete_fields = [
+        "taunt_check_type",
+        "demoralize_check_type",
+        "parley_check_type",
+        "rally_success_condition",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not SocialManeuverConfig.objects.exists()
 
     def has_delete_permission(
         self,

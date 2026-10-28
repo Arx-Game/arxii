@@ -24,7 +24,7 @@ from django.test import TestCase, override_settings, tag
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
     FALL_DAMAGE_TYPE_NAME,
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
     PositionKind,
 )
 from world.areas.positioning.models import Position
@@ -139,7 +139,7 @@ class PlummetDescentTests(TestCase):
         # Plummeting condition removed by impact.
         self.assertFalse(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
             "impact should remove the Plummeting condition",
         )
@@ -164,7 +164,7 @@ class PlummetDescentTests(TestCase):
         )
         self.assertFalse(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
             "impact should remove the Plummeting condition",
         )

@@ -293,6 +293,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     repeat_round: int | None = None,
     narrate: bool = True,
     cause: str = "",
+    vow_scaling: int = 0,
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -323,7 +324,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     ``control_change`` is added to the engagement's control modifier in the same save.
     ``narrate=False`` skips the room line (a surge whose intensity scaled to 0 would
     announce a power surge that added none). ``cause`` is stored on the record for the
-    surged player, GMs and staff to read (#4737); it is never broadcast.
+    surged player, GMs and staff to read (#4737); it is never broadcast. ``vow_scaling``
+    is the part of ``amount`` a giver's vow added (#4739), written with the record.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -358,6 +360,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             "potency": potency,
             "control_change": control_change,
             "cause": cause,
+            "vow_scaling": vow_scaling,
         },
     )
     if not created:
@@ -555,12 +558,12 @@ def peril_spike_handler(*, payload: Any) -> None:
     """Flow-callable subscriber for CONDITION_APPLIED (#2013).
 
     Filters to the acute-peril condition names (reuses
-    ``acute_peril_condition_names`` — doesn't duplicate the list) before doing
+    ``acute_peril_condition_ids``, so it doesn't duplicate the list) before doing
     any relationship read, mirroring ``relationship_spike_handler``'s shape.
     """
-    from world.vitals.peril_resolution import acute_peril_condition_names  # noqa: PLC0415
+    from world.vitals.peril_resolution import acute_peril_condition_ids  # noqa: PLC0415
 
-    if payload.instance.condition.name not in acute_peril_condition_names():
+    if payload.instance.condition_id not in acute_peril_condition_ids():
         return
     room = payload.target.location
     if room is None:

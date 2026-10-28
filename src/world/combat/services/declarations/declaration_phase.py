@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -12,17 +14,46 @@ from world.combat.services.encounter.engagement import _ensure_combat_engagement
 from world.combat.services.encounter.pulls import expire_pulls_for_round
 from world.scenes.constants import RoundStatus
 
+if TYPE_CHECKING:
+    from core.identity_map import CacheGuard
 
-@transaction.atomic
+
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
     """Advance round_number by 1 and set status to DECLARING.
 
     Uses select_for_update to prevent concurrent calls.
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
+
+    The round opening runs in one transaction. If it raises, the database rolls back and the
+    guard puts back only the identity-mapped rows it was told to keep: the encounter, its
+    participants, their sheets and engagements (intensity and control from the escalation
+    tick and the emotional-condition feed); engagements and surge records the opening
+    created are evicted (#4739). It does not restore the rows the other opening steps change
+    (vitals and condition instances from the tick, the scene clock, dissolved bonds, expired
+    pulls' max health), and a caller's outer atomic that rolls back after this returns is
+    not covered.
     """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+    from world.combat.models import DramaticSurgeRecord  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    guard = CacheGuard()
+    guard.watch_created(CharacterEngagement, DramaticSurgeRecord)
+    try:
+        with transaction.atomic():
+            _open_round(encounter, guard)
+    except BaseException:
+        guard.restore()
+        raise
+
+
+def _open_round(encounter: CombatEncounter, guard: CacheGuard) -> None:
+    """The round opening itself; ``guard`` keeps each cached row before it changes."""
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.standoffs.services.state import is_in_standoff  # noqa: PLC0415
 
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    guard.keep(enc, encounter)
     if is_in_standoff(enc):
         msg = "The standoff has not broken yet."
         raise ValueError(msg)
@@ -68,7 +99,18 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     # identity-mapped instances directly, then persist with one bulk_update
     # query — correct in-memory state AND a single query, not a per-
     # participant save() loop.
-    reset_participants = list(CombatParticipant.objects.filter(encounter=enc))
+    reset_participants = list(
+        CombatParticipant.objects.filter(encounter=enc).select_related("character_sheet")
+    )
+    guard.keep(*reset_participants)
+    # A sheet caches its engagement (a reverse one-to-one) once one is begun here, and the
+    # escalation tick and the condition feed change these engagements in memory.
+    guard.keep(*(participant.character_sheet for participant in reset_participants))
+    guard.keep(
+        *CharacterEngagement.objects.filter(
+            character_id__in=[participant.character_sheet_id for participant in reset_participants]
+        )
+    )
     for reset_participant in reset_participants:
         reset_participant.reactions_used = 0
         reset_participant.hops_used = 0
@@ -112,6 +154,13 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     if enc.escalation_curve is not None:
         install_escalation_room_triggers(enc)
         apply_escalation_tick(enc)
+        # Emotional conditions feed intensity (#4739): one surge per player character per
+        # round, the sum of their conditions' current-stage intensity_per_round.
+        from world.combat.condition_surges import (  # noqa: PLC0415
+            apply_condition_intensity_surges,
+        )
+
+        apply_condition_intensity_surges(enc)
 
     # --- Mentor's Vow (#1165): persist graduated bond dissolution at round start ---
     # Bonds that have graduated (adjusted party leveled into band) are dissolved

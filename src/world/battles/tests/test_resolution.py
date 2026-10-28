@@ -65,6 +65,7 @@ from world.battles.services import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.types import CheckResult
+from world.conditions.services import get_active_conditions
 from world.covenants.constants import CommandTier, CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
 from world.covenants.models import CharacterCovenantRole
@@ -1939,6 +1940,29 @@ class EntryRollTests(TestCase):
         `just test-parity world.battles` or CI's Postgres shard, not
         `just test-fast`.
         """
+        sheet = self._isolated_strike_fails()
+
+        instance = get_active_conditions(
+            sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance is not None
+        assert instance.current_stage.stage_order == 1
+
+    @tag("postgres")
+    def test_a_renamed_surrounded_still_applies(self) -> None:
+        """Surrounded is the designated template (#4739); its name does not matter."""
+        template = self.content["condition"]
+        template.name = "Hemmed In"
+        template.save(update_fields=["name"])
+
+        sheet = self._isolated_strike_fails()
+
+        instance = get_active_conditions(sheet.character, condition=template).first()
+        assert instance is not None
+        assert instance.condition.name == "Hemmed In"
+
+    def _isolated_strike_fails(self):
+        """An isolated STRIKE failure whose entry roll is forced to the Failure tier."""
         from world.battles.constants import BattleActionKind, BattleSideRole
         from world.battles.resolution import resolve_battle_round
         from world.battles.services import (
@@ -1950,7 +1974,6 @@ class EntryRollTests(TestCase):
             declare_battle_action,
             enlist_participant,
         )
-        from world.conditions.services import get_active_conditions
 
         sheet = CharacterSheetFactory()
         CharacterVitalsFactory(character_sheet=sheet)
@@ -1998,11 +2021,7 @@ class EntryRollTests(TestCase):
         ):
             resolve_battle_round(battle_round=battle_round)
 
-        instance = get_active_conditions(
-            sheet.character, condition=self.content["condition"]
-        ).first()
-        assert instance is not None
-        assert instance.current_stage.stage_order == 1
+        return sheet
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_surrounded_content gates on #2698

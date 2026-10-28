@@ -32,6 +32,7 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    SurgeTriggerKind,
 )
 from world.combat.models import (
     Clash,
@@ -52,6 +53,7 @@ from world.combat.models import (
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
+from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
 from world.scenes.constants import PersonaType, RoundStatus
 from world.standoffs.serializers import (
@@ -76,10 +78,23 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-# Attribute name the viewset's Prefetch(to_attr=...) lands the active
-# ConditionInstances on (on the participant's character / opponent's
-# objectdb ObjectDB). Read here so the serializer avoids an N+1.
-ACTIVE_CONDITIONS_CACHE_ATTR = "active_condition_instances"
+# Serializer-context key holding the active ConditionInstances for every target
+# in the payload, ``{object id: [ConditionInstance, ...]}``. The viewset loads it
+# once per request (ADR-0260); a bare ``Prefetch(to_attr=...)`` on the
+# idmapper-shared ObjectDB would outlive the request and go stale (ADR-0263).
+ACTIVE_CONDITIONS_CONTEXT_KEY = "active_conditions_by_object_id"
+
+
+def _context_active_conditions(target: ObjectDB, context: dict[str, Any]) -> list | None:
+    """The request's preloaded active ConditionInstances on ``target``, or None.
+
+    None means the caller built the serializer outside the viewset (websocket
+    push, telnet, unit tests) and the caller falls back to a query.
+    """
+    by_object_id = context.get(ACTIVE_CONDITIONS_CONTEXT_KEY)
+    if by_object_id is None:
+        return None
+    return by_object_id.get(target.pk, [])
 
 
 def _serialize_active_conditions(
@@ -95,16 +110,14 @@ def _serialize_active_conditions(
     Results are ordered by the template's ``display_priority`` (highest
     first). Reuses ``ConditionInstanceSerializer``.
 
-    Prefers the viewset's ``Prefetch(to_attr=ACTIVE_CONDITIONS_CACHE_ATTR)``
-    cache (built with the same select_related + suppression filter as
+    Prefers the viewset's per-request ``ACTIVE_CONDITIONS_CONTEXT_KEY`` dict
+    (built with the same select_related + suppression filter as
     ``get_active_conditions``) — visibility filter + priority ordering run
-    in Python over the identity-mapped list, so no per-row query fires.
+    in Python over that list, so no per-row query fires.
     Falls back to ``get_active_conditions`` for callers that build the
     serializer directly (e.g. unit tests).
     """
-    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache —
-    # (#2401) never a cached_property.
-    cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
+    cached = _context_active_conditions(target, context)
     if cached is not None:
         instances = [
             inst for inst in cached if can_view_hidden or inst.condition.is_visible_to_others
@@ -116,6 +129,43 @@ def _serialize_active_conditions(
             qs = qs.filter(condition__is_visible_to_others=True)
         instances = list(qs.order_by("-condition__display_priority"))
     return ConditionInstanceSerializer(instances, many=True, context=context).data
+
+
+def _audere_state(
+    target: ObjectDB,
+    *,
+    can_view_hidden: bool,
+    context: dict[str, Any],
+) -> str | None:
+    """``"audere_majora"`` / ``"audere"`` / ``None`` for a participant's character (#4739).
+
+    Found by the AudereThreshold's designated templates, never by name, so the web
+    client's Audere strip does not care what staff call the conditions. Majora wins
+    when both hold. Reads the same per-request active-condition list (and visibility
+    rule) as ``_serialize_active_conditions``; falls back to a query without one.
+    """
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    cached = _context_active_conditions(target, context)
+    if cached is None:
+        cached = list(get_active_conditions(target).select_related("condition"))
+    held = {
+        inst.condition_id
+        for inst in cached
+        if can_view_hidden or inst.condition.is_visible_to_others
+    }
+    if not held:
+        return None
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is None:
+        return None
+    majora_id = threshold.audere_majora_condition_id
+    audere_id = threshold.audere_condition_id
+    if majora_id is not None and majora_id in held:
+        return AudereCeremony.AUDERE_MAJORA.value
+    if audere_id is not None and audere_id in held:
+        return AudereCeremony.AUDERE.value
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +534,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     available_strain = serializers.SerializerMethodField()
     fatigue = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
+    audere_state = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     escalation_level = serializers.SerializerMethodField()
@@ -509,6 +560,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "available_strain",
             "fatigue",
             "active_conditions",
+            "audere_state",
             "thumbnail_url",
             "thumbnail_media_url",
             "escalation_level",
@@ -736,6 +788,18 @@ class ParticipantSerializer(serializers.ModelSerializer):
             context=self.context,
         )
 
+    @extend_schema_field(serializers.ChoiceField(choices=AudereCeremony.choices, allow_null=True))
+    def get_audere_state(self, obj: CombatParticipant) -> str | None:
+        """Which Audere ceremony the participant's character is in, if any (#4739)."""
+        character_sheet = obj.character_sheet
+        if character_sheet is None:
+            return None
+        return _audere_state(
+            character_sheet.character,
+            can_view_hidden=self._can_view_vitals(obj),
+            context=self.context,
+        )
+
     def _combat_engagement(self, obj: CombatParticipant) -> CharacterEngagement | None:
         """Resolve the participant's COMBAT CharacterEngagement, if any.
 
@@ -817,11 +881,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
             character = persona.character_sheet.character
         except AttributeError:
             return None
-        # #2196: use the view's prefetched conditions (ACTIVE_CONDITIONS_CACHE_ATTR)
-        # to avoid N+1 when serializing multiple participants.
-        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
-        # context-over-cache a cached_property.
-        cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
+        # #2196: use the view's per-request conditions dict to avoid N+1 when
+        # serializing multiple participants; None outside the viewset.
+        cached_conditions = _context_active_conditions(character, self.context)
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
 
     @extend_schema_field(AftermathDigestSerializer(allow_null=True))
@@ -1460,6 +1522,7 @@ def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict
                 amount=record.amount,
                 control_change=record.control_change,
                 condition_name=condition_name or "",
+                vow_scaling=record.vow_scaling,
             )
         fields[record.pk] = entry
     return fields
@@ -1833,7 +1896,8 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         ``condition`` and the ready-made ``roll`` line; a beat of a kind that is not rolled
         carries none of them. A surge that was never announced to the room (it added no
         intensity) has an empty ``narration`` and is left out for everyone but those same
-        viewers.
+        viewers, and so is an emotional condition's feed (``CONDITION_FED``, #4739), which
+        is never announced to the room.
         """
         request = self.context.get("request")
         records = list(
@@ -1862,9 +1926,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             }
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
-            if not sees_detail and not beat["narration"]:
+            if not sees_detail and (
+                not beat["narration"] or record.trigger_kind == SurgeTriggerKind.CONDITION_FED
+            ):
                 # Nothing was announced to the room (a control-only or condition-only
-                # surge), so a bystander has no beat to show.
+                # surge, or an emotional condition's feed, #4739, which is never
+                # announced), so a bystander has no beat to show.
                 continue
             if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind

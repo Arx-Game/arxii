@@ -1348,7 +1348,10 @@ class AudereThresholdAdmin(admin.ModelAdmin):
         "intensity_bonus",
         "anima_pool_bonus",
         "warp_multiplier",
+        "audere_condition",
+        "audere_majora_condition",
     )
+    autocomplete_fields = ("audere_condition", "audere_majora_condition")
     fieldsets = (
         (
             None,
@@ -1364,6 +1367,10 @@ class AudereThresholdAdmin(admin.ModelAdmin):
                     "surge_manifestation_text",
                 )
             },
+        ),
+        (
+            "Conditions (#4739)",
+            {"fields": ("audere_condition", "audere_majora_condition")},
         ),
         (
             "Ultimates reveal copy (#4098)",
@@ -2454,8 +2461,11 @@ class FuryConfigAdmin(admin.ModelAdmin):
         "bonus_scale_per_cap_point",
         "cap_ease_per_point",
         "default_berserk_duration_rounds",
+        "berserk_condition",
     ]
     list_filter = ["check_trait"]
+    list_select_related = ["berserk_condition"]
+    autocomplete_fields = ["berserk_condition"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""

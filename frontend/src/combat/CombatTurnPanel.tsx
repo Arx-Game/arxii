@@ -40,11 +40,8 @@ import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
 import { StandoffCard } from './standoff/StandoffCard';
 import { StandoffSummaryCard } from './standoff/StandoffSummaryCard';
-import type { components } from '@/generated/api';
 import type { EncounterDetail } from './types';
 import type { CastPosition, PositionTargetShape } from '@/actions/types';
-
-type ConditionInstance = components['schemas']['ConditionInstance'];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -190,16 +187,12 @@ export function CombatTurnPanel({
   const showAcknowledgeRisk = isActiveDuel && encounter.is_lethal;
 
   // Audere active strip — the viewer's own participant row (matched by
-  // character_sheet_id) carries the Audere condition in active_conditions while
-  // the breakthrough is live. active_conditions entries are ConditionInstances
-  // typed loosely on the generated schema (SerializerMethodField); cast at the boundary.
+  // character_sheet_id) carries audere_state while the breakthrough is live. The
+  // server finds the conditions by their designation on the Audere threshold, so
+  // staff can rename them freely (#4739).
   const viewerParticipant = findOwnParticipant(encounter.participants, characterSheetId);
-  const isAudereActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
-    (c) => c.name === 'Audere'
-  );
-  const isMajoraActive = ((viewerParticipant?.active_conditions ?? []) as ConditionInstance[]).some(
-    (c) => c.name === 'Audere Majora'
-  );
+  const audereState = viewerParticipant?.audere_state ?? null;
+  const isCeremonyActive = audereState !== null;
 
   return (
     <div
@@ -267,16 +260,16 @@ export function CombatTurnPanel({
         characterSheetId={characterSheetId}
         characterId={characterId}
         encounterId={encounterId}
-        isCeremonyActive={isAudereActive || isMajoraActive}
+        isCeremonyActive={isCeremonyActive}
       />
 
-      {/* Active-Audere strip — visible while the breakthrough condition runs. */}
-      {isAudereActive ? (
+      {/* Active-Audere strip: visible while either Audere ceremony runs. */}
+      {isCeremonyActive ? (
         <div
-          className="rounded-md border border-fuchsia-500/60 bg-fuchsia-950/40 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-300"
+          className="rounded-md border border-fuchsia-500/60 bg-fuchsia-500/10 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-800 dark:bg-fuchsia-950/40 dark:text-fuchsia-300"
           data-testid="audere-active-strip"
         >
-          Audere
+          {audereState === 'audere_majora' ? 'Audere Majora' : 'Audere'}
         </div>
       ) : null}
 

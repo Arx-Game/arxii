@@ -44,6 +44,7 @@ function makeParticipant(id: number, name: string): Participant {
     available_strain: null,
     fatigue: null,
     active_conditions: [],
+    audere_state: null,
     thumbnail_url: '',
     thumbnail_media_url: null,
     escalation_level: null,
@@ -299,6 +300,18 @@ describe('RoundFlow — GM end-encounter control (#876)', () => {
 });
 
 describe('SurgeBeats', () => {
+  it('shows the intensity a condition fed in the cause line', () => {
+    const encounter = makeEncounter([], [], 1, {
+      escalation_curve_name: 'Standard Dramatic Escalation',
+      surge_beats: [{ id: 5, narration: 'Mira surges.', amount: 2, cause: 'Anger · Intensity +2' }],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-narration')).toHaveTextContent('Anger · Intensity +2');
+  });
+
   it('renders a surge beat narration line', () => {
     const encounter = makeEncounter([], [], 1, {
       escalation_curve_name: 'Standard Dramatic Escalation',

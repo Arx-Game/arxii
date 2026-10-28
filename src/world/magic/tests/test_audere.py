@@ -13,12 +13,12 @@ from world.conditions.factories import (
     SoulfrayTemplateFactory,
 )
 from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
     AudereThreshold,
     check_audere_eligibility,
     end_audere,
     offer_audere,
 )
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
@@ -91,6 +91,7 @@ class AudereEligibilityTests(TestCase):
             intensity_bonus=20,
             anima_pool_bonus=30,
             warp_multiplier=2,
+            audere_condition=ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME),
         )
 
         # Shared content type for engagement creation
@@ -170,7 +171,7 @@ class AudereEligibilityTests(TestCase):
             target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         # Already has Audere condition
-        audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
         ConditionInstanceFactory(target=char, condition=audere_template)
         assert check_audere_eligibility(char, runtime_intensity=20) is False
 
@@ -180,7 +181,7 @@ class AudereLifecycleTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        cls.audere_template = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
 
         cls.soulfray_template = SoulfrayTemplateFactory(has_progression=True)
         ensure_soulfray_config()
@@ -235,7 +236,7 @@ class AudereLifecycleTests(TestCase):
         from world.conditions.models import ConditionInstance
 
         assert ConditionInstance.objects.filter(
-            target=self.character, condition__name=AUDERE_CONDITION_NAME
+            target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
         ).exists()
 
     def test_offer_audere_declined(self) -> None:
@@ -266,7 +267,7 @@ class AudereLifecycleTests(TestCase):
         from world.conditions.models import ConditionInstance
 
         assert not ConditionInstance.objects.filter(
-            target=self.character, condition__name=AUDERE_CONDITION_NAME
+            target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
         ).exists()
 
     def test_end_audere_on_engagement_delete(self) -> None:

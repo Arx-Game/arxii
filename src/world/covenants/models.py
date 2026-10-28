@@ -30,6 +30,7 @@ from world.covenants.constants import (
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     BattleBinding,
     CommandTier,
+    CovenantScaledAction,
     CovenantType,
     DefenseStyle,
     InsightTargetKind,
@@ -1124,8 +1125,10 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
     )
     action_key = models.CharField(
         max_length=50,
+        choices=CovenantScaledAction.choices,
         help_text=(
-            "The Action.key this scaling applies to (e.g. 'combat_interpose', 'combat_rally')."
+            "What this scaling applies to: the Interpose or Rally maneuver, or the "
+            "surges this role gives by Rally."
         ),
     )
     thread_level_multiplier = models.DecimalField(
@@ -1157,6 +1160,14 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
         return (
             f"{self.action_key} + {self.covenant_role.name}: ×{self.thread_level_multiplier}/level"
         )
+
+    def clean(self) -> None:
+        """Refuse a negative multiplier: a vow never shrinks the action it scales (#4739)."""
+        super().clean()
+        if self.thread_level_multiplier is not None and self.thread_level_multiplier < 0:
+            raise ValidationError(
+                {"thread_level_multiplier": "The multiplier cannot be negative; use 0 for none."}
+            )
 
 
 class CovenantRoleTechniqueSpecialtyManager(NaturalKeyManager):

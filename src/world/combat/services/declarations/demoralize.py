@@ -5,6 +5,7 @@ from __future__ import annotations
 from world.combat.constants import ENTITY_TYPE_PC, CombatManeuver, OpponentStatus, ParticipantStatus
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.declarations.social_check import _social_verb_success_level
+from world.combat.services.encounter.config import get_social_maneuver_config
 from world.combat.types import ActionOutcome
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
@@ -80,7 +81,9 @@ def _resolve_demoralize(
     if target is None:
         return outcome
 
-    success_level = _social_verb_success_level(participant, "Demoralize", action, target)
+    success_level = _social_verb_success_level(
+        participant, get_social_maneuver_config().demoralize_check_type, action, target
+    )
 
     if success_level < 1:
         # Failed: mindless targets narrate "the construct is unmoved."

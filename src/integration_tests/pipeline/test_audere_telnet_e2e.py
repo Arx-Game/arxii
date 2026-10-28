@@ -18,10 +18,10 @@ from commands.consent import CmdAccept
 from commands.offer_response import CmdDecline
 from commands.tests.message_capture import message_text
 from world.conditions.models import ConditionInstance
-from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
+from world.magic.audere import AudereThreshold, PendingAudereOffer
 from world.magic.audere_majora import AudereMajoraCrossing, PendingAudereMajoraOffer
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
-    AudereThresholdFactory,
     CharacterAnimaFactory,
     IntensityTierFactory,
     wire_audere_power_multipliers,
@@ -36,7 +36,7 @@ class TestAudereTelnetE2E(TestCase):
     """Command → registry → handler → service for surge and path-crossing offers."""
 
     def setUp(self) -> None:
-        # wire_audere_power_multipliers creates the AUDERE_MAJORA_CONDITION_NAME
+        # wire_audere_power_multipliers creates the AUDERE_MAJORA_SEED_TEMPLATE_NAME
         # template that cross_threshold applies at the end of a crossing.
         wire_audere_power_multipliers()
 
@@ -66,12 +66,17 @@ class TestAudereTelnetE2E(TestCase):
         self.audere_tier = IntensityTierFactory(
             name="AudereSurgeTier_te2e", threshold=15, control_modifier=0
         )
-        self.audere_config = AudereThresholdFactory(
-            minimum_intensity_tier=self.audere_tier,
-            minimum_warp_stage=soulfray_instance.current_stage,
-            intensity_bonus=5,
-            anima_pool_bonus=10,
-            warp_multiplier=2,
+        # build_crossing_world made the AudereThreshold (it designates Audere and Audere
+        # Majora, #4739); tune its surge gates and bonuses for this test.
+        self.audere_config, _ = AudereThreshold.objects.update_or_create(
+            pk=AudereThreshold.objects.get().pk,
+            defaults={
+                "minimum_intensity_tier": self.audere_tier,
+                "minimum_warp_stage": soulfray_instance.current_stage,
+                "intensity_bonus": 5,
+                "anima_pool_bonus": 10,
+                "warp_multiplier": 2,
+            },
         )
 
         # Gate 5 of check_audere_eligibility: character must NOT already be in audere.
@@ -79,7 +84,7 @@ class TestAudereTelnetE2E(TestCase):
         # The crossing tests re-add it before calling the command.
         ConditionInstance.objects.filter(
             target=self.character,
-            condition__name=AUDERE_CONDITION_NAME,
+            condition__name=AUDERE_SEED_TEMPLATE_NAME,
         ).delete()
 
         self.audere_offer = PendingAudereOffer.objects.create(
@@ -141,7 +146,7 @@ class TestAudereTelnetE2E(TestCase):
         from world.conditions.models import ConditionTemplate
         from world.conditions.services import apply_condition
 
-        audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplate.objects.get(name=AUDERE_SEED_TEMPLATE_NAME)
         apply_condition(target=self.character, condition=audere_template)
 
         declaration = "I have walked the long road to this moment and I step forward now."
@@ -168,7 +173,7 @@ class TestAudereTelnetE2E(TestCase):
         from world.conditions.models import ConditionTemplate
         from world.conditions.services import apply_condition
 
-        audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplate.objects.get(name=AUDERE_SEED_TEMPLATE_NAME)
         apply_condition(target=self.character, condition=audere_template)
 
         cmd = CmdAccept()

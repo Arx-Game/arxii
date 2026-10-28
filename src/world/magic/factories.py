@@ -14,8 +14,6 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    AUDERE_MAJORA_CONDITION_NAME,
     AudereThreshold,
     PendingAudereOffer,
 )
@@ -25,6 +23,8 @@ from world.magic.audere_majora import (
     AudereMajoraThreshold,
 )
 from world.magic.constants import (
+    AUDERE_MAJORA_SEED_TEMPLATE_NAME,
+    AUDERE_SEED_TEMPLATE_NAME,
     SOULFRAY_SEED_TEMPLATE_NAME,
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -1141,6 +1141,51 @@ class AudereThresholdFactory(factory.django.DjangoModelFactory):
     intensity_bonus = 20
     anima_pool_bonus = 30
     warp_multiplier = 2
+    # The templates made under the seed names (wire_audere_power_multipliers or a test's
+    # own ConditionTemplateFactory) when one ran first; None otherwise (#4739).
+    audere_condition = factory.LazyFunction(lambda: _seed_named_template(AUDERE_SEED_TEMPLATE_NAME))
+    audere_majora_condition = factory.LazyFunction(
+        lambda: _seed_named_template(AUDERE_MAJORA_SEED_TEMPLATE_NAME)
+    )
+
+
+def _seed_named_template(name: str):
+    from world.conditions.models import ConditionTemplate
+
+    return ConditionTemplate.objects.filter(name=name).first()
+
+
+def ensure_audere_designations(audere=None, majora=None) -> AudereThreshold:
+    """The AudereThreshold row, made with factory defaults when absent, designating
+    ``audere`` / ``majora`` where its fields are unset (#4739). For tests that hold an
+    Audere template but never needed the threshold's gates."""
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        # Unset arguments fall back to the factory's seed-named templates.
+        threshold = AudereThresholdFactory()
+    designate_audere_conditions(audere, majora)
+    return threshold
+
+
+def designate_audere_conditions(audere=None, majora=None) -> None:
+    """Point the AudereThreshold's unset Audere / Audere Majora designations (#4739).
+
+    For tests that make the threshold before the condition templates. A designation
+    already set is never overwritten. A no-op when no threshold row exists: one made
+    afterwards picks the seed-named templates up through AudereThresholdFactory.
+    """
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        return
+    changed = []
+    if audere is not None and threshold.audere_condition_id is None:
+        threshold.audere_condition = audere
+        changed.append("audere_condition")
+    if majora is not None and threshold.audere_majora_condition_id is None:
+        threshold.audere_majora_condition = majora
+        changed.append("audere_majora_condition")
+    if changed:
+        threshold.save(update_fields=changed)
 
 
 class PendingAudereOfferFactory(factory.django.DjangoModelFactory):
@@ -1159,7 +1204,9 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
 
     Idempotent — safe to call as both integration-test setUp and seed defaults
     (per factories-as-seed-data). Ensures the ``power_multiplier`` ModifierTarget
-    exists, ensures both ConditionTemplates exist, and sets each condition's
+    exists, ensures both ConditionTemplates exist and are designated on an existing
+    AudereThreshold (one made afterwards picks them up through AudereThresholdFactory;
+    ``ensure_audere_designations`` makes one, #4739), and sets each condition's
     power-multiplier percent-delta. Audere yields ``+audere_delta%`` and Audere
     Majora ``+majora_delta%`` to derived power, applied multiplicatively to
     channeled intensity (so anima/mishap/Soulfray are untouched). Audere Majora's
@@ -1169,8 +1216,9 @@ def wire_audere_power_multipliers(*, audere_delta: int = 100, majora_delta: int 
         (audere_condition, majora_condition) ConditionTemplate tuple.
     """
     target = PowerMultiplierTargetFactory()
-    audere = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
-    majora = ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME)
+    audere = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
+    majora = ConditionTemplateFactory(name=AUDERE_MAJORA_SEED_TEMPLATE_NAME)
+    designate_audere_conditions(audere, majora)
     for condition, delta in ((audere, audere_delta), (majora, majora_delta)):
         ConditionModifierEffect.objects.update_or_create(
             condition=condition,
@@ -4413,17 +4461,28 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
 class FuryConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.FuryConfig"
-        django_get_or_create = ("pk",)
 
     pk = 1
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create the singleton so passed fields (``berserk_condition=``) land.
+
+        A plain ``django_get_or_create`` on ``pk`` silently dropped every non-lookup
+        kwarg once the row existed (django_notes.md's get_or_create gotcha).
+        """
+        pk = kwargs.pop("pk")
+        instance, _ = model_class.objects.update_or_create(pk=pk, defaults=kwargs)
+        return instance
 
 
 # =============================================================================
 # Berserk condition factory (Task 7 — #567)
 # =============================================================================
 
-# Canonical name for the uncontrolled-rage condition applied by the Fury lever.
-BERSERK_CONDITION_NAME = "Berserk"
+# Name the seeded uncontrolled-rage template is made under. Code finds Berserk through
+# FuryConfig.berserk_condition (#4739); only seeds, factories and tests use this name.
+BERSERK_SEED_TEMPLATE_NAME = "Berserk"
 
 
 class _BerserkConditionTemplateFactory:
@@ -4441,6 +4500,8 @@ class _BerserkConditionTemplateFactory:
         cannot readily shake; must ride out the fury)
 
     Idempotent: uses django_get_or_create on name + get_or_create on the stage.
+    Designates the template on ``FuryConfig.berserk_condition`` (made with defaults
+    when absent) unless a test already designated another one (#4739).
     """
 
     def __call__(self):
@@ -4465,7 +4526,7 @@ class _BerserkConditionTemplateFactory:
         )
 
         template = ConditionTemplateFactory(
-            name=BERSERK_CONDITION_NAME,
+            name=BERSERK_SEED_TEMPLATE_NAME,
             category=category,
             description=(
                 "The caster has lost control of their fury. They act on primal rage, "
@@ -4491,6 +4552,13 @@ class _BerserkConditionTemplateFactory:
                 "severity_multiplier": "1.00",
             },
         )
+
+        from world.magic.models import FuryConfig
+
+        config, _ = FuryConfig.objects.get_or_create(pk=1)
+        if config.berserk_condition_id is None:
+            config.berserk_condition = template
+            config.save(update_fields=["berserk_condition"])
 
         return template
 

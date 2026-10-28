@@ -158,3 +158,40 @@ class OpponentActiveConditionsTests(TestCase):
         request = self._staff_request()
         data = OpponentSerializer(self.opponent, context={"request": request}).data
         self.assertEqual(data["active_conditions"], [])
+
+
+class ParticipantAudereStateTests(TestCase):
+    """``audere_state`` follows the AudereThreshold's designations, not names (#4739)."""
+
+    def setUp(self) -> None:
+        from world.magic.factories import AudereThresholdFactory
+
+        super().setUp()
+        self.sheet = CharacterSheetFactory()
+        self.participant = CombatParticipantFactory(character_sheet=self.sheet)
+        self.audere = ConditionTemplateFactory(name="Breakthrough", is_visible_to_others=True)
+        self.majora = ConditionTemplateFactory(name="Over the Edge", is_visible_to_others=True)
+        AudereThresholdFactory(audere_condition=self.audere, audere_majora_condition=self.majora)
+        request = APIRequestFactory().get("/")
+        request.user = AccountFactory()
+        self.context = {"request": request}
+
+    def _state(self):
+        return ParticipantSerializer(self.participant, context=self.context).data["audere_state"]
+
+    def test_none_without_either_condition(self) -> None:
+        self.assertIsNone(self._state())
+
+    def test_renamed_audere_condition_reads_as_audere(self) -> None:
+        ConditionInstanceFactory(target=self.sheet.character, condition=self.audere)
+        self.assertEqual(self._state(), "audere")
+
+    def test_majora_wins_when_both_hold(self) -> None:
+        ConditionInstanceFactory(target=self.sheet.character, condition=self.audere)
+        ConditionInstanceFactory(target=self.sheet.character, condition=self.majora)
+        self.assertEqual(self._state(), "audere_majora")
+
+    def test_a_template_named_audere_is_not_audere(self) -> None:
+        impostor = ConditionTemplateFactory(name="Audere", is_visible_to_others=True)
+        ConditionInstanceFactory(target=self.sheet.character, condition=impostor)
+        self.assertIsNone(self._state())

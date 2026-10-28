@@ -796,6 +796,14 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    intensity_per_round = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Intensity this stage adds to the bearer's combat engagement each round. "
+            "Only a condition gained by a success or a choice may carry it; 0 = none."
+        ),
+    )
+
     # Per-cast consequence pool (fires on every action while at this stage)
     consequence_pool = models.ForeignKey(
         _CONSEQUENCE_POOL_FK,
@@ -855,6 +863,30 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition.name} - {self.name}"
+
+    def clean(self) -> None:
+        """An emotional condition comes only from a success or a choice (#4739).
+
+        A stage that feeds intensity each round may not belong to a condition a surge
+        band hands out on a failed roll (outcome success level below 1).
+        """
+        super().clean()
+        if not self.intensity_per_round or self.condition_id is None:
+            return
+        from world.combat.models import SurgeDegreeBand  # noqa: PLC0415
+
+        if SurgeDegreeBand.objects.filter(
+            condition_id=self.condition_id, outcome__success_level__lt=1
+        ).exists():
+            raise ValidationError(
+                {
+                    "intensity_per_round": (
+                        "A surge band applies this condition on a failed roll, so it cannot "
+                        "feed intensity. Emotional conditions come only from a success or a "
+                        "choice; take it off that band first."
+                    )
+                }
+            )
 
     @PrunedCachedProperty
     def cached_damage_dealt_modifiers(self) -> list[ConditionDamageDealtModifier]:

@@ -579,6 +579,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   and the round payload gives the roll to the surged player, a GM and staff and nobody else.
   Inert until staff author `SurgeTuning`/`SurgeDegreeBand` rows (and, for the hurt-ally
   surge, the flow and trigger definition rows); see `combat-build-history.md`.
+- **Emotional conditions feed intensity (#4739, slice 3 of #4727), journey-proven
+  (`test_emotional_condition_journeys`).** Each round opening, a player character whose
+  conditions' current stages set `intensity_per_round` gains their sum as one
+  `CONDITION_FED` surge (told "Anger · Intensity +2", the cause in the round payload for her
+  alone); renaming the template changes nothing, and the surge tuning admin refuses a
+  failed-roll band carrying a feeding condition. Inert until staff set the stage field.
+- **Renaming a condition the game needs changes nothing (#4739), journey-proven
+  (`test_renamed_rows_journeys`).** Audere, Audere Majora, Berserk, Bleeding Out, Plummeting
+  and Surrounded (and Rally's check and condition) are found through config designations, not
+  names: staff renamed each in the admin and the surge still took hold, the renamed rage still
+  refused to flee, the rally still rolled and inspired, and the dashboard stayed clear. The
+  combat panel's Audere strip reads `audere_state` from the server.
 - **A companion's defeat resolves at the end of the fight (#3652, #1873 Decision
   4):** `resolve_companion_defeat` is now called at both completion seams -
   `complete_encounter` (`_resolve_companion_defeats`) and battle conclusion

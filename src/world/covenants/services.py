@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.constants import CommandTier, MembershipStanding
+from world.covenants.constants import CommandTier, CovenantScaledAction, MembershipStanding
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
@@ -1110,11 +1110,12 @@ def gear_additive_fraction(character: object) -> Decimal:
     return Decimal(max(tenths_values)) / 10
 
 
-def covenant_role_action_scaling_bonus(character: object, action_key: str) -> float:
-    """Return the per-role scaling bonus for a combat action (#2529, was #2022).
+def covenant_role_action_scaling_bonus(character: object, action: CovenantScaledAction) -> float:
+    """Return the per-role scaling bonus for a scaled action (#2529, was #2022; #4739).
 
     Sums ``thread_level × multiplier`` across the character's engaged PRIMARY
-    roles that have a ``CovenantRoleActionScaling`` row for ``action_key``.
+    roles that have a ``CovenantRoleActionScaling`` row whose ``action_key`` is
+    ``action`` (a ``CovenantScaledAction``; its stored values are unchanged).
     Rows and COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged
     roles are resolved sub-roles (ADR-0055), so normalize before lookup.
     Returns 0.0 when no engaged role has a row. PRIMARY-only (#2641, Layer 1
@@ -1144,7 +1145,7 @@ def covenant_role_action_scaling_bonus(character: object, action_key: str) -> fl
             anchors.append(anchor)
 
     scalings = CovenantRoleActionScaling.objects.filter(
-        action_key=action_key,
+        action_key=action,
         covenant_role__in=anchors,
     )
     total = Decimal(0)

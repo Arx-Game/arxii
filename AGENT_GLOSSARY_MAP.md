@@ -21,7 +21,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   (_Avoid_: vow rider, vow switch)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
-- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676), and rolled surge, surge tuning, degree band and taunt potency (#4737, ADR-4737)
+- [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676), and rolled surge, surge tuning, degree band and taunt potency (#4737, ADR-4737), and feeding condition (#4739)
   (ADR-4091): Allegiance (stored vs effective), Turned, Won over, Bind window; (ADR-4120)
   Settled round; (ADR-4147) Spectacle, Spectacle kind; and (#4581, ADR-4581-A) Added-effect firing
   (the once-per-round / once-per-fight vow effect ledger)
@@ -353,6 +353,12 @@ Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Regard P
 Regard Modulation", "Relationship Bond Pull Modulation", "Pull Target Modulation"); covenants-side
 framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
+**Surges given** (#4739):
+A `CovenantRoleActionScaling` row (`CovenantScaledAction.SURGES_GIVEN`) that scales the intensity
+a rallier's Rally surges the rallied ally by, `x (1 + bonus)`; intensity only. _Avoid_: rally
+scaling (that is the `combat_rally` morale row).
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 ## Combat-magic surface (#1584)
 
 **Allegiance**:
@@ -461,6 +467,12 @@ items, real current room, the technique/trait actually in play). _Avoid_: "passi
 check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md)
 ("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
 [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
+
+**Designation / designated condition** (#4122, #4739):
+A nullable config FK naming which `ConditionTemplate` *is* Soulfray, Audere, Audere Majora,
+Berserk, Bleeding Out, Plummeting, Surrounded or Rally's success condition; code reads it,
+never the name, and unset means the mechanic does nothing. _Avoid_: canonical name.
+Full entry: [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md).
 
 **Thread carry** (#4097):
 A thread woven into a technique also empowers, at the thread's full level, every

@@ -81,10 +81,14 @@ TARGET_EFFECT_ALTERATION: str = "alteration"
 # Condition name constants for the core incapacitation conditions.
 # These are plain strings (not TextChoices) — they are identity keys,
 # not an enumerated selection set. Factories use them to seed the
-# ConditionTemplate rows; services use them to locate active instances.
+# ConditionTemplate rows; services use them to locate active instances, except
+# the *_SEED_TEMPLATE_NAME rows below, which code finds by designation.
 UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
-BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
-SURROUNDED_CONDITION_NAME: str = "Surrounded"  # #1733 battle acute peril, staged
+# Names the seeds and test factories give Bleeding Out and Surrounded. Game logic
+# never reads them: each is whichever template VitalsConsequenceConfig designates
+# (#4739), so staff can rename them freely.
+BLEED_OUT_SEED_TEMPLATE_NAME: str = "Bleeding Out"
+SURROUNDED_SEED_TEMPLATE_NAME: str = "Surrounded"  # #1733 battle acute peril, staged
 FORCE_FIELD_CONDITION_NAME: str = "Aegis Field"  # absorb_pool reactive handler (#1584)
 REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (#1584)
 BLINK_CONDITION_NAME: str = "Phase Step"  # blink_dodge reactive handler (#1584)

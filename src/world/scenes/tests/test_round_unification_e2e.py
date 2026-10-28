@@ -26,7 +26,7 @@ from django.test import TestCase
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     UNCONSCIOUS_CONDITION_NAME,
     DurationType,
     FoundationalCapability,
@@ -48,11 +48,12 @@ from world.scenes.round_services import (
     ensure_round_for_acute_condition,
     maybe_resolve_scene_round,
 )
+from world.vitals.peril_designations import designate_unset_peril_conditions
 
 
 def _bleed_present(sheet):
     return ConditionInstance.objects.filter(
-        target=sheet.character, condition__name=BLEED_OUT_CONDITION_NAME
+        target=sheet.character, condition__name=BLEED_OUT_SEED_TEMPLATE_NAME
     ).exists()
 
 
@@ -70,10 +71,11 @@ def _char_in_room(room):
 def _give_bleed_out(sheet, *, rounds_remaining=1):
     """Apply a ROUNDS-duration Bleeding-Out condition that the end-tick will clear."""
     template = ConditionTemplateFactory(
-        name=BLEED_OUT_CONDITION_NAME,
+        name=BLEED_OUT_SEED_TEMPLATE_NAME,
         default_duration_type=DurationType.ROUNDS,
         default_duration_value=rounds_remaining,
     )
+    designate_unset_peril_conditions(bleed_out=template)
     return ConditionInstanceFactory(
         target=sheet.character, condition=template, rounds_remaining=rounds_remaining
     )
@@ -234,10 +236,11 @@ class CombatEndHandOffTest(TestCase):
 
         # Give the victim a ROUNDS-duration Bleeding-Out that the end-tick will decrement.
         template = ConditionTemplateFactory(
-            name=BLEED_OUT_CONDITION_NAME,
+            name=BLEED_OUT_SEED_TEMPLATE_NAME,
             default_duration_type=DurationType.ROUNDS,
             default_duration_value=2,
         )
+        designate_unset_peril_conditions(bleed_out=template)
         self.bleed_instance = ConditionInstanceFactory(
             target=self.victim_sheet.character, condition=template, rounds_remaining=2
         )

@@ -380,7 +380,7 @@ def ensure_surrounded_content() -> dict[str, object]:
     reads them synchronously to apply the condition at seed time.
     """
     from actions.models import ConsequencePool
-    from world.conditions.constants import SURROUNDED_CONDITION_NAME
+    from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
     from world.conditions.models import ConditionStage, ConditionTemplate
     from world.seeds.sample_content import authored_or_sample
     from world.vitals.services import _ensure_endurance_check_type
@@ -395,7 +395,7 @@ def ensure_surrounded_content() -> dict[str, object]:
             "has_progression": True,
             "description": "Cut off from allies, facing mounting attack pressure.",
         },
-        name=SURROUNDED_CONDITION_NAME,
+        name=SURROUNDED_SEED_TEMPLATE_NAME,
     )
 
     stage_specs = [
@@ -420,6 +420,11 @@ def ensure_surrounded_content() -> dict[str, object]:
             )
             if stage is not None:
                 stages.append(stage)
+
+    if condition is not None:
+        from world.vitals.peril_designations import designate_unset_peril_conditions
+
+        designate_unset_peril_conditions(surrounded=condition)
 
     failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
     partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)

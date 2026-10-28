@@ -97,7 +97,7 @@ class TestClusterRegistry(TestCase):
     def test_reactive_challenges_cluster_seeds_the_content_family(self) -> None:
         from world.areas.positioning.constants import (
             CATCH_THE_FALLER_NAME,
-            PLUMMETING_CONDITION_NAME,
+            PLUMMETING_SEED_TEMPLATE_NAME,
         )
         from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME
         from world.combat.redirect_content import (
@@ -114,7 +114,9 @@ class TestClusterRegistry(TestCase):
                 ChallengeTemplate.objects.filter(name=name).exists(),
                 f"expected seeded ChallengeTemplate {name!r}",
             )
-        self.assertTrue(ConditionTemplate.objects.filter(name=PLUMMETING_CONDITION_NAME).exists())
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name=PLUMMETING_SEED_TEMPLATE_NAME).exists()
+        )
         self.assertTrue(Property.objects.filter(name=VOLATILE_POWDER_PROPERTY_NAME).exists())
 
         # Idempotent on re-run: no duplicate challenge rows.

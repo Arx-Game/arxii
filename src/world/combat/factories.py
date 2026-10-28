@@ -68,6 +68,7 @@ from world.combat.models import (
     PendingOpponentAttack,
     PendingSelection,
     RiskScalingModifier,
+    SocialManeuverConfig,
     SpectacleConfig,
     SpectacleReactionLine,
     SpectacleRecord,
@@ -460,6 +461,23 @@ class StrainConfigFactory(factory_django.DjangoModelFactory):
     pk = 1
     base_anima_fatigue_ratio = 25
     strain_anima_fatigue_ratio = 50
+
+
+class SocialManeuverConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for the SocialManeuverConfig singleton (pk=1, #4739).
+
+    Every designation defaults to unset. A passed field is applied even when the
+    row already exists (``update_or_create``), unlike a plain get-or-create factory.
+    """
+
+    class Meta:
+        model = SocialManeuverConfig
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        kwargs.pop("pk", None)
+        instance, _ = model_class.objects.update_or_create(pk=1, defaults=kwargs)
+        return instance
 
 
 class ClashConfigFactory(factory_django.DjangoModelFactory):

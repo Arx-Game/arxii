@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from django.test import TestCase, override_settings, tag
 
-from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME, PositionKind
+from world.areas.positioning.constants import PLUMMETING_SEED_TEMPLATE_NAME, PositionKind
 from world.areas.positioning.factories import wire_fall_triggers
 from world.areas.positioning.models import Position
 from world.areas.positioning.plummet_content import ensure_fall_content
@@ -86,7 +86,7 @@ class SentFlyingContentTests(TestCase):
         ensure_fall_content()
         ensure_sent_flying_content()
         tmpl = ConditionTemplate.get_by_name(SENT_FLYING_CONDITION_NAME)
-        plummeting = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        plummeting = ConditionTemplate.get_by_name(PLUMMETING_SEED_TEMPLATE_NAME)
         self.assertEqual(tmpl.category_id, plummeting.category_id)
         self.assertEqual(ConditionCategory.objects.filter(name="Falling").count(), 1)
 
@@ -366,7 +366,7 @@ class SentFlyingPlummetChainTests(TestCase):
 
         self.assertTrue(
             get_active_conditions(self.character)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
             "the victim should now be plummeting, not merely impacted locally",
         )

@@ -56,11 +56,8 @@ from world.combat.services import (
     resolve_round,
 )
 from world.conditions.models import ConditionInstance
-from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    offer_audere,
-)
-from world.magic.constants import PendingAlterationStatus
+from world.magic.audere import offer_audere
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME, PendingAlterationStatus
 from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
@@ -919,7 +916,7 @@ class AudereDuringClashTests(TestCase):
         # --- Audere ConditionTemplate (required by offer_audere) ---
         from world.conditions.factories import ConditionTemplateFactory
 
-        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
 
         # --- IntensityTier + AudereThreshold ---
         # threshold=1: any non-zero runtime intensity qualifies.
@@ -1104,7 +1101,7 @@ class AudereDuringClashTests(TestCase):
         self.assertTrue(
             ConditionInstance.objects.filter(
                 target=self.sheet.character,
-                condition__name=AUDERE_CONDITION_NAME,
+                condition__name=AUDERE_SEED_TEMPLATE_NAME,
                 resolved_at__isnull=True,
             ).exists(),
             "Pre-condition: character should be in Audere before the clash.",

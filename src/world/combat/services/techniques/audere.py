@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 def _end_audere_kind_and_delete_offers(
-    condition_name: str,
+    condition_id: int | None,
     end_fn: Callable[[ObjectDB], None],
     pending_offer_model: type[PendingAudereOffer | PendingAudereMajoraOffer],
     participant_targets: list[ObjectDB],
@@ -29,17 +29,20 @@ def _end_audere_kind_and_delete_offers(
     Extracted out of ``cleanup_completed_encounter`` (one call per kind) to keep
     that function's own branching simple -- this is Audere/Audere Majora's own
     per-kind unit of work, including the #4101 fix round 1 withheld-manifestation
-    release for the Majora kind specifically.
+    release for the Majora kind specifically. ``condition_id`` is the kind's designated
+    template (#4739); when unset nobody holds it, but pending offers are still cleared.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.magic.audere_majora import PendingAudereMajoraOffer  # noqa: PLC0415
 
-    target_ids = set(
-        ConditionInstance.objects.filter(
-            target__in=participant_targets,
-            condition__name=condition_name,
-        ).values_list("target_id", flat=True)
-    )
+    target_ids: set[int] = set()
+    if condition_id is not None:
+        target_ids = set(
+            ConditionInstance.objects.filter(
+                target__in=participant_targets,
+                condition_id=condition_id,
+            ).values_list("target_id", flat=True)
+        )
     for target in participant_targets:
         if target.pk in target_ids:
             end_fn(target)

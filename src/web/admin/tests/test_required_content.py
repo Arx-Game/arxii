@@ -531,35 +531,53 @@ class TestSoulfrayRowsLinkToTheBuilder(TestCase):
         )
 
 
+def _designate_surrounded(template) -> None:
+    """Set the Surrounded designation on the vitals config (#4739)."""
+    from world.vitals.models import VitalsConsequenceConfig
+
+    config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+    config.surrounded_condition = template
+    config.save()
+
+
 class TestSurroundedConditionBundleProbe(TestCase):
-    """All three rows are required - a name-only check on the template alone
-    is the exact false green #3444 final review item 2 flagged."""
+    """All three rows are required - a check on the template alone is the exact
+    false green #3444 final review item 2 flagged. The template is the one the
+    vitals config designates (#4739), never one found by name."""
 
     def test_missing_when_only_the_template_exists(self) -> None:
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
-
-        ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        _designate_surrounded(ConditionTemplateFactory())
         result = rc._probe_surrounded_condition_bundle()
         self.assertFalse(result.present)
         self.assertTrue(any("ConsequencePool" in m for m in result.missing))
         self.assertTrue(any("ConditionStage" in m for m in result.missing))
 
-    def test_missing_when_the_pool_is_absent(self) -> None:
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
-        from world.conditions.factories import ConditionStageFactory
+    def test_missing_when_the_designation_is_unset(self) -> None:
+        """A template named Surrounded does not count until staff designate it."""
+        from actions.factories import ConsequencePoolFactory
+        from world.conditions.constants import SURROUNDED_SEED_TEMPLATE_NAME
+        from world.vitals.constants import POOL_SURROUNDED_ENTRY
 
-        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        template = ConditionTemplateFactory(name=SURROUNDED_SEED_TEMPLATE_NAME)
         ConditionStageFactory(condition=template, stage_order=1)
+        ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertFalse(result.present)
+        self.assertTrue(any("surrounded condition (unset)" in m for m in result.missing))
+
+    def test_missing_when_the_pool_is_absent(self) -> None:
+        template = ConditionTemplateFactory()
+        ConditionStageFactory(condition=template, stage_order=1)
+        _designate_surrounded(template)
         result = rc._probe_surrounded_condition_bundle()
         self.assertFalse(result.present)
         self.assertTrue(any("ConsequencePool" in m for m in result.missing))
 
     def test_missing_when_the_entry_stage_is_absent(self) -> None:
         from actions.factories import ConsequencePoolFactory
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
         from world.vitals.constants import POOL_SURROUNDED_ENTRY
 
-        ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        _designate_surrounded(ConditionTemplateFactory())
         ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
         result = rc._probe_surrounded_condition_bundle()
         self.assertFalse(result.present)
@@ -570,24 +588,22 @@ class TestSurroundedConditionBundleProbe(TestCase):
         sensitively - a differently-cased pool name is a real miss, not a
         false red."""
         from actions.factories import ConsequencePoolFactory
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
-        from world.conditions.factories import ConditionStageFactory
         from world.vitals.constants import POOL_SURROUNDED_ENTRY
 
-        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        template = ConditionTemplateFactory()
         ConditionStageFactory(condition=template, stage_order=1)
+        _designate_surrounded(template)
         ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY.title())
         result = rc._probe_surrounded_condition_bundle()
         self.assertFalse(result.present)
 
     def test_present_when_all_three_rows_exist(self) -> None:
         from actions.factories import ConsequencePoolFactory
-        from world.conditions.constants import SURROUNDED_CONDITION_NAME
-        from world.conditions.factories import ConditionStageFactory
         from world.vitals.constants import POOL_SURROUNDED_ENTRY
 
-        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        template = ConditionTemplateFactory(name="Hemmed In")
         ConditionStageFactory(condition=template, stage_order=1)
+        _designate_surrounded(template)
         ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
         result = rc._probe_surrounded_condition_bundle()
         self.assertTrue(result.present)
@@ -1399,60 +1415,59 @@ class TestManifestOptionProbes(TestCase):
 
 
 class TestAudereConditionShapeProbe(TestCase):
-    """#4098 final review item 2: duration-shape + death_deferred, not just presence."""
+    """#4098 final review item 2: duration-shape + death_deferred, not just presence.
 
-    def _well_formed_template(self, name: str) -> rc.ContentProbe:
-        from world.conditions.constants import DurationType
+    Checked on the templates `AudereThreshold` designates (#4739), whatever their names.
+    """
+
+    def _designate(self, audere, majora) -> None:
+        from world.magic.factories import AudereThresholdFactory
+
+        AudereThresholdFactory(audere_condition=audere, audere_majora_condition=majora)
+
+    def _template(self, *, duration: str, death_deferred: bool):
         from world.mechanics.factories import DeathDeferredPropertyFactory
 
-        template = ConditionTemplateFactory(
-            name=name, default_duration_type=DurationType.UNTIL_END_OF_COMBAT
-        )
-        template.properties.add(DeathDeferredPropertyFactory())
+        template = ConditionTemplateFactory(default_duration_type=duration)
+        if death_deferred:
+            template.properties.add(DeathDeferredPropertyFactory())
         return template
 
-    def test_missing_both_templates_is_reported(self) -> None:
-        from web.admin.tuning.required_content import _probe_audere_condition_shape
-        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
-
-        result = _probe_audere_condition_shape()
-        self.assertFalse(result.present)
-        self.assertTrue(any(AUDERE_CONDITION_NAME in m for m in result.missing))
-        self.assertTrue(any(AUDERE_MAJORA_CONDITION_NAME in m for m in result.missing))
+    def test_unset_designations_are_left_to_the_designation_rows(self) -> None:
+        self.assertTrue(rc._probe_audere_condition_shape().present)
 
     def test_round_limited_duration_is_reported(self) -> None:
-        from web.admin.tuning.required_content import _probe_audere_condition_shape
         from world.conditions.constants import DurationType
-        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
-        from world.mechanics.factories import DeathDeferredPropertyFactory
 
-        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
-            template = ConditionTemplateFactory(
-                name=name, default_duration_type=DurationType.ROUNDS
-            )
-            template.properties.add(DeathDeferredPropertyFactory())
-        result = _probe_audere_condition_shape()
+        self._designate(
+            self._template(duration=DurationType.ROUNDS, death_deferred=True),
+            self._template(duration=DurationType.ROUNDS, death_deferred=True),
+        )
+        result = rc._probe_audere_condition_shape()
         self.assertFalse(result.present)
-        self.assertTrue(any("round-limited" in m for m in result.missing))
+        self.assertEqual(sum("round-limited" in m for m in result.missing), 2)
 
     def test_missing_death_deferred_property_is_reported(self) -> None:
-        from web.admin.tuning.required_content import _probe_audere_condition_shape
         from world.conditions.constants import DurationType
-        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
 
-        for name in (AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME):
-            ConditionTemplateFactory(name=name, default_duration_type=DurationType.PERMANENT)
-        result = _probe_audere_condition_shape()
+        self._designate(
+            self._template(duration=DurationType.PERMANENT, death_deferred=False),
+            self._template(duration=DurationType.UNTIL_END_OF_COMBAT, death_deferred=True),
+        )
+        result = rc._probe_audere_condition_shape()
         self.assertFalse(result.present)
-        self.assertTrue(any("death_deferred" in m for m in result.missing))
+        self.assertEqual(len(result.missing), 1)
+        self.assertIn("Audere (", result.missing[0])
+        self.assertIn("death_deferred", result.missing[0])
 
     def test_well_formed_templates_are_present(self) -> None:
-        from web.admin.tuning.required_content import _probe_audere_condition_shape
-        from world.magic.audere import AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME
+        from world.conditions.constants import DurationType
 
-        self._well_formed_template(AUDERE_CONDITION_NAME)
-        self._well_formed_template(AUDERE_MAJORA_CONDITION_NAME)
-        result = _probe_audere_condition_shape()
+        self._designate(
+            self._template(duration=DurationType.UNTIL_END_OF_COMBAT, death_deferred=True),
+            self._template(duration=DurationType.UNTIL_END_OF_COMBAT, death_deferred=True),
+        )
+        result = rc._probe_audere_condition_shape()
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
 
@@ -1899,3 +1914,136 @@ class TestDriftCorrectionConfigProbe(TestCase):
         result = _probe_for("drift-correction-config").resolve(None)
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
+
+
+class TestDesignationProbes(TestCase):
+    """Each designation row is reported until staff set its field, then clears (#4739).
+
+    U-keep: the dashboard probe has no player path.
+    """
+
+    def _present(self, key: str) -> bool:
+        return _probe_for(key).resolve(None).present
+
+    def test_social_maneuver_designations(self) -> None:
+        from world.combat.factories import SocialManeuverConfigFactory
+
+        keys = (
+            "social-maneuver-taunt-check",
+            "social-maneuver-demoralize-check",
+            "social-maneuver-parley-check",
+            "social-maneuver-rally-success-condition",
+        )
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        SocialManeuverConfigFactory()
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        SocialManeuverConfigFactory(
+            taunt_check_type=CheckTypeFactory(),
+            demoralize_check_type=CheckTypeFactory(),
+            parley_check_type=CheckTypeFactory(),
+            rally_success_condition=ConditionTemplateFactory(),
+        )
+        for key in keys:
+            self.assertTrue(self._present(key), key)
+
+    def test_an_inactive_social_check_type_is_reported(self) -> None:
+        from world.combat.factories import SocialManeuverConfigFactory
+
+        keys = (
+            "social-maneuver-taunt-check",
+            "social-maneuver-demoralize-check",
+            "social-maneuver-parley-check",
+        )
+        SocialManeuverConfigFactory(
+            taunt_check_type=CheckTypeFactory(is_active=False),
+            demoralize_check_type=CheckTypeFactory(is_active=False),
+            parley_check_type=CheckTypeFactory(is_active=False),
+        )
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+
+    def test_an_inactive_rallied_check_type_is_reported(self) -> None:
+        from world.combat.constants import SurgeTriggerKind
+        from world.combat.factories import SurgeTuningFactory
+
+        SurgeTuningFactory(
+            trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(is_active=False)
+        )
+        self.assertFalse(self._present("rallied-tuning-check"))
+
+    def test_rallied_tuning_check(self) -> None:
+        from world.combat.constants import SurgeTriggerKind
+        from world.combat.factories import SurgeTuningFactory
+
+        self.assertFalse(self._present("rallied-tuning-check"))
+        SurgeTuningFactory(trigger_kind=SurgeTriggerKind.TAUNT_RECEIVED)
+        self.assertFalse(self._present("rallied-tuning-check"))
+        SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)
+        self.assertTrue(self._present("rallied-tuning-check"))
+
+    def test_audere_designations(self) -> None:
+        from world.magic.factories import AudereThresholdFactory
+
+        keys = ("audere-condition", "audere-majora-condition")
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        threshold = AudereThresholdFactory()
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        threshold.audere_condition = ConditionTemplateFactory()
+        threshold.audere_majora_condition = ConditionTemplateFactory()
+        threshold.save()
+        for key in keys:
+            self.assertTrue(self._present(key), key)
+
+    def test_berserk_designation(self) -> None:
+        from world.magic.factories import FuryConfigFactory
+
+        self.assertFalse(self._present("berserk-condition"))
+        config = FuryConfigFactory()
+        self.assertFalse(self._present("berserk-condition"))
+        config.berserk_condition = ConditionTemplateFactory()
+        config.save()
+        self.assertTrue(self._present("berserk-condition"))
+
+    def test_vitals_peril_designations(self) -> None:
+        from world.vitals.models import VitalsConsequenceConfig
+
+        keys = ("bleed-out-condition", "plummeting-condition")
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        config, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+        for key in keys:
+            self.assertFalse(self._present(key), key)
+        config.bleed_out_condition = ConditionTemplateFactory()
+        config.plummeting_condition = ConditionTemplateFactory()
+        config.save()
+        for key in keys:
+            self.assertTrue(self._present(key), key)
+
+    def test_emotional_condition_on_a_failure_band_is_listed(self) -> None:
+        """Only a stored failed-roll band carrying a feeding condition is reported."""
+        from world.combat.constants import SurgeTriggerKind
+        from world.combat.factories import SurgeDegreeBandFactory, SurgeTuningFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        key = "emotional-condition-on-failure-band"
+        tuning = SurgeTuningFactory(trigger_kind=SurgeTriggerKind.RALLIED)
+        failure = CheckOutcomeFactory(name="Probe Failure", success_level=-1)
+        success = CheckOutcomeFactory(name="Probe Success", success_level=2)
+        angry = ConditionTemplateFactory(name="Probe Fury")
+        stage = ConditionStageFactory(condition=angry, stage_order=1)
+        # A feeding condition on a success band is fine.
+        SurgeDegreeBandFactory(tuning=tuning, outcome=success, condition=angry)
+        # A failure band carrying it before it fed is fine too.
+        SurgeDegreeBandFactory(tuning=tuning, outcome=failure, condition=angry)
+        self.assertTrue(self._present(key))
+
+        # Stored past ConditionStage.clean() (save() skips it, like a shell or fixture edit).
+        stage.intensity_per_round = 2
+        stage.save()
+        result = _probe_for(key).resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Rallied / Probe Failure: Probe Fury",))

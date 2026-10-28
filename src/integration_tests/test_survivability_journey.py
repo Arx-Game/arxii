@@ -21,7 +21,7 @@ from world.combat.constants import OpponentTier
 from world.combat.factories import LethalDuelFactory, ThreatPoolEntryFactory, ThreatPoolFactory
 from world.combat.models import CombatOpponentAction, CombatRoundAction
 from world.combat.services import acknowledge_encounter_risk, resolve_round
-from world.conditions.constants import BLEED_OUT_CONDITION_NAME, UNCONSCIOUS_CONDITION_NAME
+from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME, UNCONSCIOUS_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance, TreatmentTemplate
 from world.conditions.services import perform_treatment
@@ -102,7 +102,7 @@ class SurvivabilityJourneyTests(TestCase):
         self.assertLessEqual(vitals.health, 0)
         self.assertTrue(
             ConditionInstance.objects.filter(
-                target=sheet.character, condition__name=BLEED_OUT_CONDITION_NAME
+                target=sheet.character, condition__name=BLEED_OUT_SEED_TEMPLATE_NAME
             ).exists()
         )
         self.assertEqual(vitals.life_state, CharacterLifeState.ALIVE)
@@ -152,7 +152,7 @@ class SurvivabilityJourneyTests(TestCase):
         self.assertEqual(vitals.life_state, CharacterLifeState.ALIVE)
         self.assertTrue(
             ConditionInstance.objects.filter(
-                target=sheet.character, condition__name=BLEED_OUT_CONDITION_NAME
+                target=sheet.character, condition__name=BLEED_OUT_SEED_TEMPLATE_NAME
             ).exists()
         )
         self.assertIsNone(vitals.died_at)

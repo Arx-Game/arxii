@@ -12,8 +12,9 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.magic.audere import AUDERE_CONDITION_NAME
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
+    AudereThresholdFactory,
     CharacterAnimaFactory,
     GiftFactory,
     ResonanceFactory,
@@ -149,7 +150,8 @@ class TechniqueUseResultFieldTests(TestCase):
 
     def test_use_technique_populates_was_audere_when_audere_active(self) -> None:
         """was_audere is True when the character has an active Audere ConditionInstance."""
-        audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
+        AudereThresholdFactory(audere_condition=audere_template)
         ConditionInstanceFactory(target=self.character, condition=audere_template)
 
         result = use_technique(

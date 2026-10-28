@@ -465,8 +465,11 @@ this introduces.
 
 ### The "Surrounded" condition (`world/vitals/factories.py::ensure_surrounded_content`)
 
-Idempotently seeds a `ConditionTemplate` named `SURROUNDED_CONDITION_NAME` ("Surrounded",
-`world/conditions/constants.py`) with `has_progression=True` and 3 `ConditionStage` rows,
+Idempotently seeds a `ConditionTemplate` named `SURROUNDED_SEED_TEMPLATE_NAME` ("Surrounded",
+`world/conditions/constants.py`) and points an unset `VitalsConsequenceConfig.surrounded_condition`
+at it. Resolution never finds Surrounded by name: `_maybe_apply_surrounded`, RESCUE and the
+per-round escalation read `world.vitals.peril_designations.surrounded_template()` and do nothing
+when it is unset (#4739; the Required content dashboard lists it). The template has `has_progression=True` and 3 `ConditionStage` rows,
 each resisted with the existing Endurance `CheckType` (the same survivability semantic
 Bleeding-Out already uses):
 

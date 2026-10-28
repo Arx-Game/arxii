@@ -7707,8 +7707,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
   - `CovenantRoleActionScaling` (#2529, ADR-0149; replaced `ArchetypeActionScaling`) —
     one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
-    `covenant_role_action_scaling_bonus(character, action_key)`, anchor-role
-    normalized. Lore-repo content.
+    `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction)`,
+    anchor-role normalized. `surges_given` scales a rallier's Rally surge intensity
+    (#4739). Lore-repo content.
   - `CovenantRoleTechniqueSpecialty` (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
     of the vow-power model) — one row per `(covenant_role, function)` keyed on
     `magic.TechniqueFunction`, `multiplier_tenths` (default 10 = ×1.0). Valid on both
@@ -7880,7 +7881,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
-  - `covenant_role_action_scaling_bonus(character, action_key) -> float` (#2529,
+  - `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction) -> float` (#2529, #4739,
     ADR-0149; replaces `archetype_action_scaling_bonus`) — sums `thread_level ×
     multiplier` across engaged roles' `CovenantRoleActionScaling` rows, anchor-role
     normalized
@@ -8495,7 +8496,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   blank; never broadcast to the room. Three new trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
   `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
-  .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,
+  .acute_peril_condition_ids()`, by designation since #4739), hated-foe (checked on encounter join and NPC opponent add,
   reading `CombatOpponent.persona.character_sheet` against the PC's own negative-sign
   `CharacterRelationship`), and stakes (`StakesEscalationModifier`, one row per `StakesLevel`:
   per-tick `intensity_step_bonus` + one-shot `initial_surge` + `default_curve`
@@ -8533,8 +8534,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   combat panel's `DigDeep` button reads it. Journeys: `test_dig_deep_journeys`.
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
-  with degrees. `SurgeTriggerKind` has thirteen members: the nine older kinds above and
-  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` / `DUG_DEEP` (`ROLLED_SURGE_TRIGGER_KINDS`). **All four are
+  with degrees. `SurgeTriggerKind` has fourteen members: the nine older kinds above,
+  `TAUNT_RECEIVED` / `RALLIED` / `ALLY_HURT` / `DUG_DEEP` (`ROLLED_SURGE_TRIGGER_KINDS`), and
+  `CONDITION_FED` ("Emotional Condition", #4739: an emotional condition's per-round feed
+  from `ConditionStage.intensity_per_round`; not rolled, so its per-round record has a
+  `repeat_round` and no `outcome`, the one exception the `surge_rolled_has_round_and_outcome`
+  constraint allows). **All four rolled kinds are
   off until staff author a `SurgeTuning` row per kind with bands** (no data migration seeds
   them; the Required content `surge-tuning` probe, `_probe_surge_tuning`, names each kind
   with no row and every stored band set that breaks the monotonic rule). The hurt-ally surge
@@ -8559,7 +8564,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   free; with a control change or condition the record is written but the room gets no
   "power surges" line (`narrate=False`) and the round payload narration is "". The record
   stores `outcome`, `potency`, `control_change`, `condition` (the condition only if it
-  took hold) and `cause` (the line the surged player, GMs and staff read, in
+  took hold), `vow_scaling` (#4739: the intensity a rallier's "Surges given by Rally" vow
+  added over the band's unscaled intensity, 0 otherwise) and `cause` (the line the surged player, GMs and staff read, in
   the third person with persona names: "<taunter> taunts <target>.", "<rallier> rallies
   <target>.", the NPC entry's authored taunt text as the room is told it (else "<opponent>
   taunts <target>."), or "<hurt ally>, bonded to <surged player>, loses N% of their
@@ -8573,7 +8579,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `npc_action._resolve_npc_taunt_on_target`; acts on player characters only, so an entry aimed
   at an opponent is skipped; one per target per round), Rally (`rally._surge_rallied_ally`:
   the Rally roll is the tuning's `check_type` against the fixed `RALLY_BASE_DIFFICULTY`, which
-  the roll line shows, and its outcome picks the band), and a hurt bonded ally
+  the roll line shows, and its outcome picks the band; a rallier's `SURGES_GIVEN` vow row
+  scales the intensity by `1 + bonus`, `apply_rolled_surge(vow_scaled=True)`, #4739), and a hurt bonded ally
   (`escalation.apply_ally_hurt_surge`, fired by `ally_hurt_spike_handler` from the
   `escalation_spike_on_damage` room trigger, wound-scaled). Surfaces: `TauntAction`
   (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
@@ -8582,12 +8589,61 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   GMs and staff (a bystander gets only `id` and `narration`, and no beat at all when the
   narration is empty), the round log (the cause line over the roll caption, which reads
   `Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded`,
-  with "bond difficulty" and "(scaled by the wound)" for a hurt ally), an ally taunt in the
+  with "bond difficulty" and "(scaled by the wound)" for a hurt ally, and
+  `· vow scaling +N` after the intensity when a rallier's vow added N), an ally taunt in the
   Combatants row menu and a "Taunting <name>" badge in Your Turn. On a player character a compulsion such as Goaded is a
   debuff `ConditionTemplate` a band applies (owner call 2026-10-27), never a declaration
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
   `integration_tests/test_surge_rolls_journeys.py`, `test_taunt_targets_journeys.py`.
   Architecture: `docs/architecture/runtime-modifiers-audere.md`.
+- **Emotional conditions feed intensity (#4739, ADR-4737 amendment) [BUILT & WIRED, INERT
+  UNTIL STAFF AUTHOR CONTENT]:** `world/combat/condition_surges.py`:
+  `condition_intensity_by_target(character_ids) -> dict[int, tuple[int, list[str]]]` (one
+  query: per character the summed `current_stage.intensity_per_round` of active,
+  unsuppressed, unresolved instances, and the condition names), `condition_feeds_intensity(
+  condition_ids) -> set[int]` (templates with any stage above 0), and
+  `apply_condition_intensity_surges(encounter) -> list[DramaticSurgeBeat]`, called by
+  `begin_declaration_phase` right after `apply_escalation_tick` and only when the encounter
+  has an escalation curve. One `CONDITION_FED` record per ACTIVE player character per round
+  (`repeat_round` = round, no outcome; nothing for a sum of 0; NPC opponents never), with
+  `narrate=False` and cause "<names> feed(s) <persona>'s intensity."; the player is sent
+  "<names> · Intensity +<total>" on commit and the web reads the same record in
+  `surge_beats` (the surged player, GMs and staff only; a bystander gets no beat for a
+  `CONDITION_FED` row). Which conditions feed is the stage field, never a name. If the round
+  opening raises, `begin_declaration_phase` puts the cached encounter, participants, sheets
+  and engagements back (`web.admin.authoring.identity_map.CacheGuard`) and evicts
+  engagements and surge records it created, so the escalation tick and the feed never leave
+  the identity map ahead of the database.
+  `validate_surge_bands(bands, *, feeding_condition_ids=None)` treats a feeding condition
+  as a benefit (a better outcome may add one, may not drop one) and refuses one on a band
+  whose outcome has success level below 1 (model `clean`, admin inline formset and
+  `check_stored_surge_bands` alike). Journey:
+  `integration_tests/test_emotional_condition_journeys.py`.
+- **Audere, Berserk and acute-peril designations (#4739) [BUILT & WIRED]:** no game code finds
+  Audere, Audere Majora, Berserk, Bleeding Out, Plummeting or Surrounded by name. Lookups:
+  `world.magic.audere.audere_condition_id()` / `audere_majora_condition_id()`,
+  `world.magic.services.fury.get_berserk_template()` / `berserk_condition_id()`,
+  `world.vitals.peril_designations` (`bleed_out_condition_id()`, `plummeting_condition_id()`,
+  `surrounded_condition_id()`, `plummeting_template()`, `surrounded_template()`,
+  `designate_unset_peril_conditions(...)`). `acute_peril_condition_ids()` and
+  `acute_peril_hand_off_condition_ids()` replace the `*_names()` lists. Unset = the mechanic
+  does nothing. `ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null) drives
+  the web client's Audere strip. See `docs/systems/conditions.md` "Designated conditions".
+- **Social maneuver designations (#4739) [BUILT & WIRED]:**
+  `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
+  `taunt_check_type` (the taunter's own check; the target's composure roll is the
+  `TAUNT_RECEIVED` tuning's check), `demoralize_check_type`, `parley_check_type` and
+  `rally_success_condition` (Inspired), each a nullable PROTECT FK. Rally's own check is the
+  `RALLIED` `SurgeTuning.check_type`, not a field here. Read through
+  `world.combat.services.encounter.config.get_social_maneuver_config()` (cached singleton,
+  created empty if missing). Rally rolls only the `RALLIED` tuning's check (no tuning: no
+  roll, nothing happens) and applies `rally_success_condition` on success; Taunt (on an
+  opponent, and the taunter's rating against a player), Demoralize and Parley roll their
+  designated check through `_social_verb_success_level(participant, check_type | None,
+  action, target)`, where an unset or inactive check rolls nothing (success level 0). No
+  row is found by name. Required content rows: `social-maneuver-taunt-check`,
+  `-demoralize-check`, `-parley-check`, `-rally-success-condition`, `rallied-tuning-check`,
+  and `emotional-condition-on-failure-band`.
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
@@ -8841,7 +8897,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `src/integration_tests/test_leading_the_fight_journeys.py`.
   - `ensure_social_combat_content()` (`src/world/combat/social_combat_content.py`) —
     idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
-    with stat+skill+spec), the Inspired condition, and a Charming Word technique.
+    with stat+skill+spec), the Inspired condition, and a Charming Word technique; points
+    each unset `SocialManeuverConfig` designation at its seeded row (#4739), never
+    overwriting one staff set. Seed names: `*_SEED_CHECK_NAME`,
+    `INSPIRED_SEED_TEMPLATE_NAME` (seeds, factories and tests only).
 - **Key Services (`world/mechanics/reactions.py`):**
   - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn, *, select_best_check_rating=False)`
     — shared reactive spine; used by INTERPOSE and the catch-faller seam. `approach`

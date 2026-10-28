@@ -32,7 +32,7 @@ from world.combat.tests.test_encounter_aftermath import _CompletionSeamTestBase
 from world.combat.types import AftermathDigest
 from world.companions.factories import CompanionFactory
 from world.companions.models import Companion
-from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.missions.factories import MissionDeedRecordFactory
@@ -56,6 +56,7 @@ from world.stories.models import BeatCompletion
 from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
+from world.vitals.peril_designations import designate_unset_peril_conditions
 
 
 def _seed_rule_with_pool(
@@ -247,7 +248,8 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         participant = self._add_pc(encounter)
         character = participant.character_sheet.character
 
-        bleed_out = ConditionTemplateFactory(name=BLEED_OUT_CONDITION_NAME)
+        bleed_out = ConditionTemplateFactory(name=BLEED_OUT_SEED_TEMPLATE_NAME)
+        designate_unset_peril_conditions(bleed_out=bleed_out)
         ConditionInstanceFactory(target=character, condition=bleed_out)
 
         complete_encounter(encounter, outcome=EncounterOutcome.DEFEAT)

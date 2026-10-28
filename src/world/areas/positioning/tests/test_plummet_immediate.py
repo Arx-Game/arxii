@@ -23,7 +23,7 @@ from django.test import TestCase, override_settings, tag
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.positioning.constants import (
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
     PositionKind,
 )
 from world.areas.positioning.models import Position
@@ -93,7 +93,7 @@ class UnattendedPlummetTests(TestCase):
         )
         self.assertFalse(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
             "impact removes the Plummeting condition",
         )
@@ -111,7 +111,7 @@ class UnattendedPlummetTests(TestCase):
         if plummet_round is not None:
             self.assertFalse(
                 get_active_conditions(self.faller)
-                .filter(condition__name=PLUMMETING_CONDITION_NAME)
+                .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
                 .exists(),
                 "any danger round present must not be holding a still-plummeting faller",
             )
@@ -137,7 +137,7 @@ class UnattendedPlummetTests(TestCase):
         self.assertNotEqual(position_of(self.faller), self.ground)
         self.assertTrue(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists()
         )
 
@@ -154,6 +154,6 @@ class UnattendedPlummetTests(TestCase):
         )
         self.assertFalse(
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists(),
         )

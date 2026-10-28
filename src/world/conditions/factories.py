@@ -13,7 +13,7 @@ from flows.factories import (
     TriggerFactory,
 )
 from world.conditions.constants import (
-    BLEED_OUT_CONDITION_NAME,
+    BLEED_OUT_SEED_TEMPLATE_NAME,
     POISONED_CONDITION_NAME,
     UNCONSCIOUS_CONDITION_NAME,
     ConditionInteractionOutcome,
@@ -144,8 +144,17 @@ class BleedingOutConditionFactory(ConditionTemplateFactory):
     Tests build the concrete stages via ``ConditionStageFactory``.
     """
 
-    name = BLEED_OUT_CONDITION_NAME
+    name = BLEED_OUT_SEED_TEMPLATE_NAME
     has_progression = True
+
+    @factory.post_generation
+    def designate(obj, create, extracted, **kwargs):  # noqa: N805 - factory_boy hook
+        """Point an unset ``VitalsConsequenceConfig.bleed_out_condition`` here (#4739)."""
+        if not create:
+            return
+        from world.vitals.peril_designations import designate_unset_peril_conditions
+
+        designate_unset_peril_conditions(bleed_out=obj)
 
 
 class PoisonedConditionFactory(ConditionTemplateFactory):

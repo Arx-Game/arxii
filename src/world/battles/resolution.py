@@ -1144,18 +1144,16 @@ def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     sides' participants (a shared front), and RESCUE must never clear Surrounded
     from an enemy (that would help the enemy, not the caster's side).
     """
-    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions, remove_condition  # noqa: PLC0415
+    from world.vitals.peril_designations import surrounded_template  # noqa: PLC0415
 
     targets = _scope_target_participants(declaration)
     targets = [t for t in targets if t.side_id == declaration.participant.side_id]
     if not targets:
         return
 
-    try:
-        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
+    template = surrounded_template()
+    if template is None:
         return
 
     for target in targets:
@@ -1188,13 +1186,13 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
         resolve_pool_consequences,
         select_consequence,
     )
-    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
     from world.conditions.services import (  # noqa: PLC0415
         apply_condition,
         loss_of_self_terms,
     )
     from world.vitals.constants import POOL_SURROUNDED_ENTRY  # noqa: PLC0415
+    from world.vitals.peril_designations import surrounded_template  # noqa: PLC0415
 
     participant = declaration.participant
     if not _is_isolated(participant):
@@ -1204,10 +1202,7 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
         (p for p in ConsequencePool.objects.cached_all() if p.name == POOL_SURROUNDED_ENTRY),
         None,
     )
-    try:
-        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
-        template = None
+    template = surrounded_template()
     entry_stage = (
         next(
             (
@@ -1307,15 +1302,13 @@ def _advance_surrounded_participants(
     round before their peril first escalates (final-review finding).
     """
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
-    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.vitals.peril_designations import surrounded_template  # noqa: PLC0415
     from world.vitals.services import advance_surrounded  # noqa: PLC0415
 
-    try:
-        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
-    except ConditionTemplate.DoesNotExist:
-        return  # seeding gap — nothing to advance
+    template = surrounded_template()
+    if template is None:
+        return  # Surrounded unset (#4739): nothing to advance
 
     participants = BattleParticipant.objects.filter(
         battle=battle, status=BattleParticipantStatus.ACTIVE

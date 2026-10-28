@@ -12,16 +12,16 @@ from world.combat.services import cleanup_completed_encounter
 from world.conditions.factories import ConditionInstanceFactory, SoulfrayTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    AUDERE_MAJORA_CONDITION_NAME,
     PendingAudereOffer,
     offer_audere,
 )
 from world.magic.audere_majora import PendingAudereMajoraOffer
+from world.magic.constants import AUDERE_MAJORA_SEED_TEMPLATE_NAME, AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     IntensityTierFactory,
     PendingAudereOfferFactory,
+    ensure_audere_designations,
     ensure_soulfray_config,
     wire_audere_power_multipliers,
 )
@@ -80,7 +80,7 @@ class CleanupAudereTeardownTests(TestCase):
         assert self.anima.maximum == original_maximum
         assert self.anima.pre_audere_maximum is None
         assert not ConditionInstance.objects.filter(
-            target=self.character, condition__name=AUDERE_CONDITION_NAME
+            target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
         ).exists()
 
     def test_cleanup_deletes_pending_offers(self) -> None:
@@ -98,6 +98,7 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
 
     def setUp(self) -> None:
         _audere, self.majora_template = wire_audere_power_multipliers()
+        ensure_audere_designations()
         self.character = ObjectDBFactory(db_key="majora_cleanup_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         self.encounter = CombatEncounterFactory()
@@ -115,7 +116,7 @@ class CleanupAuderaMajoraTeardownTests(TestCase):
         cleanup_completed_encounter(self.encounter)
 
         assert not ConditionInstance.objects.filter(
-            target=self.character, condition__name=AUDERE_MAJORA_CONDITION_NAME
+            target=self.character, condition__name=AUDERE_MAJORA_SEED_TEMPLATE_NAME
         ).exists()
 
     def test_cleanup_deletes_pending_majora_offers(self) -> None:
@@ -205,6 +206,7 @@ class CleanupCertainDeathBackstopTests(TestCase):
 
     def setUp(self) -> None:
         self.audere, _majora = wire_audere_power_multipliers()
+        ensure_audere_designations()
         self.character = ObjectDBFactory(db_key="certain_death_backstop_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterVitalsFactory(character_sheet=self.sheet)
@@ -241,6 +243,7 @@ class CleanupAbandonedCertainDeathTests(TestCase):
 
     def setUp(self) -> None:
         self.audere, _majora = wire_audere_power_multipliers()
+        ensure_audere_designations()
         self.character = ObjectDBFactory(db_key="abandoned_certain_death_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         CharacterVitalsFactory(character_sheet=self.sheet)

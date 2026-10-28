@@ -64,7 +64,7 @@ from world.combat.permissions import (
     IsInEncounterRoom,
 )
 from world.combat.serializers import (
-    ACTIVE_CONDITIONS_CACHE_ATTR,
+    ACTIVE_CONDITIONS_CONTEXT_KEY,
     AddOpponentSerializer,
     AddParticipantSerializer,
     ConsiderReadingSerializer,
@@ -471,6 +471,15 @@ class CombatEncounterViewSet(ModelViewSet):
             response[key] = value
         return response
 
+    def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
+        # A comment, not a docstring: a docstring here would replace the viewset's
+        # description in the API schema. Serializes the encounter with this
+        # request's active conditions in context.
+        encounter = self.get_object()
+        context = self.get_serializer_context()
+        context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
+        return Response(self.get_serializer_class()(encounter, context=context).data)
+
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
@@ -505,32 +514,34 @@ class CombatEncounterViewSet(ModelViewSet):
             return EncounterListSerializer
         return EncounterDetailSerializer
 
-    def _active_conditions_prefetch(self, lookup: str) -> Prefetch:
-        """Prefetch active ConditionInstances onto a target ObjectDB.
+    def _active_conditions_by_object_id(
+        self,
+        encounter: CombatEncounter,
+    ) -> dict[int, list[ConditionInstance]]:
+        """Active ConditionInstances for every fighter in the payload, in one query.
 
-        ``lookup`` is the relation path to the ObjectDB whose conditions we
-        want (``character_sheet__character`` for participants,
-        ``objectdb`` for opponents). The queryset mirrors
-        ``get_active_conditions`` — same suppression filter and
-        select_related — and lands on
-        ``ACTIVE_CONDITIONS_CACHE_ATTR`` so the serializer reads it
-        without an N+1. Visibility filtering + display-priority ordering
-        run in Python in the serializer.
+        Keyed by the ObjectDB pk of each participant's character and each
+        opponent's objectdb. The filter mirrors ``get_active_conditions``
+        (suppression, select_related); visibility filtering and display-priority
+        ordering run in the serializer. Loaded per request and passed through
+        serializer context (ADR-0260), never left on the idmapper-shared ObjectDB
+        (ADR-0263).
         """
+        object_ids = {p.character_sheet.character_id for p in encounter.participants_cached}
+        object_ids |= {
+            o.objectdb_id for o in encounter.opponents_cached if o.objectdb_id is not None
+        }
         not_suppressed = Q(is_suppressed=False) | Q(
             suppressed_until__isnull=False,
             suppressed_until__lt=timezone.now(),
         )
-        condition_qs = ConditionInstance.objects.filter(not_suppressed).select_related(
-            "condition",
-            "condition__category",
-            "current_stage",
-        )
-        return Prefetch(
-            f"{lookup}__condition_instances",
-            queryset=condition_qs,
-            to_attr=ACTIVE_CONDITIONS_CACHE_ATTR,
-        )
+        rows = ConditionInstance.objects.filter(
+            not_suppressed, target_id__in=object_ids
+        ).select_related("condition", "condition__category", "current_stage")
+        by_object_id: dict[int, list[ConditionInstance]] = {}
+        for row in rows:
+            by_object_id.setdefault(row.target_id, []).append(row)
+        return by_object_id
 
     def _base_queryset(self) -> QuerySet[CombatEncounter]:
         from world.areas.positioning.models import (  # noqa: PLC0415
@@ -601,7 +612,6 @@ class CombatEncounterViewSet(ModelViewSet):
                     | Q(status=ParticipantStatus.FLED, encounter__status=RoundStatus.COMPLETED)
                 )
                 .prefetch_related(
-                    self._active_conditions_prefetch("character_sheet__character"),
                     # Pre-fill CharacterSheet.cached_payload_personas (a
                     # @cached_property doubling as this to_attr target) with the
                     # thumbnail joined, so ParticipantSerializer resolves the PC
@@ -624,8 +634,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 queryset=CombatOpponent.objects.select_related(
                     "persona__thumbnail",
                     "objectdb__object_position__position",
-                ).prefetch_related(
-                    self._active_conditions_prefetch("objectdb"),
                 ),
                 to_attr="opponents_cached",
             ),
@@ -1555,6 +1563,7 @@ class CombatEncounterViewSet(ModelViewSet):
         if request.user.is_authenticated and not request.user.is_staff and encounter.scene:
             is_gm = encounter.scene.is_gm(request.user)
         context["is_gm"] = bool(request.user.is_authenticated and request.user.is_staff) or is_gm
+        context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
 
         return context
 

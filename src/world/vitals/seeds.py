@@ -260,11 +260,14 @@ def ensure_bleeding_out_condition() -> ConditionTemplate | None:
     callers must skip the dependent default-death-pool wiring.
     """
     from world.conditions.constants import (  # noqa: PLC0415
-        BLEED_OUT_CONDITION_NAME,
+        BLEED_OUT_SEED_TEMPLATE_NAME,
         DurationType,
     )
     from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.vitals.peril_designations import (  # noqa: PLC0415
+        designate_unset_peril_conditions,
+    )
     from world.vitals.services import _ensure_death_check_type  # noqa: PLC0415
 
     check_type = _ensure_death_check_type()
@@ -284,7 +287,7 @@ def ensure_bleeding_out_condition() -> ConditionTemplate | None:
             "default_duration_value": 0,
             "is_visible_to_others": True,
         },
-        name=BLEED_OUT_CONDITION_NAME,
+        name=BLEED_OUT_SEED_TEMPLATE_NAME,
     )
     if template is None:
         return None
@@ -302,6 +305,7 @@ def ensure_bleeding_out_condition() -> ConditionTemplate | None:
             condition=template,
             stage_order=order,
         )
+    designate_unset_peril_conditions(bleed_out=template)
     return template
 
 

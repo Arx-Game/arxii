@@ -37,7 +37,8 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.models import ConditionInstance
-from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
+from world.magic.audere import PendingAudereOffer
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     ResonanceFactory,
@@ -164,7 +165,7 @@ class TestAudereOfferPipeline(APITestCase):
         )
         self.assertTrue(
             ConditionInstance.objects.filter(
-                target=self.character, condition__name=AUDERE_CONDITION_NAME
+                target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
             ).exists()
         )
         self.assertFalse(PendingAudereOffer.objects.filter(pk=offer.pk).exists())
@@ -181,7 +182,7 @@ class TestAudereOfferPipeline(APITestCase):
         self.assertIsNone(self.anima.pre_audere_maximum)
         self.assertFalse(
             ConditionInstance.objects.filter(
-                target=self.character, condition__name=AUDERE_CONDITION_NAME
+                target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
             ).exists()
         )
         self.assertFalse(PendingAudereOffer.objects.filter(character_sheet=self.sheet).exists())

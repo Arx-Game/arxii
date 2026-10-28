@@ -36,3 +36,34 @@ class BerserkTemplateTests(TestCase):
             tpl.category.alters_behavior,
             "Berserk's ConditionCategory must have alters_behavior=True.",
         )
+
+
+class BerserkDesignationTests(TestCase):
+    """Berserk is whatever ``FuryConfig.berserk_condition`` names (#4739)."""
+
+    def test_unset_designation_finds_nothing(self):
+        from world.magic.factories import FuryConfigFactory
+        from world.magic.services.fury import berserk_condition_id, get_berserk_template
+
+        FuryConfigFactory()
+        self.assertIsNone(get_berserk_template())
+        self.assertIsNone(berserk_condition_id())
+
+    def test_factory_designates_and_a_rename_changes_nothing(self):
+        from world.magic.services.fury import berserk_condition_id, get_berserk_template
+
+        tpl = BerserkConditionTemplateFactory()
+        tpl.name = "Red Haze"
+        tpl.save(update_fields=["name"])
+        self.assertEqual(get_berserk_template(), tpl)
+        self.assertEqual(berserk_condition_id(), tpl.pk)
+
+    def test_config_factory_applies_designation_to_an_existing_row(self):
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.factories import FuryConfigFactory
+        from world.magic.services.fury import get_berserk_template
+
+        BerserkConditionTemplateFactory()
+        other = ConditionTemplateFactory(name="Bloodfrenzy")
+        FuryConfigFactory(berserk_condition=other)
+        self.assertEqual(get_berserk_template(), other)

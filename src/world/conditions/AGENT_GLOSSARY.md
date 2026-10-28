@@ -171,3 +171,21 @@ announce, departures are silent. Concealment rolls are per room per visit.
 _Avoid_: "hide" (that is the OOC presence-privacy toggle, `CmdHide`); "invisible"
 (implies the magical producer); any mechanic that conceals *presence* rather
 than *identity*.
+
+**intensity per round / feeding condition** (#4739):
+`ConditionStage.intensity_per_round`: the intensity a stage adds to its bearer's combat
+engagement at each round opening (one `CONDITION_FED` surge per player character for the
+sum over their active conditions; see **Feeding Condition** in the combat glossary). A
+condition feeds only at a stage that sets it, so a stageless emotion gets a stage. Only a
+success or a choice may give one: a surge band on a failed roll may not carry it.
+_Avoid_: emotion intensity percent (the deleted `get_condition_intensity_percent_modifier`),
+rage, mood.
+
+**Designation / designated condition** (#4122, #4739):
+A nullable FK on a config singleton that says which `ConditionTemplate` *is* a condition the
+code has to find (Soulfray, Audere, Audere Majora, Berserk, Bleeding Out, Plummeting,
+Surrounded, Rally's success condition). Code reads the designation, never the name, so staff
+rename the row freely; unset means the mechanic does nothing and the Required content
+dashboard lists it. Seeds make the row under a `*_SEED_TEMPLATE_NAME` and fill only an unset
+designation. _Avoid_: canonical name, magic name, the "Berserk row" (say the designated
+Berserk condition).

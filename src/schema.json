@@ -46469,6 +46469,14 @@ components:
       required:
       - accept
       - offer_id
+    AudereStateEnum:
+      enum:
+      - audere
+      - audere_majora
+      type: string
+      description: |-
+        * `audere` - Audere
+        * `audere_majora` - Audere Majora
     AudereUltimateState:
       type: object
       properties:
@@ -78290,6 +78298,12 @@ components:
             (``_can_view_vitals``). Ordered by ``display_priority`` (highest
             first). No conditions → ``[]``.
           readOnly: true
+        audere_state:
+          nullable: true
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/AudereStateEnum'
+          - $ref: '#/components/schemas/NullEnum'
         thumbnail_url:
           type: string
           nullable: true
@@ -78356,6 +78370,7 @@ components:
       required:
       - active_conditions
       - aftermath
+      - audere_state
       - available_strain
       - character_name
       - character_sheet_id

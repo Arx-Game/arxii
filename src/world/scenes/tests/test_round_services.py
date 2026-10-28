@@ -23,6 +23,7 @@ from world.scenes.round_services import (
     scene_round_is_complete,
     start_scene_round,
 )
+from world.vitals.peril_designations import designate_unset_peril_conditions
 
 
 class SceneRoundServiceTests(TestCase):
@@ -102,7 +103,7 @@ class SceneRoundServiceTests(TestCase):
         # A danger round keeps going (advances to the next round) while a participant is
         # still Bleeding-Out.
         from evennia_extensions.factories import ObjectDBFactory
-        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+        from world.conditions.constants import BLEED_OUT_SEED_TEMPLATE_NAME
 
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
@@ -115,9 +116,10 @@ class SceneRoundServiceTests(TestCase):
         sheet = CharacterSheetFactory()
         SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
         bleed_template = ConditionTemplateFactory(
-            name=BLEED_OUT_CONDITION_NAME,
+            name=BLEED_OUT_SEED_TEMPLATE_NAME,
             default_duration_type=DurationType.UNTIL_CURED,
         )
+        designate_unset_peril_conditions(bleed_out=bleed_template)
         ConditionInstanceFactory(target=sheet.character, condition=bleed_template)
         resolve_scene_round(rnd)
         rnd.refresh_from_db()
@@ -396,12 +398,11 @@ class SceneRoundResolutionTests(TestCase):
         Returns (participant, plummeting_instance). Falling is environmental, so
         there is no hostile ``source_character``.
         """
-        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
 
         participant = self._participant(present=present, initiative_order=initiative_order)
         inst = ConditionInstanceFactory(
             target=participant.character_sheet.character,
-            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+            condition=_designated_plummeting(),
         )
         return participant, inst
 
@@ -457,7 +458,6 @@ class SceneRoundResolutionTests(TestCase):
         # tick_round_for_targets is patched: the victim must NOT appear (bleed-out held).
         # advance_plummet is patched: the victim MUST appear (descent advances, #1479).
         from evennia_extensions.factories import ObjectDBFactory
-        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
 
         self.rnd.mode = SceneRoundMode.STRICT
         self.rnd.save(update_fields=["mode"])
@@ -467,7 +467,7 @@ class SceneRoundResolutionTests(TestCase):
         # Add a Plummeting condition to the same victim.
         ConditionInstanceFactory(
             target=victim_p.character_sheet.character,
-            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+            condition=_designated_plummeting(),
         )
         bystander = self._participant(present=True, initiative_order=1)
         self._declare_pass(bystander)
@@ -1091,3 +1091,13 @@ class RoomAtObjectLeaveFinishesEmptySceneTests(TestCase):
 
         self.scene.refresh_from_db()
         assert self.scene.is_finished is False
+
+
+def _designated_plummeting():
+    """The Plummeting template, designated on the vitals config (#4739)."""
+    from world.areas.positioning.constants import PLUMMETING_SEED_TEMPLATE_NAME
+    from world.conditions.factories import ConditionTemplateFactory
+
+    template = ConditionTemplateFactory(name=PLUMMETING_SEED_TEMPLATE_NAME)
+    designate_unset_peril_conditions(plummeting=template)
+    return template

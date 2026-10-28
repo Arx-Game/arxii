@@ -320,6 +320,7 @@ class SecondaryVowChassisIsolationTests(TestCase):
         self.assertEqual(with_secondary, baseline)
 
     def test_covenant_role_action_scaling_bonus_unaffected_by_secondary(self) -> None:
+        from world.covenants.constants import CovenantScaledAction
         from world.covenants.factories import CovenantRoleActionScalingFactory
         from world.covenants.services import covenant_role_action_scaling_bonus
 
@@ -332,7 +333,9 @@ class SecondaryVowChassisIsolationTests(TestCase):
         _covenant_role_thread(
             sheet=self.sheet, role=self.primary_role, resonance=resonance, level=10
         )
-        baseline = covenant_role_action_scaling_bonus(self.character, "combat_interpose")
+        baseline = covenant_role_action_scaling_bonus(
+            self.character, CovenantScaledAction.INTERPOSE
+        )
         self.assertEqual(baseline, 1.0)
 
         secondary_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
@@ -353,7 +356,9 @@ class SecondaryVowChassisIsolationTests(TestCase):
             is_secondary=True,
         )
 
-        with_secondary = covenant_role_action_scaling_bonus(self.character, "combat_interpose")
+        with_secondary = covenant_role_action_scaling_bonus(
+            self.character, CovenantScaledAction.INTERPOSE
+        )
         self.assertEqual(with_secondary, baseline)
 
 

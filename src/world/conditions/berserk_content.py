@@ -1,9 +1,9 @@
 """Production Berserk condition content (#2845, ADR-0171 config rows).
 
-Berserk is resolved BY NAME at runtime by every producer — the fury engine
-(`world.magic.services.fury.run_fury_for_action`) and the moon control check
-(`world.species.moon_sensitivity`) — so the row is load-bearing config, not
-optional content. Until #2845 it existed only as a test factory
+Every producer, the fury engine (`world.magic.services.fury.run_fury_for_action`)
+and the moon control check (`world.species.moon_sensitivity`), finds Berserk
+through `FuryConfig.berserk_condition` (#4739), never by name, so the seed points
+an unset designation at the row it made. Until #2845 it existed only as a test factory
 (`world.magic.factories.BerserkConditionTemplateFactory`, whose shape this
 seed mirrors exactly) plus a gitignored local fixture whose copy sits in an
 `alters_behavior=False` category and would silently fail to block form-revert.
@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
 
-BERSERK_CONDITION_NAME = "Berserk"
+BERSERK_SEED_TEMPLATE_NAME = "Berserk"
 CONTROL_CATEGORY_NAME = "Control"
 
 
@@ -50,7 +50,7 @@ def ensure_berserk_content() -> None:
         category.save(update_fields=["alters_behavior"])
 
     template, _ = ConditionTemplate.objects.get_or_create(
-        name=BERSERK_CONDITION_NAME,
+        name=BERSERK_SEED_TEMPLATE_NAME,
         defaults={
             "category": category,
             "description": (
@@ -80,7 +80,22 @@ def ensure_berserk_content() -> None:
             "severity_multiplier": "1.00",
         },
     )
+    _designate_unset_berserk(template)
     ensure_restore_to_sense_effect(template)
+
+
+def _designate_unset_berserk(template: ConditionTemplate) -> None:
+    """Point an unset ``FuryConfig.berserk_condition`` at the seeded template (#4739).
+
+    A designation staff already set is never overwritten. The config row is made with
+    its model defaults when absent, the same values the fury engine falls back to.
+    """
+    from world.magic.models import FuryConfig  # noqa: PLC0415
+
+    config, _ = FuryConfig.objects.get_or_create(pk=1)
+    if config.berserk_condition_id is None:
+        config.berserk_condition = template
+        config.save(update_fields=["berserk_condition"])
 
 
 def ensure_restore_to_sense_effect(berserk_template: ConditionTemplate) -> None:

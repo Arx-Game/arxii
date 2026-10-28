@@ -90,17 +90,14 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
 
     character = persona.character_sheet.character
 
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import has_condition  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
 
-    try:
-        berserk_template = ConditionTemplate.get_by_name("Berserk")
-        if has_condition(character, berserk_template):
-            raise serializers.ValidationError(
-                {"fury_commitment_id": "Cannot declare fury while already Berserk."}
-            )
-    except ConditionTemplate.DoesNotExist:
-        pass
+    berserk_template = get_berserk_template()
+    if berserk_template is not None and has_condition(character, berserk_template):
+        raise serializers.ValidationError(
+            {"fury_commitment_id": "Cannot declare fury while already Berserk."}
+        )
 
     from world.magic.services.fury import provocation_cap  # noqa: PLC0415
 

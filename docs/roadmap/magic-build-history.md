@@ -54,9 +54,11 @@ entry) for the full surface. Since then dramatic surges have added near-death (a
 peril), hated-foe, high-stakes and boss-beat spikes (#2013, #3445), and #4737 (slice 1 of
 #4727) built the rolled surges: a taunt, a rally and a hurt bonded ally raise a player
 character's intensity through a roll with degrees (inert until staff author the tuning
-rows). Remaining design intent not yet built
-(slices 2 to 4 of #4727): strain and steeling feeding intensity, emotional-condition
-intensity feeds, covenant vow scaling of surges given, and the Audere control step.
+rows). #4739 (slice 3) built emotional-condition intensity feeds: a condition stage's
+`intensity_per_round` surges its player-character bearer each round opening
+(`CONDITION_FED`, one record per round for the sum), and a failed surge roll may not hand
+one out. Remaining design intent not yet built (other slices of #4727): strain and steeling
+feeding intensity, covenant vow scaling of surges given, and the Audere control step.
 
 ### No Healing, Shielding Instead
 Restoration mechanics are counter to the tension-building combat design. Shielding prevents damage without undoing escalation. Healing is absent by design.

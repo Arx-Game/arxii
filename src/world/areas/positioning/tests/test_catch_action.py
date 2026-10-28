@@ -31,7 +31,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings, tag
 
 from world.areas.positioning.constants import (
-    PLUMMETING_CONDITION_NAME,
+    PLUMMETING_SEED_TEMPLATE_NAME,
     TELEKINESIS_CAPABILITY_NAME,
     PositionKind,
 )
@@ -123,7 +123,7 @@ class CatchActionTests(TestCase):
     def _is_plummeting(self) -> bool:
         return (
             get_active_conditions(self.faller)
-            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .filter(condition__name=PLUMMETING_SEED_TEMPLATE_NAME)
             .exists()
         )
 

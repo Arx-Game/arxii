@@ -18,6 +18,7 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     KnownUltimateFactory,
     UltimateTechniqueFactory,
+    ensure_audere_designations,
     wire_audere_power_multipliers,
 )
 from world.magic.models import KnownUltimate
@@ -65,6 +66,7 @@ class CombatCastPathTests(TestCase):
     def setUp(self) -> None:
         idmapper_models.flush_cache()
         self.audere, _ = wire_audere_power_multipliers()
+        ensure_audere_designations()
         template = ensure_technique_cast_content()
         self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.sheet = CharacterSheetFactory()

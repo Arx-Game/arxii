@@ -109,7 +109,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 11 queries on the warm call:
+        # 17 queries on the warm call:
         #   1. session + 2. encounter + 3. the lone remaining roster lookup
         #      the permission classes need (served by the account-level
         #      ``played_character_sheet_ids`` cached_property after warm-up).
@@ -143,6 +143,9 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #  11. CombatMark lookup for marks (#4603) - one flat query for this round's marks.
         #  12. Holder names for ``held_positions`` (#4670) - one flat query naming the
         #      ready enemies who hold a place, per encounter, not per place.
+        #  13. Active conditions for every participant and opponent - one flat query
+        #      per request, handed to the serializers in context (not left on the
+        #      idmapper-shared ObjectDB, which went stale; ADR-0263).
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute. The specialist-selection, sustained-action,
@@ -150,7 +153,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # The viewer's own dodge plan (#4676) adds one: her Phase Step ward (the
         # capabilities that dodge come from the warmed cached_all()). Only her own row
         # computes it, so it does not scale with the participant count.
-        with self.assertNumQueries(16):
+        with self.assertNumQueries(17):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
