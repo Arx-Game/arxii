@@ -47,7 +47,7 @@ from world.magic.models.techniques import (
 )
 
 if TYPE_CHECKING:
-    from world.checks.models import CheckCategory
+    from world.checks.models import CheckCategory, CheckType
     from world.traits.models import Trait
 
 # Identity keys for the seed only (#4739): the game finds Inspired and the verb checks by
@@ -121,7 +121,7 @@ def _ensure_social_skills_and_specs() -> tuple[dict[str, object], dict[str, obje
 
 def _ensure_social_combat_check_types(
     skills: dict[str, object], specs: dict[str, object]
-) -> dict[str, object]:
+) -> dict[str, CheckType]:
     """Seed the 4 social-combat CheckTypes with stat + skill (+ spec) composition.
 
     ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
@@ -142,7 +142,7 @@ def _ensure_social_combat_check_types(
 
     category = _ensure_social_category()
     weight = Decimal("1.0")  # PLACEHOLDER magnitudes
-    check_types: dict[str, object] = {}
+    check_types: dict[str, CheckType] = {}
     if category is None:
         return check_types
 
@@ -281,14 +281,13 @@ def _ensure_charm_technique() -> Technique | None:
     return technique
 
 
-def _designate_unset(check_types: dict[str, object], inspired: ConditionTemplate | None) -> None:
+def _designate_unset(check_types: dict[str, CheckType], inspired: ConditionTemplate | None) -> None:
     """Point each unset ``SocialManeuverConfig`` designation at the row just seeded (#4739).
 
     A designation staff already set is never overwritten (precedent: the Soulfray seed in
     ``world/magic/factories.py``). A row the seed skipped (not authored) leaves its
     designation unset for the Required content dashboard to list.
     """
-    from world.checks.models import CheckType  # noqa: PLC0415
     from world.combat.services.encounter.config import (  # noqa: PLC0415
         get_social_maneuver_config,
     )
@@ -298,13 +297,13 @@ def _designate_unset(check_types: dict[str, object], inspired: ConditionTemplate
     demoralize = check_types.get(DEMORALIZE_SEED_CHECK_NAME)
     parley = check_types.get(PARLEY_SEED_CHECK_NAME)
     changed: list[str] = []
-    if isinstance(taunt, CheckType) and config.taunt_check_type_id is None:
+    if taunt is not None and config.taunt_check_type_id is None:
         config.taunt_check_type = taunt
         changed.append("taunt_check_type")
-    if isinstance(demoralize, CheckType) and config.demoralize_check_type_id is None:
+    if demoralize is not None and config.demoralize_check_type_id is None:
         config.demoralize_check_type = demoralize
         changed.append("demoralize_check_type")
-    if isinstance(parley, CheckType) and config.parley_check_type_id is None:
+    if parley is not None and config.parley_check_type_id is None:
         config.parley_check_type = parley
         changed.append("parley_check_type")
     if inspired is not None and config.rally_success_condition_id is None:
