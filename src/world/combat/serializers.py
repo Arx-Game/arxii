@@ -86,7 +86,7 @@ ACTIVE_CONDITIONS_CACHE_ATTR = "active_condition_instances"
 
 def _prefetched_active_conditions(target: ObjectDB) -> list | None:
     """The viewset's prefetched active ConditionInstances on ``target``, or None."""
-    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache —
+    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache:
     # (#2401) never a cached_property.
     return getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
 

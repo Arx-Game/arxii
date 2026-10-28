@@ -1,7 +1,7 @@
 """Production Berserk condition content (#2845, ADR-0171 config rows).
 
-Every producer — the fury engine (`world.magic.services.fury.run_fury_for_action`)
-and the moon control check (`world.species.moon_sensitivity`) — finds Berserk
+Every producer, the fury engine (`world.magic.services.fury.run_fury_for_action`)
+and the moon control check (`world.species.moon_sensitivity`), finds Berserk
 through `FuryConfig.berserk_condition` (#4739), never by name, so the seed points
 an unset designation at the row it made. Until #2845 it existed only as a test factory
 (`world.magic.factories.BerserkConditionTemplateFactory`, whose shape this

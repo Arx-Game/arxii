@@ -555,7 +555,7 @@ def peril_spike_handler(*, payload: Any) -> None:
     """Flow-callable subscriber for CONDITION_APPLIED (#2013).
 
     Filters to the acute-peril condition names (reuses
-    ``acute_peril_condition_ids`` — doesn't duplicate the list) before doing
+    ``acute_peril_condition_ids``, so it doesn't duplicate the list) before doing
     any relationship read, mirroring ``relationship_spike_handler``'s shape.
     """
     from world.vitals.peril_resolution import acute_peril_condition_ids  # noqa: PLC0415

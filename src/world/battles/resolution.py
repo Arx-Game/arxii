@@ -1308,7 +1308,7 @@ def _advance_surrounded_participants(
 
     template = surrounded_template()
     if template is None:
-        return  # Surrounded unset (#4739) — nothing to advance
+        return  # Surrounded unset (#4739): nothing to advance
 
     participants = BattleParticipant.objects.filter(
         battle=battle, status=BattleParticipantStatus.ACTIVE

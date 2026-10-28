@@ -80,12 +80,12 @@ one (`filter(x_id=None)` is `IS NULL`); `__in` lists drop it. Seeds and the
 `BleedingOutConditionFactory` call `designate_unset_peril_conditions(...)`, which never
 overwrites a staff choice. Seed names: `BLEED_OUT_SEED_TEMPLATE_NAME`,
 `SURROUNDED_SEED_TEMPLATE_NAME` (`conditions/constants.py`), `PLUMMETING_SEED_TEMPLATE_NAME`
-(`areas/positioning/constants.py`) — seeds, factories and tests only.
+(`areas/positioning/constants.py`): seeds, factories and tests only.
 
 ### `peril_resolution.py`
 Involved-party classification and death-permission helpers used by both `services.py` and
 `world.scenes.round_services`:
-- `acute_peril_condition_ids() -> list[int]` — the designated Bleeding Out's id (empty when
+- `acute_peril_condition_ids() -> list[int]`: the designated Bleeding Out's id (empty when
   unset, #4739). PLUMMETING is EXCLUDED: falls are environmental and self-completing; the
   hold/abandonment logic does not apply.
 - `acute_peril_instances(sheet) -> QuerySet` — active Bleeding-Out `ConditionInstance`s on a victim.

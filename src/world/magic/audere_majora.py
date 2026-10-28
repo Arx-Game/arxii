@@ -857,7 +857,7 @@ def cross_threshold(
     majora_template = None if audere_threshold is None else audere_threshold.audere_majora_condition
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger
     # cancels this today. A future PRE_APPLY cancel would advance the level but
-    # skip the power spike — revisit if such content is ever authored. An unset
+    # skip the power spike; revisit if such content is ever authored. An unset
     # designation (#4739) skips the spike the same way; the dashboard lists it.
     if majora_template is not None:
         apply_condition(target=character, condition=majora_template)

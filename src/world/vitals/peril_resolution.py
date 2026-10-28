@@ -59,7 +59,7 @@ def acute_peril_condition_ids() -> list[int]:
 def acute_peril_instances(victim_sheet: "CharacterSheet") -> "QuerySet[ConditionInstance]":
     """Return the victim's active hold/abandonment-eligible ConditionInstances (Bleeding Out).
 
-    Plummeting is excluded by ``acute_peril_condition_ids`` — see its docstring.
+    Plummeting is excluded by ``acute_peril_condition_ids``; see its docstring.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 

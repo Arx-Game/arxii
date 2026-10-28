@@ -1825,7 +1825,7 @@ def advance_surrounded(character_sheet: CharacterSheet | None, *, battle: Battle
 
     Thin wrapper around ``_advance_staged_peril_condition`` for the designated
     Surrounded condition (``surrounded_condition_id``). Unlike ``advance_bleed_out``,
-    the terminal resolver needs ``battle`` — Surrounded's death-permission gate is
+    the terminal resolver needs ``battle``: Surrounded's death-permission gate is
     determined by battle-scoped
     pool routing (``select_surrounded_terminal_pool``, ``world/battles/resolution.py``),
     not ``death_is_permitted``'s ObjectDB-source gate (see Task 2's docstring for why:

@@ -263,7 +263,7 @@ export function CombatTurnPanel({
         isCeremonyActive={isCeremonyActive}
       />
 
-      {/* Active-Audere strip — visible while either Audere ceremony runs. */}
+      {/* Active-Audere strip: visible while either Audere ceremony runs. */}
       {isCeremonyActive ? (
         <div
           className="rounded-md border border-fuchsia-500/60 bg-fuchsia-950/40 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-300"
