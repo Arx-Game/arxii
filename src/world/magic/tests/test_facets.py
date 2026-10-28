@@ -236,6 +236,32 @@ class MergeAdminTests(TestCase):
         cls.winner = FacetFactory(name="Scythe")
         cls.loser = FacetFactory(name="Scythes")
 
+    def test_the_action_preserves_historical_offering_facet(self) -> None:
+        from world.ceremonies.models import CeremonyOffering
+        from world.scenes.factories import PersonaFactory
+
+        offering = CeremonyOffering.objects.create(
+            being=WorshippedBeingFactory(),
+            offered_by=PersonaFactory(),
+            facet=self.loser,
+            item_name="Iron ring",
+        )
+        self.client.force_login(self.staff)
+        url = reverse("admin:arxii_facet_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "merge_into",
+                "_selected_action": [self.winner.pk, self.loser.pk],
+                "apply": "1",
+                "winner": self.winner.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        offering.refresh_from_db()
+        self.assertEqual(offering.facet, self.winner)
+
     def test_the_action_shows_a_confirmation_then_merges(self) -> None:
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_facet_changelist")
