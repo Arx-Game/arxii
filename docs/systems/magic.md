@@ -2136,7 +2136,15 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Not yet.** The web and telnet surfaces still describe tiers by the old fields
   (`FuryTierOption.control_penalty` carries `control_surrendered`, `intensity_bonus` is 0);
-  Berserk still refuses flee and parley. Both are later tasks of #4738 part B.
+  That is a later task of #4738 part B.
+- **Berserk penalises, it does not refuse (#4738 part B).** A Berserk character may declare
+  flee and parley; both roll through `collect_check_modifiers`, so any
+  `ConditionCheckModifier` staff author on the Berserk template (template or stage level)
+  against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
+  roll. Only `leave_encounter` is refused (`reject_leave_if_berserk`: "The rage will not
+  walk away. You can still try to flee."). Required content `berserk-disengage-penalty`
+  lists a Berserk with no modifier against either check. Journeys:
+  `src/integration_tests/test_berserk_disengage_journeys.py`.
 
 Journeys: `src/integration_tests/test_surrendering_control_to_fury_journeys.py`.
 

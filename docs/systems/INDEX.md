@@ -1412,7 +1412,8 @@ ADR-0214), and species-gift provisioning.
   `ensure_moon_bound_distinction`/`ensure_moonlit_unease_condition`; seeded content in
   `_seed_moon_content` ("The Wolf's Fury" grant); Berserk production seed + Restore-to-Sense
   removal effect in `world/conditions/berserk_content.py`; compulsion in
-  `world/combat/berserk_compulsion.py` (auto-attack fallback, disengage refusal,
+  `world/combat/berserk_compulsion.py` (auto-attack fallback, leave refusal
+  `reject_leave_if_berserk`; flee/parley roll with Berserk's authored check modifiers,
   out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
   Language mechanics (#2993, ADR-0214): `language_constants.py` (`Fluency` bands
   broken/conversational/fluent, `BAND_KEEP_RATIO`, `FLUENT_GRANT_VALUE=70`),

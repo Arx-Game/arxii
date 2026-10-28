@@ -123,9 +123,9 @@ def leave_encounter(participant: CombatParticipant) -> None:
     - the encounter type is not OPEN_ENCOUNTER, or
     - the participant is not ACTIVE.
     """
-    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
+    from world.combat.berserk_compulsion import reject_leave_if_berserk  # noqa: PLC0415
 
-    reject_if_berserk(participant, "leave")
+    reject_leave_if_berserk(participant)
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (

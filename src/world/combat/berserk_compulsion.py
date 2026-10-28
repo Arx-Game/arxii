@@ -12,8 +12,9 @@ teeth, for EVERY Berserk producer (fury, the moon, future demonic sources):
   hostile-cast entry), so targeting them raises no new consent question. The
   player may steer the rage by declaring their own attack first; they cannot
   opt out except through the break-out loop (Restore to Sense / stage decay).
-- **Retreat/parley refusal** (`reject_if_berserk`): flee, parley, and leaving
-  the encounter are refused while raging.
+- **Walking away is refused** (`reject_leave_if_berserk`): the rage cannot simply
+  leave the encounter. Flee and parley are NOT refused; they roll, carrying whatever
+  ConditionCheckModifier staff author on the Berserk template (#4738).
 - **Out of combat** (`berserk_rampage_window`): at each reconcile window a
   Berserk character auto-engages the nearest NPC in the room through the same
   hostile-cast seeding a deliberate attack uses; with nobody to grab, they
@@ -49,7 +50,7 @@ logger = logging.getLogger(__name__)
 RAMPAGE_EMIT = (
     "{name} rages at nothing and everything — claws raking the air, hunting for something to break."
 )
-BERSERK_REFUSAL = "The rage does not retreat."
+BERSERK_LEAVE_REFUSAL = "The rage will not walk away. You can still try to flee."
 
 
 def is_berserk(character: ObjectDB) -> bool:
@@ -67,16 +68,15 @@ def is_berserk(character: ObjectDB) -> bool:
     return any(instance.condition_id == berserk_id for instance in get_active_conditions(character))
 
 
-def reject_if_berserk(participant: CombatParticipant, verb: str) -> None:
-    """Raise ValueError when a Berserk participant tries to disengage.
+def reject_leave_if_berserk(participant: CombatParticipant) -> None:
+    """Raise ValueError when a Berserk participant tries to leave the encounter.
 
-    Called by ``declare_flee`` / ``declare_parley`` / ``leave_encounter`` —
-    the rage neither retreats nor negotiates (#2845).
+    Called by ``leave_encounter`` only. Flee and parley are not refused: they
+    roll, and staff penalise them with a ConditionCheckModifier on Berserk.
     """
     character = participant.character_sheet.character
     if character is not None and is_berserk(character):
-        msg = f"Cannot {verb}: {BERSERK_REFUSAL.lower()}"
-        raise ValueError(msg)
+        raise ValueError(BERSERK_LEAVE_REFUSAL)
 
 
 def compulsion_technique_for(sheet: CharacterSheet) -> Technique | None:

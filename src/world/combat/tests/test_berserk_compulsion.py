@@ -10,7 +10,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.berserk_compulsion import (
     berserk_rampage_window,
     compulsion_technique_for,
-    reject_if_berserk,
     select_berserk_actions,
 )
 from world.combat.factories import (
@@ -93,28 +92,6 @@ class SelectBerserkActionsTest(TestCase):
         ):
             select_berserk_actions(self.encounter)
         declare.assert_not_called()
-
-
-class RejectIfBerserkTest(TestCase):
-    def setUp(self):
-        self.participant = CombatParticipantFactory()
-        self.character = self.participant.character_sheet.character
-
-    def test_berserk_cannot_disengage(self):
-        with _berserk_only(self.character), self.assertRaises(ValueError) as caught:
-            reject_if_berserk(self.participant, "flee")
-        self.assertIn("rage does not retreat", str(caught.exception))
-
-    def test_lucid_participant_passes(self):
-        with _berserk_only():
-            reject_if_berserk(self.participant, "flee")
-
-    def test_flee_service_carries_the_guard(self):
-        from world.combat.services import declare_flee
-
-        with _berserk_only(self.character), self.assertRaises(ValueError) as caught:
-            declare_flee(self.participant)
-        self.assertIn("rage does not retreat", str(caught.exception))
 
 
 class RampageWindowTest(TestCase):

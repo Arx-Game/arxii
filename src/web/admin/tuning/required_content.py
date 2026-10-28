@@ -1626,6 +1626,50 @@ def _probe_berserk_condition() -> ProbeResult:
     )
 
 
+def _probe_berserk_disengage_penalty() -> ProbeResult:
+    """Berserk carries a check modifier against both flee and parley (#4738).
+
+    A Berserk character may flee and parley and rolls them with whatever
+    ConditionCheckModifier staff authored on the Berserk template, at template level or
+    on any of its stages. The two check types are read through their config FKs
+    (`FleeConfig.check_type`, `SocialManeuverConfig.parley_check_type`).
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.combat.models import FleeConfig  # noqa: PLC0415
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+
+    berserk = get_berserk_template()
+    if berserk is None:
+        return ProbeResult(
+            present=False,
+            detail="Berserk cannot be found, so it cannot carry a flee or parley penalty.",
+        )
+    flee = FleeConfig.objects.cached_singleton()
+    social = _social_maneuver_config()
+    wanted = {
+        "flee": None if flee is None else flee.check_type_id,
+        "parley": None if social is None else social.parley_check_type_id,
+    }
+    held = set(
+        ConditionCheckModifier.objects.filter(
+            Q(condition=berserk) | Q(stage__condition=berserk),
+            check_type_id__in=[pk for pk in wanted.values() if pk is not None],
+        ).values_list("check_type_id", flat=True)
+    )
+    missing = [verb for verb, pk in wanted.items() if pk is None or pk not in held]
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            "The Berserk condition has no check modifier against the "
+            f"{' or '.join(missing)} check, so a raging character rolls it unpenalised."
+        ),
+    )
+
+
 def _vitals_config():
     """The vitals consequence configuration row, or None (never creates one)."""
     from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415
@@ -2642,6 +2686,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="berserk-disengage-penalty",
+            label="Berserk carries a check modifier against fleeing and against parley",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/combat/services/declarations/flee.py _resolve_flee(); "
+                "world/combat/services/declarations/social_check.py roll_social_check()"
+            ),
+            consequence=(
+                "A raging character flees and parleys at full strength: Berserk refuses "
+                "neither, so only an authored penalty on the Berserk condition makes the "
+                "rage cost them."
+            ),
+            probe=CustomProbe(fn=_probe_berserk_disengage_penalty),
+            admin_model="ConditionTemplate",
         ),
         ContentDependency(
             key="social-maneuver-taunt-check",

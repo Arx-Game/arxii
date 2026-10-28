@@ -2047,6 +2047,27 @@ class TestDesignationProbes(TestCase):
         config.save()
         self.assertTrue(self._present("berserk-condition"))
 
+    def test_berserk_disengage_penalty(self) -> None:
+        from world.combat.factories import SocialManeuverConfigFactory
+        from world.combat.models import FleeConfig
+        from world.conditions.factories import ConditionCheckModifierFactory
+        from world.magic.factories import FuryConfigFactory
+
+        flee_check, parley_check = CheckTypeFactory(), CheckTypeFactory()
+        FleeConfig.objects.filter(pk=1).delete()
+        FleeConfig.objects.create(pk=1, check_type=flee_check)
+        SocialManeuverConfigFactory(parley_check_type=parley_check)
+        berserk = ConditionTemplateFactory()
+        FuryConfigFactory(berserk_condition=berserk)
+
+        self.assertFalse(self._present("berserk-disengage-penalty"))
+        ConditionCheckModifierFactory(condition=berserk, check_type=flee_check)
+        result = _probe_for("berserk-disengage-penalty").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("parley check", result.detail)
+        ConditionCheckModifierFactory(condition=berserk, check_type=parley_check)
+        self.assertTrue(self._present("berserk-disengage-penalty"))
+
     def test_vitals_peril_designations(self) -> None:
         from world.vitals.models import VitalsConsequenceConfig
 
