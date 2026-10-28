@@ -12,7 +12,9 @@ cap 2 and a x1.2 scale. Degree shares: Critical Failure 0%, Failure 25%, Partial
 Success 75%, Critical Success 100%.
 - Seething (depth 1) surrenders 6 control: full trade 6 x 1.5 x 1.2 = 10.8.
   Success buys floor(8.1) = 8; Partial Success floor(5.4) = 5.
-- Unbound (depth 3) surrenders 12 control, but cap 2 clamps it to Seething.
+- Unbound (depth 3, a Berserk tier) surrenders 12 control, but cap 2 clamps it to Seething.
+- What the picker previews: Seething's full trade is 6 x 1.5 = 9 with no anchor, 10 with Ilse;
+  Unbound's is 18, and 21 with Ilse (21.6).
 Every roll in the round is forced (the control roll included), so each outcome is the test's
 choice.
 """
@@ -21,6 +23,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
+
+from django.urls import reverse
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
@@ -33,7 +37,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.services import resolve_round
+from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.encounter.config import get_strain_config
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic import services as magic_services
@@ -47,8 +51,9 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
-from world.mechanics.factories import CharacterEngagementFactory
+from world.mechanics.services import begin_engagement
 from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.constants import RoundStatus
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -111,7 +116,9 @@ class _AtTheFord(JourneyCase):
             threat_pool=pool,
         )
         CombatParticipantFactory(encounter=self.encounter, character_sheet=sheet)
-        self.engagement = CharacterEngagementFactory(character=sheet)
+        self.engagement = begin_engagement(
+            self.brannoc, EngagementType.COMBAT, source=self.encounter
+        )
 
         FuryConfigFactory(provocation_cap_per_tier=1, bonus_scale_per_cap_point=10)
         config = get_strain_config()
@@ -124,7 +131,9 @@ class _AtTheFord(JourneyCase):
         self.seething = FuryTierFactory(
             name="Seething", depth=1, control_surrendered=SEETHING_SURRENDERS
         )
-        self.unbound = FuryTierFactory(name="Unbound", depth=3, control_surrendered=12)
+        self.unbound = FuryTierFactory(
+            name="Unbound", depth=3, control_surrendered=12, berserk_severity=2
+        )
 
     def declare_fury(self, tier) -> str:
         return self.telnet(
@@ -198,3 +207,78 @@ class SurrenderingControl(_AtTheFord):
         engagement = self.engagement_now()
         self.assertEqual(engagement.intensity_modifier, 0)
         self.assertEqual(engagement.control_modifier, -SEETHING_SURRENDERS)
+
+
+class SeeingTheTrade(_AtTheFord):
+    """What Brannoc is shown of the trade, on telnet and on the web (#4738 part B)."""
+
+    def test_the_caster_alone_is_told_what_he_surrendered_and_bought(self) -> None:
+        self.watch(self.ilse)
+        self.declare_fury(self.seething)
+
+        self.resolve_with("Success")
+
+        self.assertTold(self.brannoc, "You surrender 6 control: intensity +8.")
+        self.assertNotTold(self.ilse, "You surrender")
+
+    def test_the_combat_hub_lists_the_tiers_and_the_declared_one(self) -> None:
+        self.declare_fury(self.seething)
+
+        told = self.telnet(self.brannoc, "combat")
+
+        self.assertIn(
+            "Fury tiers: Seething: surrender 6 control; Unbound: surrender 12 control (Berserk)",
+            told,
+        )
+        self.assertIn("Fury declared: Seething: surrender 6 control, answering to Ilse", told)
+        self.assertIn("Pressure: intensity +0, control +0", told)
+        self.assertNotIn("Fury: surrendered", told)
+
+    def test_the_combat_hub_shows_the_pressure_after_the_trade(self) -> None:
+        self.declare_fury(self.seething)
+        self.resolve_with("Success")
+        begin_declaration_phase(self.encounter)
+
+        told = self.telnet(self.brannoc, "combat")
+
+        self.assertIn("Pressure: intensity +8, control -6; Fury: surrendered 6 control", told)
+
+    def test_the_encounter_payload_carries_the_pressure(self) -> None:
+        self.declare_fury(self.seething)
+        self.resolve_with("Success")
+
+        response = self.api(self.account_of(self.brannoc)).get(f"/api/combat/{self.encounter.pk}/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        row = next(
+            p
+            for p in response.json()["participants"]
+            if p["character_sheet_id"] == self.brannoc.sheet_data.pk
+        )
+        self.assertEqual(row["intensity_modifier"], 8)
+        self.assertEqual(row["control_modifier"], -SEETHING_SURRENDERS)
+        self.assertEqual(row["fury_control_surrendered"], SEETHING_SURRENDERS)
+
+    def test_the_cast_picker_offers_each_tier_as_control_surrendered(self) -> None:
+        response = self.api(self.account_of(self.brannoc)).get(
+            reverse("actions:available-actions", kwargs={"character_id": self.brannoc.pk})
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        cast = next(
+            row
+            for row in response.json()["results"]
+            if row["ref"].get("technique_id") == self.technique.pk
+        )
+        self.assertEqual(
+            [
+                (t["name"], t["control_surrendered"], t["is_berserk"], t["full_intensity"])
+                for t in cast["available_fury_tiers"]
+            ],
+            [("Seething", 6, False, 9), ("Unbound", 12, True, 18)],
+        )
+        ilse = next(a for a in cast["eligible_fury_anchors"] if a["name"] == "Ilse")
+        self.assertEqual(
+            {row["tier_id"]: row["full_intensity"] for row in ilse["tier_full_intensities"]},
+            {self.seething.pk: 10, self.unbound.pk: 21},
+        )

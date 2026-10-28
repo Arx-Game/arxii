@@ -46067,10 +46067,16 @@ components:
         provocation_cap:
           type: integer
           readOnly: true
+        tier_full_intensities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnchorTierIntensity'
+          readOnly: true
       required:
       - id
       - name
       - provocation_cap
+      - tier_full_intensities
     AnchorSourceEnum:
       enum:
       - pool
@@ -46085,6 +46091,20 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
+    AnchorTierIntensity:
+      type: object
+      description: Read-only full-share intensity of one Fury tier under one anchor
+        (#4738).
+      properties:
+        tier_id:
+          type: integer
+          readOnly: true
+        full_intensity:
+          type: integer
+          readOnly: true
+      required:
+      - full_intensity
+      - tier_id
     AngleView:
       type: object
       properties:
@@ -59749,21 +59769,21 @@ components:
         depth:
           type: integer
           readOnly: true
-        control_penalty:
+        control_surrendered:
           type: integer
           readOnly: true
-        intensity_bonus:
-          type: integer
+        is_berserk:
+          type: boolean
           readOnly: true
-        berserk_severity:
+        full_intensity:
           type: integer
           readOnly: true
       required:
-      - berserk_severity
-      - control_penalty
+      - control_surrendered
       - depth
+      - full_intensity
       - id
-      - intensity_bonus
+      - is_berserk
       - name
     GMApplicationCreate:
       type: object
@@ -78337,6 +78357,12 @@ components:
           nullable: true
           description: Process-derived control bonus from the COMBAT engagement.
           readOnly: true
+        fury_control_surrendered:
+          type: integer
+          nullable: true
+          description: Control surrendered to Fury in the COMBAT engagement so far
+            (#4738).
+          readOnly: true
         current_position:
           allOf:
           - $ref: '#/components/schemas/PositionSummary'
@@ -78382,6 +78408,7 @@ components:
       - dodge_plan
       - escalation_level
       - fatigue
+      - fury_control_surrendered
       - health
       - id
       - intensity_modifier

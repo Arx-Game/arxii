@@ -81,6 +81,7 @@ from actions.types import (
     ActionRef,
     ActionResult,
     AnchorOption,
+    AnchorTierIntensity,
     DispatchResult,
     FuryTierOption,
     PlayerAction,
@@ -90,7 +91,7 @@ from actions.types import (
     TargetType,
 )
 from world.areas.positioning.constants import CreatureTraversal
-from world.magic.models import CharacterTechnique
+from world.magic.models import CharacterTechnique, FuryTier
 from world.mechanics.services import get_available_actions
 
 if TYPE_CHECKING:
@@ -574,28 +575,42 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
     return result
 
 
-def _fury_tier_options() -> tuple[FuryTierOption, ...]:
-    """The authored fury ladder, offered alongside every combat declaration."""
+def _fury_ladder() -> list[FuryTier]:
+    """The authored fury ladder, shallowest first."""
     from world.magic.models import FuryTier  # noqa: PLC0415
 
+    return list(FuryTier.objects.order_by("depth"))
+
+
+def _fury_tier_options(ladder: list[FuryTier]) -> tuple[FuryTierOption, ...]:
+    """The fury ladder, offered alongside every combat declaration (#4738)."""
+    from world.magic.services.fury import full_trade_intensities  # noqa: PLC0415
+
+    full = full_trade_intensities(ladder)
     return tuple(
         FuryTierOption(
             id=tier.pk,
             name=tier.name,
             depth=tier.depth,
-            # Interim mapping until FuryTierOption is reshaped (#4738 Task 3): the tier
-            # no longer carries a per-cast intensity bonus; what it buys rides the roll.
-            control_penalty=tier.control_surrendered,
-            intensity_bonus=0,
-            berserk_severity=tier.berserk_severity,
+            control_surrendered=tier.control_surrendered,
+            is_berserk=tier.berserk_severity > 0,
+            full_intensity=full[tier.pk],
         )
-        for tier in FuryTier.objects.order_by("depth")
+        for tier in ladder
     )
 
 
-def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[AnchorOption, ...]:
-    """Active relationships whose bond can carry a provocation (#1543, #3957)."""
-    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+def _eligible_fury_anchors(
+    character: ObjectDB, sheet: CharacterSheet, ladder: list[FuryTier]
+) -> tuple[AnchorOption, ...]:
+    """Active relationships whose bond can carry a provocation (#1543, #3957).
+
+    Each carries what every tier buys at a full share under its cap (#4738).
+    """
+    from world.magic.services.fury import (  # noqa: PLC0415
+        full_trade_intensities,
+        provocation_cap,
+    )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     anchors: list[AnchorOption] = []
@@ -608,7 +623,18 @@ def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[
             continue
         anchor_char = anchor_sheet.character
         name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-        anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
+        full = full_trade_intensities(ladder, cap)
+        anchors.append(
+            AnchorOption(
+                id=anchor_sheet.pk,
+                name=name,
+                provocation_cap=cap,
+                tier_full_intensities=tuple(
+                    AnchorTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])
+                    for tier in ladder
+                ),
+            )
+        )
     return tuple(anchors)
 
 
@@ -689,9 +715,10 @@ def _combat_actions(
     if not techniques:
         return []
 
-    fury_tiers = _fury_tier_options()
+    fury_ladder = _fury_ladder()
+    fury_tiers = _fury_tier_options(fury_ladder)
     soulfray_warning = get_soulfray_warning(character)
-    eligible_fury_anchors = _eligible_fury_anchors(character, sheet)
+    eligible_fury_anchors = _eligible_fury_anchors(character, sheet, fury_ladder)
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)

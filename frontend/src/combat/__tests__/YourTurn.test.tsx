@@ -281,6 +281,7 @@ function makeParticipant(
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    fury_control_surrendered: null,
     current_square: null,
     current_position: null,
     aftermath: null,
@@ -1844,23 +1845,23 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       id: 10,
       name: 'Spark',
       depth: 1,
-      control_penalty: 1,
-      intensity_bonus: 1,
-      berserk_severity: 0,
+      control_surrendered: 3,
+      is_berserk: false,
+      full_intensity: 4,
     },
     {
       id: 11,
       name: 'Blaze',
       depth: 3,
-      control_penalty: 2,
-      intensity_bonus: 3,
-      berserk_severity: 1,
+      control_surrendered: 8,
+      is_berserk: true,
+      full_intensity: 12,
     },
   ];
 
   const furyAnchors = [
-    { id: 20, name: 'Keth', provocation_cap: 2 },
-    { id: 21, name: 'Lira', provocation_cap: 5 },
+    { id: 20, name: 'Keth', provocation_cap: 2, tier_full_intensities: [] },
+    { id: 21, name: 'Lira', provocation_cap: 5, tier_full_intensities: [] },
   ];
 
   it('sends confirm_soulfray_risk when warning is present and accepted', async () => {
@@ -1987,7 +1988,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     // Pick tier Spark (depth 1) and anchor Keth (cap 2) — within cap.
     const tierTrigger = screen.getByTestId('fury-tier-select');
     await userEvent.click(tierTrigger);
-    const tierOption = await screen.findByText('Spark (depth 1)');
+    const tierOption = await screen.findByText('Spark: surrender 3 control');
     await userEvent.click(tierOption);
 
     const anchorTrigger = screen.getByTestId('fury-anchor-select');

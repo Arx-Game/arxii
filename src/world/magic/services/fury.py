@@ -23,6 +23,8 @@ from world.magic.models import FuryConfig, FuryDegreeShare, FuryTier
 from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.checks.models import CheckOutcome, CheckType
     from world.conditions.models import ConditionTemplate
 
@@ -159,6 +161,38 @@ def _ensure_fury_check_type(trait_name: str) -> CheckType:
     return check_type
 
 
+def _trade_rate() -> Decimal:
+    from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
+
+    return get_strain_config().intensity_per_control_surrendered
+
+
+def _full_trade(tier: FuryTier, cap: int, *, rate: Decimal, bonus_scale: int) -> Decimal:
+    """The unfloored intensity ``tier`` buys at a full share: control x rate x cap scale."""
+    scale = Decimal(100 + bonus_scale * cap) / 100
+    return Decimal(tier.control_surrendered) * rate * scale
+
+
+def _floor(amount: Decimal) -> int:
+    return max(int(amount.to_integral_value(rounding=ROUND_FLOOR)), 0)
+
+
+def full_trade_intensities(tiers: Iterable[FuryTier], cap: int = 0) -> dict[int, int]:
+    """Intensity each tier buys at a full (100%) share and provocation ``cap``, by tier pk.
+
+    The declaration picker's preview figures: with ``cap`` 0 the anchor adds no scaling.
+    Reads the rate and the cap scaling once for the whole ladder.
+    """
+    rate = _trade_rate()
+    bonus_scale = _config().bonus_scale_per_cap_point
+    return {
+        tier.pk: _floor(_full_trade(tier, cap, rate=rate, bonus_scale=bonus_scale))
+        if tier.control_surrendered > 0
+        else 0
+        for tier in tiers
+    }
+
+
 def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -> int:
     """Intensity the Fury trade buys for ``tier`` at provocation ``cap`` and roll ``outcome``.
 
@@ -166,19 +200,29 @@ def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -
     x (100 + bonus_scale_per_cap_point x cap) / 100 x intensity_percent / 100)``, floored
     once at the end. An outcome with no ``FuryDegreeShare`` row (or no outcome) buys 0.
     """
-    from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
-
     if outcome is None or tier.control_surrendered <= 0:
         return 0
     share = FuryDegreeShare.objects.filter(outcome_tier=outcome).first()
     if share is None or share.intensity_percent <= 0:
         return 0
-    rate = get_strain_config().intensity_per_control_surrendered
-    scale = Decimal(100 + _config().bonus_scale_per_cap_point * cap) / 100
-    amount = (
-        Decimal(tier.control_surrendered) * rate * scale * Decimal(share.intensity_percent) / 100
+    full = _full_trade(
+        tier, cap, rate=_trade_rate(), bonus_scale=_config().bonus_scale_per_cap_point
     )
-    return max(int(amount.to_integral_value(rounding=ROUND_FLOOR)), 0)
+    return _floor(full * Decimal(share.intensity_percent) / 100)
+
+
+def fury_tier_label(tier: FuryTier) -> str:
+    """How a tier reads to the player: ``Seething: surrender 6 control``, ``(Berserk)`` added."""
+    label = f"{tier.name}: surrender {tier.control_surrendered} control"
+    return f"{label} (Berserk)" if tier.berserk_severity > 0 else label
+
+
+def fury_trade_message(fury_res: FuryResolution) -> str:
+    """The caster's own line for a landed trade: ``You surrender 6 control: intensity +8.``"""
+    return (
+        f"You surrender {fury_res.control_surrendered} control: "
+        f"intensity +{fury_res.intensity_gained}."
+    )
 
 
 def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
@@ -288,6 +332,10 @@ def run_fury_for_action(
     )
     if fury_res.realized_tier is not None:
         _write_trade(engagement, fury_res)
+        # Told to the caster alone, once the trade commits (a rolled-back cast tells her
+        # nothing). One seam serves the combat, scene-cast and enhanced-action paths.
+        message = fury_trade_message(fury_res)
+        transaction.on_commit(lambda: character.msg(message))
 
     berserk_template = get_berserk_template()
     if fury_res.berserk_severity > 0 and berserk_template is not None:

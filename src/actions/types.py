@@ -516,18 +516,27 @@ class StrainAvailability:
 
 @dataclass(frozen=True)
 class FuryTierOption:
-    """One selectable Fury tier for the declaration picker (#1543).
+    """One selectable Fury tier for the declaration picker (#1543, #4738).
 
-    Mirrors the authored ``FuryTier`` fields the player needs to choose.
-    ``id`` is the FuryTier PK sent as ``fury_commitment_id``.
+    A tier is a preset amount of control surrendered for the rest of the engagement.
+    ``id`` is the FuryTier PK sent as ``fury_commitment_id``. ``full_intensity`` is what
+    the trade buys at a full share with no anchor scaling, computed server-side.
     """
 
     id: int
     name: str
     depth: int
-    control_penalty: int
-    intensity_bonus: int
-    berserk_severity: int
+    control_surrendered: int
+    is_berserk: bool
+    full_intensity: int
+
+
+@dataclass(frozen=True)
+class AnchorTierIntensity:
+    """What one Fury tier buys at a full share with this anchor's scaling (#4738)."""
+
+    tier_id: int
+    full_intensity: int
 
 
 @dataclass(frozen=True)
@@ -536,9 +545,12 @@ class AnchorOption:
 
     ``id`` is the anchor CharacterSheet PK sent as ``fury_anchor_id``.
     ``provocation_cap`` is the bond-derived ceiling pre-computed server-side
-    so the client can gate tiers without a round-trip.
+    so the client can gate tiers without a round-trip. ``tier_full_intensities``
+    carries, per tier, the full-share intensity scaled by this anchor's cap, so the
+    preview never does tuning math on the client.
     """
 
     id: int
     name: str
     provocation_cap: int
+    tier_full_intensities: tuple[AnchorTierIntensity, ...] = ()

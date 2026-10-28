@@ -85,17 +85,23 @@ export interface AvailableEnhancement {
 }
 
 /**
- * A fury tier the player may commit for a combat-cast technique (#1543).
- * Mirrors the backend FuryTierOption serializer shape.
+ * A Fury tier: a preset amount of control surrendered for the rest of the engagement
+ * (#1543, #4738). Mirrors the backend FuryTierOption serializer shape.
  */
 export interface FuryTierOption {
   id: number;
   name: string;
   depth: number;
-  control_penalty: number;
-  intensity_bonus: number;
-  /** 0 → never berserk; higher values increase berserk severity on overcommit. */
-  berserk_severity: number;
+  control_surrendered: number;
+  is_berserk: boolean;
+  /** Intensity bought at a full share with no anchor scaling, computed server-side. */
+  full_intensity: number;
+}
+
+/** What one Fury tier buys at a full share under one anchor's scaling (#4738). */
+export interface FuryAnchorTierIntensity {
+  tier_id: number;
+  full_intensity: number;
 }
 
 /**
@@ -107,6 +113,8 @@ export interface FuryAnchorOption {
   name: string;
   /** Pre-computed bond cap used for client-side tier gating. */
   provocation_cap: number;
+  /** Per tier, the full-share intensity scaled by this anchor's cap. */
+  tier_full_intensities: FuryAnchorTierIntensity[];
 }
 
 export type ActionCategory = 'physical' | 'social' | 'mental';

@@ -564,10 +564,11 @@ class CombatCastTelnetE2ETests(TestCase):
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             cmd.func()
         out = "\n".join(cmd._captured)
-        self.assertIn("Fury:", out)
-        self.assertIn(str(tier.depth), out)
-        self.assertIn(anchor_sheet.character.db_key, out)
-        self.assertIn("retained", out)  # no Berserk yet → control retained
+        self.assertIn(
+            f"Fury declared: {tier.name}: surrender {tier.control_surrendered} control, "
+            f"answering to {anchor_sheet.character.db_key}",
+            out,
+        )
         self.assertNotIn("Berserk:", out)
 
     @tag("postgres")

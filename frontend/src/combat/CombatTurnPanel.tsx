@@ -28,6 +28,7 @@ import { YourTurn } from './sections/YourTurn';
 import { PendingAttacks } from './components/PendingAttacks';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
+import { Pressure } from './sections/Pressure';
 import { CombatantsList } from './sections/CombatantsList';
 import { CompanionOrders } from './sections/CompanionOrders';
 import { ActiveState } from './sections/ActiveState';
@@ -73,6 +74,7 @@ type SectionName =
   | 'yourTurn'
   | 'resonanceBudget'
   | 'vitalPools'
+  | 'pressure'
   | 'combatantsList'
   | 'companionOrders'
   | 'activeState'
@@ -83,6 +85,7 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
   yourTurn: false,
   resonanceBudget: false,
   vitalPools: false,
+  pressure: false,
   combatantsList: false,
   companionOrders: false,
   activeState: false,
@@ -366,6 +369,14 @@ export function CombatTurnPanel({
             collapsed={collapsed.vitalPools}
             onToggleCollapse={() => toggleSection('vitalPools')}
             data-testid="section-vital-pools"
+          />
+
+          {/* 3b. Pressure: intensity, control, and control surrendered to Fury (#4738) */}
+          <Pressure
+            encounter={encounter}
+            characterSheetId={characterSheetId}
+            collapsed={collapsed.pressure}
+            onToggleCollapse={() => toggleSection('pressure')}
           />
 
           {/* 4. CombatantsList — opponent click-menu (#3381) only for a declaring-phase

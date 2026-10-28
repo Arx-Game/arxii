@@ -540,6 +540,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     escalation_level = serializers.SerializerMethodField()
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
+    fury_control_surrendered = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     current_square = serializers.SerializerMethodField()
     aftermath = serializers.SerializerMethodField()
@@ -566,6 +567,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "escalation_level",
             "intensity_modifier",
             "control_modifier",
+            "fury_control_surrendered",
             "current_position",
             "current_square",
             "aftermath",
@@ -836,6 +838,11 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """Process-derived control bonus from the COMBAT engagement."""
         engagement = self._combat_engagement(obj)
         return engagement.control_modifier if engagement else None
+
+    def get_fury_control_surrendered(self, obj: CombatParticipant) -> int | None:
+        """Control surrendered to Fury in the COMBAT engagement so far (#4738)."""
+        engagement = self._combat_engagement(obj)
+        return engagement.fury_control_surrendered if engagement else None
 
     def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
         """Resolve the participant's PRIMARY persona through the cached accessor.

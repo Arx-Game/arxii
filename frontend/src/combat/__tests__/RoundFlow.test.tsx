@@ -50,6 +50,7 @@ function makeParticipant(id: number, name: string): Participant {
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    fury_control_surrendered: null,
     current_square: null,
     current_position: null,
     aftermath: null,

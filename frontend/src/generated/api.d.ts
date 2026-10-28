@@ -28243,6 +28243,7 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly provocation_cap: number;
+      readonly tier_full_intensities: components['schemas']['AnchorTierIntensity'][];
     };
     /**
      * @description * `pool` - Every group of a type in a realm
@@ -28253,6 +28254,11 @@ export interface components {
      * @enum {string}
      */
     AnchorSourceEnum: 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
+    /** @description Read-only full-share intensity of one Fury tier under one anchor (#4738). */
+    AnchorTierIntensity: {
+      readonly tier_id: number;
+      readonly full_intensity: number;
+    };
     AngleView: {
       group_id: number;
       faction_rule_id: number;
@@ -34692,9 +34698,9 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly depth: number;
-      readonly control_penalty: number;
-      readonly intensity_bonus: number;
-      readonly berserk_severity: number;
+      readonly control_surrendered: number;
+      readonly is_berserk: boolean;
+      readonly full_intensity: number;
     };
     /** @description For players submitting a GM application. */
     GMApplicationCreate: {
@@ -44604,6 +44610,8 @@ export interface components {
       readonly intensity_modifier: number | null;
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
+      /** @description Control surrendered to Fury in the COMBAT engagement so far (#4738). */
+      readonly fury_control_surrendered: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;

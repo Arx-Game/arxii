@@ -2134,9 +2134,18 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   clamps.
 - **Required content.** `fury-degree-shares` lists canonical outcome tiers with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
-- **Not yet.** The web and telnet surfaces still describe tiers by the old fields
-  (`FuryTierOption.control_penalty` carries `control_surrendered`, `intensity_bonus` is 0);
-  That is a later task of #4738 part B.
+- **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
+  and `full_intensity` (`full_trade_intensities`: the trade at a full share with no anchor
+  scaling); each `AnchorOption` carries `tier_full_intensities`, the same figure under that
+  anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
+  surrender 6 control" (`(Berserk)` on a Berserk tier) and previews "6 control -> up to +10
+  intensity, by your roll" from those server figures. The participant payload carries
+  `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the
+  `Pressure` rail section (`frontend/src/combat/sections/Pressure.tsx`) shows them, with a
+  "Fury: surrendered N control" chip once N > 0. `run_fury_for_action` tells the caster alone,
+  on commit, "You surrender N control: intensity +M." (`fury_trade_message`), so all three
+  resolution paths say it. Telnet: bare `combat` lists the tiers (`fury_tier_label`), the
+  declared tier and a `Pressure:` line.
 - **Berserk penalises, it does not refuse (#4738 part B).** A Berserk character may declare
   flee and parley; both roll through `collect_check_modifiers`, so any
   `ConditionCheckModifier` staff author on the Berserk template (template or stage level)

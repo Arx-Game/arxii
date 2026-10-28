@@ -8544,8 +8544,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   control_surrendered, intensity_gained, berserk_severity, outcome)`. A tier with
   `berserk_severity` > 0 applies Berserk whatever the roll. No engagement: refused by
   `_cap_fury_by_provocation` (`NO_ENGAGEMENT_MESSAGE`), a no-op at resolution. Required content:
-  `fury-degree-shares`, `fury-intensity-per-control`. Journeys:
-  `test_surrendering_control_to_fury_journeys`. See `docs/systems/magic.md` "Fury".
+  `fury-degree-shares`, `fury-intensity-per-control`. Surfaces: `full_trade_intensities`
+  (picker preview), `fury_tier_label`, `fury_trade_message` (the caster's line, sent on
+  commit); `FuryTierOption(control_surrendered, is_berserk, full_intensity)`,
+  `AnchorOption.tier_full_intensities`, participant `fury_control_surrendered`, web
+  `FuryDeclaration` + `combat/sections/Pressure.tsx`, telnet `combat` hub `Pressure:` line.
+  Journeys: `test_surrendering_control_to_fury_journeys`. See `docs/systems/magic.md` "Fury".
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
   with degrees. `SurgeTriggerKind` has fourteen members: the nine older kinds above,
