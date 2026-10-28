@@ -472,7 +472,9 @@ class CombatEncounterViewSet(ModelViewSet):
         return response
 
     def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Serialize the encounter with this request's active conditions in context."""
+        # A comment, not a docstring: a docstring here would replace the viewset's
+        # description in the API schema. Serializes the encounter with this
+        # request's active conditions in context.
         encounter = self.get_object()
         context = self.get_serializer_context()
         context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
