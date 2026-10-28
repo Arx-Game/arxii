@@ -174,6 +174,23 @@ class TestReduceCorruption(TestCase):
         self.assertEqual(row.corruption_lifetime, 100)
         self.assertEqual(result.amount_reduced, 30)
 
+    def test_reduction_grants_resonance_equal_to_actual_cleansing(self) -> None:
+        from world.magic.models.aura import CharacterResonance
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        self._setup_corrupted(sheet, resonance, amount=50)
+        before = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        balance_before = before.balance
+        earned_before = before.lifetime_earned
+
+        self._call(character_sheet=sheet, resonance=resonance, amount=80)
+
+        row = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        self.assertEqual(row.corruption_current, 0)
+        self.assertEqual(row.balance - balance_before, 50)
+        self.assertEqual(row.lifetime_earned - earned_before, 50)
+
     def test_clamps_at_zero(self) -> None:
         from world.magic.models.aura import CharacterResonance
 

@@ -31,6 +31,20 @@ class CorruptionConfig(SharedMemoryModel):
             "burns Celestial or Primal resonance (a hasty fall). 20 = 2.0x."
         ),
     )
+    alternate_self_base_leak_percent = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Starting share of an active alternate self's cast corruption that reaches "
+            "the player character. The rest is absorbed by the separate identity."
+        ),
+    )
+    alternate_self_leak_percent_per_success_level = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Percentage points by which each success level reduces alternate-self cast "
+            "corruption reaching the player character. Failures increase it."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
