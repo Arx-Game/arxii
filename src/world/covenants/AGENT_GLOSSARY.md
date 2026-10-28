@@ -135,7 +135,7 @@ The `PerkBeneficiary` axis on a `VowSituationalPerk` (SELF / COVENANT_ALLIES / W
 _Avoid_: recipient, target (Situation's own `target` field is the acting character's action target, an unrelated concept — do not conflate).
 
 **Surges given**:
-`CovenantScaledAction.SURGES_GIVEN` ("Surges given by Rally" in the admin drop-down) — a `CovenantRoleActionScaling` row that scales the intensity a rallier's Rally surges the rallied ally by: the band's intensity times `1 + covenant_role_action_scaling_bonus(rallier, SURGES_GIVEN)` (thread level × multiplier over the rallier's engaged PRIMARY roles). Intensity only; the band's control change and condition are not scaled, and no other surge (taunt, a hurt ally, an emotional condition) reads it. Distinct from `RALLY` (`combat_rally`), which scales the morale a great-success rally restores to ally summons. (#4739.)
+`CovenantScaledAction.SURGES_GIVEN` ("Surges given by Rally" in the admin drop-down): a `CovenantRoleActionScaling` row that scales the intensity a rallier's Rally surges the rallied ally by: the band's intensity times `1 + covenant_role_action_scaling_bonus(rallier, SURGES_GIVEN)` (thread level × multiplier over the rallier's engaged PRIMARY roles). Intensity only; the band's control change and condition are not scaled, and no other surge (taunt, a hurt ally, an emotional condition) reads it. Distinct from `RALLY` (`combat_rally`), which scales the morale a great-success rally restores to ally summons. (#4739.)
 _Avoid_: rally scaling (ambiguous with the `combat_rally` morale row), surge bonus.
 
 **Perk Scope**:

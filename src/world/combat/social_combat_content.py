@@ -319,7 +319,7 @@ def ensure_social_combat_content() -> None:
     Seeds the 4 CheckTypes (Rally/Demoralize/Taunt/Parley) with stat + skill
     (+ spec) compositions, the ``Inspired`` condition, and the ``Charming Word``
     charm technique, then points any unset ``SocialManeuverConfig`` designation at
-    the seeded rows (#4739). Safe to call repeatedly — every write goes through
+    the seeded rows (#4739). Safe to call repeatedly: every write goes through
     ``get_or_create`` or ``authored_or_sample``, and a set designation is kept.
     """
     skills, specs = _ensure_social_skills_and_specs()

@@ -183,7 +183,7 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         ),
     )
     # ------------------------------------------------------------------
-    # Acute-peril conditions (#4739) — code finds these rows here, never by name.
+    # Acute-peril conditions (#4739): code finds these rows here, never by name.
     # ------------------------------------------------------------------
 
     bleed_out_condition = models.ForeignKey(

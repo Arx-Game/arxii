@@ -108,7 +108,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   combat action resolution seam (interpose's partial-block divisor, rally's morale
   restore, and the rallied ally's surge: `intensity x (1 + bonus)` for `surges_given`,
   intensity only, `world/combat/services/declarations/rally.py`; the ally's roll line
-  appends `· vow scaling +N`, N stored on `DramaticSurgeRecord.vow_scaling`) — sums `thread_level × multiplier` across the character's engaged
+  appends `· vow scaling +N`, N stored on `DramaticSurgeRecord.vow_scaling`), which sums `thread_level × multiplier` across the character's engaged
   roles that have a row for the action, normalizing engaged (possibly resolved
   sub-)roles to their anchor (parent) role before lookup, since rows and COVENANT_ROLE
   threads both key on the anchor. Rows are authored per-role now, not per-archetype:
