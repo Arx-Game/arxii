@@ -177,13 +177,16 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     amount: int,
     control_change: int,
     condition_name: str,
+    vow_scaling: int = 0,
 ) -> str:
     """The caption the surged player sees, for example
     ``Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded``.
 
     Parts are joined with " · ". Control appears only when it changed, the condition name
     last and only when it applied, and a hurt ally's intensity says it was scaled by the
-    wound. The surged player's character is sent it live; the round payload rebuilds it
+    wound. ``vow_scaling`` is the intensity a rallier's "Surges given by Rally" vow added
+    (#4739), shown right after the intensity as ``vow scaling +N`` when it is above 0.
+    The surged player's character is sent it live; the round payload rebuilds it
     from the stored record for the same viewers (#4737).
     """
     label = POTENCY_LABELS.get(trigger_kind, "difficulty")
@@ -192,6 +195,8 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
     if trigger_kind == SurgeTriggerKind.ALLY_HURT:
         intensity += " (scaled by the wound)"
     parts = [f"{check_type.name} check{against}", outcome.name, intensity]
+    if vow_scaling > 0:
+        parts.append(f"vow scaling +{vow_scaling}")
     if control_change:
         parts.append(f"control {control_change:+d}")
     if condition_name:
@@ -211,6 +216,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - the taunter, any object
     tuning: SurgeTuning | None = None,
     cause: str = "",
+    vow_scaled: bool = False,
 ) -> DramaticSurgeBeat | None:
     """Write one rolled surge from the band the roll's outcome picks (#4737).
 
@@ -229,6 +235,10 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
     looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
+
+    ``vow_scaled`` says ``intensity_scale`` came from the giver's "Surges given by Rally"
+    vow (#4739): the extra over the band's unscaled intensity is stored on the record as
+    ``vow_scaling`` and the roll line says ``vow scaling +N``.
 
     ``cause`` is the line the surged player, GMs and staff read for this surge (who taunted
     or rallied, or the wound); it is stored on the record and never shown to others.
@@ -252,6 +262,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     amount = math.floor(band.intensity * intensity_scale + 0.5)
     if amount == 0 and not band.control_change and band.condition is None:
         return None
+    vow_scaling = max(0, amount - band.intensity) if vow_scaled else 0
     character = participant.character_sheet.character
     condition_name = ""
     # One transaction: if applying the condition raises, the surge record rolls back too,
@@ -272,6 +283,11 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         )
         if beat is None:
             return None
+        if vow_scaling:
+            # Through the instance, not a queryset update: the record is identity-mapped.
+            record = DramaticSurgeRecord.objects.get(pk=beat.record_id)
+            record.vow_scaling = vow_scaling
+            record.save(update_fields=["vow_scaling"])
         if band.condition is not None:
             from world.conditions.services import apply_condition  # noqa: PLC0415
 
@@ -296,6 +312,7 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         amount=amount,
         control_change=band.control_change,
         condition_name=condition_name,
+        vow_scaling=vow_scaling,
     )
     # The round resolves inside an atomic block: tell the player once it has committed.
     transaction.on_commit(lambda: character.msg(line))

@@ -95,7 +95,7 @@ def _surge_rallied_ally(
 
     A rallier whose engaged vow carries a ``SURGES_GIVEN`` scaling row surges the ally by
     the band's intensity times ``1 + bonus`` (#4739); the band's control change and
-    condition are not scaled.
+    condition are not scaled. The roll line notes the extra as ``vow scaling +N``.
     """
     from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
     from world.covenants.services import covenant_role_action_scaling_bonus  # noqa: PLC0415
@@ -118,6 +118,7 @@ def _surge_rallied_ally(
         source_character=rallier_character,
         tuning=tuning,
         cause=f"{persona_name_of(rallier)} rallies {persona_name_of(ally)}.",
+        vow_scaled=intensity_scale != 1,
     )
 
 

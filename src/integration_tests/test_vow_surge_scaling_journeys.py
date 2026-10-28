@@ -4,7 +4,8 @@ Mira holds an engaged covenant vow with a thread on it. Staff open the vow-scali
 page, pick "Surges given by Rally" from the action drop-down and save a multiplier for
 Mira's role. Mira then types ``combat rally Tomas``; her Rally roll's Success band is
 worth 3 intensity, and her vow (thread level 2 x 0.5 = +1.0) doubles it, so Tomas surges
-6. Tomas's round payload carries that amount. Without the row, the same rally surges 3.
+6 and his roll line ends "Intensity +6 · vow scaling +3", live over telnet and in his
+round payload's ``roll``. Without the row, the same rally surges 3 with no vow note.
 
 The rally roll is forced with ``force_check_outcome`` so the band is chosen by the test.
 """
@@ -32,6 +33,8 @@ THREAD_LEVEL = 2
 MULTIPLIER = "0.5"
 # 1 + 2 x 0.5 = 2.0: the Success band's intensity, doubled.
 VOWED_SUCCESS_INTENSITY = SUCCESS_INTENSITY * 2
+# The roll line notes what the vow added: the scaled total minus the band's own 3.
+VOW_EXTRA = VOWED_SUCCESS_INTENSITY - SUCCESS_INTENSITY
 
 
 class AVowedRallySurgesMore(_SurgeField):
@@ -91,9 +94,12 @@ class AVowedRallySurgesMore(_SurgeField):
         self.resolve(self.success)
 
         self.assertEqual(self.intensity(self.tomas), VOWED_SUCCESS_INTENSITY)
-        self.assertTold(self.tomas, f"Success · Intensity +{VOWED_SUCCESS_INTENSITY}")
+        vowed_line = f"Success · Intensity +{VOWED_SUCCESS_INTENSITY} · vow scaling +{VOW_EXTRA}"
+        told = self.told_roll_line(self.tomas)
+        self.assertTrue(told.endswith(vowed_line), told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
         self.assertEqual(beat["amount"], VOWED_SUCCESS_INTENSITY)
+        self.assertEqual(beat["roll"], told)
         self.assertEqual(beat["trigger_kind"], SurgeTriggerKind.RALLIED)
         # The rallier is not the one surged.
         self.assertEqual(self.intensity(self.mira), 0)
@@ -103,5 +109,9 @@ class AVowedRallySurgesMore(_SurgeField):
         self.resolve(self.success)
 
         self.assertEqual(self.intensity(self.tomas), SUCCESS_INTENSITY)
+        told = self.told_roll_line(self.tomas)
+        self.assertTrue(told.endswith(f"Success · Intensity +{SUCCESS_INTENSITY}"), told)
+        self.assertNotIn("vow scaling", told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
         self.assertEqual(beat["amount"], SUCCESS_INTENSITY)
+        self.assertEqual(beat["roll"], told)

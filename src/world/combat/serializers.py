@@ -1412,6 +1412,7 @@ def _surge_roll_fields(records: Sequence[DramaticSurgeRecord]) -> dict[int, dict
                 amount=record.amount,
                 control_change=record.control_change,
                 condition_name=condition_name or "",
+                vow_scaling=record.vow_scaling,
             )
         fields[record.pk] = entry
     return fields

@@ -34,6 +34,7 @@ from world.combat.factories import (
     SurgeTuningFactory,
     ThreatPoolFactory,
 )
+from world.combat.models import DramaticSurgeRecord
 from world.combat.services import (
     _resolve_demoralize,
     _resolve_parley,
@@ -209,11 +210,14 @@ class VowScaledRallySurgeTests(_SocialField):
         self.assertEqual(self._ally_intensity(), SUCCESS_INTENSITY * 2)
         # The control change is not scaled.
         self.assertEqual(self._ally_control(), 1)
+        # The record keeps what the vow added, for the roll line.
+        self.assertEqual(DramaticSurgeRecord.objects.get().vow_scaling, SUCCESS_INTENSITY)
 
     def test_a_rallier_without_the_vow_row_surges_the_band_amount(self) -> None:
         self._rally()
 
         self.assertEqual(self._ally_intensity(), SUCCESS_INTENSITY)
+        self.assertEqual(DramaticSurgeRecord.objects.get().vow_scaling, 0)
 
     def test_a_rally_morale_row_does_not_scale_surges(self) -> None:
         self._vow(CovenantScaledAction.RALLY)

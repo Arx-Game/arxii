@@ -4429,6 +4429,15 @@ class DramaticSurgeRecord(SharedMemoryModel):
             "SET_NULL: the record is history, so it outlives the template."
         ),
     )
+    vow_scaling = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "The intensity a rallier's 'Surges given by Rally' vow added to this surge "
+            "(#4739): the written amount minus the band's unscaled intensity; 0 when no vow "
+            "scaled it. Written by the surge service so the roll line can be reproduced."
+        ),
+    )
     cause = models.TextField(
         blank=True,
         default="",
