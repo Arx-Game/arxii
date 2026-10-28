@@ -24,11 +24,14 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     Uses select_for_update to prevent concurrent calls.
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
 
-    The round opening runs in one transaction. If it raises, the database rolls back, and
-    the identity-mapped rows it changed in memory (the encounter, its participants, their
-    engagements' intensity and control from the escalation tick and the emotional-condition
-    feed) are put back as they were, and engagements and surge records it created are
-    evicted, so no later reader sees a surge the database never kept (#4739).
+    The round opening runs in one transaction. If it raises, the database rolls back and the
+    guard puts back only the identity-mapped rows it was told to keep: the encounter, its
+    participants, their sheets and engagements (intensity and control from the escalation
+    tick and the emotional-condition feed); engagements and surge records the opening
+    created are evicted (#4739). It does not restore the rows the other opening steps change
+    (vitals and condition instances from the tick, the scene clock, dissolved bonds, expired
+    pulls' max health), and a caller's outer atomic that rolls back after this returns is
+    not covered.
     """
     from web.admin.authoring.identity_map import CacheGuard  # noqa: PLC0415
     from world.combat.models import DramaticSurgeRecord  # noqa: PLC0415
