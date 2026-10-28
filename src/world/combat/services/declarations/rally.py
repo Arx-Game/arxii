@@ -110,6 +110,40 @@ def _surge_rallied_ally(
     )
 
 
+def _grant_free_dig_deeps(rallier: CombatParticipant, ally: CombatParticipant) -> None:
+    """A successful Rally gives the ally free dig deeps, and tells her (#4738).
+
+    The count is ``StrainConfig.free_dig_deeps_per_encouragement``. A quiet no-op for an ally
+    with no combat engagement here or when the count is 0.
+
+    The grant, the cached engagement and the message all wait for the round's transaction
+    to commit (``transaction.on_commit``). The round resolves inside one atomic block, and a
+    round that rolls back would leave the identity-mapped engagement holding a free dig deep
+    the database never kept; written after the commit, nothing is there to undo and a player
+    never sees or spends a free dig deep the database does not hold.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.combat.dig_deep import combat_engagement_of, grant_free_dig_deeps  # noqa: PLC0415
+    from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
+
+    count = get_strain_config().free_dig_deeps_per_encouragement
+    if count <= 0:
+        return
+    giver_sheet = rallier.character_sheet
+    giver_name = persona_name_of(rallier)
+
+    def _grant() -> None:
+        engagement = combat_engagement_of(ally)
+        if engagement is None:
+            return
+        grant_free_dig_deeps(engagement, count, giver_sheet)
+        noun = "a free dig deep" if count == 1 else f"{count} free dig deeps"
+        ally.character_sheet.character.msg(f"{giver_name}'s encouragement gives you {noun}.")
+
+    transaction.on_commit(_grant)
+
+
 def _resolve_rally(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -161,6 +195,8 @@ def _resolve_rally(
                 source_character=participant.character_sheet.character,
                 source_description="Rallied in combat.",
             )
+
+        _grant_free_dig_deeps(participant, ally)
 
         # Great success: restore morale to ally-side summon opponents.
         if success_level >= RALLY_GREAT_SUCCESS_LEVEL:

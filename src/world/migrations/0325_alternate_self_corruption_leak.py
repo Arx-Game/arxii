@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0323_remove_thread_uniq_thread_trait_and_more"),
+        ("arxii", "0324_characterengagement_dig_deep_and_more"),
     ]
 
     operations = [

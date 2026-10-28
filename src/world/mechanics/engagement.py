@@ -67,6 +67,30 @@ class CharacterEngagement(SharedMemoryModel):
         default=0,
         help_text="Process-derived control bonus (process state only).",
     )
+    free_dig_deeps = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Dig deeps this character may take in combat without paying fatigue, granted by "
+            "an ally's successful Rally. Spent one per dig deep; ends with the engagement."
+        ),
+    )
+    free_dig_deeps_given_by = models.ForeignKey(
+        "arxii.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The ally whose encouragement most recently granted free dig deeps.",
+    )
+    last_dug_deep_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The combat round number in which this character last dug deep. Set by "
+            "the dig deep service, which refuses a second dig deep in the same round whatever "
+            "the roll or band gave."
+        ),
+    )
     started_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When the engagement began.",

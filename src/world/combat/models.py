@@ -2647,6 +2647,29 @@ class StrainConfig(SharedMemoryModel):
             "into her engagement."
         ),
     )
+    dig_deep_fatigue_category = models.CharField(
+        max_length=20,
+        choices=ActionCategory.choices,
+        default=ActionCategory.MENTAL,
+        help_text=(
+            "Which fatigue pool a character pays from when she digs deep in combat "
+            "and holds no free dig deep. Staff set it; the dig deep service reads it."
+        ),
+    )
+    dig_deep_fatigue_cost = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Fatigue a character pays each time she digs deep without a free dig deep, "
+            "whatever the roll gives. Staff set it; the dig deep service reads it."
+        ),
+    )
+    free_dig_deeps_per_encouragement = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Free dig deeps an ally gains for each successful Rally aimed at her. Staff set "
+            "it; the Rally resolution reads it. 0 means a Rally grants none."
+        ),
+    )
     strain_check_difficulty = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -4104,16 +4127,18 @@ class SurgeTuning(SharedMemoryModel):
         related_name="surge_tunings",
         help_text=(
             "The check rolled when this beat fires. Staff pick it; the surge service rolls "
-            "it for the surged player character (Taunt Received, Ally Hurt) and for the "
-            "player character doing the rallying (Rallied)."
+            "it for the surged player character (Taunt Received, Ally Hurt), for the "
+            "player character doing the rallying (Rallied) and for the player character "
+            "digging deep (Dug deep)."
         ),
     )
     potency_base = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Ally Hurt only: base difficulty of the roll. Staff set it; the surge service "
-            "reads it. A taunt takes its potency from the pool entry or the taunter's check "
-            "rating, and Rally uses its fixed difficulty, so leave this at 0 for those."
+            "Ally Hurt and Dug deep: base difficulty of the roll. Staff set it; the surge "
+            "service reads it. A taunt takes its potency from the pool entry or the "
+            "taunter's check rating, and Rally uses its fixed difficulty, so leave this "
+            "at 0 for those."
         ),
     )
     potency_per_depth = models.PositiveIntegerField(
@@ -4131,14 +4156,18 @@ class SurgeTuning(SharedMemoryModel):
         ordering = ["trigger_kind"]
 
     def clean(self) -> None:
-        """Reject potency numbers on a beat that never reads them (only Ally Hurt does)."""
+        """Reject potency numbers on a beat that never reads them.
+
+        Ally Hurt reads both; Dug deep reads the base only.
+        """
         super().clean()
         if self.trigger_kind == SurgeTriggerKind.ALLY_HURT:
             return
         errors: dict[str, str] = {}
-        if self.potency_base:
+        if self.potency_base and self.trigger_kind != SurgeTriggerKind.DUG_DEEP:
             errors["potency_base"] = (
-                "Only the Ally Hurt beat reads this number; leave it at 0 for this beat."
+                "Only the Ally Hurt and Dug deep beats read this number; leave it at 0 "
+                "for this beat."
             )
         if self.potency_per_depth:
             errors["potency_per_depth"] = (

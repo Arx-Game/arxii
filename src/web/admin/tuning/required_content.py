@@ -2022,7 +2022,9 @@ def _probe_surge_tuning() -> ProbeResult:
     with no row never surges, so a taunt, a rally or a hurt ally does nothing to engagement
     intensity; a band set where a better outcome gives less than a worse one (`SurgeDegreeBand`
     stored through a path that skipped the admin form's check) is reported by line. A tuning
-    with no bands never surges (`band_for_outcome` finds nothing), so it is reported too.
+    with no bands never surges (`band_for_outcome` finds nothing), so it is reported too. A
+    Dug deep tuning with no `potency_base` rolls against nothing (#4738), so it is reported as
+    having no difficulty.
     """
     from world.combat.constants import ROLLED_SURGE_TRIGGER_KINDS, SurgeTriggerKind  # noqa: PLC0415
     from world.combat.models import SurgeTuning  # noqa: PLC0415
@@ -2042,6 +2044,8 @@ def _probe_surge_tuning() -> ProbeResult:
         for kind in ROLLED_SURGE_TRIGGER_KINDS
         if kind in bandless
     )
+    if SurgeTuning.objects.filter(trigger_kind=SurgeTriggerKind.DUG_DEEP, potency_base=0).exists():
+        missing.append(f"SurgeTuning for {SurgeTriggerKind.DUG_DEEP.label} has no difficulty")
     missing.extend(check_stored_surge_bands())
     detail = f"Rolled surge content to fix: {'; '.join(missing)}." if missing else ""
     return ProbeResult(present=not missing, missing=tuple(missing), detail=detail)

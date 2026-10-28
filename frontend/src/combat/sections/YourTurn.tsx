@@ -29,6 +29,7 @@ import type {
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
 import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
+import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
@@ -2773,6 +2774,15 @@ export function YourTurn({
           plan={myParticipantSelf.dodge_plan}
           currentPositionId={actorPositionId}
           isLocked={isLocked}
+          dispatchAction={dispatchAction}
+          onDispatched={refreshEncounter}
+        />
+      )}
+
+      {myParticipantSelf?.dig_deep && (
+        <DigDeep
+          offer={myParticipantSelf.dig_deep}
+          isLocked={readOnly || !isDeclaringPhase}
           dispatchAction={dispatchAction}
           onDispatched={refreshEncounter}
         />

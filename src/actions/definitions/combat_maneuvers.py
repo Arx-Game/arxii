@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         CombatParticipant,
         CombatRoundAction,
     )
+    from world.combat.types import DigDeepResult
     from world.magic.models import Technique
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
@@ -863,6 +864,52 @@ class RallyAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You rally your ally.")
+
+
+@dataclass
+class DigDeepAction(Action):
+    """Dig deep: roll resolve to raise your own intensity (wraps ``dig_deep``).
+
+    An immediate act, once a round; it is not the round's declared action (#4738).
+    """
+
+    key: str = "combat_dig_deep"
+    name: str = "Dig deep"
+    icon: str = "shield"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.MENTAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.dig_deep import DigDeepRefusedError, dig_deep  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        try:
+            result = dig_deep(participant)
+        except DigDeepRefusedError as err:
+            return ActionResult(success=False, message=err.user_message)
+        return ActionResult(success=True, message=_dig_deep_message(result))
+
+
+def _dig_deep_message(result: DigDeepResult) -> str:
+    """The line the player reads after digging deep: the outcome and what it cost."""
+    gain = (
+        f"Intensity +{result.surge_amount}." if result.surge_amount else "The roll gave no surge."
+    )
+    outcome = f"{result.outcome.name}. " if result.outcome is not None else ""
+    if result.used_free_dig_deep:
+        cost = "a free dig deep"
+    else:
+        cost = f"{result.fatigue_category} fatigue {result.fatigue_spent}"
+    return f"You dig deep. {outcome}{gain} Cost: {cost}."
 
 
 @dataclass
