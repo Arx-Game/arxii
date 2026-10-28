@@ -76,9 +76,14 @@ def condition_intensity_by_target(
     return fed
 
 
-def _cause_line(names: list[str], persona_name: str) -> str:
-    verb = "feeds" if len(names) == 1 else "feed"
-    return f"{', '.join(names)} {verb} {persona_name}'s intensity."
+def condition_fed_line(names: list[str], total: int) -> str:
+    """The line a condition-fed surge reads as: "<names> · Intensity +<total>".
+
+    The one builder for both clients: telnet sends it to the surged player, and it is stored
+    as the record's ``cause``, which the round payload gives the surged player's owner, GMs
+    and staff (web parity, #4739).
+    """
+    return f"{', '.join(names)} · Intensity +{total}"
 
 
 def apply_condition_intensity_surges(encounter: CombatEncounter) -> list[DramaticSurgeBeat]:
@@ -89,11 +94,10 @@ def apply_condition_intensity_surges(encounter: CombatEncounter) -> list[Dramati
     (``repeat_round`` is the round), so a second call in the same round adds nothing. The
     surge is not announced to the room; the player is told
     "<names> · Intensity +<total>" once the round-opening commits, and the web reads the
-    same record (with its ``cause``) through the round payload.
+    same line as the record's ``cause`` through the round payload.
     """
     from world.combat.escalation import apply_dramatic_surge  # noqa: PLC0415
     from world.combat.models import CombatParticipant  # noqa: PLC0415
-    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
 
     if encounter.escalation_curve is None:
         return []
@@ -115,15 +119,11 @@ def apply_condition_intensity_surges(encounter: CombatEncounter) -> list[Dramati
     ]
     if not fed_participants:
         return []
-    persona_names = persona_names_for_sheets(
-        [participant.character_sheet_id for participant in fed_participants]
-    )
-
     beats: list[DramaticSurgeBeat] = []
     for participant in fed_participants:
         character = participant.character_sheet.character
         total, names = fed[character.pk]
-        persona_name = persona_names.get(participant.character_sheet_id, character.key)
+        line = condition_fed_line(names, total)
         beat = apply_dramatic_surge(
             encounter=encounter,
             participant=participant,
@@ -131,11 +131,10 @@ def apply_condition_intensity_surges(encounter: CombatEncounter) -> list[Dramati
             trigger_kind=SurgeTriggerKind.CONDITION_FED,
             repeat_round=encounter.round_number,
             narrate=False,
-            cause=_cause_line(names, persona_name),
+            cause=line,
         )
         if beat is None:
             continue
         beats.append(beat)
-        line = f"{', '.join(names)} · Intensity +{total}"
         transaction.on_commit(lambda character=character, line=line: character.msg(line))
     return beats

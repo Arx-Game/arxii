@@ -21,6 +21,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from integration_tests.test_refused_admin_saves_journeys import RefusedAdminSaveCase
+from world.combat.condition_surges import condition_fed_line
 from world.combat.constants import ParticipantStatus, SurgeTriggerKind
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -145,7 +146,9 @@ class AngerFeedsHerIntensity(RefusedAdminSaveCase):
         (own,) = self.beats_seen_by(self.mira)
         self.assertEqual(own["trigger_kind"], SurgeTriggerKind.CONDITION_FED)
         self.assertEqual(own["amount"], ANGER_PER_ROUND)
-        self.assertEqual(own["cause"], "Anger feeds Mira's intensity.")
+        # The web reads the same line telnet sent her.
+        self.assertEqual(own["cause"], condition_fed_line(["Anger"], ANGER_PER_ROUND))
+        self.assertTold(self.mira, own["cause"])
         self.assertNotIn("outcome", own)
         # Tomas is not told of her feed at all: no beat, not even the generic line.
         self.assertEqual(self.beats_seen_by(self.tomas), [])

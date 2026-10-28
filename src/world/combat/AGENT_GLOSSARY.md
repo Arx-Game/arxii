@@ -193,7 +193,7 @@ A `SurgeDegreeBand` row: what one roll outcome does for one Surge Tuning (`inten
 _Avoid_: tier, step, result row
 
 **Feeding Condition** (#4739, ADR-4737 amendment):
-An emotional condition whose current stage has `intensity_per_round` above 0 (Anger, at that stage). At each round opening of an encounter with an escalation curve, every active player character gets one `CONDITION_FED` Dramatic Surge for the plain sum over their active, unsuppressed, unresolved feeding conditions (`condition_surges.apply_condition_intensity_surges`), is told "<names> · Intensity +<total>", and reads the record's cause in the round payload; nothing is written for a sum of 0 and NPC opponents never surge. Found by the stage field, never by name. On a Degree Band it is a benefit, never on a failed roll.
+An emotional condition whose current stage has `intensity_per_round` above 0 (Anger, at that stage). At each round opening of an encounter with an escalation curve, every active player character gets one `CONDITION_FED` Dramatic Surge for the plain sum over their active, unsuppressed, unresolved feeding conditions (`condition_surges.apply_condition_intensity_surges`), is told "<names> · Intensity +<total>", and reads the same line as the record's cause in the round payload; nothing is written for a sum of 0 and NPC opponents never surge. Found by the stage field, never by name. On a Degree Band it is a benefit, never on a failed roll.
 _Avoid_: emotion buff, rage meter, mood
 
 **Taunt Potency** (#4737):

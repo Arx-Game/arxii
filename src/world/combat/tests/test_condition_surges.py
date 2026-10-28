@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from world.combat.condition_surges import (
     apply_condition_intensity_surges,
+    condition_fed_line,
     condition_feeds_intensity,
     condition_intensity_by_target,
 )
@@ -84,7 +85,7 @@ class ConditionIntensitySurgeTests(TestCase):
         self.assertEqual(record.repeat_round, 1)
         self.assertIsNone(record.outcome)
         self.assertEqual(record.participant, self.seat)
-        self.assertIn("Unit Anger, Unit Grief feed", record.cause)
+        self.assertEqual(record.cause, condition_fed_line(["Unit Anger", "Unit Grief"], 3))
         self.assertEqual(self._intensity(), 3)
 
     def test_once_per_round_and_again_next_round(self) -> None:
