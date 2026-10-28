@@ -280,14 +280,10 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
             repeat_round=encounter.round_number,
             narrate=amount > 0,
             cause=cause,
+            vow_scaling=vow_scaling,
         )
         if beat is None:
             return None
-        if vow_scaling:
-            # Through the instance, not a queryset update: the record is identity-mapped.
-            record = DramaticSurgeRecord.objects.get(pk=beat.record_id)
-            record.vow_scaling = vow_scaling
-            record.save(update_fields=["vow_scaling"])
         if band.condition is not None:
             from world.conditions.services import apply_condition  # noqa: PLC0415
 
