@@ -9,7 +9,10 @@ from typeclasses.companions import CompanionObject
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import RiskLevel
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
-from world.companions.factories_combat import create_companion_defeat_pool
+from world.companions.factories_combat import (
+    COMPANION_DIE_LABEL,
+    create_companion_defeat_pool,
+)
 from world.companions.models import Companion
 from world.companions.mount_content import (
     MOUNTED_CONDITION_NAME,
@@ -85,15 +88,21 @@ class MountDismountTests(TestCase):
             mount_companion(other_sheet, self.companion)
 
     def test_companion_defeat_force_dismounts_rider(self) -> None:
+        from actions.models import ConsequencePoolEntry
+
+        pool = create_companion_defeat_pool()
+        for entry in ConsequencePoolEntry.objects.filter(pool=pool).select_related("consequence"):
+            if entry.consequence.label != COMPANION_DIE_LABEL:
+                entry.weight_override = 0
+                entry.save(update_fields=["weight_override"])
+
+        pool.__dict__.pop("cached_consequences", None)
+        consequences = pool.cached_consequences
+        self.assertTrue(consequences, "Expected companion defeat pool consequences to be present.")
+        self.assertTrue(all(c.label == COMPANION_DIE_LABEL or c.weight == 0 for c in consequences))
+
         mount_companion(self.sheet, self.companion)
-        # Run enough lethal draws that a "die" outcome lands (matches the
-        # existing probabilistic pattern in test_defeat_consequences.py).
-        released = False
-        for _ in range(50):
-            if resolve_companion_defeat(self.companion, RiskLevel.LETHAL):
-                released = True
-                break
-        self.assertTrue(released, "Expected at least one lethal draw to release the companion.")
+        self.assertTrue(resolve_companion_defeat(self.companion, RiskLevel.LETHAL))
         self.companion.refresh_from_db()
         self.assertFalse(self.companion.is_active)
         self.assertIsNone(self.companion.ridden_by_id)
