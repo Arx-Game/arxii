@@ -23376,6 +23376,7 @@ paths:
           enum:
           - COMBO_DISCOVERY
           - COMPROMISE
+          - CORRUPTION_CLEANSING
           - DISTINCTION
           - DRAMATIC_MOMENT
           - DRIFT_CORRECTION
@@ -23392,6 +23393,7 @@ paths:
           - SANCTUM_OWNER_BONUS
           - SANCTUM_WEAVING
           - SCENE_ENTRY
+          - SINEATING
           - STAFF_GRANT
           - STAKE_REWARD
           - STYLE_PRESENTATION
@@ -23421,6 +23423,8 @@ paths:
           * `FALL_CONVERSION` - Fall/Redemption conversion
           * `WORSHIP_RITE` - Worship rite
           * `DRIFT_CORRECTION` - Drift correction
+          * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+          * `SINEATING` - Sineating payout
       tags:
       - magic
       security:
@@ -86660,6 +86664,8 @@ components:
             * `FALL_CONVERSION` - Fall/Redemption conversion
             * `WORSHIP_RITE` - Worship rite
             * `DRIFT_CORRECTION` - Drift correction
+            * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+            * `SINEATING` - Sineating payout
         granted_at:
           type: string
           format: date-time
@@ -86715,6 +86721,8 @@ components:
       - FALL_CONVERSION
       - WORSHIP_RITE
       - DRIFT_CORRECTION
+      - CORRUPTION_CLEANSING
+      - SINEATING
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -86739,6 +86747,8 @@ components:
         * `FALL_CONVERSION` - Fall/Redemption conversion
         * `WORSHIP_RITE` - Worship rite
         * `DRIFT_CORRECTION` - Drift correction
+        * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+        * `SINEATING` - Sineating payout
     ResonanceLine:
       type: object
       properties:

@@ -48882,6 +48882,8 @@ export interface components {
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
        *     * `WORSHIP_RITE` - Worship rite
        *     * `DRIFT_CORRECTION` - Drift correction
+       *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+       *     * `SINEATING` - Sineating payout
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -48914,6 +48916,8 @@ export interface components {
      *     * `FALL_CONVERSION` - Fall/Redemption conversion
      *     * `WORSHIP_RITE` - Worship rite
      *     * `DRIFT_CORRECTION` - Drift correction
+     *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+     *     * `SINEATING` - Sineating payout
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -48938,7 +48942,9 @@ export interface components {
       | 'PENANCE'
       | 'FALL_CONVERSION'
       | 'WORSHIP_RITE'
-      | 'DRIFT_CORRECTION';
+      | 'DRIFT_CORRECTION'
+      | 'CORRUPTION_CLEANSING'
+      | 'SINEATING';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -75038,10 +75044,13 @@ export interface operations {
          *     * `FALL_CONVERSION` - Fall/Redemption conversion
          *     * `WORSHIP_RITE` - Worship rite
          *     * `DRIFT_CORRECTION` - Drift correction
+         *     * `CORRUPTION_CLEANSING` - Corruption cleansing payout
+         *     * `SINEATING` - Sineating payout
          */
         source?:
           | 'COMBO_DISCOVERY'
           | 'COMPROMISE'
+          | 'CORRUPTION_CLEANSING'
           | 'DISTINCTION'
           | 'DRAMATIC_MOMENT'
           | 'DRIFT_CORRECTION'
@@ -75058,6 +75067,7 @@ export interface operations {
           | 'SANCTUM_OWNER_BONUS'
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
+          | 'SINEATING'
           | 'STAFF_GRANT'
           | 'STAKE_REWARD'
           | 'STYLE_PRESENTATION'
