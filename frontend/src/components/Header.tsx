@@ -168,10 +168,11 @@ export function Header() {
 
   return (
     <header className="border-b">
-      <div className="container mx-auto flex items-center justify-between px-4 py-4">
-        <SiteTitle />
-        {selectedEntry && <SelectedCharacterChip entry={selectedEntry} />}
-        <NavigationMenu className="hidden md:block">
+      <div className="container mx-auto flex w-full min-w-0 flex-wrap items-center justify-between gap-y-2 px-4 py-4">
+        <div className="min-w-0 flex-1">
+          <SiteTitle />
+        </div>
+        <NavigationMenu className="hidden shrink-0 md:block">
           <NavigationMenuList>
             <NavigationMenuItem>
               <Link to="/game" className={navigationMenuTriggerStyle()}>
@@ -270,7 +271,17 @@ export function Header() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
-        <div className="md:hidden">
+        {selectedEntry && (
+          <div className="order-3 w-full md:hidden">
+            <SelectedCharacterChip entry={selectedEntry} />
+          </div>
+        )}
+        {selectedEntry && (
+          <div className="hidden md:block">
+            <SelectedCharacterChip entry={selectedEntry} />
+          </div>
+        )}
+        <div className="order-2 shrink-0 md:hidden">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">

@@ -112,19 +112,19 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-none border bg-card px-2 py-1',
+        'flex min-w-0 flex-1 items-center gap-2 rounded-none border bg-card px-2 py-1 sm:gap-3',
         'text-card-foreground'
       )}
     >
-      <Avatar className="h-11 w-11 rounded-none">
+      <Avatar className="h-11 w-11 shrink-0 rounded-none">
         <AvatarImage src={entry.profile_picture_url ?? undefined} alt={entry.name} />
         <AvatarFallback className="rounded-none text-sm">{getInitials(entry.name)}</AvatarFallback>
       </Avatar>
-      <div className="flex flex-col leading-tight">
-        <span className="theme-heading text-sm font-semibold [font-variant:small-caps]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden leading-tight">
+        <span className="theme-heading truncate text-sm font-semibold [font-variant:small-caps]">
           {entry.name}
         </span>
-        <span className="font-body text-xs text-muted-foreground">
+        <span className="truncate font-body text-xs text-muted-foreground">
           as {wornName}
           {onGamePage ? '' : ` · ${presence}`}
         </span>
@@ -137,7 +137,7 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
         asChild
         variant="default"
         size="sm"
-        className="rounded-none uppercase tracking-[0.08em]"
+        className="min-w-0 shrink-0 rounded-none px-2 text-[0.65rem] uppercase tracking-normal sm:px-3 sm:text-sm sm:tracking-[0.08em]"
       >
         <Link to="/game">
           <DoorOpen className="h-3.5 w-3.5" />
