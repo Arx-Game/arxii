@@ -15,7 +15,7 @@ from world.combat.services.encounter.pulls import expire_pulls_for_round
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
-    from web.admin.authoring.identity_map import CacheGuard
+    from core.identity_map import CacheGuard
 
 
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
@@ -33,7 +33,7 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     pulls' max health), and a caller's outer atomic that rolls back after this returns is
     not covered.
     """
-    from web.admin.authoring.identity_map import CacheGuard  # noqa: PLC0415
+    from core.identity_map import CacheGuard  # noqa: PLC0415
     from world.combat.models import DramaticSurgeRecord  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 

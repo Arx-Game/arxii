@@ -546,3 +546,37 @@ class WakingFromASleepSomeoneOfferedToTreat(JourneyCase):
         self.assertEqual(
             SceneActionRequest.objects.get(pk=offer.pk).status, ActionRequestStatus.EXPIRED
         )
+
+
+class TakingABreath(JourneyCase):
+    """Ysmay holds her breath in smoke form and lets it out (#4741)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Chimney Loft")
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.hobb = self.make_player("Hobb", room=self.room)
+        smoke = ConditionTemplateFactory(name="Smoke Form", holds_breath=True)
+        self.smoke = ConditionInstanceFactory(target=self.ysmay, condition=smoke)
+
+    def test_she_breathes_and_the_smoke_form_ends(self) -> None:
+        told = self.telnet(self.ysmay, "breathe")
+        self.assertIn("You take a breath; Smoke Form ends.", told)
+        self.assertFalse(ConditionInstance.objects.filter(pk=self.smoke.pk).exists())
+
+    def test_the_web_button_does_the_same(self) -> None:
+        result = self.web(self.ysmay, "take_breath")
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertFalse(ConditionInstance.objects.filter(pk=self.smoke.pk).exists())
+
+    def test_her_status_panel_lists_the_held_breath_until_she_breathes(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        url = f"/api/vitals/{self.ysmay.pk}/"
+        before = client.get(url)
+        self.assertEqual(before.status_code, 200, before.content)
+        self.assertEqual([h["name"] for h in before.json()["held_breath"]], ["Smoke Form"])
+        self.telnet(self.ysmay, "breathe")
+        self.assertEqual(client.get(url).json()["held_breath"], [])
+
+    def test_with_no_breath_held_he_is_told_so(self) -> None:
+        self.assertIn("You aren't holding your breath.", self.telnet(self.hobb, "breathe"))

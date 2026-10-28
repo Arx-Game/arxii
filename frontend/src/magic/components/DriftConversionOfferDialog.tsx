@@ -17,6 +17,7 @@ import { Flame } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, NO_DESCRIPTION } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { pillClass } from '@/magic/components/pillClass';
 import { useConvertDrift, useDeclineDriftConversion } from '@/magic/queries';
 import type {
   DriftConversionCap,
@@ -56,15 +57,6 @@ function driftSystemLine(cap: DriftConversionCap): string | null {
   const held = cap.sources.filter((s) => s.balance > 0).map((s) => s.resonance_name);
   if (held.length === 0) return null;
   return `You hold ${joinNames(held)} that does not fit you. Convert it to ${cap.target_resonance.name}.`;
-}
-
-/** Unselected pills are outlined; the chosen one is filled in the theme's primary pair. */
-function pillClass(selected: boolean): string {
-  return `rounded-full border px-3 py-1 text-sm transition-colors ${
-    selected
-      ? 'border-primary bg-primary font-semibold text-primary-foreground'
-      : 'border-input bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground'
-  }`;
 }
 
 const CHIP_CLASS = 'rounded-full border border-input px-3 py-1 text-sm text-muted-foreground';

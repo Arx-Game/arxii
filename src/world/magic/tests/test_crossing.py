@@ -741,7 +741,7 @@ class SoulTetherNonInterferenceTests(TestCase):
 
 
 class AnchorLabelTests(TestCase):
-    """_anchor_label_for resolves relationship anchors correctly."""
+    """anchor_label_for resolves relationship anchors correctly."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -764,20 +764,20 @@ class AnchorLabelTests(TestCase):
         )
 
     def test_track_anchor_label_includes_partner_and_type(self) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
         from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
 
         rel_type = RelationshipTypeFactory(name="Loyalty")
         RelationshipLabelFactory(relationship=self.track_thread.target_relationship, type=rel_type)
 
-        label = _anchor_label_for(self.track_thread)
+        label = anchor_label_for(self.track_thread)
         self.assertIn("bond with", label)
         self.assertIn(rel_type.name, label)
 
     def test_capstone_anchor_label_includes_title_and_partner(self) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
 
-        label = _anchor_label_for(self.capstone_thread)
+        label = anchor_label_for(self.capstone_thread)
         self.assertIn("capstone", label)
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
@@ -785,10 +785,10 @@ class AnchorLabelTests(TestCase):
     def test_track_anchor_label_skips_an_ended_label(self) -> None:
         """An ENDED label is never chosen while a later OPEN label exists (review
         round 2, N2) -- the ``ended_at`` filter moved from SQL to hand-rolled
-        Python in ``_anchor_label_for`` and nothing previously proved it fires."""
+        Python in ``anchor_label_for`` and nothing previously proved it fires."""
         from django.utils import timezone
 
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
         from world.relationships.factories import RelationshipLabelFactory, RelationshipTypeFactory
 
         ended_type = RelationshipTypeFactory(name="Rivalry")
@@ -803,14 +803,14 @@ class AnchorLabelTests(TestCase):
             type=open_type,
         )
 
-        label = _anchor_label_for(self.track_thread)
+        label = anchor_label_for(self.track_thread)
         self.assertIn(open_type.name, label)
         self.assertNotIn(ended_type.name, label)
 
     def test_track_anchor_label_names_a_companion_partner(self) -> None:
         from world.companions.factories import CompanionFactory
         from world.magic.constants import TargetKind
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
         from world.magic.factories import ThreadFactory
         from world.relationships.factories import (
             CharacterRelationshipFactory,
@@ -832,7 +832,7 @@ class AnchorLabelTests(TestCase):
             target_relationship=relationship,
             target_trait=None,
         )
-        label = _anchor_label_for(thread)
+        label = anchor_label_for(thread)
         self.assertIn("Ash", label)
         self.assertIn(rel_type.name, label)
 
@@ -843,7 +843,7 @@ class AnchorLabelTests(TestCase):
 
 
 class MantleAnchorLabelTests(TestCase):
-    """_anchor_label_for returns the mantle name for MANTLE threads."""
+    """anchor_label_for returns the mantle name for MANTLE threads."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -867,9 +867,9 @@ class MantleAnchorLabelTests(TestCase):
         )
 
     def test_mantle_anchor_label_returns_mantle_name(self) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
 
-        label = _anchor_label_for(self.thread)
+        label = anchor_label_for(self.thread)
         self.assertEqual(label, "Dawnbringer")
 
 
@@ -1116,7 +1116,7 @@ class SanctumCrossingHandlerTests(TestCase):
 
 
 class AnchorLabelSanctumTests(TestCase):
-    """_anchor_label_for returns a sanctum label for SANCTUM threads (#1993)."""
+    """anchor_label_for returns a sanctum label for SANCTUM threads (#1993)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -1143,9 +1143,9 @@ class AnchorLabelSanctumTests(TestCase):
         )
 
     def test_sanctum_anchor_label(self) -> None:
-        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.crossing.handlers import anchor_label_for
 
-        label = _anchor_label_for(self.thread)
+        label = anchor_label_for(self.thread)
         self.assertIn("sanctum", label.lower())
 
 

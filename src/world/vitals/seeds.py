@@ -728,6 +728,32 @@ def ensure_dream_room() -> ObjectDB:
     return room
 
 
+BREATH_HOLD_ROUNDS_BY_OUTCOME = {
+    "Critical Failure": 1,
+    "Failure": 2,
+    "Partial Success": 3,
+    "Success": 5,
+    "Critical Success": 8,
+}
+
+
+def ensure_breath_hold_awards() -> None:
+    """Seed held-breath rounds per outcome tier (#4741): tuning rows, staff-editable.
+
+    get_or_create, so staff edits survive re-seeding. The breath check itself
+    (BreathHoldConfig.check_type) is a content row staff pick in admin.
+    """
+    from world.conditions.models import BreathHoldDurationAward  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    for name, rounds in BREATH_HOLD_ROUNDS_BY_OUTCOME.items():
+        outcome = CheckOutcome.objects.filter(name=name).first()
+        if outcome is not None:
+            BreathHoldDurationAward.objects.get_or_create(
+                outcome_tier=outcome, defaults={"rounds": rounds}
+            )
+
+
 def _wire_consequence_config() -> None:
     """Fill null pool FKs + empty condolence text on the config singleton.
 
@@ -826,6 +852,7 @@ def seed_survivability_content() -> None:
     create_abandonment_pools()
     ensure_surrounded_content()
     _wire_consequence_config()
+    ensure_breath_hold_awards()
     ensure_death_kudos_category()
     ensure_dream_room()
     ensure_wound_treatment_content()

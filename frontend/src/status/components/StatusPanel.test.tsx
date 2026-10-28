@@ -51,6 +51,7 @@ const VITALS: CharacterVitalsData = {
     well_rested: false,
     rested_today: false,
   },
+  held_breath: [],
 };
 
 function setQueries({
@@ -222,6 +223,28 @@ describe('StatusPanel', () => {
       expect(executeActionMock).toHaveBeenCalledWith('Aria', 'withdraw_coins', { amount: 120 });
       // Implementation clears the text on dispatch (not on the result).
       expect(input).toHaveValue('');
+    });
+  });
+
+  // #4741: a held breath shows with a Take a breath control
+  describe('held breath (#4741)', () => {
+    it('shows nothing about breath when nothing is held', () => {
+      setQueries();
+      renderWithProviders(<StatusPanel characterId={7} characterName="Aria" />);
+      expect(screen.queryByRole('button', { name: /take a breath/i })).not.toBeInTheDocument();
+    });
+
+    it('lists the held-breath condition and dispatches take_breath', async () => {
+      const user = userEvent.setup();
+      setQueries({
+        vitals: { ...VITALS, held_breath: [{ name: 'Smoke Form', rounds_remaining: 5 }] },
+      });
+      renderWithProviders(<StatusPanel characterId={7} characterName="Aria" />);
+
+      expect(screen.getByText(/Smoke Form · 5 rounds left/)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /take a breath/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith('Aria', 'take_breath', {});
     });
   });
 });

@@ -146,6 +146,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances), `scales_with_severity` (inherited from `ConditionOrStageEffect`; honoured by all three readers as of #2708 — see "Capability magnitude curve" below) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type` OR `check_category` (exactly one; category targets all checks in a category, including per-character magic checks — #2697), `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value`, `scales_with_severity` (#4728: multiplies by the instance's `effective_severity`; unset rows are flat, with no stage-multiplier fallback, because stage rows are authored per stage. One rule, `scaled_resistance_value`, read by the damage seam through `CharacterConditionHandler.resistance_modifier` and by `get_resistance_modifier`) |
+| `BreathHoldConfig` / `BreathHoldDurationAward` | The breath check, and held-breath rounds per check outcome tier (#4741) | singleton `check_type`, `target_difficulty`; award `outcome_tier` (one-to-one), `rounds`. Read by `breath_hold_rounds` |
 | `ConditionDamageDealtModifier` | How a condition changes its bearer's OUTGOING damage of one type (#4742) | `damage_type` (required; a type with no row is unchanged), `modifier_percent` (-75 = a quarter), `scales_with_severity` (same rule as resistance, `scaled_damage_dealt_percent`). Read by `scaled_outgoing_damage` (PC technique profiles, combo riders, joust, NPC attacks) through `ConditionHandler.damage_dealt_percent` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` (after combat, a settled ROUNDS row ticks these through the non-lethal clamp, see "Settled round effects") |
 
@@ -292,6 +293,33 @@ damage — the clamp bounds only the live application; the unclamped sum still r
 on the returned `DamageInteractionResult`. See `docs/systems/magic.md`'s "The Damage
 Identity" section for the sibling bounded percent lane (the ally-buff side) and
 ADR-0158.
+
+### Held breath (#4741, ADR-4741-A) [BUILT & WIRED]
+
+A condition that lasts only while its bearer holds her breath: a smoke form, being underwater.
+Three fields on `ConditionTemplate` (admin fieldset "Held Breath"):
+
+- **`holds_breath`** - on application (single and bulk, new or refreshed) the bearer rolls
+  `BreathHoldConfig.check_type` at `target_difficulty` (`breath_hold_rounds`), and the outcome
+  tier's `BreathHoldDurationAward.rounds` replaces the authored or technique-supplied rounds
+  (`_rounds_for_application`). No configured check, no outcome, or no row for that tier falls
+  back to the condition's own rounds. `clean()` requires a Rounds duration. The countdown is the
+  ordinary ROUNDS one, in combat and settled out of combat.
+- **`breath_runs_out_condition`** - applied when the hold expires on its own, in combat
+  (`_process_duration_and_progression`) or settled (`settled_effects_tick`), through
+  `_breath_ran_out`. Never applied when she breathes. Underwater -> Drowning.
+- **`breaks_held_breath`** - when this condition lands (its resist roll failed or absent), the
+  bearer breathes: `take_breath` ends every held-breath condition on her. A Coughing condition
+  with a resist check is a coughing fit she can roll to avoid.
+
+`take_breath(target)` is the one way a hold ends early; `TakeBreathAction` (key `take_breath`,
+always succeeds, no roll), telnet `breathe`, and the web Status panel's "Take a breath" button
+(the vitals payload's `held_breath` list) all reach it.
+
+**Cough after casting is authored, not coded.** A permanent condition on her (her mage scar)
+carries a reactive trigger on `TECHNIQUE_CAST` filtered `{"path": "caster", "op": "==",
+"value": "self"}`, whose flow calls `flow_apply_condition` with `target="@payload.caster"` and
+`condition_name="Coughing"`. Any other event works the same way.
 
 ### Incorporeal and untyped damage (#4742, ADR-4742-A) [BUILT & WIRED]
 

@@ -25305,6 +25305,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/CrossXPLockResponse'
           description: ''
+  /api/magic/threads/{id}/resonance-options/:
+    get:
+      operationId: magic_threads_resonance_options_retrieve
+      description: |-
+        Where this thread can be moved, and what the owner carries that pays the rite.
+
+        GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
+
+        Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
+        options: [{resonance_id, resonance_name, affinity_name, conversion_type,
+        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+        ``ritual_id`` is null while no retune rite is authored; perform it through
+        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``qualifying`` is filled only when the rite asks for a target-resonance offering.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResonanceOptions'
+          description: ''
   /api/mechanics/categories/:
     get:
       operationId: mechanics_categories_list
@@ -51613,10 +51644,15 @@ components:
           $ref: '#/components/schemas/CharacterVitalsStatusEnum'
         fatigue:
           $ref: '#/components/schemas/VitalsFatigue'
+        held_breath:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldBreath'
       required:
       - fatigue
       - health
       - health_percentage
+      - held_breath
       - max_health
       - status
       - wound_description
@@ -53636,6 +53672,14 @@ components:
       - id
       - persona_name
       - reason
+    ConversionTypeEnum:
+      enum:
+      - FALL
+      - REDEMPTION
+      type: string
+      description: |-
+        * `FALL` - Fall
+        * `REDEMPTION` - Redemption
     CopyAsNewRequest:
       type: object
       description: '``{name, as_template}``: a copy of the NPC under a new name.'
@@ -62223,6 +62267,19 @@ components:
       - max_inches
       - min_inches
       - name
+    HeldBreath:
+      type: object
+      description: One condition the character keeps only while holding her breath
+        (#4741).
+      properties:
+        name:
+          type: string
+        rounds_remaining:
+          type: integer
+          nullable: true
+      required:
+      - name
+      - rounds_remaining
     HeldClue:
       type: object
       description: One clue a character holds — the journal row (#1575).
@@ -95986,6 +96043,76 @@ components:
       - resonance
       - target_id
       - target_kind
+    ThreadResonanceOption:
+      type: object
+      description: |-
+        One resonance a thread may move to, with the carried items that pay the rite (read-only).
+
+        ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
+        resonance pk, worked out once for every option by the view
+        (``qualifying_components_by_target``), so this serializer queries nothing per option.
+        ``conversion_type`` is null for a retune within the thread's own affinity.
+        ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
+        into, null when the thread moves on its own.
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        affinity_name:
+          type: string
+        conversion_type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ConversionTypeEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        projected_points:
+          type: integer
+        merges_into_thread_id:
+          type: integer
+          nullable: true
+        qualifying:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftQualifyingComponent'
+          readOnly: true
+      required:
+      - affinity_name
+      - conversion_type
+      - merges_into_thread_id
+      - projected_points
+      - qualifying
+      - resonance_id
+      - resonance_name
+    ThreadResonanceOptions:
+      type: object
+      description: |-
+        GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+
+        ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+        ``offering_required`` / ``offering_count``: whether the rite asks for target-resonance
+        offerings and how many units (the web pays only those). ``unavailable_reason`` is the
+        refusal to show in place of the options, "" when the thread can move.
+      properties:
+        ritual_id:
+          type: integer
+          nullable: true
+        offering_required:
+          type: boolean
+        offering_count:
+          type: integer
+        unavailable_reason:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadResonanceOption'
+      required:
+      - offering_count
+      - offering_required
+      - options
+      - ritual_id
+      - unavailable_reason
     ThreadTargetKindEnum:
       enum:
       - TRAIT

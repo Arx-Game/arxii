@@ -16,11 +16,14 @@ Key invariants:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from world.magic.constants import GainSource
 from world.magic.exceptions import ConversionMappingError
@@ -33,7 +36,10 @@ from world.magic.models.resonance_environment import AffinityInteraction
 from world.magic.services.resonance import grant_resonance
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Thread
     from world.magic.models.affinity import Affinity, Resonance
 
 
@@ -368,6 +374,41 @@ def convert_resonance(  # noqa: PLR0913
     )
 
 
+@contextmanager
+def conversion_restored_on_raise(character_sheet: CharacterSheet) -> Iterator[None]:
+    """Put the character's resonance and thread rows back in memory if the block raises.
+
+    The full conversion zeroes resonance balances, grants their targets and re-anchors
+    threads one by one, each written in place on the identity-mapped row. A raise part way
+    (a re-anchor the unique index refuses, ``ThreadAnchorTakenError``) rolls every write
+    back in the database, but the rows already moved would keep the move in memory (#4735).
+    Enter this OUTSIDE the conversion's ``transaction.atomic()`` so it runs after the
+    rollback. It keeps every ``CharacterResonance`` row and live thread the character holds
+    before anything changes; on a raise it writes them back onto the same objects
+    (``core.identity_map.CacheGuard``), evicts any resonance row the rolled-back
+    conversion created, clears the sheet's cached properties and the character's thread
+    and resonance handlers, and re-raises.
+    """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+    from evennia_extensions.mixins import clear_django_cached_properties  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    guard = CacheGuard()
+    guard.keep(
+        *CharacterResonance.objects.filter(character_sheet=character_sheet),
+        *Thread.objects.filter(owner=character_sheet, retired_at__isnull=True),
+    )
+    guard.watch_created(CharacterResonance)
+    try:
+        yield
+    except BaseException:
+        guard.restore()
+        clear_django_cached_properties(character_sheet)
+        character_sheet.character.threads.invalidate()
+        character_sheet.character.resonances.invalidate()
+        raise
+
+
 def _reanchor_threads(
     character_sheet: CharacterSheet,
     converted: list[ConvertedResonance],
@@ -378,7 +419,7 @@ def _reanchor_threads(
 
     If a target-resonance thread with the same anchor already exists, the
     source thread is retired and its developed_points are merged into the
-    existing target thread.
+    existing target thread (``_reanchor_thread``).
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
@@ -396,64 +437,87 @@ def _reanchor_threads(
         target_resonance_id = resonance_map.get(thread.resonance_id)
         if target_resonance_id is None:
             continue
-
         # Scale developed_points by the multiplier
         new_points = max(0, int(Decimal(thread.developed_points) * multiplier))
-
-        # Check for an existing thread on the target resonance with the same anchor
-        existing = _find_existing_target_thread(thread, character_sheet, target_resonance_id)
-        if existing is not None:
-            # Merge: add scaled points to existing thread, retire source
-            existing.developed_points += new_points
-            existing.save(update_fields=["developed_points"])
-            from django.utils import timezone  # noqa: PLC0415
-
-            thread.retired_at = timezone.now()
-            thread.save(update_fields=["retired_at"])
-        else:
-            # Simple re-anchor: change the resonance FK
-            thread.resonance_id = target_resonance_id
-            thread.developed_points = new_points
-            thread.save(update_fields=["resonance", "developed_points"])
-
+        _reanchor_thread(thread, target_resonance_id, new_points)
         count += 1
 
+    if count:
+        character_sheet.character.threads.invalidate()
     return count
 
 
-def _find_existing_target_thread(
-    source_thread: object,
-    character_sheet: CharacterSheet,
-    target_resonance_id: int,
-) -> object | None:
-    """Find an existing non-retired thread on the target resonance with the same anchor.
+def _reanchor_thread(thread: Thread, target_resonance_id: int, new_points: int) -> Thread:
+    """Move ``thread`` onto ``target_resonance_id`` carrying ``new_points``; return the survivor.
 
-    Two threads have the same anchor if they share the same target_kind and
-    the same typed FK (target_trait, target_technique, etc.).
+    When the owner already holds a live thread on the same anchor in the target resonance,
+    ``new_points`` are added to that thread and ``thread`` is retired: the existing thread
+    survives. Otherwise ``thread`` itself is re-anchored with ``new_points`` and survives.
+    ``level`` is left as it is either way. The caller scales the points (the full
+    conversion and a single-thread retune floor them differently).
+
+    Raises:
+        ThreadAnchorTakenError: Another process put a live thread on the same anchor in the
+            target resonance after the lookup, so the partial unique index refused the move.
+            The save runs in a savepoint and ``thread``'s cached fields are put back, so the
+            shared instance does not claim a move the database never made.
+    """
+    existing = _find_existing_target_thread(thread, target_resonance_id)
+    if existing is not None:
+        from world.magic.models import Thread  # noqa: PLC0415
+
+        # Lock the survivor and add to the points the database holds, not the shared cached
+        # instance's: two merges into the same thread then both count.
+        held = (
+            Thread.objects.select_for_update()
+            .filter(pk=existing.pk)
+            .values_list("developed_points", flat=True)[0]
+        )
+        existing.developed_points = held + new_points
+        existing.save(update_fields=["developed_points"])
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+        return existing
+    from world.magic.exceptions import ThreadAnchorTakenError  # noqa: PLC0415
+
+    old_resonance_id, old_points = thread.resonance_id, thread.developed_points
+    thread.resonance_id = target_resonance_id
+    thread.developed_points = new_points
+    try:
+        with transaction.atomic():
+            thread.save(update_fields=["resonance", "developed_points"])
+    except IntegrityError as exc:
+        thread.resonance_id = old_resonance_id
+        thread.developed_points = old_points
+        raise ThreadAnchorTakenError from exc
+    return thread
+
+
+def same_anchor_threads(source_thread: Thread) -> QuerySet[Thread]:
+    """The owner's other live threads on ``source_thread``'s anchor, at any resonance.
+
+    Two threads share an anchor when they share ``target_kind`` and the typed target FK.
+    Every typed FK is compared, null included, so only the one the kind sets can match.
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
-    kwargs = {
-        "owner": character_sheet,
-        "resonance_id": target_resonance_id,
-        "retired_at__isnull": True,
-        "target_kind": source_thread.target_kind,
-    }
+    return Thread.objects.filter(
+        owner_id=source_thread.owner_id,
+        retired_at__isnull=True,
+        target_kind=source_thread.target_kind,
+        target_trait_id=source_thread.target_trait_id,
+        target_technique_id=source_thread.target_technique_id,
+        target_facet_id=source_thread.target_facet_id,
+        target_relationship_id=source_thread.target_relationship_id,
+        target_capstone_id=source_thread.target_capstone_id,
+        target_covenant_role_id=source_thread.target_covenant_role_id,
+        target_gift_id=source_thread.target_gift_id,
+        target_mantle_id=source_thread.target_mantle_id,
+        target_sanctum_details_id=source_thread.target_sanctum_details_id,
+        target_organization_id=source_thread.target_organization_id,
+    ).exclude(pk=source_thread.pk)
 
-    # Match on whichever typed FK is set
-    for fk_field in (
-        "target_trait",
-        "target_technique",
-        "target_facet",
-        "target_relationship",
-        "target_capstone",
-        "target_covenant_role",
-        "target_gift",
-        "target_mantle",
-        "target_sanctum_details",
-    ):
-        fk_value = getattr(source_thread, fk_field, None)
-        if fk_value is not None:
-            kwargs[fk_field] = fk_value
 
-    return Thread.objects.filter(**kwargs).exclude(pk=source_thread.pk).first()
+def _find_existing_target_thread(source_thread: Thread, target_resonance_id: int) -> Thread | None:
+    """Find the owner's live thread on the target resonance with the same anchor, if any."""
+    return same_anchor_threads(source_thread).filter(resonance_id=target_resonance_id).first()

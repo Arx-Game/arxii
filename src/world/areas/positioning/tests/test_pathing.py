@@ -23,6 +23,7 @@ from world.areas.positioning.services import (
     force_move_to_position,
     materialize_aerial_layer,
     move_to_position,
+    path_costs_from,
     place_in_position,
     step_costs,
     strike_reaches,
@@ -90,6 +91,19 @@ class FindPathTests(_Yard):
         # Through the gate costs 1 + 2 = 3; the detour costs 2.
         self.gate()
         self.assertEqual(self.path(CreatureTraversal.LEAPS), [self.a, self.d, self.c])
+
+    def test_held_positions_stop_both_route_searches(self) -> None:
+        held = frozenset({self.b.pk, self.d.pk})
+        self.assertIsNone(
+            find_path(
+                self.a,
+                lambda position: position == self.c,
+                traversal=CreatureTraversal.WALKS,
+                stop_at=held,
+            )
+        )
+        costs = path_costs_from(self.a, traversal=CreatureTraversal.WALKS, stop_at=held)
+        self.assertEqual(costs, {self.a.pk: 0, self.b.pk: 1, self.d.pk: 1})
 
     def test_origin_satisfies_goal(self) -> None:
         self.assertEqual(self.path(CreatureTraversal.WALKS, goal=self.a), [self.a])

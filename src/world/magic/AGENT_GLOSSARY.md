@@ -562,3 +562,7 @@ _Avoid_: pending offer (the `AbstractPendingOffer` family is a different shape),
 **Conversion rite** (#4733):
 The ritual a character performs under a conversion offer, designated by `DriftCorrectionConfig.rite`: they offer up an item that counts (tied to the target resonance, carrying a motif facet of it, or meaning enough to them), a configured check is rolled with their worn focus added, and the check's outcome tier sets what share of the requested amount converts (`DriftCorrectionOutcomeShare`). A failed roll spends the offering and moves nothing. Performed by `perform_drift_correction_rite`.
 _Avoid_: correction check, drift roll, purification.
+
+**Thread retune** (#4735, slice 6 of #4672):
+Moving one thread to another resonance by performing the retune rite (the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`). Within the thread's affinity it keeps every point; across affinities it is a Fall or a Redemption of that one thread, converting its `developed_points` at the authored pair rate (floored at 1). A live thread already on the same anchor in the new resonance takes the points and the moved one retires. It changes no balance and no affinity, unlike a **Fall** or **Redemption** of the character.
+_Avoid_: reweave (weaving makes a new thread), thread conversion (the full Fall re-anchors every thread), respec.

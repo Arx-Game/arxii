@@ -202,6 +202,20 @@ export function NodePage() {
  * becomes a mission ending. Routes, branch targets and track targets are
  * cleared to an ending; random-route candidates are removed with the node.
  */
+function incomingTrackLinks(nodes: MissionNode[], nodeId: number): DeleteLink[] {
+  const links: DeleteLink[] = [];
+  for (const other of nodes) {
+    if (other.id === nodeId) continue;
+    if (other.track_success_target === nodeId) {
+      links.push({ id: `ts${other.id}`, text: `${other.key}: track success` });
+    }
+    if (other.track_failure_target === nodeId) {
+      links.push({ id: `tf${other.id}`, text: `${other.key}: track failure` });
+    }
+  }
+  return links;
+}
+
 function DeleteNodeDialogLoader({
   node,
   open,
@@ -242,15 +256,7 @@ function DeleteNodeDialogLoader({
       endings.push({ id: `b${opt.id}`, text: describe(opt) });
     }
   }
-  for (const other of nodes) {
-    if (other.id === node.id) continue;
-    if (other.track_success_target === node.id) {
-      endings.push({ id: `ts${other.id}`, text: `${other.key}: track success` });
-    }
-    if (other.track_failure_target === node.id) {
-      endings.push({ id: `tf${other.id}`, text: `${other.key}: track failure` });
-    }
-  }
+  endings.push(...incomingTrackLinks(nodes, node.id));
 
   const routeById = new Map((routesPage?.results ?? []).map((r) => [r.id, r]));
   const lostDestinations: DeleteLink[] = [];

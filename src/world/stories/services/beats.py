@@ -384,6 +384,34 @@ def _settle_completion_legend(  # noqa: PLR0913
     return list(report.entries)
 
 
+def _credit_completion_gm_reward(
+    *,
+    beat: Beat,
+    outcome: BeatOutcome,
+    progress: AnyStoryProgress,
+    scope: str,
+    resolved_by: GMProfile | None,
+) -> None:
+    """Credit a GM for a qualifying marked outcome after the completion commits."""
+    if resolved_by is None or outcome not in _GM_MARKED_VALID_OUTCOMES:
+        return
+    from world.gm.models import GMRewardConfig  # noqa: PLC0415
+    from world.stories.services.gm_rewards import credit_gm_story_reward  # noqa: PLC0415
+
+    reward_character_sheet = progress.character_sheet if scope == StoryScope.CHARACTER else None
+    reward_gm_table = progress.gm_table if scope == StoryScope.GROUP else None
+    config = GMRewardConfig.load()
+    credit_gm_story_reward(
+        resolved_by=resolved_by,
+        scope=scope,
+        character_sheet=reward_character_sheet,
+        gm_table=reward_gm_table,
+        per_player_xp=config.beat_xp_per_player,
+        event_cap=config.beat_xp_cap,
+        label=f"beat #{beat.pk} resolved",
+    )
+
+
 def _create_completion_and_fire_pool(  # noqa: PLR0913
     *,
     beat: Beat,
@@ -525,22 +553,9 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     else:
         _notify_beat_completion(completion, progress)
 
-    if resolved_by is not None and outcome in _GM_MARKED_VALID_OUTCOMES:
-        from world.gm.models import GMRewardConfig  # noqa: PLC0415
-        from world.stories.services.gm_rewards import credit_gm_story_reward  # noqa: PLC0415
-
-        reward_character_sheet = progress.character_sheet if scope == StoryScope.CHARACTER else None
-        reward_gm_table = progress.gm_table if scope == StoryScope.GROUP else None
-        config = GMRewardConfig.load()
-        credit_gm_story_reward(
-            resolved_by=resolved_by,
-            scope=scope,
-            character_sheet=reward_character_sheet,
-            gm_table=reward_gm_table,
-            per_player_xp=config.beat_xp_per_player,
-            event_cap=config.beat_xp_cap,
-            label=f"beat #{beat.pk} resolved",
-        )
+    _credit_completion_gm_reward(
+        beat=beat, outcome=outcome, progress=progress, scope=scope, resolved_by=resolved_by
+    )
 
     return completion
 

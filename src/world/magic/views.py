@@ -34,6 +34,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
+from world.items.models import ItemInstance
 from world.magic.constants import (
     PendingAlterationStatus,
     RestrictionKind,
@@ -176,6 +177,7 @@ from world.magic.serializers import (
     ThreadHubSummarySerializer,
     ThreadPullPreviewRequestSerializer,
     ThreadPullPreviewResponseSerializer,
+    ThreadResonanceOptionsSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
     primary_persona_names_for,
@@ -204,6 +206,8 @@ _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
 _ERR_IMBUING_REQUIRES_AMOUNT = "Imbuing ritual requires amount in kwargs (positive int)."
 _KWARG_TARGET_AFFINITY = "target_affinity"
+_KWARG_TARGET_RESONANCE = "target_resonance"
+_KWARG_THREAD_ID = "thread_id"
 
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
@@ -1093,6 +1097,62 @@ class ThreadViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(responses={200: ThreadResonanceOptionsSerializer})
+    @action(detail=True, methods=["get"], url_path="resonance-options")
+    def resonance_options(self, request: Request, pk: int | None = None) -> Response:
+        """Where this thread can be moved, and what the owner carries that pays the rite.
+
+        GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
+
+        Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
+        options: [{resonance_id, resonance_name, affinity_name, conversion_type,
+        projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+        ``ritual_id`` is null while no retune rite is authored; perform it through
+        ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+        ``qualifying`` is filled only when the rite asks for a target-resonance offering.
+        """
+        from world.magic.services.drift import (  # noqa: PLC0415
+            qualifying_components_by_target,
+        )
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            target_resonance_meaning_bar,
+            target_resonance_offering_count,
+        )
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            thread_resonance_options,
+            thread_resonance_ritual,
+            thread_resonance_unavailable_reason,
+        )
+
+        thread = self.get_object()
+        ritual = thread_resonance_ritual()
+        options = thread_resonance_options(thread) if ritual is not None else []
+        offering_count = target_resonance_offering_count(ritual) if ritual is not None else 0
+        qualifying = {}
+        if offering_count:
+            items = list(
+                ItemInstance.objects.filter(
+                    holder_character_sheet_id=thread.owner_id
+                ).select_related("template")
+            )
+            qualifying = qualifying_components_by_target(
+                thread.owner,
+                [option.resonance for option in options],
+                items,
+                min_item_meaning=target_resonance_meaning_bar(ritual),
+            )
+        serializer = ThreadResonanceOptionsSerializer(
+            {
+                "ritual_id": ritual.pk if ritual is not None else None,
+                "offering_required": offering_count > 0,
+                "offering_count": offering_count,
+                "unavailable_reason": thread_resonance_unavailable_reason(thread, ritual, options),
+                "options": options,
+            },
+            context={"qualifying": qualifying},
+        )
+        return Response(serializer.data)
+
 
 class ThreadPullPreviewView(APIView):
     """Read-only preview of a resonance pull (Spec A §5.6).
@@ -1375,15 +1435,69 @@ class RitualPerformView(APIView):
         a Tradition and carries ``tradition_id`` (#2460). Returns an error Response
         when either cannot be resolved, or None when the kwargs are ready.
         """
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+        )
+
         if imbuing:
             error = self._resolve_imbuing_kwargs(sheet, kwargs)
             if error is not None:
                 return error
+        if ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
+            error = self._resolve_owned_thread_kwargs(sheet, kwargs)
+            if error is not None:
+                return error
+        error = self._resolve_target_resonance_kwargs(kwargs)
+        if error is not None:
+            return error
         if is_ghost_tutor_ritual(
             name=ritual.name, service_function_path=ritual.service_function_path
         ):
             return self._resolve_ghost_tutor_kwargs(sheet, kwargs)
         return self._resolve_target_affinity_kwargs(kwargs)
+
+    @staticmethod
+    def _resolve_owned_thread_kwargs(sheet: CharacterSheet, kwargs: dict) -> Response | None:
+        """Resolve an optional ``thread_id`` into the performer's own live Thread, in place.
+
+        Absent is left to the ritual to refuse; anything else that is not one of the
+        performer's live threads (another's, a retired one, a non-integer) is a 400. Shares
+        ``resolve_owned_thread`` with the telnet ``ritual`` command.
+        """
+        from world.magic.exceptions import UnknownOwnedThread  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_owned_thread,
+        )
+
+        if _KWARG_THREAD_ID not in kwargs:
+            return None
+        try:
+            kwargs["thread"] = resolve_owned_thread(sheet, kwargs.pop(_KWARG_THREAD_ID))
+        except UnknownOwnedThread as err:
+            return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return None
+
+    @staticmethod
+    def _resolve_target_resonance_kwargs(kwargs: dict) -> Response | None:
+        """Resolve a ``target_resonance`` id into a ``Resonance`` in place (slice 6 of #4672).
+
+        Shares ``resolve_target_resonance`` with telnet's ``resonance=``: a non-integer or
+        unknown id is a 400.
+        """
+        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
+
+        if _KWARG_TARGET_RESONANCE not in kwargs:
+            return None
+        try:
+            kwargs[_KWARG_TARGET_RESONANCE] = resolve_target_resonance(
+                kwargs[_KWARG_TARGET_RESONANCE]
+            )
+        except UnknownResonance as err:
+            return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return None
 
     def _run_imbue_finisher(self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict) -> Response:
         """Fuse the telnet ``imbue`` finisher onto a web-hosted Rite of Imbuing.
@@ -1471,6 +1585,9 @@ class RitualPerformView(APIView):
             "execution_kind": ritual.execution_kind,
         }
         if ritual.execution_kind == RitualExecutionKind.SERVICE and result is not None:
+            # The action's line, which a service result may extend (the thread retune does),
+            # so the web shows what telnet prints.
+            payload["message"] = action_result.message
             payload["result"] = (
                 asdict(result, dict_factory=_model_ref_dict)
                 if dataclasses.is_dataclass(result)

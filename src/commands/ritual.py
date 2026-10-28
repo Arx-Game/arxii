@@ -9,7 +9,9 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual anima``                        — perform your personal anima ritual in the
         scene you stand in (also ``ritual <its name>``); once per scene (#4451)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
-        e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``)
+        e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
+        ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
+        resonance to move a thread to: ``ritual <rite> thread=5 resonance=12``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
         — amplify a witnessed deed; free-text grammar special-cased for the Rite
         of Honors (#3466); see ``_resolve_honors_args`` below for why this one
@@ -48,6 +50,10 @@ if TYPE_CHECKING:
 
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
+# ``resonance=<id>`` (alias ``target_resonance=<id>``) names the resonance a ritual works
+# toward, e.g. the thread retune (slice 6 of #4672); it reaches the action as a Resonance.
+_RESONANCE_KWARG = "resonance"
+_TARGET_RESONANCE_KWARG = "target_resonance"
 #: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
 #: its authored name is.
 _ANIMA_SHORTHAND = "anima"
@@ -172,6 +178,8 @@ class CmdRitual(ArxCommand):
         ``ritual <name>``
         ``ritual <name> key=value [key=value]``
         Example: ``ritual Rite of Imbuing thread=5``
+        Example: ``ritual <retune rite> thread=5 resonance=12`` - move a thread
+            to another resonance (leave out ``resonance=`` to list where it can go)
         ``ritual anima`` - perform your personal anima ritual in the scene you
             are in (once per scene; it eases Soulfray, then restores anima)
 
@@ -469,7 +477,7 @@ class CmdRitual(ArxCommand):
     def resolve_action_args(self) -> dict[str, Any]:
         """Parse ``ritual <name> [k=v ...]`` into action kwargs."""
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-        from world.magic.models import Ritual, Thread  # noqa: PLC0415
+        from world.magic.models import Ritual  # noqa: PLC0415
         from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
         from world.societies.honors import HONORS_SERVICE_PATH  # noqa: PLC0415
 
@@ -509,15 +517,15 @@ class CmdRitual(ArxCommand):
         service_kwargs: dict[str, Any] = {}
         thread_id = raw_kwargs.pop(_THREAD_ID_KEY, None)
         if thread_id is not None:
-            thread = Thread.objects.filter(
-                pk=thread_id,
-                owner=self.caller.sheet_data,
-                retired_at__isnull=True,
-            ).first()
-            if thread is None:
-                msg = "You have no active thread with that id."
-                raise CommandError(msg)
-            service_kwargs["thread"] = thread
+            from world.magic.exceptions import UnknownOwnedThread  # noqa: PLC0415
+            from world.magic.services.thread_resonance import (  # noqa: PLC0415
+                resolve_owned_thread,
+            )
+
+            try:
+                service_kwargs["thread"] = resolve_owned_thread(self.caller.sheet_data, thread_id)
+            except UnknownOwnedThread as err:
+                raise CommandError(err.user_message) from err
 
         tradition_id = raw_kwargs.pop("tradition_id", None)
         if tradition_id is not None:
@@ -541,10 +549,71 @@ class CmdRitual(ArxCommand):
             except UnknownAffinity as err:
                 raise CommandError(err.user_message) from err
 
+        self._move_target_resonance(raw_kwargs, service_kwargs)
+        self._refuse_incomplete_retune(ritual, service_kwargs)
+
         service_kwargs.update(raw_kwargs)
 
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
+
+    @staticmethod
+    def _refuse_incomplete_retune(ritual: Any, service_kwargs: dict[str, Any]) -> None:
+        """Give the retune rite's telnet syntax before dispatch when a thread or target is missing.
+
+        The service's own refusals carry no syntax (the web reads them too); here a player
+        who left out ``thread=`` or ``resonance=`` is told what to type, and a thread with no
+        ``resonance=`` lists where it can go, with the ids. A thread its anchor holds in
+        place gets that refusal instead. Nothing has been spent: this runs before the action.
+        """
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+            options_sentence,
+            thread_resonance_options,
+            thread_resonance_refusal,
+        )
+
+        if ritual.service_function_path != THREAD_RESONANCE_SERVICE_PATH:
+            return
+        thread = service_kwargs.get("thread")
+        if thread is None:
+            msg = "Name the thread to move: thread=<id>."
+            raise CommandError(msg)
+        if service_kwargs.get(_TARGET_RESONANCE_KWARG) is not None:
+            return
+        refusal = thread_resonance_refusal(thread)
+        if refusal:
+            raise CommandError(refusal)
+        options = thread_resonance_options(thread)
+        msg = (
+            "Name the resonance to move it to: resonance=<id>. "
+            f"{options_sentence(options, with_ids=True)}"
+        )
+        raise CommandError(msg)
+
+    def _move_target_resonance(
+        self, raw_kwargs: dict[str, int], service_kwargs: dict[str, Any]
+    ) -> None:
+        """Pop ``resonance=`` (alias ``target_resonance=``) into ``service_kwargs`` as a Resonance.
+
+        Under the ``target_resonance`` key; nothing when neither was given; an unknown id is
+        refused.
+        """
+        from world.magic.exceptions import UnknownResonance  # noqa: PLC0415
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            resolve_target_resonance,
+        )
+
+        resonance_id = raw_kwargs.pop(_RESONANCE_KWARG, None)
+        alias_id = raw_kwargs.pop(_TARGET_RESONANCE_KWARG, None)
+        if resonance_id is None:
+            resonance_id = alias_id
+        if resonance_id is None:
+            return
+        try:
+            service_kwargs[_TARGET_RESONANCE_KWARG] = resolve_target_resonance(resonance_id)
+        except UnknownResonance as err:
+            raise CommandError(err.user_message) from err
 
     def _split_name_and_rest(self, args: str) -> tuple[str, str]:
         """Split into ritual name + the raw (unparsed) trailing ``key=value`` text.

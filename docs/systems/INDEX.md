@@ -82,6 +82,19 @@
   `DriftConversionOfferDialog` on the scene page and game page. One Required content row,
   `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
 
+- **Thread retune (slice 6 of #4672):** `services/thread_resonance.py` moves one thread to
+  another resonance through the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`
+  (`thread_resonance_ritual`, `thread_resonance_options` -> `ThreadResonanceOption`,
+  `check_thread_resonance_change`, `change_thread_resonance` -> `ThreadResonanceChangeResult`,
+  `ThreadResonanceChangeError`); within the affinity one to one, across it at the authored pair
+  rate floored at 1, merging into a live same-anchor thread via `conversion._reanchor_thread`.
+  `PerformRitualAction._precheck` refuses before anything is spent. Telnet `ritual <rite>
+  thread=<id> resonance=<id>`; REST `GET /api/magic/threads/{id}/resonance-options/`; the
+  Spellbook's `ThreadResonanceDialog`. Anchor rules: `thread_resonance_refusal` (sanctum,
+  signed technique), gift threads narrowed to the gift's resonances; `ThreadAnchorTakenError` on
+  a lost unique-index race. Required content rows `thread-resonance-ritual`,
+  `thread-resonance-ritual-single`, `thread-resonance-ritual-web-payable`. Details: [magic.md](magic.md) "Thread retune".
+
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
@@ -1233,6 +1246,9 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),
   `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
   absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
+  `BreathHoldConfig` + `BreathHoldDurationAward` (held-breath rounds per outcome, #4741;
+  `ConditionTemplate.holds_breath` / `breath_runs_out_condition` / `breaks_held_breath`,
+  services `take_breath`, `breath_hold_rounds`, action `take_breath`, telnet `breathe`),
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageDealtModifier`
   (the bearer's outgoing damage of one type, as a percent, #4742), `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`, `TreatmentTemplate`
@@ -7540,6 +7556,9 @@ holder is never notified a claim exists.
     - `consume_materials(allocations) -> None`: decrements each stack; a stack that
       reaches 0 goes through `destroy_consumed_item_instance` (`usage.py`, #4099), soft-
       or hard-delete, never a bare `delete()` that would leave a ghost game object
+    - `consumption_restored_on_raise(items)` (context manager): entered outside the
+      consuming `transaction.atomic()`, puts the items, their game objects and holders'
+      contents back in memory when the block raises (the ritual perform, #4735)
     - `meets_quality_tier(inst, requirement) -> bool`
   - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
     merchant system exists anywhere in this codebase):

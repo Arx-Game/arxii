@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0321_sceneactionpulldeclaration_burn"),
-    ]
+    dependencies = [("arxii", "0323_remove_thread_uniq_thread_trait_and_more")]
 
     operations = [
         migrations.CreateModel(

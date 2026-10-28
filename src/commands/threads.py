@@ -53,8 +53,8 @@ class CmdThreads(ArxCommand):
 
     def _list_threads(self, sheet: object) -> None:
         from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _anchor_label_for,
             _open_labels_by_relationship_id,
+            anchor_label_for,
         )
         from world.magic.models import Thread  # noqa: PLC0415
 
@@ -82,7 +82,7 @@ class CmdThreads(ArxCommand):
         open_labels = _open_labels_by_relationship_id(threads)
         lines = ["|wYour threads:|n"]
         for thread in threads:
-            anchor = _anchor_label_for(thread, open_labels)
+            anchor = anchor_label_for(thread, open_labels)
             res_name = thread.resonance.name if thread.resonance else "???"
             display_level = thread.level // 10
             lines.append(f"  {res_name} {anchor} (level {display_level})")
@@ -90,8 +90,8 @@ class CmdThreads(ArxCommand):
 
     def _list_crossing_offers(self, sheet: object) -> None:
         from world.magic.crossing.handlers import (  # noqa: PLC0415
-            _anchor_label_for,
             _open_labels_by_relationship_id,
+            anchor_label_for,
         )
         from world.magic.models.crossing import (  # noqa: PLC0415
             CrossingOption,
@@ -116,7 +116,7 @@ class CmdThreads(ArxCommand):
             return
         open_labels = _open_labels_by_relationship_id(offer.thread for offer in offers)
         for offer in offers:
-            anchor_label = _anchor_label_for(offer.thread, open_labels)
+            anchor_label = anchor_label_for(offer.thread, open_labels)
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"
             self.msg(f"|wCrossing level {offer.crossing_level}|n - {res_name} {anchor_label}")
             options = CrossingOption.objects.filter(

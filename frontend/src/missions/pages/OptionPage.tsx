@@ -266,6 +266,10 @@ function saveButtonText(isPending: boolean) {
   return isPending ? 'Saving…' : 'Save';
 }
 
+function optionalSelectId(value: number | null): string {
+  return value === null ? 'none' : String(value);
+}
+
 function OptionEditor({ option }: { option: MissionOption }) {
   const qc = useQueryClient();
   const leaves = usePredicateLeaves();
@@ -370,9 +374,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
           <div>
             <Label htmlFor="opt-check-type">Check type</Label>
             <Select
-              value={
-                draft.authored_check_type !== null ? String(draft.authored_check_type) : 'none'
-              }
+              value={optionalSelectId(draft.authored_check_type)}
               onValueChange={(v) =>
                 setDraft({
                   ...draft,
@@ -415,9 +417,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
           <div>
             <Label htmlFor="opt-opposition-check-type">Opposition check type</Label>
             <Select
-              value={
-                draft.opposition_check_type !== null ? String(draft.opposition_check_type) : 'none'
-              }
+              value={optionalSelectId(draft.opposition_check_type)}
               onValueChange={(v) =>
                 setDraft({
                   ...draft,

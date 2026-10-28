@@ -523,6 +523,23 @@ async function applyPowers(entryId: number, powers: PowersDraft): Promise<void> 
   }
 }
 
+async function saveDraftPreferences(
+  id: number,
+  draft: NpcFormDraft,
+  preferencesCopied: boolean
+): Promise<void> {
+  if (draft.preferences.length === 0 && !(preferencesCopied && draft.removedPreferences.length > 0))
+    return;
+  await step('saving What works on them', async () => {
+    // A copy wrote the source's rows; read them back so the save keeps them.
+    const saved = preferencesCopied ? (await fetchNpcDetail(id)).preferences : [];
+    await putNpcPreferences(
+      id,
+      mergePreferences(saved, draft.removedPreferences, draft.preferences)
+    );
+  });
+}
+
 export async function createNpc(
   characterId: number,
   draft: NpcFormDraft,
@@ -573,16 +590,7 @@ export async function createNpc(
     await step('saving Who they favor and oppose', () => putNpcRegard(id, line));
   }
   const preferencesCopied = copies.some(([section]) => section === 'preferences');
-  if (draft.preferences.length > 0 || (preferencesCopied && draft.removedPreferences.length > 0)) {
-    await step('saving What works on them', async () => {
-      // A copy wrote the source's rows; read them back so the save keeps them.
-      const saved = preferencesCopied ? (await fetchNpcDetail(id)).preferences : [];
-      await putNpcPreferences(
-        id,
-        mergePreferences(saved, draft.removedPreferences, draft.preferences)
-      );
-    });
-  }
+  await saveDraftPreferences(id, draft, preferencesCopied);
   if (Object.keys(draft.settings).length > 0) {
     await step('saving the notes and lending', () => patchNpcSettings(id, draft.settings));
   }

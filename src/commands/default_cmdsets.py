@@ -38,6 +38,7 @@ from commands.comfort import CmdComfort
 from commands.companion import CmdCompanion
 from commands.conditions import (
     CmdBreakFree,
+    CmdBreathe,
     CmdRally,
     CmdRevealCondition,
     CmdTreatCondition,
@@ -361,6 +362,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTreatCondition,
             # #2706 — break-free from behavior-altering conditions.
             CmdBreakFree,
+            CmdBreathe,
             CmdRevealCondition,
             CmdRally,
             # #1487 - telnet consent preference management namespace.

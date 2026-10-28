@@ -202,6 +202,15 @@ def dodge_landing_options(participant: CombatParticipant) -> list[Position]:
     return reachable_landings(current, widest.reach)
 
 
+def _reachable_dodge_source(
+    sources: list[DodgeSource], current: Position | None, landing: Position
+) -> DodgeSource | None:
+    """Find the first source that reaches the planned landing."""
+    return next(
+        (source for source in sources if landing in reachable_landings(current, source.reach)), None
+    )
+
+
 def choose_dodge(
     participant: CombatParticipant, *, covered_position: Position | None = None
 ) -> Dodge | None:
@@ -221,11 +230,11 @@ def choose_dodge(
     if landing is not None and current is not None and landing.room_id != current.room_id:
         landing = None
     if landing is not None:
-        for source in sources:
-            if landing in reachable_landings(current, source.reach):
-                if covered_position is not None and landing.pk == covered_position.pk:
-                    return None
-                return Dodge(source=source, landing=landing if landing != current else None)
+        source = _reachable_dodge_source(sources, current, landing)
+        if source is not None:
+            if covered_position is not None and landing.pk == covered_position.pk:
+                return None
+            return Dodge(source=source, landing=landing if landing != current else None)
     if covered_position is not None:
         return None
     return Dodge(source=sources[0], landing=None)
