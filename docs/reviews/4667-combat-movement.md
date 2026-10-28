@@ -1,27 +1,44 @@
 # Review evidence — issue #4667
 
-Reviewed revision: `03d1c5067fac792fdeffd1db444758b8902abc38` (implementation commit; the report commit is its child).
+- Reviewed revision: `5ba0208372e3dff1ab8303750d96589c573e6f0b`
+- Reviewer: TehomCD (implementation review)
+- Reviewer verdict: PASS
+- Application/build identity: Arx II frontend production bundle (`pnpm build`), served by Vite preview; test: `frontend/e2e/combat-movement-panel.spec.ts`
+- Environment: Playwright Chromium, one worker, local worktree, production bundle
+- Viewports/themes: Chromium default viewport, default Arx theme
+- Approved design: Lightweight bug report #4667 fix shape; show blocked crossing disabled with reason and refresh actions after movement
+- Visual review: Compared the actual rendered before/after movement panel to the issue's expected states; blocked crossing is legible, disabled, and includes its reason; post-move list displays the new position action
+- Visual verdict: PASS
+- Screenshots: ![Movement panel before successful move](docs/reviews/4667-movement-panel-before.png) ![Movement panel after successful move](docs/reviews/4667-movement-panel-after.png)
+- Comparison notes: Before: enabled `Move to Middle`, and disabled `Move to Gallery (blocked: Iron Railing)` with `Gated by challenge: Iron Railing`. After: `Move to West`; stale `Move to Middle` and blocked Gallery entry are gone.
+- Tested interactions: Entered the mocked scene, opened Combat, checked blocked action visibility/disabled state/reason, dispatched Move to Middle, observed an additional available-actions request and replaced movement action without waiting for the 10-second polling period.
+- Fixture/live boundary: Mocked auth, WebSocket room entry, encounter, available-actions, and dispatch REST payloads. Proves actual built-client rendering and interactions only; does not claim live backend or browser-to-server integration. Backend serializer/action availability are separately covered by focused tests. An isolated live-server attempt was blocked before launch because `seed_test_account` failed during Evennia account first-save (`SESSION_HANDLER` was `None`); its temporary database was removed. The stale shared Postgres test schema was not counted as evidence.
+- Overall outcome: PASS
 
-## Environment and provenance
+## Visual checklist
 
-- Exact source: worktree branch `feature-4667-combat-movement-panel-hides-blocked-wall`; built with `cd frontend && pnpm build` (Vite production bundle), then served by Playwright's Vite preview at localhost:4173.
-- Browser: Playwright Chromium, one worker, `frontend/e2e/combat-movement-panel.spec.ts`.
-- Data boundary: isolated fixture with mocked auth, WebSocket room entry, encounter, available-actions and dispatch REST responses. No live backend was used. This is client rendering/interaction evidence only; backend request/dispatch integration remains unverified in a live server.
-- Captures below were made by that test from the built bundle on the reviewed source. `movement-panel-before.png` shows a normal move and a disabled blocked crossing with its reason. `movement-panel-after.png` shows the new-position move after dispatch and query invalidation.
+| Element | Expected | Result | Evidence |
+|---|---|---|---|
+| Blocked Gallery crossing | Disabled, readable reason visible | MATCH | `4667-movement-panel-before.png` |
+| Post-move list | Old actions replaced by current position action | MATCH | `4667-movement-panel-after.png` |
 
-## Checks performed and observed
+## Requirement ledger
 
-1. **Blocked wall visibility:** Opened `/game`, entered the mocked scene, and selected Combat. Expected `Move to Gallery (blocked: Iron Railing)` to appear disabled and explain the gating challenge. Observed the disabled entry and `Gated by challenge: Iron Railing` in the rendered movement panel. Capture: `movement-panel-before.png`.
-2. **Successful move refresh:** Clicked the enabled `Move to Middle` action. Expected a dispatch and a fresh available-actions request without waiting for the 10-second poll, with old-position actions replaced. Observed one dispatch, an additional available-actions request, and the panel changed to `Move to West`; the previous move disappeared. Capture: `movement-panel-after.png`.
-3. **Automated checks:** `pnpm build` passed; focused Playwright test passed (1 test); focused Vitest tests passed (16); `pnpm typecheck` passed. `just test-fast actions.tests.test_player_action_serializer` passed (9 tests) and `just test-fast actions.tests.test_get_player_actions_enhancements` passed (6 tests).
-4. **Backend boundary:** Live isolated-server attempt was blocked before server startup: `seed_test_account` failed in Evennia account first-save because `SESSION_HANDLER` was `None` during cmdset initialization. The temporary `rt_4667` database was dropped. An existing Postgres test DB was stale (`arxii_conditiontemplate.holds_breath` missing) and was not counted as a pass. No production/shared database was touched.
+|id|status|evidence|authorizeddecision|
+|---|---|---|---|
+|blocked-wall|PASS|Built-app Playwright fixture shows disabled Gallery crossing and server reason|Issue #4667|
+|move-refresh|PASS|Built-app Playwright dispatch causes new actions request and current-position panel|Issue #4667|
+|backend-marker|PASS|Serializer test asserts CHALLENGE backend movement marker; availability suite passes|Issue #4667|
 
-## Mandatory criteria
+## Verification details
 
-- Blocked crossing visible and disabled with reason: **PASS (mocked REST fixture; client behavior only)**.
-- Successful movement refreshes available actions immediately: **PASS (mocked REST fixture; observed follow-up request and changed panel)**.
-- Live backend integration: **BLOCKED** — account seeding failed as described above.
+- `cd frontend && pnpm build`: passed.
+- `cd frontend && pnpm exec playwright test --config playwright.config.ts --workers=1 e2e/combat-movement-panel.spec.ts`: 1 passed. Screenshot capture run also passed.
+- `cd frontend && pnpm exec vitest run src/combat/roundActionHelpers.test.ts src/combat/components/MovementActions.test.tsx`: 16 passed.
+- `cd frontend && pnpm typecheck`: passed.
+- `just test-fast actions.tests.test_player_action_serializer`: 9 passed.
+- `just test-fast actions.tests.test_get_player_actions_enhancements`: 6 passed.
+- Browser fixture is mocked; the report does not assert live backend integration.
 
 ## Unresolved findings
-
-None for the tested client-side behavior. Live backend integration remains blocked and is not claimed as verified.
+- None
