@@ -146,6 +146,9 @@ class _ACaster(_AShifter):
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
+        from world.magic.factories import _make_resist_corruption_check_type
+
+        _make_resist_corruption_check_type()
         self.ysmay, self.sheet, self.alt = self.make_shifter(
             "Ysmay", room=self.room, mask_affinity=self.abyssal
         )

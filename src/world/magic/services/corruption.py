@@ -99,6 +99,37 @@ def _compute_tick(  # noqa: PLR0913
     return math.ceil(base_tick * multipliers)
 
 
+def _alternate_self_corruption_leak_percent(
+    caster_sheet: CharacterSheet, config: CorruptionConfig
+) -> int:
+    """Roll the active alternate self's corruption leak, or return 100 without one."""
+    from world.forms.models import ActiveAlternateSelf  # noqa: PLC0415
+
+    if not ActiveAlternateSelf.objects.filter(
+        character=caster_sheet, alternate_self__isnull=False
+    ).exists():
+        return 100
+
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.seeds_checks import RESIST_CORRUPTION_CHECK_TYPE_NAME  # noqa: PLC0415
+
+    check_type = CheckType.objects.get(name=RESIST_CORRUPTION_CHECK_TYPE_NAME)
+    result = perform_check_with_modifiers(
+        caster_sheet.character,
+        check_type=check_type,
+        target_difficulty=0,
+    )
+    return max(
+        1,
+        min(
+            100,
+            config.alternate_self_base_leak_percent
+            - result.success_level * config.alternate_self_leak_percent_per_success_level,
+        ),
+    )
+
+
 def accrue_corruption_for_cast(
     *,
     caster_sheet: CharacterSheet,
@@ -120,6 +151,7 @@ def accrue_corruption_for_cast(
     per_resonance: list[CorruptionAccrualResult] = []
     tier = technique_use_result.technique.tier  # type: ignore[union-attr]
     tier_coef = _resolve_tier_coefficient(tier, config)
+    leak_percent = _alternate_self_corruption_leak_percent(caster_sheet, config)
 
     def tick_for(involvement: int, affinity_coef: int, hasty_fall_multiplier: int = 10) -> int:
         # Celestial always has coefficient 0: no accrual, no audit noise.
@@ -156,6 +188,7 @@ def accrue_corruption_for_cast(
 
         if tick == 0:
             continue
+        tick = math.ceil(tick * leak_percent / 100)
 
         result = accrue_corruption(
             character_sheet=caster_sheet,
@@ -612,6 +645,17 @@ def reduce_corruption(
     char_resonance.corruption_current = max(0, current_before - amount)
     char_resonance.save(update_fields=["corruption_current"])
     actual_reduction = current_before - char_resonance.corruption_current
+
+    if actual_reduction > 0 and not _from_decay:
+        from world.magic.constants import GainSource  # noqa: PLC0415
+        from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+        grant_resonance(
+            character_sheet,
+            resonance,
+            actual_reduction,
+            source=GainSource.CORRUPTION_CLEANSING,
+        )
 
     character = _resolve_character(character_sheet)
     instance = ConditionInstance.objects.filter(

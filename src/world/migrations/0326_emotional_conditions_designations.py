@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0324_characterengagement_dig_deep_and_more")]
+    dependencies = [("arxii", "0325_alternate_self_corruption_leak")]
 
     operations = [
         migrations.CreateModel(

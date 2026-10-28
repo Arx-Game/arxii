@@ -831,6 +831,15 @@ def _find_shared_active_scene(
 # =============================================================================
 
 
+def _grant_sineating_resonance(offer: SineatingOffer, units: int) -> None:
+    """Grant the resonance the Sinner loses and the Sineater takes from the Mire."""
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    for sheet in (offer.sinner_sheet, offer.sineater_sheet):
+        grant_resonance(sheet, offer.resonance, units, source=GainSource.SINEATING)
+
+
 def resolve_sineating(
     offer: SineatingOffer,
     units_accepted: int,
@@ -925,6 +934,7 @@ def resolve_sineating(
             cr.lifetime_helped = cr.lifetime_helped + units
             cr.save(update_fields=["lifetime_helped"])
             new_lifetime_helped = cr.lifetime_helped
+            _grant_sineating_resonance(offer, units)
 
         # 5. Write Sineating audit row (always — including declines).
         from world.magic.models import Sineating  # noqa: PLC0415

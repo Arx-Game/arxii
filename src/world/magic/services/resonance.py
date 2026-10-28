@@ -321,6 +321,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
+        GainSource.SINEATING,
+        GainSource.CORRUPTION_CLEANSING,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
