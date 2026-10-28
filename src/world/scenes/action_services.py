@@ -1457,8 +1457,8 @@ def _resolve_action_against_persona(
             spend_or_defer_condition_uses(result.action_resolution, technique_breakdown)
     else:
         # Plain (non-technique) actions do not use the fury lever; fury is a
-        # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
-        # inside use_technique). The serializer rejects fury_commitment_id on
+        # technique-cast-only mechanic (its trade lands on the engagement before
+        # use_technique reads runtime stats, #4738). The serializer rejects fury_commitment_id on
         # plain actions, so fury_commitment is always None here.
         #
         # Social/scene actions are always plain, and this is the ONE place they
@@ -1928,8 +1928,6 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         pull_target=context.target,
         # The pull's involved traits follow this action's roll, not the personal check.
         cast_check=action_cast_check,
-        control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
         strain_power_enabled=False,
         # #4089: the Soulfray wheel is played by _create_result_interaction, after
         # this action's own wheels. Its only caller always reaches it.

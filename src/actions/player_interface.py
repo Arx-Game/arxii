@@ -583,8 +583,10 @@ def _fury_tier_options() -> tuple[FuryTierOption, ...]:
             id=tier.pk,
             name=tier.name,
             depth=tier.depth,
-            control_penalty=tier.control_penalty,
-            intensity_bonus=tier.intensity_bonus,
+            # Interim mapping until FuryTierOption is reshaped (#4738 Task 3): the tier
+            # no longer carries a per-cast intensity bonus; what it buys rides the roll.
+            control_penalty=tier.control_surrendered,
+            intensity_bonus=0,
             berserk_severity=tier.berserk_severity,
         )
         for tier in FuryTier.objects.order_by("depth")

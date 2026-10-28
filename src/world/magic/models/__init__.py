@@ -121,7 +121,7 @@ from world.magic.models.fall_redemption import (
     FallRedemptionRecord,
     ResonanceConversion,
 )
-from world.magic.models.fury import FuryConfig, FuryTier
+from world.magic.models.fury import FuryConfig, FuryDegreeShare, FuryTier
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.ghost_tutor import GhostTutelage
 from world.magic.models.gift_unlocks import (
@@ -372,6 +372,7 @@ __all__ = [
     "FeedingRecord",
     # fury lever
     "FuryConfig",
+    "FuryDegreeShare",
     "FuryTier",
     # ghost-tutor tutelage (#2460)
     "GhostTutelage",

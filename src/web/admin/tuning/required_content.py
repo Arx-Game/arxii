@@ -827,6 +827,27 @@ def _probe_strain_burn_reach_tiers() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_fury_degree_shares() -> ProbeResult:
+    """Every canonical CheckOutcome tier must have a FuryDegreeShare row (#4738).
+
+    A Fury control roll that lands on a tier without a row buys no intensity: the
+    character still surrenders the tier's control and gets nothing for it.
+    """
+    from world.magic.models import FuryDegreeShare  # noqa: PLC0415
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+
+    covered = set(
+        FuryDegreeShare.objects.filter(outcome_tier__name__in=CANONICAL_OUTCOME_LEVELS).values_list(
+            "outcome_tier__name", flat=True
+        )
+    )
+    missing = tuple(name for name in CANONICAL_OUTCOME_LEVELS if name not in covered)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"No FuryDegreeShare row for outcome tier(s): {', '.join(missing)}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_audere_condition_shape() -> ProbeResult:
     """Audere and Audere Majora must outlast their own round countdown and defer death.
 
@@ -2615,8 +2636,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
             ),
             consequence=(
-                "Berserk cannot be found: losing control to Fury or to moon-sensitivity "
-                "applies no Berserk condition, so the forced rampage never fires."
+                "Berserk cannot be found: choosing a Berserk Fury tier or losing control to "
+                "moon-sensitivity applies no Berserk condition, so the forced rampage never "
+                "fires."
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
@@ -4765,6 +4787,35 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_strain_burn_reach_tiers),
             admin_model="StrainBurnReach",
+        ),
+        ContentDependency(
+            key="fury-degree-shares",
+            label="Fury degree share per outcome tier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/fury.py fury_intensity_for()",
+            consequence=(
+                "A Fury control roll that lands on a tier with no FuryDegreeShare row buys "
+                "no intensity: the character surrenders control for nothing."
+            ),
+            probe=CustomProbe(fn=_probe_fury_degree_shares),
+            admin_model="FuryDegreeShare",
+        ),
+        ContentDependency(
+            key="fury-intensity-per-control",
+            label="Intensity per control surrendered to Fury",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/fury.py fury_intensity_for()",
+            consequence=(
+                "Surrendering control to Fury buys no intensity at any roll: the trade is all cost."
+            ),
+            probe=FilteredRowProbe(
+                label="StrainConfig",
+                filters=(("intensity_per_control_surrendered__gt", 0),),
+                absent_detail=(
+                    "StrainConfig's intensity per control surrendered is 0 (or there is no "
+                    "StrainConfig row)."
+                ),
+            ),
         ),
         ContentDependency(
             key="corruption-config",

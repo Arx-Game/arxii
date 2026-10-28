@@ -539,6 +539,10 @@ that has no `CharacterTechnique`. It holds only while the character's bond to th
 staff.
 _Avoid_: manifest choice, summon binding, bonded summon.
 
+**Fury** (#567, reworked #4738):
+A chosen trade of control for intensity, declared with a technique cast and an anchor (someone she has a tie toward). The chosen **Fury tier** is a preset amount of control she surrenders for the rest of her engagement; her control roll's outcome picks the **Fury degree share** of the trade she buys, and the anchor's tie caps how deep she may go. Both land on her `CharacterEngagement`. **Berserk** is the far end: a tier with `berserk_severity` above 0, chosen, never rolled into.
+_Avoid_: fury bonus, lucid check, losing control to Fury.
+
 **Magic Activity** (#4450, ADR-4450):
 A kind of magical roll that adds staff-chosen skills, one `MagicActivity` member each: the anima ritual, technique learning, ritual working, sustaining magic, dispelling, magical treatment, Soulfray resilience, resisting loss of self, Soul Tether rescue, Court petition, Fury control, moon control, enduring hostile resonance, feeding restraint, sensing magic, worship rite, invocation, ceremony, companion binding and dream peril. Staff map an activity to skills with `MagicActivitySkill` rows (a skill and a weight each); the roll keeps its own check type and adds those skills as terms. An activity with no row adds nothing. A technique cast is not an activity; its skill is the **Technique skill**. A new magical roll joins by adding a member and passing `activity_skill_terms(<member>)`.
 _Avoid_: magic check type, roll category, skill bundle.

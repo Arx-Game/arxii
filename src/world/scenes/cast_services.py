@@ -272,8 +272,8 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         cast_pull=cast_pull,
         pull_target=target,
         cast_check=cast_check,
-        control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
+        # Fury's trade is on her engagement already (#4738); the runtime stats carry it.
+        power_intensity_bonus=sig_intensity_delta,
         apply_variant=apply_variant,
         preferred_resonance=preferred_resonance,
         # Soulfray kills only in combat encounters (#4098 fix round 2) — a

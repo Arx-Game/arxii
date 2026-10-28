@@ -38,10 +38,11 @@ if TYPE_CHECKING:
 
 
 def _cap_fury_by_provocation(attrs: dict) -> dict:
-    """Reject a fury_commitment that exceeds the initiator's provocation cap,
-    or reject if the caster already has the Berserk condition.
+    """Reject a fury_commitment that exceeds the initiator's provocation cap, or that
+    a character with no engagement declares (Fury needs something at stake, #4738).
 
-    Mirrors _cap_strain_by_anima for the fury lever.
+    Declaring Fury again while already Berserk is allowed: each declaration surrenders
+    control again and buys again. Mirrors _cap_strain_by_anima for the fury lever.
     """
     from world.magic.models import FuryTier  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
@@ -90,16 +91,13 @@ def _cap_fury_by_provocation(attrs: dict) -> dict:
 
     character = persona.character_sheet.character
 
-    from world.conditions.services import has_condition  # noqa: PLC0415
-    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+    from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE, provocation_cap  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
-    berserk_template = get_berserk_template()
-    if berserk_template is not None and has_condition(character, berserk_template):
-        raise serializers.ValidationError(
-            {"fury_commitment_id": "Cannot declare fury while already Berserk."}
-        )
-
-    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+    # Fury's trade lands on the engagement (#4738): with nothing at stake there is
+    # nothing to surrender control to.
+    if not CharacterEngagement.objects.filter(character_id=persona.character_sheet_id).exists():
+        raise serializers.ValidationError({"fury_commitment_id": NO_ENGAGEMENT_MESSAGE})
 
     cap = provocation_cap(character, anchor_sheet)
     if cap < tier.depth:

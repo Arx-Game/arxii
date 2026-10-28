@@ -3,8 +3,9 @@
 Covers:
 1. Serializer rejects declaring a fury tier above the provocation cap.
 2. A resolved fury cast records Interaction.fury_committed = realized tier.
-3. A below-floor control-retention outcome applies Berserk to the caster.
-4. Serializer rejects declaring fury when the caster already has Berserk.
+3. Choosing a Berserk tier applies Berserk even on a critical success (#4738).
+4. Serializer accepts fury from a caster already Berserk, and refuses it from a
+   caster with no engagement (#4738 rulings 1 and 3).
 """
 
 from __future__ import annotations
@@ -27,7 +28,10 @@ from world.magic.factories import (
     FuryTierFactory,
     TechniqueFactory,
 )
+from world.magic.services.fury import NO_ENGAGEMENT_MESSAGE
 from world.magic.types.techniques import AnimaCostResult, TechniqueUseResult
+from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.factories import CharacterEngagementFactory
 from world.relationships.constants import LabelAwareness, TypeFamily
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.services import declare_label
@@ -107,12 +111,12 @@ def _setup_fury_fixture(*, tier_depth: int = 2, bond_tier_number: int = 2):
     tier = FuryTierFactory(
         name=f"Tier_{tier_depth}_{bond_tier_number}",
         depth=tier_depth,
-        control_penalty=4,
-        intensity_bonus=5,
+        control_surrendered=4,
         base_check_difficulty=10,
-        lucid_grade_floor=2,
         berserk_severity=3,
     )
+    # Fury needs something at stake (#4738): the initiator is engaged.
+    CharacterEngagementFactory(character=initiator.character_sheet)
 
     # Mutual Mentor/Student bond at bond_tier_number (#3957 — get_relationship_tier
     # requires two mutually-consented TEACHING labels, not a track catalog entry).
@@ -154,6 +158,7 @@ class SerializerFuryCapRejectionTests(TestCase):
         # No relationship → provocation_cap = 0 → any tier is rejected.
         # technique_id provided so validation reaches the cap check.
         initiator = PersonaFactory()
+        CharacterEngagementFactory(character=initiator.character_sheet)
         anchor = PersonaFactory()
         tier = FuryTierFactory(name="HighTierNoBond", depth=3)
         technique = TechniqueFactory(damage_profile=False)
@@ -169,8 +174,9 @@ class SerializerFuryCapRejectionTests(TestCase):
                 "fury_anchor_id": anchor.character_sheet.pk,
             }
         )
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as ctx:
             ser.is_valid(raise_exception=True)
+        self.assertIn("provocation cap", str(ctx.exception.detail["fury_commitment_id"]))
 
     def test_fury_within_cap_accepted(self) -> None:
         from world.scenes.action_serializers import (
@@ -250,50 +256,53 @@ class SerializerFuryCapRejectionTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Serializer rejects fury when caster already has Berserk
+# Test 4: Berserk does not block Fury; no engagement does (#4738)
 # ---------------------------------------------------------------------------
 
 
-class SerializerBerserkBlockTests(TestCase):
-    """Serializer rejects fury commitment when initiator already has Berserk.
+class SerializerBerserkAndEngagementTests(TestCase):
+    """Fury may be declared again while Berserk; never with nothing at stake.
 
     Uses ConditionInstanceFactory directly to bypass the PG-only apply_condition
-    DISTINCT ON path — the serializer only needs has_condition, which works on SQLite.
+    DISTINCT ON path.
     """
 
-    def test_berserk_caster_fury_rejected(self) -> None:
-        from rest_framework.exceptions import ValidationError
-
+    def _serializer(self, scene, initiator, anchor, tier):
         from world.scenes.action_serializers import (
             SceneActionRequestCreateSerializer,
         )
 
-        berserk_template = BerserkConditionTemplateFactory()
-        _scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(
-            tier_depth=2, bond_tier_number=2
+        return SceneActionRequestCreateSerializer(
+            data={
+                "scene": scene.pk,
+                "initiator_persona": initiator.pk,
+                "target_persona": anchor.pk,
+                "action_key": "intimidate",
+                "technique_id": TechniqueFactory(damage_profile=False).pk,
+                "fury_commitment_id": tier.pk,
+                "fury_anchor_id": anchor.character_sheet.pk,
+            }
         )
-        technique = TechniqueFactory(damage_profile=False)
 
-        # Plant a Berserk ConditionInstance directly (avoids DISTINCT ON in apply_condition).
+    def test_berserk_caster_may_declare_fury_again(self) -> None:
+        berserk_template = BerserkConditionTemplateFactory()
+        scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(tier_depth=2, bond_tier_number=2)
         ConditionInstanceFactory(
             target=initiator.character_sheet.character,
             condition=berserk_template,
             is_suppressed=False,
         )
 
-        ser = SceneActionRequestCreateSerializer(
-            data={
-                "scene": _scene.pk,
-                "initiator_persona": initiator.pk,
-                "target_persona": anchor.pk,
-                "action_key": "intimidate",
-                "technique_id": technique.pk,
-                "fury_commitment_id": tier.pk,
-                "fury_anchor_id": anchor.character_sheet.pk,
-            }
-        )
-        with self.assertRaises(ValidationError):
-            ser.is_valid(raise_exception=True)
+        ser = self._serializer(scene, initiator, anchor, tier)
+        self.assertTrue(ser.is_valid(), msg=ser.errors)
+
+    def test_fury_with_no_engagement_is_refused(self) -> None:
+        scene, initiator, anchor, tier, _cfg = _setup_fury_fixture(tier_depth=2, bond_tier_number=2)
+        CharacterEngagement.objects.filter(character=initiator.character_sheet).delete()
+
+        ser = self._serializer(scene, initiator, anchor, tier)
+        self.assertFalse(ser.is_valid())
+        self.assertEqual(ser.errors["fury_commitment_id"], [NO_ENGAGEMENT_MESSAGE])
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +338,7 @@ class FuryCommittedAuditTests(TestCase):
         mock_resolve.return_value = pending
         mock_use_technique.return_value = _make_technique_use_result(pending)
 
-        # Force the control-retention check to succeed (success_level=3 > lucid_grade_floor=2)
+        # Force the control roll to a success.
         lucid_outcome = CheckOutcomeFactory(name="FuryLucid_Audit", success_level=3)
 
         request = SceneActionRequestFactory(
@@ -358,12 +367,12 @@ class FuryCommittedAuditTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Below-floor check outcome triggers Berserk via apply_condition
+# Test 3: A Berserk tier applies Berserk whatever the roll (#4738)
 # ---------------------------------------------------------------------------
 
 
-class BerserkAppliedOnLostControlTests(TestCase):
-    """A control-retention check with success_level < lucid_grade_floor applies Berserk.
+class BerserkTierIsChosenTests(TestCase):
+    """Choosing a tier with berserk_severity applies Berserk even on a critical success.
 
     Mocks apply_condition to avoid the PG-only DISTINCT ON inside
     _build_bulk_context; asserts it was called with the expected severity.
@@ -389,17 +398,16 @@ class BerserkAppliedOnLostControlTests(TestCase):
     @patch("world.scenes.action_services.start_action_resolution")
     @patch("world.magic.services.use_technique")
     @patch("world.conditions.services.apply_condition")
-    def test_berserk_called_on_failed_control_retention(
+    def test_berserk_applied_on_a_critical_success(
         self,
         mock_apply: MagicMock,
         mock_use_technique: MagicMock,
         mock_resolve: MagicMock,
     ) -> None:
-        # success_level=-1 < lucid_grade_floor=2 → berserk_severity=3 → apply_condition called
-        pending = _make_pending_resolution(success_level=-1)
+        pending = _make_pending_resolution(success_level=3)
         mock_resolve.return_value = pending
         mock_use_technique.return_value = _make_technique_use_result(pending)
-        failure_outcome = CheckOutcomeFactory(name="FuryFail_Berserk", success_level=-1)
+        crit_outcome = CheckOutcomeFactory(name="FuryCrit_Berserk", success_level=3)
 
         request = SceneActionRequestFactory(
             scene=self.scene,
@@ -413,7 +421,7 @@ class BerserkAppliedOnLostControlTests(TestCase):
         request.action_template = self.action_template
         request.save(update_fields=["action_template"])
 
-        with force_check_outcome(failure_outcome):
+        with force_check_outcome(crit_outcome):
             respond_to_action_request(
                 action_request=request,
                 decision=ConsentDecision.ACCEPT,

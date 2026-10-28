@@ -1065,7 +1065,11 @@ integration test suite.
   restricted to technique casts. The "Restore to Sense" ally-recovery action is authored,
   effect-tested, and **live-dispatchable** on the scene consent path (#1172): accepting the
   request fires its `RemoveConditionOnCheckConfig`, removing the target ally's Berserk
-  condition end-to-end.
+  condition end-to-end. **Reworked by #4738 part B:** the per-cast `control_penalty` /
+  `intensity_bonus` and the lucid-vs-Berserk roll are gone. A tier now surrenders
+  `control_surrendered` onto the character's engagement for the rest of it, the control roll's
+  `FuryDegreeShare` picks how much intensity that buys, and Berserk tiers are chosen, never
+  rolled into (see `docs/systems/magic.md` "Fury").
 - **Fury + soulfray-accept in party combat** — **DONE** (#1454): the party-combat round path
   now consumes both as player decisions. `CombatRoundAction` adopts the `CommittingDeclaration`
   mixin (`fury_commitment` / `fury_anchor`) plus a `confirm_soulfray_risk` bool;

@@ -285,8 +285,12 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
 
     def test_fury_control(self) -> None:
         from world.magic.services.fury import run_fury_for_action
+        from world.mechanics.factories import CharacterEngagementFactory
 
-        character = CharacterSheetFactory().character
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        # Fury needs something at stake (#4738): without an engagement nothing is rolled.
+        CharacterEngagementFactory(character=sheet)
         anchor = CharacterSheetFactory()
         tier = FuryTierFactory()
 

@@ -8532,6 +8532,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   carries `dig_deep` (`DigDeepOffer`: free dig deeps, `given_by` (the giver's persona name),
   `dug_deep_this_round`, fatigue pool, cost) to its owner only; the
   combat panel's `DigDeep` button reads it. Journeys: `test_dig_deep_journeys`.
+- **Surrendering control to Fury (#4738 part B) [BUILT & WIRED, INERT UNTIL STAFF SET
+  `StrainConfig.intensity_per_control_surrendered` AND `FuryDegreeShare` ROWS]:**
+  `world/magic/services/fury.py` `run_fury_for_action` rolls the control check, then
+  `resolve_fury` / `fury_intensity_for(tier, cap, outcome)` price the trade
+  (`FuryTier.control_surrendered` x the rate x the anchor-cap scale x the outcome's
+  `FuryDegreeShare.intensity_percent`) and it lands on the character's `CharacterEngagement`
+  (`intensity_modifier` up, `control_modifier` down, `fury_control_surrendered` tallied) before
+  `use_technique`, so the same cast channels it. `FuryResolution(realized_tier,
+  control_surrendered, intensity_gained, berserk_severity, outcome)`. A tier with
+  `berserk_severity` > 0 applies Berserk whatever the roll. No engagement: refused by
+  `_cap_fury_by_provocation` (`NO_ENGAGEMENT_MESSAGE`), a no-op at resolution. Required content:
+  `fury-degree-shares`, `fury-intensity-per-control`. Journeys:
+  `test_surrendering_control_to_fury_journeys`. See `docs/systems/magic.md` "Fury".
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll
   with degrees. `SurgeTriggerKind` has fourteen members: the nine older kinds above,

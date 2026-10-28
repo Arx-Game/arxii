@@ -1,35 +1,43 @@
-"""Fury lever resolution service.
+"""Fury lever resolution service (#4738: Fury is surrendering control for intensity).
 
-Pure computation layer: provocation cap (bond-derived ceiling on tier depth),
-tier clamping, and control-retention outcome assembly. The caller (Task 6)
-performs the control-retention check and passes the CheckResult in; this
-module stays free of I/O side-effects.
+A Fury tier is a preset amount of control the character surrenders. Her control roll's
+outcome picks the share (``FuryDegreeShare``) of the full trade she buys; the trade lands
+on her ``CharacterEngagement`` and lasts for the rest of the engagement. The deepest tiers
+are Berserk: choosing one applies Berserk whatever the roll.
+
+``resolve_fury`` is the pure computation; ``run_fury_for_action`` rolls the check, writes
+the engagement and applies Berserk.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import ROUND_FLOOR, Decimal
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.models import FuryConfig, FuryTier
+from world.magic.models import FuryConfig, FuryDegreeShare, FuryTier
 from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
-    from world.checks.models import CheckType
+    from world.checks.models import CheckOutcome, CheckType
     from world.conditions.models import ConditionTemplate
+
+NO_ENGAGEMENT_MESSAGE = "Fury needs something at stake: you are not engaged."
 
 
 @dataclass(frozen=True)
 class FuryResolution:
-    """Outcome of a fury escalation attempt."""
+    """Outcome of a Fury declaration: control surrendered and the intensity it bought."""
 
     realized_tier: FuryTier | None
-    control_penalty: int
-    intensity_bonus: int
+    control_surrendered: int
+    intensity_gained: int
     berserk_severity: int
+    outcome: CheckOutcome | None = None
 
 
 def _config() -> FuryConfig:
@@ -151,30 +159,85 @@ def _ensure_fury_check_type(trait_name: str) -> CheckType:
     return check_type
 
 
+def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -> int:
+    """Intensity the Fury trade buys for ``tier`` at provocation ``cap`` and roll ``outcome``.
+
+    ``floor(control_surrendered x StrainConfig.intensity_per_control_surrendered
+    x (100 + bonus_scale_per_cap_point x cap) / 100 x intensity_percent / 100)``, floored
+    once at the end. An outcome with no ``FuryDegreeShare`` row (or no outcome) buys 0.
+    """
+    from world.combat.services.encounter.config import get_strain_config  # noqa: PLC0415
+
+    if outcome is None or tier.control_surrendered <= 0:
+        return 0
+    share = FuryDegreeShare.objects.filter(outcome_tier=outcome).first()
+    if share is None or share.intensity_percent <= 0:
+        return 0
+    rate = get_strain_config().intensity_per_control_surrendered
+    scale = Decimal(100 + _config().bonus_scale_per_cap_point * cap) / 100
+    amount = (
+        Decimal(tier.control_surrendered) * rate * scale * Decimal(share.intensity_percent) / 100
+    )
+    return max(int(amount.to_integral_value(rounding=ROUND_FLOOR)), 0)
+
+
 def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     """Assemble a FuryResolution from the given parameters.
 
     Args:
         character: The ObjectDB character invoking fury.
         tier: The FuryTier the player declared.
-        anchor: The CharacterSheet fury anchor (nullable FK — None means unavailable).
-        check_result: A CheckResult-like object with ``success_level`` int;
-            None is treated as success_level=0.
+        anchor: The CharacterSheet fury anchor (nullable; None means unavailable).
+        check_result: The control roll's CheckResult (its ``outcome`` picks the share);
+            None buys nothing.
 
-    The declared tier is always clamped to the bond-derived provocation cap.
-    ``provocation_cap`` returns 0 when character or anchor is None, so a null
-    anchor naturally yields FuryResolution(None, 0, 0, 0) without special-casing.
+    The declared tier is always clamped to the bond-derived provocation cap; a cap of 0
+    (no anchor, no bond) yields an empty resolution. Berserk is the realized tier's own
+    ``berserk_severity``: chosen, never rolled into.
     """
     cap = provocation_cap(character, anchor)
     realized = clamp_tier(tier, cap)
     if realized is None:
         return FuryResolution(None, 0, 0, 0)
-    cfg = _config()
-    # Mirrors StrainConfig singleton read in world/fatigue/services.py.
-    bonus = realized.intensity_bonus * (100 + cfg.bonus_scale_per_cap_point * cap) // 100
-    grade = check_result.success_level if check_result is not None else 0
-    berserk = 0 if grade >= realized.lucid_grade_floor else realized.berserk_severity
-    return FuryResolution(realized, realized.control_penalty, bonus, berserk)
+    outcome = check_result.outcome if check_result is not None else None
+    return FuryResolution(
+        realized_tier=realized,
+        control_surrendered=realized.control_surrendered,
+        intensity_gained=fury_intensity_for(realized, cap, outcome),
+        berserk_severity=realized.berserk_severity,
+        outcome=outcome,
+    )
+
+
+def _engagement_of(character: ObjectDB):
+    """The character's engagement of any type, or None."""
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    return CharacterEngagement.objects.filter(character_id=character.pk).first()
+
+
+def _write_trade(engagement, fury_res: FuryResolution) -> None:
+    """Land the trade on the engagement: intensity up, control down, surrendered tallied.
+
+    Written on the identity-mapped instance (the one ``get_runtime_technique_stats`` reads
+    back), under a row lock re-read as values so a write another request just made is not
+    lost.
+    """
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    with transaction.atomic():
+        intensity, control, surrendered = (
+            CharacterEngagement.objects.select_for_update()
+            .filter(pk=engagement.pk)
+            .values_list("intensity_modifier", "control_modifier", "fury_control_surrendered")
+            .get()
+        )
+        engagement.intensity_modifier = intensity + fury_res.intensity_gained
+        engagement.control_modifier = control - fury_res.control_surrendered
+        engagement.fury_control_surrendered = surrendered + fury_res.control_surrendered
+        engagement.save(
+            update_fields=["intensity_modifier", "control_modifier", "fury_control_surrendered"]
+        )
 
 
 def run_fury_for_action(
@@ -184,15 +247,15 @@ def run_fury_for_action(
     fury_anchor: CharacterSheet | None,
     source_technique=None,
 ) -> FuryResolution | None:
-    """Run the control-retention check, assemble the FuryResolution, apply Berserk.
+    """Roll the control check, land the Fury trade on the engagement, apply Berserk.
 
-    Single orchestration seam shared by the enhanced-action, cast, and plain-action
-    resolution paths so the check/resolve/apply-Berserk sequence lives in one place.
+    Single orchestration seam shared by the combat, cast and technique-enhanced action
+    resolution paths. Returns None when no fury was declared or the character has no
+    engagement (Fury needs something at stake; validation refuses that earlier).
 
-    Returns None when no fury was declared (``fury_commitment is None``); otherwise
-    returns the FuryResolution. The caller is responsible for feeding
-    ``control_penalty`` / ``intensity_bonus`` into ``use_technique`` (technique paths)
-    and recording ``realized_tier`` as the audit value.
+    The trade is written to her ``CharacterEngagement`` before the caller's
+    ``use_technique``, so this same cast's runtime intensity and control include it. The
+    caller records ``realized_tier`` as the audit value.
 
     Args:
         character: The ObjectDB character invoking fury.
@@ -201,6 +264,9 @@ def run_fury_for_action(
         source_technique: Optional Technique to credit as the Berserk source.
     """
     if fury_commitment is None:
+        return None
+    engagement = _engagement_of(character)
+    if engagement is None:
         return None
 
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
@@ -220,6 +286,8 @@ def run_fury_for_action(
     fury_res = resolve_fury(
         character=character, tier=fury_commitment, anchor=fury_anchor, check_result=check
     )
+    if fury_res.realized_tier is not None:
+        _write_trade(engagement, fury_res)
 
     berserk_template = get_berserk_template()
     if fury_res.berserk_severity > 0 and berserk_template is not None:

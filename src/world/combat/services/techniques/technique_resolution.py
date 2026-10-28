@@ -138,12 +138,9 @@ def resolve_combat_technique(
         targets=targets,
         lethal=encounter.is_lethal,
         cast_check=cast_check,
-        control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=(
-            (fury_res.intensity_bonus if fury_res else 0)
-            + sig_intensity_delta
-            + _vulnerability_intensity_bonus(action)
-        ),
+        # Fury's trade was written to her engagement above (#4738), so the runtime
+        # stats use_technique reads already carry it.
+        power_intensity_bonus=sig_intensity_delta + _vulnerability_intensity_bonus(action),
         # #2536 Task 4: thread the live round context so situational-perk
         # POWER_BONUS providers can read combat-positioning situations
         # (AT_RANGE/IN_MELEE/SURROUNDED/...). Cheap to build — CombatRoundContext

@@ -1916,6 +1916,45 @@ class TestDriftCorrectionConfigProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestFuryTradeProbes(TestCase):
+    """Fury's trade reads a share per outcome tier and a rate on StrainConfig (#4738).
+
+    U-keep: the dashboard probe has no player path.
+    """
+
+    def test_lists_the_canonical_tiers_with_no_share(self) -> None:
+        from world.magic.factories import FuryDegreeShareFactory
+        from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+        from world.traits.services import ensure_canonical_check_outcome
+
+        covered, *uncovered = CANONICAL_OUTCOME_LEVELS
+        FuryDegreeShareFactory(outcome_tier=ensure_canonical_check_outcome(covered))
+        result = _probe_for("fury-degree-shares").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, tuple(uncovered))
+        self.assertIn("No FuryDegreeShare row for outcome tier(s): ", result.detail)
+
+    def test_present_when_every_canonical_tier_has_a_share(self) -> None:
+        from world.magic.factories import FuryDegreeShareFactory
+        from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+        from world.traits.services import ensure_canonical_check_outcome
+
+        for name in CANONICAL_OUTCOME_LEVELS:
+            FuryDegreeShareFactory(outcome_tier=ensure_canonical_check_outcome(name))
+        self.assertTrue(_probe_for("fury-degree-shares").resolve(None).present)
+
+    def test_rate_reported_until_staff_set_it_above_zero(self) -> None:
+        from decimal import Decimal
+
+        from world.combat.services.encounter.config import get_strain_config
+
+        config = get_strain_config()
+        self.assertFalse(_probe_for("fury-intensity-per-control").resolve(None).present)
+        config.intensity_per_control_surrendered = Decimal("1.50")
+        config.save()
+        self.assertTrue(_probe_for("fury-intensity-per-control").resolve(None).present)
+
+
 class TestDesignationProbes(TestCase):
     """Each designation row is reported until staff set its field, then clears (#4739).
 
