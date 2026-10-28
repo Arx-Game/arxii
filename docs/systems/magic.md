@@ -2981,6 +2981,17 @@ audience watches. See `world/checks/CLAUDE.md`'s "#924 theater" section and ADR-
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
 
+**Found by designation (#4739) [BUILT & WIRED].** The Audere and Audere Majora conditions are
+`AudereThreshold.audere_condition` / `audere_majora_condition`, read through
+`audere_condition_id()` / `audere_majora_condition_id()`; eligibility, `offer_audere`,
+`end_audere`, `cross_threshold`, `end_audere_majora`, the mid-crossing check, the check-level
+bonus, `_character_is_in_audere`, `active_ceremony` and encounter cleanup all compare ids,
+never names. Unset: no offer, nothing applied (the dashboard lists it). The combat participant
+payload carries `audere_state` (`audere` | `audere_majora` | null) for the web Audere strip.
+Berserk likewise is `FuryConfig.berserk_condition` (`get_berserk_template()`,
+`berserk_condition_id()`), read by fury, moon-sensitivity, the rampage compulsion's
+`is_berserk`, the fury declaration serializer and the combat status line.
+
 **High control opens Audere earlier (#4740, #4727 decision 6).**
 `AudereThreshold.control_per_stage_earlier` (PositiveSmallIntegerField, default 0 = off):
 each full step of runtime control steps the Soulfray stage the plain Audere offer needs back

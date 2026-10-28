@@ -1699,6 +1699,18 @@ control steps the stage needed back along the Soulfray ladder, one stage per
 offer surfaces tell the player via `stages_lowered_by_control` / `control_lowered_line`,
 #4740),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
+
+**Found by designation (#4739):** Audere and Audere Majora are the templates
+`AudereThreshold.audere_condition` / `audere_majora_condition` name, read through
+`audere_condition_id()` / `audere_majora_condition_id()` (or the threshold's FK when a
+template is applied or removed). Nothing finds them by name; unset means no offer is made,
+nothing is applied, and the Required content dashboard lists it. The web client reads
+`ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null), never a condition
+name. Test factories: `AudereThresholdFactory` picks up the `AUDERE_SEED_TEMPLATE_NAME` /
+`AUDERE_MAJORA_SEED_TEMPLATE_NAME` templates when they exist, `wire_audere_power_multipliers`
+designates them on an existing threshold, and `ensure_audere_designations()` makes a threshold
+when a test has none. Berserk is `FuryConfig.berserk_condition` the same way
+(`get_berserk_template()` / `berserk_condition_id()`).
 **Surge broadcast (#3451):** `AudereThreshold.surge_manifestation_text` (blank
 default) is EMITted to the active scene by `_broadcast_surge` when a surge is
 accepted — the plain-Audere echo of the Majora manifestation, via the shared

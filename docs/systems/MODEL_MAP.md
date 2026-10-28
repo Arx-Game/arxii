@@ -3303,7 +3303,7 @@
 ### Service Functions
 - `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
 - `active_condition_instances_by_sheet(sheet_ids: collections.abc.Iterable[int]) -> list[world.conditions.models.ConditionInstance] - Active condition instances on many sheets, in one query and with no teardown (#4090).`
-- `acute_peril_hand_off_condition_names() -> list[str] - Names of the acute-peril conditions combat hands to a scene round at its end.`
+- `acute_peril_hand_off_condition_ids() -> list[int] - Primary keys of the acute-peril conditions combat hands to a scene round at its end.`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
 - `aggro_priority_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total aggro priority per target from active draws_aggro conditions (#4572).`

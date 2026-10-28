@@ -468,6 +468,12 @@ check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GL
 ("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
 [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
 
+**Designation / designated condition** (#4122, #4739):
+A nullable config FK naming which `ConditionTemplate` *is* Soulfray, Audere, Audere Majora,
+Berserk, Bleeding Out, Plummeting, Surrounded or Rally's success condition; code reads it,
+never the name, and unset means the mechanic does nothing. _Avoid_: canonical name.
+Full entry: [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md).
+
 **Thread carry** (#4097):
 A thread woven into a technique also empowers, at the thread's full level, every
 technique that technique is a transitive prerequisite for, read on demand via the

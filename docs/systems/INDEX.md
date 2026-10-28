@@ -8477,7 +8477,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   blank; never broadcast to the room. Three new trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
   `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
-  .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,
+  .acute_peril_condition_ids()`, by designation since #4739), hated-foe (checked on encounter join and NPC opponent add,
   reading `CombatOpponent.persona.character_sheet` against the PC's own negative-sign
   `CharacterRelationship`), and stakes (`StakesEscalationModifier`, one row per `StakesLevel`:
   per-tick `intensity_step_bonus` + one-shot `initial_surge` + `default_curve`
@@ -8580,6 +8580,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   whose outcome has success level below 1 (model `clean`, admin inline formset and
   `check_stored_surge_bands` alike). Journey:
   `integration_tests/test_emotional_condition_journeys.py`.
+- **Audere, Berserk and acute-peril designations (#4739) [BUILT & WIRED]:** no game code finds
+  Audere, Audere Majora, Berserk, Bleeding Out, Plummeting or Surrounded by name. Lookups:
+  `world.magic.audere.audere_condition_id()` / `audere_majora_condition_id()`,
+  `world.magic.services.fury.get_berserk_template()` / `berserk_condition_id()`,
+  `world.vitals.peril_designations` (`bleed_out_condition_id()`, `plummeting_condition_id()`,
+  `surrounded_condition_id()`, `plummeting_template()`, `surrounded_template()`,
+  `designate_unset_peril_conditions(...)`). `acute_peril_condition_ids()` and
+  `acute_peril_hand_off_condition_ids()` replace the `*_names()` lists. Unset = the mechanic
+  does nothing. `ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null) drives
+  the web client's Audere strip. See `docs/systems/conditions.md` "Designated conditions".
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the

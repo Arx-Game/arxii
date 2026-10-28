@@ -172,3 +172,12 @@ condition feeds only at a stage that sets it, so a stageless emotion gets a stag
 success or a choice may give one: a surge band on a failed roll may not carry it.
 _Avoid_: emotion intensity percent (the deleted `get_condition_intensity_percent_modifier`),
 rage, mood.
+
+**Designation / designated condition** (#4122, #4739):
+A nullable FK on a config singleton that says which `ConditionTemplate` *is* a condition the
+code has to find (Soulfray, Audere, Audere Majora, Berserk, Bleeding Out, Plummeting,
+Surrounded, Rally's success condition). Code reads the designation, never the name, so staff
+rename the row freely; unset means the mechanic does nothing and the Required content
+dashboard lists it. Seeds make the row under a `*_SEED_TEMPLATE_NAME` and fill only an unset
+designation. _Avoid_: canonical name, magic name, the "Berserk row" (say the designated
+Berserk condition).

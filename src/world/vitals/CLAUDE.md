@@ -69,11 +69,25 @@ Core survivability pipeline:
   source-appropriate pool (`select_abandonment_pool`); no-op when no resolvable acute-peril
   instance (rescue beats the check); seeding gap holds rather than kills.
 
+### `peril_designations.py` (#4739)
+Bleeding Out, Plummeting and Surrounded are whichever templates
+`VitalsConsequenceConfig.bleed_out_condition` / `plummeting_condition` / `surrounded_condition`
+name; no game code finds them by name, so staff may rename them. `bleed_out_condition_id()`,
+`plummeting_condition_id()`, `surrounded_condition_id()` (and `plummeting_template()`,
+`surrounded_template()`) return `None` when unset, and the mechanic then does nothing (the
+Required content dashboard lists it). Guard on `None` before filtering a nullable column by
+one (`filter(x_id=None)` is `IS NULL`); `__in` lists drop it. Seeds and the
+`BleedingOutConditionFactory` call `designate_unset_peril_conditions(...)`, which never
+overwrites a staff choice. Seed names: `BLEED_OUT_SEED_TEMPLATE_NAME`,
+`SURROUNDED_SEED_TEMPLATE_NAME` (`conditions/constants.py`), `PLUMMETING_SEED_TEMPLATE_NAME`
+(`areas/positioning/constants.py`) — seeds, factories and tests only.
+
 ### `peril_resolution.py`
 Involved-party classification and death-permission helpers used by both `services.py` and
 `world.scenes.round_services`:
-- `acute_peril_condition_names() -> list[str]` — returns `[BLEED_OUT_CONDITION_NAME]`. PLUMMETING
-  is EXCLUDED: falls are environmental and self-completing; the hold/abandonment logic does not apply.
+- `acute_peril_condition_ids() -> list[int]` — the designated Bleeding Out's id (empty when
+  unset, #4739). PLUMMETING is EXCLUDED: falls are environmental and self-completing; the
+  hold/abandonment logic does not apply.
 - `acute_peril_instances(sheet) -> QuerySet` — active Bleeding-Out `ConditionInstance`s on a victim.
 - `is_pc_source(source_character) -> bool` — True iff the source is a player character
   (`is_player_character`: active tenure or live puppet; a story NPC never counts, ADR-4418);
@@ -179,5 +193,5 @@ death → retire. Offscreen deaths staff-only. Surfaces: `GiveDeathKudosAction` 
   `process_damage_consequences`, so a converted ROUNDS effect cannot knock out, wound or kill.
   The clamp is unconditional (no AFK flag). Acute peril (Bleeding Out, Plummeting) is not part
   of that lane. Scoped exception to the ADR-0004 rule above.
-- **Plummet is exempt** from the hold/abandonment model: `acute_peril_condition_names()` returns
+- **Plummet is exempt** from the hold/abandonment model: `acute_peril_condition_ids()` returns
   BLEED_OUT only; plummet descent always advances regardless of who drove the round.

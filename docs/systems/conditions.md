@@ -96,8 +96,8 @@ carried an `expires_at` for the lapse sweep to see). Now `cleanup_completed_enco
 `ROUNDS` instance with a round count on the encounter's participants and opponents (players and
 persistent NPCs alike) gets `expires_at = now + rounds * SettleConfig.settled_seconds_per_round`,
 `last_settled_tick_at = now` and `rounds_remaining = None` (idempotent: a converted row has no
-round count), except the acute perils (Bleeding Out, Plummeting; named by
-`acute_peril_hand_off_condition_names`), which keep their scene-round hand-off and stay ROUNDS rows.
+round count), except the acute perils (Bleeding Out, Plummeting; the templates
+`VitalsConsequenceConfig` designates, listed by `acute_peril_hand_off_condition_ids`, #4739), which keep their scene-round hand-off and stay ROUNDS rows.
 That is a **settled round**. Then:
 
 - **Tick and expiry (`settled_effects_tick`, cron `conditions.settled_effects`, one minute,
@@ -760,22 +760,35 @@ drives `in_control`, consent and form revert. `breakable_condition_filter()` in
 
 ---
 
-## Designated conditions (#4739) [BUILT, call sites move in later #4739 tasks]
+## Designated conditions (#4739) [BUILT & WIRED]
 
 Conditions the code has to find are designated on a config singleton by a nullable
 `ForeignKey(PROTECT, related_name="+")`, never matched by name, so renaming the
 template in admin changes nothing. Each has a lookup and a Required content row that
-lists it while unset. No migration sets any of them; staff do.
+lists it while unset. No migration sets any of them; staff do. An unset designation
+means the mechanic does nothing (no crash, no fallback to a name). Guard on `None` before
+filtering a nullable column by a lookup (`filter(x_id=None)` is `IS NULL` and matches every
+unset row); an `__in` list drops `None` safely. Seeds and test factories point an unset
+designation at the row they just made and never overwrite one staff set; the names they make
+rows under are `*_SEED_TEMPLATE_NAME` constants that game code never imports.
 
 | Condition | Field | Lookup |
 |---|---|---|
 | Soulfray | `SoulfrayConfig.condition` (#4122) | `world.magic.services.soulfray.soulfray_condition_id()` |
-| Audere | `AudereThreshold.audere_condition` | `world.magic.audere.audere_condition_id()` |
-| Audere Majora | `AudereThreshold.audere_majora_condition` | `world.magic.audere.audere_majora_condition_id()` |
-| Berserk | `FuryConfig.berserk_condition` | `world.magic.services.fury.get_berserk_template()` |
-| Bleeding Out | `VitalsConsequenceConfig.bleed_out_condition` | `world.vitals.peril_designations.bleed_out_condition_id()` |
-| Plummeting | `VitalsConsequenceConfig.plummeting_condition` | `world.vitals.peril_designations.plummeting_condition_id()` |
-| Surrounded | `VitalsConsequenceConfig.surrounded_condition` | `world.vitals.peril_designations.surrounded_condition_id()` |
+| Audere | `AudereThreshold.audere_condition` | `world.magic.audere.audere_condition_id()` (eligibility, offer, `end_audere`, `_character_is_in_audere`, `active_ceremony`, encounter cleanup, participant `audere_state`) |
+| Audere Majora | `AudereThreshold.audere_majora_condition` | `world.magic.audere.audere_majora_condition_id()` (crossing, `end_audere_majora`, mid-crossing check, check-level bonus) |
+| Berserk | `FuryConfig.berserk_condition` | `world.magic.services.fury.get_berserk_template()` / `berserk_condition_id()` (fury, moon control, `is_berserk`, fury serializer, combat status line) |
+| Bleeding Out | `VitalsConsequenceConfig.bleed_out_condition` | `world.vitals.peril_designations.bleed_out_condition_id()` (dying status, death tier, `advance_bleed_out`, `acute_peril_condition_ids()`, ally-peril surge) |
+| Plummeting | `VitalsConsequenceConfig.plummeting_condition` | `world.vitals.peril_designations.plummeting_condition_id()` / `plummeting_template()` (plummet begin/advance/end, scene-round danger) |
+| Surrounded | `VitalsConsequenceConfig.surrounded_condition` | `world.vitals.peril_designations.surrounded_condition_id()` / `surrounded_template()` (battle entry, RESCUE, escalation, `advance_surrounded`) |
+
+`acute_peril_hand_off_condition_ids()` (`conditions/services.py`, Bleeding Out + Plummeting)
+and `acute_peril_condition_ids()` (`vitals/peril_resolution.py`, Bleeding Out) replace the
+old `*_names()` lists with the same membership. `_advance_staged_peril_condition(sheet,
+condition_id, terminal_resolver)` takes the designated id. Seed helpers:
+`designate_unset_peril_conditions(...)` (vitals), `ensure_audere_designations` /
+`designate_audere_conditions` (magic test factories), and the Berserk seed / factory, which
+make `FuryConfig` pk=1 when absent.
 | Inspired (Rally success) | `SocialManeuverConfig.rally_success_condition` | `world.combat.services.encounter.config.get_social_maneuver_config()` |
 
 ## Admin
