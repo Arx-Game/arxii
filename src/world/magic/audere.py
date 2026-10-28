@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-AUDERE_CONDITION_NAME = "Audere"
-AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
-
 
 class AudereThreshold(SharedMemoryModel):
     """Configuration for when Audere can be triggered and its effects.
@@ -233,9 +230,10 @@ def audere_condition_id() -> int | None:
     """Primary key of the condition template that IS Audere, or ``None`` when unset.
 
     Read from ``AudereThreshold.audere_condition`` (#4739), so renaming the template
-    changes nothing. ``None`` means no threshold row or an unset field; a filter on
-    ``condition_id=None`` then matches nothing until staff set it (the Required
-    content dashboard flags it).
+    changes nothing. ``None`` means no threshold row or an unset field (the Required
+    content dashboard flags it). Guard on ``None`` before filtering a nullable column
+    by it: ``filter(x_id=None)`` is ``IS NULL`` and matches every unset row. An
+    ``__in`` list drops ``None`` safely.
     """
     threshold = AudereThreshold.objects.cached_singleton()
     return None if threshold is None else threshold.audere_condition_id
@@ -378,10 +376,10 @@ def _evaluate_audere_gates(
     if not CharacterEngagement.objects.filter(character_id=character.pk).exists():
         return None
 
-    if ConditionInstance.objects.filter(
-        target=character,
-        condition__name=AUDERE_CONDITION_NAME,
-    ).exists():
+    audere_id = audere_condition_id()
+    if audere_id is None:
+        return None
+    if ConditionInstance.objects.filter(target=character, condition_id=audere_id).exists():
         return None
 
     return stage_order
@@ -445,15 +443,16 @@ def audere_check_level_bonus(character: ObjectDB) -> int:
     from world.conditions.models import ConditionInstance
     from world.magic.audere_majora import AudereMajoraThreshold
 
+    majora_id = audere_majora_condition_id()
     held = set(
         ConditionInstance.objects.filter(
             target=character,
-            condition__name__in=[AUDERE_CONDITION_NAME, AUDERE_MAJORA_CONDITION_NAME],
-        ).values_list("condition__name", flat=True)
+            condition_id__in=[audere_condition_id(), majora_id],
+        ).values_list("condition_id", flat=True)
     )
     if not held:
         return 0
-    if AUDERE_MAJORA_CONDITION_NAME in held:
+    if majora_id is not None and majora_id in held:
         from world.progression.services.skill_development import (
             get_character_path_level,
         )
@@ -478,7 +477,6 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     and grants intensity/anima bonuses within a transaction.
     """
     from world.combat.constants import SpectacleKind
-    from world.conditions.models import ConditionTemplate
     from world.conditions.services import apply_condition
     from world.magic.models import CharacterAnima
     from world.mechanics.engagement import CharacterEngagement
@@ -489,10 +487,10 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
 
     threshold = AudereThreshold.objects.cached_singleton()
-    if threshold is None:
+    if threshold is None or threshold.audere_condition is None:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
 
-    audere_template = ConditionTemplate.get_by_name(AUDERE_CONDITION_NAME)
+    audere_template = threshold.audere_condition
 
     with transaction.atomic():
         from world.magic.services.ultimates import clear_readied_ultimate
@@ -643,18 +641,14 @@ def end_audere(character: ObjectDB) -> None:
     reverting the engagement intensity modifier and anima pool — calling it
     without an active Audere condition would silently corrupt engagement state.
     """
-    from world.conditions.models import ConditionTemplate
     from world.conditions.services import remove_condition
     from world.magic.models import CharacterAnima
     from world.mechanics.engagement import CharacterEngagement
 
-    audere_template = ConditionTemplate.objects.filter(
-        name=AUDERE_CONDITION_NAME,
-    ).first()
+    threshold = AudereThreshold.objects.cached_singleton()
+    audere_template = None if threshold is None else threshold.audere_condition
     if audere_template is None:
         return
-
-    threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
         from world.magic.services.ultimates import clear_readied_ultimate

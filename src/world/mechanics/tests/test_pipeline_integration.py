@@ -45,11 +45,11 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
     check_audere_eligibility,
     end_audere,
     offer_audere,
 )
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
@@ -1209,7 +1209,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         )
 
         # Audere condition template (needed for the "not already in Audere" check)
-        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
 
         # AudereThreshold requiring major tier and soulfray stage 2
         AudereThresholdFactory(
@@ -1252,7 +1252,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         )
 
         # Audere condition template
-        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
 
         # Threshold config
         threshold = AudereThresholdFactory(

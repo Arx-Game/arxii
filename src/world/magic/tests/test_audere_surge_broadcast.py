@@ -22,10 +22,8 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     SoulfrayTemplateFactory,
 )
-from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    offer_audere,
-)
+from world.magic.audere import offer_audere
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     AudereThresholdFactory,
     CharacterAnimaFactory,
@@ -53,7 +51,7 @@ def _make_lifecycle_character(db_key: str) -> ObjectDB:
 
 
 def _make_threshold(*, surge_text: str, tier_name: str):
-    ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+    ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
     soulfray = SoulfrayTemplateFactory(has_progression=True)
     ensure_soulfray_config()
     stage = ConditionStageFactory(condition=soulfray, stage_order=3, name="Ripping")

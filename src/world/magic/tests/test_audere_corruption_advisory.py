@@ -12,10 +12,8 @@ from world.conditions.factories import (
     ConditionStageFactory,
     ConditionTemplateFactory,
 )
-from world.magic.audere import (
-    AUDERE_CONDITION_NAME,
-    offer_audere,
-)
+from world.magic.audere import offer_audere
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import AudereThresholdFactory, CharacterAnimaFactory, ResonanceFactory
 
 
@@ -139,7 +137,7 @@ class AudereCorruptionAdvisoryTests(TestCase):
         )
 
         # Provide Audere prerequisite infrastructure so offer can be accepted.
-        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)  # must exist for apply_condition
+        ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)  # must exist for apply_condition
         from world.magic.factories import IntensityTierFactory
 
         tier = IntensityTierFactory(name="MajorAdvisory", threshold=15)

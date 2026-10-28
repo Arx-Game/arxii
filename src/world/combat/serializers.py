@@ -53,6 +53,7 @@ from world.combat.models import (
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
+from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
 from world.scenes.constants import PersonaType, RoundStatus
 from world.standoffs.serializers import (
@@ -83,6 +84,13 @@ if TYPE_CHECKING:
 ACTIVE_CONDITIONS_CACHE_ATTR = "active_condition_instances"
 
 
+def _prefetched_active_conditions(target: ObjectDB) -> list | None:
+    """The viewset's prefetched active ConditionInstances on ``target``, or None."""
+    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache —
+    # (#2401) never a cached_property.
+    return getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
+
+
 def _serialize_active_conditions(
     target: ObjectDB,
     *,
@@ -103,9 +111,7 @@ def _serialize_active_conditions(
     Falls back to ``get_active_conditions`` for callers that build the
     serializer directly (e.g. unit tests).
     """
-    # Suppression justified: live/time-derived set on identity-mapped parent; context-over-cache —
-    # (#2401) never a cached_property.
-    cached = getattr(target, ACTIVE_CONDITIONS_CACHE_ATTR, None)  # noqa: GETATTR_LITERAL
+    cached = _prefetched_active_conditions(target)
     if cached is not None:
         instances = [
             inst for inst in cached if can_view_hidden or inst.condition.is_visible_to_others
@@ -117,6 +123,42 @@ def _serialize_active_conditions(
             qs = qs.filter(condition__is_visible_to_others=True)
         instances = list(qs.order_by("-condition__display_priority"))
     return ConditionInstanceSerializer(instances, many=True, context=context).data
+
+
+def _audere_state(
+    target: ObjectDB,
+    *,
+    can_view_hidden: bool,
+) -> str | None:
+    """``"audere_majora"`` / ``"audere"`` / ``None`` for a participant's character (#4739).
+
+    Found by the AudereThreshold's designated templates, never by name, so the web
+    client's Audere strip does not care what staff call the conditions. Majora wins
+    when both hold. Reads the same prefetched active-condition list (and visibility
+    rule) as ``_serialize_active_conditions``; falls back to a query without one.
+    """
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+
+    cached = _prefetched_active_conditions(target)
+    if cached is None:
+        cached = list(get_active_conditions(target).select_related("condition"))
+    held = {
+        inst.condition_id
+        for inst in cached
+        if can_view_hidden or inst.condition.is_visible_to_others
+    }
+    if not held:
+        return None
+    threshold = AudereThreshold.objects.cached_singleton()
+    if threshold is None:
+        return None
+    majora_id = threshold.audere_majora_condition_id
+    audere_id = threshold.audere_condition_id
+    if majora_id is not None and majora_id in held:
+        return AudereCeremony.AUDERE_MAJORA.value
+    if audere_id is not None and audere_id in held:
+        return AudereCeremony.AUDERE.value
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +510,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     available_strain = serializers.SerializerMethodField()
     fatigue = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
+    audere_state = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     escalation_level = serializers.SerializerMethodField()
@@ -492,6 +535,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "available_strain",
             "fatigue",
             "active_conditions",
+            "audere_state",
             "thumbnail_url",
             "thumbnail_media_url",
             "escalation_level",
@@ -687,6 +731,14 @@ class ParticipantSerializer(serializers.ModelSerializer):
             can_view_hidden=self._can_view_vitals(obj),
             context=self.context,
         )
+
+    @extend_schema_field(serializers.ChoiceField(choices=AudereCeremony.choices, allow_null=True))
+    def get_audere_state(self, obj: CombatParticipant) -> str | None:
+        """Which Audere ceremony the participant's character is in, if any (#4739)."""
+        character_sheet = obj.character_sheet
+        if character_sheet is None:
+            return None
+        return _audere_state(character_sheet.character, can_view_hidden=self._can_view_vitals(obj))
 
     def _combat_engagement(self, obj: CombatParticipant) -> CharacterEngagement | None:
         """Resolve the participant's COMBAT CharacterEngagement, if any.

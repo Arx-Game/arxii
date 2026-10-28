@@ -46,7 +46,8 @@ from world.conditions.factories import (
     DamageSuccessLevelMultiplierFactory,
 )
 from world.conditions.models import ConditionInstance, ConditionStage
-from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
+from world.magic.audere import PendingAudereOffer
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterGiftFactory,
@@ -198,7 +199,7 @@ class HighControlOpensAudereAStageEarlier(_HighControlOpensAudere):
         self.assertIsNone(self.offer())
         self.assertTrue(
             ConditionInstance.objects.filter(
-                target=self.ysmay, condition__name=AUDERE_CONDITION_NAME
+                target=self.ysmay, condition__name=AUDERE_SEED_TEMPLATE_NAME
             ).exists()
         )
 

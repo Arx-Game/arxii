@@ -89,9 +89,9 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     # end_audere_majora only removes the condition (no modifier reversal needed).
     # The loop preserves this by calling the per-kind end_fn as-is.
     from world.magic.audere import (  # noqa: PLC0415
-        AUDERE_CONDITION_NAME,
-        AUDERE_MAJORA_CONDITION_NAME,
         PendingAudereOffer,
+        audere_condition_id,
+        audere_majora_condition_id,
         end_audere,
     )
     from world.magic.audere_majora import (  # noqa: PLC0415
@@ -99,12 +99,12 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         end_audere_majora,
     )
 
-    for condition_name, end_fn, pending_offer_model in [
-        (AUDERE_CONDITION_NAME, end_audere, PendingAudereOffer),
-        (AUDERE_MAJORA_CONDITION_NAME, end_audere_majora, PendingAudereMajoraOffer),
+    for condition_id, end_fn, pending_offer_model in [
+        (audere_condition_id(), end_audere, PendingAudereOffer),
+        (audere_majora_condition_id(), end_audere_majora, PendingAudereMajoraOffer),
     ]:
         _end_audere_kind_and_delete_offers(
-            condition_name, end_fn, pending_offer_model, participant_targets
+            condition_id, end_fn, pending_offer_model, participant_targets
         )
 
     # A self taken on through the Audere reveal drops away with the fight even when

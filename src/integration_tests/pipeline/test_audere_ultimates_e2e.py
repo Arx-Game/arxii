@@ -89,8 +89,8 @@ from world.conditions.models import ConditionInstance
 from world.covenants.constants import RoleArchetype
 from world.gm.constants import GMPromptKind
 from world.gm.models import GMPrompt
-from world.magic.audere import AUDERE_CONDITION_NAME, PendingAudereOffer
-from world.magic.constants import GiftKind, UltimateCardKind
+from world.magic.audere import PendingAudereOffer
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME, GiftKind, UltimateCardKind
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterGiftFactory,
@@ -262,7 +262,7 @@ class _AudereCombatFixture(APITestCase):
 
     def _in_audere(self) -> bool:
         return ConditionInstance.objects.filter(
-            target=self.character, condition__name=AUDERE_CONDITION_NAME
+            target=self.character, condition__name=AUDERE_SEED_TEMPLATE_NAME
         ).exists()
 
 

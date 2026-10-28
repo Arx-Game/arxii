@@ -15,6 +15,7 @@ from world.conditions.factories import (
     SoulfrayTemplateFactory,
 )
 from world.covenants.constants import RoleArchetype
+from world.magic.audere import AudereThreshold
 from world.magic.constants import GiftKind
 from world.magic.factories import (
     AudereThresholdFactory,
@@ -274,15 +275,12 @@ class UltimateRevealAppendedToCrossingAcceptTests(TestCase):
         engagement.engagement_type = EngagementType.COMBAT
         engagement.save(update_fields=["engagement_type"])
 
-        # This AudereThreshold row is read only for its reveal labels/framing text --
-        # the surge-eligibility gates it also carries are irrelevant to a Majora
-        # crossing. Pin tier/stage explicitly: the bare SubFactory defaults collide
-        # with build_crossing_world's own IntensityTier threshold=10 (unique column).
-        AudereThresholdFactory(
-            minimum_intensity_tier=IntensityTierFactory(threshold=999),
-            minimum_warp_stage=ConditionStageFactory(stage_order=1),
-            sword_reveal_label="Edge",
-            reveal_framing_text="PLACEHOLDER framing",
+        # The AudereThreshold row build_crossing_world made (it designates Audere and
+        # Audere Majora, #4739) is read here only for its reveal labels/framing text --
+        # the surge-eligibility gates it also carries are irrelevant to a Majora crossing.
+        AudereThreshold.objects.update_or_create(
+            pk=AudereThreshold.objects.get().pk,
+            defaults={"sword_reveal_label": "Edge", "reveal_framing_text": "PLACEHOLDER framing"},
         )
 
         gift = GiftFactory(kind=GiftKind.MAJOR)
@@ -306,9 +304,9 @@ class UltimateRevealAppendedToCrossingAcceptTests(TestCase):
 
         from world.conditions.models import ConditionTemplate
         from world.conditions.services import apply_condition
-        from world.magic.audere import AUDERE_CONDITION_NAME
+        from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 
-        audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplate.objects.get(name=AUDERE_SEED_TEMPLATE_NAME)
         apply_condition(target=self.character, condition=audere_template)
 
         self.character.msg = MagicMock()

@@ -145,12 +145,12 @@ def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
 def _character_is_in_audere(character: ObjectDB) -> bool:
     """Return True if the character has an active Audere ConditionInstance."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.magic.audere import AUDERE_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.audere import audere_condition_id  # noqa: PLC0415
 
-    return ConditionInstance.objects.filter(
-        target=character,
-        condition__name=AUDERE_CONDITION_NAME,
-    ).exists()
+    audere_id = audere_condition_id()
+    if audere_id is None:
+        return False
+    return ConditionInstance.objects.filter(target=character, condition_id=audere_id).exists()
 
 
 def _character_has_fatigue_collapse_immune(character: ObjectDB) -> bool:

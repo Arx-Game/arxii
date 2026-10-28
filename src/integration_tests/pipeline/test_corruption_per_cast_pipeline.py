@@ -176,7 +176,7 @@ class TestCorruptionPerCastPipeline(TestCase):
             ConditionInstanceFactory,
             ConditionTemplateFactory,
         )
-        from world.magic.factories import CharacterAnimaFactory
+        from world.magic.factories import CharacterAnimaFactory, ensure_audere_designations
         from world.magic.models.aura import CharacterResonance
         from world.magic.services import use_technique
 
@@ -199,10 +199,11 @@ class TestCorruptionPerCastPipeline(TestCase):
         CharacterAnimaFactory(character=sheet_audere, current=20, maximum=20)
 
         # Put sheet_audere's character in Audere by creating the ConditionInstance directly.
-        # _character_is_in_audere() checks for ConditionInstance where
-        # condition.name = "Audere".  We can create that directly with a factory
+        # _character_is_in_audere() checks for a ConditionInstance of the template the
+        # AudereThreshold designates (#4739).  We can create that directly with a factory
         # without going through the full gate check (which requires engagement + Soulfray).
         audere_template = ConditionTemplateFactory(name="Audere")
+        ensure_audere_designations(audere=audere_template)
         ConditionInstanceFactory(
             target=sheet_audere.character,
             condition=audere_template,
@@ -331,7 +332,7 @@ class TestCorruptionPerCastPipeline(TestCase):
             ConditionInstanceFactory,
             ConditionTemplateFactory,
         )
-        from world.magic.factories import CharacterAnimaFactory
+        from world.magic.factories import CharacterAnimaFactory, ensure_audere_designations
         from world.magic.models.aura import CharacterResonance
         from world.magic.services import use_technique
 
@@ -349,12 +350,13 @@ class TestCorruptionPerCastPipeline(TestCase):
         CharacterAnimaFactory(character=sheet, current=2, maximum=50)
 
         # Apply Audere ConditionInstance.
-        # _character_is_in_audere() checks condition__name == AUDERE_CONDITION_NAME = "Audere".
+        # _character_is_in_audere() checks the AudereThreshold's designated template (#4739).
         # Use get_or_create via the factory so the template already created by Scenario 1
         # (--keepdb) is reused safely.
-        from world.magic.audere import AUDERE_CONDITION_NAME
+        from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
 
-        audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+        audere_template = ConditionTemplateFactory(name=AUDERE_SEED_TEMPLATE_NAME)
+        ensure_audere_designations(audere=audere_template)
         ConditionInstanceFactory(
             target=sheet.character,
             condition=audere_template,

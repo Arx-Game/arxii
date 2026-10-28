@@ -3,8 +3,10 @@
 Bleeding Out, Plummeting and Surrounded are found through
 ``VitalsConsequenceConfig``, never by name, so renaming a template changes nothing.
 Each lookup returns the designated template's primary key, or ``None`` when no
-config row exists or the field is unset; a filter on ``condition_id=None`` then
-matches no row. The Required content dashboard lists an unset designation.
+config row exists or the field is unset; the mechanic then does nothing and the
+Required content dashboard lists the unset designation. Guard on ``None`` before
+filtering a nullable column by one of these: ``filter(x_id=None)`` is ``IS NULL``
+and matches every unset row. An ``__in`` list drops ``None`` safely.
 """
 
 from __future__ import annotations

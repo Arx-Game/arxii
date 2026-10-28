@@ -24,9 +24,15 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     SoulfrayTemplateFactory,
 )
-from world.magic.audere import AUDERE_CONDITION_NAME
+from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import AudereMajoraThreshold, PendingAudereMajoraOffer
-from world.magic.factories import IntensityTierFactory, ensure_soulfray_config
+from world.magic.constants import AUDERE_SEED_TEMPLATE_NAME
+from world.magic.factories import (
+    AudereThresholdFactory,
+    IntensityTierFactory,
+    designate_audere_conditions,
+    ensure_soulfray_config,
+)
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.progression.models import CharacterPathHistory
@@ -154,8 +160,17 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
         current_stage=soulfray_stage,
     )
 
-    audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME, has_progression=False)
+    audere_template = ConditionTemplateFactory(
+        name=AUDERE_SEED_TEMPLATE_NAME, has_progression=False
+    )
     ConditionInstanceFactory(target=character, condition=audere_template, current_stage=None)
+    # Audere and Audere Majora are found through the AudereThreshold's designations
+    # (#4739): make the threshold if no test has, and point it at the templates.
+    if not AudereThreshold.objects.exists():
+        AudereThresholdFactory(
+            minimum_intensity_tier=intensity_tier, minimum_warp_stage=soulfray_stage
+        )
+    designate_audere_conditions(audere=audere_template)
 
     obj_ct = ContentType.objects.get_for_model(ObjectDB)
     CharacterEngagement.objects.create(
