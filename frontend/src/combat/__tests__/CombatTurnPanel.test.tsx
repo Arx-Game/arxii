@@ -494,10 +494,10 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
       wrapper: createWrapper(),
     });
 
-    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('audere-active-strip')).toHaveTextContent(/^Audere$/);
   });
 
-  it('shows the Audere active strip during Audere Majora', () => {
+  it('labels the strip Audere Majora during Audere Majora', () => {
     mockEncounter({
       is_participant: true,
       participants: [makeParticipant({ audere_state: 'audere_majora' })],
@@ -507,7 +507,7 @@ describe('CombatTurnPanel — Phase 8 rail sections', () => {
       wrapper: createWrapper(),
     });
 
-    expect(screen.getByTestId('audere-active-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('audere-active-strip')).toHaveTextContent('Audere Majora');
   });
 
   it('does not show the strip for a condition merely named Audere', () => {
