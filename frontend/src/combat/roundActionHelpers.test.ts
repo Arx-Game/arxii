@@ -26,6 +26,16 @@ function entry(registryKey: string, description: string, met = true): PlayerActi
 }
 
 describe('isMoveAction (#4663)', () => {
+  it('counts blocked crossing actions marked by the server, regardless of backend', () => {
+    const blocked = {
+      ...entry('challenge', ''),
+      backend: 'challenge' as const,
+      is_movement: true,
+      ref: { ...entry('challenge', '').ref, backend: 'challenge', registry_key: null },
+    };
+    expect(isMoveAction(blocked)).toBe(true);
+  });
+
   it('counts a step, a take-off, a landing and a pass roll as moves', () => {
     for (const key of [
       'move_to_position',

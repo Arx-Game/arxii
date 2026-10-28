@@ -167,6 +167,7 @@ class PlayerActionSerializer(serializers.Serializer):
     protective_flavor = serializers.CharField(read_only=True, allow_null=True)
     reactive_anima_cost = serializers.IntegerField(read_only=True, allow_null=True)
     position_target_shape = serializers.CharField(read_only=True)
+    is_movement = serializers.BooleanField(read_only=True)
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
     eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)

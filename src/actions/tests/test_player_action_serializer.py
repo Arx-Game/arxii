@@ -37,6 +37,7 @@ class PlayerActionSerializerTests(TestCase):
         self.assertTrue(data["target_spec"]["filters"]["in_same_scene"])
         self.assertEqual(data["strain"]["cap"], 10)
         self.assertEqual(list(data["enhancements"]), [])
+        self.assertFalse(data["is_movement"])
 
     def test_self_action_has_null_target_spec(self) -> None:
         action = PlayerAction(
@@ -47,6 +48,15 @@ class PlayerActionSerializerTests(TestCase):
         data = PlayerActionSerializer(action).data
         self.assertIsNone(data["target_spec"])
         self.assertIsNone(data["strain"])
+
+    def test_movement_marker_is_serialized(self) -> None:
+        action = PlayerAction(
+            backend=ActionBackend.CHALLENGE,
+            display_name="Move to Gallery (blocked: Iron Railing)",
+            ref=ActionRef(backend=ActionBackend.CHALLENGE, challenge_instance_id=1),
+            is_movement=True,
+        )
+        self.assertTrue(PlayerActionSerializer(action).data["is_movement"])
 
     def test_action_category_serialized(self) -> None:
         action = PlayerAction(
