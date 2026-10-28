@@ -27,9 +27,9 @@ from world.magic.models import Facet, FacetAlias
 
 _NON_LETTERS = re.compile(r"[^a-z ]+")
 _SPACES = re.compile(r" +")
-#: The relations a merge moves, by the accessor name ``Facet._meta.related_objects``
-#: reports. A new relation onto Facet must be added here (and to the test that asserts
-#: this set equals the live one) before any merge will run.
+#: The relations a merge moves, by the accessor names from Facet's reverse relations,
+#: including hidden relations (related_name="+"). A new relation onto Facet must be
+#: added here (and to the test that asserts this set equals the live one).
 HANDLED_RELATIONS: frozenset[str] = frozenset(
     {
         "motif_usages",  # MotifResonanceAssociation.facet, unique per motif resonance
@@ -42,6 +42,7 @@ HANDLED_RELATIONS: frozenset[str] = frozenset(
         "favored_by_beings",  # worship.BeingFacet.facet, unique per being
         "answer_sacrifice_lines",  # worship.AnswerSacrificeLine.facet, unique per answer
         "worship_requests",  # worship.RequestedItem.facet: a request for a facet follows it (#4530)
+        "+",  # CeremonyOffering.facet: its historical match follows the winner
         "aliases",  # FacetAlias.facet: the losers' aliases follow the winner
     }
 )
@@ -157,7 +158,18 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
     item that already carries the winner, a being that already favors it) is dropped
     rather than duplicated. Refuses to start when a relation onto Facet has no handler.
     """
-    live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - the relation set is the contract
+    live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - relation set is the merge contract
+    live.update(
+        rel.get_accessor_name()
+        for rel in Facet._meta.get_fields(include_hidden=True)  # noqa: SLF001 - includes hidden reverse relations
+        if rel.auto_created
+        and not rel.concrete
+        and (rel.one_to_many or rel.one_to_one)
+        and not rel.many_to_many
+        and not rel.field.model._meta.auto_created  # noqa: SLF001 - exclude M2M intermediary relations
+        and rel.get_accessor_name() not in live
+        and rel.field.remote_field.hidden
+    )
     missing = live - HANDLED_RELATIONS
     if missing:
         detail = f"no merge handler for {sorted(missing)}"
@@ -177,6 +189,7 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             # An answer with a line for both facets keeps the winner's line (#4333).
             _move_unique_fk(loser, winner, "answer_sacrifice_lines", "answer", result)
             _move_fk(loser, winner, "worship_requests", "facet", result)
+            _move_ceremony_offerings(loser, winner, result)
             for alias in loser.aliases.all():
                 alias.facet = winner
                 alias.save(update_fields=["facet"])
@@ -184,6 +197,16 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             result.retired_names.append(loser.name)
             loser.delete()
     return result
+
+
+def _move_ceremony_offerings(loser: Facet, winner: Facet, result: FacetMerge) -> None:
+    """Keep the facet recorded on past ceremony offerings when it is merged."""
+    from world.ceremonies.models import CeremonyOffering  # noqa: PLC0415
+
+    for offering in CeremonyOffering.objects.filter(facet=loser):
+        offering.facet = winner
+        offering.save(update_fields=["facet"])
+        result.moved += 1
 
 
 def _move_fk(

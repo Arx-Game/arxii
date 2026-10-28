@@ -127,7 +127,35 @@ class MergeFacetsTests(TestCase):
 
     def test_every_live_relation_has_a_handler(self) -> None:
         live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}
+        live.update(
+            rel.get_accessor_name()
+            for rel in Facet._meta.get_fields(include_hidden=True)
+            if rel.auto_created
+            and not rel.concrete
+            and (rel.one_to_many or rel.one_to_one)
+            and not rel.many_to_many
+            and not rel.field.model._meta.auto_created
+            and rel.get_accessor_name() not in live
+            and rel.field.remote_field.hidden
+        )
         self.assertEqual(live, set(svc.HANDLED_RELATIONS))
+
+    def test_historical_ceremony_offerings_follow_the_winning_facet(self) -> None:
+        from world.ceremonies.models import CeremonyOffering
+        from world.scenes.factories import PersonaFactory
+
+        offering = CeremonyOffering.objects.create(
+            being=WorshippedBeingFactory(),
+            offered_by=PersonaFactory(),
+            facet=self.loser,
+            item_name="Iron ring",
+        )
+
+        result = svc.merge_facets(self.winner, [self.loser])
+
+        offering.refresh_from_db()
+        self.assertEqual(offering.facet, self.winner)
+        self.assertEqual(result.moved, 1)
 
     def test_a_relation_without_a_handler_stops_the_merge(self) -> None:
         original = svc.HANDLED_RELATIONS
