@@ -1161,6 +1161,14 @@ class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
             f"{self.action_key} + {self.covenant_role.name}: ×{self.thread_level_multiplier}/level"
         )
 
+    def clean(self) -> None:
+        """Refuse a negative multiplier: a vow never shrinks the action it scales (#4739)."""
+        super().clean()
+        if self.thread_level_multiplier is not None and self.thread_level_multiplier < 0:
+            raise ValidationError(
+                {"thread_level_multiplier": "The multiplier cannot be negative; use 0 for none."}
+            )
+
 
 class CovenantRoleTechniqueSpecialtyManager(NaturalKeyManager):
     """Manager for CovenantRoleTechniqueSpecialty with natural key support."""

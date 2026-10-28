@@ -459,3 +459,28 @@ class EnhancementOverlapTests(TestCase):
 
         ctx = PowerTermContext(sheet=sheet, technique=technique, applicable_threads=[])
         self.assertEqual(enhancement_overlap_term(ctx), 0)
+
+
+class CovenantRoleActionScalingCleanTests(TestCase):
+    """A vow's action scaling never shrinks the action (#4739): clean() refuses below 0."""
+
+    def test_a_negative_multiplier_is_refused(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        row = CovenantRoleActionScalingFactory.build(
+            covenant_role=CovenantRoleFactory(),
+            action_key=CovenantScaledAction.SURGES_GIVEN,
+            thread_level_multiplier=Decimal("-0.5"),
+        )
+        with self.assertRaises(ValidationError) as caught:
+            row.full_clean()
+        self.assertIn("thread_level_multiplier", caught.exception.message_dict)
+
+    def test_zero_and_positive_multipliers_pass(self) -> None:
+        for value in (Decimal(0), Decimal("0.5")):
+            row = CovenantRoleActionScalingFactory.build(
+                covenant_role=CovenantRoleFactory(),
+                action_key=CovenantScaledAction.SURGES_GIVEN,
+                thread_level_multiplier=value,
+            )
+            row.full_clean()
