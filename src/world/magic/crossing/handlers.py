@@ -351,7 +351,7 @@ def _open_labels_by_relationship_id(
 
     Built once per request by a caller that lists more than one thread
     (``CmdThreads._list_threads`` / ``_list_crossing_offers``) and passed into
-    ``_anchor_label_for``. This replaced a ``prefetch_related(
+    ``anchor_label_for``. This replaced a ``prefetch_related(
     "target_relationship__labels__type")`` on the feeding queryset (#3957
     review round 2, N1): a bare-string prefetch writes
     ``_prefetched_objects_cache["labels"]`` onto the ``CharacterRelationship``
@@ -398,7 +398,7 @@ def _relationship_track_label_for(
     return f"bond with {side.target_name} ({label_desc})"
 
 
-def _anchor_label_for(
+def anchor_label_for(
     thread: Thread,
     open_label_by_relationship_id: dict[int, RelationshipLabel] | None = None,
 ) -> str:
@@ -447,7 +447,7 @@ def _anchor_label_for(
 def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
     """Build a resonance-flavored crossing announcement."""
     resonance_name = thread.resonance.name if thread.resonance else "your resonance"
-    anchor_label = _anchor_label_for(thread)
+    anchor_label = anchor_label_for(thread)
     return (
         f"Your {resonance_name}-resonant {anchor_label} thread "
         f"has crossed a threshold (level {crossing_level}). "

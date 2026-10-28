@@ -28,6 +28,7 @@ from world.magic.models.fall_redemption import (
 from world.magic.services.conversion import (
     ConversionResult,
     conversion_pair,
+    conversion_restored_on_raise,
     convert_resonance,
     get_fall_redemption_config,
 )
@@ -96,7 +97,6 @@ class FallResult:
     record_id: int
 
 
-@transaction.atomic
 def perform_fall(
     character_sheet: CharacterSheet,
     *,
@@ -126,7 +126,21 @@ def perform_fall(
     Raises:
         FallEligibilityError: if aura threshold not met, already converted, or no
             conversion is authored for the path.
+
+    A raise anywhere in the ceremony rolls it all back, and the cached resonance and
+    thread rows it moved are put back to match (``conversion_restored_on_raise``, #4735).
     """
+    with conversion_restored_on_raise(character_sheet), transaction.atomic():
+        return _perform_fall(character_sheet, target_affinity=target_affinity, scene=scene)
+
+
+def _perform_fall(
+    character_sheet: CharacterSheet,
+    *,
+    target_affinity: Affinity,
+    scene: object | None,
+) -> FallResult:
+    """The ceremony itself; ``perform_fall`` owns its transaction and the cache restore."""
     config = get_fall_redemption_config()
 
     # Resolve current dominant affinity from CharacterAura

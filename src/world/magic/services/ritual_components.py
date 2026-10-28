@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Min, Sum
+
 from world.items.exceptions import InsufficientMaterials
 from world.items.services.materials import consume_materials, gather_consumable_pks
 from world.magic.exceptions import RitualComponentError
@@ -19,6 +21,35 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import Resonance, Ritual, RitualComponentRequirement
+
+
+def target_resonance_meaning_bar(ritual: Ritual) -> int | None:
+    """The keepsake bar for ``ritual``'s target-resonance offering, or None (no keepsake route).
+
+    The lowest ``min_item_meaning`` on its ``matches_target_resonance`` requirements. Shared
+    by every rite whose offering is matched to the resonance it works toward (drift
+    correction, the thread retune); the caller reads it once and passes it to
+    ``qualifying_components`` / ``qualifying_components_by_target``.
+    """
+    return ritual.requirements.filter(
+        matches_target_resonance=True, min_item_meaning__isnull=False
+    ).aggregate(bar=Min("min_item_meaning"))["bar"]
+
+
+def target_resonance_offering_count(ritual: Ritual) -> int:
+    """How many offering units ``ritual``'s target-resonance requirements ask for, 0 if none.
+
+    The sum of their ``quantity``. The Spellbook's retune dialog asks for that many picks.
+    """
+    total = ritual.requirements.filter(matches_target_resonance=True).aggregate(
+        total=Sum("quantity")
+    )["total"]
+    return total or 0
+
+
+def has_target_resonance_requirement(ritual: Ritual) -> bool:
+    """Whether ``ritual`` carries a requirement paid toward a chosen resonance."""
+    return ritual.requirements.filter(matches_target_resonance=True).exists()
 
 
 def _resolve_touchstone_pks(

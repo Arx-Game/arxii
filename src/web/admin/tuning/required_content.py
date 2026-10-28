@@ -1531,6 +1531,96 @@ def _probe_drift_correction_config() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_thread_resonance_ritual() -> ProbeResult:
+    """A SERVICE ritual moves a thread to another resonance (slice 6 of #4672).
+
+    Consumer: `world/magic/services/thread_resonance.py thread_resonance_ritual()`, which
+    finds the rite by its `service_function_path` (`THREAD_RESONANCE_SERVICE_PATH`). The
+    probe reads the same function.
+    """
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        THREAD_RESONANCE_SERVICE_PATH,
+        thread_resonance_ritual,
+    )
+
+    if thread_resonance_ritual() is None:
+        return ProbeResult(
+            present=False,
+            missing=("the thread retune ritual",),
+            detail=(
+                "No ritual changes a thread's resonance: no SERVICE ritual has the service "
+                f"path {THREAD_RESONANCE_SERVICE_PATH}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_single_thread_resonance_ritual() -> ProbeResult:
+    """At most one SERVICE ritual carries the retune service path (slice 6 of #4672).
+
+    Consumer: `thread_resonance_ritual()` hands the Spellbook the lowest-pk one, while
+    `PerformRitualAction` performs whichever a player names, so a second row is a rite the
+    web never offers, with its own offering requirements. Missing: the names of every row
+    past the first.
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models import Ritual  # noqa: PLC0415
+    from world.magic.services.thread_resonance import (  # noqa: PLC0415
+        THREAD_RESONANCE_SERVICE_PATH,
+    )
+
+    names = list(
+        Ritual.objects.filter(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path=THREAD_RESONANCE_SERVICE_PATH,
+        )
+        .order_by("pk")
+        .values_list("name", flat=True)
+    )
+    if len(names) > 1:
+        extra = tuple(names[1:])
+        return ProbeResult(
+            present=False,
+            missing=extra,
+            detail=(
+                f"{len(names)} rituals change a thread's resonance; the Spellbook offers only "
+                f"{names[0]}. Remove or repoint: {', '.join(extra)}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_thread_resonance_ritual_web_payable() -> ProbeResult:
+    """The Spellbook's retune rite asks only for offerings the web can pay (slice 6 of #4672).
+
+    Consumer: `ThreadViewSet.resonance_options` and the Spellbook's ThreadResonanceDialog,
+    which pay a target-resonance requirement only (the options carry `offering_count`). An
+    item-template or touchstone requirement on `thread_resonance_ritual()` has no picker on
+    the web, so every web retune is refused; telnet, which offers everything carried, can
+    still pay it. Missing: the rite's name.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.magic.services.thread_resonance import thread_resonance_ritual  # noqa: PLC0415
+
+    ritual = thread_resonance_ritual()
+    if ritual is None:
+        return ProbeResult(present=True)
+    unpayable = ritual.requirements.filter(
+        Q(item_template__isnull=False) | Q(min_touchstone_tier__isnull=False)
+    ).exists()
+    if unpayable:
+        return ProbeResult(
+            present=False,
+            missing=(ritual.name,),
+            detail=(
+                f"{ritual.name} asks for an item-template or touchstone component; the "
+                "Spellbook pays only target-resonance offerings, so it cannot perform it."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -2975,6 +3065,55 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual",
+            label="Thread retune ritual",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/thread_resonance.py thread_resonance_ritual(), "
+                "change_thread_resonance()"
+            ),
+            consequence=(
+                "No ritual changes a thread's resonance: the Spellbook's Retune thread "
+                "button has no rite to perform and telnet has no rite to name, so no player "
+                "can move a thread to another resonance until staff author the SERVICE "
+                "ritual (and its offering requirements)."
+            ),
+            probe=CustomProbe(fn=_probe_thread_resonance_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual-single",
+            label="Only one thread retune ritual",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/thread_resonance.py thread_resonance_ritual() "
+                "(lowest pk wins)"
+            ),
+            consequence=(
+                "Telnet can perform any ritual with the retune service path, but the "
+                "Spellbook's Retune thread button only ever offers the first one, with that "
+                "one's offering; a second row is reachable by name only."
+            ),
+            probe=CustomProbe(fn=_probe_single_thread_resonance_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="thread-resonance-ritual-web-payable",
+            label="Thread retune ritual payable on the web",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/views.py ThreadViewSet.resonance_options, "
+                "frontend ThreadResonanceDialog (target-resonance offerings only)"
+            ),
+            consequence=(
+                "The Spellbook's Retune thread button pays only target-resonance offerings; "
+                "a retune rite with an item-template or touchstone component is refused on "
+                "every web retune and can be performed from telnet only."
+            ),
+            probe=CustomProbe(fn=_probe_thread_resonance_ritual_web_payable),
+            admin_model="Ritual",
         ),
         ContentDependency(
             key="stakes-escalation-curves",

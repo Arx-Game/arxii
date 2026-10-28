@@ -1046,6 +1046,43 @@ from the check type, once as the technique skill.
 check-type rows that weight them; staff rename, repoint or remove them in admin as part of the skill
 revamp, working from the new dashboard row.
 
+## Changing a thread's resonance (#4735, slice 6 of #4672, BUILT 2026-10-27)
+
+A player can move one of their threads to another resonance through a rite: a retune within the
+thread's affinity keeps every point, a Fall or Redemption across affinities converts them at the
+authored pair rate (a Redemption never empties a thread), and a live thread already on the same
+anchor in the new resonance takes the points while the moved one retires.
+
+**Built (backend, telnet, web API, Spellbook dialog):** `services/thread_resonance.py` (options, a pre-spend check,
+the change), the shared `conversion._reanchor_thread` merge (and `_find_existing_target_thread`
+without `getattr`), `PerformRitualAction._precheck` so a refused move spends nothing, the
+target-resonance offering paid toward the chosen resonance, telnet `resonance=<id>`, web
+`kwargs.target_resonance`, `GET /api/magic/threads/{id}/resonance-options/`, a result line that
+telnet and web both show, Required content rows `thread-resonance-ritual`,
+`thread-resonance-ritual-single` (TUNING: a second rite on the path) and
+`thread-resonance-ritual-web-payable` (TUNING: a rite with a template or touchstone component the
+web cannot pay), and migration 0322:
+the trait, technique, relationship-track and relationship-capstone thread unique constraints now
+apply to live threads only, so a retired thread no longer blocks a later move (retune or Fall). Journey: `integration_tests/test_thread_resonance_journeys.py`.
+
+Anchor rules (ruled on the final review): a GIFT thread moves only within its gift's supported
+resonances when the gift names any; a SANCTUM thread has no options (the Ritual of Purging changes
+its sanctum's resonance); a TECHNIQUE thread whose signature bonus requires a resonance is held
+until the signature is cleared.
+
+**Built (frontend):** `ThreadResonanceDialog` on `ThreadDetailPage` ("Change resonance" button,
+not the thread card): "Change to" pills with a move-kind swatch and a "merges" chip, offering
+pills only when the rite asks for them (`offering_count` picks), the server's
+`unavailable_reason` in place of the pills, the server's 400 detail on a refusal, and navigation
+to the surviving thread after a merge. Vitest:
+`frontend/src/magic/components/threads/__tests__/ThreadResonanceDialog.test.tsx`.
+
+**Not built here:** web pickers for item-template or touchstone components on the retune rite
+(the dashboard row flags such a rite). Nothing is authored: until staff create the SERVICE
+ritual, the dashboard row lists it.
+
+---
+
 ## Drift correction: the conversion offer and rite (#4733, slice 4 of #4672, BUILT 2026-10-27)
 
 A character who earns resonance from a deed while holding resonance that sits off their aura can

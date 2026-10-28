@@ -536,7 +536,7 @@ actions, backends, and service functions.
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
 - **`threads.py`**: `CmdThreads` (`threads`, #1993) — the thread management hub. Bare
   `threads`/`threads list` shows all the caller's active threads (anchor, resonance,
-  display level) via `_anchor_label_for` (`world/magic/crossing/handlers.py`, the same
+  display level) via `anchor_label_for` (`world/magic/crossing/handlers.py`, the same
   helper the crossing ceremony uses). `threads crossing list` shows pending crossing
   offers + available `CrossingOption` rows; `threads crossing choose <id>` resolves a
   pending offer via `ResolveCrossingOfferAction` (the same action the web

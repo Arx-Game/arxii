@@ -27,8 +27,11 @@ without change.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
+
+from evennia.objects.models import ObjectDB
 
 from world.items.exceptions import InsufficientMaterials
 from world.items.models import ItemInstance
@@ -181,3 +184,94 @@ def consume_materials(allocations: list[tuple[ItemInstance, int]]) -> None:
                 destroy_consumed_item_instance(inst, note="Consumed as a material.")
             else:
                 inst.save(update_fields=["quantity"])
+
+
+@contextmanager
+def consumption_restored_on_raise(items: Iterable[ItemInstance]) -> Iterator[None]:
+    """Put ``items`` back in memory as stored when the block they are consumed in raises.
+
+    For a caller that consumes items inside a ``transaction.atomic()`` and can still be
+    refused after the consumption (a ritual whose service raises once its components are
+    spent): enter this OUTSIDE the atomic block, so it runs after the rollback. The
+    rollback restores the rows; this restores the identity-mapped objects behind them,
+    which ``consume_materials`` changed in place and the database no longer agrees with
+    (#4735). On a raise:
+
+    * each item gets back its quantity, ``destroyed_at``, holder and container on the
+      same Python object (``core.identity_map.CacheGuard``), and goes back into the
+      identity map if a hard delete took it out;
+    * a game object a soft-delete moved out of play gets its location back in place; one
+      a hard delete removed is left out of the identity map (its attribute, tag and alias
+      handlers were cleared in memory) and the item drops its cached link to it, so the
+      next read loads it fresh;
+    * a consumed container's contents, which ``_spill_contents`` moved out of it, get
+      their container and location back the same way (read in one query, before);
+    * each holder's contents cache (a character, or a container's game object) is
+      rebuilt from the database, and its carried and equipped item handlers are
+      invalidated.
+
+    The exception is re-raised. Nothing happens when the block completes.
+
+    Out of scope: the cached ``SET_NULL`` referrers that a hard-deleted component's
+    delete nulled in memory (``core.deletion.IdentityMapCollector``, ADR-0327) keep the
+    null. Rows the rolled-back block created (an ``OwnershipEvent``, a
+    ``RitualAnimaContribution``) stay in the identity map under a pk the table no longer has.
+    """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+
+    components = [item for item in items if item.pk is not None]
+    contents = (
+        list(
+            ItemInstance.objects.filter(contained_in__in=components).select_related(
+                "game_object__db_location"
+            )
+        )
+        if components
+        else []
+    )
+    kept = [*components, *contents]
+    item_pks = [item.pk for item in kept]
+    objects = [item.game_object for item in kept if item.game_object_id is not None]
+    object_pks = [obj.pk for obj in objects]
+    holders = {obj.location.pk: obj.location for obj in objects if obj.location is not None}
+    guard = CacheGuard()
+    guard.keep(*kept, *objects)
+    try:
+        yield
+    except BaseException:
+        guard.restore()
+        _rejoin_identity_map(kept, item_pks, objects, object_pks)
+        for holder in holders.values():
+            holder.contents_cache.init()
+            if hasattr(holder, "carried_items"):
+                holder.carried_items.invalidate()
+            if hasattr(holder, "equipped_items"):
+                holder.equipped_items.invalidate()
+        raise
+
+
+def _rejoin_identity_map(
+    items: list[ItemInstance],
+    item_pks: list[int],
+    objects: list[ObjectDB],
+    object_pks: list[int],
+) -> None:
+    """After ``CacheGuard.restore``: re-cache restored items, drop deleted game objects.
+
+    A hard delete flushed both the item and its game object from the identity map (the
+    ``pre_delete`` flush) and Django nulled their pks; the guard put the pks back. The item
+    is a plain row and whole again, so it is cached again unless a fresh copy was loaded
+    since. The game object is not: Evennia's delete cleared its handlers in memory. It
+    stays out, and the item forgets it.
+    """
+    game_object_field = ItemInstance._meta.get_field("game_object")  # noqa: SLF001
+    deleted_objects = {
+        id(obj)
+        for obj, pk in zip(objects, object_pks, strict=True)
+        if ObjectDB.get_cached_instance(pk) is not obj
+    }
+    for item, pk in zip(items, item_pks, strict=True):
+        if ItemInstance.get_cached_instance(pk) is None:
+            ItemInstance.cache_instance(item)
+        if game_object_field.is_cached(item) and id(item.game_object) in deleted_objects:
+            game_object_field.delete_cached_value(item)
