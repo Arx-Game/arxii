@@ -4386,17 +4386,28 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
 class FuryConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.FuryConfig"
-        django_get_or_create = ("pk",)
 
     pk = 1
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Update-or-create the singleton so passed fields (``berserk_condition=``) land.
+
+        A plain ``django_get_or_create`` on ``pk`` silently dropped every non-lookup
+        kwarg once the row existed (django_notes.md's get_or_create gotcha).
+        """
+        pk = kwargs.pop("pk")
+        instance, _ = model_class.objects.update_or_create(pk=pk, defaults=kwargs)
+        return instance
 
 
 # =============================================================================
 # Berserk condition factory (Task 7 — #567)
 # =============================================================================
 
-# Canonical name for the uncontrolled-rage condition applied by the Fury lever.
-BERSERK_CONDITION_NAME = "Berserk"
+# Name the seeded uncontrolled-rage template is made under. Code finds Berserk through
+# FuryConfig.berserk_condition (#4739); only seeds, factories and tests use this name.
+BERSERK_SEED_TEMPLATE_NAME = "Berserk"
 
 
 class _BerserkConditionTemplateFactory:
@@ -4414,6 +4425,8 @@ class _BerserkConditionTemplateFactory:
         cannot readily shake; must ride out the fury)
 
     Idempotent: uses django_get_or_create on name + get_or_create on the stage.
+    Designates the template on ``FuryConfig.berserk_condition`` (made with defaults
+    when absent) unless a test already designated another one (#4739).
     """
 
     def __call__(self):
@@ -4438,7 +4451,7 @@ class _BerserkConditionTemplateFactory:
         )
 
         template = ConditionTemplateFactory(
-            name=BERSERK_CONDITION_NAME,
+            name=BERSERK_SEED_TEMPLATE_NAME,
             category=category,
             description=(
                 "The caster has lost control of their fury. They act on primal rage, "
@@ -4464,6 +4477,13 @@ class _BerserkConditionTemplateFactory:
                 "severity_multiplier": "1.00",
             },
         )
+
+        from world.magic.models import FuryConfig
+
+        config, _ = FuryConfig.objects.get_or_create(pk=1)
+        if config.berserk_condition_id is None:
+            config.berserk_condition = template
+            config.save(update_fields=["berserk_condition"])
 
         return template
 

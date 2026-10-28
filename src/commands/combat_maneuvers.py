@@ -541,10 +541,14 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     def _berserk_instance(self, character: Any) -> Any:
         """The active Berserk ConditionInstance on *character*, or None."""
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
+        from world.magic.services.fury import berserk_condition_id  # noqa: PLC0415
 
+        berserk_id = berserk_condition_id()
+        if berserk_id is None:
+            return None
         return ConditionInstance.objects.filter(
             target=character,
-            condition__name="Berserk",
+            condition_id=berserk_id,
         ).first()
 
     @staticmethod

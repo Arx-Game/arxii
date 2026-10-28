@@ -49,8 +49,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-BERSERK_CONDITION_NAME = "Berserk"
-
 
 def is_moon_bound(sheet: CharacterSheet) -> bool:
     """Whether *sheet* holds any distinction tagged ``moon-bound``."""
@@ -181,13 +179,13 @@ def _force_battle_form_shift(character, sheet: CharacterSheet) -> None:
 
 
 def _apply_berserk(character) -> None:
-    """Apply the shared Berserk condition (the same row fury applies)."""
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    """Apply the shared Berserk condition (the row ``FuryConfig.berserk_condition`` names)."""
     from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
 
-    template = ConditionTemplate.objects.filter(name=BERSERK_CONDITION_NAME).first()
+    template = get_berserk_template()
     if template is None:
-        logger.warning("Berserk template missing; moon control loss applied no condition.")
+        logger.warning("Berserk condition unset; moon control loss applied no condition.")
         return
     apply_condition(
         character,
@@ -208,9 +206,13 @@ def _rampage_window(character) -> None:
 def _active_berserk_instance(character):
     """The character's active Berserk ConditionInstance, if any."""
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.magic.services.fury import berserk_condition_id  # noqa: PLC0415
 
+    berserk_id = berserk_condition_id()
+    if berserk_id is None:
+        return None
     for instance in get_active_conditions(character):
-        if instance.condition.name == BERSERK_CONDITION_NAME:
+        if instance.condition_id == berserk_id:
             return instance
     return None
 

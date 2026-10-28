@@ -46,8 +46,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-BERSERK_CONDITION_NAME = "Berserk"
-
 RAMPAGE_EMIT = (
     "{name} rages at nothing and everything — claws raking the air, hunting for something to break."
 )
@@ -55,13 +53,18 @@ BERSERK_REFUSAL = "The rage does not retreat."
 
 
 def is_berserk(character: ObjectDB) -> bool:
-    """Whether the character has an active Berserk condition."""
-    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    """Whether the character has an active Berserk condition.
 
-    return any(
-        instance.condition.name == BERSERK_CONDITION_NAME
-        for instance in get_active_conditions(character)
-    )
+    Berserk is the template ``FuryConfig.berserk_condition`` names (#4739), compared
+    by id; an unset designation means nobody is Berserk.
+    """
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.magic.services.fury import berserk_condition_id  # noqa: PLC0415
+
+    berserk_id = berserk_condition_id()
+    if berserk_id is None:
+        return False
+    return any(instance.condition_id == berserk_id for instance in get_active_conditions(character))
 
 
 def reject_if_berserk(participant: CombatParticipant, verb: str) -> None:

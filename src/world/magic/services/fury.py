@@ -104,6 +104,17 @@ def get_berserk_template() -> ConditionTemplate | None:
     return None if config is None else config.berserk_condition
 
 
+def berserk_condition_id() -> int | None:
+    """Primary key of the condition template that IS Berserk, or ``None`` when unset.
+
+    Same single ``cached_singleton()`` read as ``get_berserk_template()``, for callers
+    that compare ids (``is_berserk``). Guard on ``None`` before filtering a nullable
+    column by it: ``filter(x_id=None)`` is ``IS NULL``.
+    """
+    config = FuryConfig.objects.cached_singleton()
+    return None if config is None else config.berserk_condition_id
+
+
 def _ensure_fury_check_type(trait_name: str) -> CheckType:
     """Return the CheckType for a fury control-retention check keyed on trait_name.
 
@@ -210,13 +221,13 @@ def run_fury_for_action(
         character=character, tier=fury_commitment, anchor=fury_anchor, check_result=check
     )
 
-    if fury_res.berserk_severity > 0:
-        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    berserk_template = get_berserk_template()
+    if fury_res.berserk_severity > 0 and berserk_template is not None:
         from world.conditions.services import apply_condition  # noqa: PLC0415
 
         apply_condition(
             character,
-            ConditionTemplate.get_by_name("Berserk"),
+            berserk_template,
             severity=fury_res.berserk_severity,
             duration_rounds=cfg.default_berserk_duration_rounds,
             source_character=character,

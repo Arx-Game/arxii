@@ -423,12 +423,12 @@ class BerserkAppliedOnLostControlTests(TestCase):
         self.assertTrue(mock_apply.called, "apply_condition was not called")
         call_kwargs = mock_apply.call_args
         self.assertEqual(call_kwargs.kwargs.get("severity"), self.tier.berserk_severity)
-        from world.conditions.models import ConditionTemplate
+        from world.magic.services.fury import get_berserk_template
 
         applied_template = (
             call_kwargs.args[1] if call_kwargs.args else call_kwargs.kwargs.get("condition")
         )
-        self.assertEqual(applied_template, ConditionTemplate.get_by_name("Berserk"))
+        self.assertEqual(applied_template, get_berserk_template())
 
 
 # ---------------------------------------------------------------------------
