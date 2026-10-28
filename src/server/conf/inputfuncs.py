@@ -380,10 +380,13 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
     appears in the action's ``objectdb_target_kwargs`` set are resolved from
     int → ObjectDB before dispatch.  All other kwargs pass through unchanged.
 
-    Outbound: ``session.msg`` with
-        ``type=WebsocketMessageType.ACTION_RESULT.value`` and a kwargs
-        payload of ``{"success": bool, "message": str | None,
-        "data": dict | None, "client_request_id": str | None}``. The
+    Outbound: one ``["action_result", [], {...}]`` frame, sent as
+        ``session.msg(action_result=((), payload))`` with a payload of
+        ``{"success": bool, "message": str | None,
+        "data": dict | None, "client_request_id": str | None}``. Every
+        keyword to ``msg`` is its own output command, so the message name is
+        the keyword; ``msg(type=..., kwargs=...)`` sends two unrelated frames
+        named ``type`` and ``kwargs`` that no client handles (#4774). The
         ``client_request_id`` is echoed back unchanged from the inbound
         ``kwargs.client_request_id`` (when the caller supplied one) so a
         dispatching client can correlate this event with its own send
@@ -401,15 +404,13 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
         client_request_id = None
 
     def _send(success: bool, message: str | None = None, data: object = None) -> None:
-        session.msg(
-            type=WebsocketMessageType.ACTION_RESULT.value,
-            kwargs={
-                "success": success,
-                "message": message,
-                "data": data,
-                "client_request_id": client_request_id,
-            },
-        )
+        payload = {
+            "success": success,
+            "message": message,
+            "data": data,
+            "client_request_id": client_request_id,
+        }
+        session.msg(**{WebsocketMessageType.ACTION_RESULT.value: ((), payload)})
 
     actor = session.puppet
     if actor is None:
