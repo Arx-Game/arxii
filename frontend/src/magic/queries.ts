@@ -10,6 +10,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
+import { performRitual } from '@/rituals/api';
+import type { PerformRitualRequest } from '@/rituals/types';
 import { useAppSelector } from '@/store/hooks';
 import { combatKeys } from '@/combat/queries';
 import { availableActionsKeys } from '@/scenes/actionQueries';
@@ -63,6 +65,8 @@ export const magicKeys = {
   threads: () => [...magicKeys.all, 'threads'] as const,
   threadList: () => [...magicKeys.threads(), 'list'] as const,
   thread: (id: number) => [...magicKeys.threads(), id] as const,
+  threadResonanceOptions: (id: number) =>
+    [...magicKeys.threads(), id, 'resonance-options'] as const,
 
   // Scoped by sheet id (2026-07 audit): an unscoped key cached one alt's
   // balances/prospects and served them to every other character the account
@@ -407,6 +411,34 @@ export function usePatchThreadNarrative(id: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.thread(id) }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.threadList() }).catch(() => {});
+    },
+  });
+}
+
+/** Resonance options for retuning a thread; fetched only while the dialog is open. */
+export function useThreadResonanceOptions(threadId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: magicKeys.threadResonanceOptions(threadId),
+    queryFn: () => api.getThreadResonanceOptions(threadId),
+    enabled,
+    gcTime: 0,
+  });
+}
+
+/**
+ * Perform the retune rite (POST /api/magic/rituals/perform/) and refresh what it moves:
+ * the threads, the hub summary and the resonance balances.
+ */
+export function useRetuneThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PerformRitualRequest) => performRitual(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.threads() }).catch(() => {});
+      qc.invalidateQueries({
+        queryKey: [...magicKeys.all, 'thread-hub-summary'],
+      }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonances() }).catch(() => {});
     },
   });
 }

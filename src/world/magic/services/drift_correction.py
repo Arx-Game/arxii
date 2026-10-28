@@ -41,7 +41,10 @@ from world.magic.services.drift import (
     get_drift_correction_config,
     qualifying_components,
 )
-from world.magic.services.ritual_components import resolve_ritual_components
+from world.magic.services.ritual_components import (
+    resolve_ritual_components,
+    target_resonance_meaning_bar,
+)
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
     DriftConversionPreview,
@@ -156,12 +159,9 @@ def offered_components(
     config = get_drift_correction_config()
     if config.rite_id is None:
         return []
-    bars = list(
-        config.rite.requirements.filter(
-            matches_target_resonance=True, min_item_meaning__isnull=False
-        ).values_list("min_item_meaning", flat=True)
+    return qualifying_components(
+        sheet, target, items, min_item_meaning=target_resonance_meaning_bar(config.rite)
     )
-    return qualifying_components(sheet, target, items, min_item_meaning=min(bars) if bars else None)
 
 
 def offer_options(

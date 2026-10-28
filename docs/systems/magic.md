@@ -4334,6 +4334,101 @@ offer and target resonance.
 `test_ritual_components_target_mode.py`, `test_drift_correction_views.py`; journey
 `integration_tests/test_drift_correction_journeys.py` (telnet, web, lapse, negatives).
 
+### Thread retune: moving a thread to another resonance (slice 6 of #4672) [BUILT & WIRED]
+
+A player moves one thread to another resonance by performing the retune rite: the SERVICE
+`Ritual` whose `service_function_path` is `THREAD_RESONANCE_SERVICE_PATH`
+(`world.magic.services.thread_resonance.change_thread_resonance`). Staff author the row and its
+`RitualComponentRequirement` rows; code finds it with `thread_resonance_ritual()` (first by pk),
+the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
+
+- **Targets** (`thread_resonance_options(thread)` -> `ThreadResonanceOption`): every other
+  resonance of the thread's affinity (rate 1, `conversion_type` None), plus, for each other
+  affinity, the `ResonanceConversion` counterpart of the thread's resonance when
+  `conversion_pair` succeeds (the pair's multiplier and Fall / Redemption type). No mapping or no
+  pair: not offered. Sorted own affinity first, then affinity and resonance name, for display.
+- **Points**: `developed_points` within the affinity unchanged; across affinities
+  `scaled_thread_points` = `max(1, int(points x multiplier))` while points > 0 (a Redemption
+  shrinks a thread but never empties it, like `convert_resonance_amount`). `level` is unchanged.
+- **Merge**: `_reanchor_thread(thread, target_resonance_id, new_points)` (`services/conversion.py`,
+  shared with the full Fall conversion's `_reanchor_threads`) adds the points to a live thread on
+  the same anchor in the target resonance and retires the moved thread, else re-anchors it.
+  The merge locks the surviving row and adds to the points the database holds, so two merges
+  into one thread both count. `_find_existing_target_thread` compares every typed target FK id
+  (organization included).
+- **Refusals** (`ThreadResonanceChangeError`, `check_thread_resonance_change`): no thread named,
+  a thread that is not the performer's or is retired, no target named (the message lists the
+  options as "Name (id, same affinity|Fall|Redemption)"), and a target not among the options
+  (its own resonance included). Under the lock it also refuses a thread whose resonance moved
+  since it was read (`THREAD_MOVED_MESSAGE`). A retired thread holds no place: every per-anchor `Thread`
+  unique constraint applies to live threads only (migration 0322 brought trait, technique,
+  relationship track and relationship capstone in line with the others), so a merged thread
+  can move back onto the resonance its retired partner left, by a retune or the full Fall.
+- **Message**: the result's `message` ("Mercy of the Healer left Bene and now channels Praedari
+  (40 points, now 48)." or "... merged into your Lumen thread on the same anchor: its 40 points
+  brought 40, and that thread now holds 50."; a thread with no name is "Your <anchor> thread")
+  is appended to "You perform <rite>." by `PerformRitualAction` (`_service_result_line`), and
+  `RitualPerformView` returns that line as `message` for every SERVICE ritual with a result.
+- **Nothing spent on refusal**: `PerformRitualAction._precheck` runs
+  `check_thread_resonance_change` for this rite before components and anima are spent;
+  `change_thread_resonance` locks the thread row and checks again. `_validate_components` passes
+  `kwargs["target_resonance"]` as `resonance_context`, but only for a ritual that has a
+  `matches_target_resonance` requirement (`has_target_resonance_requirement`), so the offering
+  is paid toward the chosen resonance (material, facet or keepsake) and a stray `resonance=`
+  changes no other ritual's components. The keepsake bar is `target_resonance_meaning_bar`
+  (`services/ritual_components.py`, shared with drift correction's `offered_components`).
+- **Aura**: balances are untouched, so no `recompute_aura`; `character.threads.invalidate()` runs.
+- **Resolvers**: `resolve_target_resonance(id)` (`UnknownResonance`) and
+  `resolve_owned_thread(sheet, id)` (`UnknownOwnedThread`), in `services/thread_resonance.py`,
+  are shared by telnet's `ritual` command and `RitualPerformView`: a non-integer, unknown or
+  foreign id is a plain refusal (telnet) or a 400 (web), never a 500. `target_resonance` is
+  resolved for every ritual; `thread_id` through this resolver for the retune rite.
+- **Anchor rules**: `thread_resonance_refusal(thread)` holds a SANCTUM thread (its sanctum's
+  resonance; the Ritual of Purging changes it) and a TECHNIQUE thread whose `signature_bonus`
+  has a `required_resonance` (clear the signature first); `thread_resonance_options` returns
+  none for either, and narrows a GIFT thread to `gift.cached_resonances` when that set is
+  non-empty (the `weave_thread` rule). `check_thread_resonance_change` applies both, so telnet
+  and web refuse alike. Service refusals carry no telnet syntax; the `ritual` command adds
+  `thread=<id>` / `resonance=<id>` hints before dispatch (`_refuse_incomplete_retune`).
+- **Race**: a re-anchor that loses the partial unique index to another process raises
+  `ThreadAnchorTakenError` (a `ThreadResonanceChangeError`) from a savepoint in
+  `_reanchor_thread`, with the cached thread's `resonance_id` and `developed_points` put back.
+- **A refusal after the spend gives the spend back, in memory too** (#4735): the perform's
+  components and anima are spent before dispatch, so a service that refuses afterwards (this
+  race, or any caught ritual exception) rolls the whole perform back. The rollback restores
+  the tables; `PerformRitualAction`'s `_spend_restored_on_raise`, entered outside the
+  `transaction.atomic()`, restores the identity map to match for every ritual: the items
+  (`consumption_restored_on_raise` in `world/items/services/materials.py`: quantity,
+  `destroyed_at`, holder and container in place, a consumed container's spilled contents
+  too; a hard-deleted item re-cached; its deleted
+  game object left out of the cache; the holder's `contents_cache` rebuilt and its carried
+  and equipped handlers invalidated) and, when the rite channels, the `CharacterAnima` row.
+  The full Fall re-anchors threads one by one, so a refusal part way would leave the threads
+  already moved, and the balances already zeroed, moved in memory: `perform_fall` takes
+  `conversion_restored_on_raise` (`services/conversion.py`) around its transaction, which
+  keeps the character's `CharacterResonance` rows and live threads and writes them back in
+  place on a raise, then invalidates the character's thread and resonance handlers. Both use `core.identity_map.CacheGuard` (ADR-4626's restore-in-place).
+- **Surfaces**: telnet `ritual <rite> thread=<id> resonance=<id>` (alias `target_resonance=`;
+  leave it out to list the options); the Spellbook's `ThreadResonanceDialog` on the thread
+  detail page (vitest `ThreadResonanceDialog.test.tsx`); web `POST /api/magic/rituals/perform/` with
+  `kwargs: {thread_id, target_resonance}` (`RitualPerformView` resolves both; the result is
+  `ThreadResonanceChangeResult`: `thread_id` of the survivor, `from_resonance_id`,
+  `to_resonance_id`, `points_before`, `points_moved`, `points_after`, `merged`,
+  `conversion_type`); `GET /api/magic/threads/{id}/resonance-options/` (owner only) returns
+  `{ritual_id | null, offering_required, offering_count, unavailable_reason, options:
+  [{resonance_id, resonance_name, affinity_name, conversion_type (FALL / REDEMPTION / null),
+  projected_points, merges_into_thread_id | null, qualifying: [{item_id, name, mode}]}]}`
+  (`offering_count` sums the rite's `matches_target_resonance` quantities via
+  `target_resonance_offering_count`; `qualifying` is filled only when it is non-zero;
+  `unavailable_reason` from `thread_resonance_unavailable_reason`); the view works out every option's
+  qualifying items in one batch (`qualifying_components_by_target` in `services/drift.py`), so
+  its query count does not grow with the number of options. Required content rows
+  `thread-resonance-ritual` ("No ritual changes a thread's resonance") and
+  `thread-resonance-ritual-single` (TUNING: a second ritual on the path, which the Spellbook
+  never offers) and `thread-resonance-ritual-web-payable` (TUNING: the rite has an
+  item-template or touchstone component the Spellbook cannot pay). Journey:
+  `integration_tests/test_thread_resonance_journeys.py`.
+
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 
 **Design:** `docs/architecture/resonance-environment-universal-path.md`

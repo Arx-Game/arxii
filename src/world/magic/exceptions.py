@@ -920,3 +920,48 @@ class DriftConversionInvalidError(DriftCorrectionError):
         super().__init__(user_message)
         if user_message:
             self.user_message = user_message
+
+
+class ThreadResonanceChangeError(MagicError):
+    """A thread cannot be moved to the asked-for resonance (slice 6 of #4672).
+
+    The raise site names the reason (no such thread, no target named, a target that is
+    not one of the thread's options).
+    """
+
+    user_message = "That thread cannot be moved to that resonance."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
+class ThreadAnchorTakenError(ThreadResonanceChangeError):
+    """Another process put a live thread on the same anchor at the target resonance first.
+
+    The partial unique index refused the re-anchor; nothing moved.
+    """
+
+    user_message = "Another thread has just taken that place; look at your threads again."
+
+    def __init__(self) -> None:
+        super().__init__(ThreadAnchorTakenError.user_message)
+
+
+class UnknownResonance(MagicError):
+    """No Resonance row has the id a ritual was given (telnet and web share this refusal)."""
+
+    def __init__(self, resonance_id: object) -> None:
+        super().__init__(resonance_id)
+        self.user_message = f"No resonance with id {resonance_id}."
+
+
+class UnknownOwnedThread(MagicError):
+    """The id a ritual was given is not one of the performer's live threads."""
+
+    user_message = "You have no active thread with that id."
+
+    def __init__(self, thread_id: object = None) -> None:
+        super().__init__(thread_id)
+        self.user_message = UnknownOwnedThread.user_message

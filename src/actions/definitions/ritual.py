@@ -20,6 +20,8 @@ very early; magic/combat models pull in much of the world graph).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -74,6 +76,7 @@ class PerformRitualAction(Action):
             ResonanceInsufficient,
             RitualComponentError,
             RitualPoolError,
+            ThreadResonanceChangeError,
             UltimateNotLearnable,
             XPInsufficient,
         )
@@ -99,8 +102,15 @@ class PerformRitualAction(Action):
             return self._perform_anima_ritual(sheet, ritual)
 
         try:
-            with transaction.atomic():
-                self._validate_components(ritual, components, sheet)
+            # Refusals that need no roll run before anything is spent. A service can still
+            # refuse after the components and anima are spent; the rollback restores the
+            # tables, and _spend_restored_on_raise puts the cached rows back to match.
+            channelled = sheet.anima_or_none if ritual.anima_requirement > 0 else None
+            with _spend_restored_on_raise(components, channelled), transaction.atomic():
+                self._precheck(ritual, sheet, kwargs)
+                self._validate_components(
+                    ritual, components, sheet, resonance_context=kwargs.get("target_resonance")
+                )
 
                 # #3001: a solo perform auto-channels the performer's own anima
                 # toward the requirement, then gates. Spent like components —
@@ -142,6 +152,7 @@ class PerformRitualAction(Action):
             FallRedemptionError,
             HonorRefused,
             UltimateNotLearnable,
+            ThreadResonanceChangeError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -150,6 +161,9 @@ class PerformRitualAction(Action):
             if ritual.execution_kind == RitualExecutionKind.CEREMONY
             else f"You perform {ritual.name}."
         )
+        result_line = _service_result_line(result)
+        if result_line:
+            msg = f"{msg} {result_line}"
         return ActionResult(
             success=True,
             message=msg,
@@ -208,16 +222,51 @@ class PerformRitualAction(Action):
             data={"execution_kind": ritual.execution_kind, "result": outcome},
         )
 
+    def _precheck(self, ritual: Any, performer_sheet: Any, kwargs: dict[str, Any]) -> None:
+        """Refuse a ritual whose service would refuse, before components or anima are spent.
+
+        Only the thread retune (slice 6 of #4672) has such a check today: it is found by its
+        service path, the way the Rite of Honors is. Raises ``ThreadResonanceChangeError``.
+        """
+        from world.magic.services.thread_resonance import (  # noqa: PLC0415
+            THREAD_RESONANCE_SERVICE_PATH,
+            check_thread_resonance_change,
+        )
+
+        if ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
+            check_thread_resonance_change(
+                performer_sheet,
+                thread=kwargs.get("thread"),
+                target_resonance=kwargs.get("target_resonance"),
+            )
+
     def _validate_components(
-        self, ritual: Any, components: list[Any], performer_sheet: Any
+        self,
+        ritual: Any,
+        components: list[Any],
+        performer_sheet: Any,
+        *,
+        resonance_context: Any = None,
     ) -> None:
-        """Validate and consume ``ritual``'s components via the shared helper."""
+        """Validate and consume ``ritual``'s components via the shared helper.
+
+        ``resonance_context`` is the ``target_resonance`` the performer named, if any. It is
+        passed on only for a ritual that carries a target-resonance requirement (the offering
+        is paid toward it, and a touchstone must tie to it); on any other ritual a stray
+        ``resonance=`` changes nothing about its components.
+        """
         from world.magic.services.ritual_components import (  # noqa: PLC0415
+            has_target_resonance_requirement,
             resolve_and_consume_ritual_components,
         )
 
+        if resonance_context is not None and not has_target_resonance_requirement(ritual):
+            resonance_context = None
         resolve_and_consume_ritual_components(
-            ritual=ritual, components=components, performer_sheet=performer_sheet
+            ritual=ritual,
+            components=components,
+            performer_sheet=performer_sheet,
+            resonance_context=resonance_context,
         )
 
     def _resolve_anima_pool(self, ritual: Any, performer_sheet: Any) -> Any:
@@ -242,6 +291,43 @@ class PerformRitualAction(Action):
         return resolve_pool_gate(
             ritual=ritual, performer_sheet=performer_sheet, pool=contribution.amount
         )
+
+
+@contextmanager
+def _spend_restored_on_raise(components: list[Any], anima: Any) -> Iterator[None]:
+    """Put what a perform spends back in memory when the perform raises after spending it.
+
+    The perform consumes its components and channels the performer's anima inside its
+    transaction, then dispatches; a service that refuses after that (the retune's
+    ``ThreadAnchorTakenError``, any caught ritual exception) rolls the tables back, but the
+    identity-mapped items, their game objects and the anima row keep the spend (#4735). Entered
+    outside ``transaction.atomic()`` so it runs after the rollback, for every ritual alike.
+    ``anima`` is the performer's ``CharacterAnima`` when the rite channels it, else None.
+    """
+    from core.identity_map import CacheGuard  # noqa: PLC0415
+    from world.items.services.materials import consumption_restored_on_raise  # noqa: PLC0415
+
+    anima_guard = CacheGuard()
+    anima_guard.keep(anima)
+    try:
+        with consumption_restored_on_raise(components):
+            yield
+    except BaseException:
+        anima_guard.restore()
+        raise
+
+
+def _service_result_line(result: Any) -> str:
+    """The line a SERVICE ritual's result adds to "You perform X.", or "" when it adds none.
+
+    Only the thread retune carries one today (slice 6 of #4672); the web response returns the
+    same message, so telnet and web read the same words.
+    """
+    from world.magic.types.threads import ThreadResonanceChangeResult  # noqa: PLC0415
+
+    if isinstance(result, ThreadResonanceChangeResult):
+        return result.message
+    return ""
 
 
 def _anima_ritual_message(ritual: Any, outcome: Any) -> str:

@@ -16639,6 +16639,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/threads/{id}/resonance-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Where this thread can be moved, and what the owner carries that pays the rite.
+     *
+     *     GET /api/magic/threads/{id}/resonance-options/  (slice 6 of #4672)
+     *
+     *     Response: ``{ritual_id, offering_required, offering_count, unavailable_reason,
+     *     options: [{resonance_id, resonance_name, affinity_name, conversion_type,
+     *     projected_points, merges_into_thread_id, qualifying: [{item_id, name, mode}]}]}``.
+     *     ``ritual_id`` is null while no retune rite is authored; perform it through
+     *     ``POST /api/magic/rituals/perform/`` with ``kwargs: {thread_id, target_resonance}``.
+     *     ``qualifying`` is filled only when the rite asks for a target-resonance offering.
+     */
+    get: operations['magic_threads_resonance_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/mechanics/categories/': {
     parameters: {
       query?: never;
@@ -31743,6 +31771,12 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /**
+     * @description * `FALL` - Fall
+     *     * `REDEMPTION` - Redemption
+     * @enum {string}
+     */
+    ConversionTypeEnum: 'FALL' | 'REDEMPTION';
     /** @description ``{name, as_template}``: a copy of the NPC under a new name. */
     CopyAsNewRequest: {
       name: string;
@@ -53242,6 +53276,42 @@ export interface components {
       name: string;
       /** @default  */
       description: string;
+    };
+    /**
+     * @description One resonance a thread may move to, with the carried items that pay the rite (read-only).
+     *
+     *     ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
+     *     resonance pk, worked out once for every option by the view
+     *     (``qualifying_components_by_target``), so this serializer queries nothing per option.
+     *     ``conversion_type`` is null for a retune within the thread's own affinity.
+     *     ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
+     *     into, null when the thread moves on its own.
+     */
+    ThreadResonanceOption: {
+      resonance_id: number;
+      resonance_name: string;
+      affinity_name: string;
+      conversion_type:
+        | (components['schemas']['ConversionTypeEnum'] | components['schemas']['NullEnum'])
+        | null;
+      projected_points: number;
+      merges_into_thread_id: number | null;
+      readonly qualifying: components['schemas']['DriftQualifyingComponent'][];
+    };
+    /**
+     * @description GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+     *
+     *     ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+     *     ``offering_required`` / ``offering_count``: whether the rite asks for target-resonance
+     *     offerings and how many units (the web pays only those). ``unavailable_reason`` is the
+     *     refusal to show in place of the options, "" when the thread can move.
+     */
+    ThreadResonanceOptions: {
+      ritual_id: number | null;
+      offering_required: boolean;
+      offering_count: number;
+      unavailable_reason: string;
+      options: components['schemas']['ThreadResonanceOption'][];
     };
     /**
      * @description * `TRAIT` - Trait
@@ -76507,6 +76577,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrossXPLockResponse'];
+        };
+      };
+    };
+  };
+  magic_threads_resonance_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadResonanceOptions'];
         };
       };
     };

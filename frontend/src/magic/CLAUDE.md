@@ -122,6 +122,11 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `getCharacterResonances()` — GET `/api/magic/character-resonances/`
 - `getThreadHubSummary(characterSheetId?)` — GET `/api/magic/thread-hub-summary/`
 - `getTeachingOffers()` — GET `/api/magic/teaching-offers/`
+- `getThreadResonanceOptions(id)` — GET `/api/magic/threads/{id}/resonance-options/` →
+  `ThreadResonanceOptions` (`{ritual_id, offering_required, offering_count,
+unavailable_reason, options: [{resonance_id, resonance_name, affinity_name,
+conversion_type, projected_points, merges_into_thread_id, qualifying}]}`; owner-only,
+  slice 6 of #4672)
 
 **Thread mutations:**
 
@@ -263,6 +268,10 @@ React Query hooks with a `magicKeys` query key factory.
 - `useWeaveThread()` — invalidates `threadList`, `threadHubSummary`
 - `usePatchThreadNarrative(id)` — invalidates `thread(id)`, `threadList`
 - `useRetireThread()` — invalidates `threadList`, `threadHubSummary`
+- `useThreadResonanceOptions(threadId, enabled)` — read hook for the retune dialog's
+  options (`threadResonanceOptions(id)`, `gcTime: 0`, fetched only while the dialog is open)
+- `useRetuneThread()` — performs the retune rite through `performRitual`; invalidates
+  `threads()`, `thread-hub-summary`, `characterResonances()`
 - `useImbueThread()` — takes `{ characterSheetId, threadId, amount }`;
   invalidates `thread(id)`, `threadHubSummary`, `characterResonanceList`
 - `useCrossXPLock()` — takes `{ threadId, body }`;
@@ -362,7 +371,8 @@ that opens `WeaveThreadWizard`. Links to `/threads/:id` and `/threads/teaching`.
 ### `pages/ThreadDetailPage.tsx`
 
 Thread detail page at `/threads/:id`. Renders the full thread record with `ImbuePanel`,
-`XPLockBoundaryPanel`, `PullEffectPreview`, `ThreadRenameDialog`, and `ThreadRetireDialog`.
+`XPLockBoundaryPanel`, `PullEffectPreview`, `ThreadRenameDialog`, `ThreadRetireDialog`, and
+`ThreadResonanceDialog` (opened by the "Change resonance" button, shown on a live thread).
 
 ### `pages/WeavingTeachingOffersPage.tsx`
 
@@ -400,6 +410,23 @@ and shows resolved effects and affordability. Pull commit now rides cast/clash.
 ### `components/threads/ThreadRenameDialog.tsx`
 
 Dialog for renaming a thread (patching `name` + `description`). Calls `usePatchThreadNarrative`.
+
+### `components/threads/ThreadResonanceDialog.tsx`
+
+Moves a thread to another resonance (slice 6 of #4672, Screen 6 of the #4735 demo). Reads
+`useThreadResonanceOptions`; shows the server's `unavailable_reason` in place of the "Change
+to" pills when the thread cannot move (no rite, a sanctum thread, a signed technique thread,
+no options). Each pill carries a swatch for the move kind (retune / Fall / Redemption, keyed
+on `conversion_type`) and a "merges" chip when `merges_into_thread_id` is set. Offering pills
+appear only when `offering_required`, and exactly `min(offering_count, qualifying.length)`
+picks enable the button. Performs via `useRetuneThread` with `kwargs: {thread_id,
+target_resonance}`; a 400 shows the server's detail; after a merge it navigates to the
+surviving thread (`result.thread_id`). Tests: `__tests__/ThreadResonanceDialog.test.tsx`.
+
+### `components/pillClass.ts`
+
+`pillClass(selected)`: the outlined / filled pill classes shared by
+`DriftConversionOfferDialog` and `ThreadResonanceDialog`.
 
 ### `components/threads/ThreadRetireDialog.tsx`
 

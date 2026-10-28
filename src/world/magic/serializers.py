@@ -24,6 +24,7 @@ from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
+    from world.magic.types.threads import ThreadResonanceOption
 from world.conditions.models import (
     CapabilityType,
     ConditionTemplate,
@@ -81,6 +82,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
+from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.sessions import RitualSession
 from world.magic.models.techniques import ConditionTargetKind
 from world.roster.models import RosterEntry
@@ -4407,3 +4409,49 @@ class TrainTechniqueRequestSerializer(serializers.Serializer):
     """Request shape for ``POST .../technique-progress/<technique_id>/train/``."""
 
     ap_to_invest = serializers.IntegerField(required=False, min_value=1)
+
+
+# =============================================================================
+# Thread resonance change (slice 6 of #4672)
+# =============================================================================
+
+
+class ThreadResonanceOptionSerializer(serializers.Serializer):
+    """One resonance a thread may move to, with the carried items that pay the rite (read-only).
+
+    ``qualifying`` reads ``context["qualifying"]``: the carried items that pay, keyed by
+    resonance pk, worked out once for every option by the view
+    (``qualifying_components_by_target``), so this serializer queries nothing per option.
+    ``conversion_type`` is null for a retune within the thread's own affinity.
+    ``merges_into_thread_id`` is the live thread on the same anchor the move would merge
+    into, null when the thread moves on its own.
+    """
+
+    resonance_id = serializers.IntegerField(source="resonance.pk")
+    resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME)
+    affinity_name = serializers.CharField(source="resonance.affinity.name")
+    conversion_type = serializers.ChoiceField(choices=ConversionType.choices, allow_null=True)
+    projected_points = serializers.IntegerField()
+    merges_into_thread_id = serializers.IntegerField(allow_null=True)
+    qualifying = serializers.SerializerMethodField()
+
+    @extend_schema_field(DriftQualifyingComponentSerializer(many=True))
+    def get_qualifying(self, option: "ThreadResonanceOption") -> list[dict]:
+        components = self.context["qualifying"].get(option.resonance.pk, [])
+        return DriftQualifyingComponentSerializer(components, many=True).data
+
+
+class ThreadResonanceOptionsSerializer(serializers.Serializer):
+    """GET /api/magic/threads/{id}/resonance-options/ response (read-only).
+
+    ``ritual_id`` is the authored retune rite to perform, null while staff have not made one.
+    ``offering_required`` / ``offering_count``: whether the rite asks for target-resonance
+    offerings and how many units (the web pays only those). ``unavailable_reason`` is the
+    refusal to show in place of the options, "" when the thread can move.
+    """
+
+    ritual_id = serializers.IntegerField(allow_null=True)
+    offering_required = serializers.BooleanField()
+    offering_count = serializers.IntegerField()
+    unavailable_reason = serializers.CharField(allow_blank=True)
+    options = ThreadResonanceOptionSerializer(many=True)
