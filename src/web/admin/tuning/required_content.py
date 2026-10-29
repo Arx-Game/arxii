@@ -828,20 +828,21 @@ def _probe_strain_burn_reach_tiers() -> ProbeResult:
 
 
 def _probe_fury_degree_shares() -> ProbeResult:
-    """Every canonical CheckOutcome tier must have a FuryDegreeShare row (#4738).
+    """Every CheckOutcome tier must have a FuryDegreeShare row (#4738).
 
     A Fury control roll that lands on a tier without a row buys no intensity: the
-    character still surrenders the tier's control and gets nothing for it.
+    character still surrenders the tier's control and gets nothing for it. Tiers are
+    matched by FK (the drift correction probe's shape), never by name; names only label
+    what is missing.
     """
     from world.magic.models import FuryDegreeShare  # noqa: PLC0415
-    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
 
-    covered = set(
-        FuryDegreeShare.objects.filter(outcome_tier__name__in=CANONICAL_OUTCOME_LEVELS).values_list(
-            "outcome_tier__name", flat=True
-        )
+    missing = tuple(
+        CheckOutcome.objects.exclude(pk__in=FuryDegreeShare.objects.values("outcome_tier_id"))
+        .order_by("success_level", "name")
+        .values_list("name", flat=True)
     )
-    missing = tuple(name for name in CANONICAL_OUTCOME_LEVELS if name not in covered)
     if not missing:
         return ProbeResult(present=True)
     detail = f"No FuryDegreeShare row for outcome tier(s): {', '.join(missing)}."

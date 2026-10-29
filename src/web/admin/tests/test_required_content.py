@@ -1922,19 +1922,21 @@ class TestFuryTradeProbes(TestCase):
     U-keep: the dashboard probe has no player path.
     """
 
-    def test_lists_the_canonical_tiers_with_no_share(self) -> None:
+    def test_lists_the_outcome_tiers_with_no_share(self) -> None:
         from world.magic.factories import FuryDegreeShareFactory
         from world.traits.constants import CANONICAL_OUTCOME_LEVELS
         from world.traits.services import ensure_canonical_check_outcome
 
         covered, *uncovered = CANONICAL_OUTCOME_LEVELS
+        for name in CANONICAL_OUTCOME_LEVELS:
+            ensure_canonical_check_outcome(name)
         FuryDegreeShareFactory(outcome_tier=ensure_canonical_check_outcome(covered))
         result = _probe_for("fury-degree-shares").resolve(None)
         self.assertFalse(result.present)
         self.assertEqual(result.missing, tuple(uncovered))
         self.assertIn("No FuryDegreeShare row for outcome tier(s): ", result.detail)
 
-    def test_present_when_every_canonical_tier_has_a_share(self) -> None:
+    def test_present_when_every_outcome_tier_has_a_share(self) -> None:
         from world.magic.factories import FuryDegreeShareFactory
         from world.traits.constants import CANONICAL_OUTCOME_LEVELS
         from world.traits.services import ensure_canonical_check_outcome

@@ -2143,7 +2143,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
   `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or
   charged. Resolution still clamps, for a tie that lapsed after declaring.
-- **Required content.** `fury-degree-shares` lists canonical outcome tiers with no
+- **Required content.** `fury-degree-shares` lists every `CheckOutcome` (matched by FK) with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
   and `full_intensity` (`full_trade_intensities`: the trade at the highest authored
