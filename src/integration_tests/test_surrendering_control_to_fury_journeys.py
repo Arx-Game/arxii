@@ -12,7 +12,7 @@ cap 2 and a x1.2 scale. Degree shares: Critical Failure 0%, Failure 25%, Partial
 Success 75%, Critical Success 100%.
 - Seething (depth 1) surrenders 6 control: full trade 6 x 1.5 x 1.2 = 10.8.
   Success buys floor(8.1) = 8; Partial Success floor(5.4) = 5.
-- Unbound (depth 3, a Berserk tier) surrenders 12 control, but cap 2 clamps it to Seething.
+- Unbound (depth 3, a Berserk tier) surrenders 12 control; declaring it past cap 2 is refused.
 - What the picker previews: Seething's full trade is 6 x 1.5 = 9 with no anchor, 10 with Ilse;
   Unbound's is 18, and 21 with Ilse (21.6).
 Every roll in the round is forced (the control roll included), so each outcome is the test's
