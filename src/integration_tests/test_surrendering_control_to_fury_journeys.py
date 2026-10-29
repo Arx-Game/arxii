@@ -27,7 +27,11 @@ from unittest.mock import MagicMock, patch
 
 from django.urls import reverse
 
+from actions.constants import ActionBackend
+from actions.errors import ActionDispatchError
 from actions.factories import ActionTemplateFactory
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.combat.constants import ActionCategory, OpponentTier
@@ -42,6 +46,7 @@ from world.combat.models import CombatRoundAction
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.encounter.config import get_strain_config
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.fatigue.constants import EffortLevel
 from world.magic import services as magic_services
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -207,6 +212,31 @@ class SurrenderingControl(_AtTheFord):
             CombatRoundAction.objects.filter(participant__character_sheet=self.brannoc.sheet_data)
             .exclude(fury_commitment=None)
             .exists()
+        )
+
+    def test_a_tier_deeper_than_the_cap_sent_from_the_web_is_refused(self) -> None:
+        # The web client's combat submit, a COMBAT ref, skips the cast's round_declaration.
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT, technique_id=self.technique.pk, action_slot="focused"
+        )
+        kwargs = {
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target_id": self.bandit.pk,
+            "fury_commitment_id": self.unbound.pk,
+            "fury_anchor_id": self.ilse.sheet_data.pk,
+        }
+
+        with self.assertRaises(ActionDispatchError) as refused:
+            dispatch_player_action(self.brannoc, ref, kwargs)
+
+        self.assertEqual(
+            refused.exception.user_message,
+            "That Fury tier exceeds your provocation cap with that anchor.",
+        )
+        self.assertFalse(
+            CombatRoundAction.objects.filter(
+                participant__character_sheet=self.brannoc.sheet_data
+            ).exists()
         )
 
     def test_a_botched_roll_buys_nothing_but_still_surrenders(self) -> None:

@@ -421,6 +421,28 @@ class CombatRoundContext(RoundContext):
         from world.combat.services import declare_action  # noqa: PLC0415
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
+        fury_commitment = None
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is not None:
+            from world.magic.models import FuryTier  # noqa: PLC0415
+
+            fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
+
+        fury_anchor = None
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        if fury_anchor_id is not None:
+            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+
+        # The web dispatch reaches here without the cast's round_declaration hook, so the
+        # provocation cap is enforced again before anything is charged (#4738).
+        if fury_commitment is not None:
+            from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+
+            if provocation_cap(participant.character_sheet, fury_anchor) < fury_commitment.depth:
+                raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
+
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
             self._commit_focused_pull(participant, technique, kwargs)
@@ -454,20 +476,6 @@ class CombatRoundContext(RoundContext):
 
         confirm_soulfray_risk: bool = bool(kwargs.get("confirm_soulfray_risk", False))
         strain_commitment = int(kwargs.get("strain_commitment", 0) or 0)
-
-        fury_commitment = None
-        fury_commitment_id = kwargs.get("fury_commitment_id")
-        if fury_commitment_id is not None:
-            from world.magic.models import FuryTier  # noqa: PLC0415
-
-            fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
-
-        fury_anchor = None
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        if fury_anchor_id is not None:
-            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
 
         action = declare_action(
             participant,

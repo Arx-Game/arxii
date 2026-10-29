@@ -30,6 +30,7 @@ class ActionDispatchError(Exception):
     BURN_NO_FALL_RATE = "burn_no_fall_rate"
     BURN_INVALID = "burn_invalid"
     PULL_NEEDS_SOULFRAY_CONSENT = "pull_needs_soulfray_consent"
+    FURY_OVER_CAP = "fury_over_cap"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -48,6 +49,7 @@ class ActionDispatchError(Exception):
         PULL_NEEDS_SOULFRAY_CONSENT: (
             "Accept the Soulfray risk before pulling a thread on this cast."
         ),
+        FURY_OVER_CAP: "That Fury tier exceeds your provocation cap with that anchor.",
     }
     _FALLBACK = "That action could not be completed."
 
