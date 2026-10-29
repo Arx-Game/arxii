@@ -60,6 +60,13 @@ if git cat-file -e "${OLD_REV}^{commit}" 2>/dev/null; then
     echo "and say so in the report; if they do not, prove it with a diff of the reviewed"
     echo "files rather than asserting it."
     if [[ "$ASSUME_YES" != "--yes" ]]; then
+      # An agent's shell has no terminal and its stdin never closes, so a prompt there
+      # waits forever (#4797). Without a terminal, stop and say how to proceed instead.
+      if [[ ! -t 0 ]]; then
+        echo "No terminal to confirm on. Judge the diff above, then re-run with --yes."
+        echo "Report left unchanged."
+        exit 3
+      fi
       read -r -p "Restate the revision anyway? [y/N] " reply
       [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted; report left unchanged."; exit 3; }
     fi
