@@ -2144,9 +2144,9 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
 - **Required content.** `fury-degree-shares` lists canonical outcome tiers with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
-  and `full_intensity` (`full_trade_intensities`: the trade at a full share with no anchor
-  scaling); each `AnchorOption` carries `tier_full_intensities`, the same figure under that
-  anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
+  and `full_intensity` (`full_trade_intensities`: the trade at the highest authored
+  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no anchor scaling); each
+  `AnchorOption` carries `tier_full_intensities`, the same figure under that anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
   surrender 6 control" (`(Berserk)` on a Berserk tier) and previews "6 control -> up to +10
   intensity, by your roll" from those server figures. The participant payload carries
   `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the

@@ -170,7 +170,7 @@ def _trade_rate() -> Decimal:
 
 
 def _full_trade(tier: FuryTier, cap: int, *, rate: Decimal, bonus_scale: int) -> Decimal:
-    """The unfloored intensity ``tier`` buys at a full share: control x rate x cap scale."""
+    """The unfloored intensity ``tier`` buys at a 100% share: control x rate x cap scale."""
     scale = Decimal(100 + bonus_scale * cap) / 100
     return Decimal(tier.control_surrendered) * rate * scale
 
@@ -179,17 +179,32 @@ def _floor(amount: Decimal) -> int:
     return max(int(amount.to_integral_value(rounding=ROUND_FLOOR)), 0)
 
 
-def full_trade_intensities(tiers: Iterable[FuryTier], cap: int = 0) -> dict[int, int]:
-    """Intensity each tier buys at a full (100%) share and provocation ``cap``, by tier pk.
+def top_share_percent() -> int:
+    """The highest authored ``FuryDegreeShare.intensity_percent``, or 0 when none exists."""
+    from django.db.models import Max  # noqa: PLC0415
 
-    The declaration picker's preview figures: with ``cap`` 0 the anchor adds no scaling.
-    Reads the rate and the cap scaling once for the whole ladder.
+    return FuryDegreeShare.objects.aggregate(top=Max("intensity_percent"))["top"] or 0
+
+
+def full_trade_intensities(
+    tiers: Iterable[FuryTier], cap: int = 0, *, top_percent: int | None = None
+) -> dict[int, int]:
+    """The most intensity each tier can buy at provocation ``cap``, by tier pk.
+
+    The declaration picker's "up to" figures: the trade at the highest authored
+    ``FuryDegreeShare.intensity_percent`` (``top_share_percent``; 0 when no share row
+    exists, so nothing can be bought). With ``cap`` 0 the anchor adds no scaling. A caller
+    pricing several anchors passes ``top_percent`` once instead of re-reading it.
     """
+    if top_percent is None:
+        top_percent = top_share_percent()
     rate = _trade_rate()
     bonus_scale = _config().bonus_scale_per_cap_point
     return {
-        tier.pk: _floor(_full_trade(tier, cap, rate=rate, bonus_scale=bonus_scale))
-        if tier.control_surrendered > 0
+        tier.pk: _floor(
+            _full_trade(tier, cap, rate=rate, bonus_scale=bonus_scale) * Decimal(top_percent) / 100
+        )
+        if tier.control_surrendered > 0 and top_percent > 0
         else 0
         for tier in tiers
     }

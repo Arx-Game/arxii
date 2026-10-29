@@ -605,14 +605,17 @@ def _eligible_fury_anchors(
 ) -> tuple[AnchorOption, ...]:
     """Active relationships whose bond can carry a provocation (#1543, #3957).
 
-    Each carries what every tier buys at a full share under its cap (#4738).
+    Each carries the most every tier can buy under its cap: the trade at the highest
+    authored degree share (#4738).
     """
     from world.magic.services.fury import (  # noqa: PLC0415
         full_trade_intensities,
         provocation_cap,
+        top_share_percent,
     )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
+    top_percent = top_share_percent()
     anchors: list[AnchorOption] = []
     for rel in CharacterRelationship.objects.filter(source=sheet, is_active=True).select_related(
         "target", "target__character"
@@ -623,7 +626,7 @@ def _eligible_fury_anchors(
             continue
         anchor_char = anchor_sheet.character
         name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-        full = full_trade_intensities(ladder, cap)
+        full = full_trade_intensities(ladder, cap, top_percent=top_percent)
         anchors.append(
             AnchorOption(
                 id=anchor_sheet.pk,

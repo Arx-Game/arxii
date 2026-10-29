@@ -94,11 +94,11 @@ export interface FuryTierOption {
   depth: number;
   control_surrendered: number;
   is_berserk: boolean;
-  /** Intensity bought at a full share with no anchor scaling, computed server-side. */
+  /** The most intensity the tier can buy (best authored share), no anchor scaling. Server-side. */
   full_intensity: number;
 }
 
-/** What one Fury tier buys at a full share under one anchor's scaling (#4738). */
+/** The most one Fury tier can buy under one anchor's scaling (#4738). */
 export interface FuryAnchorTierIntensity {
   tier_id: number;
   full_intensity: number;

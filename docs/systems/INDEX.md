@@ -8547,7 +8547,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `berserk_severity` > 0 applies Berserk whatever the roll. No engagement: refused by
   `_cap_fury_by_provocation` (`NO_ENGAGEMENT_MESSAGE`), a no-op at resolution. Required content:
   `fury-degree-shares`, `fury-intensity-per-control`. Surfaces: `full_trade_intensities`
-  (picker preview), `fury_tier_label`, `fury_trade_message` (the caster's line, sent on
+  (picker "up to" preview, at the highest authored share, `top_share_percent`), `fury_tier_label`, `fury_trade_message` (the caster's line, sent on
   commit); `FuryTierOption(control_surrendered, is_berserk, full_intensity)`,
   `AnchorOption.tier_full_intensities`, participant `fury_control_surrendered`, web
   `FuryDeclaration` + `combat/sections/Pressure.tsx`, telnet `combat` hub `Pressure:` line.

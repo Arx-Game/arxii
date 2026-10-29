@@ -519,8 +519,9 @@ class FuryTierOption:
     """One selectable Fury tier for the declaration picker (#1543, #4738).
 
     A tier is a preset amount of control surrendered for the rest of the engagement.
-    ``id`` is the FuryTier PK sent as ``fury_commitment_id``. ``full_intensity`` is what
-    the trade buys at a full share with no anchor scaling, computed server-side.
+    ``id`` is the FuryTier PK sent as ``fury_commitment_id``. ``full_intensity`` is the most
+    the trade can buy (the highest authored degree share) with no anchor scaling, computed
+    server-side.
     """
 
     id: int
@@ -533,7 +534,7 @@ class FuryTierOption:
 
 @dataclass(frozen=True)
 class AnchorTierIntensity:
-    """What one Fury tier buys at a full share with this anchor's scaling (#4738)."""
+    """The most one Fury tier can buy under this anchor's scaling (#4738)."""
 
     tier_id: int
     full_intensity: int

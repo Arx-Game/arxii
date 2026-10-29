@@ -233,3 +233,35 @@ class _FakeCheck:
     def __init__(self, outcome):
         self.outcome = outcome
         self.success_level = outcome.success_level
+
+
+class FullTradePreviewTests(TestCase):
+    """The picker's "up to" figure uses the highest authored share, not 100% (#4738)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        FuryConfigFactory(bonus_scale_per_cap_point=10)
+        config = get_strain_config()
+        config.intensity_per_control_surrendered = Decimal("1.50")
+        config.save()
+        cls.tier = FuryTierFactory(name="Seething", depth=1, control_surrendered=10)
+
+    def test_no_share_rows_preview_nothing(self):
+        from world.magic.services.fury import full_trade_intensities
+
+        self.assertEqual(full_trade_intensities([self.tier]), {self.tier.pk: 0})
+
+    def test_preview_uses_the_highest_authored_share(self):
+        from world.magic.services.fury import full_trade_intensities
+
+        FuryDegreeShareFactory(
+            outcome_tier=CheckOutcomeFactory(name="Partial", success_level=0),
+            intensity_percent=40,
+        )
+        FuryDegreeShareFactory(
+            outcome_tier=CheckOutcomeFactory(name="Success", success_level=1),
+            intensity_percent=80,
+        )
+        # 10 x 1.5 = 15 at no cap; x 80% = 12. Cap 2 scales by 1.2: 18 x 80% = 14.4 -> 14.
+        self.assertEqual(full_trade_intensities([self.tier]), {self.tier.pk: 12})
+        self.assertEqual(full_trade_intensities([self.tier], 2), {self.tier.pk: 14})
