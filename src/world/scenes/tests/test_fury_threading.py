@@ -78,6 +78,18 @@ def _make_technique_use_result(resolution: PendingActionResolution) -> Technique
     )
 
 
+def _cast_that_goes_off(result: TechniqueUseResult):
+    """A stand-in for use_technique that drives its FuryCast as a cast that goes off does."""
+
+    def cast(**kwargs):
+        fury = kwargs.get("fury")
+        if fury is not None and fury.surrender():
+            fury.settle()
+        return result
+
+    return cast
+
+
 _ROOM_COUNTER = [0]
 
 
@@ -336,7 +348,7 @@ class FuryCommittedAuditTests(TestCase):
     ) -> None:
         pending = _make_pending_resolution(success_level=3)
         mock_resolve.return_value = pending
-        mock_use_technique.return_value = _make_technique_use_result(pending)
+        mock_use_technique.side_effect = _cast_that_goes_off(_make_technique_use_result(pending))
 
         # Force the control roll to a success.
         lucid_outcome = CheckOutcomeFactory(name="FuryLucid_Audit", success_level=3)
@@ -406,7 +418,7 @@ class BerserkTierIsChosenTests(TestCase):
     ) -> None:
         pending = _make_pending_resolution(success_level=3)
         mock_resolve.return_value = pending
-        mock_use_technique.return_value = _make_technique_use_result(pending)
+        mock_use_technique.side_effect = _cast_that_goes_off(_make_technique_use_result(pending))
         crit_outcome = CheckOutcomeFactory(name="FuryCrit_Berserk", success_level=3)
 
         request = SceneActionRequestFactory(

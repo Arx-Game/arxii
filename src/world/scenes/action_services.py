@@ -1890,7 +1890,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     """
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
-    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+    from world.magic.services.fury import fury_cast_for  # noqa: PLC0415
     from world.magic.types.magic_skills import CastCheck  # noqa: PLC0415
 
     # The pull context follows what this action rolls: the template's check traits plus the
@@ -1902,7 +1902,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         character, technique, cast_pull=cast_pull, cast_check=action_cast_check
     )
 
-    fury_res = run_fury_for_action(
+    # Runs inside use_technique, after its gates, so only a cast that goes off pays (#4738).
+    fury = fury_cast_for(
         character=character,
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
@@ -1912,6 +1913,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     technique_result = use_technique(
         character=character,
         technique=technique,
+        fury=fury,
         resolve_fn=lambda *, power, ledger, extra_modifiers=0: start_action_resolution(  # noqa: ARG005
             character=character,
             template=action_template,
@@ -1943,7 +1945,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         action_resolution=resolution_result,
         action_key=action_key,
         technique_result=technique_result,
-        fury_committed=fury_res.realized_tier if fury_res else None,
+        fury_committed=fury.realized_tier if fury else None,
     )
 
 

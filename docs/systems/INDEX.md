@@ -8535,7 +8535,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   combat panel's `DigDeep` button reads it. Journeys: `test_dig_deep_journeys`.
 - **Surrendering control to Fury (#4738 part B) [BUILT & WIRED, INERT UNTIL STAFF SET
   `StrainConfig.intensity_per_control_surrendered` AND `FuryDegreeShare` ROWS]:**
-  `world/magic/services/fury.py` `run_fury_for_action` rolls the control check, then
+  `world/magic/services/fury.py` `FuryCast` (from `fury_cast_for`, driven by
+  `use_technique(fury=)` after its Soulfray gate; `withdraw()` on a PRE_CAST cancel, `settle()`
+  for the message and Berserk) rolls the control check, then
   `resolve_fury` / `fury_intensity_for(tier, cap, outcome)` price the trade
   (`FuryTier.control_surrendered` x the rate x the anchor-cap scale x the outcome's
   `FuryDegreeShare.intensity_percent`) and it lands on the character's `CharacterEngagement`

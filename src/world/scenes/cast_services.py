@@ -209,7 +209,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     # Gathered inside _resolve_fn, after use_technique's focus check against carried
     # drift (#4732), so a conflict that check applies reaches this same roll.
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+    from world.magic.services.fury import fury_cast_for  # noqa: PLC0415
 
     applicable_threads = applicable_threads_for_cast(
         character, technique, cast_pull=cast_pull, cast_check=cast_check
@@ -221,7 +221,8 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     sig_intensity_delta = signature_intensity_delta(character, technique)
 
-    fury_res = run_fury_for_action(
+    # Runs inside use_technique, after its gates, so only a cast that goes off pays (#4738).
+    fury = fury_cast_for(
         character=character,
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
@@ -272,7 +273,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         cast_pull=cast_pull,
         pull_target=target,
         cast_check=cast_check,
-        # Fury's trade is on her engagement already (#4738); the runtime stats carry it.
+        fury=fury,
         power_intensity_bonus=sig_intensity_delta,
         apply_variant=apply_variant,
         preferred_resonance=preferred_resonance,
@@ -283,6 +284,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     )
 
     # Soulfray gate: use_technique returned without resolving — propagate None result.
+    fury_res = fury.resolution if fury is not None else None
     if not technique_result.confirmed:
         return None, None, fury_res
 
@@ -293,7 +295,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         action_key=CAST_ACTION_KEY,
         technique_result=technique_result,
         power_ledger=power_ledger,
-        fury_committed=fury_res.realized_tier if fury_res else None,
+        fury_committed=fury.realized_tier if fury else None,
     )
     return result, power_ledger, fury_res
 

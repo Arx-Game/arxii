@@ -158,7 +158,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
     tagged so it only runs in the CI Postgres parity suite.
 
     The tier is a Berserk tier (berserk_severity > 0), so whatever the control roll:
-    - run_fury_for_action calls apply_condition(Berserk) for real.
+    - FuryCast.settle calls apply_condition(Berserk) for real.
     - The caster ends up with a ConditionInstance for Berserk.
     - Interaction.fury_committed is set to the realized tier.
     """
@@ -485,7 +485,7 @@ class BerserkDecayTests(TestCase):
 class FuryCapZeroTests(TestCase):
     """Cap 0 (no bond between caster and anchor) → fury unavailable.
 
-    This exercises the null-anchor path through run_fury_for_action:
+    This exercises the null-anchor path through resolve_fury:
     provocation_cap returns 0 → clamp_tier returns None → FuryResolution(None,…)
     → berserk_severity=0 → apply_condition NOT called.
     """

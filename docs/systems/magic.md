@@ -2114,20 +2114,27 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `intensity_per_control_surrendered` x (100 + `bonus_scale_per_cap_point` x cap) / 100 x
   `intensity_percent` / 100), Decimal math floored once. An outcome with no `FuryDegreeShare`
   row buys nothing; the control is still surrendered.
-- **Where it lands.** `run_fury_for_action` rolls the control check (`FuryConfig.check_trait`
-  plus the `FURY_CONTROL` magic-skill terms, difficulty `base_check_difficulty` minus the ease),
-  then writes her `CharacterEngagement` (any engagement type) under a row lock:
+- **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
+  `use_technique(fury=...)`, which drives it. Once the Soulfray gate has passed,
+  `FuryCast.surrender()` rolls the control check (`FuryConfig.check_trait` plus the
+  `FURY_CONTROL` magic-skill terms, difficulty `base_check_difficulty` minus the ease) and writes
+  her `CharacterEngagement` (any engagement type) under a row lock:
   `intensity_modifier += intensity_gained`, `control_modifier -= control_surrendered`,
-  `fury_control_surrendered += control_surrendered`. It runs before `use_technique`, so the cast
-  Fury was declared with already reads the trade through `get_runtime_technique_stats`; every
-  later cast in the engagement does too. Fury may be declared again each round, and each
-  declaration surrenders and buys again. With no engagement it returns None.
+  `fury_control_surrendered += control_surrendered`. `use_technique` then re-reads her runtime
+  stats, so the cast Fury was declared with channels the trade, and every later cast in the
+  engagement does too. A `TECHNIQUE_PRE_CAST` cancel calls `withdraw()`, which takes the trade
+  back off (the roll stands). A cast that proceeds calls `settle()`: the caster alone is told
+  "You surrender N control: intensity +M." on commit, and Berserk is applied for a Berserk tier.
+  A cast stopped at the Soulfray gate surrenders nothing and tells her nothing. With no
+  engagement, or when the anchor's tie clamps the tier to nothing, nothing is rolled and nothing
+  changes. Fury may be declared again each round, and each declaration surrenders and buys again.
 - **Berserk is chosen.** A tier with `berserk_severity` above 0 is a Berserk tier: choosing it
   applies Berserk (`FuryConfig.berserk_condition`) at that severity whatever the roll. No roll
   ever causes Berserk. Declaring Fury while already Berserk is allowed.
 - **Callers.** Combat (`resolve_combat_technique`), scene cast (`cast_services._resolve_cast`)
-  and technique-enhanced scene actions (`action_services`). None passes a Fury term to
-  `use_technique`; its `control_penalty` parameter is gone.
+  and technique-enhanced scene actions (`action_services`) each pass `fury=` to
+  `use_technique` and read `FuryCast.realized_tier` back for the audit. None passes a Fury power
+  term; `use_technique`'s `control_penalty` parameter is gone.
 - **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
   without a technique, without an anchor, above the cap, and with no engagement ("Fury needs
   something at stake: you are not engaged."). Combat declarations are not validated; resolution
@@ -2142,8 +2149,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   intensity, by your roll" from those server figures. The participant payload carries
   `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the
   `Pressure` rail section (`frontend/src/combat/sections/Pressure.tsx`) shows them, with a
-  "Fury: surrendered N control" chip once N > 0. `run_fury_for_action` tells the caster alone,
-  on commit, "You surrender N control: intensity +M." (`fury_trade_message`), so all three
+  "Fury: surrendered N control" chip once N > 0, read from her engagement whatever its type.
+  `FuryCast.settle` tells the caster alone, on commit, "You surrender N control: intensity +M." (`fury_trade_message`), so all three
   resolution paths say it. Telnet: bare `combat` lists the tiers (`fury_tier_label`), the
   declared tier and a `Pressure:` line.
 - **Berserk penalises, it does not refuse (#4738 part B).** A Berserk character may declare

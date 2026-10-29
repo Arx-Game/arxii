@@ -44,10 +44,6 @@ from world.vitals.models import CharacterVitals
 # (not lazy), so we must patch the bound name there.
 _SOULFRAY_WARNING_PATCH = "world.magic.services.techniques.get_soulfray_warning"
 
-# run_fury_for_action is imported lazily inside resolve_combat_technique, so
-# patching the origin module is correct (repo convention: lazy-import + patch-origin).
-_RUN_FURY_PATCH = "world.magic.services.fury.run_fury_for_action"
-
 # use_technique is imported lazily inside resolve_combat_technique via
 # `from world.magic.services import use_technique` — patch the re-export point.
 _USE_TECHNIQUE_PATCH = "world.magic.services.use_technique"
@@ -180,15 +176,19 @@ class FuryAuditTests(TestCase):
             anima_cost=fake_cost, confirmed=False, technique=technique
         )
 
-        with patch(_RUN_FURY_PATCH, return_value=fury_res):
-            with patch(_USE_TECHNIQUE_PATCH, return_value=fake_use_result):
-                result = resolve_combat_technique(
-                    participant=participant,
-                    action=action,
-                    fatigue_category=ActionCategory.PHYSICAL,
-                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
-                    offense_check_fn=None,
-                )
+        def cast(**kwargs):
+            # The cast surrendered: use_technique drives the FuryCast it is handed.
+            kwargs["fury"].resolution = fury_res
+            return fake_use_result
+
+        with patch(_USE_TECHNIQUE_PATCH, side_effect=cast):
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
+                offense_check_fn=None,
+            )
 
         self.assertIs(
             result.fury_committed,

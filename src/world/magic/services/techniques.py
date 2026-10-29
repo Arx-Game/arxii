@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
     from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.services.fury import FuryCast
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
@@ -1594,8 +1595,14 @@ def use_technique(  # noqa: PLR0913
     cast_check: CastCheck | None = None,
     combat_burn_for: str = "",
     pulled_resonance: Resonance | None = None,
+    fury: FuryCast | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
+
+    ``fury`` (#4738) is the Fury declared with this cast. It surrenders (rolls and lands
+    its trade on her engagement) only once the Soulfray gate has passed, and the runtime
+    stats are re-read so this cast channels it; a ``TECHNIQUE_PRE_CAST`` cancel withdraws
+    the trade; a cast that proceeds settles it (her message on commit, Berserk).
 
     Burning resonance (#4736): a non-combat ``cast_pull`` with ``burn > 0`` is resolved
     here (ceiling, strain check, reach) once the Soulfray gate passes, and its strain
@@ -1639,6 +1646,19 @@ def use_technique(  # noqa: PLR0913
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
         )
+    if fury is not None and fury.surrender():
+        # The trade is on her engagement now; this cast reads it like any later one.
+        stats, anima, cost, effective_strain = _calculate_technique_cost(
+            character=character,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            lethal=lethal,
+            apply_variant=apply_variant,
+            preferred_resonance=preferred_resonance,
+        )
+        strain_power_bonus = _strain_power_bonus(
+            effective_strain, strain_config, strain_power_enabled
+        )
     # #4099: the ONE decision whether this cast pays the caster's price. Made here, at
     # resolution (combat calls use_technique when the round resolves, not when the
     # action is declared), and threaded to the power term, the settlement after
@@ -1680,6 +1700,8 @@ def use_technique(  # noqa: PLR0913
         burn_result=burn_result,
     )
     if preparation is None:
+        if fury is not None:
+            fury.withdraw()
         return TechniqueUseResult(
             anima_cost=cost,
             confirmed=False,
@@ -1688,6 +1710,8 @@ def use_technique(  # noqa: PLR0913
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
         )
+    if fury is not None:
+        fury.settle()
     preparation.strain_power_bonus = strain_power_bonus
     preparation.combat_burn_for = combat_burn_for
     # Resolution may supply an explicit check result; retain it over extraction.

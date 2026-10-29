@@ -21,6 +21,7 @@ choice.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -51,10 +52,12 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.magic.types.techniques import SoulfrayWarning
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.services import begin_engagement
 from world.relationships.factories import CharacterRelationshipFactory
+from world.relationships.models import CharacterRelationship
 from world.scenes.constants import RoundStatus
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
@@ -145,7 +148,7 @@ class _AtTheFord(JourneyCase):
             f"cast {self.technique.name} at {self.bandit.name} fury={tier.name} anchor=Ilse",
         )
 
-    def resolve_with(self, outcome_name: str) -> list[int]:
+    def resolve_with(self, outcome_name: str, *, stop_the_cast=None) -> list[int]:
         """Resolve the round with every roll at ``outcome_name``.
 
         Returns the runtime intensity each cast resolved with (a spy on the real
@@ -164,6 +167,7 @@ class _AtTheFord(JourneyCase):
         with (
             patch("world.checks.services.perform_check", return_value=rolled),
             patch("world.magic.services.use_technique", side_effect=spy),
+            stop_the_cast or nullcontext(),
             self.captureOnCommitCallbacks(execute=True),
         ):
             resolve_round(self.encounter)
@@ -211,6 +215,60 @@ class SurrenderingControl(_AtTheFord):
         engagement = self.engagement_now()
         self.assertEqual(engagement.intensity_modifier, 0)
         self.assertEqual(engagement.control_modifier, -SEETHING_SURRENDERS)
+
+
+class OnlyACastThatGoesOffPays(_AtTheFord):
+    """The trade lands only once the cast is past its gates (#4738 part B fix round)."""
+
+    def assertNothingTraded(self) -> None:  # noqa: N802 - unittest style
+        engagement = self.engagement_now()
+        self.assertEqual(
+            (
+                engagement.intensity_modifier,
+                engagement.control_modifier,
+                engagement.fury_control_surrendered,
+            ),
+            (0, 0, 0),
+        )
+        self.assertNotTold(self.brannoc, "You surrender")
+
+    def test_a_cast_stopped_at_the_soulfray_gate_surrenders_nothing(self) -> None:
+        self.declare_fury(self.seething)
+        # A Soulfray stage that appeared after he declared: the unconfirmed cast stops.
+        warning = SoulfrayWarning(stage_name="Fraying", stage_description="", has_death_risk=False)
+
+        casts = self.resolve_with(
+            "Success",
+            stop_the_cast=patch(
+                "world.magic.services.techniques.get_soulfray_warning", return_value=warning
+            ),
+        )
+
+        self.assertEqual(casts, [0])
+        self.assertNothingTraded()
+
+    def test_a_cast_cancelled_before_it_resolves_gives_the_trade_back(self) -> None:
+        self.declare_fury(self.seething)
+
+        self.resolve_with(
+            "Success",
+            stop_the_cast=patch(
+                "world.magic.services.techniques._prepare_technique_cast", return_value=None
+            ),
+        )
+
+        self.assertNothingTraded()
+
+    def test_no_tie_to_the_anchor_rolls_nothing(self) -> None:
+        CharacterRelationship.objects.filter(source=self.brannoc.sheet_data).delete()
+        self.declare_fury(self.seething)
+
+        # The control roll's check type is only fetched when the roll is made.
+        with patch("world.magic.services.fury._ensure_fury_check_type") as control_roll:
+            self.resolve_with("Success")
+
+        control_roll.assert_not_called()
+        self.assertNothingTraded()
 
 
 class SeeingTheTrade(_AtTheFord):
