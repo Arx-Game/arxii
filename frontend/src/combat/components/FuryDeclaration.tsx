@@ -1,12 +1,19 @@
 /**
  * FuryDeclaration — "Surrender control": tier + bonded-anchor pickers for a combat
  * cast (#1543, #4738). Each tier is a preset amount of control surrendered; the preview
- * reads the full-share intensity the server computed for that tier under the anchor.
+ * reads the most intensity the server says that tier can buy under the anchor.
  * Shown by YourTurn only when the focused slot is a cast. Holds no state (state
  * lives in YourTurn, threaded via callbacks — mirrors selectedPull/strainByClash).
  * When both are cleared, YourTurn sends no fury kwargs.
  */
 import type { FuryTierOption, FuryAnchorOption } from '@/scenes/actionTypes';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 function furyTierLabel(tier: FuryTierOption): string {
   const label = `${tier.name}: surrender ${tier.control_surrendered} control`;
@@ -17,13 +24,6 @@ function fullIntensityFor(tier: FuryTierOption, anchor: FuryAnchorOption): numbe
   const scaled = anchor.tier_full_intensities.find((row) => row.tier_id === tier.id);
   return scaled?.full_intensity ?? tier.full_intensity;
 }
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 interface FuryDeclarationProps {
   tiers: FuryTierOption[];
