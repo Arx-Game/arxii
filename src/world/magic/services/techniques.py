@@ -712,7 +712,10 @@ def get_runtime_technique_stats(
 
     return RuntimeTechniqueStats(
         intensity=runtime_intensity,
-        control=runtime_control,
+        # Floored at 0 (#4738): control surrendered to Fury, round after round, can push the
+        # engagement's control_modifier far down, and a negative figure would raise the
+        # anima cost without limit. The old per-cast Fury penalty floored the same way.
+        control=max(runtime_control, 0),
     )
 
 

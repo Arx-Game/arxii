@@ -2128,6 +2128,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   A cast stopped at the Soulfray gate surrenders nothing and tells her nothing. With no
   engagement, or when the anchor's tie clamps the tier to nothing, nothing is rolled and nothing
   changes. Fury may be declared again each round, and each declaration surrenders and buys again.
+  `get_runtime_technique_stats` floors runtime control at 0, so repeated surrenders cannot push
+  the anima cost up without limit (the stored `control_modifier` is not floored).
 - **Berserk is chosen.** A tier with `berserk_severity` above 0 is a Berserk tier: choosing it
   applies Berserk (`FuryConfig.berserk_condition`) at that severity whatever the roll. No roll
   ever causes Berserk. Declaring Fury while already Berserk is allowed.
