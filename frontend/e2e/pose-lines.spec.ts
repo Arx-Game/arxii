@@ -188,4 +188,62 @@ test.describe('a pose is a prose line (#4128)', () => {
     await expect(play.getByRole('menuitem', { name: /^Block/ })).toBeVisible();
     await page.screenshot({ path: `${OUT}/play-menu-1600.png` });
   });
+
+  test('the name that opens the line carries the same two menus as the avatar (#4791)', async ({
+    page,
+  }) => {
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection, {
+      id: 905,
+      content: 'leans back.',
+      line: 'Nyx leans back.',
+    });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText('leans back.')).toBeVisible();
+    const name = line.getByTestId('pose-actor').getByRole('button', { name: 'Nyx' });
+    await expect(name).toBeVisible();
+
+    // The right button is the sorting menu at once, not the fold: the line is still there.
+    await name.click({ button: 'right' });
+    await expect(page.getByRole('menu').getByRole('menuitem').first()).toHaveText('Minimize');
+    await expect(line.getByText('leans back.')).toBeVisible();
+    await page.screenshot({ path: `${OUT}/name-sorting-menu-1600.png` });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    await name.click();
+    const play = page.getByRole('menu');
+    await expect(play.getByRole('menuitem').first()).toHaveText('Reply');
+    await expect(play.getByRole('menuitem').nth(1)).toHaveText('Kudos');
+    await expect(play.getByRole('menuitem', { name: 'Look' })).toBeVisible();
+    await expect(play.getByRole('menuitem', { name: 'View sheet' })).toBeVisible();
+    await page.screenshot({ path: `${OUT}/name-play-menu-1600.png` });
+  });
+
+  test('in the quiet room the name carries the persona menu and the sorting menu too (#4791)', async ({
+    page,
+  }) => {
+    const [connection] = await reachReadySession(page, { scene: false });
+    pushForeignPose(connection, {
+      id: 906,
+      content: 'sets the cup down.',
+      line: 'Nyx sets the cup down.',
+      sceneId: null,
+    });
+    const line = page.getByTestId('ambient-line').first();
+    await expect(line.getByText('sets the cup down.')).toBeVisible();
+    const name = line.getByTestId('pose-actor').getByRole('button', { name: 'Nyx' });
+
+    await name.click({ button: 'right' });
+    await expect(page.getByRole('menu').getByRole('menuitem').first()).toHaveText('Minimize');
+    await expect(line.getByText('sets the cup down.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+
+    await name.click();
+    const play = page.getByRole('menu');
+    await expect(play.getByRole('menuitem', { name: 'Look' })).toBeVisible();
+    await expect(play.getByRole('menuitem', { name: 'View sheet' })).toBeVisible();
+    await page.screenshot({ path: `${OUT}/quiet-room-name-play-menu-1600.png` });
+  });
 });

@@ -255,7 +255,10 @@ export function pushForeignPose(
   overrides: Partial<{
     id: number;
     content: string;
-    sceneId: number;
+    /** The server's rendered sentence (#3858), the actor in it; a line without one renders its content. */
+    line: string;
+    /** `null` is a quiet-room line, read by `ExplorationReader` (#4791). */
+    sceneId: number | null;
   }> = {}
 ): void {
   connection.route.send(
@@ -266,9 +269,10 @@ export function pushForeignPose(
         id: overrides.id ?? 902,
         persona: { id: 99, name: NYX.name, thumbnail_url: '' },
         content: overrides.content ?? 'Nyx glances toward the noise, unhurried.',
+        line: overrides.line,
         mode: 'pose',
         timestamp: new Date().toISOString(),
-        scene_id: overrides.sceneId ?? 1,
+        scene_id: overrides.sceneId === undefined ? 1 : overrides.sceneId,
         place_id: null,
         place_name: null,
         receiver_persona_ids: [],

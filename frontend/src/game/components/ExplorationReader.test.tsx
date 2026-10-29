@@ -198,6 +198,7 @@ describe('ExplorationReader persona menu (#4030)', () => {
     id: 9,
     persona: { id: 4, name: 'Mara', thumbnail_url: '' },
     content: 'A bell sounds beyond the wall.',
+    line: 'Mara says, "A bell sounds beyond the wall."',
     mode: 'say',
     timestamp: '2026-01-01T00:00:00Z',
     scene_id: null,
@@ -233,5 +234,34 @@ describe('ExplorationReader persona menu (#4030)', () => {
       .getAllByRole('menuitem')
       .map((el) => el.textContent);
     expect(labels).toEqual(['Look', 'View sheet']);
+  });
+
+  it('left-click on the name that opens the line is the same persona menu (#4791)', async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ExplorationReader room={room} ambientInteractions={[ambientInteraction]} />
+      </Wrapper>
+    );
+
+    const name = within(screen.getByTestId('pose-actor')).getByRole('button');
+    expect(name).toHaveTextContent('Mara');
+    await user.click(name);
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Look', 'View sheet']);
+  });
+
+  it('right-click on the name is not the persona menu either: that button is the sorting menu (#4791)', () => {
+    render(
+      <Wrapper>
+        <ExplorationReader room={room} ambientInteractions={[ambientInteraction]} />
+      </Wrapper>
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('pose-actor'));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });
