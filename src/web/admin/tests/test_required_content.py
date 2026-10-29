@@ -2061,11 +2061,20 @@ class TestDesignationProbes(TestCase):
         FuryConfigFactory(berserk_condition=berserk)
 
         self.assertFalse(self._present("berserk-disengage-penalty"))
-        ConditionCheckModifierFactory(condition=berserk, check_type=flee_check)
+        ConditionCheckModifierFactory(condition=berserk, check_type=flee_check, modifier_value=-3)
+        # A bonus is not a penalty.
+        ConditionCheckModifierFactory(condition=berserk, check_type=parley_check, modifier_value=5)
         result = _probe_for("berserk-disengage-penalty").resolve(None)
         self.assertFalse(result.present)
         self.assertIn("parley check", result.detail)
-        ConditionCheckModifierFactory(condition=berserk, check_type=parley_check)
+        self.assertNotIn("flee", result.detail)
+        # A penalty authored on the parley check's category reaches the parley roll too.
+        ConditionCheckModifierFactory(
+            condition=berserk,
+            check_type=None,
+            check_category=parley_check.category,
+            modifier_value=-2,
+        )
         self.assertTrue(self._present("berserk-disengage-penalty"))
 
     def test_vitals_peril_designations(self) -> None:

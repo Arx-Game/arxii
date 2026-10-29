@@ -1627,12 +1627,14 @@ def _probe_berserk_condition() -> ProbeResult:
 
 
 def _probe_berserk_disengage_penalty() -> ProbeResult:
-    """Berserk carries a check modifier against both flee and parley (#4738).
+    """Berserk carries a penalty against both flee and parley (#4738).
 
     A Berserk character may flee and parley and rolls them with whatever
     ConditionCheckModifier staff authored on the Berserk template, at template level or
-    on any of its stages. The two check types are read through their config FKs
-    (`FleeConfig.check_type`, `SocialManeuverConfig.parley_check_type`).
+    on any of its stages. A modifier counts when its value is negative and it reaches the
+    roll: authored against the check type itself or against that check type's category
+    (`collect_check_modifiers` applies both). The two check types are read through their
+    config FKs (`FleeConfig.check_type`, `SocialManeuverConfig.parley_check_type`).
     """
     from django.db.models import Q  # noqa: PLC0415
 
@@ -1649,22 +1651,32 @@ def _probe_berserk_disengage_penalty() -> ProbeResult:
     flee = FleeConfig.objects.cached_singleton()
     social = _social_maneuver_config()
     wanted = {
-        "flee": None if flee is None else flee.check_type_id,
-        "parley": None if social is None else social.parley_check_type_id,
+        "flee": None if flee is None else flee.check_type,
+        "parley": None if social is None else social.parley_check_type,
     }
-    held = set(
+    check_types = [ct for ct in wanted.values() if ct is not None]
+    penalties = list(
         ConditionCheckModifier.objects.filter(
             Q(condition=berserk) | Q(stage__condition=berserk),
-            check_type_id__in=[pk for pk in wanted.values() if pk is not None],
-        ).values_list("check_type_id", flat=True)
+            Q(check_type__in=check_types)
+            | Q(check_category_id__in=[ct.category_id for ct in check_types]),
+            modifier_value__lt=0,
+        ).values_list("check_type_id", "check_category_id")
     )
-    missing = [verb for verb, pk in wanted.items() if pk is None or pk not in held]
+
+    def penalised(check_type) -> bool:
+        return any(
+            type_id == check_type.pk or (type_id is None and category_id == check_type.category_id)
+            for type_id, category_id in penalties
+        )
+
+    missing = [verb for verb, ct in wanted.items() if ct is None or not penalised(ct)]
     if not missing:
         return ProbeResult(present=True)
     return ProbeResult(
         present=False,
         detail=(
-            "The Berserk condition has no check modifier against the "
+            "The Berserk condition has no penalty (a negative check modifier) against the "
             f"{' or '.join(missing)} check, so a raging character rolls it unpenalised."
         ),
     )

@@ -2163,7 +2163,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
   roll. Only `leave_encounter` is refused (`reject_leave_if_berserk`: "The rage will not
   walk away. You can still try to flee."). Required content `berserk-disengage-penalty`
-  lists a Berserk with no modifier against either check. Journeys:
+  lists a Berserk with no penalty against either check: a negative modifier authored on the
+  check type or on its category, at template or stage level. Journeys:
   `src/integration_tests/test_berserk_disengage_journeys.py`.
 
 Journeys: `src/integration_tests/test_surrendering_control_to_fury_journeys.py`.
