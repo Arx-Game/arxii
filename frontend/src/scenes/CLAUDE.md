@@ -27,7 +27,9 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   `ActorLine`'s `renderName`; #4791), is `PersonaMenu` with `poseActions` (Reply, Kudos)
   first and `contextMenu={false}`, since the right button belongs to `FeedBlockFrame`'s
   sorting menu, which both open at once; double-click on either is the add-target
-  affordance; a read-only line renders both plain. A companion pose's name is the
+  affordance, which in a real browser never fires (#4793: the modal menu opens on the
+  first press and takes the second; the jsdom test does not see it); a read-only line
+  renders both plain. A companion pose's name is the
   companion's and its menu is the owner's, as the avatar's is (a companion has no face or
   menu of its own, #3294); it keeps its "(via <owner>)" tell after the line. Action chips, the parent chip, reactions, badges,
   nominate and endorsements keep their places after the text. The ACTION, OUTCOME and

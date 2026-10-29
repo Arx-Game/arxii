@@ -259,6 +259,9 @@ export function pushForeignPose(
     line: string;
     /** `null` is a quiet-room line, read by `ExplorationReader` (#4791). */
     sceneId: number | null;
+    /** A companion pose (#3294): the companion Nyx posed as, named in the line. */
+    attributedCompanionId: number;
+    attributedCompanionName: string;
   }> = {}
 ): void {
   connection.route.send(
@@ -273,6 +276,8 @@ export function pushForeignPose(
         mode: 'pose',
         timestamp: new Date().toISOString(),
         scene_id: overrides.sceneId === undefined ? 1 : overrides.sceneId,
+        attributed_companion_id: overrides.attributedCompanionId ?? null,
+        attributed_companion_name: overrides.attributedCompanionName ?? null,
         place_id: null,
         place_name: null,
         receiver_persona_ids: [],

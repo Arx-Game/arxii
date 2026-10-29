@@ -246,4 +246,155 @@ test.describe('a pose is a prose line (#4128)', () => {
     await expect(play.getByRole('menuitem', { name: 'View sheet' })).toBeVisible();
     await page.screenshot({ path: `${OUT}/quiet-room-name-play-menu-1600.png` });
   });
+
+  test("a companion pose's name opens the owner's menu, as its avatar does (#4791)", async ({
+    page,
+  }) => {
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection, {
+      id: 907,
+      content: 'pads in and settles by the fire.',
+      line: 'Fang pads in and settles by the fire.',
+      attributedCompanionId: 5,
+      attributedCompanionName: 'Fang',
+    });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText('pads in and settles by the fire.')).toBeVisible();
+    await expect(line.getByText('(via Nyx)')).toBeVisible();
+
+    await line.getByTestId('pose-actor').getByRole('button', { name: 'Fang' }).click();
+    const play = page.getByRole('menu');
+    // The menu is the owner's: headed Nyx, with her Reply, Kudos, Look and View sheet.
+    await expect(play.getByText('Nyx', { exact: true })).toBeVisible();
+    await expect(play.getByRole('menuitem').first()).toHaveText('Reply');
+    await expect(play.getByRole('menuitem').nth(1)).toHaveText('Kudos');
+    await expect(play.getByRole('menuitem', { name: 'Look' })).toBeVisible();
+    await expect(play.getByRole('menuitem', { name: 'View sheet' })).toBeVisible();
+    await page.screenshot({ path: `${OUT}/companion-name-play-menu-1600.png` });
+  });
+
+  test('a double-click on the name adds the target to the composer, as the avatar does (#4791)', async ({
+    page,
+  }) => {
+    // #4793: the modal play menu opens on the first press and locks pointer events,
+    // so the second press lands outside it and only dismisses it; the dblclick's
+    // target is the page root and the wrapper's handler never runs. The avatar has
+    // had this since #4128 and the name mirrors it. Expected to fail until #4793
+    // settles how add-target and the menu share the button; drop this line then.
+    test.fail();
+    const [connection] = await reachReadySession(page);
+    pushForeignPose(connection, { id: 908, content: 'leans back.', line: 'Nyx leans back.' });
+    const line = page.getByTestId('pose-unit').first();
+    await expect(line.getByText('leans back.')).toBeVisible();
+
+    await line.getByTestId('pose-actor').getByRole('button', { name: 'Nyx' }).dblclick();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(page.getByRole('textbox')).toHaveValue('@Nyx');
+  });
+
+  test('a read-only line from History renders the name plain, with no menu (#4791)', async ({
+    page,
+  }) => {
+    // Registered after the harness's catch-all, so these win (history-threads.spec.ts).
+    await page.route('**/api/play/conversations/**', (route) =>
+      route.fulfill({
+        json: {
+          results: [
+            {
+              ref: { kind: 'room', key: 'scene:412' },
+              title: 'Scene 412',
+              availability: 'retained',
+              canRead: true,
+              canSend: false,
+              sceneId: '412',
+              latestVisiblePose: { id: '11', timestamp: '2026-06-14T10:00:00Z' },
+              unread: 0,
+              directUnread: 0,
+            },
+          ],
+          before: null,
+          after: null,
+          snapshot: '2026-06-14T12:00:00Z',
+        },
+      })
+    );
+    await page.route('**/api/play/threads/**', (route) =>
+      route.fulfill({
+        json: {
+          results: [
+            {
+              id: 'a1',
+              conversation: { kind: 'room', key: 'scene:412' },
+              root: { id: '11', timestamp: '2026-06-14T10:00:00Z' },
+              firstVisible: { id: '11', timestamp: '2026-06-14T10:00:00Z' },
+              latestVisible: { id: '11', timestamp: '2026-06-14T10:00:00Z' },
+              opening: 'Nyx leans back.',
+              visiblePoseCount: 1,
+              unread: 0,
+              directUnread: 0,
+            },
+          ],
+          before: null,
+          after: null,
+          snapshot: '2026-06-14T12:00:00Z',
+        },
+      })
+    );
+    await page.route('**/api/play/context/**', (route) =>
+      route.fulfill({
+        json: {
+          results: [
+            {
+              id: 11,
+              thread_id: 'a1',
+              persona: { id: 30, name: 'Nyx' },
+              content: 'leans back.',
+              line: 'Nyx leans back.',
+              mode: 'pose',
+              visibility: 'default',
+              timestamp: '2026-06-14T10:00:00Z',
+              scene: 412,
+              reactions: [],
+              is_favorited: false,
+              place: null,
+              place_name: null,
+              receiver_persona_ids: [],
+              target_persona_ids: [],
+              action_links: [],
+              pose_kind: 'standard',
+              endorsee_sheet_id: null,
+              endorsable_resonances: [],
+              pose_endorsers: [],
+              my_pose_endorsement: null,
+              entry_endorsers: [],
+              entry_endorsed_by_me: false,
+            },
+          ],
+          threadId: 'a1',
+          before: null,
+          after: null,
+        },
+      })
+    );
+    await reachReadySession(page);
+
+    await page
+      .getByRole('navigation', { name: 'Sidebar modes' })
+      .getByRole('button', { name: 'History', exact: true })
+      .click();
+    const historyNav = page.getByTestId('history-navigator');
+    const row = historyNav.locator('.mt-2.rounded.border.p-2').filter({ hasText: 'Scene 412' });
+    await row.getByRole('button', { name: /^Threads$/ }).click();
+    await row.getByRole('button', { name: /Nyx leans back/ }).click();
+    await expect(page.getByText(/Reading history/)).toBeVisible();
+
+    const feed = page.getByTestId('feed-scroll-container');
+    const line = feed.getByTestId('pose-unit').filter({ hasText: 'leans back.' });
+    await expect(line).toBeVisible();
+    await expect(line.getByTestId('pose-actor')).toHaveCount(0);
+    await expect(line.getByTestId('pose-avatar').getByRole('button')).toHaveCount(0);
+    await line.getByText('Nyx', { exact: true }).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await page.screenshot({ path: `${OUT}/read-only-name-1600.png` });
+  });
 });
