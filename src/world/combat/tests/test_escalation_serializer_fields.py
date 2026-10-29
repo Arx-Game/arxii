@@ -66,20 +66,23 @@ class ParticipantEscalationFieldTests(TestCase):
         self.assertIsNone(data["intensity_modifier"])
         self.assertIsNone(data["control_modifier"])
 
-    def test_escalation_fields_ignore_non_combat_engagement(self) -> None:
+    def test_escalation_ignores_a_non_combat_engagement_but_pressure_reads_it(self) -> None:
+        """Escalation is combat's own; the Pressure figures read any engagement (#4738)."""
         engagement = begin_engagement(
             self.sheet.character,
             EngagementType.CHALLENGE,
             source=self.encounter,
         )
         engagement.escalation_level = 5
+        engagement.intensity_modifier = 3
+        engagement.control_modifier = -2
         engagement.save()
 
         data = ParticipantSerializer(self.participant).data
 
         self.assertIsNone(data["escalation_level"])
-        self.assertIsNone(data["intensity_modifier"])
-        self.assertIsNone(data["control_modifier"])
+        self.assertEqual(data["intensity_modifier"], 3)
+        self.assertEqual(data["control_modifier"], -2)
 
     def test_escalation_fields_null_after_end_engagement(self) -> None:
         """Stale reverse-cache guard: queryset delete nulls pk without clearing the

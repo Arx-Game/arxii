@@ -491,13 +491,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
     @staticmethod
     def _pressure_lines(character: Any) -> list[str]:
-        """Intensity and control on the combat engagement, and Fury's surrender (#4738).
+        """Intensity and control on her engagement (whatever its type), and Fury's surrender.
 
-        Telnet's copy of the web Pressure card.
+        Telnet's copy of the web Pressure card (#4738).
         """
-        from world.combat.services import active_combat_engagement_for  # noqa: PLC0415
+        from world.combat.services import engagement_of_any_type_for  # noqa: PLC0415
 
-        engagement = active_combat_engagement_for(character)
+        engagement = engagement_of_any_type_for(character)
         if engagement is None:
             return []
         line = (

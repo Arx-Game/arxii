@@ -8549,6 +8549,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   commit); `FuryTierOption(control_surrendered, is_berserk, full_intensity)`,
   `AnchorOption.tier_full_intensities`, participant `fury_control_surrendered`, web
   `FuryDeclaration` + `combat/sections/Pressure.tsx`, telnet `combat` hub `Pressure:` line.
+  The Pressure figures (participant `intensity_modifier` / `control_modifier` /
+  `fury_control_surrendered`, telnet `Pressure:`) read her engagement whatever its type
+  (`world.combat.services.engagement_of_any_type_for`), since a challenge or mission
+  engagement she already held is the one combat and Fury use.
   Journeys: `test_surrendering_control_to_fury_journeys`. See `docs/systems/magic.md` "Fury".
 - **Rolled surges (#4737, ADR-4737) [BUILT & WIRED, INERT UNTIL STAFF AUTHOR CONTENT]:** a
   taunt, a rally and a hurt bonded ally raise a player character's intensity through a roll

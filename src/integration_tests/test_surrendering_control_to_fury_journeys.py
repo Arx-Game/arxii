@@ -116,6 +116,7 @@ class _AtTheFord(JourneyCase):
             threat_pool=pool,
         )
         CombatParticipantFactory(encounter=self.encounter, character_sheet=sheet)
+        self.engage_before_the_fight()
         self.engagement = begin_engagement(
             self.brannoc, EngagementType.COMBAT, source=self.encounter
         )
@@ -134,6 +135,9 @@ class _AtTheFord(JourneyCase):
         self.unbound = FuryTierFactory(
             name="Unbound", depth=3, control_surrendered=12, berserk_severity=2
         )
+
+    def engage_before_the_fight(self) -> None:
+        """Stakes Brannoc already holds when the fight starts; none by default."""
 
     def declare_fury(self, tier) -> str:
         return self.telnet(
@@ -282,3 +286,36 @@ class SeeingTheTrade(_AtTheFord):
             {row["tier_id"]: row["full_intensity"] for row in ilse["tier_full_intensities"]},
             {self.seething.pk: 10, self.unbound.pk: 21},
         )
+
+
+class FuryOnAChallengeEngagement(_AtTheFord):
+    """Brannoc was already mid-challenge at the ford when the bandit struck.
+
+    Combat keeps the challenge engagement (``begin_engagement`` never replaces stakes he
+    holds), so Fury's trade lands there, and both Pressure surfaces still show it.
+    """
+
+    def engage_before_the_fight(self) -> None:
+        begin_engagement(self.brannoc, EngagementType.CHALLENGE, source=self.ford)
+
+    def test_the_trade_lands_on_the_challenge_and_both_surfaces_show_it(self) -> None:
+        self.assertEqual(self.engagement.engagement_type, EngagementType.CHALLENGE)
+        self.declare_fury(self.seething)
+        self.resolve_with("Success")
+
+        engagement = self.engagement_now()
+        self.assertEqual((engagement.intensity_modifier, engagement.control_modifier), (8, -6))
+        response = self.api(self.account_of(self.brannoc)).get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        row = next(
+            p
+            for p in response.json()["participants"]
+            if p["character_sheet_id"] == self.brannoc.sheet_data.pk
+        )
+        self.assertEqual(
+            (row["intensity_modifier"], row["control_modifier"], row["fury_control_surrendered"]),
+            (8, -SEETHING_SURRENDERS, SEETHING_SURRENDERS),
+        )
+        begin_declaration_phase(self.encounter)
+        told = self.telnet(self.brannoc, "combat")
+        self.assertIn("Pressure: intensity +8, control -6; Fury: surrendered 6 control", told)
