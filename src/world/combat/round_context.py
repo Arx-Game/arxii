@@ -419,6 +419,9 @@ class CombatRoundContext(RoundContext):
 
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.services import declare_action  # noqa: PLC0415
+        from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
+            DeclarationRefusedError,
+        )
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
         fury_commitment = None
@@ -477,24 +480,28 @@ class CombatRoundContext(RoundContext):
         confirm_soulfray_risk: bool = bool(kwargs.get("confirm_soulfray_risk", False))
         strain_commitment = int(kwargs.get("strain_commitment", 0) or 0)
 
-        action = declare_action(
-            participant,
-            focused_action=focused,
-            focused_category=None,
-            effort_level=effort,
-            focused_opponent_target=opponent_target,
-            focused_ally_target=ally_target,
-            physical_passive=physical,
-            social_passive=social,
-            mental_passive=mental,
-            confirm_soulfray_risk=confirm_soulfray_risk,
-            strain_commitment=strain_commitment,
-            fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
-            cast_destination=cast_positions["cast_destination"],
-            cast_position_a=cast_positions["cast_position_a"],
-            cast_position_b=cast_positions["cast_position_b"],
-        )
+        try:
+            action = declare_action(
+                participant,
+                focused_action=focused,
+                focused_category=None,
+                effort_level=effort,
+                focused_opponent_target=opponent_target,
+                focused_ally_target=ally_target,
+                physical_passive=physical,
+                social_passive=social,
+                mental_passive=mental,
+                confirm_soulfray_risk=confirm_soulfray_risk,
+                strain_commitment=strain_commitment,
+                fury_commitment=fury_commitment,
+                fury_anchor=fury_anchor,
+                cast_destination=cast_positions["cast_destination"],
+                cast_position_a=cast_positions["cast_position_a"],
+                cast_position_b=cast_positions["cast_position_b"],
+            )
+        except DeclarationRefusedError as exc:
+            # A refusal the player can meet comes back as a 400 with its reason (#4796).
+            raise ActionDispatchError(exc.code) from exc
 
         # AoE / FILTERED_GROUP: persist the full target set as join rows so the
         # resolver can iterate them without a round-trip to the declaration kwargs.

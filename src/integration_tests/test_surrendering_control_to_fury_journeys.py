@@ -249,6 +249,37 @@ class SurrenderingControl(_AtTheFord):
         self.assertEqual(engagement.control_modifier, -SEETHING_SURRENDERS)
 
 
+class ADeclarationRefusedWithAReason(_AtTheFord):
+    """A declaration the round cannot take is refused with its reason, never a 500 (#4796)."""
+
+    def test_a_damage_cast_sent_from_the_web_with_no_target_is_refused(self) -> None:
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT, technique_id=self.technique.pk, action_slot="focused"
+        )
+
+        with self.assertRaises(ActionDispatchError) as refused:
+            dispatch_player_action(self.brannoc, ref, {"effort_level": EffortLevel.MEDIUM})
+
+        self.assertEqual(
+            refused.exception.user_message, "That technique needs an opponent to target."
+        )
+        self.assertFalse(
+            CombatRoundAction.objects.filter(
+                participant__character_sheet=self.brannoc.sheet_data
+            ).exists()
+        )
+
+    def test_a_damage_cast_typed_with_no_target_is_refused(self) -> None:
+        said = self.telnet(self.brannoc, f"cast {self.technique.name}")
+
+        self.assertIn("That technique needs an opponent to target.", said)
+        self.assertFalse(
+            CombatRoundAction.objects.filter(
+                participant__character_sheet=self.brannoc.sheet_data
+            ).exists()
+        )
+
+
 class OnlyACastThatGoesOffPays(_AtTheFord):
     """The trade lands only once the cast is past its gates (#4738 part B fix round)."""
 

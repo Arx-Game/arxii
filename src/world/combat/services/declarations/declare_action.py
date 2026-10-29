@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from actions.errors import ActionDispatchError
 from world.combat.constants import EncounterType, OpponentStatus
 from world.combat.models import (
     CombatOpponent,
@@ -12,6 +13,7 @@ from world.combat.models import (
     EncounterRiskAcknowledgement,
 )
 from world.combat.services.declarations.declaration_validation import (
+    DeclarationRefusedError,
     _validate_no_pending_sustained,
     _validate_passive_slot,
     _validate_strain_commitment,
@@ -79,7 +81,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     # character keeps awareness and passes naturally (no dying_final_round concept).
     if not can_act(participant.character_sheet):
         msg = "Cannot declare action: character is dead or incapacitated."
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.CANNOT_ACT)
 
     _validate_strain_commitment(participant, strain_commitment)
 
@@ -104,7 +106,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         ).exists()
         if not has_ack:
             msg = "You must acknowledge the lethal risk of this duel before acting."
-            raise ValueError(msg)
+            raise DeclarationRefusedError(msg, code=ActionDispatchError.LETHAL_RISK_UNACKNOWLEDGED)
 
     # Sustaining occupies your action (#2705, D2) — see _validate_no_pending_sustained.
     _validate_no_pending_sustained(participant, encounter)
@@ -119,12 +121,12 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
 
     if focused_opponent_target and focused_opponent_target.status != OpponentStatus.ACTIVE:
         msg = "Cannot target a defeated opponent."
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.TARGET_DEFEATED)
 
     # XOR target validation
     if focused_opponent_target and focused_ally_target:
         msg = "Action cannot target both an opponent and an ally."
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.TARGET_CONFLICT)
 
     # Target-kind alignment with technique authoring
     if focused_action is not None:
