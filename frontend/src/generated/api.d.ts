@@ -44606,11 +44606,11 @@ export interface components {
       readonly thumbnail_media_url: string | null;
       /** @description Escalation pressure on this combatant — public dramatic state. */
       readonly escalation_level: number | null;
-      /** @description Process-derived intensity bonus from the COMBAT engagement. */
+      /** @description Process-derived intensity bonus from her engagement, whatever its type. */
       readonly intensity_modifier: number | null;
-      /** @description Process-derived control bonus from the COMBAT engagement. */
+      /** @description Process-derived control bonus from her engagement, whatever its type. */
       readonly control_modifier: number | null;
-      /** @description Control surrendered to Fury in the COMBAT engagement so far (#4738). */
+      /** @description Control surrendered to Fury in her engagement so far, whatever its type (#4738). */
       readonly fury_control_surrendered: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;

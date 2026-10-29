@@ -78350,18 +78350,20 @@ components:
         intensity_modifier:
           type: integer
           nullable: true
-          description: Process-derived intensity bonus from the COMBAT engagement.
+          description: Process-derived intensity bonus from her engagement, whatever
+            its type.
           readOnly: true
         control_modifier:
           type: integer
           nullable: true
-          description: Process-derived control bonus from the COMBAT engagement.
+          description: Process-derived control bonus from her engagement, whatever
+            its type.
           readOnly: true
         fury_control_surrendered:
           type: integer
           nullable: true
-          description: Control surrendered to Fury in the COMBAT engagement so far
-            (#4738).
+          description: Control surrendered to Fury in her engagement so far, whatever
+            its type (#4738).
           readOnly: true
         current_position:
           allOf:
