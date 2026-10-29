@@ -228,6 +228,11 @@ def fury_intensity_for(tier: FuryTier, cap: int, outcome: CheckOutcome | None) -
     return _floor(full * Decimal(share.intensity_percent) / 100)
 
 
+def fury_over_cap_message(tier: FuryTier, cap: int) -> str:
+    """The refusal for a tier deeper than the anchor's provocation cap (scene and combat)."""
+    return f"Fury tier depth ({tier.depth}) exceeds provocation cap ({cap})."
+
+
 def fury_tier_label(tier: FuryTier) -> str:
     """How a tier reads to the player: ``Seething: surrender 6 control``, ``(Berserk)`` added."""
     label = f"{tier.name}: surrender {tier.control_surrendered} control"

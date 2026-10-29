@@ -57,6 +57,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.mechanics.factories import CharacterEngagementFactory
+from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -439,6 +440,8 @@ class CombatCastTelnetE2ETests(TestCase):
         FuryConfigFactory()
         tier = FuryTierFactory()
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         # Declare through the real telnet command: cast ... fury=<tier> anchor=<name>.
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
@@ -493,6 +496,8 @@ class CombatCastTelnetE2ETests(TestCase):
         BerserkConditionTemplateFactory()  # seed the Berserk ConditionTemplate
         tier = FuryTierFactory(berserk_severity=3)
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
@@ -552,6 +557,8 @@ class CombatCastTelnetE2ETests(TestCase):
         FuryConfigFactory()
         tier = FuryTierFactory()
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
@@ -584,6 +591,8 @@ class CombatCastTelnetE2ETests(TestCase):
         BerserkConditionTemplateFactory()
         tier = FuryTierFactory(berserk_severity=3)
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(

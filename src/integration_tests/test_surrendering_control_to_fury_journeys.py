@@ -38,6 +38,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
+from world.combat.models import CombatRoundAction
 from world.combat.services import begin_declaration_phase, resolve_round
 from world.combat.services.encounter.config import get_strain_config
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
@@ -198,14 +199,15 @@ class SurrenderingControl(_AtTheFord):
         self.assertEqual(partial, 5)
         self.assertGreater(8, partial)
 
-    def test_the_anchor_cap_clamps_a_deeper_tier(self) -> None:
-        self.declare_fury(self.unbound)
+    def test_a_tier_deeper_than_the_anchor_cap_is_refused_at_declaration(self) -> None:
+        told = self.declare_fury(self.unbound)
 
-        self.resolve_with("Success")
-
-        engagement = self.engagement_now()
-        self.assertEqual(engagement.fury_control_surrendered, SEETHING_SURRENDERS)
-        self.assertEqual(engagement.intensity_modifier, 8)
+        self.assertIn("Fury tier depth (3) exceeds provocation cap (2).", told)
+        self.assertFalse(
+            CombatRoundAction.objects.filter(participant__character_sheet=self.brannoc.sheet_data)
+            .exclude(fury_commitment=None)
+            .exists()
+        )
 
     def test_a_botched_roll_buys_nothing_but_still_surrenders(self) -> None:
         self.declare_fury(self.seething)
@@ -259,9 +261,9 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
 
         self.assertNothingTraded()
 
-    def test_no_tie_to_the_anchor_rolls_nothing(self) -> None:
-        CharacterRelationship.objects.filter(source=self.brannoc.sheet_data).delete()
+    def test_a_tie_lapsed_since_declaring_rolls_nothing(self) -> None:
         self.declare_fury(self.seething)
+        CharacterRelationship.objects.filter(source=self.brannoc.sheet_data).delete()
 
         # The control roll's check type is only fetched when the roll is made.
         with patch("world.magic.services.fury._ensure_fury_check_type") as control_roll:

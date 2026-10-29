@@ -2139,8 +2139,10 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   term; `use_technique`'s `control_penalty` parameter is gone.
 - **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
   without a technique, without an anchor, above the cap, and with no engagement ("Fury needs
-  something at stake: you are not engaged."). Combat declarations are not validated; resolution
-  clamps.
+  something at stake: you are not engaged."). A combat cast declaration (web or telnet) refuses a
+  tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
+  `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or
+  charged. Resolution still clamps, for a tie that lapsed after declaring.
 - **Required content.** `fury-degree-shares` lists canonical outcome tiers with no
   `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
 - **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
