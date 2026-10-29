@@ -111,9 +111,10 @@ describe('Pressure', () => {
         characterSheetId={1001}
       />
     );
-    expect(screen.getByTestId('pressure-fury-chip')).toHaveTextContent(
-      'Fury: surrendered 6 control'
-    );
+    const chip = screen.getByTestId('pressure-fury-chip');
+    expect(chip).toHaveTextContent('Fury: surrendered 6 control');
+    // A light-theme colour and a dark one: a single pale red was unreadable on a white card.
+    expect(chip).toHaveClass('text-red-700', 'dark:text-red-400');
   });
 
   it('shows no Fury chip when nothing was surrendered', () => {
