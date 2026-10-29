@@ -74,7 +74,7 @@ export function Pressure({
           {surrendered > 0 && (
             <Badge
               variant="outline"
-              className="border-red-500/60 text-red-300"
+              className="border-red-500/60 text-red-700 dark:text-red-400"
               data-testid="pressure-fury-chip"
             >
               Fury: surrendered {surrendered} control
