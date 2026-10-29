@@ -154,7 +154,7 @@ function setupMocks() {
   mockedUseAvailableCombos.mockReturnValue({ data: [], isLoading: false, isError: false });
   mockedUseUpgradeCombo.mockReturnValue({ mutate: vi.fn(), isPending: false });
   mockedUseDispatchPlayerAction.mockReturnValue({
-    mutateAsync: vi.fn().mockResolvedValue({ backend: 'COMBAT', deferred: true }),
+    mutateAsync: vi.fn().mockResolvedValue({ backend: 'combat', deferred: true }),
     isPending: false,
   });
   mockedUseFleeMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -174,7 +174,7 @@ function makeAction(
   category: string | null = 'physical'
 ): PlayerAction {
   return {
-    backend: 'COMBAT',
+    backend: 'combat',
     display_name: `Tech ${techniqueId}`,
     description: '',
     difficulty: null,
@@ -183,7 +183,7 @@ function makeAction(
     check_type: { id: 1, name: 'Attack' },
     action_template: null,
     ref: {
-      backend: 'COMBAT',
+      backend: 'combat',
       challenge_instance_id: null,
       approach_id: null,
       technique_id: techniqueId,

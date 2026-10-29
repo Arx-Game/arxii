@@ -421,7 +421,7 @@ function makeCastPlayerAction(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockMutateAsync.mockResolvedValue({ backend: 'COMBAT', deferred: true });
+  mockMutateAsync.mockResolvedValue({ backend: 'combat', deferred: true });
   mockManeuverMutateAsync.mockResolvedValue({ success: true });
   mockFleeMutate.mockImplementation((_arg: unknown, opts?: { onError?: (e: Error) => void }) => {
     void opts;
@@ -957,13 +957,13 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
 
     // Focused dispatch: action_slot 'focused', effort_level mapped to 'high'.
     expect(calls[0][0]).toMatchObject({
-      ref: { backend: 'COMBAT', technique_id: 10, action_slot: 'focused' },
+      ref: { backend: 'combat', technique_id: 10, action_slot: 'focused' },
       kwargs: { effort_level: 'high' },
     });
 
     // Passive dispatch: action_slot carries the slot string, same round effort.
     expect(calls[1][0]).toMatchObject({
-      ref: { backend: 'COMBAT', technique_id: 20, action_slot: 'passive-social' },
+      ref: { backend: 'combat', technique_id: 20, action_slot: 'passive-social' },
       kwargs: { effort_level: 'high' },
     });
 
@@ -1780,7 +1780,7 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
     setupMocks();
     // Focused (with the pull) succeeds; the combat_ready dispatch after it fails once.
     mockMutateAsync
-      .mockResolvedValueOnce({ backend: 'COMBAT', deferred: true })
+      .mockResolvedValueOnce({ backend: 'combat', deferred: true })
       .mockResolvedValueOnce({
         backend: 'REGISTRY',
         deferred: false,
@@ -2397,7 +2397,7 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
     // The dispatch endpoint always resolves 200 — a business-rule rejection
     // surfaces as success:false, not a thrown error.
     mockMutateAsync.mockResolvedValueOnce({
-      backend: 'COMBAT',
+      backend: 'combat',
       deferred: false,
       success: false,
       message: 'Rejected.',
