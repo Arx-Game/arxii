@@ -130,8 +130,8 @@ class IsEncounterGMOrStaff(BasePermission):
 class IsEncounterParticipant(BasePermission):
     """Allow authenticated users who have an active CombatParticipant.
 
-    Uses the encounter's participants_cached when available (prefetched
-    by _base_queryset) to avoid a separate query. Routes the roster
+    Reads the encounter's ``participants_cached`` (prefetched by
+    _base_queryset; popped by every participant write, #4784). Routes the roster
     lookup through the view's per-request cache when available so the
     permission check and view body share a single roster query.
 

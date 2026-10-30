@@ -421,7 +421,9 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         opponent.refresh_from_db()
         self.assertEqual(opponent.status, OpponentStatus.REMOVED)
-        self.assertNotIn(opponent.pk, [o.pk for o in response.data["opponents"]])
+        # The payload lists every status, as a fresh read does; the client filters (#4784).
+        statuses = {row["id"]: row["status"] for row in response.data["opponents"]}
+        self.assertEqual(statuses[opponent.pk], OpponentStatus.REMOVED)
 
     def test_remove_opponent_non_gm_denied(self) -> None:
         """Non-GM player cannot remove an opponent."""
