@@ -125,24 +125,37 @@ async function assertStaysVisibleThroughout(
   }
 }
 
+/**
+ * A pose from Nyx with the server's rendered sentence (#3858), so the line
+ * opens with her name and the name carries the play menu (#4791). Since
+ * #4128 a pose line's right button is the sorting menu, so every test here
+ * opens the persona menu with a left click on the name.
+ */
+function pushNyxPose(connection: Parameters<typeof pushForeignPose>[0]): void {
+  pushForeignPose(connection, {
+    content: 'glances toward the noise, unhurried.',
+    line: 'Nyx glances toward the noise, unhurried.',
+  });
+}
+
 test.describe('PersonaMenu -> Look dialog (#4030)', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
   });
 
-  test('right-click opens Look; the dialog survives past the old auto-dismiss window, Esc closes it, and dragging moves it', async ({
+  test('the name opens Look; the dialog survives past the old auto-dismiss window, Esc closes it, and dragging moves it', async ({
     page,
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page);
     const [connection] = await reachReadySession(page);
-    pushForeignPose(connection);
+    pushNyxPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
     await expect(pose).toBeVisible();
-    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+    const nameButton = pose.getByTestId('pose-actor').getByRole('button', { name: NYX.name });
 
-    await nameButton.click({ button: 'right' });
+    await nameButton.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await menu.getByRole('menuitem', { name: 'Look', exact: true }).click();
@@ -175,19 +188,19 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
     await expect(dialog).not.toBeVisible();
   });
 
-  test('left-click on the pose name also opens Look, and the dialog stays open past the old auto-dismiss window', async ({
+  test('the avatar opens the same Look, and the dialog stays open past the old auto-dismiss window', async ({
     page,
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page);
     const [connection] = await reachReadySession(page);
-    pushForeignPose(connection);
+    pushNyxPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
     await expect(pose).toBeVisible();
-    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+    const avatarButton = pose.getByTestId('pose-avatar').getByRole('button');
 
-    await nameButton.click();
+    await avatarButton.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await menu.getByRole('menuitem', { name: 'Look', exact: true }).click();
@@ -208,19 +221,19 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
   // (src/actions/persona_menu.py:126-130) -- and that shape self-closes the
   // dialog 10/10 in the second review pass. These two tests use that exact
   // shape (`QUIET_ROOM_MENU_FIXTURE`, copied verbatim from the server).
-  test('right-click opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
+  test('the name opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
     page,
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
     const [connection] = await reachReadySession(page);
-    pushForeignPose(connection);
+    pushNyxPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
     await expect(pose).toBeVisible();
-    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+    const nameButton = pose.getByTestId('pose-actor').getByRole('button', { name: NYX.name });
 
-    await nameButton.click({ button: 'right' });
+    await nameButton.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByText(QUIET_ROOM_MENU_FIXTURE.groups[2].empty_state)).toBeVisible();
@@ -231,19 +244,19 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
     await assertStaysVisibleThroughout(dialog);
   });
 
-  test('left-click opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
+  test('the avatar opens Look from a quiet-room (footer) menu; the dialog stays open', async ({
     page,
   }) => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
     const [connection] = await reachReadySession(page);
-    pushForeignPose(connection);
+    pushNyxPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
     await expect(pose).toBeVisible();
-    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+    const avatarButton = pose.getByTestId('pose-avatar').getByRole('button');
 
-    await nameButton.click();
+    await avatarButton.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await menu.getByRole('menuitem', { name: 'Look', exact: true }).click();
@@ -257,13 +270,13 @@ test.describe('PersonaMenu -> Look dialog (#4030)', () => {
     await mockRestRoutes(page);
     await mockPersonaMenuRoutes(page, QUIET_ROOM_MENU_FIXTURE);
     const [connection] = await reachReadySession(page);
-    pushForeignPose(connection);
+    pushNyxPose(connection);
 
     const pose = page.locator('[data-testid="pose-unit"]').filter({ hasText: NYX.name });
     await expect(pose).toBeVisible();
-    const nameButton = pose.getByRole('button', { name: NYX.name, exact: true });
+    const nameButton = pose.getByTestId('pose-actor').getByRole('button', { name: NYX.name });
 
-    await nameButton.click({ button: 'right' });
+    await nameButton.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await menu.getByRole('menuitem', { name: 'Block…', exact: true }).click();

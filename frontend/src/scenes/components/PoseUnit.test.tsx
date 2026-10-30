@@ -481,6 +481,74 @@ describe('PoseUnit', () => {
     expect(onReply).toHaveBeenCalledWith(interaction);
   });
 
+  it('left-clicking the name that opens the line is the same play menu as the avatar (#4791)', async () => {
+    const onReply = vi.fn();
+    const interaction = makeInteraction({
+      mode: 'pose',
+      persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
+      content: 'glances toward the noise.',
+      line: 'Alice glances toward the noise.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" onReply={onReply} />
+      </Wrapper>
+    );
+
+    const name = within(screen.getByTestId('pose-actor')).getByRole('button');
+    expect(name).toHaveTextContent('Alice');
+    await userEvent.click(name);
+    const menu = await screen.findByRole('menu');
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent);
+    expect(labels.slice(0, 2)).toEqual(['Reply', 'Kudos']);
+    expect(labels).toContain('Look');
+    expect(labels).toContain('View sheet');
+
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Reply' }));
+    expect(onReply).toHaveBeenCalledWith(interaction);
+  });
+
+  it('double-clicking the name adds the target, as the avatar does (#4791)', () => {
+    const onAddTarget = vi.fn();
+    const interaction = makeInteraction({
+      mode: 'pose',
+      persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
+      content: 'glances toward the noise.',
+      line: 'Alice glances toward the noise.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" onAddTarget={onAddTarget} />
+      </Wrapper>
+    );
+
+    fireEvent.doubleClick(screen.getByTestId('pose-actor'));
+    expect(onAddTarget).toHaveBeenCalledWith('Alice');
+  });
+
+  it('a read-only line has a plain name with no menu (#4791)', () => {
+    const interaction = makeInteraction({
+      mode: 'pose',
+      persona: { id: 10, name: 'Alice', thumbnail_url: '/alice.png' },
+      content: 'glances toward the noise.',
+      line: 'Alice glances toward the noise.',
+    });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" readOnly />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('pose-actor')).toBeNull();
+    fireEvent.click(screen.getByText('Alice'));
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('clicking the avatar fires onAvatarClick on the standalone ACTION branch', () => {
     const onAvatarClick = vi.fn();
     const interaction = makeInteraction({
