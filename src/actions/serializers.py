@@ -137,6 +137,14 @@ class TargetSpecSerializer(serializers.Serializer):
     filters = TargetFiltersSerializer(read_only=True)
 
 
+class CastPreviewSerializer(serializers.Serializer):
+    """Read-only serializer for CastPreview: what a cast would run at right now (#4799)."""
+
+    intensity = serializers.IntegerField(read_only=True)
+    control = serializers.IntegerField(read_only=True)
+    effective_anima_cost = serializers.IntegerField(read_only=True)
+
+
 class StrainAvailabilitySerializer(serializers.Serializer):
     """Read-only serializer for StrainAvailability — per-character strain cap snapshot."""
 
@@ -178,6 +186,7 @@ class PlayerActionSerializer(serializers.Serializer):
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
     eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
+    cast_preview = CastPreviewSerializer(read_only=True, allow_null=True)
     is_ultimate = serializers.BooleanField(read_only=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:

@@ -49822,6 +49822,24 @@ components:
       description: |-
         * `npc` - npc
         * `crowd` - crowd
+    CastPreview:
+      type: object
+      description: 'Read-only serializer for CastPreview: what a cast would run at
+        right now (#4799).'
+      properties:
+        intensity:
+          type: integer
+          readOnly: true
+        control:
+          type: integer
+          readOnly: true
+        effective_anima_cost:
+          type: integer
+          readOnly: true
+      required:
+      - control
+      - effective_anima_cost
+      - intensity
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -83435,6 +83453,11 @@ components:
           items:
             $ref: '#/components/schemas/AnchorOption'
           readOnly: true
+        cast_preview:
+          allOf:
+          - $ref: '#/components/schemas/CastPreview'
+          readOnly: true
+          nullable: true
         is_ultimate:
           type: boolean
           readOnly: true
@@ -83443,6 +83466,7 @@ components:
       - action_template
       - available_fury_tiers
       - backend
+      - cast_preview
       - check_type
       - description
       - difficulty

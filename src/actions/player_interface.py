@@ -82,6 +82,7 @@ from actions.types import (
     ActionResult,
     AnchorOption,
     AnchorTierIntensity,
+    CastPreview,
     DispatchResult,
     FuryTierOption,
     PlayerAction,
@@ -103,7 +104,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.types import PassOption
     from world.consent.models import SocialConsentCategory
-    from world.magic.models import CharacterAnima
+    from world.magic.models import CharacterAnima, Technique
     from world.mechanics.types import AvailableAction
     from world.scenes.action_availability import AvailableEnhancement
 
@@ -725,6 +726,7 @@ def _combat_actions(
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)
+    anima = _get_character_anima(character)
     result: list[PlayerAction] = []
     for technique in techniques:
         if not technique_performable(character, technique):
@@ -767,10 +769,36 @@ def _combat_actions(
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,
                 is_ultimate=technique.is_ultimate,
+                cast_preview=_cast_preview(character, technique, anima),
             )
         )
 
     return result
+
+
+def _cast_preview(
+    character: ObjectDB, technique: Technique, anima: CharacterAnima | None
+) -> CastPreview:
+    """The intensity, control and anima cost this cast would run at now (#4799).
+
+    The same runtime stats and cost the enhancement options price with, so the cast
+    card never estimates them from the technique's authored numbers.
+    """
+    from world.magic.services import (  # noqa: PLC0415
+        calculate_effective_anima_cost,
+        get_runtime_technique_stats,
+    )
+
+    stats = get_runtime_technique_stats(technique, character)
+    cost = 0
+    if anima is not None:
+        cost = calculate_effective_anima_cost(
+            base_cost=technique.anima_cost,
+            runtime_intensity=stats.intensity,
+            runtime_control=stats.control,
+            current_anima=anima.current,
+        ).effective_cost
+    return CastPreview(intensity=stats.intensity, control=stats.control, effective_anima_cost=cost)
 
 
 def _clash_contribution_actions(

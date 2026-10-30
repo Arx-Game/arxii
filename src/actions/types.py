@@ -343,6 +343,8 @@ class PlayerAction:
     soulfray_warning: SoulfrayWarning | None = None
     available_fury_tiers: tuple[FuryTierOption, ...] = ()
     eligible_fury_anchors: tuple[AnchorOption, ...] = ()
+    # Runtime stats and cost the cast card shows (#4799); None for non-cast actions.
+    cast_preview: CastPreview | None = None
 
     # #4098: a readied Audere ultimate (only ever a COMBAT action)
     is_ultimate: bool = False
@@ -512,6 +514,19 @@ class StrainAvailability:
     conversion_base: int = 0
     diminishing_step: int = 1
     diminishing_floor: int = 0
+
+
+@dataclass(frozen=True)
+class CastPreview:
+    """What a combat cast would run at for this character right now (#4799).
+
+    Runtime intensity and control (the engagement's process modifiers, identity and
+    social safety included) and the anima cost they make, all computed server-side.
+    """
+
+    intensity: int
+    control: int
+    effective_anima_cost: int
 
 
 @dataclass(frozen=True)

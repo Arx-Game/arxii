@@ -30064,6 +30064,12 @@ export interface components {
      * @enum {string}
      */
     CastListEntryKindEnum: 'npc' | 'crowd';
+    /** @description Read-only serializer for CastPreview: what a cast would run at right now (#4799). */
+    CastPreview: {
+      readonly intensity: number;
+      readonly control: number;
+      readonly effective_anima_cost: number;
+    };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
@@ -47387,6 +47393,7 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+      readonly cast_preview: components['schemas']['CastPreview'] | null;
       readonly is_ultimate: boolean;
     };
     /**

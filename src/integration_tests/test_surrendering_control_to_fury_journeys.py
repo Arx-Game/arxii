@@ -423,6 +423,36 @@ class SeeingTheTrade(_AtTheFord):
             {self.seething.pk: 10, self.unbound.pk: 21},
         )
 
+    def test_the_cast_card_shows_what_the_next_cast_runs_at_after_the_trade(self) -> None:
+        # The card used to show the authored I:20 / C:40 and a free cast (#4799).
+        self.declare_fury(self.seething)
+        self.resolve_with("Success")
+        begin_declaration_phase(self.encounter)
+
+        response = self.api(self.account_of(self.brannoc)).get(
+            reverse("actions:available-actions", kwargs={"character_id": self.brannoc.pk})
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        cast = next(
+            row
+            for row in response.json()["results"]
+            if row["ref"].get("technique_id") == self.technique.pk
+        )
+        # Seething bought +8 intensity for 6 control. Control (34) still clears intensity
+        # (28) by 6, more than the base cost of 1, so the cast stays free.
+        self.assertEqual(
+            cast["cast_preview"],
+            {
+                "intensity": TECHNIQUE_INTENSITY + 8,
+                "control": 40 - SEETHING_SURRENDERS,
+                "effective_anima_cost": 0,
+            },
+        )
+        # The cast itself runs at the intensity the card showed.
+        self.telnet(self.brannoc, f"cast {self.technique.name} at {self.bandit.name}")
+        self.assertEqual(self.resolve_with("Success"), [TECHNIQUE_INTENSITY + 8])
+
 
 class FuryOnAChallengeEngagement(_AtTheFord):
     """Brannoc was already mid-challenge at the ford when the bandit struck.

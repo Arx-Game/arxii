@@ -1031,7 +1031,7 @@ export async function getNextPathOptions(characterId: number): Promise<PathOptio
  * GET /api/magic/techniques/{id}/
  *
  * Returns a single Technique with intensity, control, anima_cost and other stats.
- * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ * The technique's authored stats; the cast card shows runtime ones from `cast_preview` (#4799).
  */
 export async function getTechnique(id: number): Promise<Technique> {
   const res = await apiFetch(`${TECHNIQUES_URL}/${id}/`);

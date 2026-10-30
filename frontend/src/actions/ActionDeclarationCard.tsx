@@ -22,8 +22,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
-import type { PlayerAction } from '@/scenes/actionTypes';
-import { useTechnique, useCharacterResonances } from '@/magic/queries';
+import type { CastPreview, PlayerAction } from '@/scenes/actionTypes';
+import { useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
 import { burnStrainUnits, effectiveBurn, type StrainBurn } from '@/magic/burn';
@@ -616,33 +616,19 @@ function ICChip({ intensity, control }: ICChipProps) {
 // ---------------------------------------------------------------------------
 // Cost preview sub-component
 //
-// This is intentionally informational and computed client-side.
-// Real cost is computed server-side at cast time. The formula here is
-// a heuristic:
-//   - control >= intensity  → 0 anima (comfortable)
-//   - intensity > control   → ~anima_cost anima (overburn risk — server confirms)
+// The server's own runtime numbers for this cast (#4799): the engagement's
+// modifiers (Dig deep, Fury) included, so the card never estimates them.
 // ---------------------------------------------------------------------------
 
-interface CostPreviewProps {
-  intensity: number;
-  control: number;
-  animaCost: number;
-}
-
-function CostPreview({ intensity, control, animaCost }: CostPreviewProps) {
-  const isOverburn = intensity > control;
-
-  if (isOverburn) {
-    return (
-      <p className="text-xs text-amber-400">
-        Cost: ~{animaCost} anima · (overburn risk; server confirms at cast)
-      </p>
-    );
-  }
-
+function CostPreview({ preview }: { preview: CastPreview }) {
   return (
-    <p className="text-xs text-muted-foreground">
-      Cost: 0 anima · (Control &ge; Intensity, comfortable)
+    <p
+      className={cn(
+        'text-xs',
+        preview.intensity > preview.control ? 'text-amber-400' : 'text-muted-foreground'
+      )}
+    >
+      Cost: {preview.effective_anima_cost} anima
     </p>
   );
 }
@@ -685,14 +671,10 @@ export function ActionDeclarationCard({
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
 
-  // Fetch technique detail for I/C chip and cost preview.
-  const {
-    data: techniqueDetail,
-    isLoading: techniqueLoading,
-    isError: techniqueError,
-  } = useTechnique(actionContext.techniqueId);
-
   const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
+  // What the chosen cast would run at, from the server (#4799).
+  const castPreview =
+    techniques.find((a) => a.ref.technique_id === actionContext.techniqueId)?.cast_preview ?? null;
 
   // Thread pull state (local — Phase 7 can lift or add onPullsChange prop)
   const [selectedPulls, setSelectedPulls] = useState<Record<number, 0 | 1 | 2 | 3>>({});
@@ -780,23 +762,13 @@ export function ActionDeclarationCard({
   const hasTechnique = actionContext.techniqueId !== undefined;
 
   const renderTechniqueDetail = () => {
-    if (techniqueDetail) {
-      return (
-        <CostPreview
-          intensity={techniqueDetail.intensity ?? 0}
-          control={techniqueDetail.control ?? 0}
-          animaCost={techniqueDetail.anima_cost}
-        />
-      );
+    if (castPreview) {
+      return <CostPreview preview={castPreview} />;
     }
-    if (techniqueError) {
+    if (hasTechnique) {
       return <p className="text-xs text-muted-foreground">Cost unavailable</p>;
     }
-    return (
-      <p className="text-xs text-muted-foreground">
-        {hasTechnique && techniqueLoading ? 'Loading cost...' : '(select a technique first)'}
-      </p>
-    );
+    return <p className="text-xs text-muted-foreground">(select a technique first)</p>;
   };
 
   const renderTechniquePicker = () => {
@@ -833,13 +805,7 @@ export function ActionDeclarationCard({
         <h3 className="text-sm font-semibold capitalize">
           {actionContext.slot.replace(/-/g, ' ')}
         </h3>
-        {/* I/C chip — shown when technique detail is loaded; hidden on error */}
-        {techniqueDetail && !techniqueError && (
-          <ICChip
-            intensity={techniqueDetail.intensity ?? 0}
-            control={techniqueDetail.control ?? 0}
-          />
-        )}
+        {castPreview && <ICChip intensity={castPreview.intensity} control={castPreview.control} />}
       </div>
 
       {/* Technique section */}

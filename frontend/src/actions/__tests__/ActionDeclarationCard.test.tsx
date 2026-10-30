@@ -3,12 +3,11 @@
  *
  * Mocks:
  * - @/scenes/actionQueries.fetchAvailableActions  (technique list)
- * - @/magic/queries.useTechnique + useApplicablePulls + useThreads
+ * - @/magic/queries.useApplicablePulls + useThreads
  * - @/magic/components/threads/ThreadPullPicker   (stub to isolate card tests)
  *
- * The card uses useTechnique (a React Query hook), so we mock the queries
- * module directly to control what technique detail the card sees synchronously.
- * ThreadPullPicker is stubbed so Phase 5 tests don't break due to Phase 6
+ * The chip and cost line read each technique's server-computed `cast_preview`
+ * from the actions list (#4799). ThreadPullPicker is stubbed so Phase 5 tests don't break due to Phase 6
  * threading complexity.
  */
 
@@ -43,13 +42,12 @@ vi.mock('@/scenes/actionQueries', async () => {
   };
 });
 
-// Mock the entire magic queries module to control useTechnique, useApplicablePulls,
+// Mock the entire magic queries module to control useApplicablePulls,
 // useThreads, and useCharacterResonances synchronously.
 vi.mock('@/magic/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/magic/queries')>();
   return {
     ...actual,
-    useTechnique: vi.fn(),
     useApplicablePulls: vi.fn(),
     useThreads: vi.fn(),
     useCharacterResonances: vi.fn(),
@@ -65,7 +63,6 @@ import { fetchAvailableActions } from '@/scenes/actionQueries';
 import * as magicQueries from '@/magic/queries';
 
 const mockedFetchActions = fetchAvailableActions as ReturnType<typeof vi.fn>;
-const mockedUseTechnique = magicQueries.useTechnique as ReturnType<typeof vi.fn>;
 const mockedUseApplicablePulls = magicQueries.useApplicablePulls as ReturnType<typeof vi.fn>;
 const mockedUseThreads = magicQueries.useThreads as ReturnType<typeof vi.fn>;
 const mockedUseCharacterResonances = magicQueries.useCharacterResonances as ReturnType<
@@ -111,6 +108,8 @@ const MOCK_TECHNIQUES = [
       technique_id: 101,
       registry_key: null,
     },
+    // The live #4799 case: authored I:20 / C:40, running at I:33 / C:26 for 8 anima.
+    cast_preview: { intensity: 33, control: 26, effective_anima_cost: 8 },
   },
   {
     backend: 'MAGIC',
@@ -128,38 +127,9 @@ const MOCK_TECHNIQUES = [
       technique_id: 102,
       registry_key: null,
     },
+    cast_preview: { intensity: 4, control: 7, effective_anima_cost: 0 },
   },
 ];
-
-// intensity=8, control=5 → overburn (I > C)
-const TECHNIQUE_OVERBURN = {
-  id: 101,
-  name: 'Tidal Fury',
-  gift: 1,
-  effect_type: 1,
-  level: 1,
-  intensity: 8,
-  control: 5,
-  anima_cost: 3,
-  tier: 1,
-};
-
-// intensity=4, control=7 → comfortable (C >= I)
-const TECHNIQUE_COMFORTABLE = {
-  id: 102,
-  name: 'Storm Surge',
-  gift: 1,
-  effect_type: 1,
-  level: 1,
-  intensity: 4,
-  control: 7,
-  anima_cost: 1,
-  tier: 1,
-};
-
-function mockUseTechnique(data: typeof TECHNIQUE_OVERBURN | null) {
-  mockedUseTechnique.mockReturnValue({ data, isLoading: false, isError: false });
-}
 
 function mockPickerHooks() {
   // Provide stub returns for Phase 6 hooks so card tests don't break.
@@ -179,7 +149,6 @@ function mockPickerHooks() {
 describe('ActionDeclarationCard — Task 5.1 skeleton', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 
@@ -245,7 +214,6 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
       previous: null,
       results: MOCK_TECHNIQUES,
     });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 
@@ -338,7 +306,6 @@ describe('ActionDeclarationCard — Task 5.2 technique picker', () => {
 describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 
@@ -399,7 +366,6 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
 describe('ActionDeclarationCard — #3446 strain slider', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 
@@ -499,7 +465,7 @@ describe('ActionDeclarationCard — #3446 strain slider', () => {
 // Task 5.3 — intensity/control chip
 // ---------------------------------------------------------------------------
 
-describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
+describe('ActionDeclarationCard — runtime I/C chip (#4799)', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({
       count: MOCK_TECHNIQUES.length,
@@ -510,65 +476,43 @@ describe('ActionDeclarationCard — Task 5.3 I/C chip', () => {
     mockPickerHooks();
   });
 
-  it('shows warning chip when intensity exceeds control', () => {
-    mockUseTechnique(TECHNIQUE_OVERBURN); // I:8 > C:5
-
+  function renderCard(techniqueId?: number) {
     render(
       <ActionDeclarationCard
         characterId={1}
         characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 101 })}
+        actionContext={emptyContext({ techniqueId })}
         onContextChange={() => {}}
       />,
       { wrapper: createWrapper() }
     );
+  }
 
-    const chip = screen.getByTestId('ic-chip');
-    expect(chip).toBeInTheDocument();
-    expect(chip).toHaveTextContent('I:8 / C:5');
+  it('shows the intensity and control the cast runs at, not its authored stats', async () => {
+    renderCard(101);
+
+    const chip = await screen.findByTestId('ic-chip');
+    expect(chip).toHaveTextContent('I:33 / C:26');
     expect(chip).toHaveClass('bg-amber-500/20');
   });
 
-  it('shows neutral chip when control >= intensity', () => {
-    mockUseTechnique(TECHNIQUE_COMFORTABLE); // I:4, C:7
+  it('shows a neutral chip when control meets intensity', async () => {
+    renderCard(102);
 
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 102 })}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
-    const chip = screen.getByTestId('ic-chip');
+    const chip = await screen.findByTestId('ic-chip');
     expect(chip).toHaveTextContent('I:4 / C:7');
     expect(chip).not.toHaveClass('bg-amber-500/20');
   });
 
-  it('does not render chip when no technique is selected', () => {
-    mockUseTechnique(null);
+  it('does not render the chip when no technique is selected', async () => {
+    renderCard();
 
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext()}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
+    expect(await screen.findByText('(select a technique first)')).toBeInTheDocument();
     expect(screen.queryByTestId('ic-chip')).not.toBeInTheDocument();
   });
 });
 
-// ---------------------------------------------------------------------------
-// Task 5.3 — cost preview line
-// ---------------------------------------------------------------------------
-
-describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
+describe('ActionDeclarationCard — runtime cost line (#4799)', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({
       count: MOCK_TECHNIQUES.length,
@@ -579,86 +523,41 @@ describe('ActionDeclarationCard — Task 5.3 cost preview', () => {
     mockPickerHooks();
   });
 
-  it('hides the cost line when no technique is selected', () => {
-    mockUseTechnique(null);
-
+  function renderCard(techniqueId?: number) {
     render(
       <ActionDeclarationCard
         characterId={1}
         characterSheetId={1}
-        actionContext={emptyContext()}
+        actionContext={emptyContext({ techniqueId })}
         onContextChange={() => {}}
       />,
       { wrapper: createWrapper() }
     );
+  }
 
-    expect(screen.queryByText(/0 anima/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/overburn/i)).not.toBeInTheDocument();
+  it('shows the anima the cast will cost', async () => {
+    renderCard(101);
+
+    expect(await screen.findByText('Cost: 8 anima')).toBeInTheDocument();
   });
 
-  it('shows comfortable cost line when control >= intensity', () => {
-    mockUseTechnique(TECHNIQUE_COMFORTABLE); // I:4, C:7
+  it('shows a free cast as costing nothing', async () => {
+    renderCard(102);
 
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 102 })}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
-    expect(screen.getByText(/0 anima/i)).toBeInTheDocument();
-    expect(screen.getByText(/comfortable/i)).toBeInTheDocument();
+    expect(await screen.findByText('Cost: 0 anima')).toBeInTheDocument();
   });
 
-  it('shows overburn cost line when intensity > control', () => {
-    mockUseTechnique(TECHNIQUE_OVERBURN); // I:8 > C:5
+  it('hides the cost line when no technique is selected', async () => {
+    renderCard();
 
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 101 })}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
-    expect(screen.getByText(/overburn/i)).toBeInTheDocument();
+    expect(await screen.findByText('(select a technique first)')).toBeInTheDocument();
+    expect(screen.queryByText(/anima$/)).not.toBeInTheDocument();
   });
 
-  it('shows "Cost unavailable" when useTechnique errors instead of "Loading cost..."', () => {
-    mockedUseTechnique.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+  it('says the cost is unavailable when the technique has no preview', async () => {
+    renderCard(999);
 
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 101 })}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
-    expect(screen.getByText(/cost unavailable/i)).toBeInTheDocument();
-    expect(screen.queryByText(/loading cost/i)).not.toBeInTheDocument();
-  });
-
-  it('does not render I/C chip when useTechnique errors', () => {
-    mockedUseTechnique.mockReturnValue({ data: undefined, isLoading: false, isError: true });
-
-    render(
-      <ActionDeclarationCard
-        characterId={1}
-        characterSheetId={1}
-        actionContext={emptyContext({ techniqueId: 101 })}
-        onContextChange={() => {}}
-      />,
-      { wrapper: createWrapper() }
-    );
-
+    expect(await screen.findByText('Cost unavailable')).toBeInTheDocument();
     expect(screen.queryByTestId('ic-chip')).not.toBeInTheDocument();
   });
 });
@@ -675,7 +574,6 @@ describe('ActionDeclarationCard — Task 6.4 ThreadPullPicker section', () => {
       previous: null,
       results: MOCK_TECHNIQUES,
     });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 
@@ -731,7 +629,6 @@ describe('ActionDeclarationCard — Task 6.4 ThreadPullPicker section', () => {
 describe('ActionDeclarationCard — #1001a combatant target picker', () => {
   beforeEach(() => {
     mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
-    mockUseTechnique(null);
     mockPickerHooks();
   });
 

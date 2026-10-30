@@ -176,6 +176,18 @@ export interface PlayerAction {
    * engagement while the reveal holds — undefined/false everywhere else.
    */
   is_ultimate?: boolean;
+  /**
+   * What a combat cast would run at for this character right now (#4799): runtime
+   * intensity and control and the anima cost they make, computed server-side.
+   * null / absent for anything that is not a combat cast.
+   */
+  cast_preview?: CastPreview | null;
+}
+
+export interface CastPreview {
+  intensity: number;
+  control: number;
+  effective_anima_cost: number;
 }
 
 export interface PlayerActionsResponse {
