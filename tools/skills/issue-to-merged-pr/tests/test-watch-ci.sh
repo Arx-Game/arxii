@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Stubs `gh` with a fixed statusCheckRollup and checks watch-ci.sh's verdict (#4643).
 set -euo pipefail
 script="$(cd "$(dirname "$0")/.." && pwd)/scripts/watch-ci.sh"
 tmp=$(mktemp -d)
@@ -11,26 +12,39 @@ chmod +x "$tmp/gh"
 export PATH="$tmp:$PATH"
 export ROLLUP="$tmp/rollup.json"
 
-printf '%s\n' '[{"name":"CodeQL","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"SonarCloud","status":"COMPLETED","conclusion":"SUCCESS"}]' >"$ROLLUP"
-old_script="$tmp/watch-ci-old.sh"
-git show a675e7d:tools/skills/issue-to-merged-pr/scripts/watch-ci.sh >"$old_script"
-chmod +x "$old_script"
-old_output=$("$old_script" 123)
-[[ "$old_output" == "OK" ]]
-echo 'PASS: pre-fix a675e7d script reports OK for CodeQL+SonarCloud.'
-
+# A copy with a one-second hard cap, so a held-pending rollup times out quickly.
 short_script="$tmp/watch-ci-short.sh"
 sed "s/HARD_CAP=\$((25 \* 60))/HARD_CAP=1/" "$script" >"$short_script"
 chmod +x "$short_script"
-set +e
-output=$("$short_script" 123 2>&1)
-code=$?
-set -e
-[[ "$code" -eq 6 ]]
-grep -q '^TIMEOUT after 1s with checks still pending$' <<<"$output"
-echo 'PASS: fixed script held CodeQL+SonarCloud pending through timeout (exit 6).'
 
-printf '%s\n' '[{"name":"backend","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"CodeQL","status":"COMPLETED","conclusion":"SUCCESS"}]' >"$ROLLUP"
+expect_held_pending() {
+  local label="$1" output code
+  set +e
+  output=$("$short_script" 123 2>&1)
+  code=$?
+  set -e
+  [[ "$code" -eq 6 ]] || { echo "FAIL: $label exited $code: $output"; exit 1; }
+  grep -q '^TIMEOUT after 1s with checks still pending$' <<<"$output"
+  echo "PASS: $label held pending through timeout (exit 6)."
+}
+
+ok='"status":"COMPLETED","conclusion":"SUCCESS"'
+
+echo "[{\"name\":\"CodeQL\",$ok},{\"name\":\"SonarCloud\",$ok}]" >"$ROLLUP"
+expect_held_pending "CodeQL+SonarCloud only"
+
+echo "[{\"name\":\"backend\",$ok},{\"name\":\"CodeQL\",$ok}]" >"$ROLLUP"
+expect_held_pending "backend without frontend"
+
+echo "[{\"name\":\"backend\",$ok},{\"name\":\"frontend\",$ok},{\"name\":\"CodeQL\",$ok}]" >"$ROLLUP"
 output=$("$script" 123)
 [[ "$output" == "OK" ]]
-echo 'PASS: backend+CodeQL successful rollup returned OK (exit 0).'
+echo 'PASS: backend+frontend+CodeQL successful rollup returned OK (exit 0).'
+
+echo "[{\"name\":\"backend\",\"status\":\"COMPLETED\",\"conclusion\":\"FAILURE\"},{\"name\":\"frontend\",$ok}]" >"$ROLLUP"
+set +e
+output=$("$script" 123)
+code=$?
+set -e
+[[ "$code" -eq 5 && "$output" == "FAIL backend" ]]
+echo 'PASS: a failed backend check reported FAIL backend (exit 5).'

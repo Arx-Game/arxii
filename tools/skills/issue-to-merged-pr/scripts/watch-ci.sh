@@ -59,10 +59,11 @@ check_state() {
     return
   fi
 
-  # A successful partial check rollup is not proof that the required CI ran.
-  # The backend aggregator is always posted by ci.yml and is branch protection's
-  # stable signal, even when backend tests are skipped for unrelated changes.
-  if ! jq -e 'any(.[]; .name == "backend")' <<<"$json" >/dev/null; then
+  # A successful partial rollup (only CodeQL and SonarCloud, #4643) is not proof
+  # that CI ran. ci.yml always posts the required `backend` and `frontend`
+  # aggregators, even when their tests are skipped, so wait until both are there.
+  if ! jq -e 'any(.[]; .name == "backend") and any(.[]; .name == "frontend")' \
+    <<<"$json" >/dev/null; then
     echo "PENDING"
     return
   fi
