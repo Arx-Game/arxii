@@ -295,8 +295,16 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
         )
         self.assertNotTold(self.brannoc, "You surrender")
 
+    def assertToldItFaltered(self) -> None:  # noqa: N802 - unittest style
+        """The room hears the cast faltered, never that it was thrown and missed (#4801)."""
+        self.assertShownRow(
+            self.ilse, f"Brannoc’s {self.technique.name} falters before it can be cast."
+        )
+        self.assertFalse(any("misses" in row for row in self.mailbox(self.ilse).rows))
+
     def test_a_cast_stopped_at_the_soulfray_gate_surrenders_nothing(self) -> None:
         self.declare_fury(self.seething)
+        self.watch(self.ilse)
         # A Soulfray stage that appeared after he declared: the unconfirmed cast stops.
         warning = SoulfrayWarning(stage_name="Fraying", stage_description="", has_death_risk=False)
 
@@ -309,9 +317,14 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
 
         self.assertEqual(casts, [0])
         self.assertNothingTraded()
+        self.assertToldItFaltered()
+        self.assertTold(
+            self.brannoc, "Your Soulfray worsened before your turn and stopped the cast."
+        )
 
     def test_a_cast_cancelled_before_it_resolves_gives_the_trade_back(self) -> None:
         self.declare_fury(self.seething)
+        self.watch(self.ilse)
 
         self.resolve_with(
             "Success",
@@ -321,6 +334,8 @@ class OnlyACastThatGoesOffPays(_AtTheFord):
         )
 
         self.assertNothingTraded()
+        self.assertToldItFaltered()
+        self.assertTold(self.brannoc, "Something here stopped your cast before it left your hands.")
 
     def test_a_tie_lapsed_since_declaring_rolls_nothing(self) -> None:
         self.declare_fury(self.seething)
