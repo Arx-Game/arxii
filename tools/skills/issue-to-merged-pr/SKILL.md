@@ -450,7 +450,10 @@ red, so do not treat it as cleanup to get to later:
    `Reviewed revision` to the current `HEAD^1`, prints what changed between the
    old revision and the new one so you can judge whether the review still
    stands, and re-validates the comment exactly as CI will. Skipping it is the
-   single most common way this job goes red after a green one.
+   single most common way this job goes red after a green one. When code
+   changed in between and there is no terminal (always, for an agent), it
+   prints the diff and exits 3 without touching the report: judge the diff,
+   then re-run with `--yes` (#4797; the prompt used to wait forever).
 
 **The revision gotcha, which bites every time.** Both the gate and
 `open-pr.sh` validate the report against `git rev-parse HEAD^1`, so the report's
