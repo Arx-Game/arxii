@@ -1,5 +1,8 @@
 """The facet vocabulary's spelling rule, near-matches, create endpoint and merge (#4197)."""
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -138,7 +141,20 @@ class MergeFacetsTests(TestCase):
             and rel.get_accessor_name() not in live
             and rel.field.remote_field.hidden
         )
+        hidden = {
+            (rel.field.model._meta.label_lower, rel.field.name)
+            for rel in Facet._meta.get_fields(include_hidden=True)
+            if rel.auto_created
+            and not rel.concrete
+            and (rel.one_to_many or rel.one_to_one)
+            and not rel.many_to_many
+            and not rel.field.model._meta.auto_created
+            and rel.get_accessor_name() not in live
+            and rel.field.remote_field.hidden
+        }
         self.assertEqual(live, set(svc.HANDLED_RELATIONS))
+        self.assertEqual(hidden, {("arxii.ceremonyoffering", "facet")})
+        self.assertEqual(hidden, set(svc.HANDLED_HIDDEN_RELATIONS))
 
     def test_historical_ceremony_offerings_follow_the_winning_facet(self) -> None:
         from world.ceremonies.models import CeremonyOffering
@@ -156,6 +172,34 @@ class MergeFacetsTests(TestCase):
         offering.refresh_from_db()
         self.assertEqual(offering.facet, self.winner)
         self.assertEqual(result.moved, 1)
+
+    def test_an_unrecognized_hidden_relation_stops_the_merge(self) -> None:
+        fake_model = SimpleNamespace(
+            _meta=SimpleNamespace(auto_created=False, label_lower="world.test.unhandledfacetlink")
+        )
+        fake_relation = SimpleNamespace(
+            auto_created=True,
+            concrete=False,
+            one_to_many=True,
+            one_to_one=False,
+            many_to_many=False,
+            field=SimpleNamespace(
+                model=fake_model,
+                name="facet",
+                remote_field=SimpleNamespace(hidden=True),
+            ),
+            get_accessor_name=lambda: "+",
+        )
+        fields = Facet._meta.get_fields(include_hidden=True)
+        original = svc.HANDLED_HIDDEN_RELATIONS
+        svc.HANDLED_HIDDEN_RELATIONS = frozenset()
+        try:
+            with patch.object(Facet._meta, "get_fields", return_value=(*fields, fake_relation)):
+                with self.assertRaisesRegex(UnmergedFacetRelation, "world.test.unhandledfacetlink"):
+                    svc.merge_facets(self.winner, [self.loser])
+        finally:
+            svc.HANDLED_HIDDEN_RELATIONS = original
+        self.assertTrue(Facet.objects.filter(pk=self.loser.pk).exists())
 
     def test_a_relation_without_a_handler_stops_the_merge(self) -> None:
         original = svc.HANDLED_RELATIONS
