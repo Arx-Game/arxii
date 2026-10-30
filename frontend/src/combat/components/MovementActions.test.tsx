@@ -143,6 +143,38 @@ describe('MovementActions', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it('gives multiple blocked no-location actions distinct rendered identities', () => {
+    const blockedActions = [
+      {
+        ...makeMoveAction(null, 'Step left'),
+        prerequisite_met: false,
+        prerequisite_reasons: ['No movement remaining.'],
+      },
+      {
+        ...makeMoveAction(null, 'Step right'),
+        prerequisite_met: false,
+        prerequisite_reasons: ['No movement remaining.'],
+      },
+    ];
+
+    render(
+      <MovementActions
+        actions={blockedActions}
+        isLocked={false}
+        dispatchAction={vi.fn(okDispatch)}
+      />
+    );
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((button) => button.getAttribute('data-testid'))).toEqual([
+      'move-btn-move_to_position-here-0',
+      'move-btn-move_to_position-here-1',
+    ]);
+    expect(new Set(buttons.map((button) => button.getAttribute('data-testid'))).size).toBe(2);
+    expect(buttons.every((button) => button.hasAttribute('disabled'))).toBe(true);
+  });
+
   it('disables a refused move and shows why under the label', () => {
     const refused: PlayerAction = {
       ...makeMoveAction(7, 'Move to Gate'),

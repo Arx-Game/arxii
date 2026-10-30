@@ -33,6 +33,15 @@ export function MovementActions({
 
   // While the round is open the server puts "N hops left this round." on each move it offers.
   const hopsLine = hopsLeftLine(actions);
+  const baseKeys = actions.map((action) => {
+    const via = [action.ref.feature_id, action.ref.approach_id]
+      .filter((id) => id != null)
+      .map((id) => `-${id}`)
+      .join('');
+    return `${action.ref.registry_key ?? 'move'}-${action.ref.position_id ?? 'here'}${via}`;
+  });
+  const keyCounts = new Map<string, number>();
+  baseKeys.forEach((key) => keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1));
 
   return (
     <div className="space-y-2" data-testid="movement-section">
@@ -42,16 +51,12 @@ export function MovementActions({
           {hopsLine}
         </p>
       )}
-      {actions.map((action) => {
-        const positionId = action.ref.position_id;
+      {actions.map((action, index) => {
+        // Repeated action refs can occur for blocked no-location movement variants.
+        // Keep the familiar ID where unique and disambiguate duplicates by their list position.
+        const baseKey = baseKeys[index];
+        const key = keyCounts.get(baseKey)! > 1 ? `${baseKey}-${index}` : baseKey;
         const refused = !action.prerequisite_met;
-        // A move and a pass roll can name the same place (#4663), and two stunts can reach
-        // one place by different features or approaches (#4675): the key carries them all.
-        const via = [action.ref.feature_id, action.ref.approach_id]
-          .filter((id) => id != null)
-          .map((id) => `-${id}`)
-          .join('');
-        const key = `${action.ref.registry_key ?? 'move'}-${positionId ?? 'here'}${via}`;
         // The hops line already shows above; any other note is this entry's own.
         const note =
           action.description && action.description !== hopsLine ? action.description : '';
