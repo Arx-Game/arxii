@@ -2,16 +2,15 @@
 
 Coverage map
 ============
-1.  @tag("postgres") real cast with fury tier → control_penalty + intensity_bonus
-    consumed by real use_technique → on forced control-retention failure, REAL
-    apply_condition(Berserk) runs (PG-only DISTINCT ON path) → caster has
-    Berserk ConditionInstance + Interaction.fury_committed is set.
+1.  @tag("postgres") real cast with a Berserk fury tier → REAL apply_condition(Berserk)
+    runs (PG-only DISTINCT ON path) → caster has Berserk ConditionInstance +
+    Interaction.fury_committed is set.
 
 2.  Full berserker loop: real cast → fury failure → Berserk applied → successful
     Restore-to-Sense removes it.  Also @tag("postgres").
 
-3.  Strain + Fury stacked: control_delta correct, fatigue split correct, Fury alone
-    accrues NO extra fatigue.
+3.  Strain + Fury stacked: control surrendered to Fury (on the engagement) raises the
+    cost, fatigue split correct, Fury alone accrues NO extra fatigue.
 
 4.  fury_committed audit on a CLASH declaration (ClashContributionDeclaration path).
 
@@ -27,7 +26,8 @@ Gaps that are ALREADY COVERED by earlier tasks and NOT duplicated here
 - Interaction.fury_committed audit (non-clash): test_fury_threading.py
 - BerserkAppliedOnLostControl mock-level wiring: test_fury_threading.py
 - resolve_fury / provocation_cap / clamp_tier units: test_fury_service.py
-- control_penalty raising anima cost through use_technique: test_use_technique_control_penalty.py
+- The trade landing on the engagement, per outcome: integration_tests/
+  test_surrendering_control_to_fury_journeys.py
 - Berserk ConditionTemplate shape: test_berserk_template.py
 - RemoveConditionOnCheck effect dispatch: integration_tests/test_conditions_journeys.py
   (TalkingABerserkerDown, #3657) and test_restore_sense_action.py
@@ -74,8 +74,9 @@ from world.vitals.models import CharacterVitals
 class _FakeCheck:
     """Minimal stand-in for perform_check result used in resolve_fury calls."""
 
-    def __init__(self, success_level: int) -> None:
+    def __init__(self, success_level: int, outcome=None) -> None:
         self.success_level = success_level
+        self.outcome = outcome
 
 
 # ---------------------------------------------------------------------------
@@ -112,12 +113,12 @@ def _setup_bonded_pair(*, tier_depth: int = 2, bond_tier_number: int = 2):
     tier = FuryTierFactory(
         name=f"IntTier_{tier_depth}_{bond_tier_number}",
         depth=tier_depth,
-        control_penalty=4,
-        intensity_bonus=5,
+        control_surrendered=4,
         base_check_difficulty=10,
-        lucid_grade_floor=2,
         berserk_severity=3,
     )
+    # Fury needs something at stake (#4738): the initiator is engaged.
+    CharacterEngagementFactory(character=initiator.character_sheet)
 
     # Mutual Mentor/Student bond at bond_tier_number. Fury itself reads only the SOURCE
     # side's tier (``fury._bond_tier``, any label), so this fixture builds more than the cap
@@ -156,8 +157,8 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
     The DISTINCT ON path in _build_bulk_context is Postgres-only; this class is
     tagged so it only runs in the CI Postgres parity suite.
 
-    On a forced failed control-retention check (success_level < lucid_grade_floor):
-    - run_fury_for_action calls apply_condition(Berserk) for real.
+    The tier is a Berserk tier (berserk_severity > 0), so whatever the control roll:
+    - FuryCast.settle calls apply_condition(Berserk) for real.
     - The caster ends up with a ConditionInstance for Berserk.
     - Interaction.fury_committed is set to the realized tier.
     """
@@ -187,7 +188,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_real_apply_condition_on_fury_failure(self, mock_resolve: object) -> None:
-        """Forced failed check → real apply_condition(Berserk) → caster has Berserk."""
+        """A Berserk tier → real apply_condition(Berserk) → caster has Berserk."""
         from unittest.mock import MagicMock
 
         from actions.constants import ResolutionPhase
@@ -195,7 +196,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
 
         # Build a minimal PendingActionResolution so the action pipeline can complete.
         check_result = MagicMock()
-        check_result.success_level = -1  # below lucid_grade_floor=2 → berserk
+        check_result.success_level = -1
         check_result.outcome_name = "Failure"
         step = StepResult(step_label="main", check_result=check_result, consequence_id=None)
         pending = PendingActionResolution(
@@ -208,7 +209,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
         )
         mock_resolve.return_value = pending
 
-        # Force the control-retention check (inside run_fury_for_action) to fail.
+        # The control roll's outcome does not decide Berserk; force it anyway.
         failure_outcome = CheckOutcomeFactory(name="FuryInt_RealFail", success_level=-1)
 
         request = SceneActionRequestFactory(
@@ -234,7 +235,7 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
         # 1. The caster must now have an active Berserk ConditionInstance.
         self.assertTrue(
             has_condition(caster, self.berserk_template),
-            "Caster must have active Berserk after a failed control-retention check.",
+            "Caster must have active Berserk after choosing a Berserk tier.",
         )
 
         # 2. The Interaction must record the realized fury tier.
@@ -297,30 +298,20 @@ class FullBerserkerLoopTests(TestCase):
 
 
 class StrainAndFuryStackedTests(TestCase):
-    """Strain + Fury stacked on one cast: control_delta and fatigue split verified.
+    """Strain + Fury stacked on one cast: surrendered control and the fatigue split.
 
-    Fury raises control_penalty (lowers runtime control → higher anima cost).
-    Strain adds strain_commitment on top (raises effective cost further, AND
-    moves a portion to the higher-rate strain_portion for fatigue calculation).
+    Fury surrenders control onto the engagement (#4738), which lowers runtime control and
+    so raises the anima cost. Strain adds strain_commitment on top (raises effective cost
+    further, AND moves a portion to the higher-rate strain_portion for fatigue).
 
-    Fury alone — no strain_commitment — accrues fatigue only at the base ratio
-    (same formula as a no-fury cast of the same effective cost).  This test
-    asserts that behaviour.
+    Fury alone (no strain_commitment) accrues fatigue only at the base ratio.
     """
+
+    CONTROL_SURRENDERED = 6
 
     @classmethod
     def setUpTestData(cls) -> None:
-        FuryConfigFactory()
-        cls.tier = FuryTierFactory(
-            name="StrainFuryTier",
-            depth=1,
-            control_penalty=6,
-            intensity_bonus=4,
-            base_check_difficulty=0,  # check always succeeds → no Berserk
-            lucid_grade_floor=1,
-            berserk_severity=0,
-        )
-        # Technique: high control so penalty still leaves positive control.
+        # Technique: high control so the surrender still leaves positive control.
         cls.technique = TechniqueFactory(
             intensity=5,
             control=20,
@@ -328,129 +319,54 @@ class StrainAndFuryStackedTests(TestCase):
             damage_profile=False,
         )
 
-    def _make_caster(self):
-        """Return (character, character_sheet, anima) for a fresh caster."""
+    def _make_caster(self, *, control_surrendered: int = 0):
+        """Return (character, character_sheet) for a fresh, engaged caster."""
         from world.character_sheets.factories import CharacterSheetFactory
 
         anima = CharacterAnimaFactory(current=50, maximum=50)
         character = anima.character.character
-        CharacterEngagementFactory(character=anima.character)
+        CharacterEngagementFactory(
+            character=anima.character,
+            control_modifier=-control_surrendered,
+            fury_control_surrendered=control_surrendered,
+        )
         sheet = CharacterSheetFactory(character=character)
-        return character, sheet, anima
+        return character, sheet
 
     def _noop_resolve(self, *, power: int, ledger: object = None, extra_modifiers: int = 0):  # noqa: ARG002
         from types import SimpleNamespace
 
         return SimpleNamespace(check_result=None)
 
-    def test_fury_control_penalty_raises_cost(self) -> None:
-        """control_penalty=6 lowers runtime_control by 6 → higher effective anima cost."""
-        from world.magic.services.techniques import calculate_effective_anima_cost
+    def _fatigue_after_cast(self, *, control_surrendered: int, strain_commitment: int = 0):
+        from world.fatigue.services import get_or_create_fatigue_pool
 
-        baseline = calculate_effective_anima_cost(
-            base_cost=self.technique.anima_cost,
-            runtime_intensity=self.technique.intensity,
-            runtime_control=self.technique.control,
-            current_anima=50,
+        caster, sheet = self._make_caster(control_surrendered=control_surrendered)
+        use_technique(
+            character=caster,
+            technique=self.technique,
+            resolve_fn=self._noop_resolve,
+            strain_commitment=strain_commitment,
         )
-        penalised = calculate_effective_anima_cost(
-            base_cost=self.technique.anima_cost,
-            runtime_intensity=self.technique.intensity,
-            runtime_control=self.technique.control - self.tier.control_penalty,
-            current_anima=50,
-        )
-        self.assertGreater(
-            penalised.effective_cost,
-            baseline.effective_cost,
-            "Fury control_penalty must raise effective anima cost.",
-        )
+        return get_or_create_fatigue_pool(sheet).get_current(self.technique.action_category)
 
     def test_fury_alone_does_not_accrue_extra_fatigue(self) -> None:
-        """Fury adds no extra fatigue beyond what the higher cost itself produces.
+        """Surrendered control raises cost (and so base-rate fatigue), nothing more.
 
-        The fatigue formula is:
-          base_portion * base_ratio + strain_portion * strain_ratio
-        where base_portion = effective_cost - strain_commitment and strain_portion =
-        strain_commitment. With strain_commitment=0 (Fury only), fatigue is simply
-        effective_cost * base_ratio // 100.
-
-        We verify that two casters with the same effective anima cost but one cast
-        via control_penalty and one via a naturally lower control accumulate the
-        same fatigue — Fury imposes no additional fatigue penalty beyond the cost raise.
+        fatigue = base_portion * base_ratio + strain_portion * strain_ratio; with no
+        strain, a Fury cast's fatigue comes from the same formula at a higher cost.
         """
-        from world.fatigue.services import get_or_create_fatigue_pool
-
-        # Caster A: baseline cast (no fury, control_penalty=0).
-        caster_a, sheet_a, _ = self._make_caster()
-        use_technique(
-            character=caster_a,
-            technique=self.technique,
-            resolve_fn=self._noop_resolve,
-            control_penalty=0,
-        )
-        pool_a = get_or_create_fatigue_pool(sheet_a)
-        fatigue_a = pool_a.get_current(self.technique.action_category)
-
-        # Caster B: same cast with control_penalty=6 (fury contribution).
-        caster_b, sheet_b, _ = self._make_caster()
-        use_technique(
-            character=caster_b,
-            technique=self.technique,
-            resolve_fn=self._noop_resolve,
-            control_penalty=self.tier.control_penalty,
-        )
-        pool_b = get_or_create_fatigue_pool(sheet_b)
-        fatigue_b = pool_b.get_current(self.technique.action_category)
-
-        # Fury raises effective cost and therefore raises fatigue (at base rate),
-        # but must NOT impose additional fatigue beyond the cost arithmetic.
-        # The key invariant: fatigue_b comes from the same formula as fatigue_a,
-        # just at a higher effective_cost.  We assert fatigue_b >= fatigue_a
-        # (cost went up, so fatigue went up or stayed equal).
-        self.assertGreaterEqual(
-            fatigue_b,
-            fatigue_a,
-            "Fury control_penalty raises cost and therefore fatigue (at base rate).",
-        )
+        baseline = self._fatigue_after_cast(control_surrendered=0)
+        fury = self._fatigue_after_cast(control_surrendered=self.CONTROL_SURRENDERED)
+        self.assertGreaterEqual(fury, baseline)
 
     def test_strain_adds_fatigue_above_fury_alone(self) -> None:
-        """Adding strain_commitment on top of fury raises fatigue above fury alone.
-
-        With strain_ratio > base_ratio (default 50 vs 25), strain_commitment N
-        raises the fatigue more than the same N added to effective_cost from
-        a natural base-cost increase.
-        """
-        from world.fatigue.services import get_or_create_fatigue_pool
-
-        # Caster A: fury only (control_penalty, no strain).
-        caster_a, sheet_a, _ = self._make_caster()
-        use_technique(
-            character=caster_a,
-            technique=self.technique,
-            resolve_fn=self._noop_resolve,
-            control_penalty=self.tier.control_penalty,
-            strain_commitment=0,
+        """Strain on top of Fury produces more fatigue than Fury alone."""
+        fury_only = self._fatigue_after_cast(control_surrendered=self.CONTROL_SURRENDERED)
+        stacked = self._fatigue_after_cast(
+            control_surrendered=self.CONTROL_SURRENDERED, strain_commitment=4
         )
-        pool_a = get_or_create_fatigue_pool(sheet_a)
-        fatigue_fury_only = pool_a.get_current(self.technique.action_category)
-
-        # Caster B: fury + strain (both control_penalty AND strain_commitment=4).
-        caster_b, sheet_b, _ = self._make_caster()
-        use_technique(
-            character=caster_b,
-            technique=self.technique,
-            resolve_fn=self._noop_resolve,
-            control_penalty=self.tier.control_penalty,
-            strain_commitment=4,
-        )
-        pool_b = get_or_create_fatigue_pool(sheet_b)
-        fatigue_stacked = pool_b.get_current(self.technique.action_category)
-
-        self.assertGreater(
-            fatigue_stacked,
-            fatigue_fury_only,
-            "Strain + Fury must produce more fatigue than Fury alone.",
-        )
+        self.assertGreater(stacked, fury_only)
 
 
 # ---------------------------------------------------------------------------
@@ -471,14 +387,7 @@ class ClashDeclarationFuryAuditTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
 
         FuryConfigFactory()
-        cls.tier = FuryTierFactory(
-            name="ClashAuditTier",
-            depth=1,
-            control_penalty=2,
-            intensity_bonus=3,
-            lucid_grade_floor=1,
-            berserk_severity=0,
-        )
+        cls.tier = FuryTierFactory(name="ClashAuditTier", depth=1, control_surrendered=2)
         cls.anchor_sheet = CharacterSheetFactory()
 
     def test_fury_fields_stored_on_clash_declaration(self) -> None:
@@ -576,7 +485,7 @@ class BerserkDecayTests(TestCase):
 class FuryCapZeroTests(TestCase):
     """Cap 0 (no bond between caster and anchor) → fury unavailable.
 
-    This exercises the null-anchor path through run_fury_for_action:
+    This exercises the null-anchor path through resolve_fury:
     provocation_cap returns 0 → clamp_tier returns None → FuryResolution(None,…)
     → berserk_severity=0 → apply_condition NOT called.
     """
@@ -589,9 +498,7 @@ class FuryCapZeroTests(TestCase):
         cls.tier = FuryTierFactory(
             name="CapZeroTier",
             depth=1,
-            control_penalty=2,
-            intensity_bonus=3,
-            lucid_grade_floor=1,
+            control_surrendered=2,
             berserk_severity=5,  # non-zero — should not fire
         )
         # Two sheets with NO relationship → cap = 0.
@@ -614,8 +521,8 @@ class FuryCapZeroTests(TestCase):
             "No bond → provocation_cap=0 → realized_tier must be None.",
         )
         self.assertEqual(res.berserk_severity, 0)
-        self.assertEqual(res.control_penalty, 0)
-        self.assertEqual(res.intensity_bonus, 0)
+        self.assertEqual(res.control_surrendered, 0)
+        self.assertEqual(res.intensity_gained, 0)
 
     def test_null_anchor_fury_unavailable(self) -> None:
         """anchor=None → provocation_cap=0 → FuryResolution with None tier."""

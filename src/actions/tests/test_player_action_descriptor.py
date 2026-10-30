@@ -81,9 +81,9 @@ class TestPlayerActionFurySoulfrayDefaults(TestCase):
             id=1,
             name="Unleashed",
             depth=2,
-            control_penalty=4,
-            intensity_bonus=5,
-            berserk_severity=3,
+            control_surrendered=4,
+            is_berserk=True,
+            full_intensity=6,
         )
         assert opt.depth == 2
         try:
@@ -110,16 +110,18 @@ class TestPlayerActionSerializerFurySoulfray(TestCase):
                     id=1,
                     name="Unleashed",
                     depth=2,
-                    control_penalty=4,
-                    intensity_bonus=5,
-                    berserk_severity=3,
+                    control_surrendered=4,
+                    is_berserk=True,
+                    full_intensity=6,
                 ),
             ),
             eligible_fury_anchors=(AnchorOption(id=7, name="Rival", provocation_cap=3),),
         )
         data = PlayerActionSerializer(pa).data
         assert data["available_fury_tiers"][0]["depth"] == 2
-        assert data["available_fury_tiers"][0]["berserk_severity"] == 3
+        assert data["available_fury_tiers"][0]["control_surrendered"] == 4
+        assert data["available_fury_tiers"][0]["is_berserk"] is True
+        assert data["available_fury_tiers"][0]["full_intensity"] == 6
         assert data["eligible_fury_anchors"][0]["provocation_cap"] == 3
         assert data["soulfray_warning"] is None
 

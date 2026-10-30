@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from actions.errors import ActionDispatchError
 from world.combat import services as _svc
 from world.combat.constants import (
@@ -97,6 +99,53 @@ def _broadcast_fizzle_no_one_in_reach(
         unattributed_narration="",
         target_personas=[target_persona] if target_persona is not None else None,
     )
+
+
+def _broadcast_cast_stopped(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    technique: Technique,
+    combat_result: CombatTechniqueResult,
+) -> None:
+    """Narrate a cast stopped before it went off, never as a miss (#4801).
+
+    The Soulfray gate (a stage taken after the declaration, risk not accepted) or a
+    pre-cast trigger stopped it: nothing was spent or rolled. The room hears that it
+    faltered; the caster is told why.
+    """
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        target_persona_for_round_action,
+    )
+    from world.combat.services.techniques.cast_audience import (  # noqa: PLC0415
+        _resolve_combat_cast_audience,
+    )
+    from world.magic.services.technique_personalization import (  # noqa: PLC0415
+        technique_display_name,
+    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    character = participant.character_sheet.character
+    actor = active_persona_for_sheet(participant.character_sheet).name
+    target_persona = target_persona_for_round_action(action)
+    broadcast_action_outcome(
+        encounter=participant.encounter,
+        narration=(
+            f"{actor}’s {technique_display_name(character, technique)} falters "
+            "before it can be cast."
+        ),
+        audience=_resolve_combat_cast_audience(participant, technique),
+        unattributed_narration="",
+        target_personas=[target_persona] if target_persona is not None else None,
+    )
+    if combat_result.technique_use_result.soulfray_warning is not None:
+        reason = (
+            "Your Soulfray worsened before your turn and stopped the cast. "
+            "Accept the Soulfray risk when you declare to cast through it."
+        )
+    else:
+        reason = "Something here stopped your cast before it left your hands."
+    transaction.on_commit(lambda: character.msg(reason))
 
 
 def _resolve_pc_action(
@@ -201,6 +250,14 @@ def resolve_pc_technique(
         combat_result = _svc._run_combat_technique_pipeline(  # noqa: SLF001 (test patch seam)
             participant, action, technique, fatigue_category, offense_check_fn
         )
+        # The non-attack path returns a CombatTechniqueResolution, which carries no use result.
+        if (
+            isinstance(combat_result, CombatTechniqueResult)
+            and not combat_result.technique_use_result.confirmed
+        ):
+            # Stopped before it went off: like a fizzle, it costs nothing (#4801).
+            _broadcast_cast_stopped(participant, action, technique, combat_result)
+            return outcome
         outcome.damage_results.extend(combat_result.damage_results)
         if action.from_entrance:
             _maybe_suggest_entrance_dramatic_moment(participant, combat_result)

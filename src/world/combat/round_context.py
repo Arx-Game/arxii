@@ -419,7 +419,32 @@ class CombatRoundContext(RoundContext):
 
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.services import declare_action  # noqa: PLC0415
+        from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
+            DeclarationRefusedError,
+        )
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+
+        fury_commitment = None
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is not None:
+            from world.magic.models import FuryTier  # noqa: PLC0415
+
+            fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
+
+        fury_anchor = None
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        if fury_anchor_id is not None:
+            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+
+        # The web dispatch reaches here without the cast's round_declaration hook, so the
+        # provocation cap is enforced again before anything is charged (#4738).
+        if fury_commitment is not None:
+            from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+
+            if provocation_cap(participant.character_sheet, fury_anchor) < fury_commitment.depth:
+                raise ActionDispatchError(ActionDispatchError.FURY_OVER_CAP)
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
@@ -455,38 +480,28 @@ class CombatRoundContext(RoundContext):
         confirm_soulfray_risk: bool = bool(kwargs.get("confirm_soulfray_risk", False))
         strain_commitment = int(kwargs.get("strain_commitment", 0) or 0)
 
-        fury_commitment = None
-        fury_commitment_id = kwargs.get("fury_commitment_id")
-        if fury_commitment_id is not None:
-            from world.magic.models import FuryTier  # noqa: PLC0415
-
-            fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
-
-        fury_anchor = None
-        fury_anchor_id = kwargs.get("fury_anchor_id")
-        if fury_anchor_id is not None:
-            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
-
-        action = declare_action(
-            participant,
-            focused_action=focused,
-            focused_category=None,
-            effort_level=effort,
-            focused_opponent_target=opponent_target,
-            focused_ally_target=ally_target,
-            physical_passive=physical,
-            social_passive=social,
-            mental_passive=mental,
-            confirm_soulfray_risk=confirm_soulfray_risk,
-            strain_commitment=strain_commitment,
-            fury_commitment=fury_commitment,
-            fury_anchor=fury_anchor,
-            cast_destination=cast_positions["cast_destination"],
-            cast_position_a=cast_positions["cast_position_a"],
-            cast_position_b=cast_positions["cast_position_b"],
-        )
+        try:
+            action = declare_action(
+                participant,
+                focused_action=focused,
+                focused_category=None,
+                effort_level=effort,
+                focused_opponent_target=opponent_target,
+                focused_ally_target=ally_target,
+                physical_passive=physical,
+                social_passive=social,
+                mental_passive=mental,
+                confirm_soulfray_risk=confirm_soulfray_risk,
+                strain_commitment=strain_commitment,
+                fury_commitment=fury_commitment,
+                fury_anchor=fury_anchor,
+                cast_destination=cast_positions["cast_destination"],
+                cast_position_a=cast_positions["cast_position_a"],
+                cast_position_b=cast_positions["cast_position_b"],
+            )
+        except DeclarationRefusedError as exc:
+            # A refusal the player can meet comes back as a 400 with its reason (#4796).
+            raise ActionDispatchError(exc.code) from exc
 
         # AoE / FILTERED_GROUP: persist the full target set as join rows so the
         # resolver can iterate them without a round-trip to the declaration kwargs.

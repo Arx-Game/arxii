@@ -485,8 +485,28 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         lines.extend(self._anima_lines(character))
         lines.extend(self._soulfray_lines(character))
         if participant is not None:
+            lines.extend(self._pressure_lines(character))
             lines.extend(self._fury_and_berserk_lines(character, action))
         return lines
+
+    @staticmethod
+    def _pressure_lines(character: Any) -> list[str]:
+        """Intensity and control on her engagement (whatever its type), and Fury's surrender.
+
+        Telnet's copy of the web Pressure card (#4738).
+        """
+        from world.combat.services import engagement_of_any_type_for  # noqa: PLC0415
+
+        engagement = engagement_of_any_type_for(character)
+        if engagement is None:
+            return []
+        line = (
+            f"Pressure: intensity {engagement.intensity_modifier:+d}, "
+            f"control {engagement.control_modifier:+d}"
+        )
+        if engagement.fury_control_surrendered > 0:
+            line += f"; Fury: surrendered {engagement.fury_control_surrendered} control"
+        return [line]
 
     @staticmethod
     def _anima_lines(character: Any) -> list[str]:
@@ -509,27 +529,38 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return [f"Soulfray: {warning.stage_name}{risk}"]
 
     def _fury_and_berserk_lines(self, character: Any, action: Any) -> list[str]:
-        """Fury-commitment and Berserk lines for an in-encounter participant."""
+        """The Fury ladder, the declared tier, and Berserk for an in-encounter participant."""
         berserk = self._berserk_instance(character)
-        lines: list[str] = []
+        lines = self._fury_tier_lines()
         if action is not None and action.fury_commitment_id:
-            lines.append(self._fury_line(action, berserk))
+            lines.append(self._fury_line(action))
         if berserk is not None:
             lines.append(self._berserk_line(berserk))
         return lines
 
     @staticmethod
-    def _fury_line(action: Any, berserk: Any) -> str:
-        """One line describing the committed fury and whether control is held."""
-        control = "lost" if berserk is not None else "retained"
+    def _fury_tier_lines() -> list[str]:
+        """The tiers ``cast ... fury=<tier>`` accepts, as the web picker lists them."""
+        from world.magic.models import FuryTier  # noqa: PLC0415
+        from world.magic.services.fury import fury_tier_label  # noqa: PLC0415
+
+        labels = [fury_tier_label(tier) for tier in FuryTier.objects.order_by("depth")]
+        if not labels:
+            return []
+        return ["Fury tiers: " + "; ".join(labels)]
+
+    @staticmethod
+    def _fury_line(action: Any) -> str:
+        """The Fury tier declared this round and the anchor it answers to."""
+        from world.magic.services.fury import fury_tier_label  # noqa: PLC0415
+
         anchor_name = "unknown"
         if action.fury_anchor_id and action.fury_anchor is not None:
             anchor_char = action.fury_anchor.character
             if anchor_char is not None:
                 anchor_name = anchor_char.db_key
         return (
-            f"Fury: committed (depth {action.fury_commitment.depth}, "
-            f"anchored to {anchor_name}) — control {control}"
+            f"Fury declared: {fury_tier_label(action.fury_commitment)}, answering to {anchor_name}"
         )
 
     @staticmethod

@@ -57,6 +57,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.mechanics.factories import CharacterEngagementFactory
+from world.relationships.factories import CharacterRelationshipFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -439,6 +440,8 @@ class CombatCastTelnetE2ETests(TestCase):
         FuryConfigFactory()
         tier = FuryTierFactory()
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         # Declare through the real telnet command: cast ... fury=<tier> anchor=<name>.
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
@@ -459,7 +462,7 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
-            mock_control.return_value = MagicMock(success_level=2)
+            mock_control.return_value = MagicMock(success_level=2, outcome=None)
             resolve_round(self.encounter)
 
         self.anima.refresh_from_db()
@@ -476,8 +479,8 @@ class CombatCastTelnetE2ETests(TestCase):
         )
 
     @tag("postgres")
-    def test_fury_lost_control_applies_berserk(self) -> None:
-        """When the control-retention check fails, Fury applies Berserk in combat.
+    def test_berserk_tier_applies_berserk(self) -> None:
+        """Choosing a Berserk Fury tier applies Berserk in combat, whatever the roll.
 
         Tagged postgres: applying a condition exercises apply_condition, which uses
         a PG-only DISTINCT ON that NotSupportedErrors on the SQLite fast tier.
@@ -491,8 +494,10 @@ class CombatCastTelnetE2ETests(TestCase):
 
         FuryConfigFactory()
         BerserkConditionTemplateFactory()  # seed the Berserk ConditionTemplate
-        tier = FuryTierFactory()
+        tier = FuryTierFactory(berserk_severity=3)
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
@@ -507,8 +512,8 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
-            # Below the tier's lucid_grade_floor (2) → control lost → Berserk applied.
-            mock_control.return_value = MagicMock(success_level=1)
+            # A strong control roll: Berserk is chosen, not rolled into.
+            mock_control.return_value = MagicMock(success_level=3, outcome=None)
             resolve_round(self.encounter)
 
         self.assertTrue(
@@ -516,7 +521,7 @@ class CombatCastTelnetE2ETests(TestCase):
                 target=self.character,
                 condition__name="Berserk",
             ).exists(),
-            "losing control to fury must apply a Berserk condition to the caster",
+            "choosing a Berserk fury tier must apply a Berserk condition to the caster",
         )
 
     def test_combat_hub_shows_anima_and_omits_absent_lines(self) -> None:
@@ -552,6 +557,8 @@ class CombatCastTelnetE2ETests(TestCase):
         FuryConfigFactory()
         tier = FuryTierFactory()
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
@@ -564,15 +571,16 @@ class CombatCastTelnetE2ETests(TestCase):
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             cmd.func()
         out = "\n".join(cmd._captured)
-        self.assertIn("Fury:", out)
-        self.assertIn(str(tier.depth), out)
-        self.assertIn(anchor_sheet.character.db_key, out)
-        self.assertIn("retained", out)  # no Berserk yet → control retained
+        self.assertIn(
+            f"Fury declared: {tier.name}: surrender {tier.control_surrendered} control, "
+            f"answering to {anchor_sheet.character.db_key}",
+            out,
+        )
         self.assertNotIn("Berserk:", out)
 
     @tag("postgres")
     def test_combat_hub_shows_berserk_after_lost_control(self) -> None:
-        """After fury loses control, the hub shows Berserk + rounds remaining."""
+        """After a Berserk fury tier, the hub shows Berserk + rounds remaining."""
         from world.magic.factories import (
             BerserkConditionTemplateFactory,
             FuryConfigFactory,
@@ -581,8 +589,10 @@ class CombatCastTelnetE2ETests(TestCase):
 
         FuryConfigFactory()
         BerserkConditionTemplateFactory()
-        tier = FuryTierFactory()
+        tier = FuryTierFactory(berserk_severity=3)
         anchor_sheet = CharacterSheetFactory()
+        # A tie deep enough for the tier: a deeper tier is refused at declaration (#4738).
+        CharacterRelationshipFactory(source=self.sheet, target=anchor_sheet, tier=2)
 
         with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
             _make_cmd(
@@ -597,8 +607,7 @@ class CombatCastTelnetE2ETests(TestCase):
             patch("world.checks.services.perform_check") as mock_control,
         ):
             mock_offense.return_value = MagicMock(success_level=2)
-            # Below lucid_grade_floor → control lost → Berserk applied.
-            mock_control.return_value = MagicMock(success_level=1)
+            mock_control.return_value = MagicMock(success_level=1, outcome=None)
             resolve_round(self.encounter)
 
         # The encounter left DECLARING after resolve_round. Open a fresh

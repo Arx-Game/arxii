@@ -6,10 +6,12 @@ roles) in one call. ``FlowDefinitionViewSet`` is CRUD on ``FlowDefinition``
 rows, with step-tree writes delegated to ``flows.serializers``.
 """
 
+from collections.abc import Iterable
 import dataclasses
 
 from django.db.models import Count, Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.objects.models import ObjectDB
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import PageNumberPagination
@@ -123,6 +125,16 @@ class FlowDefinitionViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewS
         return FlowDefinitionWriteSerializer
 
 
+def _invalidate_trigger_owners(objs: Iterable[ObjectDB]) -> None:
+    """Drop each object's cached triggers, as the game's own trigger writers do (#4800).
+
+    An object loads its triggers once and keeps them, so an authored change reaches
+    it only once its handler is told; otherwise it waits for a server restart.
+    """
+    for obj in {obj.pk: obj for obj in objs}.values():
+        obj.trigger_handler.invalidate()
+
+
 class TriggerDefinitionViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewSet):
     """Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417 task 6)."""
 
@@ -132,6 +144,19 @@ class TriggerDefinitionViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelVi
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["event_name"]
     search_fields = ["name"]
+
+    def perform_update(self, serializer: BaseSerializer[TriggerDefinition]) -> None:
+        definition = serializer.save()
+        # The event a definition listens for decides where its triggers are cached.
+        _invalidate_trigger_owners(
+            trigger.obj for trigger in definition.trigger_set.select_related("obj")
+        )
+
+    def perform_destroy(self, instance: TriggerDefinition) -> None:
+        # Deleting a definition takes its triggers with it.
+        owners = [trigger.obj for trigger in instance.trigger_set.select_related("obj")]
+        instance.delete()
+        _invalidate_trigger_owners(owners)
 
 
 class TriggerViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewSet):
@@ -146,3 +171,17 @@ class TriggerViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["trigger_definition", "obj"]
     search_fields = ["trigger_definition__name"]
+
+    def perform_create(self, serializer: BaseSerializer[Trigger]) -> None:
+        trigger = serializer.save()
+        _invalidate_trigger_owners([trigger.obj])
+
+    def perform_update(self, serializer: BaseSerializer[Trigger]) -> None:
+        previous_obj = serializer.instance.obj
+        trigger = serializer.save()
+        _invalidate_trigger_owners([previous_obj, trigger.obj])
+
+    def perform_destroy(self, instance: Trigger) -> None:
+        obj = instance.obj
+        instance.delete()
+        _invalidate_trigger_owners([obj])

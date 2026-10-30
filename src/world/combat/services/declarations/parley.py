@@ -79,10 +79,8 @@ def declare_parley(
     decisive success, calms the opponent (Calm condition → NEUTRAL allegiance).
     This function only records the declaration.
     """
-    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
-    reject_if_berserk(participant, "parley")
     encounter = participant.encounter
     if encounter.status != RoundStatus.DECLARING:
         msg = (

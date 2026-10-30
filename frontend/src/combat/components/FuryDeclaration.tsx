@@ -1,5 +1,7 @@
 /**
- * FuryDeclaration — tier + bonded-anchor pickers for a combat cast (#1543).
+ * FuryDeclaration — "Surrender control": tier + bonded-anchor pickers for a combat
+ * cast (#1543, #4738). Each tier is a preset amount of control surrendered; the preview
+ * reads the most intensity the server says that tier can buy under the anchor.
  * Shown by YourTurn only when the focused slot is a cast. Holds no state (state
  * lives in YourTurn, threaded via callbacks — mirrors selectedPull/strainByClash).
  * When both are cleared, YourTurn sends no fury kwargs.
@@ -12,6 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
+function furyTierLabel(tier: FuryTierOption): string {
+  const label = `${tier.name}: surrender ${tier.control_surrendered} control`;
+  return tier.is_berserk ? `${label} (Berserk)` : label;
+}
+
+function fullIntensityFor(tier: FuryTierOption, anchor: FuryAnchorOption): number {
+  const scaled = anchor.tier_full_intensities.find((row) => row.tier_id === tier.id);
+  return scaled?.full_intensity ?? tier.full_intensity;
+}
 
 interface FuryDeclarationProps {
   tiers: FuryTierOption[];
@@ -44,7 +56,9 @@ export function FuryDeclaration({
       className="space-y-2 rounded border border-border bg-card/60 p-2"
       data-testid="fury-declaration"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fury</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Surrender control
+      </p>
       <div className="space-y-1.5">
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Tier</span>
         <Select
@@ -58,7 +72,7 @@ export function FuryDeclaration({
           <SelectContent>
             {tiers.map((t) => (
               <SelectItem key={t.id} value={String(t.id)} className="text-xs">
-                {t.name} (depth {t.depth})
+                {furyTierLabel(t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -83,6 +97,12 @@ export function FuryDeclaration({
           </SelectContent>
         </Select>
       </div>
+      {selectedTier !== null && selectedAnchor !== null && (
+        <p className="text-xs tabular-nums text-foreground" data-testid="fury-preview">
+          {selectedTier.control_surrendered} control → up to +
+          {fullIntensityFor(selectedTier, selectedAnchor)} intensity, by your roll
+        </p>
+      )}
       {overCap && (
         <p className="text-[10px] text-destructive" data-testid="fury-over-cap-warning">
           Fury tier exceeds your bond with {selectedAnchor?.name}.

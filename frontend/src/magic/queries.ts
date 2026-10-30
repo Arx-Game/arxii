@@ -518,7 +518,7 @@ export function useCrossXPLock() {
 /**
  * Fetch a single Technique by PK, including intensity, control, and anima_cost.
  *
- * Used by ActionDeclarationCard to render the I/C chip and cost preview.
+ * The technique's authored stats; the cast card shows runtime ones from `cast_preview` (#4799).
  * Disabled when id is undefined or 0.
  */
 export function useTechnique(id: number | undefined) {

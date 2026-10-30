@@ -30,6 +30,15 @@ class ActionDispatchError(Exception):
     BURN_NO_FALL_RATE = "burn_no_fall_rate"
     BURN_INVALID = "burn_invalid"
     PULL_NEEDS_SOULFRAY_CONSENT = "pull_needs_soulfray_consent"
+    FURY_OVER_CAP = "fury_over_cap"
+    TARGET_REQUIRED = "target_required"
+    TARGET_KIND_MISMATCH = "target_kind_mismatch"
+    TARGET_DEFEATED = "target_defeated"
+    TARGET_CONFLICT = "target_conflict"
+    STILL_SUSTAINING = "still_sustaining"
+    CANNOT_ACT = "cannot_act"
+    STRAIN_OVER_BUDGET = "strain_over_budget"
+    LETHAL_RISK_UNACKNOWLEDGED = "lethal_risk_unacknowledged"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -48,6 +57,15 @@ class ActionDispatchError(Exception):
         PULL_NEEDS_SOULFRAY_CONSENT: (
             "Accept the Soulfray risk before pulling a thread on this cast."
         ),
+        FURY_OVER_CAP: "That Fury tier exceeds your provocation cap with that anchor.",
+        TARGET_REQUIRED: "That technique needs an opponent to target.",
+        TARGET_KIND_MISMATCH: "That technique cannot target them.",
+        TARGET_DEFEATED: "That opponent is already defeated.",
+        TARGET_CONFLICT: "An action cannot target both an opponent and an ally.",
+        STILL_SUSTAINING: "You are still holding a working together and cannot act.",
+        CANNOT_ACT: "You are in no state to act.",
+        STRAIN_OVER_BUDGET: "You do not have the anima to push that hard.",
+        LETHAL_RISK_UNACKNOWLEDGED: ("Acknowledge the lethal risk of this duel before acting."),
     }
     _FALLBACK = "That action could not be completed."
 

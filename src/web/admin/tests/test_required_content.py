@@ -1916,6 +1916,47 @@ class TestDriftCorrectionConfigProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestFuryTradeProbes(TestCase):
+    """Fury's trade reads a share per outcome tier and a rate on StrainConfig (#4738).
+
+    U-keep: the dashboard probe has no player path.
+    """
+
+    def test_lists_the_outcome_tiers_with_no_share(self) -> None:
+        from world.magic.factories import FuryDegreeShareFactory
+        from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+        from world.traits.services import ensure_canonical_check_outcome
+
+        covered, *uncovered = CANONICAL_OUTCOME_LEVELS
+        for name in CANONICAL_OUTCOME_LEVELS:
+            ensure_canonical_check_outcome(name)
+        FuryDegreeShareFactory(outcome_tier=ensure_canonical_check_outcome(covered))
+        result = _probe_for("fury-degree-shares").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, tuple(uncovered))
+        self.assertIn("No FuryDegreeShare row for outcome tier(s): ", result.detail)
+
+    def test_present_when_every_outcome_tier_has_a_share(self) -> None:
+        from world.magic.factories import FuryDegreeShareFactory
+        from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+        from world.traits.services import ensure_canonical_check_outcome
+
+        for name in CANONICAL_OUTCOME_LEVELS:
+            FuryDegreeShareFactory(outcome_tier=ensure_canonical_check_outcome(name))
+        self.assertTrue(_probe_for("fury-degree-shares").resolve(None).present)
+
+    def test_rate_reported_until_staff_set_it_above_zero(self) -> None:
+        from decimal import Decimal
+
+        from world.combat.services.encounter.config import get_strain_config
+
+        config = get_strain_config()
+        self.assertFalse(_probe_for("fury-intensity-per-control").resolve(None).present)
+        config.intensity_per_control_surrendered = Decimal("1.50")
+        config.save()
+        self.assertTrue(_probe_for("fury-intensity-per-control").resolve(None).present)
+
+
 class TestDesignationProbes(TestCase):
     """Each designation row is reported until staff set its field, then clears (#4739).
 
@@ -2007,6 +2048,36 @@ class TestDesignationProbes(TestCase):
         config.berserk_condition = ConditionTemplateFactory()
         config.save()
         self.assertTrue(self._present("berserk-condition"))
+
+    def test_berserk_disengage_penalty(self) -> None:
+        from world.combat.factories import SocialManeuverConfigFactory
+        from world.combat.models import FleeConfig
+        from world.conditions.factories import ConditionCheckModifierFactory
+        from world.magic.factories import FuryConfigFactory
+
+        flee_check, parley_check = CheckTypeFactory(), CheckTypeFactory()
+        FleeConfig.objects.filter(pk=1).delete()
+        FleeConfig.objects.create(pk=1, check_type=flee_check)
+        SocialManeuverConfigFactory(parley_check_type=parley_check)
+        berserk = ConditionTemplateFactory()
+        FuryConfigFactory(berserk_condition=berserk)
+
+        self.assertFalse(self._present("berserk-disengage-penalty"))
+        ConditionCheckModifierFactory(condition=berserk, check_type=flee_check, modifier_value=-3)
+        # A bonus is not a penalty.
+        ConditionCheckModifierFactory(condition=berserk, check_type=parley_check, modifier_value=5)
+        result = _probe_for("berserk-disengage-penalty").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("parley check", result.detail)
+        self.assertNotIn("flee", result.detail)
+        # A penalty authored on the parley check's category reaches the parley roll too.
+        ConditionCheckModifierFactory(
+            condition=berserk,
+            check_type=None,
+            check_category=parley_check.category,
+            modifier_value=-2,
+        )
+        self.assertTrue(self._present("berserk-disengage-penalty"))
 
     def test_vitals_peril_designations(self) -> None:
         from world.vitals.models import VitalsConsequenceConfig

@@ -597,8 +597,11 @@ actions, backends, and service functions.
     names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
     rage answers to (resolved to a `CharacterSheet` by character key). They inject
     `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
-    forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them (control
-    penalty + intensity bonus, Berserk on lost control). A soulfray-risky cast is asked at
+    forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them: the tier
+    is control she surrenders for the rest of the engagement, her control roll decides the
+    intensity it buys, and a Berserk tier applies Berserk (#4738). The caster is told
+    "You surrender N control: intensity +M."; bare `combat` lists the tiers as
+    "<name>: surrender N control (Berserk)". A soulfray-risky cast is asked at
     declaration via the `accept soulfray` / `decline soulfray` offer flow (decline = free
     re-declare); no special cast syntax triggers it.
 
@@ -636,7 +639,8 @@ actions, backends, and service functions.
   first, then an active opponent (`_resolve_use_item_target`). `ready` (#2120) additionally
   early-resolves the round in `PaceMode.READY` encounters once every ACTIVE participant is
   ready (`maybe_resolve_on_ready`). Bare `combat` prints a status hub — anima +
-  soulfray stage (+ fury/Berserk when in an active round) alongside the declared action —
+  soulfray stage (+ a `Pressure:` line of intensity, control and Fury surrendered, the Fury
+  tier ladder, the declared tier and Berserk when in an active round) alongside the declared action —
   mirroring the resource/risk visibility the web combat panel will show (#1543). Verbs are
   namespaced — not bare top-level keys — to avoid exit/channel/alias collisions (mirrors
   `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing

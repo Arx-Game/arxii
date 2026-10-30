@@ -343,6 +343,8 @@ class PlayerAction:
     soulfray_warning: SoulfrayWarning | None = None
     available_fury_tiers: tuple[FuryTierOption, ...] = ()
     eligible_fury_anchors: tuple[AnchorOption, ...] = ()
+    # Runtime stats and cost the cast card shows (#4799); None for non-cast actions.
+    cast_preview: CastPreview | None = None
 
     # #4098: a readied Audere ultimate (only ever a COMBAT action)
     is_ultimate: bool = False
@@ -515,19 +517,42 @@ class StrainAvailability:
 
 
 @dataclass(frozen=True)
-class FuryTierOption:
-    """One selectable Fury tier for the declaration picker (#1543).
+class CastPreview:
+    """What a combat cast would run at for this character right now (#4799).
 
-    Mirrors the authored ``FuryTier`` fields the player needs to choose.
-    ``id`` is the FuryTier PK sent as ``fury_commitment_id``.
+    Runtime intensity and control (the engagement's process modifiers, identity and
+    social safety included) and the anima cost they make, all computed server-side.
+    """
+
+    intensity: int
+    control: int
+    effective_anima_cost: int
+
+
+@dataclass(frozen=True)
+class FuryTierOption:
+    """One selectable Fury tier for the declaration picker (#1543, #4738).
+
+    A tier is a preset amount of control surrendered for the rest of the engagement.
+    ``id`` is the FuryTier PK sent as ``fury_commitment_id``. ``full_intensity`` is the most
+    the trade can buy (the highest authored degree share) with no anchor scaling, computed
+    server-side.
     """
 
     id: int
     name: str
     depth: int
-    control_penalty: int
-    intensity_bonus: int
-    berserk_severity: int
+    control_surrendered: int
+    is_berserk: bool
+    full_intensity: int
+
+
+@dataclass(frozen=True)
+class AnchorTierIntensity:
+    """The most one Fury tier can buy under this anchor's scaling (#4738)."""
+
+    tier_id: int
+    full_intensity: int
 
 
 @dataclass(frozen=True)
@@ -536,9 +561,12 @@ class AnchorOption:
 
     ``id`` is the anchor CharacterSheet PK sent as ``fury_anchor_id``.
     ``provocation_cap`` is the bond-derived ceiling pre-computed server-side
-    so the client can gate tiers without a round-trip.
+    so the client can gate tiers without a round-trip. ``tier_full_intensities``
+    carries, per tier, the full-share intensity scaled by this anchor's cap, so the
+    preview never does tuning math on the client.
     """
 
     id: int
     name: str
     provocation_cap: int
+    tier_full_intensities: tuple[AnchorTierIntensity, ...] = ()

@@ -316,6 +316,7 @@ from world.combat.services.encounter.encounter_setup import (
 from world.combat.services.encounter.engagement import (
     _ensure_combat_engagement,
     active_combat_engagement_for,
+    engagement_of_any_type_for,
 )
 from world.combat.services.encounter.levels import (
     _bulk_primary_levels,
@@ -814,6 +815,7 @@ __all__ = [
     "elevation_bonus",
     "emit_event",
     "end_encounter",
+    "engagement_of_any_type_for",
     "ensure_opponent_plans",
     "expire_pulls_for_round",
     "finalize_new_encounter",

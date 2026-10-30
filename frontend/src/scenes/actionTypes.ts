@@ -85,17 +85,23 @@ export interface AvailableEnhancement {
 }
 
 /**
- * A fury tier the player may commit for a combat-cast technique (#1543).
- * Mirrors the backend FuryTierOption serializer shape.
+ * A Fury tier: a preset amount of control surrendered for the rest of the engagement
+ * (#1543, #4738). Mirrors the backend FuryTierOption serializer shape.
  */
 export interface FuryTierOption {
   id: number;
   name: string;
   depth: number;
-  control_penalty: number;
-  intensity_bonus: number;
-  /** 0 → never berserk; higher values increase berserk severity on overcommit. */
-  berserk_severity: number;
+  control_surrendered: number;
+  is_berserk: boolean;
+  /** The most intensity the tier can buy (best authored share), no anchor scaling. Server-side. */
+  full_intensity: number;
+}
+
+/** The most one Fury tier can buy under one anchor's scaling (#4738). */
+export interface FuryAnchorTierIntensity {
+  tier_id: number;
+  full_intensity: number;
 }
 
 /**
@@ -107,6 +113,8 @@ export interface FuryAnchorOption {
   name: string;
   /** Pre-computed bond cap used for client-side tier gating. */
   provocation_cap: number;
+  /** Per tier, the full-share intensity scaled by this anchor's cap. */
+  tier_full_intensities: FuryAnchorTierIntensity[];
 }
 
 export type ActionCategory = 'physical' | 'social' | 'mental';
@@ -168,6 +176,18 @@ export interface PlayerAction {
    * engagement while the reveal holds — undefined/false everywhere else.
    */
   is_ultimate?: boolean;
+  /**
+   * What a combat cast would run at for this character right now (#4799): runtime
+   * intensity and control and the anima cost they make, computed server-side.
+   * null / absent for anything that is not a combat cast.
+   */
+  cast_preview?: CastPreview | null;
+}
+
+export interface CastPreview {
+  intensity: number;
+  control: number;
+  effective_anima_cost: number;
 }
 
 export interface PlayerActionsResponse {

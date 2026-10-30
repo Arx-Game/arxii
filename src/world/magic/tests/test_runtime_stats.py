@@ -195,6 +195,15 @@ class RuntimeStatsEngagementTests(TestCase):
         assert result.intensity == 8  # 5 + 3
         assert result.control == 5  # 3 + 2 (no social safety)
 
+    def test_control_surrendered_below_zero_floors_runtime_control_at_zero(self) -> None:
+        """Fury can drive control_modifier far down; runtime control stops at 0 (#4738)."""
+        sheet = CharacterSheetFactory()
+        CharacterEngagementFactory(character=sheet, control_modifier=-12)
+
+        result = get_runtime_technique_stats(self.technique, character=sheet.character)
+
+        assert result.control == 0  # 3 - 12, floored
+
 
 class RuntimeStatsIntensityTierTests(TestCase):
     """IntensityTier.control_modifier integration.

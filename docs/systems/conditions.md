@@ -805,7 +805,7 @@ rows under are `*_SEED_TEMPLATE_NAME` constants that game code never imports.
 | Soulfray | `SoulfrayConfig.condition` (#4122) | `world.magic.services.soulfray.soulfray_condition_id()` |
 | Audere | `AudereThreshold.audere_condition` | `world.magic.audere.audere_condition_id()` (eligibility, offer, `end_audere`, `_character_is_in_audere`, `active_ceremony`, encounter cleanup, participant `audere_state`) |
 | Audere Majora | `AudereThreshold.audere_majora_condition` | `world.magic.audere.audere_majora_condition_id()` (crossing, `end_audere_majora`, mid-crossing check, check-level bonus) |
-| Berserk | `FuryConfig.berserk_condition` | `world.magic.services.fury.get_berserk_template()` / `berserk_condition_id()` (fury, moon control, `is_berserk`, fury serializer, combat status line) |
+| Berserk | `FuryConfig.berserk_condition` | `world.magic.services.fury.get_berserk_template()` / `berserk_condition_id()` (fury, moon control, `is_berserk`, combat status line) |
 | Bleeding Out | `VitalsConsequenceConfig.bleed_out_condition` | `world.vitals.peril_designations.bleed_out_condition_id()` (dying status, death tier, `advance_bleed_out`, `acute_peril_condition_ids()`, ally-peril surge) |
 | Plummeting | `VitalsConsequenceConfig.plummeting_condition` | `world.vitals.peril_designations.plummeting_condition_id()` / `plummeting_template()` (plummet begin/advance/end, scene-round danger) |
 | Surrounded | `VitalsConsequenceConfig.surrounded_condition` | `world.vitals.peril_designations.surrounded_condition_id()` / `surrounded_template()` (battle entry, RESCUE, escalation, `advance_surrounded`) |

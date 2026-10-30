@@ -91,6 +91,10 @@ class CharacterEngagement(SharedMemoryModel):
             "the roll or band gave."
         ),
     )
+    fury_control_surrendered = models.PositiveIntegerField(
+        default=0,
+        help_text="Control surrendered to Fury in this engagement, for display.",
+    )
     started_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When the engagement began.",

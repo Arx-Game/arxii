@@ -36,10 +36,8 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     round resolution (_resolve_flee); the participant remains ACTIVE until
     the check succeeds.
     """
-    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
-    reject_if_berserk(participant, "flee")
     encounter = participant.encounter
 
     # Encounter status check
