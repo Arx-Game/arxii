@@ -604,7 +604,7 @@ function ICChip({ intensity, control }: ICChipProps) {
       className={cn(
         'inline-flex items-center rounded border px-2 py-0.5 font-mono text-xs',
         isOverburn
-          ? 'border-amber-500/40 bg-amber-500/20 text-amber-300'
+          ? 'border-amber-500/40 bg-amber-500/20 text-amber-700 dark:text-amber-300'
           : 'border-border bg-muted text-muted-foreground'
       )}
     >
@@ -625,7 +625,9 @@ function CostPreview({ preview }: { preview: CastPreview }) {
     <p
       className={cn(
         'text-xs',
-        preview.intensity > preview.control ? 'text-amber-400' : 'text-muted-foreground'
+        preview.intensity > preview.control
+          ? 'text-amber-700 dark:text-amber-400'
+          : 'text-muted-foreground'
       )}
     >
       Cost: {preview.effective_anima_cost} anima

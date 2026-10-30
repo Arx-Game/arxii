@@ -2673,7 +2673,7 @@ export function YourTurn({
           <SoulfrayAcceptGate
             warning={soulfrayWarning}
             techniqueName={focusedCastDescriptor?.display_name ?? 'Cast'}
-            animaCost={0}
+            animaCost={focusedCastDescriptor?.cast_preview?.effective_anima_cost ?? null}
             accepted={soulfrayAccepted}
             onAcceptChange={setSoulfrayAccepted}
             disabled={isLocked}

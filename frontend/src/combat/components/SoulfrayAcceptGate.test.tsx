@@ -39,6 +39,35 @@ describe('SoulfrayAcceptGate', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
+  it('names the cost the cast will take', () => {
+    const { container } = render(
+      <SoulfrayAcceptGate
+        warning={warning}
+        techniqueName="Firebolt"
+        animaCost={22}
+        accepted={false}
+        onAcceptChange={() => {}}
+      />
+    );
+    expect(container).toHaveTextContent(
+      'Casting Firebolt will cost 22 anima and may worsen your condition.'
+    );
+  });
+
+  it('names no cost when the cost is unknown, never a free cast (#4799)', () => {
+    const { container } = render(
+      <SoulfrayAcceptGate
+        warning={warning}
+        techniqueName="Firebolt"
+        animaCost={null}
+        accepted={false}
+        onAcceptChange={() => {}}
+      />
+    );
+    expect(container).toHaveTextContent('Casting Firebolt may worsen your condition.');
+    expect(container).not.toHaveTextContent('anima');
+  });
+
   it('uses red styling when has_death_risk', () => {
     render(
       <SoulfrayAcceptGate
