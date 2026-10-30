@@ -726,7 +726,10 @@ def _combat_actions(
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)
-    anima = _get_character_anima(character)
+    # The cast is priced as its encounter will charge it (#4799); lethal unless told otherwise.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+
+    lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
     result: list[PlayerAction] = []
     for technique in techniques:
         if not technique_performable(character, technique):
@@ -769,36 +772,33 @@ def _combat_actions(
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,
                 is_ultimate=technique.is_ultimate,
-                cast_preview=_cast_preview(character, technique, anima),
+                cast_preview=_cast_preview(character, technique, lethal=lethal),
             )
         )
 
     return result
 
 
-def _cast_preview(
-    character: ObjectDB, technique: Technique, anima: CharacterAnima | None
-) -> CastPreview:
+def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) -> CastPreview:
     """The intensity, control and anima cost this cast would run at now (#4799).
 
-    The same runtime stats and cost the enhancement options price with, so the cast
-    card never estimates them from the technique's authored numbers.
+    Priced by the cast's own cost function, so the card agrees with the charge: the
+    cheaper of the variant and base form, and capped at current anima in a non-lethal
+    fight. Declared strain is added at declaration, not here.
     """
-    from world.magic.services import (  # noqa: PLC0415
-        calculate_effective_anima_cost,
-        get_runtime_technique_stats,
-    )
+    from world.magic.services.techniques import _calculate_technique_cost  # noqa: PLC0415
 
-    stats = get_runtime_technique_stats(technique, character)
-    cost = 0
-    if anima is not None:
-        cost = calculate_effective_anima_cost(
-            base_cost=technique.anima_cost,
-            runtime_intensity=stats.intensity,
-            runtime_control=stats.control,
-            current_anima=anima.current,
-        ).effective_cost
-    return CastPreview(intensity=stats.intensity, control=stats.control, effective_anima_cost=cost)
+    stats, _anima, cost, _strain = _calculate_technique_cost(
+        character=character,
+        technique=technique,
+        strain_commitment=0,
+        lethal=lethal,
+        apply_variant=True,
+        preferred_resonance=None,
+    )
+    return CastPreview(
+        intensity=stats.intensity, control=stats.control, effective_anima_cost=cost.effective_cost
+    )
 
 
 def _clash_contribution_actions(

@@ -1896,6 +1896,38 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     );
   });
 
+  it('adds the declared strain to the cost the Soulfray gate names', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(7, 'Doom Touch', {
+      soulfray_warning: warning,
+      cast_preview: { intensity: 41, control: 20, effective_anima_cost: 22 },
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 5, techniqueId: 7 })
+          }
+        >
+          select technique
+        </button>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    expect(screen.getByTestId('soulfray-accept-gate')).toHaveTextContent(
+      'Casting Doom Touch will cost 27 anima and may worsen your condition.'
+    );
+  });
+
   it('sends confirm_soulfray_risk when warning is present and accepted', async () => {
     setupMocks();
     const cast = makeCastPlayerAction(7, 'Doom Touch', { soulfray_warning: warning });

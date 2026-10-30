@@ -34,7 +34,7 @@ from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-from world.combat.constants import ActionCategory, OpponentTier
+from world.combat.constants import ActionCategory, OpponentTier, RiskLevel
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -452,6 +452,32 @@ class SeeingTheTrade(_AtTheFord):
         # The cast itself runs at the intensity the card showed.
         self.telnet(self.brannoc, f"cast {self.technique.name} at {self.bandit.name}")
         self.assertEqual(self.resolve_with("Success"), [TECHNIQUE_INTENSITY + 8])
+
+    def test_the_cast_card_caps_the_cost_at_her_anima_in_a_fight_that_cannot_kill(self) -> None:
+        # Intensity 20 + 30 = 50 against control 40: base cost 1 + 10 = 11, but a non-lethal
+        # fight never takes more anima than she has (#4799).
+        engagement = self.engagement_now()
+        engagement.intensity_modifier = 30
+        engagement.save(update_fields=["intensity_modifier"])
+        self.encounter.risk_level = RiskLevel.MODERATE
+        self.encounter.save(update_fields=["risk_level"])
+        self.encounter.__dict__.pop("is_lethal", None)  # derived and cached on the instance
+        anima = self.brannoc.sheet_data.anima
+        anima.current = 5
+        anima.save(update_fields=["current"])
+
+        response = self.api(self.account_of(self.brannoc)).get(
+            reverse("actions:available-actions", kwargs={"character_id": self.brannoc.pk})
+        )
+
+        cast = next(
+            row
+            for row in response.json()["results"]
+            if row["ref"].get("technique_id") == self.technique.pk
+        )
+        self.assertEqual(
+            cast["cast_preview"], {"intensity": 50, "control": 40, "effective_anima_cost": 5}
+        )
 
 
 class FuryOnAChallengeEngagement(_AtTheFord):
