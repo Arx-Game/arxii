@@ -131,9 +131,24 @@ the server would use `arxiidev`.
 
    ```bash
    PGPASSWORD=arxii createdb -h db -U arxii rt_4246
-   DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 uv run python tools/build_schema.py
-   DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 uv run arx manage seed_test_account
+   PGOPTIONS='-c max_parallel_workers_per_gather=0' DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 uv run python tools/build_schema.py
+   PGOPTIONS='-c max_parallel_workers_per_gather=0' DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 \
+     EVENNIA_SUPERUSER_USERNAME=rt_admin EVENNIA_SUPERUSER_EMAIL=rt_admin@example.com \
+     EVENNIA_SUPERUSER_PASSWORD=rt-admin-pass-4246 uv run arx manage shell -c "
+   from world.seeds.test_account import seed_test_account
+   print(seed_test_account(username='e2e_test_account', email='e2e_test@example.com', password='TestPass123!'))
+   "
    ```
+
+   `PGOPTIONS` turns off parallel query for your connections. The shared
+   Postgres has a small `/dev/shm`, and a parallel scan during the schema
+   build ran it out of shared memory and put the whole server, every
+   session's database included, into crash recovery (#4669). The seed goes
+   through `shell` with the `EVENNIA_SUPERUSER_*` variables because on a
+   database that has never run a server `arx manage seed_test_account` fails
+   creating the account cmdset (`'NoneType' has no attribute
+   'sessions_from_account'`), the same reason `real-test.yml` does it this way.
+   If Evennia then asks to move an existing superuser to id 1, answer `'Y'`.
 
    The seed makes `e2e_test_account` / `TestPass123!`. The container already
    sets `DATABASE_URL` to `arxiidev`, and each of your tool calls starts a
