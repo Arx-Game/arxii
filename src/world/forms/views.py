@@ -235,7 +235,7 @@ class AlternateSelfViewSet(
         permission_classes=[permissions.IsAuthenticated],
     )
     def revert(self, request: Request) -> Response:
-        """#1111 — revert the active alternate self (blocked while not in control)."""
+        """#1111 — revert the active alternate self (rolls against a compulsion)."""
         from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
         puppet = character_for_request(request, entry_id=None)

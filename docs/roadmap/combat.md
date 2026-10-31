@@ -576,7 +576,25 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   scaled by the anchor's cap). The trade lands on `CharacterEngagement`, and the cast it was
   declared with already channels it. Berserk tiers are chosen, never rolled into. Inert until
   staff set the rate and the share rows (Required content lists both). Still to come: the
-  web/telnet surfaces in the new terms. Berserk now penalises flee/parley instead of refusing: they roll with the Berserk template's authored check modifiers (Required content `berserk-disengage-penalty`), and only leaving the encounter is refused.
+  web/telnet surfaces in the new terms. Berserk now penalises flee/parley instead of refusing: they roll with the Berserk template's authored check modifiers (Required content `berserk-disengage-penalty`). Leaving the encounter used to be refused here; since #4802 it rolls the compulsion's resist check (next entry).
+- **Involuntary control loss (#4802, ADR-0329), journey-proven
+  (`test_losing_control_journeys`, `fuzz/test_compulsion_never_refuses`).** One mechanism with
+  authored rows. A vulnerability condition carries `ControlLossTrigger` rows (moon pull, wound
+  threshold, condition stage) whose bands apply Berserk, an engagement shift or a forced form;
+  the moon is one such row, its constants moved into the database. A condition in an
+  `alters_behavior` category carries a `Compulsion` (wants, resist check, forbidden actions with
+  extra difficulty, resist bands). A compelled player character may declare anything: an attack
+  rolls nothing, anything else rolls at the round lock, and a bad result replaces the action with
+  an attack, a middling one applies a penalty. Leaving the encounter and changing form back roll
+  too; the old refusals (`reject_leave_if_berserk`, the revert block for a compulsion) are gone.
+  An ally with the steadying capability (`MovementConfig.steadying_capability`) can give a
+  second roll, costing anima and a reaction, scaled by bond depth. Built: models and
+  migrations `0332`/`0333`, `world/conditions/control_loss.py`, `world/combat/compulsion.py`,
+  `SteadyPlanAction`, the encounter payload's `compulsion` and `steady_plan`, the
+  `CompulsionBanner` and steady toggle in the combat panel, and the telnet `Against ...` line
+  and `combat steady`. Still deferred (owner ruling): compulsion rolls outside combat and
+  non-lethal fights against PCs; the out-of-combat NPC rampage stays. Forced forms exist only
+  for the moon trigger (the lycan battle form is the one provisioning seam).
 - **Rolled surges (#4737), journey-proven (`test_surge_rolls_journeys`,
   `test_taunt_targets_journeys`).** An NPC taunt entry surges a player character through a
   Composure roll with degrees (a better result surges more, the roll line reaches only that

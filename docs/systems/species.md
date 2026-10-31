@@ -297,27 +297,30 @@ ADR. `ensure_appetite_distinctions` / `ensure_ravenous_condition` /
 seeded content routes through `authored_or_sample` in `_seed_appetite_content`
 (Vesperi is the eighth khati subspecies).
 
-## Moon Control & Lycans (#2845, ADR-0183)
+## Moon Control & Lycans (#2845, #4802, ADR-0329)
 
-The moon is a *control* pressure, not exposure damage. `world.species.moon_pull`
-computes the felt pull (`illumination × sky exposure − radiant shade`; NIGHT
-only; cloud cover rides ADR-0180 shelter rows for free — clothing/magic never
-enter an instinct read) plus `moon_clarity_instance_value` (the battle-form
-stat multiplier at shift time — voluntary and forced alike).
-`world.species.moon_sensitivity` runs the control window: `Moon-Bound`
-tag-anchored holders (Lycans innately, via "The Wolf's Fury" SpeciesGiftGrant
-seeded in `_seed_moon_content`) above the pull threshold roll `moon_control`
-(willpower + composure; ADR-0171 config prerequisite); difficulty scales with
-pull, down with level and Wolf's-Fury thread level; level 6+ exempt unless
-impaired (condition-driven willpower ≥1 tier down). Failure = forced shift
-(`trigger_transformation(cause="moon")`, battle form lazily provisioned by
-`world.species.moon_provisioning.ensure_lycan_battle_form`) + the shared
-**Berserk** condition (production seed + Restore-to-Sense removal effect in
-`world.conditions.berserk_content`; compulsion in
-`world.combat.berserk_compulsion` — auto-attack fallback at round resolution,
-disengage refusal, out-of-combat rampage; see the INDEX combat entry). Cani (the
-umbrella subspecies) get the flavor-only Moonlit Unease under the open night
-moon (`reconcile_cani_unease`). Cron: `species.moon_reconcile` (5-min DRAIN).
+The moon is a *control* pressure, not exposure damage, and since #4802 it is one
+`ControlLossTrigger` row (`fires_on=MOON_PULL`) hung on the **Lycan blood** vulnerability, not code.
+`world.species.moon_pull` computes the felt pull (`illumination × sky exposure − radiant
+shade`; NIGHT only; cloud cover rides ADR-0180 shelter rows for free; clothing and magic never
+enter an instinct read) plus `moon_clarity_instance_value` (the battle-form stat multiplier at
+shift time, voluntary and forced alike). `world.species.moon_sensitivity.reconcile_moon_pull`
+is the sweep: a character carrying a condition with a moon trigger, above the trigger's
+`min_moon_pull`, has `fire_control_loss_triggers` run (`world.conditions.control_loss`). The
+trigger holds the check type, base difficulty, difficulty per pull, relief per level, the relief
+gift (picked by FK, no gift name in code), thread relief and cap, the tier exemption
+(`exempt_from_level`, impaired by `impaired_willpower_drop`) and its bands. The roll goes
+through `perform_check_with_modifiers`, so condition and equipment modifiers count. A band can
+apply the shared **Berserk** condition and set `forces_form`, which forces the battle-form
+shift (`trigger_transformation(cause="moon")`, battle form lazily provisioned by
+`world.species.moon_provisioning.ensure_lycan_battle_form`). Lycan blood reaches new lycans
+through the lycan `SpeciesGiftGrant.drawback_condition`; migration `0333` created the trigger
+and the existing characters' instances. `moon_constants.py` keeps only the pull's own magnitudes.
+Berserk's seed, Restore-to-Sense removal effect and compulsion live in
+`world.conditions.berserk_content`; the compulsion's resolution in `world.combat.compulsion`
+(see `docs/systems/conditions.md`, "Losing control"). Cani (the umbrella subspecies) get the
+flavor-only Moonlit Unease under the open night moon (`reconcile_cani_unease`). Cron:
+`species.moon_reconcile` (5-min DRAIN).
 
 ---
 

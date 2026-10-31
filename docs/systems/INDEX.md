@@ -1408,17 +1408,18 @@ ADR-0214), and species-gift provisioning.
   `tasks.sun_reconcile_tick` (`species.sun_reconcile` cron), factories
   `ensure_sunlight_exposure_content` (staged template) + `ensure_sunlight_distinctions`
   (Bane/Allergy: Sunlight anchor rows); PLACEHOLDER constants in `sun_constants.py`.
-  Moon control (#2845, ADR-0183): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
-  `moon_sensitivity.reconcile_moon_pull` (control window: `moon_control` check →
-  forced shift + shared Berserk) + `reconcile_cani_unease` (umbrella flavor state),
+  Moon control (#2845, #4802, ADR-0329): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
+  `moon_sensitivity.reconcile_moon_pull` (the sweep: fires the character's moon
+  `ControlLossTrigger` through `world.conditions.control_loss`; band applies Berserk and forced
+  shift) + `reconcile_cani_unease` (umbrella flavor state),
   `moon_provisioning.ensure_lycan_battle_form` (lazy battle-form provisioning),
   `tasks.moon_reconcile_tick` (`species.moon_reconcile` cron), factories
   `ensure_moon_bound_distinction`/`ensure_moonlit_unease_condition`; seeded content in
   `_seed_moon_content` ("The Wolf's Fury" grant); Berserk production seed + Restore-to-Sense
-  removal effect in `world/conditions/berserk_content.py`; compulsion in
-  `world/combat/berserk_compulsion.py` (auto-attack fallback, leave refusal
-  `reject_leave_if_berserk`; flee/parley roll with Berserk's authored check modifiers,
-  out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
+  removal effect and compulsion rows in `world/conditions/berserk_content.py`; compulsion
+  resolution in `world/combat/compulsion.py` (see the Losing control entry below);
+  `moon_constants.py` keeps only the pull's own magnitudes.
+  Losing control (#4802, ADR-0329): see `docs/systems/conditions.md`.
   Language mechanics (#2993, ADR-0214): `language_constants.py` (`Fluency` bands
   broken/conversational/fluent, `BAND_KEEP_RATIO`, `FLUENT_GRANT_VALUE=70`),
   `language_services.py` (`garble_text`, `speech_seed`, `fluency_value`, `effective_band`,
@@ -8677,6 +8678,29 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `acute_peril_hand_off_condition_ids()` replace the `*_names()` lists. Unset = the mechanic
   does nothing. `ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null) drives
   the web client's Audere strip. See `docs/systems/conditions.md` "Designated conditions".
+- **Losing control in combat (#4802, ADR-0329) [BUILT & WIRED]:** `world/combat/compulsion.py`.
+  At the DECLARING to RESOLVING boundary `resolve_compulsions` has every compelled player
+  character whose declared action is not an attack on an opponent roll the compulsion's resist
+  check (difficulty = base + per-severity x severity + the forbidden action's extra; a charge,
+  joust or waiting strike counts as attacking and rolls nothing). The `CompulsionResistBand` for
+  the outcome sets `ACTS_FREELY`, `ACTS_STRAINED` (the action rolls with
+  `CombatRoundAction.compulsion_penalty`; rally and interpose too) or `COMPULSION_ACTS` (the
+  declaration is replaced by the compulsion attack, `declared_by_compulsion`, with no Soulfray
+  consent given for the player). `select_compelled_actions` auto-declares for an idle compelled
+  participant. NPCs never roll. Leave and revert-form roll at once through
+  `resist_compulsion_now` (no declaration to replace, no steadier). Several compulsions: the
+  most severe governs. **Steadying:** on a failed first roll, `reactions.steadiers_for` lists
+  active allies in the encounter with `CombatParticipant.steady_enabled`, no compulsion of their
+  own, the `MovementConfig.steadying_capability` above its baseline and the anima; the biggest
+  bonus (capability + `steady_bonus_per_depth` x bond depth via `qualifying_bond_depths`, less
+  the reaction penalty) wins, ties to the lowest participant pk. `try_steady` pays
+  `steady_anima_cost`, records a reaction and rerolls, returning `SteadyResult`. The plan is
+  `SteadyPlanAction` (key `combat_steady`; telnet `combat steady [on|off]`; web "Steady allies"
+  toggle). The encounter payload carries `compulsion` (what it wants, each action's difficulty)
+  and `steady_plan` for the viewer's own participant only; `YourTurn` shows
+  `CompulsionBanner`, and telnet declares print an `Against <condition>: ...` line. Out of combat
+  the NPC rampage (`berserk_rampage_window`) is unchanged. Models and trigger engine:
+  `docs/systems/conditions.md`. Journeys: `integration_tests/test_losing_control_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the

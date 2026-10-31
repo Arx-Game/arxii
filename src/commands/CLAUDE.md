@@ -647,6 +647,17 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
+  `steady [on|off]` (#4802) sets the caller's steady plan beside `dodge`: it dispatches
+  `SteadyPlanAction` (key `combat_steady`), which turns the plan on (or off) only when the
+  caller holds the steadying capability above its baseline, and answers "Nothing you have lets
+  you steady an ally." otherwise. A stray word prints "Usage: combat steady [on|off]." and
+  changes nothing. **Compulsion warning (#4802):** when a declare command (`_CombatCommandMixin`
+  in `commands/combat.py`) lands a round action that goes against the caller's compulsion, it
+  prints one line before the usual confirmation: `Against <condition>: <check> check,
+  difficulty <n>. If it fails, you attack instead.` (`world.combat.compulsion.compulsion_warning`).
+  An attack, a plan, a mark, a secondary passive cast or a clash contribution prints nothing
+  (`_declares_a_round_action`), and the resist and steadying roll lines arrive with the round
+  output. Nothing is refused: the warning is information, and the roll happens at the round lock.
 - **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010/#2007) — the
   large-scale-battle namespace. One `ArxCommand` routes a leading subverb (`battle declare
   strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment/move/reposition

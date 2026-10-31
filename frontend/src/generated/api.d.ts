@@ -10158,7 +10158,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description #1111 — revert the active alternate self (blocked while not in control). */
+    /** @description #1111 — revert the active alternate self (rolls against a compulsion). */
     post: operations['forms_alternate_selves_revert_create'];
     delete?: never;
     options?: never;

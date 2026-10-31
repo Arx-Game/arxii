@@ -1225,7 +1225,7 @@ offer, `world.magic.offer_handlers.SoulfrayPendingHandler`, must never block a w
 passed `soulfray_consented` at all, so EVERY web-cast ward was silently stamped consented. The
 view now reads `soulfray_consented` from the serializer (`default=False`) and always passes it
 explicitly, bypassing the derivation on the web path only - every other caller (telnet's
-`CastTechniqueAction`, `offer_handlers.py`'s accept-soulfray re-dispatch, `berserk_compulsion.py`,
+`CastTechniqueAction`, `offer_handlers.py`'s accept-soulfray re-dispatch, `compulsion.py` (formerly `berserk_compulsion.py`),
 `clash.py`, `battles/resolution.py`) still omits it and keeps the old derived behavior unchanged.
 
 **Telnet** (`commands/combat.py`'s `CmdDeclareTechnique`) - a trailing `soulfray` keyword on
@@ -2161,8 +2161,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   flee and parley; both roll through `collect_check_modifiers`, so any
   `ConditionCheckModifier` staff author on the Berserk template (template or stage level)
   against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
-  roll. Only `leave_encounter` is refused (`reject_leave_if_berserk`: "The rage will not
-  walk away. You can still try to flee."). Required content `berserk-disengage-penalty`
+  roll. Leaving the encounter and changing form back roll the compulsion's resist check as
+  well (#4802, ADR-0329); nothing is refused any more. Required content `berserk-disengage-penalty`
   lists a Berserk with no penalty against either check: a negative modifier authored on the
   check type or on its category, at template or stage level. Journeys:
   `src/integration_tests/test_berserk_disengage_journeys.py`.

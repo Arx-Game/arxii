@@ -2001,6 +2001,8 @@
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
+  - compulsions <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - modifier_target <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
   - detect_situation_traps <- mechanics.SituationTrapLink
@@ -2739,6 +2741,7 @@
 ### MovementConfig
 **Foreign Keys:**
   - held_ground_challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - steadying_capability -> conditions.CapabilityType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### NpcTacticsConfig
@@ -2932,7 +2935,7 @@
 - `plan_opponent_round(opponent: 'CombatOpponent', ctx: 'NpcRoundContext') -> 'list[CombatOpponentAction]' - Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).`
 - `refit_targets(npc_action: 'CombatOpponentAction') -> 'bool' - Drop the stored targets this action's strike no longer reaches; False when none is left.`
 - `remove_opponent(opponent: 'CombatOpponent') -> 'None' - Pull an opponent out of a live encounter (GM action, #3382).`
-- `remove_participant(participant: 'CombatParticipant') -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
+- `remove_participant(participant: 'CombatParticipant', *, by_gm: 'bool' = False) -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' - Validate declared cast positions against the encounter's room + technique reach.`
 - `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', cast_check: 'CastCheck', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' - Route a damage-path combat technique through use_technique.`
 - `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None) -> 'DefenseResult' - Resolve one NPC attack against one PC via a defensive check.`
@@ -3070,6 +3073,23 @@
   - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
 
+### Compulsion
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [OneToOne]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - forbidden <- conditions.CompulsionForbiddenAction
+  - bands <- conditions.CompulsionResistBand
+
+### CompulsionForbiddenAction
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+
+### CompulsionResistBand
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+  - outcome -> traits.CheckOutcome [FK]
+
 ### ConditionCapabilityEffect
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
@@ -3170,6 +3190,7 @@
   - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - auderethreshold_set <- magic.AudereThreshold
 
 ### ConditionStageOnEntry
@@ -3218,6 +3239,8 @@
   - conditioninstance_set <- conditions.ConditionInstance
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
+  - compulsion <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
@@ -3242,6 +3265,21 @@
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
+
+### ControlLossBand
+**Foreign Keys:**
+  - trigger -> conditions.ControlLossTrigger [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - applies -> conditions.ConditionTemplate [FK] (nullable)
+
+### ControlLossTrigger
+**Foreign Keys:**
+  - vulnerability -> conditions.ConditionTemplate [FK]
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - check_type -> checks.CheckType [FK]
+  - relief_gift -> magic.Gift [FK] (nullable)
+**Pointed to by:**
+  - bands <- conditions.ControlLossBand
 
 ### DamageSuccessLevelMultiplier
 
@@ -4427,6 +4465,7 @@
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
 - `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
+- `attempt_revert_form(sheet: 'CharacterSheet') -> 'CompulsionAttempt' - The player's entry point for changing back (#4802).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
