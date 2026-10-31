@@ -11,6 +11,7 @@ from django.test import TestCase
 from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ActionTemplateFactory
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
@@ -1316,3 +1317,39 @@ class TechniqueDamageBonusTests(TestCase):
             bonus.for_type(2)
 
         self.assertEqual(total.call_count, 2)
+
+    def _opponents_cost(self, *, opponent_scope: bool) -> int:
+        """How many times two opponents' hits of one type run the modifier sum."""
+        resolver = _build_resolver(base_power=0)
+        category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        ModifierTargetFactory(
+            category=category, name="Any damage", scope_effect_kind=EffectKind.DAMAGE
+        )
+        if opponent_scope:
+            ModifierTargetFactory(
+                category=category,
+                name="Damage versus abyssal",
+                scope_effect_kind=EffectKind.DAMAGE,
+                scope_opponent_property=PropertyFactory(name="Bonus Cost Abyssal"),
+            )
+        bonus = TechniqueDamageBonus.for_cast(
+            resolver.participant.character_sheet, resolver.action.focused_action
+        )
+        opponent_a = ObjectDBFactory(db_key="Bonus Cost A")
+        opponent_b = ObjectDBFactory(db_key="Bonus Cost B")
+
+        with patch(
+            "world.combat.services.techniques.technique_resolver.technique_effect_total",
+            wraps=technique_effect_total,
+        ) as total:
+            bonus.for_type(1, opponent_a)
+            bonus.for_type(1, opponent_b)
+            bonus.for_type(1, opponent_a)
+
+        return total.call_count
+
+    def test_area_cast_without_opponent_scope_computes_once_per_type(self) -> None:
+        self.assertEqual(self._opponents_cost(opponent_scope=False), 1)
+
+    def test_opponent_scope_computes_once_per_opponent(self) -> None:
+        self.assertEqual(self._opponents_cost(opponent_scope=True), 2)

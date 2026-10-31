@@ -467,7 +467,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         technique_scope = self._set_technique_scope_fields()
         if self.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
             if technique_scope:
-                msg = "Only a maneuver effect target names a technique scope."
+                msg = "Only a maneuver effect target names a technique or opponent scope."
                 raise ValidationError({technique_scope[0]: msg})
             if has_effect or has_kind:
                 msg = "Only a maneuver effect target names an effect or a kind of effect."
@@ -487,13 +487,18 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def _clean_technique_scope(self, *, has_effect: bool, has_kind: bool) -> None:
         """A technique scope narrows a kind of effect (#4822), never one maneuver's effect."""
         if has_effect:
-            msg = "A technique scope narrows a kind of effect, not one maneuver's effect."
+            msg = (
+                "A technique or opponent scope narrows a kind of effect, not one maneuver's effect."
+            )
             raise ValidationError({"scope_maneuver_effect": msg})
         if not has_kind:
-            msg = "A technique scope needs the kind of effect it narrows."
+            msg = "A technique or opponent scope needs the kind of effect it narrows."
             raise ValidationError({"scope_effect_kind": msg})
         if self.scope_effect_kind not in TECHNIQUE_SCOPE_KINDS:
-            msg = "A technique scope narrows damage, condition severity or condition duration."
+            msg = (
+                "A technique or opponent scope narrows damage, condition severity or "
+                "condition duration."
+            )
             raise ValidationError({"scope_effect_kind": msg})
         if self.scope_damage_type_id is not None and self.scope_effect_kind != EffectKind.DAMAGE:
             msg = "A damage type scope is for damage only."

@@ -110,6 +110,8 @@ class TechniqueDamageBonus:
     targets: list[ModifierTarget]
     totals: dict[tuple[int | None, int | None], int] = field(default_factory=dict)
     facts: dict[int | None, OpponentFacts] = field(default_factory=dict)
+    # Whether any damage target is narrowed by the opponent (#4823), worked out once per cast.
+    narrowed: bool = False
 
     @classmethod
     def none(cls) -> TechniqueDamageBonus:
@@ -122,19 +124,23 @@ class TechniqueDamageBonus:
         targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
         if not targets:
             return cls.none()
-        return cls(sheet=sheet, context=technique_effect_context(sheet, technique), targets=targets)
+        return cls(
+            sheet=sheet,
+            context=technique_effect_context(sheet, technique),
+            targets=targets,
+            narrowed=opponent_targets_exist(targets),
+        )
 
     def read_opponent(
         self,
         opponent: ObjectDB | None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
     ) -> OpponentFacts:
-        """What ``opponent`` carries (#4823), read once per cast and only when a damage
-        target is narrowed by it. Call before an opponent's first profile lands, so a
+        """What ``opponent`` carries (#4823), read once per opponent per cast and only when
+        a damage target is narrowed by it. Call before an opponent's first profile lands, so a
         condition one profile consumes still counts for the rest of the same hit."""
         key = opponent.pk if opponent is not None else None
         if key not in self.facts:
-            read = opponent_targets_exist(self.targets)
-            self.facts[key] = opponent_facts(opponent) if read else OpponentFacts()
+            self.facts[key] = opponent_facts(opponent) if self.narrowed else OpponentFacts()
         return self.facts[key]
 
     def for_type(
@@ -143,11 +149,14 @@ class TechniqueDamageBonus:
         opponent: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
     ) -> int:
         """The unclamped bonus on a hit of resolved damage type ``damage_type_id`` against
-        ``opponent``, worked out once per distinct (type, opponent) pair."""
+        ``opponent``, worked out once per distinct type, or per (type, opponent) pair when a
+        damage target is narrowed by the opponent."""
         context = self.context
         if context is None:
             return 0
-        key = (damage_type_id, opponent.pk if opponent is not None else None)
+        # Without an opponent scope every opponent gets the same answer: one entry per type.
+        opponent_key = opponent.pk if self.narrowed and opponent is not None else None
+        key = (damage_type_id, opponent_key)
         if key not in self.totals:
             facts = self.read_opponent(opponent)
             self.totals[key] = technique_effect_total(

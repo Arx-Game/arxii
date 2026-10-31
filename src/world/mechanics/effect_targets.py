@@ -206,7 +206,8 @@ class TechniqueConditionBonus:
     Built once per cast by ``for_cast``: both target lists load first, and with neither in
     the game there is nothing to match, so no context is built. ``for_target`` answers "what
     do the matching modifiers add to a condition landing on this target", as a
-    ``(severity, duration)`` pair, worked out once per target and reused by every later row.
+    ``(severity, duration)`` pair, worked out once per target per cast and reused by every
+    later row.
     A target's properties and conditions are read only when a severity or duration target is
     narrowed by who it lands on, and are read before the cast's first condition lands, since
     the builder works out every row before any is applied. ``none`` is ``(0, 0)`` for everyone.
