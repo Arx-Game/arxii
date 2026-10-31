@@ -18,15 +18,18 @@ def get_personas(self, obj):
     return PersonaPayloadSerializer(list(primary) + list(established), many=True).data
 ```
 
-**Right:** add a `cached_property` on the model that returns the filtered list, and use `Prefetch(..., to_attr="<that name>")` upstream:
+**Right:** add a `PrunedCachedProperty` on the model that returns the filtered list, use `Prefetch(..., to_attr="<that name>")` upstream, and pop it from every writer of the rows it lists:
 
 ```python
 # On the model
-@cached_property
+@PrunedCachedProperty
 def cached_payload_personas(self) -> list[Persona]:
     """Serves as the to_attr target for Prefetch+to_attr.
     Falls back to a query when not prefetched."""
     return list(self.personas.filter(...).order_by(...))
+
+# On the row it lists (Persona.save / delete)
+pop_cached_rows(CharacterSheet, self.character_sheet_id, "cached_payload_personas")
 
 # In the serializer
 def get_personas(self, obj):
@@ -43,6 +46,8 @@ RosterEntry.objects.filter(...).prefetch_related(
 ```
 
 **The cached_property must come from `django.utils.functional`** — `functools.cached_property` silently breaks `Prefetch(to_attr=...)`. Enforced by `tools/lint_cached_property_import.py`. See `src/evennia_extensions/CACHED_PROPERTY_STANDARD.md`.
+
+**The pop is not optional.** The sheet is identity-mapped, so the first request's prefetch fills the list for the life of the process and every later prefetch skips it. Without the writer-side pop, a new face never reached `/api/user/` until a restart (#4784).
 
 ### Queryset construction inside serializer methods
 

@@ -49,4 +49,7 @@ invalidation — never `CachedRowsHandler` (retired) and never a plain
 failure modes #3816 traced: the former never batches at all since a getter
 that never raises defeats Django's `hasattr` fallback check; the latter
 batches once then never refreshes, ADR-0263's original finding). See
-`evennia_extensions/CACHED_PROPERTY_STANDARD.md` for the mechanism.
+`evennia_extensions/CACHED_PROPERTY_STANDARD.md` for the mechanism. The
+targeted write-side helper is `evennia_extensions.cached_property.pop_cached_rows`
+(#4784, which converted the combat encounter's payload lists, the bestiary's
+phase list and the sheet's payload personas to this shape).

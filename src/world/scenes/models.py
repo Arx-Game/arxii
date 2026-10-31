@@ -13,7 +13,7 @@ from django.utils.functional import cached_property
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.cached_property import PrunedCachedProperty, pop_cached_rows
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.checks.constants import ModifierSize
 from world.magic.constants import LedgerOp, PowerStage
@@ -420,6 +420,13 @@ class SceneUnseenObserver(SharedMemoryModel):
         return f"unseen observer on {self.scene_id} ({self.source_label})"
 
 
+def _pop_sheet_payload_personas(sheet_id: int | None) -> None:
+    """A new face or a changed portrait reaches the sheet's next payload (#4784)."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    pop_cached_rows(CharacterSheet, sheet_id, "cached_payload_personas")
+
+
 class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
     """A face the character shows the world.
 
@@ -604,6 +611,16 @@ class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_persona_type_display()})"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        super().save(*args, **kwargs)
+        _pop_sheet_payload_personas(self.character_sheet_id)
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        sheet_id = self.character_sheet_id
+        result = super().delete(*args, **kwargs)
+        _pop_sheet_payload_personas(sheet_id)
+        return result
 
     @property
     def is_established_or_primary(self) -> bool:

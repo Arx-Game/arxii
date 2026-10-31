@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import F, Prefetch
+from django.db.models import Prefetch
 
 from world.combat.constants import EncounterType, OpponentStatus, ParticipantStatus
 from world.combat.models import (
@@ -57,6 +57,27 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
 
     PerformCheckFn = Callable[..., CheckResult]
+
+
+def _count_down_vulnerability_windows(encounter: CombatEncounter) -> None:
+    """Take a round off every open vulnerability window in the encounter.
+
+    Counts down on the identity-mapped instances, then writes them. A queryset
+    update left every cached opponent reading the old count (``refresh_from_db``
+    hands back the same instance), so the payload kept the window open and the
+    opponent's next full ``save()`` wrote the old count back (#4784).
+    """
+    counting_down = list(
+        CombatOpponent.objects.filter(encounter=encounter, vulnerability_rounds_remaining__gt=0)
+    )
+    for opponent in counting_down:
+        opponent.vulnerability_rounds_remaining -= 1
+    if counting_down:
+        CombatOpponent.objects.bulk_update_with_reason(
+            counting_down,
+            ["vulnerability_rounds_remaining"],
+            reason="issue #3817: intentional bulk write",
+        )
 
 
 @transaction.atomic
@@ -174,13 +195,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     result.available_combos = _fire_round_start(enc, round_number)
 
     # --- Vulnerability window countdown (#2016) ---
-    CombatOpponent.objects.filter(
-        encounter=encounter,
-        vulnerability_rounds_remaining__gt=0,
-    ).update_with_reason(
-        reason="issue #3817: intentional atomic write",
-        vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1,
-    )
+    _count_down_vulnerability_windows(encounter)
 
     # --- Wind-up maturation (#2637 design 5): before the round's
     # CombatOpponentAction rows are queried below, so a matured wind-up's
