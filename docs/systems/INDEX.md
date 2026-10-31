@@ -10273,7 +10273,7 @@ combat, poison, spells, exhaustion, and any damage source.
     highest fraction any mend on it used; clamps to `max_health`, returns the amount actually
     mended (0 is legal, not an error). The healing clock (#4810): a mend in the fight the
     wound landed in (the target's live encounter is `created_encounter`) first loses
-    `WOUND_CAP_SHRINK_PER_ROUND` (0.05, module constant marked for config) of its fraction per
+    `MovementConfig.wound_cap_shrink_per_round` percent (default 5) of its fraction per
     round since `created_round`; another fight, a finished fight, or a null round never
     shrinks. A technique cast passes its treatment row's
     `mend_cap_fraction`; the scene `treat` path passes `FIRST_AID_MEND_FRACTION` for a mundane

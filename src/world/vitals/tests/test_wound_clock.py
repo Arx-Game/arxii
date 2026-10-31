@@ -1,8 +1,8 @@
 """The healing clock: a wound's healable limit shrinks by round in its own fight (#4810).
 
 Wounds that land in a fight are stamped with its encounter and round. A mend in
-that same fight loses ``WOUND_CAP_SHRINK_PER_ROUND`` of its fraction per round
-since the wound landed; a wound from another fight, or with no round, never
+that same fight loses ``MovementConfig.wound_cap_shrink_per_round`` percent of its
+fraction per round since the wound landed; a wound from another fight, or with no round, never
 shrinks. Built in ``setUp``: the tests mutate vitals and wound rows.
 """
 

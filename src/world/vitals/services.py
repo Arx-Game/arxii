@@ -592,11 +592,6 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         )
 
 
-#: How much of a wound's mend fraction is lost per round since it landed, for a
-#: mend in the same fight (#4810). TODO(#4810): move to config.
-WOUND_CAP_SHRINK_PER_ROUND: Decimal = Decimal("0.05")
-
-
 def _rounds_since_wound(details: WoundDetails, target_sheet: CharacterSheet) -> int:
     """Rounds since the wound landed, when this mend is in the fight it landed in.
 
@@ -650,7 +645,8 @@ def mend_wound(
       a high one finds no room. Nothing new is stored. The remainder is
       permanent attrition, by design.
     - **The healing clock (#4810):** a mend in the fight the wound landed in
-      loses ``WOUND_CAP_SHRINK_PER_ROUND`` of its fraction for each round since
+      loses ``MovementConfig.wound_cap_shrink_per_round`` percent of its fraction for
+      each round since
       ``WoundDetails.created_round``. A wound from another fight, or with no
       recorded round, never shrinks.
 
@@ -673,9 +669,12 @@ def mend_wound(
 
     fraction = NEVER_TO_FULL_FRACTION if cap_fraction is None else cap_fraction
     fraction = min(fraction, NEVER_TO_FULL_FRACTION)
+    from world.combat.services.reactions import reaction_tuning  # noqa: PLC0415
+
+    shrink_per_round = Decimal(reaction_tuning().wound_cap_shrink_per_round) / 100
     fraction = max(
         Decimal(0),
-        fraction - WOUND_CAP_SHRINK_PER_ROUND * _rounds_since_wound(details, target_sheet),
+        fraction - shrink_per_round * _rounds_since_wound(details, target_sheet),
     )
     cap_total = int(fraction * details.damage_taken)
     remaining_cap = max(0, cap_total - details.health_mended_total)

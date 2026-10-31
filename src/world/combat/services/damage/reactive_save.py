@@ -15,7 +15,8 @@ the capability, never a vow's name. Holding both is the opt-in, the way holding 
 dodging capability is (``reactions.py``); there is no per-round toggle yet.
 
 **What it does.** The blow is cut to whatever would leave the ally just above the
-knockout line, but by at most ``REACTIVE_SAVE_MAX_CUT`` of the blow, so a huge hit
+knockout line, but by at most ``MovementConfig.reactive_save_max_cut`` percent of the
+blow, so a huge hit
 is softened rather than erased. "Would drop" is judged on the pre-damage amount,
 before thread reduction, resistance, armor and cover, since those run after this
 hook. The save counts against the hit's answer cap (``ABSORPTION_CAP_PER_MOMENT``),
@@ -39,9 +40,6 @@ if TYPE_CHECKING:
     from flows.events.payloads import DamagePreApplyPayload
     from world.character_sheets.models import CharacterSheet
     from world.vitals.models import CharacterVitals
-
-#: The most of one blow a reactive save can take off. TODO(#4810): move to config.
-REACTIVE_SAVE_MAX_CUT: Decimal = Decimal("0.5")
 
 
 def reactive_save_anima_cost(healer: CombatParticipant) -> int:
@@ -88,7 +86,10 @@ def _would_drop(vitals: CharacterVitals, amount: int) -> bool:
 def _softened_amount(vitals: CharacterVitals, amount: int) -> int:
     """The blow cut to leave her just above the line, by at most the max cut."""
     leaves_her_standing = max(0, vitals.health - _knockout_line(vitals) - 1)
-    least_allowed = int((Decimal(amount) * (1 - REACTIVE_SAVE_MAX_CUT)).to_integral(ROUND_CEILING))
+    from world.combat.services.reactions import reaction_tuning  # noqa: PLC0415
+
+    max_cut = Decimal(reaction_tuning().reactive_save_max_cut) / 100
+    least_allowed = int((Decimal(amount) * (1 - max_cut)).to_integral(ROUND_CEILING))
     return max(leaves_her_standing, least_allowed)
 
 
