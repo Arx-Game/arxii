@@ -175,4 +175,5 @@ test('from md up the chip still sits between the title and the nav', async ({ pa
   expect(chipBox!.y).toBeLessThan(titleBox!.y + titleBox!.height);
   expect(playBox!.y).toBeLessThan(titleBox!.y + titleBox!.height);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(1280);
+  if (SCREENSHOTS) await page.screenshot({ path: `${SCREENSHOTS}/header-1280-selected.png` });
 });
