@@ -78448,11 +78448,13 @@ components:
       - active
       - fled
       - removed
+      - removed_by_gm
       type: string
       description: |-
         * `active` - Active
         * `fled` - Fled
         * `removed` - Removed
+        * `removed_by_gm` - Removed by GM
     ParticipationLevelEnum:
       enum:
       - critical
