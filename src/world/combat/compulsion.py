@@ -17,8 +17,9 @@ These seams make the drive real, for every compulsion staff author:
   opponent, at the same DECLARING to RESOLVING boundary as the NPC auto-selection
   fallback. Every opponent in an encounter already passed the gates to be there (risk
   acknowledgement, hostile-cast entry), so targeting them raises no new consent question.
-- **Walking away** (`reject_leave_if_compelled`): leaving the encounter is still refused
-  until leaving rolls like any other forbidden action (#4802 Task 6).
+- **Walking away and changing back** (`resist_compulsion_now`): leaving an encounter and
+  reverting an alternate self roll the same check, at once, with no declaration to replace
+  and no ally to steady it (there is no round to spend a reaction in).
 - **Out of combat** (`berserk_rampage_window`): at each reconcile window a compelled
   character auto-engages the nearest NPC in the room through the same hostile-cast
   seeding a deliberate attack uses; with nobody to grab, they rage harmlessly. PC targets
@@ -38,7 +39,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.combat.constants import CombatManeuver
-from world.combat.types import CompulsionCost, CompulsionRoll
+from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import active_compulsion, has_compulsion
 
@@ -68,7 +69,6 @@ logger = logging.getLogger(__name__)
 RAMPAGE_EMIT = (
     "{name} rages at nothing and everything, claws raking the air, hunting for something to break."
 )
-BERSERK_LEAVE_REFUSAL = "The rage will not walk away. You can still try to flee."
 
 #: Maneuvers that are attacks, so a compelled character makes them with no roll (R10).
 _ATTACK_MANEUVERS = frozenset(
@@ -80,17 +80,6 @@ _FORBIDDEN_BY_MANEUVER: dict[str, str] = {
     CombatManeuver.FLEE: CompulsionForbidden.FLEE,
     CombatManeuver.PARLEY: CompulsionForbidden.PARLEY,
 }
-
-
-def reject_leave_if_compelled(participant: CombatParticipant) -> None:
-    """Raise ValueError when a compelled participant tries to leave the encounter.
-
-    Called by ``leave_encounter`` only. Flee and parley are not refused: they roll
-    against the compulsion at the round lock.
-    """
-    character = participant.character_sheet.character
-    if character is not None and has_compulsion(character):
-        raise ValueError(BERSERK_LEAVE_REFUSAL)
 
 
 # -- the resist roll ---------------------------------------------------------------
@@ -130,6 +119,55 @@ def compulsion_band(
     if outcome is None:
         return None
     return compulsion.bands.filter(outcome_id=outcome.pk).order_by("pk").first()
+
+
+#: The verb phrase the roll line uses for each action resolved outside the round.
+_OUTSIDE_ROUND_LABEL: dict[str, str] = {
+    CompulsionForbidden.LEAVE: "leave the encounter",
+    CompulsionForbidden.REVERT_FORM: "change back",
+}
+
+
+def resist_compulsion_now(character: ObjectDB, forbidden: str) -> CompulsionAttempt:  # noqa: OBJECTDB_PARAM
+    """Roll the resist check for *character* leaving an encounter or changing back.
+
+    ``forbidden`` is ``CompulsionForbidden.LEAVE`` or ``REVERT_FORM``. A character with no
+    compulsion (Charmed, Calm) and any NPC (NPCs never roll) go ahead with nothing rolled.
+    The difficulty and the band come from the same helpers the round lock uses; there is
+    no steadying here. The band's ``control_change`` lands whatever the result.
+
+    ACTS_STRAINED lets the action happen: leaving and changing back have no roll of
+    their own, so the band's action penalty has nothing to reduce.
+
+    The room hears the line; the character hears it themself on success, and on failure
+    from the caller's refusal message, so it is never told twice.
+    """
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    found = active_compulsion(character)
+    sheet = character.character_sheet
+    if found is None or sheet is None or not is_player_character(sheet):
+        return CompulsionAttempt(allowed=True, line="", check_result=None)
+    compulsion, instance = found
+    difficulty = compulsion_difficulty(compulsion, instance, forbidden)
+    result = perform_check_with_modifiers(
+        character, compulsion.check_type, target_difficulty=difficulty
+    )
+    line = (
+        f"{_persona_name(character)} tries to {_OUTSIDE_ROUND_LABEL[forbidden]} against "
+        f"{compulsion.condition.name}. {compulsion.check_type.name} vs {difficulty}: "
+        f"{_outcome_name(result)}."
+    )
+    band = compulsion_band(compulsion, result.outcome)
+    allowed = band is None or band.result != CompulsionResult.COMPULSION_ACTS
+    if band is not None and band.control_change:
+        _shift_character_control(character, band.control_change)
+    if character.location is not None:
+        character.location.msg_contents(line, exclude=[character])
+    if allowed:
+        character.msg(line)
+    return CompulsionAttempt(allowed=allowed, line=line, check_result=result)
 
 
 def _is_compelled_attack(action: CombatRoundAction) -> bool:
@@ -318,9 +356,14 @@ def _compulsion_acts(
 
 def _shift_control(participant: CombatParticipant, control_change: int) -> None:
     """Land a band's control change on the participant's engagement, if one exists."""
+    _shift_character_control(participant.character_sheet.character, control_change)
+
+
+def _shift_character_control(character: ObjectDB, control_change: int) -> None:  # noqa: OBJECTDB_PARAM
+    """Land a band's control change on *character*'s engagement, if one exists."""
     from world.magic.services.fury import engagement_of, shift_engagement  # noqa: PLC0415
 
-    engagement = engagement_of(participant.character_sheet.character)
+    engagement = engagement_of(character)
     if engagement is None:
         return
     shift_engagement(engagement, intensity=0, control=control_change, surrendered=0)

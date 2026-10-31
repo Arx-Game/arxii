@@ -36,6 +36,7 @@ from world.species.models import Species
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.combat.types import CompulsionAttempt
     from world.scenes.models import Persona
 
 
@@ -381,15 +382,7 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
         ValueError: if no active alternate self exists for this sheet.
         RevertBlockedError: if the character is not in control.
     """
-    from world.scenes.services import set_active_persona  # noqa: PLC0415
-
-    try:
-        active = ActiveAlternateSelf.objects.select_related("return_form").get(character=sheet)
-    except ActiveAlternateSelf.DoesNotExist as exc:
-        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG) from exc
-
-    if active.alternate_self_id is None:
-        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG)
+    active = _active_alternate_self(sheet)
 
     # ``in_control`` is a plain property reading the character's
     # ``CharacterConditionHandler`` cache (invalidated by every condition
@@ -399,6 +392,49 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     # the fresh value on the next access.
     if not sheet.in_control:
         raise RevertBlockedError
+
+    _revert(sheet, active)
+
+
+def attempt_revert_form(sheet: CharacterSheet) -> CompulsionAttempt:
+    """The player's entry point for changing back (#4802).
+
+    A character carrying a compulsion rolls its resist check for ``REVERT_FORM`` and
+    changes back only when the roll lets them. A character who is not in control but has
+    no compulsion (Charmed, Calm) changes back freely, as does an NPC (NPCs never roll).
+    The system paths (Audere end, TALKED_DOWN) call ``revert_alternate_self`` and keep its
+    ``in_control`` check.
+
+    The roll is committed even when it fails: only the revert itself is atomic.
+
+    Raises:
+        ValueError: if no active alternate self exists for this sheet.
+    """
+    from world.combat.compulsion import resist_compulsion_now  # noqa: PLC0415
+    from world.conditions.constants import CompulsionForbidden  # noqa: PLC0415
+
+    active = _active_alternate_self(sheet)
+    attempt = resist_compulsion_now(sheet.character, CompulsionForbidden.REVERT_FORM)
+    if attempt.allowed:
+        _revert(sheet, active)
+    return attempt
+
+
+def _active_alternate_self(sheet: CharacterSheet) -> ActiveAlternateSelf:
+    """The sheet's active alternate-self row; ValueError when none is worn."""
+    try:
+        active = ActiveAlternateSelf.objects.select_related("return_form").get(character=sheet)
+    except ActiveAlternateSelf.DoesNotExist as exc:
+        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG) from exc
+    if active.alternate_self_id is None:
+        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG)
+    return active
+
+
+@transaction.atomic
+def _revert(sheet: CharacterSheet, active: ActiveAlternateSelf) -> None:
+    """Revert *active* with no control check; the callers decide whether it may happen."""
+    from world.scenes.services import set_active_persona  # noqa: PLC0415
 
     # Restore form facet.
     if active.return_form is not None:

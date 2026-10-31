@@ -11,6 +11,7 @@ from world.combat.models import CombatEncounter, CombatParticipant
 from world.combat.services.encounter.completion import complete_encounter
 from world.combat.services.encounter.encounter_risk import acknowledge_encounter_risk
 from world.combat.services.encounter.engagement import _ensure_combat_engagement
+from world.conditions.constants import CompulsionForbidden
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 
 ALREADY_PARTICIPATING_MESSAGE = "Already participating in this encounter."
 REMOVED_BY_GM_MESSAGE = "A GM removed you from this fight."
+LEAVE_RESISTED_MESSAGE = "You cannot break away."
 
 
 def _create_participant(
@@ -138,21 +140,53 @@ def join_encounter(
     return participant
 
 
-@transaction.atomic
 def leave_encounter(participant: CombatParticipant) -> None:
     """Allow a participant to voluntarily leave an Open Encounter between rounds.
 
-    Unlike flee (a check-gated exit), this is unconditional. If the departing
-    participant is the last active participant, the encounter completes as ABANDONED.
+    Unlike flee (a check-gated exit), this needs no check of its own. A compelled player
+    character rolls the compulsion's resist check first (#4802): leaving an encounter is
+    combat by definition. A failed roll raises with the roll line and the character stays.
+    If the departing participant is the last active participant, the encounter completes
+    as ABANDONED.
 
     Raises ValueError when:
     - the encounter is not in BETWEEN_ROUNDS status,
-    - the encounter type is not OPEN_ENCOUNTER, or
-    - the participant is not ACTIVE.
+    - the encounter type is not OPEN_ENCOUNTER,
+    - the participant is not ACTIVE, or
+    - the participant is compelled and fails the resist roll.
     """
-    from world.combat.compulsion import reject_leave_if_compelled  # noqa: PLC0415
+    from world.combat.compulsion import resist_compulsion_now  # noqa: PLC0415
 
-    reject_leave_if_compelled(participant)
+    # The roll runs before (and outside) the leave transaction: a failed roll raises, and
+    # the raise must not roll back the band's control change or the roll's own writes.
+    # A leave that would be refused anyway rolls nothing.
+    if _can_leave_now(participant):
+        attempt = resist_compulsion_now(
+            participant.character_sheet.character, CompulsionForbidden.LEAVE
+        )
+        if not attempt.allowed:
+            msg = f"{attempt.line} {LEAVE_RESISTED_MESSAGE}"
+            raise ValueError(msg)
+    _leave_encounter(participant)
+
+
+def _can_leave_now(participant: CombatParticipant) -> bool:
+    """Whether the encounter and the participant allow a leave right now (a plain read)."""
+    return (
+        CombatEncounter.objects.filter(
+            pk=participant.encounter_id,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            encounter_type=EncounterType.OPEN_ENCOUNTER,
+        ).exists()
+        and CombatParticipant.objects.filter(
+            pk=participant.pk, status=ParticipantStatus.ACTIVE
+        ).exists()
+    )
+
+
+@transaction.atomic
+def _leave_encounter(participant: CombatParticipant) -> None:
+    """The validated leave itself: lock, check, remove, complete when nobody is left."""
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (

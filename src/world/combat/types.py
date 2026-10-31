@@ -747,6 +747,20 @@ class SteadyResult:
 
 
 @dataclass(frozen=True)
+class CompulsionAttempt:
+    """A compelled character's resist roll for something outside the round (#4802).
+
+    Leaving an encounter and changing back roll at once, with no declaration to replace.
+    ``allowed`` is whether the action goes ahead; ``line`` is the roll as the player is
+    told it (empty when nothing was rolled); ``check_result`` is None when nothing rolled.
+    """
+
+    allowed: bool
+    line: str
+    check_result: CheckResult | None
+
+
+@dataclass(frozen=True)
 class CompulsionRoll:
     """One resist roll a compelled participant made at the round lock (#4802).
 

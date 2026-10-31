@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from actions.constants import ActionBackend
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
+from world.conditions.control_loss import has_compulsion
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
@@ -140,8 +141,8 @@ class CmdForm(DispatchCommand):
         else:
             lines.append("You have no alternate selves.")
 
-        if not sheet.in_control:
-            lines.append("You are not in control; revert is blocked.")
+        if has_compulsion(sheet.character):
+            lines.append("You are compelled; changing back takes a roll against it.")
 
         self.msg("\n".join(lines))
 

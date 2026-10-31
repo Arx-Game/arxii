@@ -20,12 +20,19 @@ from unittest.mock import MagicMock, patch
 from django.test import override_settings
 
 from actions.constants import ActionTargetType
+from evennia_extensions.factories import CharacterFactory
 from integration_tests.harness import JourneyCase
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
-from world.combat.constants import ActionCategory, CombatManeuver, ParticipantStatus
+from world.combat.constants import (
+    ActionCategory,
+    CombatManeuver,
+    EncounterType,
+    ParticipantStatus,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -34,13 +41,14 @@ from world.combat.factories import (
     SocialManeuverConfigFactory,
 )
 from world.combat.models import CombatParticipant, CombatRoundAction, FleeConfig, MovementConfig
-from world.combat.services import resolve_round
+from world.combat.services import leave_encounter, resolve_round
 from world.combat.services.damage.damage import apply_damage_to_participant
 from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
 from world.conditions.constants import ControlLossFiresOn
 from world.conditions.factories import (
     CapabilityTypeFactory,
     CompulsionFactory,
+    ConditionCategoryFactory,
     ConditionCheckModifierFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
@@ -52,6 +60,14 @@ from world.conditions.services import (
     apply_condition,
     get_active_conditions,
 )
+from world.forms.factories import (
+    AlternateSelfFactory,
+    CharacterFormFactory,
+    CharacterFormStateFactory,
+)
+from world.forms.models import ActiveAlternateSelf, FormType
+from world.forms.services import RevertBlockedError, revert_alternate_self
+from world.forms.services.transformation import trigger_transformation
 from world.game_clock.constants import TimePhase
 from world.magic.constants import TargetKind, TechniqueReach
 from world.magic.factories import (
@@ -75,7 +91,8 @@ from world.relationships.factories import (
     RelationshipLabelFactory,
     RelationshipTypeFactory,
 )
-from world.scenes.constants import RoundStatus
+from world.scenes.constants import PersonaType, RoundStatus
+from world.scenes.factories import PersonaFactory
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.species.moon_provisioning import (
     SEED_LYCAN_GIFT_NAME,
@@ -798,3 +815,116 @@ class ACompelledStrikeThatFalters(_CompelledMira):
         self.assertTrue(self.declared().declared_by_compulsion)
         self.assertTold(self.mira, "Your compulsion's strike faltered at the edge of Soulfray.")
         self.assertNotTold(self.mira, "Accept the Soulfray risk")
+
+
+class ACompelledFighterWhoWalksAway(_CompelledMira):
+    """Leaving the encounter between rounds rolls against the compulsion (Berserk 41:
+    base 25, plus 2 a severity at severity 3, plus 10 for LEAVE)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
+        self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
+        self.encounter.save()
+
+    def test_compelled_leave_rolls_and_success_leaves(self) -> None:
+        with force_check_outcome(self.success):
+            result = self.web(self.mira, "combat_leave")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertTold(
+            self.mira,
+            "Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Success.",
+        )
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.REMOVED)
+
+    def test_compelled_leave_failure_stays_and_is_told_why(self) -> None:
+        with force_check_outcome(self.failure):
+            told = self.telnet(self.mira, "combat leave")
+
+        self.assertIn("Resist compulsion vs 41: Failure.", told)
+        self.assertIn("You cannot break away.", told)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
+
+    def test_an_npc_with_the_compulsion_leaves_with_no_roll(self) -> None:
+        npc = CharacterFactory(db_key="Grub", location=self.road)
+        npc_sheet = CharacterSheetFactory(character=npc)
+        apply_condition(npc, self.berserk, severity=3, duration_rounds=3)
+        seat = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=npc_sheet, status=ParticipantStatus.ACTIVE
+        )
+
+        with self.resist_rolls() as spy:
+            leave_encounter(seat)
+
+        self.assertEqual(spy.call_count, 0)
+        seat.refresh_from_db()
+        self.assertEqual(seat.status, ParticipantStatus.REMOVED)
+
+
+class _AltSelfMira(_ControlLossCase):
+    """Mira, wearing the Beast, out of any fight."""
+
+    resist_rolls = staticmethod(_CompelledMira.resist_rolls)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.road = self.make_room("The Road")
+        self.mira = self.make_player("Mira", room=self.road)
+        self.sheet = self.mira.sheet_data
+        true_form = CharacterFormFactory(character=self.sheet, name="True", form_type=FormType.TRUE)
+        CharacterFormStateFactory(character=self.sheet, active_form=true_form)
+        persona = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ALTERNATE, name="the Beast"
+        )
+        alt = AlternateSelfFactory(character=self.sheet, persona=persona)
+        trigger_transformation(self.sheet, alt, cause="command")
+        self.watch(self.mira)
+
+    def wearing_the_beast(self) -> bool:
+        return ActiveAlternateSelf.objects.get(character=self.sheet).alternate_self_id is not None
+
+
+class ACompelledFighterWhoChangesBack(_AltSelfMira):
+    def test_compelled_revert_out_of_combat_rolls(self) -> None:
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+
+        with force_check_outcome(self.failure):
+            told = self.telnet(self.mira, "form revert")
+
+        self.assertIn(
+            "the Beast tries to change back against Berserk. Resist compulsion vs 41", told
+        )
+        self.assertIn("Failure.", told)
+        self.assertIn("You cannot change back.", told)
+        self.assertTrue(self.wearing_the_beast())
+
+        with force_check_outcome(self.success):
+            result = self.web(self.mira, "revert_form")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertFalse(self.wearing_the_beast())
+
+    def test_charmed_pc_reverts_freely(self) -> None:
+        charm = ConditionTemplateFactory(
+            name="Charmed", category=ConditionCategoryFactory(alters_behavior=True)
+        )
+        apply_condition(self.mira, charm)
+        self.assertFalse(self.sheet.in_control)
+
+        with self.resist_rolls() as spy:
+            result = self.web(self.mira, "revert_form")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(spy.call_count, 0)
+        self.assertFalse(self.wearing_the_beast())
+
+    def test_audere_end_talked_down_still_holds_form(self) -> None:
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+
+        with self.assertRaises(RevertBlockedError):
+            revert_alternate_self(self.sheet)
+
+        self.assertTrue(self.wearing_the_beast())

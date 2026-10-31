@@ -555,17 +555,14 @@ class TakingAnotherShape(JourneyCase):
         self.assertEqual(result.detail.message, "You assume the Beast.")
         self.assertEqual(self._active().alternate_self_id, self.beast.pk)
 
-        # Not in control: the hub says so and the revert is refused.
+        # Not in control with no compulsion (a charm, a calm): changing back is free (#4802).
         rage = ConditionTemplateFactory(
             name="Rage", category=ConditionCategoryFactory(name="Fury", alters_behavior=True)
         )
         apply_condition(self.ysmay, rage)
-        self.assertIn("You are not in control; revert is blocked.", self.telnet(self.ysmay, "form"))
-        self.assertIn(
-            "You can't revert while not in control of yourself.",
-            self.telnet(self.ysmay, "form revert"),
-        )
-        self.assertEqual(self._active().alternate_self_id, self.beast.pk)
+        self.assertNotIn("You are compelled", self.telnet(self.ysmay, "form"))
+        self.assertIn("You revert to your true self.", self.telnet(self.ysmay, "form revert"))
+        self.assertIsNone(self._active().alternate_self_id)
 
     def test_two_selves_of_one_name_are_told_apart(self) -> None:
         AlternateSelfFactory(character=self.sheet, display_name="The Beast")

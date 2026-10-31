@@ -25,6 +25,7 @@ _UNKNOWN_ALT_SELF_MSG = "You have no such alternate self."
 # ``_NO_ACTIVE_ALT_SELF_MSG`` but kept here so the action never reaches into the
 # service's private constant or — worse — leaks an exception's ``str()``.
 _NO_ACTIVE_ALT_SELF_ACTION_MSG = "You have no alternate self to revert."
+_REVERT_RESISTED_MSG = "You cannot change back."
 
 
 @dataclass
@@ -116,9 +117,9 @@ class ShiftFormAction(Action):
 @dataclass
 class RevertFormAction(Action):
     """Revert the active alternate self — restore return anchors, delete the
-    granted stat + ability suites. ``in_control``-gated: the wrapped service
-    raises ``RevertBlockedError`` while the character is not in control
-    (rage/possession/charm); the action surfaces it as a failure result.
+    granted stat + ability suites. A character under a compulsion (rage) rolls its
+    resist check to change back and stays as they are on a failed roll; one who is
+    not in control with no compulsion (charm, calm) changes back freely (#4802).
     """
 
     key: str = "revert_form"
@@ -136,16 +137,13 @@ class RevertFormAction(Action):
         from world.forms.services import (  # noqa: PLC0415
             AlternateSelfActiveError,
             FormOwnershipError,
-            RevertBlockedError,
-            revert_alternate_self,
+            attempt_revert_form,
         )
         from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
         sheet = actor.sheet_data
         try:
-            revert_alternate_self(sheet)
-        except RevertBlockedError as exc:
-            return ActionResult(success=False, message=exc.user_message)
+            attempt = attempt_revert_form(sheet)
         except ActivePersonaError:
             # The active alt-self's persona FK points at another sheet (bad
             # seed/admin edit). Surface the safe message — never ``str(exc)``.
@@ -163,4 +161,6 @@ class RevertFormAction(Action):
             # which would leak the exception's text (CLAUDE.md: never ``str(exc)``
             # in responses).
             return ActionResult(success=False, message=_NO_ACTIVE_ALT_SELF_ACTION_MSG)
+        if not attempt.allowed:
+            return ActionResult(success=False, message=f"{attempt.line} {_REVERT_RESISTED_MSG}")
         return ActionResult(success=True, message="You revert to your true self.")
