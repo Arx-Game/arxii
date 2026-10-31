@@ -52,6 +52,7 @@ from world.combat.services.npc.npc_targeting import (
     _get_eligible_entries,
     _npc_action_target_pool,
     _targetable_participants,
+    untargetable_participant_ids,
 )
 from world.conditions.constants import Allegiance
 from world.scenes.constants import RoundStatus
@@ -80,6 +81,7 @@ class NpcRoundContext:
     active_locks_by_opponent: dict[int, int]
     shield_participant_ids: set[int]
     provokers: dict[int, int]
+    untargetable_by_opponent: dict[int, set[int]]  # concealed or spared PCs (#4811)
     unmatured_windup_opponent_ids: set[int]
     tactics: TacticsInputs
     holds: EncounterHolds  # where each side stands, read once for the pass (#4663)
@@ -169,6 +171,7 @@ def _build_npc_round_context(
         active_locks_by_opponent=active_locks_by_opponent,
         shield_participant_ids=shield_participant_ids,
         provokers=_provoking_participant_ids(opponents, active_participants),
+        untargetable_by_opponent=untargetable_participant_ids(opponents, active_participants),
         unmatured_windup_opponent_ids=_unmatured_windup_opponent_ids(encounter, opponents),
         tactics=build_tactics_inputs(encounter, opponents, all_active, entries_by_pool),
         holds=encounter_holds(encounter, acting_participants=active_participants),
@@ -387,6 +390,11 @@ def plan_opponent_round(
     leaves it as it was. Player characters ignore the flag because PCs choose their own
     targets; charmed, turned and summoned opponents ignore it because they do not target the
     PC side (``targeting_participants`` is false).
+
+    ``ctx.untargetable_by_opponent`` (#4811) drops concealed participants, and the source
+    of a spares_source condition the opponent carries with that source's wards, before
+    the lock and provoke narrowing. So a spare beats a provoke toward the same person (the
+    provoker is outside the pool), and a provoke from someone not spared still narrows.
     """
     from world.combat.morale import (  # noqa: PLC0415
         OpponentMoraleState,
@@ -491,14 +499,16 @@ def plan_opponent_round(
 
 
 def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[list, bool] | None:
-    """The opponent's hostiles this round, narrowed by a lock, a provoke or a companion
-    order; None when a companion HOLD order keeps it out of the round."""
+    """The opponent's hostiles this round, less the concealed and spared (#4811), narrowed
+    by a lock, a provoke or a companion order; None when a companion HOLD order keeps it
+    out of the round."""
     target_pool, targeting_participants = _npc_action_target_pool(
         opponent,
         ctx.active_participants,
         ctx.encounter,
         allegiances=ctx.allegiances,
         active_opponents=ctx.all_active,
+        untargetable=ctx.untargetable_by_opponent.get(opponent.pk, set()),
     )
     # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
     if targeting_participants:
