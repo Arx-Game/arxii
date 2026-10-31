@@ -126,8 +126,41 @@ class MergeFacetsTests(TestCase):
         cls.other_loser = FacetFactory(name="Sickles")
 
     def test_every_live_relation_has_a_handler(self) -> None:
-        live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}
-        self.assertEqual(live, set(svc.HANDLED_RELATIONS))
+        self.assertEqual(svc.live_named_relations(), set(svc.HANDLED_RELATIONS))
+        self.assertEqual(svc.live_hidden_relations(), set(svc.HANDLED_HIDDEN_RELATIONS))
+
+    def test_hidden_relations_are_told_apart_by_model_and_field(self) -> None:
+        # Every related_name="+" FK reports the accessor "+", so the guard keys them by
+        # model and field; CeremonyOffering.facet is the one today (#4591).
+        self.assertIn(("arxii.ceremonyoffering", "facet"), svc.live_hidden_relations())
+        self.assertNotIn("+", svc.live_named_relations())
+
+    def test_historical_ceremony_offerings_follow_the_winning_facet(self) -> None:
+        from world.ceremonies.models import CeremonyOffering
+        from world.scenes.factories import PersonaFactory
+
+        offering = CeremonyOffering.objects.create(
+            being=WorshippedBeingFactory(),
+            offered_by=PersonaFactory(),
+            facet=self.loser,
+            item_name="Iron ring",
+        )
+
+        result = svc.merge_facets(self.winner, [self.loser])
+
+        offering.refresh_from_db()
+        self.assertEqual(offering.facet, self.winner)
+        self.assertEqual(result.moved, 1)
+
+    def test_a_hidden_relation_without_a_handler_stops_the_merge(self) -> None:
+        original = svc.HANDLED_HIDDEN_RELATIONS
+        svc.HANDLED_HIDDEN_RELATIONS = frozenset()
+        try:
+            with self.assertRaisesRegex(UnmergedFacetRelation, "arxii.ceremonyoffering"):
+                svc.merge_facets(self.winner, [self.loser])
+        finally:
+            svc.HANDLED_HIDDEN_RELATIONS = original
+        self.assertTrue(Facet.objects.filter(pk=self.loser.pk).exists())
 
     def test_a_relation_without_a_handler_stops_the_merge(self) -> None:
         original = svc.HANDLED_RELATIONS
@@ -207,6 +240,32 @@ class MergeAdminTests(TestCase):
         cls.staff = AccountFactory(is_staff=True, is_superuser=True)
         cls.winner = FacetFactory(name="Scythe")
         cls.loser = FacetFactory(name="Scythes")
+
+    def test_the_action_preserves_historical_offering_facet(self) -> None:
+        from world.ceremonies.models import CeremonyOffering
+        from world.scenes.factories import PersonaFactory
+
+        offering = CeremonyOffering.objects.create(
+            being=WorshippedBeingFactory(),
+            offered_by=PersonaFactory(),
+            facet=self.loser,
+            item_name="Iron ring",
+        )
+        self.client.force_login(self.staff)
+        url = reverse("admin:arxii_facet_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "merge_into",
+                "_selected_action": [self.winner.pk, self.loser.pk],
+                "apply": "1",
+                "winner": self.winner.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        offering.refresh_from_db()
+        self.assertEqual(offering.facet, self.winner)
 
     def test_the_action_shows_a_confirmation_then_merges(self) -> None:
         self.client.force_login(self.staff)
