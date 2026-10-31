@@ -3694,6 +3694,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
 **Pointed to by:**
+  - stat_scalings <- covenants.VowStatScaling
   - limits <- covenants.VowFocusPickLimit
   - character_choices <- covenants.CharacterVowFocusPick
   - situational_perks <- covenants.VowSituationalPerk
@@ -3738,6 +3739,7 @@
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 
 ### WeaknessPoolEntry
 **Foreign Keys:**

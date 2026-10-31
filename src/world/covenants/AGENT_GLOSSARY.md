@@ -109,7 +109,7 @@ _Avoid_: gear profile, armor profile, VowGearScaling (removed model).
 
 **Focus pick**:
 One option in a vow's catalog that a holder chooses at pick level 1, 2 or 3 (`VowFocusPick`,
-#4759). Its payload is the existing vow rows (added effects, situational perks, action scaling)
+#4759). Its payload is the existing vow rows (added effects, situational perks, vow stat scaling)
 that point at it through `focus_pick`; a row with no pick is the base vow and applies to every
 holder. A pick's price comes from its `value` and its limits (`VowFocusPickLimit`, priced by
 `world.covenants.focus_picks.pick_price`) and must fit the per-level budget

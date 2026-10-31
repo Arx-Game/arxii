@@ -59,7 +59,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   as of #2533 (`NaturalKeyMixin` NK `["covenant_role", "modifier_target"]`,
   `covenants.covenantrolebonus` in `CONTENT_MODELS`).
 - **`VowStatScaling`** (#2022) — authored config: one row per
-  `(CovenantRole, ModifierTarget)` with `bonus_per_level` scaling by the
+  `(CovenantRole, ModifierTarget, focus_pick)` (the pick is null for the base vow, #4783;
+  `vow_stat_scaling_unique_role_target`, NULLS NOT DISTINCT) with `bonus_per_level` scaling by the
   **COVENANT_ROLE thread level** (not character level, which `CovenantRoleBonus`
   already handles). `vow_stat_scaling_bonus(sheet, target)` returns
   `thread_level × bonus_per_level`; no row → 0. Rows on an engaged role's anchor role count too
@@ -67,8 +68,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   darkness" — a deepened vow is a substantially stronger character. When the vow
   dims (#2051), the scaling drops to 0. This is ADR-0149 Layer 3's stat-power pillar
   and stayed unaffected by the #2533 rework; as of #2533 it rides the lore-repo
-  content pipeline too (`NaturalKeyMixin` NK `["covenant_role", "modifier_target"]`,
-  `covenants.vowstatscaling` in `CONTENT_MODELS`) — a wiring-proof test shows
+  content pipeline too (`NaturalKeyMixin` NK `["covenant_role", "modifier_target",
+  "focus_pick"]`, `covenants.vowstatscaling` in `CONTENT_MODELS`) — a wiring-proof test shows
   thread-level scaling aggregating into `equipment_walk_total` end-to-end.
 - **`VowGearScaling`** — **REMOVED in #2533.** Formerly authored config keyed on
   the removed `CovenantRole.archetype` field (`(gear_archetype, role_archetype)`
@@ -1192,9 +1193,10 @@ style decide defense. Until then a `focus_pick` row still applies to every holde
   CASCADE, `related_name="focus_picks"`), `pick` (CASCADE), `chosen_at`; unique
   `(character_role, pick)`. `clean()` runs `validate_character_focus_pick`.
 - **`focus_pick`** (nullable FK, RESTRICT) on `VowAddedEffect`, `VowSituationalPerk` and
-  `CovenantRoleActionScaling`. Null is the base vow. Each `clean()` refuses a pick from
+  `VowStatScaling` (#4783 moved it here from the removed `CovenantRoleActionScaling`). Null is
+  the base vow. Each `clean()` refuses a pick from
   another role (`focus_pick_role_error`). `focus_pick` joined the `vow_added_effect_scope_unique`
-  and `covenant_role_action_scaling_unique` keys (NULLS NOT DISTINCT) and both natural keys,
+  and `vow_stat_scaling_unique_role_target` keys (NULLS NOT DISTINCT) and both natural keys,
   so a picked row may repeat a base row's scope. `CovenantRoleTechniqueSpecialty` gets no link:
   the specialty is the vow's base identity.
 - **`CombatStyle`** (NK `name`, `CreditedContent`, in `CONTENT_MODELS`) - `name`,

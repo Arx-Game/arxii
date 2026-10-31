@@ -7836,7 +7836,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `CharacterVowFocusPick` (`character_role` x `pick`, play state) and `CombatStyle`
     (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`).
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
-    `CovenantRoleActionScaling`. `SituationRequirementMixin.condition_property` (FK
+    `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,

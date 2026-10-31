@@ -276,9 +276,9 @@ class GearArchetypeCompatibilityAdmin(admin.ModelAdmin):
 class VowStatScalingAdmin(admin.ModelAdmin):
     """#3831 - authored vow-driven stat scaling per (covenant_role, modifier_target)."""
 
-    list_display = ("covenant_role", "modifier_target", "bonus_per_level")
+    list_display = ("covenant_role", "modifier_target", "focus_pick", "bonus_per_level")
     search_fields = ("covenant_role__name", "modifier_target__name")
-    autocomplete_fields = ("covenant_role", "modifier_target")
+    autocomplete_fields = ("covenant_role", "modifier_target", "focus_pick")
 
 
 @admin.register(CovenantRoleGiftGrant)

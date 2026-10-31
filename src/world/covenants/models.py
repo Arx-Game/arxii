@@ -1087,6 +1087,18 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
             "covenant_role_thread_level * bonus_per_level."
         ),
     )
+    focus_pick = models.ForeignKey(
+        VOW_FOCUS_PICK_MODEL,
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="stat_scalings",
+        help_text=(
+            "The focus pick this row belongs to. Blank means it is part of the base vow "
+            "and applies to every holder; set, only holders who chose the pick get it. "
+            "The pick must be on the same role."
+        ),
+    )
 
     objects = VowStatScalingManager()
 
@@ -1094,20 +1106,28 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
         ordering = ["covenant_role", "modifier_target"]
         constraints = [
             models.UniqueConstraint(
-                fields=["covenant_role", "modifier_target"],
+                fields=["covenant_role", "modifier_target", "focus_pick"],
                 name="vow_stat_scaling_unique_role_target",
+                nulls_distinct=False,
             ),
         ]
 
     class NaturalKeyConfig:
-        fields = ["covenant_role", "modifier_target"]
-        dependencies = [COVENANT_ROLE_MODEL, MODIFIER_TARGET_MODEL]
+        fields = ["covenant_role", "modifier_target", "focus_pick"]
+        dependencies = [COVENANT_ROLE_MODEL, MODIFIER_TARGET_MODEL, VOW_FOCUS_PICK_MODEL]
 
     def __str__(self) -> str:
         return (
             f"{self.covenant_role.name} / {self.modifier_target.name}: "
             f"+{self.bonus_per_level}/thread-level"
         )
+
+    def clean(self) -> None:
+        """Refuse a focus pick from another role (#4759)."""
+        super().clean()
+        pick_error = focus_pick_role_error(self.focus_pick_id, self.covenant_role_id)
+        if pick_error is not None:
+            raise ValidationError({"focus_pick": pick_error})
 
 
 def focus_pick_role_error(focus_pick_id: int | None, covenant_role_id: int | None) -> str | None:
@@ -1243,7 +1263,7 @@ class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     A focus pick is an option a vow holder chooses at pick level 1, 2 or 3. Its
     payload is the existing vow rows (``VowAddedEffect``, ``VowSituationalPerk``,
-    ``CovenantRoleActionScaling``) that point at it through their nullable
+    ``VowStatScaling``) that point at it through their nullable
     ``focus_pick``; a row with no pick is the base vow and applies to every
     holder. It is its own table because one pick can bundle several payload rows
     and a character's choice (``CharacterVowFocusPick``) needs one stable row to

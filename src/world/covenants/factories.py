@@ -50,6 +50,7 @@ from world.covenants.models import (
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    VowStatScaling,
     WeaknessPoolEntry,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
@@ -413,6 +414,18 @@ class CovenantRoleBonusFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     bonus_per_level = 1
+
+
+class VowStatScalingFactory(factory_django.DjangoModelFactory):
+    """Factory for VowStatScaling: a base row (no focus pick) unless one is passed."""
+
+    class Meta:
+        model = VowStatScaling
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
+    bonus_per_level = 1
+    focus_pick = None
 
 
 class CovenantRiteFactory(factory_django.DjangoModelFactory):
