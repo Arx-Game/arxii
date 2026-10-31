@@ -21,6 +21,11 @@ Expected values come from the spec, not from running the code:
 * The bonus counts once per damage profile, as the technique's other damage modifiers do: a
   Fire profile of 6 and a Cold profile of 4 against an abyssal opponent deal
   (6 + 5) + (4 + 5) = 20.
+* A technique scope and an opponent scope on one target both have to hold: "+5 damage against
+  abyssal, from Ember Fire" lifts an Ember Fire area hit of 6 to 11 on the abyssal archer, leaves
+  the non-abyssal bandit at 6, and leaves the same hit from another gift at 6 on the archer.
+* The bonus stacks with the defender's own Property damage modifier (Abyssal takes +2 from Fire):
+  without the attacker's modifier the archer loses 6 + 2 = 8, with it 6 + 2 + 5 = 13.
 * With no opponent-scoped target in the game, no opponent's facts are read.
 """
 
@@ -35,8 +40,13 @@ from integration_tests.test_technique_effect_damage_journeys import (
 )
 from world.combat.factories import CombatOpponentFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.magic.factories import GiftFactory
 from world.mechanics.effect_targets import opponent_facts
-from world.mechanics.factories import ObjectPropertyFactory, PropertyFactory
+from world.mechanics.factories import (
+    ObjectPropertyFactory,
+    PropertyDamageModifierFactory,
+    PropertyFactory,
+)
 
 
 class OpponentScopedDamage(_DamageField):
@@ -115,6 +125,47 @@ class OpponentScopedDamage(_DamageField):
         twin = self.technique(self.ember, (6, self.fire), (4, self.cold))
 
         self.assertEqual(self.strike(twin), (6 + 5) + (4 + 5))
+
+    def test_a_combined_technique_and_opponent_scope(self) -> None:
+        grant_damage_modifier(
+            self.sheet,
+            "Ember fire vs abyssal",
+            5,
+            scope_gift=self.ember,
+            scope_damage_type=self.fire,
+            scope_opponent_property=self.abyssal,
+        )
+        ObjectPropertyFactory(object=self.archer.objectdb, property=self.abyssal)
+        frost_sweep = self.technique(
+            GiftFactory(name="Frost"), (6, self.fire), target_type=ActionTargetType.AREA
+        )
+
+        # An Ember Fire area hit of 6: the abyssal archer takes 6 + 5, the bandit 6.
+        self.strike(self.sweep)
+        self.assertEqual(self.lost_health(self.archer), 6 + 5)
+        self.assertEqual(self.lost_health(self.bandit), 6)
+
+        # The same hit from another gift fails the technique half of the scope: 6 on both.
+        self.strike(frost_sweep)
+        self.assertEqual(self.lost_health(self.archer), (6 + 5) + 6)
+        self.assertEqual(self.lost_health(self.bandit), 6 + 6)
+
+    def test_opponent_scope_stacks_with_a_defender_property_damage_modifier(self) -> None:
+        ObjectPropertyFactory(object=self.archer.objectdb, property=self.abyssal)
+        PropertyDamageModifierFactory(
+            property=self.abyssal, damage_type=self.fire, modifier_value=2
+        )
+
+        # No attacker modifier yet: the archer loses 6 + 2 (its property takes more Fire).
+        self.strike(self.sweep)
+        self.assertEqual(self.lost_health(self.archer), 6 + 2)
+        self.assertEqual(self.lost_health(self.bandit), 6)
+
+        # "+5 damage against abyssal" on top: 6 + 2 + 5 on the archer, 6 on the bandit.
+        grant_damage_modifier(self.sheet, "Vs abyssal", 5, scope_opponent_property=self.abyssal)
+        self.strike(self.sweep)
+        self.assertEqual(self.lost_health(self.archer), (6 + 2) + (6 + 2 + 5))
+        self.assertEqual(self.lost_health(self.bandit), 6 + 6)
 
     def test_no_opponent_scope_reads_no_opponent_facts(self) -> None:
         grant_damage_modifier(self.sheet, "Any damage", 2)
