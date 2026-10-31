@@ -23,6 +23,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
+from world.combat.services.techniques.technique_resolver import TechniqueDamageBonus
 from world.combat.types import SpectacleShift
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
@@ -34,7 +35,11 @@ from world.magic.factories import (
     TechniqueMoraleEffectFactory,
 )
 from world.magic.types.power_ledger import PowerLedger
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
+from world.mechanics.effect_targets import technique_effect_total
 from world.mechanics.factories import (
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
     ObjectPropertyFactory,
     PropertyDamageModifierFactory,
     PropertyFactory,
@@ -1251,7 +1256,13 @@ class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
         )
 
         scaled, resolved_type = resolver._profile_damage(
-            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+            profile,
+            None,
+            opponent,
+            sl=1,
+            multiplier=Decimal(1),
+            eff_intensity=0,
+            technique_bonus=TechniqueDamageBonus.none(),
         )
 
         self.assertEqual(scaled, 15)  # base_damage(5) + property bonus(10)
@@ -1271,7 +1282,37 @@ class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
         )
 
         scaled, _resolved_type = resolver._profile_damage(
-            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+            profile,
+            None,
+            opponent,
+            sl=1,
+            multiplier=Decimal(1),
+            eff_intensity=0,
+            technique_bonus=TechniqueDamageBonus.none(),
         )
 
         self.assertEqual(scaled, 5)
+
+
+class TechniqueDamageBonusTests(TestCase):
+    """The technique damage bonus is worked out once per damage type per cast (#4822)."""
+
+    def test_for_type_computes_once_per_damage_type(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        ModifierTargetFactory(
+            category=category, name="Any damage", scope_effect_kind=EffectKind.DAMAGE
+        )
+        bonus = TechniqueDamageBonus.for_cast(
+            resolver.participant.character_sheet, resolver.action.focused_action
+        )
+
+        with patch(
+            "world.combat.services.techniques.technique_resolver.technique_effect_total",
+            wraps=technique_effect_total,
+        ) as total:
+            bonus.for_type(1)
+            bonus.for_type(1)
+            bonus.for_type(2)
+
+        self.assertEqual(total.call_count, 2)

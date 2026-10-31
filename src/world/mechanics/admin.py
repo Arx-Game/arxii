@@ -65,11 +65,22 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "target_being",
         "scope_maneuver_effect",
         "scope_effect_kind",
+        "scope_technique",
+        "scope_gift",
+        "scope_technique_function",
+        "scope_damage_type",
+        "scope_resonance",
         "display_order",
         "is_active",
     ]
     list_filter = ["category", "is_active"]
-    autocomplete_fields = ["target_trait"]
+    autocomplete_fields = [
+        "target_trait",
+        "scope_technique",
+        "scope_gift",
+        "scope_damage_type",
+        "scope_resonance",
+    ]
     # target_being__name (#4333): a being's favor targets are found by the being's
     # name in every picker that autocompletes against this admin.
     search_fields = ["name", "description", "target_being__name"]
@@ -80,6 +91,11 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "target_being",
         "target_trait",
         "scope_maneuver_effect",
+        "scope_technique",
+        "scope_technique__gift",
+        "scope_gift",
+        "scope_damage_type",
+        "scope_resonance",
     ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):

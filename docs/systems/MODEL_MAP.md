@@ -3263,6 +3263,7 @@
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - weather_shelters <- weather.WeatherTypeShelter
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
@@ -6017,6 +6018,7 @@
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
   - character_grants <- magic.CharacterGift
@@ -6248,6 +6250,7 @@
   - damage_type <- conditions.DamageType
   - corruption_condition_templates <- conditions.ConditionTemplate
   - modifier_target <- mechanics.ModifierTarget
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
   - alteration_templates <- magic.MagicalAlterationTemplate
@@ -6553,6 +6556,7 @@
   - action_enhancements <- actions.ActionEnhancement
   - consequence_effects <- checks.ConsequenceEffect
   - conditions_caused <- conditions.ConditionInstance
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
   - ultimate_for_gifts <- magic.Gift
@@ -7076,6 +7080,10 @@
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
   - target_being -> worship.WorshippedBeing [FK] (nullable)
   - scope_maneuver_effect -> mechanics.ManeuverEffect [FK] (nullable)
+  - scope_technique -> magic.Technique [FK] (nullable)
+  - scope_gift -> magic.Gift [FK] (nullable)
+  - scope_damage_type -> conditions.DamageType [FK] (nullable)
+  - scope_resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect

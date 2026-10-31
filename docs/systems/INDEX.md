@@ -6988,6 +6988,18 @@ Unified modifier system — categories, types, sources, and per-character modifi
   `CHARGE_MAX_HOPS`, `FLEE_COVER_BONUS`, `FleeConfig.cover_bonus`, the combat
   `RALLY_MORALE_PER_LEVEL`, the interpose divisor, the succor partial tier and
   `CovenantRoleActionScaling`. See `mechanics.md` "Maneuver effects".
+- **Technique effect scopes (#4822, slice 2 of #4783):** `ModifierTarget` gained `scope_technique`,
+  `scope_gift`, `scope_technique_function`, `scope_damage_type` and `scope_resonance` (they
+  combine; unset means any; a technique scope needs a kind and no single maneuver effect;
+  `modifier_target_technique_scope_needs_kind`), and `EffectKind` gained `CONDITION_SEVERITY` and
+  `CONDITION_DURATION`. Readers in `world/mechanics/effect_targets.py`: `technique_effect_context`,
+  `technique_effect_targets`, `technique_effect_total`, `technique_condition_bonuses`, and
+  `effect_modifier_total(kind_wide=False)`; the frozen `TechniqueEffectContext` is in
+  `world/mechanics/types.py`. Wired to a flat damage term per profile in combat
+  (`TechniqueDamageBonus` in `technique_resolver.py`) and to the severity and duration of a
+  technique's own conditions in combat, scene casts and passive techniques
+  (`bonused_severity`, `bonused_duration` in `magic/services/condition_application.py`). Opponent
+  scopes are #4823; derived and sized amounts #4824. See `mechanics.md` "Technique effect scopes".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".

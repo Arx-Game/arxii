@@ -27,6 +27,8 @@ from world.magic.factories import (
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.condition_application import (
     apply_technique_conditions,
+    bonused_duration,
+    bonused_severity,
     remove_technique_conditions,
 )
 from world.mechanics.models import ModifierTarget
@@ -896,3 +898,23 @@ class VowSeamKwargTests(TestCase):
             removed_condition_rows=[],
         )
         self.assertEqual(results, [])
+
+
+class BonusedNumbersTests(TestCase):
+    """#4822: a bonus on a condition's severity or duration, and the floor of 1."""
+
+    def test_a_row_without_a_duration_keeps_none(self) -> None:
+        self.assertIsNone(bonused_duration(None, 1))
+        self.assertIsNone(bonused_duration(None, -5))
+
+    def test_a_negative_duration_bonus_floors_at_one(self) -> None:
+        self.assertEqual(bonused_duration(3, -10), 1)
+
+    def test_a_positive_duration_bonus_adds(self) -> None:
+        self.assertEqual(bonused_duration(3, 2), 5)
+
+    def test_a_negative_severity_bonus_floors_at_one(self) -> None:
+        self.assertEqual(bonused_severity(2, -10), 1)
+
+    def test_a_positive_severity_bonus_adds(self) -> None:
+        self.assertEqual(bonused_severity(2, 3), 5)

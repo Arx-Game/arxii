@@ -303,7 +303,7 @@ without migrations; the seeder never writes it, since a category is content,
 and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
 scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
 recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
-one of the two; no other category may set either. A target with neither set matches nothing.
+one of the two (a target with a technique scope names a kind instead, see "Technique effect scopes"); no other category may set either. A target with neither set matches nothing.
 Staff author targets after the catalog rows exist, then point a source at the target (an unsized
 distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
 crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
@@ -338,10 +338,86 @@ reach an effect target: it needs a resonance on the target, and an effect target
 **Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
 modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
 target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
-the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts, sized modifiers on effects, and scopes for a technique, a
-damage type, a resonance and the opponent are not built. "Damage, any maneuver" reaches only
-Charge today, so author damage targets as "Charge: damage". The battle Rally
+the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts and sized modifiers
+on effects (#4824) and scopes for the opponent (#4823) are not built. A maneuver reads only the
+targets that carry no technique scope, so a technique-scoped target never reaches a maneuver
+(see "Technique effect scopes"). A kind-wide "damage" target with no technique scope reaches the
+damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
+targets scoped to "Charge: damage". The battle Rally
 (`world/battles`, `RALLY_MORALE_PER_LEVEL`) is a different action and is untouched.
+
+## Technique effect scopes (#4822, ADR-4783-A)
+
+A modifier can name the technique it changes. Slice 2 of #4783 adds five scope columns to
+`ModifierTarget` and two effect kinds, so "+4 fire damage on Pyromancy techniques" or "+2 severity
+on the conditions of Ember Veil" is a target a distinction, crafted recipe modifier, condition,
+facet or mantle crossing-choice condition or vow stat scaling row points at, like any maneuver
+effect.
+
+**Scopes.** `scope_technique` (FK `Technique`), `scope_gift` (FK `Gift`), `scope_technique_function`
+(a `TechniqueFunction`), `scope_damage_type` (FK `DamageType`) and `scope_resonance` (FK
+`Resonance`). The FKs are `CASCADE`, since clearing one would widen the target. They are new
+columns, separate from `target_damage_type` and `target_resonance`, which are one-to-one identity
+links for their own categories. Targets stay in the "maneuver_effect" category, which already
+reaches every source. Rules, held by `ModifierTarget.clean()` and the
+`modifier_target_technique_scope_needs_kind` constraint:
+- A technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; a technique scope on
+  any other category is refused.
+- `scope_damage_type` is for the damage kind only.
+- A technique scope works only with damage, condition severity and condition duration; the admin
+  refuses any other kind.
+- Scopes combine: every scope a target sets must match. Gift + damage type + damage kind is "fire
+  damage of any Pyromancy technique". An unset scope means any.
+- A gift scope matches the technique's gift and that gift's parent, so a target scoped to an
+  umbrella gift reaches the techniques of its child gifts. A target scoped to a child gift does not
+  reach the parent's own techniques.
+
+**What a kind modifier reaches.** A kind-only damage modifier applies to every damage profile a
+cast deals, signature and vow-added profiles included, and a negative one lowers the whole hit
+(floored at 0). Severity and duration modifiers apply only to the technique's own condition rows,
+not signature or vow-added ones.
+
+**Kinds.** `EffectKind` gains `CONDITION_SEVERITY` and `CONDITION_DURATION` (rounds); `DAMAGE`
+already existed. Neither new kind has a catalog effect, so they are reached by a kind scope only.
+
+**The reader** (`world/mechanics/effect_targets.py`):
+- `technique_effect_context(sheet, technique, damage_type_id=None)` builds a frozen
+  `TechniqueEffectContext` (`world/mechanics/types.py`): the technique id, its gift and parent
+  gift ids, the function set from `cached_function_tags`, the resonance ids from
+  `gift_resonances_for`, and the resolved damage type id.
+- `technique_effect_targets(kind)`: one query for the active maneuver-effect targets of that kind
+  that name no one maneuver effect. Kind-wide and technique-scoped targets both come back.
+- `technique_effect_total(sheet, context, targets)`: the unclamped sum over the targets that fit
+  the context. No sheet gives 0.
+- `technique_condition_bonuses(sheet, technique)`: the `(severity, duration)` pair for a cast,
+  loaded once; with neither kind authored anywhere it builds no context.
+- `effect_modifier_total(sheet, key, kind_wide=False)` leaves out targets that name only the kind,
+  which Charge damage uses so a kind-wide damage target is not counted twice.
+
+Matching uses the technique as authored, not the caster's specialized variant.
+
+**Damage** (combat only; a scene cast has no technique damage step). `_profile_damage` in
+`world/combat/services/techniques/technique_resolver.py` adds one flat term per damage profile,
+matched on the profile's resolved damage type (untyped counts as Physical), with the other flat
+terms and inside the existing floor at 0, so a large negative modifier cannot heal. A technique
+with two profiles gains the bonus twice, and an area technique gains it on every opponent.
+`TechniqueDamageBonus` is built once per cast and works out the total once per distinct damage
+type. In a Charge a kind-only damage target is counted by this term; the Charge damage term counts
+only targets scoped to "Charge: damage". Charge to hit is unchanged.
+
+**Conditions.** `technique_condition_bonuses` feeds the `severity_bonus` and `duration_bonus` of
+`apply_technique_conditions` on the technique's own condition rows in a combat cast
+(`CombatTechniqueResolver`), a scene cast (`scenes.cast_services`) and a passive technique
+(`combat/services/damage/passive_techniques.py`). Signature-motif and vow-added rows keep their own
+sources. `bonused_severity` and `bonused_duration` (`world/magic/services/condition_application.py`)
+floor a negative bonus at 1; a condition with no duration stays without one; a team-lane row
+ignores both bonuses.
+
+**Not built.** Opponent scopes (#4823); derived and sized amounts (#4824), so technique-scoped
+modifiers are flat. The staff power evaluator values a technique alone, so per-character modifiers
+do not show there. Power-category targets that gate on `target_resonance` or `target_damage_type`
+raise power, which scales a profile; this term is a flat amount after scaling, and neither counts
+the other.
 
 ## API Endpoints
 

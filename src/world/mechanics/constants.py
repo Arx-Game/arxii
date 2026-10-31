@@ -203,7 +203,16 @@ class EffectKind(models.TextChoices):
     PARTIAL_PROTECTION = "partial_protection", "Partial protection"
     MORALE = "morale", "Morale"
     SURGE_INTENSITY = "surge_intensity", "Surge intensity"
+    CONDITION_SEVERITY = "condition_severity", "Condition severity"
+    CONDITION_DURATION = "condition_duration", "Condition duration"
 
+
+# The kinds a technique scope can narrow: the ones a technique's cast reads (#4822).
+TECHNIQUE_SCOPE_KINDS: tuple[str, ...] = (
+    EffectKind.DAMAGE,
+    EffectKind.CONDITION_SEVERITY,
+    EffectKind.CONDITION_DURATION,
+)
 
 MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.CHARGE_TO_HIT: EffectKind.TO_HIT,

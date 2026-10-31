@@ -27,6 +27,7 @@ from world.combat.services import (
 )
 from world.conditions.factories import DamageTypeFactory
 from world.conditions.models import ConditionInstance, ConditionResistanceModifier
+from world.distinctions.factories import DistinctionEffectFactory
 from world.magic.factories import (
     BuffPassiveTechniqueFactory,
     ComboOpeningPassiveTechniqueFactory,
@@ -38,6 +39,13 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    DistinctionModifierSourceFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
+)
 from world.scenes.constants import RoundStatus
 
 
@@ -69,6 +77,57 @@ class ApplyPassiveTechniqueSelfBuffTest(TestCase):
             success_level=self.applied.minimum_success_level,
         )
         self.assertEqual(instances.first().severity, expected_severity)
+
+
+class ApplyPassiveTechniqueDurationBonusTest(TestCase):
+    """#4822: the actor's condition duration modifier reaches a passive's rounds (and not its
+    severity). Read straight after ``_apply_passive_technique``, before any round ticks."""
+
+    def setUp(self):
+        self.encounter = CombatEncounterFactory()
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.tech = TechniqueFactory(action_category="physical", intensity=4)
+        self.applied = TechniqueAppliedConditionFactory(
+            technique=self.tech,
+            target_kind="self",
+            base_severity=2,
+            base_duration_rounds=3,
+            minimum_success_level=1,
+        )
+
+    def _instance(self):
+        return ConditionInstance.objects.get(
+            target=self.participant.character_sheet.character,
+            condition=self.applied.condition,
+            resolved_at__isnull=True,
+        )
+
+    def test_control_without_a_modifier(self):
+        _apply_passive_technique(self.tech, self.participant, self.encounter)
+
+        instance = self._instance()
+        self.assertEqual((instance.severity, instance.rounds_remaining), (2, 3))
+
+    def test_duration_modifier_adds_rounds_and_leaves_severity(self):
+        target = ModifierTargetFactory(
+            category=ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name="Longer",
+            scope_effect_kind=EffectKind.CONDITION_DURATION,
+            scope_technique=self.tech,
+        )
+        CharacterModifierFactory(
+            character=self.participant.character_sheet,
+            target=target,
+            value=1,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=DistinctionEffectFactory(target=target)
+            ),
+        )
+
+        _apply_passive_technique(self.tech, self.participant, self.encounter)
+
+        instance = self._instance()
+        self.assertEqual((instance.severity, instance.rounds_remaining), (2, 3 + 1))
 
 
 class ApplyPassiveTechniqueComboOpeningTest(TestCase):

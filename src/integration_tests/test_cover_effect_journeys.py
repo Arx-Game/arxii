@@ -29,11 +29,18 @@ from world.combat.services import resolve_round
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
 from world.covenants.models import VowStatScaling
+from world.distinctions.factories import DistinctionEffectFactory
+from world.magic.factories import GiftFactory
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
+    EffectKind,
     ManeuverEffectKey,
 )
-from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    DistinctionModifierSourceFactory,
+    ModifierTargetFactory,
+)
 from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
 from world.mechanics.models import ModifierCategory
 from world.scenes.constants import RoundStatus
@@ -160,6 +167,31 @@ class CoverReadsTheCatalog(JourneyCase):
             self.covers(contributions),
             {"Covered by Mara": COVER_ESCAPE + 2, "Covered by Perrin": COVER_ESCAPE},
         )
+
+    def test_a_technique_scoped_target_leaves_cover_alone(self) -> None:
+        # Mara holds a "+5 damage" modifier scoped to the Ember gift. It belongs to technique
+        # damage, not to Cover. Spec: her escape bonus is the baseline 10.
+        category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        target = ModifierTargetFactory(
+            category=category,
+            name="Ember damage",
+            scope_effect_kind=EffectKind.DAMAGE,
+            scope_gift=GiftFactory(name="Ember"),
+        )
+        CharacterModifierFactory(
+            character=self.mara.sheet_data,
+            target=target,
+            value=5,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=DistinctionEffectFactory(target=target)
+            ),
+        )
+        self.cover(self.mara, self.hobb)
+
+        contributions = self.flee_and_resolve()
+
+        # Baseline (one coverer, no modifier): Covered by Mara adds 10.
+        self.assertEqual(self.covers(contributions), {"Covered by Mara": COVER_ESCAPE})
 
     def test_edited_base_value_is_used_per_coverer(self) -> None:
         row = get_maneuver_effect(ManeuverEffectKey.COVER_ESCAPE_BONUS)

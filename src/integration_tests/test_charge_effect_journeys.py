@@ -48,6 +48,7 @@ from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
 from world.covenants.models import VowStatScaling
+from world.distinctions.factories import DistinctionEffectFactory
 from world.items.constants import GearArchetype
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -59,9 +60,14 @@ from world.magic.factories import (
 )
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
+    EffectKind,
     ManeuverEffectKey,
 )
-from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    DistinctionModifierSourceFactory,
+    ModifierTargetFactory,
+)
 from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
 from world.mechanics.models import ModifierCategory
 from world.scenes.constants import RoundStatus
@@ -194,6 +200,32 @@ class ChargeReadsTheCatalog(_ChargeField):
     def test_unmodified_charge_matches_today(self) -> None:
         to_hit, damage = self.charge_and_resolve()
 
+        self.assertEqual(to_hit, TO_HIT)
+        self.assertEqual(damage, DAMAGE)
+
+    def test_a_technique_scoped_damage_target_leaves_the_charge_alone(self) -> None:
+        # A "+5 damage" modifier scoped to the Ember gift is a technique-damage modifier; the
+        # charge technique's gift is not Ember, and a maneuver reader never matches a
+        # technique-scoped target anyway. Spec: the charge stays at the baseline.
+        category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        target = ModifierTargetFactory(
+            category=category,
+            name="Ember damage",
+            scope_effect_kind=EffectKind.DAMAGE,
+            scope_gift=GiftFactory(name="Ember"),
+        )
+        CharacterModifierFactory(
+            character=self.sheet,
+            target=target,
+            value=5,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=DistinctionEffectFactory(target=target)
+            ),
+        )
+
+        to_hit, damage = self.charge_and_resolve()
+
+        # Baseline numbers: +10 to hit, 5 damage (the bandit loses 5).
         self.assertEqual(to_hit, TO_HIT)
         self.assertEqual(damage, DAMAGE)
 

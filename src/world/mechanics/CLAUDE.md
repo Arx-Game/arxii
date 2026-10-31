@@ -23,6 +23,7 @@ Dataclasses for service layer results and intermediate calculations.
 ### `services.py`
 Service functions for modifier operations:
 - **`effect_value(sheet, key)` / `effect_modifier_total(sheet, key)`** (`effect_targets.py`, #4783): a character's number for a maneuver effect. `effect_modifier_total` is the unclamped sum of every modifier on a target in the "maneuver_effect" category scoped to that effect or its kind; `effect_value` adds the catalog base, floors at 0 and caps partial protection at 100.
+- **Technique effect readers** (`effect_targets.py`, #4822): `technique_effect_context(sheet, technique, damage_type_id=None)` builds a frozen `TechniqueEffectContext` (`types.py`); `technique_effect_targets(kind)` loads the active kind targets that name no one maneuver effect; `technique_effect_total(sheet, context, targets)` sums those whose technique scopes all match; `technique_condition_bonuses(sheet, technique)` returns the `(severity, duration)` pair for a cast. `effect_modifier_total(sheet, key, kind_wide=False)` drops kind-only targets (Charge damage uses it, since the technique's own damage term counts them). A maneuver reader never matches a technique-scoped target.
 - **`get_modifier_total(sheet, modifier_target)`**: Get total for a specific ModifierTarget.
 - **`get_modifier_breakdown(sheet, modifier_target)`**: Get detailed breakdown with amplification/immunity.
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
@@ -60,7 +61,12 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | target_aspect | OneToOne(Aspect, null) | The Aspect this target represents (#4827); the check seam's ASPECT block reads it |
 | target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
 | scope_maneuver_effect | FK(ManeuverEffect, null, CASCADE) | A "maneuver_effect" target scoped to one effect (#4783) |
-| scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing |
+| scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing. A target with a technique scope sets the kind and no effect |
+| scope_technique | FK(Technique, null, CASCADE) | Technique scope (#4822): this technique only |
+| scope_gift | FK(Gift, null, CASCADE) | Technique scope: every technique of this gift or of its child gifts |
+| scope_technique_function | CharField(blank, `TechniqueFunction`) | Technique scope: every technique carrying this function |
+| scope_damage_type | FK(DamageType, null, CASCADE) | Technique scope: damage of this type (damage kind only; untyped damage is Physical) |
+| scope_resonance | FK(Resonance, null, CASCADE) | Technique scope: techniques whose gift manifests as this resonance for the caster. Technique scopes combine, need a kind and no `scope_maneuver_effect` (`modifier_target_technique_scope_needs_kind`) |
 
 ### CharacterModifier
 Per-character modifier values with source tracking. Sources are responsible for creating/deleting their modifier records.

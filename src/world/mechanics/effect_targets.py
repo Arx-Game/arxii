@@ -15,9 +15,11 @@ from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
 from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.mechanics.models import ManeuverEffect, ModifierTarget
 from world.mechanics.services import get_modifier_total
+from world.mechanics.types import TechniqueEffectContext
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Technique
 
 PARTIAL_PROTECTION_CAP = 100
 
@@ -36,8 +38,13 @@ def effect_value(sheet: "CharacterSheet | None", key: str) -> int:
     return _clamp(effect.kind, effect.base_value + effect_modifier_total(sheet, key))
 
 
-def effect_modifier_total(sheet: "CharacterSheet | None", key: str) -> int:
+def effect_modifier_total(
+    sheet: "CharacterSheet | None", key: str, *, kind_wide: bool = True
+) -> int:
     """The unclamped sum of every modifier on maneuver effect ``key`` for ``sheet``.
+
+    With ``kind_wide=False`` only targets scoped to this effect itself count; a target
+    that names just the kind of effect (it already reaches techniques) is left out.
 
     The same targets ``effect_value`` counts, without the base value and without the floor
     or cap, so a caller that scales the base itself (a lance doubling a charge) can clamp
@@ -45,7 +52,7 @@ def effect_modifier_total(sheet: "CharacterSheet | None", key: str) -> int:
     """
     if sheet is None:
         return 0
-    return _modifier_total(sheet, _matching_targets(get_maneuver_effect(key)))
+    return _modifier_total(sheet, _matching_targets(get_maneuver_effect(key), kind_wide=kind_wide))
 
 
 def effect_values(sheets: Iterable["CharacterSheet"], key: str) -> dict[int, int]:
@@ -63,13 +70,116 @@ def effect_values(sheets: Iterable["CharacterSheet"], key: str) -> dict[int, int
     }
 
 
-def _matching_targets(effect: ManeuverEffect) -> list[ModifierTarget]:
-    """The active maneuver-effect targets scoped to ``effect`` or to its kind."""
+def _matching_targets(effect: ManeuverEffect, *, kind_wide: bool = True) -> list[ModifierTarget]:
+    """The active maneuver-effect targets scoped to ``effect`` or (``kind_wide``) its kind.
+
+    A target with any technique scope belongs to the technique reader and never matches
+    a maneuver, though it names a kind (#4822).
+    """
+    scope = Q(scope_maneuver_effect_id=effect.pk)
+    if kind_wide:
+        scope |= Q(scope_effect_kind=effect.kind)
     return list(
         ModifierTarget.objects.filter(
-            category__name=MANEUVER_EFFECT_CATEGORY_NAME, is_active=True
-        ).filter(Q(scope_maneuver_effect_id=effect.pk) | Q(scope_effect_kind=effect.kind))
+            category__name=MANEUVER_EFFECT_CATEGORY_NAME,
+            is_active=True,
+            scope_technique__isnull=True,
+            scope_gift__isnull=True,
+            scope_technique_function="",
+            scope_damage_type__isnull=True,
+            scope_resonance__isnull=True,
+        ).filter(scope)
     )
+
+
+def technique_effect_context(
+    sheet: "CharacterSheet",
+    technique: "Technique",
+    *,
+    damage_type_id: int | None = None,
+) -> TechniqueEffectContext:
+    """Describe ``technique`` as cast by ``sheet`` for the technique-scoped targets."""
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+    gift = technique.gift
+    gift_ids = {gift.pk}
+    if gift.parent_id is not None:
+        gift_ids.add(gift.parent_id)
+    return TechniqueEffectContext(
+        technique_id=technique.pk,
+        gift_ids=frozenset(gift_ids),
+        functions=frozenset(tag.function for tag in technique.cached_function_tags),
+        resonance_ids=frozenset(r.pk for r in gift_resonances_for(sheet.character, gift)),
+        damage_type_id=damage_type_id,
+    )
+
+
+def technique_effect_targets(kind: str) -> list[ModifierTarget]:
+    """Active maneuver-effect targets for ``kind`` that name no one maneuver effect.
+
+    Kind-only targets (no technique scope) and technique-scoped ones both come back;
+    ``technique_effect_total`` narrows them to a cast. One query.
+    """
+    return list(
+        ModifierTarget.objects.filter(
+            category__name=MANEUVER_EFFECT_CATEGORY_NAME,
+            is_active=True,
+            scope_effect_kind=kind,
+            scope_maneuver_effect__isnull=True,
+        )
+    )
+
+
+def technique_effect_total(
+    sheet: "CharacterSheet | None",
+    context: TechniqueEffectContext,
+    targets: list[ModifierTarget],
+) -> int:
+    """The unclamped sum of ``sheet``'s modifiers over the ``targets`` that fit ``context``.
+
+    A target fits when every technique scope it sets matches the cast. No sheet, no
+    modifiers: 0.
+    """
+    if sheet is None:
+        return 0
+    return _modifier_total(sheet, [t for t in targets if _fits(t, context)])
+
+
+def technique_condition_bonuses(
+    sheet: "CharacterSheet | None", technique: "Technique"
+) -> tuple[int, int]:
+    """The severity and duration ``sheet``'s modifiers add to ``technique``'s own conditions.
+
+    Worked out once per cast, not per row or target. Both target lists load first; with
+    neither in the game there is nothing to match, so no context is built. Unclamped: the
+    condition builder floors a negative bonus at 1. With no sheet: ``(0, 0)``.
+    """
+    if sheet is None:
+        return 0, 0
+    severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
+    duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
+    if not severity_targets and not duration_targets:
+        return 0, 0
+    context = technique_effect_context(sheet, technique)
+    return (
+        technique_effect_total(sheet, context, severity_targets),
+        technique_effect_total(sheet, context, duration_targets),
+    )
+
+
+def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
+    """Whether every technique scope ``target`` sets matches ``context``."""
+    checks = (
+        (target.scope_technique_id, context.technique_id == target.scope_technique_id),
+        (target.scope_gift_id, target.scope_gift_id in context.gift_ids),
+        (
+            target.scope_technique_function,
+            target.scope_technique_function in context.functions,
+        ),
+        (target.scope_damage_type_id, context.damage_type_id == target.scope_damage_type_id),
+        (target.scope_resonance_id, target.scope_resonance_id in context.resonance_ids),
+    )
+    return all(matches for scope, matches in checks if scope)
 
 
 def _modifier_total(sheet: "CharacterSheet", targets: list[ModifierTarget]) -> int:

@@ -4046,6 +4046,11 @@ apply path.
   severity; the duration bonus is added to a row's duration when it has one. A team-lane row
   ignores both (its severity is priced against the landing target and the lane is bounded).
   It already took `applied_condition_rows=` (#1582), which a vow row's children use.
+  Since #4822 the caster's condition severity and duration modifiers (technique-scoped
+  `ModifierTarget`s, `technique_condition_bonuses` in `world/mechanics/effect_targets.py`) feed the
+  same two arguments on the technique's own rows in combat, scene casts and passive techniques;
+  `bonused_severity` / `bonused_duration` floor a negative bonus at 1 and leave a row with no
+  duration without one. See `mechanics.md` "Technique effect scopes".
 - **`remove_technique_conditions`** gained `removed_condition_rows: Iterable | None = None`;
   `None` reads `technique.removed_conditions` as before. Rows are anything exposing
   `condition`, `target_kind`, `minimum_success_level`, `remove_all_stacks` and
