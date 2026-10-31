@@ -373,6 +373,18 @@ protection, morale, surge intensity), lets any modifier source change it. _Avoid
 action scaling.
 Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
 
+**Technique scope** (#4822):
+A narrowing on a "maneuver_effect" `ModifierTarget` to one technique, gift, technique function,
+damage type or resonance (they combine; unset means any). It lets a modifier change a technique's
+damage, or the severity or duration of the conditions it applies. _Avoid_: technique filter.
+Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
+
+**Technique effect context** (#4822):
+What one cast is, as a technique-scoped target sees it: the technique, its gift and parent gift,
+its functions, the caster's resonances for the gift and the resolved damage type. _Avoid_:
+technique snapshot.
+Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
+
 **Vow-scaled maneuver effect** (#4783):
 A `VowStatScaling` row on a "maneuver_effect" target (such as "Rally: surge intensity"): the
 holder's shown thread level x `bonus_per_level` is added to that maneuver effect. Replaced

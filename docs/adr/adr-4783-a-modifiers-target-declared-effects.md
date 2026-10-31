@@ -73,6 +73,17 @@ scope, on every read of every modifier. The two new columns are separate foreign
 columns, not the identity links that `target_resonance` and `target_damage_type` are, so a later
 slice can add "technique", "damage type" and "opponent property" scopes the same way.
 
+## Amendment, 2026-10-31 (#4822, slice 2 of #4783)
+
+Technique scopes landed as the "later slice" decision 11 expected: five more nullable columns on
+`ModifierTarget` (`scope_technique`, `scope_gift`, `scope_technique_function`, `scope_damage_type`,
+`scope_resonance`), not link tables, and two new effect kinds (condition severity, condition
+duration). They combine, an unset scope means any, and a technique scope needs a kind and no single
+maneuver effect, so the decision 8 unit rule holds. A kind-only damage target is counted once in a
+Charge: the technique's own damage term reads it, and the Charge damage effect reads only targets
+scoped to "Charge: damage". Opponent scopes remain #4823; decisions 9 and 10 (flat amounts only,
+derived amounts later, #4824) are unchanged.
+
 ## Rejected
 
 - **Link tables on the specific side (ADR-0010's preference).** One table per scope, each pointing

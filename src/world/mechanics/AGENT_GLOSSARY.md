@@ -17,8 +17,16 @@ One named part of a combat maneuver with one number, held as a row of the fixed 
 _Avoid_: maneuver stat, maneuver tuning, action scaling (the removed vow-only table)
 
 **Effect kind** (#4783):
-What sort of number a maneuver effect is (`EffectKind`: to hit, damage, reach, escape bonus, partial protection, morale, surge intensity). A broad target names a kind, such as "partial protection, any maneuver". Each kind fixes the unit of every modifier that targets it, so a modifier on a kind adds the same sort of number wherever it applies. Derived from the key by the `MANEUVER_EFFECT_KIND` map, not stored on the row. A modifier on a maneuver effect is a flat amount; a vow adds its shown thread level times its `bonus_per_level`.
+What sort of number a maneuver effect is (`EffectKind`: to hit, damage, reach, escape bonus, partial protection, morale, surge intensity; and, for technique scopes (#4822), condition severity and condition duration in rounds). A broad target names a kind, such as "partial protection, any maneuver". Each kind fixes the unit of every modifier that targets it, so a modifier on a kind adds the same sort of number wherever it applies. Derived from the key by the `MANEUVER_EFFECT_KIND` map, not stored on the row. A modifier on a maneuver effect is a flat amount; a vow adds its shown thread level times its `bonus_per_level`.
 _Avoid_: effect type, effect category (a `ModifierCategory` is the registry grouping, and "maneuver_effect" is one of them)
+
+**Technique scope** (#4822):
+A narrowing on a "maneuver_effect" `ModifierTarget` that names the technique it changes: `scope_technique`, `scope_gift`, `scope_technique_function`, `scope_damage_type` or `scope_resonance`. Scopes combine (every one set must match), an unset scope means any, and a technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; the damage type scope is for the damage kind only. A gift scope matches the technique's gift and that gift's parent, so an umbrella gift reaches its child gifts' techniques. The kinds a technique scope narrows are damage, condition severity and condition duration (rounds), all flat. A technique-scoped target never reaches a maneuver. Matching uses the technique as authored, not the caster's specialized variant.
+_Avoid_: technique filter, technique modifier (the modifier is the source's; the scope is the target's), effect scope (a maneuver scope is `scope_maneuver_effect`)
+
+**Technique effect context** (#4822):
+The frozen `TechniqueEffectContext` that `technique_effect_context(sheet, technique, damage_type_id=None)` builds for one cast: the technique id, its gift and parent gift ids, its function set, the resonance ids its gift manifests as for the caster and the resolved damage type id. `technique_effect_total(sheet, context, targets)` sums the modifiers of the targets whose technique scopes all match it. Built once per cast, and the damage type slot is filled per damage profile.
+_Avoid_: technique snapshot
 
 **ModifierSource**:
 The provenance record for a character's modifier — where it came from (e.g. a distinction effect template plus the character-distinction instance). It answers WHICH target a modifier grants and its base value, and drives cascade cleanup when the source is removed.

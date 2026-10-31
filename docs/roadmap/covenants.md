@@ -959,8 +959,10 @@ the vow-only action scaling table is gone. What was built:
   role, so a holder graduated to a sub-role keeps their scaling; this also changes existing
   stat rows for sub-role holders, as intended. The thread level always comes from the anchor.
 - **Not built**: sized (leveled) modifiers on effects and derived amounts (a source choosing
-  what its number scales from), and the technique and opponent scopes. See
-  `docs/systems/mechanics.md` "Maneuver effects".
+  what its number scales from, #4824), and the opponent scopes (#4823). The technique scopes
+  (technique, gift, function, damage type, resonance; damage, condition severity and condition
+  duration) shipped in #4822. See `docs/systems/mechanics.md` "Maneuver effects" and "Technique
+  effect scopes".
 - **Focus picks**: `VowStatScaling` gained the nullable `focus_pick` #4805 gave action scaling,
   so a focus pick can still carry maneuver (and stat) scaling rows. As with the other payload
   tables, no reader filters by the chosen pick yet.
