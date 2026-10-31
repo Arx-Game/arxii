@@ -49,6 +49,11 @@ Core survivability pipeline:
   single damage event: knockout check → death check → permanent wound check. Each tier rolls the
   corresponding pool (knockout/death/wound) via `resolve_vitals_consequence`.
 - `apply_damage_to_participant(...)`, `apply_exhaustion_damage(...)` — caller entry points.
+- `mend_wound(healer, target, wound, amount, cap_fraction=None)` — the double-bounded mend
+  (ADR-0156). A wound that lands while its bearer is an ACTIVE participant of an unfinished
+  fight is stamped with `WoundDetails.created_encounter`/`created_round` (#4810); a mend in
+  that same fight loses `WOUND_CAP_SHRINK_PER_ROUND` of its fraction per round since. Another
+  fight, or a null round, never shrinks.
 - `advance_bleed_out(sheet) -> bool` — called once per round for each participant carrying
   Bleeding Out. Non-terminal stages: resist-check; failure advances stage. Terminal stage: delegates
   to `_resolve_terminal_bleed_out` (guarded pool, not unconditional death). Returns True iff the
