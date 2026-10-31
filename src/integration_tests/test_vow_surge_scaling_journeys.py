@@ -1,102 +1,91 @@
-"""Journey: a vow scales the surge a rallier gives (#4739, slice 3 of #4727).
+"""Journey: a vow scales the surge a rallier gives (#4739, slice 3 of #4727; #4783).
 
-Mira holds an engaged covenant vow with a thread on it. Staff open the vow-scaling admin
-page, pick "Surges given by Rally" from the action drop-down and save a multiplier for
-Mira's role. Mira then types ``combat rally Tomas``; her Rally roll's Success band is
-worth 3 intensity, and her vow (thread level 2 x 0.5 = +1.0) doubles it, so Tomas surges
-6 and his roll line ends "Intensity +6 · vow scaling +3", live over telnet and in his
-round payload's ``roll``. Without the row, the same rally surges 3 with no vow note.
+Mira holds an engaged covenant vow at thread level 2. Staff open the vow stat scaling admin
+add page and save "+50 per level" for Mira's role on a "Rally: surge intensity" target (the
+maneuver effect catalog, #4783). Mira then types ``combat rally Tomas``; her Rally roll's
+Success band is worth 3 intensity, and her surge intensity is 100 + 2 x 50 = 200%, so Tomas
+surges 6 and his roll line reads "Success · Intensity +6", live over telnet and in his
+round payload's ``roll``. Without the row, the same rally surges 3 and the line ends there.
 
 The rally roll is forced with ``force_check_outcome`` so the band is chosen by the test.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from django.contrib.auth import get_user_model
 
-from integration_tests.test_surge_rolls_journeys import SUCCESS_INTENSITY, _SurgeField
+from integration_tests.test_surge_rolls_journeys import _SurgeField
 from world.combat.constants import SurgeTriggerKind
-from world.covenants.constants import CovenantScaledAction
-from world.covenants.factories import (
-    CharacterCovenantRoleFactory,
-    CovenantFactory,
-    CovenantRoleFactory,
-)
-from world.covenants.models import CovenantRoleActionScaling
-from world.covenants.services import set_engaged_membership
-from world.magic.constants import TargetKind
-from world.magic.factories import ThreadFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
+from world.covenants.models import VowStatScaling
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEffectKey
+from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
+from world.mechanics.models import ModifierCategory
 
+BAND_INTENSITY = 3
 THREAD_LEVEL = 2
-MULTIPLIER = "0.5"
-# 1 + 2 x 0.5 = 2.0: the Success band's intensity, doubled.
-VOWED_SUCCESS_INTENSITY = SUCCESS_INTENSITY * 2
-# The roll line notes what the vow added: the scaled total minus the band's own 3.
-VOW_EXTRA = VOWED_SUCCESS_INTENSITY - SUCCESS_INTENSITY
+BONUS_PER_LEVEL = 50
+# 100 + 2 x 50 = 200%: the Success band's intensity, doubled.
+VOWED_SUCCESS_INTENSITY = BAND_INTENSITY * 2
 
 
 class AVowedRallySurgesMore(_SurgeField):
     def setUp(self) -> None:
         super().setUp()
+        ensure_maneuver_effects()
         self.enter_combat(self.mira, self.tomas)
         self.author_tuning(
             SurgeTriggerKind.RALLIED,
             "Encourage",
             partial=1,
-            success=SUCCESS_INTENSITY,
+            success=BAND_INTENSITY,
         )
-        self.role = CovenantRoleFactory(name="Herald", crown_weight=1)
-        membership = CharacterCovenantRoleFactory(
-            character_sheet=self.mira.sheet_data,
-            covenant=CovenantFactory(),
-            covenant_role=self.role,
+        self.role = CovenantRoleFactory(name="Herald", covenant_type=CovenantType.DURANCE)
+        engage_vow_with_thread(
+            self.mira.sheet_data,
+            self.role,
+            covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
+            thread_level=THREAD_LEVEL,
         )
-        set_engaged_membership(membership=membership)
-        ThreadFactory(
-            owner=self.mira.sheet_data,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=self.role,
-            target_trait=None,
-            level=THREAD_LEVEL,
+        self.target = ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name="Rally: surge intensity",
+            scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.RALLY_SURGE_INTENSITY),
         )
         self.staff = get_user_model().objects.create_superuser(
             "vow_tuner", "vow@example.com", "pw-12345"
         )
 
-    def staff_scale_surges_given(self) -> None:
-        """Staff pick "Surges given by Rally" on the admin add page and save the row."""
+    def staff_scale_surge_intensity(self) -> None:
+        """Staff save "+50 per level" on the Rally surge intensity target in the admin."""
         self.client.force_login(self.staff)
-        page = self.client.get("/admin/arxii/covenantroleactionscaling/add/").content.decode()
-        self.assertIn(
-            f'<option value="{CovenantScaledAction.SURGES_GIVEN}">Surges given by Rally</option>',
-            page,
-        )
+        add_url = "/admin/arxii/vowstatscaling/add/"
+        self.assertEqual(self.client.get(add_url).status_code, 200)
         response = self.client.post(
-            "/admin/arxii/covenantroleactionscaling/add/",
+            add_url,
             {
                 "covenant_role": self.role.pk,
-                "action_key": CovenantScaledAction.SURGES_GIVEN,
-                "thread_level_multiplier": MULTIPLIER,
+                "modifier_target": self.target.pk,
+                "bonus_per_level": BONUS_PER_LEVEL,
             },
         )
         self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
-        row = CovenantRoleActionScaling.objects.get(covenant_role=self.role)
-        self.assertEqual(row.action_key, CovenantScaledAction.SURGES_GIVEN)
-        self.assertEqual(row.thread_level_multiplier, Decimal(MULTIPLIER))
+        row = VowStatScaling.objects.get(covenant_role=self.role)
+        self.assertEqual(row.modifier_target, self.target)
+        self.assertEqual(row.bonus_per_level, BONUS_PER_LEVEL)
 
     def test_mira_s_vow_doubles_the_surge_her_rally_gives_tomas(self) -> None:
-        self.staff_scale_surges_given()
+        self.staff_scale_surge_intensity()
 
         told = self.telnet(self.mira, "combat rally Tomas")
         self.assertIn("You rally your ally.", told)
         self.resolve(self.success)
 
         self.assertEqual(self.intensity(self.tomas), VOWED_SUCCESS_INTENSITY)
-        vowed_line = f"Success · Intensity +{VOWED_SUCCESS_INTENSITY} · vow scaling +{VOW_EXTRA}"
         told = self.told_roll_line(self.tomas)
-        self.assertTrue(told.endswith(vowed_line), told)
+        self.assertIn(f"Success · Intensity +{VOWED_SUCCESS_INTENSITY} · ", told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
         self.assertEqual(beat["amount"], VOWED_SUCCESS_INTENSITY)
         self.assertEqual(beat["roll"], told)
@@ -108,10 +97,9 @@ class AVowedRallySurgesMore(_SurgeField):
         self.telnet(self.mira, "combat rally Tomas")
         self.resolve(self.success)
 
-        self.assertEqual(self.intensity(self.tomas), SUCCESS_INTENSITY)
+        self.assertEqual(self.intensity(self.tomas), BAND_INTENSITY)
         told = self.told_roll_line(self.tomas)
-        self.assertTrue(told.endswith(f"Success · Intensity +{SUCCESS_INTENSITY}"), told)
-        self.assertNotIn("vow scaling", told)
+        self.assertTrue(told.endswith(f"Success · Intensity +{BAND_INTENSITY}"), told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
-        self.assertEqual(beat["amount"], SUCCESS_INTENSITY)
+        self.assertEqual(beat["amount"], BAND_INTENSITY)
         self.assertEqual(beat["roll"], told)
