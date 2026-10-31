@@ -27,9 +27,12 @@ from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.combat.constants import ActionCategory, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
+    CombatOpponentActionFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ThreatPoolEntryFactory,
 )
+from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_round
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
@@ -209,3 +212,27 @@ class AreaCastNarration(JourneyCase):
         self.encounter = solo_encounter
         only = self.opponent("Lone Hound", soak=0)
         self.assertEqual(self.opponent_name_queries(area, only), 0)
+
+    def test_an_npc_attack_keeps_the_one_figure_line(self) -> None:
+        # The Hound mauls Hobb for a flat 7 (no soak on Hobb); an opponent's attack on a
+        # participant is never split, so the room reads the single-figure line:
+        #   "Hound’s Maul strikes Hobb for 7 damage."
+        entry = ThreatPoolEntryFactory(name="Maul", base_damage=7)
+        action = CombatOpponentActionFactory(
+            opponent=self.hound, round_number=1, threat_entry=entry
+        )
+        participant = self.encounter.participants.get()
+        action.targets.add(participant)
+        CombatRoundAction.objects.create(
+            participant=participant, round_number=1, focused_action=None, focused_category=None
+        )
+
+        with every_check_succeeds():
+            resolve_round(self.encounter)
+
+        line = (
+            Interaction.objects.filter(mode=InteractionMode.OUTCOME, content__contains="Maul")
+            .get()
+            .content
+        )
+        self.assertEqual(line, "Hound’s Maul strikes Hobb for 7 damage.")
