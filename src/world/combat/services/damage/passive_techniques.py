@@ -26,7 +26,7 @@ def _passive_row_targets(
     row: TechniqueAppliedCondition,
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's character
     active_opponents: list[CombatOpponent],
-    allegiances: dict[int, str],
+    allegiances: dict[int, Allegiance],
     active_allies: list[CombatParticipant],
 ) -> list[ObjectDB]:
     """The objects a passive's condition row lands on: the actor, the opponents not fighting
