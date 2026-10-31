@@ -211,6 +211,42 @@ class TechniqueConditionModifiersInCombat(JourneyCase):
 
         self.assertIsNone(instance.rounds_remaining)
 
+    def test_duration_after_the_round_tick_without_a_modifier(self) -> None:
+        technique = self.technique(self.condition, ConditionTargetKind.ENEMY)
+
+        instance = self.strike(technique)
+
+        # Spec: the condition is applied for 4 rounds and the round's end tick takes one
+        # off the very round it landed in, so 4 - 1 = 3 rounds remain.
+        self.assertEqual(instance.rounds_remaining, BASE_DURATION - 1)
+
+    def test_duration_bonus_survives_the_round_tick(self) -> None:
+        technique = self.technique(self.condition, ConditionTargetKind.ENEMY)
+        grant_condition_modifier(
+            self.sheet, "Singe longer", 1, EffectKind.CONDITION_DURATION, scope_technique=technique
+        )
+
+        instance = self.strike(technique)
+
+        # Spec: "+1 condition duration" makes it 4 + 1 = 5 rounds; after the same end-of-round
+        # tick (one off) 5 - 1 = 4 remain, one more than the 3 of the unmodified case. Severity
+        # is untouched by a duration bonus.
+        self.assertEqual(instance.rounds_remaining, BASE_DURATION)
+        self.assertEqual(instance.severity, BASE_SEVERITY)
+
+    def test_a_severity_bonus_leaves_the_duration_alone_after_the_tick(self) -> None:
+        technique = self.technique(self.condition, ConditionTargetKind.ENEMY)
+        grant_condition_modifier(
+            self.sheet, "Singe deeper", 1, EffectKind.CONDITION_SEVERITY, scope_technique=technique
+        )
+
+        instance = self.strike(technique)
+
+        # Spec: "+1 severity" lifts severity to 3 + 1 = 4 and leaves duration at 4; after the
+        # tick 3 remain.
+        self.assertEqual(instance.severity, BASE_SEVERITY + 1)
+        self.assertEqual(instance.rounds_remaining, BASE_DURATION - 1)
+
     def test_passive_technique_takes_the_bonus(self) -> None:
         passive = self.technique(self.condition, ConditionTargetKind.SELF)
         grant_condition_modifier(
