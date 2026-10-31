@@ -223,6 +223,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
     ...overrides,
   };
@@ -789,6 +791,8 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
         }),
       ],

@@ -982,3 +982,74 @@ class ATalkedDownSelfWhoseConditionCompels(_ATalkedDownBeast):
             self.telnet(self.mira, "form revert")
 
         self.assertFalse(self.wearing_the_beast())
+
+
+class TheDeclarePanelPayload(_SteadyingAllies):
+    """What the participant payload tells each viewer about a compulsion and steadying."""
+
+    def payload(self, viewer, seat) -> dict:
+        """The two fields under test, read through the serializer's own methods."""
+        from rest_framework.test import APIRequestFactory
+
+        from world.combat.serializers import ParticipantSerializer
+
+        request = APIRequestFactory().get("/")
+        request.user = self.account_of(viewer)
+        serializer = ParticipantSerializer(seat, context={"request": request})
+        return {
+            "compulsion": serializer.get_compulsion(seat),
+            "steady_plan": serializer.get_steady_plan(seat),
+        }
+
+    def test_compulsion_payload_only_for_own_participant(self) -> None:
+        brann = self.ally("Brann", capability=4)
+
+        own = self.payload(self.mira, self.seat)["compulsion"]
+        others = self.payload(brann, self.seat)["compulsion"]
+
+        self.assertIsNone(others)
+        self.assertEqual(own["condition_name"], "Berserk")
+        self.assertEqual(own["wants_label"], "Attack an opponent")
+        self.assertEqual(own["check_name"], "Resist compulsion")
+        against = {row["action_key"]: row for row in own["against"]}
+        # 25 base + 2 per severity x 3; flee also carries Berserk's +5 for being forbidden.
+        self.assertEqual(
+            against["flee"], {"action_key": "flee", "difficulty": 36, "forbidden": True}
+        )
+        self.assertEqual(against["technique_no_target"]["difficulty"], 31)
+        self.assertFalse(against["technique_no_target"]["forbidden"])
+        self.assertNotIn("charge", against)
+        self.assertIsNone(self.payload(brann, self.ally_seats["Brann"])["compulsion"])
+
+    def test_steady_plan_payload_only_for_a_holder_of_the_capability(self) -> None:
+        brann = self.ally("Brann", capability=4)
+
+        plan = self.payload(brann, self.ally_seats["Brann"])["steady_plan"]
+
+        self.assertEqual(
+            plan, {"enabled": False, "cost_line": f"{STEADY_ANIMA} anima each", "bonus_hint": "+4"}
+        )
+        self.assertIsNone(self.payload(self.mira, self.seat)["steady_plan"])
+        self.assertIsNone(self.payload(brann, self.seat)["steady_plan"])
+
+    def test_telnet_declare_against_compulsion_warns(self) -> None:
+        told = self.telnet(self.mira, "combat flee")
+
+        self.assertIn(
+            "Against Berserk: Resist compulsion check, difficulty 36. "
+            "If it fails, you attack instead.",
+            told,
+        )
+        self.assertIn("You declare a desperate flee.", told)
+
+    def test_telnet_declare_of_an_attack_does_not_warn(self) -> None:
+        told = self.telnet(self.mira, f"cast Claw at {self.captain.name}")
+
+        self.assertNotIn("Against Berserk", told)
+
+    def test_a_plan_command_after_a_flee_does_not_repeat_the_warning(self) -> None:
+        self.telnet(self.mira, "combat flee")
+
+        told = self.telnet(self.mira, "combat dodge off")
+
+        self.assertNotIn("Against Berserk", told)

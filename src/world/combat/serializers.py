@@ -499,6 +499,31 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class CompulsionActionCostSerializer(serializers.Serializer):
+    """One action's cost under a compulsion (#4802). Schema-only."""
+
+    action_key = serializers.CharField(help_text="A maneuver value, or technique_no_target.")
+    difficulty = serializers.IntegerField()
+    forbidden = serializers.BooleanField()
+
+
+class CompulsionSerializer(serializers.Serializer):
+    """The viewer's own compulsion and what going against it costs (#4802). Schema-only."""
+
+    condition_name = serializers.CharField()
+    wants_label = serializers.CharField()
+    check_name = serializers.CharField()
+    against = CompulsionActionCostSerializer(many=True)
+
+
+class SteadyPlanSerializer(serializers.Serializer):
+    """The viewer's own steady plan (#4802). Schema-only."""
+
+    enabled = serializers.BooleanField()
+    cost_line = serializers.CharField()
+    bonus_hint = serializers.CharField()
+
+
 class DigDeepOfferSerializer(serializers.Serializer):
     """What digging deep costs the viewer's own character right now (#4738); read-only."""
 
@@ -546,6 +571,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
     dodge_plan = serializers.SerializerMethodField()
+    compulsion = serializers.SerializerMethodField()
+    steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
 
     class Meta:
@@ -573,6 +600,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "aftermath",
             "reactions_used",
             "dodge_plan",
+            "compulsion",
+            "steady_plan",
             "dig_deep",
         ]
 
@@ -633,6 +662,44 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "landing_id": obj.dodge_landing_id,
             "options": [{"id": p.pk, "name": p.name} for p in dodge_landing_options(obj)],
             "cost_line": dodge_cost_line(sources[0]),
+        }
+
+    @extend_schema_field(CompulsionSerializer(allow_null=True))
+    def get_compulsion(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What the viewer's compulsion wants and costs (#4802); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.compulsion import compulsion_summary  # noqa: PLC0415
+
+        summary = compulsion_summary(obj)
+        if summary is None:
+            return None
+        return {
+            "condition_name": summary.condition_name,
+            "wants_label": summary.wants_label,
+            "check_name": summary.check_name,
+            "against": [
+                {"action_key": c.action_key, "difficulty": c.difficulty, "forbidden": c.forbidden}
+                for c in summary.against
+            ],
+        }
+
+    @extend_schema_field(SteadyPlanSerializer(allow_null=True))
+    def get_steady_plan(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """The viewer's own steady plan; None for anyone else or when nothing lets her steady."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.models import MovementConfig  # noqa: PLC0415
+        from world.combat.services.reactions import steady_capability_value  # noqa: PLC0415
+
+        capability = steady_capability_value(obj)
+        config = MovementConfig.objects.cached_singleton()
+        if capability <= 0 or config is None:
+            return None
+        return {
+            "enabled": obj.steady_enabled,
+            "cost_line": f"{config.steady_anima_cost} anima each",
+            "bonus_hint": f"+{capability}",
         }
 
     def _is_viewers_own(self, obj: CombatParticipant) -> bool:

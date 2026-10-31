@@ -11,12 +11,15 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
-import { dodgeRequest } from '@/combat/dodging';
+import { dodgeRequest, steadyRequest } from '@/combat/dodging';
 
 type DodgePlan = components['schemas']['DodgePlan'];
+type SteadyPlan = components['schemas']['SteadyPlan'];
 
 export interface DodgePlanPanelProps {
-  plan: DodgePlan;
+  plan: DodgePlan | null;
+  /** Her steady plan, sent only when she holds the steadying capability. */
+  steadyPlan?: SteadyPlan | null;
   /** The viewer's own place now: the first option is always where she stands. */
   currentPositionId: number | null;
   isLocked: boolean;
@@ -26,13 +29,18 @@ export interface DodgePlanPanelProps {
 
 export function DodgePlanPanel({
   plan,
+  steadyPlan = null,
   currentPositionId,
   isLocked,
   dispatchAction,
   onDispatched,
 }: DodgePlanPanelProps) {
   const send = (kwargs: Record<string, unknown>) => {
-    dispatchAction(dodgeRequest(kwargs))
+    dispatchPlan(dodgeRequest(kwargs));
+  };
+
+  const dispatchPlan = (request: DispatchActionRequest) => {
+    dispatchAction(request)
       .then((result) => {
         if (isDispatchFailure(result)) {
           toast.error(result.message ?? 'That plan was refused.');
@@ -45,6 +53,45 @@ export function DodgePlanPanel({
       });
   };
 
+  return (
+    <>
+      {plan && (
+        <DodgeSection
+          plan={plan}
+          currentPositionId={currentPositionId}
+          isLocked={isLocked}
+          send={send}
+        />
+      )}
+      {steadyPlan && (
+        <section className="space-y-1.5" data-testid="steady-plan">
+          <DodgeOption
+            label="Steady allies who lose to a compulsion"
+            chosen={steadyPlan.enabled}
+            disabled={isLocked}
+            testId="steady-toggle"
+            onClick={() => dispatchPlan(steadyRequest(!steadyPlan.enabled))}
+          />
+          <p className="text-xs text-muted-foreground" data-testid="steady-cost">
+            {steadyPlan.cost_line} · {steadyPlan.bonus_hint}
+          </p>
+        </section>
+      )}
+    </>
+  );
+}
+
+function DodgeSection({
+  plan,
+  currentPositionId,
+  isLocked,
+  send,
+}: {
+  plan: DodgePlan;
+  currentPositionId: number | null;
+  isLocked: boolean;
+  send: (kwargs: Record<string, unknown>) => void;
+}) {
   const elsewhere = plan.options.filter((option) => option.id !== currentPositionId);
   const inPlace = plan.enabled && plan.landing_id === null;
 

@@ -39,7 +39,13 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.combat.constants import CombatManeuver
-from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
+from world.combat.types import (
+    CompulsionActionCost,
+    CompulsionAttempt,
+    CompulsionCost,
+    CompulsionRoll,
+    CompulsionSummary,
+)
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import active_compulsion, has_compulsion
 
@@ -224,6 +230,60 @@ def compulsion_against(
         return None
     compulsion, instance = found
     return _cost(compulsion, instance, action)
+
+
+#: The panel key for a technique that names no opponent (a defend, a heal).
+NO_TARGET_TECHNIQUE_KEY = "technique_no_target"
+
+
+def compulsion_summary(participant: CombatParticipant) -> CompulsionSummary | None:
+    """The participant's compulsion and every declarable action's cost, for the declare panel.
+
+    The compulsion and its forbidden rows are read once; each action's cost is derived
+    from them, so the number of options adds no queries. Attacks are free and are left out.
+    """
+    character = participant.character_sheet.character
+    if character is None:
+        return None
+    found = active_compulsion(character)
+    if found is None:
+        return None
+    compulsion, instance = found
+    rows = {row.action: row for row in compulsion.forbidden.all()}
+    against: list[CompulsionActionCost] = []
+    for key in [*CombatManeuver.values, NO_TARGET_TECHNIQUE_KEY]:
+        if key in _ATTACK_MANEUVERS:
+            continue
+        forbidden_key = _FORBIDDEN_BY_MANEUVER.get(key)
+        row = rows.get(forbidden_key) if forbidden_key is not None else None
+        against.append(
+            CompulsionActionCost(
+                action_key=key,
+                difficulty=compulsion_difficulty(compulsion, instance, None, forbidden_row=row),
+                forbidden=row is not None,
+            )
+        )
+    return CompulsionSummary(
+        condition_name=compulsion.condition.name,
+        wants_label=compulsion.get_wants_display(),
+        check_name=compulsion.check_type.name,
+        against=against,
+    )
+
+
+def compulsion_warning(participant: CombatParticipant, action: CombatRoundAction) -> str | None:
+    """The line a telnet declare prints when *action* goes against the compulsion."""
+    cost = compulsion_against(participant, action)
+    if cost is None:
+        return None
+    found = active_compulsion(participant.character_sheet.character)
+    if found is None:
+        return None
+    compulsion, _ = found
+    return (
+        f"Against {compulsion.condition.name}: {compulsion.check_type.name} check, "
+        f"difficulty {cost.difficulty}. If it fails, you attack instead."
+    )
 
 
 def resolve_compulsions(encounter: CombatEncounter) -> list[CompulsionRoll]:

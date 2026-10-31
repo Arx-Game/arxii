@@ -287,6 +287,8 @@ function makeParticipant(
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
   };
 }
@@ -2886,5 +2888,40 @@ describe('YourTurn — mounted maneuvers panel (#3381)', () => {
     await userEvent.click(screen.getByTestId('charge-confirm-btn'));
 
     expect(await screen.findByTestId('charge-error')).toHaveTextContent('Not mounted.');
+  });
+});
+
+describe('YourTurn — compulsion', () => {
+  const compulsion = {
+    condition_name: 'Berserk',
+    wants_label: 'Attack an opponent',
+    check_name: 'Resist compulsion',
+    against: [{ action_key: 'flee', difficulty: 36, forbidden: true }],
+  };
+
+  it('shows the banner and marks flee with its difficulty', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-banner')).toHaveTextContent('Berserk compels');
+    expect(screen.getByTestId('compulsion-difficulty-flee')).toHaveTextContent('difficulty 36');
+    expect(screen.queryByTestId('compulsion-mark-cover')).not.toBeInTheDocument();
+  });
+
+  it('shows neither without a compulsion', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('compulsion-banner')).not.toBeInTheDocument();
   });
 });

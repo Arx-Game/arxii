@@ -59,7 +59,7 @@ from commands.pull_parsing import (
 )
 
 if TYPE_CHECKING:
-    from actions.types import ActionRef
+    from actions.types import ActionRef, DispatchResult
     from world.combat.models import CombatParticipant
     from world.magic.types.pull import CastPullDeclaration
 
@@ -114,6 +114,34 @@ class _CombatCommandMixin(PullParsingMixin):
     encounters" — clash, scene casts, and every other combat maneuver keep the
     CharacterTechnique-only gate).
     """
+
+    def _declares_a_round_action(self) -> bool:
+        """Whether this command just declared the round's action (a plan or mark does not)."""
+        return True
+
+    def _report_dispatch_result(self, result: DispatchResult) -> None:
+        """Confirm the dispatch, led by the compulsion's warning when the declare goes
+        against it (#4802)."""
+        if self._declares_a_round_action():
+            warning = self._compulsion_warning()
+            if warning:
+                self.msg(warning)
+        super()._report_dispatch_result(result)
+
+    def _compulsion_warning(self) -> str | None:
+        """The "Against X" line for the caller's declared action this round, or None."""
+        from world.combat.compulsion import compulsion_warning  # noqa: PLC0415
+        from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            return None
+        action = CombatRoundAction.objects.filter(
+            participant=participant, round_number=participant.encounter.round_number
+        ).first()
+        if action is None:
+            return None
+        return compulsion_warning(participant, action)
 
     def _combat_participant_or_none(self) -> CombatParticipant | None:
         """Return the caller's active CombatParticipant in a DECLARING encounter, or None.
@@ -1060,6 +1088,10 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
     _burn: int = 0
 
     # ---------------------------------------------------------------------------
+
+    def _declares_a_round_action(self) -> bool:
+        """A clash contribution does not replace the round's declared action."""
+        return False
 
     def _parse_args(self) -> None:
         """Parse ``self.args`` once; cache opponent, technique, strain, and optional pull."""

@@ -146,4 +146,24 @@ describe('CommitmentPanel reactions', () => {
     expect(screen.getByText('Ondrelle: 3 reactions this round')).toBeInTheDocument();
     expect(screen.queryByText(/Bram/)).not.toBeInTheDocument();
   });
+
+  it('turns the steady plan on and off through combat_steady', async () => {
+    const dispatch = ok();
+    render(
+      <DodgePlanPanel
+        plan={null}
+        steadyPlan={{ enabled: false, cost_line: '4 anima each', bonus_hint: '+6' }}
+        currentPositionId={13}
+        isLocked={false}
+        dispatchAction={dispatch}
+      />
+    );
+    expect(screen.queryByTestId('dodge-plan')).not.toBeInTheDocument();
+    expect(screen.getByTestId('steady-cost')).toHaveTextContent('4 anima each · +6');
+    await userEvent.click(screen.getByTestId('steady-toggle'));
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_steady' },
+      kwargs: { steady: true },
+    });
+  });
 });

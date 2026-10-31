@@ -55,6 +55,17 @@ _SUBVERBS: dict[str, str] = {
 # subverbs that take a single name argument.
 # subverbs that set a reaction plan for the round.
 _PLAN_SUBVERBS = {"dodge", "steady"}
+# subverbs that leave this round's declared action alone (#4802).
+_NON_DECLARING_SUBVERBS = _PLAN_SUBVERBS | {
+    "mark",
+    "ready",
+    "combo",
+    "revert",
+    "digdeep",
+    "join",
+    "leave",
+    "yield",
+}
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
 
@@ -165,6 +176,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             self.msg(f"Unknown combat action '{self._subverb}'. Try: {options}.")
             return
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
+
+    def _declares_a_round_action(self) -> bool:
+        """Plans, marks, toggles and combo edits leave the declared action as it was."""
+        return self._subverb not in _NON_DECLARING_SUBVERBS
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for the parsed subverb."""

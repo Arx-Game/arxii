@@ -52934,6 +52934,41 @@ components:
       - label
       - name
       - when
+    Compulsion:
+      type: object
+      description: The viewer's own compulsion and what going against it costs (#4802).
+        Schema-only.
+      properties:
+        condition_name:
+          type: string
+        wants_label:
+          type: string
+        check_name:
+          type: string
+        against:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompulsionActionCost'
+      required:
+      - against
+      - check_name
+      - condition_name
+      - wants_label
+    CompulsionActionCost:
+      type: object
+      description: One action's cost under a compulsion (#4802). Schema-only.
+      properties:
+        action_key:
+          type: string
+          description: A maneuver value, or technique_no_target.
+        difficulty:
+          type: integer
+        forbidden:
+          type: boolean
+      required:
+      - action_key
+      - difficulty
+      - forbidden
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -78404,6 +78439,16 @@ components:
           - $ref: '#/components/schemas/DodgePlan'
           nullable: true
           readOnly: true
+        compulsion:
+          allOf:
+          - $ref: '#/components/schemas/Compulsion'
+          nullable: true
+          readOnly: true
+        steady_plan:
+          allOf:
+          - $ref: '#/components/schemas/SteadyPlan'
+          nullable: true
+          readOnly: true
         dig_deep:
           allOf:
           - $ref: '#/components/schemas/DigDeepOffer'
@@ -78417,6 +78462,7 @@ components:
       - character_name
       - character_sheet_id
       - character_status
+      - compulsion
       - control_modifier
       - current_position
       - current_square
@@ -78430,6 +78476,7 @@ components:
       - intensity_modifier
       - max_health
       - reactions_used
+      - steady_plan
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -92648,6 +92695,20 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    SteadyPlan:
+      type: object
+      description: The viewer's own steady plan (#4802). Schema-only.
+      properties:
+        enabled:
+          type: boolean
+        cost_line:
+          type: string
+        bonus_hint:
+          type: string
+      required:
+      - bonus_hint
+      - cost_line
+      - enabled
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.

@@ -31439,6 +31439,20 @@ export interface components {
       when: string | null;
       entry_id: number | null;
     };
+    /** @description The viewer's own compulsion and what going against it costs (#4802). Schema-only. */
+    Compulsion: {
+      condition_name: string;
+      wants_label: string;
+      check_name: string;
+      against: components['schemas']['CompulsionActionCost'][];
+    };
+    /** @description One action's cost under a compulsion (#4802). Schema-only. */
+    CompulsionActionCost: {
+      /** @description A maneuver value, or technique_no_target. */
+      action_key: string;
+      difficulty: number;
+      forbidden: boolean;
+    };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
       readonly id: number;
@@ -44620,6 +44634,8 @@ export interface components {
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
       readonly dodge_plan: components['schemas']['DodgePlan'] | null;
+      readonly compulsion: components['schemas']['Compulsion'] | null;
+      readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
     };
     /**
@@ -51697,6 +51713,12 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description The viewer's own steady plan (#4802). Schema-only. */
+    SteadyPlan: {
+      enabled: boolean;
+      cost_line: string;
+      bonus_hint: string;
+    };
     /** @description What the panel's send or dismiss reports back. */
     StewardActionResult: {
       detail: string;
