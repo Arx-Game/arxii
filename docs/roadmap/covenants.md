@@ -923,6 +923,27 @@ treatments and damage riding the cast, authored in plain Django admin. What was 
   wired, pending #4565 (the workbench, vow board, vow page and spellbook vow section).
 - See `docs/systems/covenants.md` "Vow added effects" and ADR-4581-A.
 
+### Vow focus picks and combat styles (#4805, slice 1 of #4759) - SHIPPED (authoring only)
+
+Staff can author, in the admin, everything #4759's combat roles need; play reads none of it
+until slices 2 to 7. What was built:
+
+- **Models**: `VowFocusPick`, `VowFocusPickLimit`, `VowFocusPickConfig` (per-level budget),
+  `CharacterVowFocusPick` and `CombatStyle`; a nullable `focus_pick` on added effects,
+  situational perks and action scaling (action scaling was later removed by #4783, and vow stat
+  scaling carries the `focus_pick` instead); `CharacterSheet.combat_style`;
+  `SituationRequirementMixin.condition_property`; `StandoffApproach.target_condition` /
+  `ally_condition`; `ConditionTemplate.spares_source`; `WoundDetails.created_encounter` /
+  `created_round`. `DefenseStyle.GEAR_SOAK` is labelled "Mitigation". Migration
+  `0328_vow_focus_picks_and_combat_styles` (schema-only).
+- **Situations**: `TARGET_HAS_CONDITION_PROPERTY`, `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`,
+  `TARGET_LOW_HEALTH` with their param specs; evaluators never hold until slice 3.
+- **Service**: `world.covenants.focus_picks` (`pick_price`, the choice rules
+  `CharacterVowFocusPick.clean()` runs).
+- **Admin**: pick inline with a computed price on CovenantRole; limits inline on the pick;
+  admins for combat styles, the budget config and character picks.
+- See `docs/systems/covenants.md` "Vow focus picks and combat styles" and ADR-4759.
+
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
 Vows scale combat maneuvers through the same `VowStatScaling` rows they use for stats, and
@@ -930,7 +951,7 @@ the vow-only action scaling table is gone. What was built:
 
 - **Removed**: `CovenantRoleActionScaling`, `CovenantScaledAction`,
   `covenant_role_action_scaling_bonus` and the "Surges given" row (migration
-  `0331_drop_action_scaling`; deliberate discard of placeholder rows, owner ruling 2026-10-31).
+  `0332_drop_action_scaling`; deliberate discard of placeholder rows, owner ruling 2026-10-31).
 - **Replacement**: a `VowStatScaling` row on a `ModifierTarget` in the "maneuver_effect"
   category, scoped to one effect or one kind of effect. The holder's shown thread level times
   `bonus_per_level` is added to the effect's catalog base value (`effect_value`).
@@ -940,6 +961,9 @@ the vow-only action scaling table is gone. What was built:
 - **Not built**: sized (leveled) modifiers on effects and derived amounts (a source choosing
   what its number scales from), and the technique and opponent scopes. See
   `docs/systems/mechanics.md` "Maneuver effects".
+- **Focus picks**: `VowStatScaling` gained the nullable `focus_pick` #4805 gave action scaling,
+  so a focus pick can still carry maneuver (and stat) scaling rows. As with the other payload
+  tables, no reader filters by the chosen pick yet.
 - See `docs/systems/covenants.md` and ADR-4783-A.
 
 ### Cross-cutting (post-Covenants)

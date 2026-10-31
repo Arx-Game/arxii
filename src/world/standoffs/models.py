@@ -247,6 +247,28 @@ class StandoffApproach(NaturalKeyMixin, SharedMemoryModel):
         related_name="+",
         help_text="Archetypes this approach suits; empty means any.",
     )
+    target_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "A condition laid on the pressed target when this approach succeeds, which "
+            "carries into the fight if one breaks out. Blank means none."
+        ),
+    )
+    ally_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "A condition laid on an ally of the actor when this approach succeeds, e.g. "
+            "preparation for the fight. Blank means none."
+        ),
+    )
     display_order = models.PositiveIntegerField(default=0, help_text="Lower values show first.")
 
     objects = NaturalKeyManager()

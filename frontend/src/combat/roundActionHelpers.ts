@@ -20,9 +20,10 @@ export const MOVE_REGISTRY_KEYS: ReadonlySet<string> = new Set([
 /** A registry action that moves the viewer (see MOVE_REGISTRY_KEYS). */
 export function isMoveAction(a: PlayerAction): boolean {
   return (
-    a.ref.backend === 'registry' &&
-    a.ref.registry_key != null &&
-    MOVE_REGISTRY_KEYS.has(a.ref.registry_key)
+    a.is_movement === true ||
+    (a.ref.backend === 'registry' &&
+      a.ref.registry_key != null &&
+      MOVE_REGISTRY_KEYS.has(a.ref.registry_key))
   );
 }
 

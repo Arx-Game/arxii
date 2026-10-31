@@ -87,12 +87,12 @@ ALLOWED_MIGRATIONS: set[str] = {
     # fresh database gets the same rows from world.seeds.checks instead.
     "world/migrations/0284_monotonic_result_charts_and_deeper_charts.py",
     # #4783: ADR-0237 restructure backfill, carries FleeConfig.cover_bonus into the
-    # "Cover: escape bonus" ManeuverEffect row before 0331 drops the column. It also
+    # "Cover: escape bonus" ManeuverEffect row before 0332 drops the column. It also
     # get_or_creates the eight ManeuverEffect rows and the "maneuver_effect"
     # ModifierCategory: prose-free mechanical catalog rows the code reads by key, which
     # the owner's 2026-10-22 ruling allows by data migration. An existing row keeps its
     # value; a fresh database gets the same rows from ensure_maneuver_effects().
-    "world/migrations/0330_cover_escape_bonus_carry.py",
+    "world/migrations/0331_cover_escape_bonus_carry.py",
 }
 
 # Patterns that suggest seed data in migrations

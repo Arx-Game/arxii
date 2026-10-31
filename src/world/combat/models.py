@@ -15,12 +15,14 @@ from django.utils.html import escape
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.cached_property import PrunedCachedProperty, pop_cached_rows
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
 from world.areas.positioning.constants import CreatureTraversal
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
     from world.combat.types import MovementProfile
@@ -85,6 +87,7 @@ from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
+from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -297,25 +300,136 @@ class CombatEncounter(AbstractRound):
             f"(Round {self.round_number}, {self.get_status_display()})"
         )
 
+    # The payload lists (#4784). The encounter viewset pre-fills each with a
+    # Prefetch onto this name; any other caller gets the same rows lazily. Each row
+    # model pops its own list on save()/delete() (EncounterPayloadRowMixin), so the
+    # identity-mapped encounter never serves one request's rows to the next.
+
+    @PrunedCachedProperty
+    def participants_cached(self) -> list["CombatParticipant"]:
+        """The participants the encounter payload lists.
+
+        Also popped by this encounter's own ``save()``: a COMPLETED encounter lists
+        FLED rows too, so the list depends on the encounter's status.
+        """
+        return list(participant_payload_queryset().filter(encounter=self))
+
+    @PrunedCachedProperty
+    def opponents_cached(self) -> list["CombatOpponent"]:
+        """Every opponent on this encounter, whatever its status."""
+        return list(opponent_payload_queryset().filter(encounter=self))
+
+    @PrunedCachedProperty
+    def clashes_cached(self) -> list["Clash"]:
+        """This encounter's ACTIVE clashes."""
+        return list(clash_payload_queryset().filter(encounter=self))
+
+    @PrunedCachedProperty
+    def engagement_locks_cached(self) -> list["EngagementLock"]:
+        """This encounter's ACTIVE engagement locks."""
+        return list(engagement_lock_payload_queryset().filter(encounter=self))
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        super().save(*args, **kwargs)
+        self.__dict__.pop("participants_cached", None)
+
     @property
     def forced_escape(self) -> bool:
         """True when an unbeatable Hero Killer is on the field (#875).
 
         Drives the "you must run" UI — victory is impossible; the party must
-        flee. Cache-aware: uses prefetched ``opponents_cached`` when present
-        so the detail serializer adds no query.
+        flee. Reads ``opponents_cached``, so the detail serializer adds no query.
         """
-        # Suppression justified: live combat state on identity-mapped encounter; (#2401)
-        # context-over-cache.
-        cached = getattr(self, "opponents_cached", None)  # noqa: GETATTR_LITERAL
-        if cached is not None:
-            return any(
-                o.tier == OpponentTier.HERO_KILLER and o.status == OpponentStatus.ACTIVE
-                for o in cached
-            )
-        return self.opponents.filter(
-            tier=OpponentTier.HERO_KILLER, status=OpponentStatus.ACTIVE
-        ).exists()
+        return any(
+            o.tier == OpponentTier.HERO_KILLER and o.status == OpponentStatus.ACTIVE
+            for o in self.opponents_cached
+        )
+
+
+def participant_payload_queryset() -> "QuerySet[CombatParticipant]":
+    """The rows ``CombatEncounter.participants_cached`` holds, joined for the payload."""
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    return (
+        CombatParticipant.objects.select_related(
+            "character_sheet__character",
+            "character_sheet__character__display_data",
+            "character_sheet__active_alternate_self",
+            "character_sheet__active_alternate_self__alternate_self",
+            "character_sheet__character__object_position__position",
+            "character_sheet__vitals",
+            "character_sheet__fatigue",
+            "covenant_role",
+        )
+        .filter(
+            # Live fights only ever list ACTIVE rows; a COMPLETED encounter
+            # also lists FLED rows, so ParticipantSerializer.aftermath can
+            # reach a FLED participant's own digest (#3551 minor 3) -
+            # deliver_aftermath_digests already sends that participant one.
+            Q(status=ParticipantStatus.ACTIVE)
+            | Q(status=ParticipantStatus.FLED, encounter__status=RoundStatus.COMPLETED)
+        )
+        .prefetch_related(
+            # Pre-fill CharacterSheet.cached_payload_personas (a
+            # PrunedCachedProperty doubling as this to_attr target) with the
+            # thumbnail joined, so ParticipantSerializer resolves the PC
+            # portrait with zero per-row queries (#630). Queryset shape
+            # mirrors the property's documented fallback.
+            Prefetch(
+                "character_sheet__personas",
+                queryset=Persona.objects.filter(
+                    persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
+                )
+                .order_by("-persona_type", "created_at", "id")
+                .select_related("thumbnail"),
+                to_attr="cached_payload_personas",
+            ),
+        )
+    )
+
+
+def opponent_payload_queryset() -> "QuerySet[CombatOpponent]":
+    """The opponent rows ``CombatEncounter.opponents_cached`` holds."""
+    return CombatOpponent.objects.select_related(
+        "persona__thumbnail",
+        "objectdb__object_position__position",
+    )
+
+
+def clash_payload_queryset() -> "QuerySet[Clash]":
+    """The clash rows ``CombatEncounter.clashes_cached`` holds."""
+    return Clash.objects.filter(status=ClashStatus.ACTIVE).select_related("npc_opponent")
+
+
+def engagement_lock_payload_queryset() -> "QuerySet[EngagementLock]":
+    """The lock rows ``CombatEncounter.engagement_locks_cached`` holds."""
+    return EngagementLock.objects.filter(status=EngagementLockStatus.ACTIVE).select_related(
+        "opponent", "participant"
+    )
+
+
+class EncounterPayloadRowMixin:
+    """Pops the encounter's cached list of this kind of row on every save and delete.
+
+    ``encounter_cache_name`` names the ``CombatEncounter`` property that lists these
+    rows. A row whose status moves it into or out of that list changes the list, and
+    the identity-mapped encounter would otherwise keep serving the old one (#4784).
+    """
+
+    encounter_cache_name: ClassVar[str]
+    encounter_id: int
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        super().save(*args, **kwargs)
+        pop_cached_rows(CombatEncounter, self.encounter_id, self.encounter_cache_name)
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        encounter_id = self.encounter_id
+        result = super().delete(*args, **kwargs)
+        pop_cached_rows(CombatEncounter, encounter_id, self.encounter_cache_name)
+        return result
 
 
 class ThreatPool(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -617,8 +731,10 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.pool.name}: {self.name}"
 
 
-class CombatOpponent(SharedMemoryModel):
+class CombatOpponent(EncounterPayloadRowMixin, SharedMemoryModel):
     """An NPC entity in a combat encounter."""
+
+    encounter_cache_name = "opponents_cached"
 
     encounter = models.ForeignKey(
         CombatEncounter,
@@ -1393,8 +1509,10 @@ class ComboSignature(SharedMemoryModel):
         return f"{self.signature_name} ({self.covenant} / {self.combo})"
 
 
-class CombatParticipant(SharedMemoryModel):
+class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
     """A PC in a combat encounter."""
+
+    encounter_cache_name = "participants_cached"
 
     encounter = models.ForeignKey(
         CombatEncounter,
@@ -3339,6 +3457,15 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @PrunedCachedProperty
+    def cached_phase_templates(self) -> list["CreaturePhaseTemplate"]:
+        """This template's authored phases.
+
+        The bestiary viewset pre-fills it with a ``Prefetch`` onto this name; a
+        ``CreaturePhaseTemplate`` save or delete pops it (#4784).
+        """
+        return list(self.phase_templates.all())
+
 
 class CreaturePhaseTemplate(AbstractPhaseConfig):
     """Authored phase specification for a CreatureTemplate (#2016).
@@ -3365,6 +3492,16 @@ class CreaturePhaseTemplate(AbstractPhaseConfig):
 
     def __str__(self) -> str:
         return f"{self.creature_template.name} Phase {self.phase_number}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        super().save(*args, **kwargs)
+        pop_cached_rows(CreatureTemplate, self.creature_template_id, "cached_phase_templates")
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        template_id = self.creature_template_id
+        result = super().delete(*args, **kwargs)
+        pop_cached_rows(CreatureTemplate, template_id, "cached_phase_templates")
+        return result
 
 
 class BreakBarConfig(SharedMemoryModel):
@@ -3524,7 +3661,7 @@ class EncounterScalingConfig(SharedMemoryModel):
 # =============================================================================
 
 
-class Clash(SharedMemoryModel):
+class Clash(EncounterPayloadRowMixin, SharedMemoryModel):
     """Central primitive for a Clash multi-round contest between PCs and an NPC opponent.
 
     ``flavor`` is the discriminator (CLASH / LOCK / WARD / BREAK). Three flavored
@@ -3537,6 +3674,8 @@ class Clash(SharedMemoryModel):
 
     Mirrors the Thread discriminator pattern from world/magic/models/threads.py.
     """
+
+    encounter_cache_name = "clashes_cached"
 
     encounter = models.ForeignKey(
         CombatEncounter,
@@ -4763,7 +4902,7 @@ class ThreatRecord(SharedMemoryModel):
         )
 
 
-class EngagementLock(SharedMemoryModel):
+class EngagementLock(EncounterPayloadRowMixin, SharedMemoryModel):
     """A declarable foil pairing between one PC and one opponent (#2020).
 
     While ACTIVE, the locked NPC's targeting is narrowed to just the locked PC
@@ -4776,6 +4915,8 @@ class EngagementLock(SharedMemoryModel):
     ``break_in_consequence_pool`` fires dramatic effects and a
     ``SurgeTriggerKind.INTERFERENCE`` surge fires for the locked duelist.
     """
+
+    encounter_cache_name = "engagement_locks_cached"
 
     encounter = models.ForeignKey(
         CombatEncounter,

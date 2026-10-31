@@ -1268,14 +1268,9 @@ class CreatureTemplateSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_has_phases(self, obj: CreatureTemplate) -> bool:
-        # Reads the ViewSet's Prefetch(to_attr="cached_phase_templates") cache
-        # (mirrors CheckTypeSerializer's cached_traits) to avoid an .exists()
-        # N+1 across a page of rows; falls back to a live query for a
-        # serializer used directly (e.g. a unit test) without that prefetch.
-        cached = getattr(obj, "cached_phase_templates", None)  # noqa: GETATTR_LITERAL
-        if cached is None:
-            return obj.phase_templates.exists()
-        return len(cached) > 0
+        # The ViewSet's Prefetch(to_attr="cached_phase_templates") fills this for
+        # a whole page of rows, so there is no .exists() per row.
+        return len(obj.cached_phase_templates) > 0
 
     def get_threat_pool_name(self, obj: CreatureTemplate) -> str | None:
         return obj.threat_pool.name if obj.threat_pool_id else None
@@ -1331,18 +1326,12 @@ class EncounterListSerializer(serializers.ModelSerializer):
         }
 
     def get_participant_count(self, obj: CombatEncounter) -> int:
-        """Return participant count, preferring cached list."""
-        try:
-            return len(obj.participants_cached)  # type: ignore[attr-defined]
-        except AttributeError:
-            return obj.participants.count()
+        """Return participant count, from the cached payload list."""
+        return len(obj.participants_cached)
 
     def get_opponent_count(self, obj: CombatEncounter) -> int:
-        """Return opponent count, preferring cached list."""
-        try:
-            return len(obj.opponents_cached)  # type: ignore[attr-defined]
-        except AttributeError:
-            return obj.opponents.count()
+        """Return opponent count, from the cached payload list."""
+        return len(obj.opponents_cached)
 
 
 class VolatileObjectSerializer(serializers.Serializer):
@@ -1681,10 +1670,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         character_ids = self._get_viewer_character_ids(request)
-        return any(
-            p.character_sheet.character_id in character_ids
-            for p in obj.participants_cached  # type: ignore[attr-defined]
-        )
+        return any(p.character_sheet.character_id in character_ids for p in obj.participants_cached)
 
     @extend_schema_field(StandoffViewSerializer(allow_null=True))
     def get_standoff(self, obj: CombatEncounter) -> dict[str, Any] | None:
@@ -1699,7 +1685,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         if obj.round_number != 0:
             return None
         viewer_ids = self.context.get("viewer_character_ids", set())
-        for participant in obj.participants_cached:  # type: ignore[attr-defined]
+        for participant in obj.participants_cached:
             if participant.character_sheet.character_id in viewer_ids:
                 view = build_standoff_view(obj, participant.character_sheet)
                 return None if view is None else StandoffViewSerializer(view).data
@@ -1734,7 +1720,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         viewer_ids = self.context.get("viewer_character_ids", set())
         if any(
             participant.character_sheet.character_id in viewer_ids
-            for participant in obj.participants_cached  # type: ignore[attr-defined]
+            for participant in obj.participants_cached
         ):
             return None
         summary = build_standoff_summary(obj)
@@ -1991,24 +1977,10 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         rail section. Returns only ACTIVE clashes so resolved ones don't litter
         the UI after the clash is done.
 
-        Uses the ``clashes_cached`` prefetch-to-attr set on the viewset's
-        ``_base_queryset`` so no extra query fires during detail serialization.
-        Falls back to a direct filter for callers that don't use the viewset
-        (e.g. unit tests that call the serializer directly).
+        Reads ``CombatEncounter.clashes_cached``, which the viewset's
+        ``_base_queryset`` pre-fills so no extra query fires here.
         """
-        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
-        # context-over-cache a cached_property.
-        clashes = getattr(obj, "clashes_cached", None)  # noqa: GETATTR_LITERAL
-        if clashes is None:
-            clashes = (
-                Clash.objects.filter(
-                    encounter=obj,
-                    status=ClashStatus.ACTIVE,
-                )
-                .select_related("npc_opponent")
-                .all()
-            )
-        return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
+        return ClashStateSerializer(obj.clashes_cached, many=True).data  # type: ignore[return-value]
 
     @extend_schema_field(EngagementLockSerializer(many=True))
     def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
@@ -2017,23 +1989,9 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Exposes foil pairings (who is dueling whom) to the frontend combat UI.
         Returns only ACTIVE locks so resolved ones don't appear after breaking.
 
-        Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
-        viewset's ``_base_queryset`` so no extra query fires during detail
-        serialization. Falls back to a direct filter for callers that don't
-        use the viewset (e.g. unit tests that call the serializer directly).
+        Reads ``CombatEncounter.engagement_locks_cached``, which the viewset's
+        ``_base_queryset`` pre-fills so no extra query fires here.
         """
-        # Suppression justified: live/time-derived set on identity-mapped parent; (#2401) — never
-        # context-over-cache a cached_property.
-        locks = getattr(obj, "engagement_locks_cached", None)  # noqa: GETATTR_LITERAL
-        if locks is None:
-            from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
-            from world.combat.models import EngagementLock  # noqa: PLC0415
-
-            locks = EngagementLock.objects.filter(
-                encounter=obj,
-                status=EngagementLockStatus.ACTIVE,
-            )
-
         return [
             {
                 "id": lock.pk,
@@ -2043,7 +2001,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "initiated_by": lock.initiated_by,
                 "started_round": lock.started_round,
             }
-            for lock in locks
+            for lock in obj.engagement_locks_cached
         ]
 
     @extend_schema_field(CombatMarkSerializer(many=True))

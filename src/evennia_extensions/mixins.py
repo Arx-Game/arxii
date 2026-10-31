@@ -390,4 +390,4 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
     def delete(self, *args, **kwargs):
         """Delete and clear related object caches."""
         self.clear_related_caches(self._get_changed_related_objects())
-        super().delete(*args, **kwargs)
+        return super().delete(*args, **kwargs)

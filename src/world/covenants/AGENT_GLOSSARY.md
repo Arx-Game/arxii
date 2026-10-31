@@ -90,8 +90,9 @@ _Avoid_: conflating with the combat-identity blend (a coarser SWORD/SHIELD/CROWN
 
 **Defense Style**:
 `DefenseStyle` (`world.covenants.constants`, #2533, ADR-0149 Layer 3) — how a covenant vow
-defends: GEAR_SOAK (armor is the defense), EVASION (not being there is the defense), BARRIER
-(force/warding is the defense). Code-defined vocabulary, not lore-repo content — Layer 4's
+defends: GEAR_SOAK (armor is the defense; labelled "Mitigation" since #4759, stored value
+unchanged), EVASION (not being there is the defense), BARRIER (force/warding is the defense).
+Code-defined vocabulary, not lore-repo content — Layer 4's
 situational perks (#2536) key on these labels, and each style must have a distinct
 shine-situation in that perk set (2026-07-20 niche ruling; exact tuning numbers are secondary).
 _Avoid_: defense type, defense mode, archetype.
@@ -105,6 +106,24 @@ roles' resolved profiles (sub-role's own profile when present, else its anchor's
 compatible-armor bucket once in `apply_equipped_armor_soak` (#1174). Superseded `VowGearScaling`
 as the mechanism for a vow's defense to substitute for gear rather than stack with it.
 _Avoid_: gear profile, armor profile, VowGearScaling (removed model).
+
+**Focus pick**:
+One option in a vow's catalog that a holder chooses at pick level 1, 2 or 3 (`VowFocusPick`,
+#4759). Its payload is the existing vow rows (added effects, situational perks, action scaling)
+that point at it through `focus_pick`; a row with no pick is the base vow and applies to every
+holder. A pick's price comes from its `value` and its limits (`VowFocusPickLimit`, priced by
+`world.covenants.focus_picks.pick_price`) and must fit the per-level budget
+(`VowFocusPickConfig`). A character's choice is a `CharacterVowFocusPick` on their membership; a
+secondary vow gets none. A sub-role holder chooses from the anchor's catalog and the sub-role's.
+_Avoid_: talent, feat, perk (a situational perk is one kind of payload a pick can carry),
+specialization (that is the resonance sub-role).
+
+**Combat style**:
+How a character was taught to fight with magic (`CombatStyle`, `CharacterSheet.combat_style`,
+#4759): a Defense Style plus `armor_share_tenths`, how much of their armor counts. It replaces the
+vow's Defense Profile for that character; a character with none keeps the profile (ADR-4759).
+_Avoid_: technique style (`TechniqueStyle` is how a Path or Gift casts, a different thing),
+fighting stance, defense profile (that is the vow's fallback row).
 
 **Situation**:
 A code-defined label (`world.covenants.perks.constants.Situation`, a `TextChoices`) naming a precise, testable game-state condition a `VowSituationalPerk` can key on — e.g. `AT_RANGE`, `TARGET_DISTRACTED`, `ALLY_LOW_HEALTH`. Each value has exactly one registered evaluator (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`, signature `(SituationContext) -> bool`). Adding a new Situation to the library is a code change (one enum value + one evaluator); attaching an existing Situation to a perk is a content edit forever after (#2536, ADR-0151, ruling 5).

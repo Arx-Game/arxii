@@ -44,7 +44,13 @@ class StandoffApproachAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_verbal",)
     search_fields = ("name",)
-    autocomplete_fields = ("check_type", "capability", "sway_target")
+    autocomplete_fields = (
+        "check_type",
+        "capability",
+        "sway_target",
+        "target_condition",
+        "ally_condition",
+    )
     filter_horizontal = ("archetypes",)
     inlines = (ApproachReactionLineInline,)
 

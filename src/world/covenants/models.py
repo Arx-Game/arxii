@@ -24,14 +24,21 @@ from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.battles.constants import BattleActionKind
 from world.contributors.models import CreditedContent
 from world.covenants.constants import (
+    FOCUS_PICK_FREQUENCY_LIMIT_KINDS,
+    FOCUS_PICK_LIMIT_FREQUENCY_FULL,
+    FOCUS_PICK_REDUCTION_LIMIT_KINDS,
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
+    VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT,
+    VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_VALUE_DEFAULT,
     BattleBinding,
     CommandTier,
     CovenantType,
     DefenseStyle,
+    FocusPickLimitKind,
     InsightTargetKind,
     MembershipStanding,
     MentorBondAdjusted,
@@ -78,6 +85,7 @@ CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
 GIFT_MODEL = "arxii.Gift"
 VOW_SITUATIONAL_PERK_MODEL = "arxii.VowSituationalPerk"
 VOW_ADDED_EFFECT_MODEL = "arxii.VowAddedEffect"
+VOW_FOCUS_PICK_MODEL = "arxii.VowFocusPick"
 MODIFIER_TARGET_MODEL = "arxii.ModifierTarget"
 
 
@@ -1102,6 +1110,23 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
+def focus_pick_role_error(focus_pick_id: int | None, covenant_role_id: int | None) -> str | None:
+    """Why a payload row's ``focus_pick`` cannot sit on its role, or None (#4759).
+
+    A pick's payload rows live on the pick's own role, so a holder who chose it
+    gets exactly that vow's rows. Shared by every payload model's ``clean()``.
+    """
+    if focus_pick_id is None or covenant_role_id is None:
+        return None
+    pick = VowFocusPick.objects.get(pk=focus_pick_id)
+    if pick.covenant_role_id != covenant_role_id:
+        return (
+            f"The focus pick '{pick.name}' belongs to {pick.covenant_role.name}, not this "
+            "row's role. Pick one from the same role."
+        )
+    return None
+
+
 class CovenantRoleTechniqueSpecialtyManager(NaturalKeyManager):
     """Manager for CovenantRoleTechniqueSpecialty with natural key support."""
 
@@ -1202,6 +1227,322 @@ class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name}: {self.get_style_display()}"
+
+
+# =============================================================================
+# Vow focus picks and combat styles (#4759 slice 1)
+# =============================================================================
+
+
+class VowFocusPickManager(NaturalKeyManager):
+    """Manager for VowFocusPick with natural key support."""
+
+
+class VowFocusPick(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """One entry in a vow's focus pick catalog (#4759).
+
+    A focus pick is an option a vow holder chooses at pick level 1, 2 or 3. Its
+    payload is the existing vow rows (``VowAddedEffect``, ``VowSituationalPerk``,
+    ``CovenantRoleActionScaling``) that point at it through their nullable
+    ``focus_pick``; a row with no pick is the base vow and applies to every
+    holder. It is its own table because one pick can bundle several payload rows
+    and a character's choice (``CharacterVowFocusPick``) needs one stable row to
+    point at.
+
+    ``value`` is a placeholder point score for what the pick adds at its level,
+    until the simulator sets it. The price staff see is worked out from the
+    value and the pick's limits by ``world.covenants.focus_picks.pick_price``
+    and is never stored. Valid on both anchor roles and sub-roles: a sub-role
+    holder chooses from the anchor's catalog plus the sub-role's own.
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="focus_picks",
+        help_text="The vow (covenant role) whose catalog this pick belongs to.",
+    )
+    pick_level = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(VOW_FOCUS_PICK_MAX_LEVEL)],
+        help_text=(
+            "The pick level this pick sits at (1 to 3). A character may choose it once "
+            "their shown vow thread level reaches this number."
+        ),
+    )
+    name = models.CharField(
+        max_length=80,
+        help_text="Name staff and players see for this pick. Unique within the vow.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="What the pick does, in the words players read.",
+    )
+    value = models.PositiveIntegerField(
+        default=VOW_FOCUS_PICK_VALUE_DEFAULT,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "Points this pick is worth before its limits. A placeholder until the "
+            "simulator sets it. Its limits lower this to the price."
+        ),
+    )
+
+    objects = VowFocusPickManager()
+
+    class Meta:
+        ordering = ["covenant_role__slug", "pick_level", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "name"],
+                name="vow_focus_pick_unique_name_per_role",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "name"]
+        dependencies = [COVENANT_ROLE_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.covenant_role.name}: {self.name} (level {self.pick_level})"
+
+    @PrunedCachedProperty
+    def cached_limits(self) -> list[VowFocusPickLimit]:
+        """This pick's limits; a limit's save or delete clears it."""
+        return list(self.limits.all())
+
+
+class VowFocusPickLimitManager(NaturalKeyManager):
+    """Manager for VowFocusPickLimit with natural key support."""
+
+
+class VowFocusPickLimit(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
+    """One limit on a vow focus pick, which lowers the pick's price (#4759).
+
+    A SELF, TARGET, SETTING or TIMING limit multiplies the price by how often it
+    is met (``frequency_tenths / 10``). An EXPOSURE or COST limit costs something
+    on every use, so it takes a flat ``reduction`` off instead. Each kind reads
+    only its own column; ``clean()`` refuses the other. One limit of each kind
+    per pick: fold two target conditions into one limit whose frequency covers
+    both.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["pick"]
+
+    pick = models.ForeignKey(
+        VOW_FOCUS_PICK_MODEL,
+        on_delete=models.CASCADE,
+        related_name="limits",
+        help_text="The focus pick this limit narrows.",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=FocusPickLimitKind.choices,
+        help_text=(
+            "Self, Target, Setting or Timing: a condition on when the pick works, priced "
+            "by how often it is met. Exposure or Cost: something the pick costs on every "
+            "use, priced by a flat reduction."
+        ),
+    )
+    frequency_tenths = models.PositiveSmallIntegerField(
+        default=FOCUS_PICK_LIMIT_FREQUENCY_FULL,
+        validators=[MinValueValidator(1), MaxValueValidator(FOCUS_PICK_LIMIT_FREQUENCY_FULL)],
+        help_text=(
+            "How often the limit is met, in tenths (1 to 10). Common 6, uncommon 5, "
+            "rare 3. Self, Target, Setting and Timing limits only; leave at 10 otherwise."
+        ),
+    )
+    reduction = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Points taken off the price. Exposure and Cost limits only; leave at 0 otherwise."
+        ),
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="The limit in plain words, e.g. 'only against a target someone holds'.",
+    )
+
+    objects = VowFocusPickLimitManager()
+
+    class Meta:
+        ordering = ["pick", "kind"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pick", "kind"],
+                name="vow_focus_pick_limit_one_per_kind",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["pick", "kind"]
+        dependencies = [VOW_FOCUS_PICK_MODEL]
+
+    def __str__(self) -> str:
+        return f"{self.pick.name}: {self.get_kind_display()} limit"
+
+    def clean(self) -> None:
+        """Refuse a column the limit's kind does not read, so no limit is ignored."""
+        super().clean()
+        if self.kind in FOCUS_PICK_FREQUENCY_LIMIT_KINDS and self.reduction:
+            raise ValidationError(
+                {
+                    "reduction": (
+                        f"A {self.get_kind_display()} limit is priced by its frequency, "
+                        "not a reduction. Leave the reduction at 0."
+                    )
+                }
+            )
+        if (
+            self.kind in FOCUS_PICK_REDUCTION_LIMIT_KINDS
+            and self.frequency_tenths is not None
+            and self.frequency_tenths != FOCUS_PICK_LIMIT_FREQUENCY_FULL
+        ):
+            raise ValidationError(
+                {
+                    "frequency_tenths": (
+                        f"A {self.get_kind_display()} limit is priced by its reduction, "
+                        f"not a frequency. Leave the frequency at "
+                        f"{FOCUS_PICK_LIMIT_FREQUENCY_FULL}."
+                    )
+                }
+            )
+
+
+class VowFocusPickConfig(SharedMemoryModel):
+    """Singleton (pk=1): the focus pick budget per pick level (#4759).
+
+    A character's chosen picks at one pick level may cost, added up, no more than
+    ``budget_per_level``. Lazy-created through
+    ``world.covenants.focus_picks.vow_focus_pick_config()`` with the default, like
+    ``SecondaryVowConfig``. Updated in the Django admin.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    budget_per_level = models.PositiveIntegerField(
+        default=VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT,
+        help_text=(
+            "Points a character may spend on focus picks at each pick level. The prices "
+            "of their chosen picks at one level must add up to no more than this."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="vow_focus_pick_config_updates",
+        help_text="The staff account that last changed this config.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"VowFocusPickConfig(pk={self.pk}, budget_per_level={self.budget_per_level})"
+
+
+class CharacterVowFocusPick(SharedMemoryModel):
+    """A character's chosen focus pick on one vow membership (#4759).
+
+    Play state, so resettable. Set by staff in the admin for now; there is no
+    player-facing picker yet. ``clean()`` runs the rules in
+    ``world.covenants.focus_picks.validate_character_focus_pick``: the pick
+    belongs to the held vow (or its anchor, for a sub-role), the membership is
+    not a secondary vow, the pick's level is no higher than the shown vow level,
+    and the level's picks fit the budget.
+    """
+
+    character_role = models.ForeignKey(
+        "arxii.CharacterCovenantRole",
+        on_delete=models.CASCADE,
+        related_name="focus_picks",
+        help_text="The character's vow membership this pick is chosen on.",
+    )
+    pick = models.ForeignKey(
+        VOW_FOCUS_PICK_MODEL,
+        on_delete=models.CASCADE,
+        related_name="character_choices",
+        help_text="The focus pick chosen.",
+    )
+    chosen_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["character_role", "pick__pick_level", "pick__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_role", "pick"],
+                name="character_vow_focus_pick_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_role.character_sheet}: {self.pick.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.character_role_id is None or self.pick_id is None:
+            return
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            validate_character_focus_pick,
+        )
+
+        validate_character_focus_pick(self)
+
+
+class CombatStyleManager(NaturalKeyManager):
+    """Manager for CombatStyle with natural key support."""
+
+
+class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """How a character was taught to fight with magic (#4759).
+
+    A character's combat style (``CharacterSheet.combat_style``) replaces their
+    vow's ``CovenantRoleDefenseProfile``: it sets the defense style (evasion,
+    barrier or mitigation) and how much of their armor counts. A character with
+    no style keeps the vow profile's behavior. Not a ``TechniqueStyle``, which is
+    how a Path or Gift casts; a Path and a character choose those separately
+    (ADR-4759).
+    """
+
+    name = models.CharField(
+        max_length=80,
+        unique=True,
+        help_text="Name staff and players see, e.g. 'Duelist's Footwork'.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="How a fighter of this style moves and defends, in the words players read.",
+    )
+    defense_style = models.CharField(
+        max_length=20,
+        choices=DefenseStyle.choices,
+        help_text=(
+            "How a character with this style defends: Evasion (not being there), Barrier "
+            "(a ward that needs a check) or Mitigation (armor takes the blow)."
+        ),
+    )
+    armor_share_tenths = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MaxValueValidator(10)],
+        help_text=(
+            "How much of the character's armor counts, in tenths (0 to 10). 10 means all "
+            "of it; an evasion style usually counts less."
+        ),
+    )
+
+    objects = CombatStyleManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_defense_style_display()})"
 
 
 class CovenantRoleGiftGrantManager(NaturalKeyManager):
@@ -1953,6 +2294,18 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="CHECK_BONUS/POWER_BONUS scope: fires only on this declared warfare action kind.",
     )
+    focus_pick = models.ForeignKey(
+        VOW_FOCUS_PICK_MODEL,
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="situational_perks",
+        help_text=(
+            "The focus pick this row belongs to. Blank means it is part of the base vow "
+            "and applies to every holder; set, only holders who chose the pick get it. "
+            "The pick must be on the same role."
+        ),
+    )
 
     objects = VowSituationalPerkManager()
 
@@ -1971,6 +2324,9 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        pick_error = focus_pick_role_error(self.focus_pick_id, self.covenant_role_id)
+        if pick_error is not None:
+            raise ValidationError({"focus_pick": pick_error})
         if self.check_type_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
             raise ValidationError(
                 {"check_type": "check_type is only meaningful when effect_kind=CHECK_BONUS."}
@@ -2042,7 +2398,11 @@ class SituationRequirementMixin(models.Model):
         null=True,
         blank=True,
         validators=[MinValueValidator(1)],
-        help_text="Count-shaped floor: surrounded lock count, minimum affection.",
+        help_text=(
+            "Count floor: surrounded lock count, minimum affection; for the "
+            "condition-property situations, the minimum severity (or minimum number "
+            "of enemies nearby)."
+        ),
     )
     affinity = models.ForeignKey(
         "arxii.Affinity",
@@ -2059,6 +2419,18 @@ class SituationRequirementMixin(models.Model):
         default="",
         help_text="Directed combat-origin side; blank = side-blind.",
     )
+    condition_property = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The property a condition must carry for the situation to hold. Read only by "
+            "the condition-property situations, e.g. a target carrying any condition with "
+            "the Indulgence property."
+        ),
+    )
 
     class Meta:
         abstract = True
@@ -2070,6 +2442,7 @@ class SituationRequirementMixin(models.Model):
             count_threshold=self.count_threshold,
             affinity=self.affinity,
             origin_side=self.origin_side,
+            condition_property=self.condition_property,
         )
 
     def clean(self) -> None:
@@ -2083,6 +2456,7 @@ class SituationRequirementMixin(models.Model):
             "count_threshold": self.count_threshold,
             "affinity": self.affinity,
             "origin_side": self.origin_side or None,
+            "condition_property": self.condition_property,
         }
         for field, value in values.items():
             if value is not None and field not in allowed:
@@ -2109,7 +2483,7 @@ class VowSituationalPerkSituation(SituationRequirementMixin, NaturalKeyMixin, Sh
         on_delete=models.CASCADE,
         related_name="situations",
     )
-    situation = models.CharField(max_length=32, choices=Situation.choices)
+    situation = models.CharField(max_length=48, choices=Situation.choices)
 
     objects = VowSituationalPerkSituationManager()
 
@@ -2162,7 +2536,7 @@ class VowSituationalPerkRung(SituationRequirementMixin, NaturalKeyMixin, SharedM
         related_name="rungs",
     )
     rung_number = models.PositiveIntegerField(help_text="Escalation order; must be >= 1.")
-    extra_situation = models.CharField(max_length=32, choices=Situation.choices)
+    extra_situation = models.CharField(max_length=48, choices=Situation.choices)
     magnitude_tenths = models.PositiveIntegerField(
         default=10,
         help_text="Integer-tenths magnitude for this rung; replaces the base when it fires.",
@@ -2264,7 +2638,7 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
         help_text="Whether the cast must be in combat, out of combat, or either.",
     )
     situation = models.CharField(
-        max_length=32,
+        max_length=48,
         choices=Situation.choices,
         blank=True,
         default="",
@@ -2311,6 +2685,18 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
             "role's effect (for a sub-role), or an earlier-unlock effect on the same role."
         ),
     )
+    focus_pick = models.ForeignKey(
+        VOW_FOCUS_PICK_MODEL,
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="added_effects",
+        help_text=(
+            "The focus pick this row belongs to. Blank means it is part of the base vow "
+            "and applies to every holder; set, only holders who chose the pick get it. "
+            "The pick must be on the same role."
+        ),
+    )
 
     objects = VowAddedEffectManager()
 
@@ -2328,6 +2714,7 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
                     "beneficiary",
                     "frequency",
                     "unlock_thread_level",
+                    "focus_pick",
                 ],
                 name="vow_added_effect_scope_unique",
                 nulls_distinct=False,
@@ -2354,8 +2741,9 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
             "beneficiary",
             "frequency",
             "unlock_thread_level",
+            "focus_pick",
         ]
-        dependencies = [COVENANT_ROLE_MODEL, GIFT_MODEL, "arxii.Technique"]
+        dependencies = [COVENANT_ROLE_MODEL, GIFT_MODEL, "arxii.Technique", VOW_FOCUS_PICK_MODEL]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name}: {self.get_function_display()}"
@@ -2381,6 +2769,9 @@ class VowAddedEffect(SituationRequirementMixin, NaturalKeyMixin, SharedMemoryMod
         self._check_narrowing(errors)
         self._check_upgrade(errors)
         self._check_saved_damage(errors)
+        pick_error = focus_pick_role_error(self.focus_pick_id, self.covenant_role_id)
+        if pick_error is not None:
+            errors["focus_pick"] = pick_error
         if errors:
             raise ValidationError(errors)
 

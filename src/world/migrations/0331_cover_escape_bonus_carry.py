@@ -1,7 +1,7 @@
 """The maneuver effect catalog's rows, and FleeConfig.cover_bonus carried into it (#4783).
 
-Data only (the ManeuverEffect table and the ModifierTarget scope columns come from 0328 and
-0329; 0331 drops FleeConfig.cover_bonus).
+Data only (the ManeuverEffect table and the ModifierTarget scope columns come from 0329 and
+0330; 0332 drops FleeConfig.cover_bonus).
 
 1. Get-or-create the "maneuver_effect" ModifierCategory and the eight ManeuverEffect rows
    with today's numbers. These are prose-free mechanical catalog rows the code reads by
@@ -11,7 +11,7 @@ Data only (the ManeuverEffect table and the ModifierTarget scope columns come fr
    value of "Cover: escape bonus", so a staff-edited escape bonus survives the drop.
 
 The values are copied here, never imported from app code. Reversing is a no-op: reversing
-0328 drops the table, and 0331 reversed restores cover_bonus at its default.
+0329 drops the table, and 0332 reversed restores cover_bonus at its default.
 """
 
 from django.db import migrations
@@ -54,7 +54,7 @@ def write_catalog_and_carry_cover_bonus(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0329_modifier_target_one_scope")]
+    dependencies = [("arxii", "0330_modifier_target_one_scope")]
 
     operations = [
         migrations.RunPython(write_catalog_and_carry_cover_bonus, migrations.RunPython.noop),

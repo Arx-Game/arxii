@@ -880,16 +880,8 @@ export interface Gift {
   powers: Power[];
 }
 
-export interface GiftListItem {
-  id: number;
-  name: string;
-  slug: string;
-  affinity: number;
-  affinity_name: string;
-  description: string;
-  level_requirement: number;
-  power_count: number;
-}
+/** One row of GET /api/magic/gifts/ (GiftListSerializer), read from the schema (#4669). */
+export type GiftListItem = components['schemas']['GiftList'];
 
 export interface Power {
   id: number;

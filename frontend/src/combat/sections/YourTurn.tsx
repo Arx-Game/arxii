@@ -31,6 +31,7 @@ import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
 import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
 import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
+import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
@@ -2761,6 +2762,9 @@ export function YourTurn({
         onDispatched={() => {
           queryClient
             .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+            .catch(() => {});
+          queryClient
+            .invalidateQueries({ queryKey: availableActionsKeys.forCharacter(characterId) })
             .catch(() => {});
         }}
       />

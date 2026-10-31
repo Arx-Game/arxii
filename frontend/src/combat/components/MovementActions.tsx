@@ -46,8 +46,13 @@ export function MovementActions({
         const positionId = action.ref.position_id;
         const refused = !action.prerequisite_met;
         // A move and a pass roll can name the same place (#4663), and two stunts can reach
-        // one place by different features or approaches (#4675): the key carries them all.
-        const via = [action.ref.feature_id, action.ref.approach_id]
+        // one place by different features or approaches (#4675). A blocked crossing names no
+        // place, only the challenge on its wall, one per edge (#4667): the key carries them all.
+        const via = [
+          action.ref.feature_id,
+          action.ref.approach_id,
+          action.ref.challenge_instance_id,
+        ]
           .filter((id) => id != null)
           .map((id) => `-${id}`)
           .join('');

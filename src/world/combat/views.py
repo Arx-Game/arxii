@@ -29,11 +29,8 @@ from actions.types import ActionRef, ActionResult, DispatchResult
 from world.areas.positioning.models import Position
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
-    ClashStatus,
     DuelChallengeStatus,
-    EngagementLockStatus,
     OpponentTier,
-    ParticipantStatus,
 )
 from world.combat.filters import (
     CombatEncounterFilter,
@@ -43,7 +40,6 @@ from world.combat.filters import (
     PlacementPickFilter,
 )
 from world.combat.models import (
-    Clash,
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
@@ -53,10 +49,13 @@ from world.combat.models import (
     CreaturePhaseTemplate,
     CreatureTemplate,
     DuelChallenge,
-    EngagementLock,
     EscalationCurve,
     PendingSelection,
     ThreatPool,
+    clash_payload_queryset,
+    engagement_lock_payload_queryset,
+    opponent_payload_queryset,
+    participant_payload_queryset,
 )
 from world.combat.permissions import (
     IsEncounterGMOrStaff,
@@ -105,7 +104,7 @@ from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.mechanics.models import Property
-from world.scenes.constants import PersonaType, RoundStatus
+from world.scenes.constants import RoundStatus
 from world.scenes.models import Persona, Scene
 from world.societies.models import Organization
 from world.standoffs.serializers import (
@@ -452,14 +451,11 @@ class CombatEncounterViewSet(ModelViewSet):
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Create, then re-serialize through the prefetch-primed queryset (#3067).
 
-        ``EncounterDetailSerializer``'s nested fields (participants/opponents/
-        clashes/etc.) read ``*_cached`` attrs that only exist on instances
-        fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
-        calls. The bare instance ``perform_create`` leaves on ``serializer``
-        doesn't carry them, so DRF's default ``CreateModelMixin.create()``
-        (serializing that bare instance) raises ``AttributeError`` — this
-        endpoint had no caller before the web GM-start-encounter flow, so the
-        gap was never exercised.
+        ``EncounterDetailSerializer`` reads the encounter's payload lists
+        (``participants_cached`` and the rest). Re-fetching through
+        ``_base_queryset()`` fills them and the room's position graph in a few
+        batched queries; the bare instance ``perform_create`` leaves would load
+        each lazily instead.
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -593,62 +589,22 @@ class CombatEncounterViewSet(ModelViewSet):
             ),
             Prefetch(
                 "participants",
-                queryset=CombatParticipant.objects.select_related(
-                    "character_sheet__character",
-                    "character_sheet__character__display_data",
-                    "character_sheet__active_alternate_self",
-                    "character_sheet__active_alternate_self__alternate_self",
-                    "character_sheet__character__object_position__position",
-                    "character_sheet__vitals",
-                    "character_sheet__fatigue",
-                    "covenant_role",
-                )
-                .filter(
-                    # Live fights only ever list ACTIVE rows; a COMPLETED encounter
-                    # also lists FLED rows, so ParticipantSerializer.aftermath can
-                    # reach a FLED participant's own digest (#3551 minor 3) -
-                    # deliver_aftermath_digests already sends that participant one.
-                    Q(status=ParticipantStatus.ACTIVE)
-                    | Q(status=ParticipantStatus.FLED, encounter__status=RoundStatus.COMPLETED)
-                )
-                .prefetch_related(
-                    # Pre-fill CharacterSheet.cached_payload_personas (a
-                    # @cached_property doubling as this to_attr target) with the
-                    # thumbnail joined, so ParticipantSerializer resolves the PC
-                    # portrait with zero per-row queries (#630). Queryset shape
-                    # mirrors the property's documented fallback.
-                    Prefetch(
-                        "character_sheet__personas",
-                        queryset=Persona.objects.filter(
-                            persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
-                        )
-                        .order_by("-persona_type", "created_at", "id")
-                        .select_related("thumbnail"),
-                        to_attr="cached_payload_personas",
-                    ),
-                ),
+                queryset=participant_payload_queryset(),
                 to_attr="participants_cached",
             ),
             Prefetch(
                 "opponents",
-                queryset=CombatOpponent.objects.select_related(
-                    "persona__thumbnail",
-                    "objectdb__object_position__position",
-                ),
+                queryset=opponent_payload_queryset(),
                 to_attr="opponents_cached",
             ),
             Prefetch(
                 "clashes",
-                queryset=Clash.objects.filter(status=ClashStatus.ACTIVE).select_related(
-                    "npc_opponent"
-                ),
+                queryset=clash_payload_queryset(),
                 to_attr="clashes_cached",
             ),
             Prefetch(
                 "engagement_locks",
-                queryset=EngagementLock.objects.filter(
-                    status=EngagementLockStatus.ACTIVE,
-                ).select_related("opponent", "participant"),
+                queryset=engagement_lock_payload_queryset(),
                 to_attr="engagement_locks_cached",
             ),
         )
@@ -697,9 +653,8 @@ class CombatEncounterViewSet(ModelViewSet):
     def resolve_round(self, request: Request, pk: int | None = None) -> Response:
         """Resolve the current round.
 
-        SharedMemoryModel identity map means all .save() calls during
-        resolution update the same Python objects in participants_cached
-        and opponents_cached — no re-fetch needed.
+        Each row resolution saves or deletes pops the encounter's matching list
+        (#4784), so the response reloads only the lists that changed.
         """
         encounter = self.get_object()
         try:
@@ -731,7 +686,7 @@ class CombatEncounterViewSet(ModelViewSet):
         if role_id:
             covenant_role = get_object_or_404(CovenantRole, pk=role_id)
         try:
-            new_participant = add_participant(
+            add_participant(
                 encounter,
                 sheet,
                 covenant_role=covenant_role,
@@ -744,8 +699,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_ADD_PARTICIPANT},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Update cached participant list in-place
-        encounter.participants_cached.append(new_participant)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -765,10 +718,6 @@ class CombatEncounterViewSet(ModelViewSet):
             encounter=encounter,
         )
         remove_participant(participant)
-        # Remove from cached list (prefetch only loads ACTIVE)
-        encounter.participants_cached = [
-            p for p in encounter.participants_cached if p.pk != participant.pk
-        ]
         return self._serialize_encounter(request, encounter)
 
     @extend_schema(request=AddOpponentSerializer)
@@ -794,7 +743,7 @@ class CombatEncounterViewSet(ModelViewSet):
         # from a puppeted actor; a named NPC (#4373) goes through
         # add_opponent's custody APPEAR gate with it.
         try:
-            new_opponent = add_opponent(
+            add_opponent(
                 encounter,
                 name=data["name"],
                 tier=data["tier"],
@@ -813,8 +762,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Update cached opponent list in-place
-        encounter.opponents_cached.append(new_opponent)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -836,8 +783,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_REMOVE_OPPONENT},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Remove from cached list (prefetch only loads ACTIVE)
-        encounter.opponents_cached = [o for o in encounter.opponents_cached if o.pk != opponent.pk]
         return self._serialize_encounter(request, encounter)
 
     @extend_schema(
@@ -1130,14 +1075,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_ALREADY_JOINED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Refresh the cached participant list with the newly-created row.
-        new_participant = CombatParticipant.objects.filter(
-            encounter=encounter,
-            character_sheet=sheet,
-            status=ParticipantStatus.ACTIVE,
-        ).first()
-        if new_participant is not None:
-            encounter.participants_cached.append(new_participant)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -1182,9 +1119,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_INVALID_STATUS},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        encounter.participants_cached = [
-            p for p in encounter.participants_cached if p.pk != participant.pk
-        ]
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -1536,9 +1470,10 @@ class CombatEncounterViewSet(ModelViewSet):
     ) -> Response:
         """Serialize the encounter as-is — no re-fetch.
 
-        Use when the encounter's cached state (participants_cached,
-        opponents_cached) is still valid. Most endpoints that only
-        touch actions or encounter fields use this.
+        The payload lists (``participants_cached`` and the rest) are cached
+        properties that each row's save() or delete() pops (#4784), so an
+        action that added, removed or changed a row is reflected here without
+        touching the list.
         """
         context = self._build_serializer_context(request, encounter)
         return Response(

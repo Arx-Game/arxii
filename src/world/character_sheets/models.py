@@ -582,6 +582,21 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
+    # How this character was taught to fight with magic (#4759). Replaces the vow's
+    # defense profile; null keeps the vow profile's behavior.
+    combat_style = models.ForeignKey(
+        "arxii.CombatStyle",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="character_sheets",
+        help_text=(
+            "How this character fights with magic: sets their defense style and how much "
+            "of their armor counts, in place of their vow's defense profile. Blank keeps "
+            "the vow's."
+        ),
+    )
+
     # Residence & Trickle
     current_residence = models.ForeignKey(
         "arxii.RoomProfile",
@@ -1165,7 +1180,7 @@ class CharacterSheet(SharedMemoryModel):
             msg = f"Month {self.birthday_month} has at most {max_day} days."
             raise ValidationError({"birthday_day": msg})
 
-    @cached_property
+    @PrunedCachedProperty
     def cached_payload_personas(self) -> list[Persona]:
         """PRIMARY + ESTABLISHED personas, ordered for the account payload.
 
@@ -1187,7 +1202,9 @@ class CharacterSheet(SharedMemoryModel):
         When prefetched, Django populates this directly. When accessed without
         prefetch, falls back to a fresh query. The fallback ordering MUST
         match the Prefetch ordering exactly, or prefetched vs. non-prefetched
-        rows will diverge.
+        rows will diverge. ``Persona.save()``/``delete()`` pop it, so the
+        identity-mapped sheet never serves a face list from before the write
+        (#4784).
         """
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 

@@ -1660,6 +1660,7 @@
   - species -> species.Species [FK] (nullable)
   - current_language -> species.Language [FK] (nullable)
   - current_mood -> character_sheets.MoodOption [FK] (nullable)
+  - combat_style -> covenants.CombatStyle [FK] (nullable)
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
@@ -3490,6 +3491,19 @@
   - sworn_as -> scenes.Persona [FK]
 **Pointed to by:**
   - granted_techniques <- magic.CharacterTechnique
+  - focus_picks <- covenants.CharacterVowFocusPick
+
+### CharacterVowFocusPick
+**Foreign Keys:**
+  - character_role -> covenants.CharacterCovenantRole [FK]
+  - pick -> covenants.VowFocusPick [FK]
+
+### CombatStyle
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - character_sheets <- character_sheets.CharacterSheet
 
 ### CourtGrantConfig
 **Foreign Keys:**
@@ -3586,6 +3600,7 @@
   - vow_stat_scalings <- covenants.VowStatScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
+  - focus_picks <- covenants.VowFocusPick
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
@@ -3639,10 +3654,12 @@
 ### VowAddedEffect
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
   - upgrades -> covenants.VowAddedEffect [FK] (nullable)
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 **Pointed to by:**
   - upgraded_by <- covenants.VowAddedEffect
   - applied_conditions <- covenants.VowAddedEffectAppliedCondition
@@ -3671,6 +3688,27 @@
   - effect -> covenants.VowAddedEffect [FK]
   - treatment_template -> conditions.TreatmentTemplate [FK]
 
+### VowFocusPick
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - covenant_role -> covenants.CovenantRole [FK]
+**Pointed to by:**
+  - limits <- covenants.VowFocusPickLimit
+  - character_choices <- covenants.CharacterVowFocusPick
+  - situational_perks <- covenants.VowSituationalPerk
+  - added_effects <- covenants.VowAddedEffect
+
+### VowFocusPickConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### VowFocusPickLimit
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - pick -> covenants.VowFocusPick [FK]
+
 ### VowSituationalPerk
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -3679,6 +3717,7 @@
   - check_type -> checks.CheckType [FK] (nullable)
   - mission_category -> missions.MissionCategory [FK] (nullable)
   - mission_template -> missions.MissionTemplate [FK] (nullable)
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 **Pointed to by:**
   - situations <- covenants.VowSituationalPerkSituation
   - rungs <- covenants.VowSituationalPerkRung
@@ -3686,11 +3725,13 @@
 ### VowSituationalPerkRung
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowSituationalPerkSituation
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowStatScaling
@@ -10552,6 +10593,8 @@
   - check_type -> checks.CheckType [FK]
   - capability -> conditions.CapabilityType [FK]
   - sway_target -> mechanics.ModifierTarget [FK] (nullable)
+  - target_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - ally_condition -> conditions.ConditionTemplate [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - reaction_lines <- standoffs.StandoffReactionLine
@@ -11312,6 +11355,7 @@
 ### WoundDetails
 **Foreign Keys:**
   - condition_instance -> conditions.ConditionInstance [OneToOne]
+  - created_encounter -> combat.CombatEncounter [FK] (nullable)
 
 ### Service Functions
 - `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' - Advance staged bleed-out conditions toward death.`

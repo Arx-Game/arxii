@@ -57,3 +57,16 @@ class PrunedCachedProperty(cached_property):
         if not all(row.pk for row in rows):
             rows = instance.__dict__[self.name] = [row for row in rows if row.pk]
         return rows
+
+
+def pop_cached_rows(model: type, pk: int | None, name: str) -> None:
+    """Drop the row list cached as *name* on *model*'s identity-mapped *pk*, if loaded.
+
+    The write-side half of a ``PrunedCachedProperty`` (ADR-0298): a child row's
+    ``save()``/``delete()`` calls this for its parent so the next read reloads. It
+    pops one name only, never a blanket cached-property clear, and asks the identity
+    map rather than the database, so a parent nobody has loaded costs no query.
+    """
+    parent = model.get_cached_instance(pk) if pk is not None else None
+    if parent is not None:
+        parent.__dict__.pop(name, None)

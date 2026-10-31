@@ -27,9 +27,16 @@ from world.magic.models import Facet, FacetAlias
 
 _NON_LETTERS = re.compile(r"[^a-z ]+")
 _SPACES = re.compile(r" +")
-#: The relations a merge moves, by the accessor name ``Facet._meta.related_objects``
-#: reports. A new relation onto Facet must be added here (and to the test that asserts
-#: this set equals the live one) before any merge will run.
+#: The relations a merge moves. A new relation onto Facet must be added to one of
+#: these sets (and to the test that asserts each equals the live one) before any merge
+#: will run. Named relations are keyed by the accessor ``Facet._meta.related_objects``
+#: reports; a ``related_name="+"`` FK has no accessor of its own (every one reports
+#: ``"+"``), so those are keyed by (model label, field name) instead (#4591).
+HANDLED_HIDDEN_RELATIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("arxii.ceremonyoffering", "facet"),  # CeremonyOffering.facet: a past offering's match
+    }
+)
 HANDLED_RELATIONS: frozenset[str] = frozenset(
     {
         "motif_usages",  # MotifResonanceAssociation.facet, unique per motif resonance
@@ -150,6 +157,28 @@ class FacetMerge:
     dropped: int = 0
 
 
+def live_named_relations() -> set[str]:
+    """The accessor of every named relation onto Facet."""
+    return {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - the relation set is the contract
+
+
+def live_hidden_relations() -> set[tuple[str, str]]:
+    """Every ``related_name="+"`` FK onto Facet, as (model label, field name).
+
+    An M2M's auto-created through table also points at Facet with a hidden FK; that
+    row moves with its M2M, which is a named relation, so it is left out here.
+    """
+    return {
+        (rel.related_model._meta.label_lower, rel.field.name)  # noqa: SLF001 - stable identity
+        for rel in Facet._meta.get_fields(include_hidden=True)  # noqa: SLF001 - hidden ones too
+        if rel.auto_created
+        and not rel.concrete
+        and rel.hidden
+        and not rel.many_to_many
+        and not rel.related_model._meta.auto_created  # noqa: SLF001 - an M2M through table
+    }
+
+
 def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
     """Repoint every binding from each loser to ``winner``, retire the losers as aliases.
 
@@ -157,10 +186,13 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
     item that already carries the winner, a being that already favors it) is dropped
     rather than duplicated. Refuses to start when a relation onto Facet has no handler.
     """
-    live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - the relation set is the contract
-    missing = live - HANDLED_RELATIONS
-    if missing:
-        detail = f"no merge handler for {sorted(missing)}"
+    missing = live_named_relations() - HANDLED_RELATIONS
+    missing_hidden = live_hidden_relations() - HANDLED_HIDDEN_RELATIONS
+    if missing or missing_hidden:
+        detail = (
+            f"no merge handler for named relations {sorted(missing)} "
+            f"or hidden relations {sorted(missing_hidden)}"
+        )
         raise UnmergedFacetRelation(detail)
     losers = [loser for loser in losers if loser.pk != winner.pk]
     result = FacetMerge(winner=winner)
@@ -177,6 +209,7 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             # An answer with a line for both facets keeps the winner's line (#4333).
             _move_unique_fk(loser, winner, "answer_sacrifice_lines", "answer", result)
             _move_fk(loser, winner, "worship_requests", "facet", result)
+            _move_ceremony_offerings(loser, winner, result)
             for alias in loser.aliases.all():
                 alias.facet = winner
                 alias.save(update_fields=["facet"])
@@ -184,6 +217,16 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             result.retired_names.append(loser.name)
             loser.delete()
     return result
+
+
+def _move_ceremony_offerings(loser: Facet, winner: Facet, result: FacetMerge) -> None:
+    """Keep the facet recorded on past ceremony offerings when it is merged."""
+    from world.ceremonies.models import CeremonyOffering  # noqa: PLC0415
+
+    for offering in CeremonyOffering.objects.filter(facet=loser):
+        offering.facet = winner
+        offering.save(update_fields=["facet"])
+        result.moved += 1
 
 
 def _move_fk(

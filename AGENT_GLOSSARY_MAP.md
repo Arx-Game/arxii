@@ -18,7 +18,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Conversion rite (#4733, slice 4 of #4672); and Thread retune (#4735, slice 6 of #4672)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
-  (_Avoid_: vow rider, vow switch)
+  (_Avoid_: vow rider, vow switch); and Focus pick and Combat style (#4759, ADR-4759)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md), also holds the #4418 playing-the-cast terms (ADR-4418):
   Cast list, Crowd voice, Resist card, Flipped roll (_Avoid_: "cast" alone for the list, which is a technique cast)
 - [combat](src/world/combat/AGENT_GLOSSARY.md), also holds the #4091 allegiance terms, and hop budget, tactics level and move plan (#4607), the waiting strike (#4608), unanswerable attacker, progress guarantee and bash (#4609), the encounter state ping (#4644), and dodge, dodge plan and area attack (#4676), and rolled surge, surge tuning, degree band and taunt potency (#4737, ADR-4737), and feeding condition (#4739)
@@ -352,6 +352,18 @@ _Avoid_: regard bonus (the polarity match gates empowerment, not the raw regard 
 Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Regard Polarity", "Court
 Regard Modulation", "Relationship Bond Pull Modulation", "Pull Target Modulation"); covenants-side
 framing in [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
+**Focus pick** (#4759):
+An option in a vow's catalog a holder chooses at pick level 1 to 3 (`VowFocusPick`); the vow rows
+pointing at it through `focus_pick` reach only holders who chose it. Priced from its value and
+limits, within a per-level budget. _Avoid_: talent, feat, perk.
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
+**Combat style** (#4759, ADR-4759):
+How a character was taught to fight with magic (`CombatStyle` on `CharacterSheet.combat_style`):
+a Defense Style and an armor share that replace the vow's Defense Profile. _Avoid_: technique
+style (`TechniqueStyle`, how a Path or Gift casts).
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Maneuver effect** (#4783):
 One named part of a combat maneuver with one number (Charge damage, Cover escape bonus, Succor

@@ -98,8 +98,9 @@
 - **Facet vocabulary guards (#4197, ADR-4197):** `Facet` is a flat vocabulary typed by many
   hands. `world/magic/services/facets.py` holds the one spelling rule (`facet_key`),
   `find_facet` / `near_facets` (what a spelling resolves to, and what it is near; aliases
-  count), and `merge_facets(winner, losers) -> FacetMerge` (repoints all eight relations onto
-  `Facet` in one transaction, drops a binding an owner already has on the winner, retires the
+  count), and `merge_facets(winner, losers) -> FacetMerge` (repoints every relation onto `Facet`
+  in one transaction, including `related_name="+"` ones such as a past
+  `CeremonyOffering.facet` (#4591), drops a binding an owner already has on the winner, retires the
   losers as `FacetAlias` rows, refuses with `UnmergedFacetRelation` when a relation has no
   handler). API: `GET /api/magic/facets/near/?name=`; `POST /api/magic/facets/` is staff-only
   and answers an existing facet with `matched: true` for a spelling that already resolves.
@@ -1353,7 +1354,8 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   See `docs/systems/conditions.md` "Condition effects combat reads".
 - **Conditions react when someone is struck (#4584, ADR-4584-A) [BUILT & WIRED]:**
   `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_source_by_target`),
-  `source_guards_bearer` (standing guard; `guardians_by_target`), `prevents_knockout` (grace;
+  `source_guards_bearer` (standing guard; `guardians_by_target`), `spares_source` (#4759; an NPC
+  spares the source and its wards, read by #4759 slice 7, not yet wired), `prevents_knockout` (grace;
   `knockout_preventing_instance`) and `retaliation_damage` / `retaliation_damage_type` /
   `retaliation_condition` (strike-back; `retaliating_instances`). `UNTIL_USED` conditions end by
   use: `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id`;
@@ -7823,9 +7825,23 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `role_base_bonus_for_target(role, target, char_level)` returns
     `char_level × bonus_per_level`; no row → 0. Lore-repo content (#2533,
     `NaturalKeyMixin`, `CONTENT_MODELS`).
-  - `DefenseStyle` (`TextChoices`, #2533, ADR-0149 Layer 3) — `GEAR_SOAK`/
-    `EVASION`/`BARRIER`, how a covenant vow defends. Code-defined vocabulary
-    (Layer 4's situational perks, #2536, key on these labels).
+  - `DefenseStyle` (`TextChoices`, #2533, ADR-0149 Layer 3) — `GEAR_SOAK`
+    (labelled "Mitigation" since #4759) / `EVASION`/`BARRIER`, how a covenant vow
+    defends. Code-defined vocabulary (Layer 4's situational perks, #2536, key on these
+    labels).
+  - **Vow focus picks and combat styles (#4759 slice 1, ADR-4759) [BUILT, NOT WIRED]:**
+    `VowFocusPick` (NK `(covenant_role, name)`, `pick_level` 1-3, `value`),
+    `VowFocusPickLimit` (NK `(pick, kind)`, `FocusPickLimitKind`, `frequency_tenths`,
+    `reduction`), `VowFocusPickConfig` (singleton, `budget_per_level`),
+    `CharacterVowFocusPick` (`character_role` x `pick`, play state) and `CombatStyle`
+    (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`).
+    Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
+    `CovenantRoleActionScaling`. `SituationRequirementMixin.condition_property` (FK
+    `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
+    `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
+    False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
+    `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
+    `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),
     `gear_additive_tenths` (default 10 = fully additive). Lore-repo content
@@ -8205,6 +8221,8 @@ caster and move, and allied NPCs take heart. Ultimates never fail (ADR-4147).
   devastating_action), `SpectacleReaction` (shaken, faltering, broken, heartened). Also
   `AudereThreshold.check_level_bonus`, `AudereMajoraThreshold.check_level_bonus`,
   `StandoffApproach.casts_technique`, `StandoffConfig.terms_ease_faltering` / `terms_ease_broken`.
+  #4759: `StandoffApproach.target_condition` / `ally_condition` (nullable `ConditionTemplate`,
+  laid on a successful press by #4759 slice 4, not yet wired).
 - **Key functions:** `apply_spectacle`, `classify_cast`, `is_devastating`, `spectacle_hit`,
   `encounter_for_character`, `deliver_spectacle` (`combat/spectacle.py`; its morale helpers
   `tier_morale_map` and `mindless_share` moved to `combat/morale.py` in #4619);
@@ -10227,7 +10245,9 @@ combat, poison, spells, exhaustion, and any damage source.
   specific→general per ADR-0010; `damage_taken` PositiveInt — the debit that caused the wound,
   the mend-cap basis; `health_mended_total` PositiveInt, default 0 — running sum every
   `mend_wound()` call has ever mended on this wound, across every healer; stamped by
-  `_record_wound_details` the moment the wound tier applies a wound condition)
+  `_record_wound_details` the moment the wound tier applies a wound condition; #4759:
+  `created_encounter` (nullable FK `CombatEncounter`, SET_NULL) and `created_round` (nullable
+  PositiveInt), the fight and round a wound landed in, stamped and read by #4759 slice 6)
 - **Old-age decline (#2756, ADR-0172):** the Frailty condition (severity counts accumulated
   decline; its `ConditionModifierEffect` −1 × severity vs the `max_health` ModifierTarget is
   that target's first writer, folded in by `recompute_max_health`). `world/vitals/aging.py`

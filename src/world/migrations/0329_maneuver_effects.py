@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0327_fury_surrenders_control"),
+        ("arxii", "0328_vow_focus_picks_and_combat_styles"),
     ]
 
     operations = [
