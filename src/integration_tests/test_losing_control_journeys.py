@@ -13,19 +13,30 @@ records the difficulty the roll was made at.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Iterator
+from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
 from integration_tests.harness import JourneyCase
+from world.checks.factories import CheckTypeFactory
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.constants import ActionCategory, ParticipantStatus
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+)
+from world.combat.models import CombatRoundAction, FleeConfig
+from world.combat.services import resolve_round
 from world.combat.services.damage.damage import apply_damage_to_participant
-from world.conditions.berserk_content import ensure_berserk_content
+from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
 from world.conditions.constants import ControlLossFiresOn
 from world.conditions.factories import (
+    CompulsionFactory,
     ConditionCheckModifierFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
@@ -39,8 +50,18 @@ from world.conditions.services import (
 )
 from world.game_clock.constants import TimePhase
 from world.magic.constants import TargetKind
-from world.magic.factories import GiftFactory, ThreadFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterGiftFactory,
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueFactory,
+    ThreadFactory,
+)
+from world.magic.models import CharacterTechnique
+from world.magic.seeds_cast import ensure_technique_cast_content
 from world.magic.services.fury import get_berserk_template
+from world.scenes.constants import RoundStatus
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.species.moon_provisioning import (
     SEED_LYCAN_GIFT_NAME,
@@ -293,3 +314,195 @@ class MoonTrigger(_ControlLossCase):
             moon_reconcile_tick()
 
         self.assertEqual(rolled.call_args.kwargs["extra_modifiers"], -10)
+
+
+# -- a compulsion at combat resolution ------------------------------------------------
+#
+# Mira is Berserk at severity 3 in a fight with a Bandit Captain. The seeded Berserk
+# compulsion (base 25, +2 per severity; flee and parley +5) makes every hand-worked
+# difficulty: any action other than an attack rolls at 25 + 2 x 3 = 31, a flee or a
+# parley at 31 + 5 = 36. A Partial Success acts strained at -4; a Failure lets the rage
+# act. She knows Claw, a damaging technique the rage swings with, and Mend, which harms
+# nobody.
+
+
+def _land_the_swing(*_args: object, **_kwargs: object):
+    """The offence roll a declared or compelled attack makes, pinned to land."""
+    return MagicMock(success_level=2)
+
+
+class _CompelledMira(_ControlLossCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.partial = outcome_at_level(0)
+        self.failure = outcome_at_level(-1)
+        self.success = outcome_at_level(1)
+        self.road = self.make_room("The Road")
+        self.mira = self.make_player("Mira", room=self.road)
+        self.sheet = self.mira.sheet_data
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet, health=100, max_health=100, base_max_health=100
+        )
+        CharacterAnimaFactory(character=self.sheet, current=100, maximum=100)
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=self.road
+        )
+        self.seat = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE
+        )
+        self.captain = CombatOpponentFactory(
+            encounter=self.encounter, name="Bandit Captain", health=5000, max_health=5000
+        )
+        self.flee_check = CheckTypeFactory(name="Run for it")
+        FleeConfig.objects.filter(pk=1).delete()
+        FleeConfig.objects.create(pk=1, check_type=self.flee_check)
+        template = ensure_technique_cast_content()
+        self.claw = TechniqueFactory(
+            name="Claw",
+            effect_type=EffectTypeFactory(name="Claw effect", base_power=5),
+            action_category=ActionCategory.PHYSICAL,
+            action_template=template,
+            anima_cost=1,
+        )
+        self.mend = TechniqueFactory(
+            name="Mend",
+            effect_type=EffectTypeFactory(name="Mend effect", base_power=None),
+            action_category=ActionCategory.PHYSICAL,
+            action_template=template,
+            anima_cost=1,
+        )
+        for technique in (self.claw, self.mend):
+            CharacterGiftFactory(character=self.sheet, gift=technique.gift)
+            CharacterTechnique.objects.create(character=self.sheet, technique=technique)
+        self.rage = apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3).instance
+        self.watch(self.mira)
+
+    def resolve(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            resolve_round(self.encounter, offense_check_fn=_land_the_swing)
+
+    @staticmethod
+    @contextmanager
+    def resist_rolls() -> Iterator[MagicMock]:
+        """One spy on the real check, wherever a roll reaches it from (the flee roll
+        holds its own reference through the consequence resolver)."""
+        spy = MagicMock(wraps=perform_check)
+        with (
+            patch("world.checks.services.perform_check", spy),
+            patch("world.checks.consequence_resolution.perform_check", spy),
+        ):
+            yield spy
+
+    @staticmethod
+    def rolled_on(spy, check_type) -> list:
+        """The spied calls rolled on ``check_type``."""
+        return [
+            call
+            for call in spy.call_args_list
+            if (call.args[1] if len(call.args) > 1 else call.kwargs.get("check_type")) == check_type
+        ]
+
+    def declared(self):
+        return CombatRoundAction.objects.filter(participant=self.seat, round_number=1).first()
+
+
+class ACompelledFighterWhoAttacks(_CompelledMira):
+    def test_compelled_pc_attacking_rolls_nothing(self) -> None:
+        told = self.telnet(self.mira, "cast Claw at Bandit Captain")
+        self.assertNotIn("Could not", told)
+
+        with self.resist_rolls() as spy:
+            self.resolve()
+
+        compulsion = self.berserk.compulsion
+        self.assertEqual(self.rolled_on(spy, compulsion.check_type), [])
+        self.assertNotTold(self.mira, "tries to")
+
+    def test_idle_compelled_pc_is_auto_declared(self) -> None:
+        with self.resist_rolls() as spy:
+            self.resolve()
+
+        self.assertEqual(self.rolled_on(spy, self.berserk.compulsion.check_type), [])
+        action = self.declared()
+        self.assertEqual(action.focused_action, self.claw)
+        self.assertEqual(action.focused_opponent_target, self.captain)
+
+
+class ACompelledFighterWhoFlees(_CompelledMira):
+    def test_compelled_flee_partial_success_flees_at_penalty(self) -> None:
+        result = self.web(self.mira, "combat_flee")
+        self.assertTrue(result.detail.success, result.detail.message)
+
+        with self.resist_rolls() as spy, force_check_outcome(self.partial):
+            self.resolve()
+
+        self.assertTold(
+            self.mira,
+            "Mira tries to flee against Berserk. compulsion_resist vs 36: Partial Success.",
+        )
+        flee_rolls = self.rolled_on(spy, self.flee_check)
+        self.assertEqual(len(flee_rolls), 1)
+        # perform_check(character, check_type, target_difficulty, extra_modifiers, ...)
+        self.assertEqual(flee_rolls[0].args[3], -4)
+        self.assertEqual(self.declared().compulsion_penalty, 4)
+
+    def test_compelled_flee_failure_attacks_instead(self) -> None:
+        self.telnet(self.mira, "combat flee")
+
+        with self.resist_rolls() as spy, force_check_outcome(self.failure):
+            self.resolve()
+
+        self.assertTold(self.mira, "compulsion_resist vs 36: Failure.")
+        self.assertTold(self.mira, "Berserk wins out: Mira attacks Bandit Captain.")
+        self.assertEqual(self.rolled_on(spy, self.flee_check), [])
+        action = self.declared()
+        self.assertIsNone(action.maneuver)
+        self.assertEqual(action.focused_action, self.claw)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
+
+    def test_failed_resist_with_no_attack_available_cancels_without_error(self) -> None:
+        CharacterTechnique.objects.filter(character=self.sheet, technique=self.claw).delete()
+        self.telnet(self.mira, "combat flee")
+
+        with force_check_outcome(self.failure):
+            self.resolve()
+
+        self.assertTold(self.mira, "Berserk wins out: Mira gives up trying to flee.")
+        self.assertIsNone(self.declared())
+
+
+class ACompelledFighterWhoHeals(_CompelledMira):
+    def test_compelled_heal_rolls_at_base_difficulty(self) -> None:
+        told = self.telnet(self.mira, "cast Mend")
+        self.assertNotIn("Could not", told)
+
+        with force_check_outcome(self.success):
+            self.resolve()
+
+        # 25 base + 2 per severity x 3, and Mend is not a forbidden action.
+        self.assertTold(
+            self.mira, "Mira tries to use Mend against Berserk. compulsion_resist vs 31: Success."
+        )
+        self.assertEqual(self.declared().focused_action, self.mend)
+
+
+class TwoCompulsionsAtOnce(_CompelledMira):
+    def test_two_compulsions_the_most_severe_governs(self) -> None:
+        fever = ConditionTemplateFactory(name="Battle fever", category=self.berserk.category)
+        CompulsionFactory(
+            condition=fever,
+            check_type=self.berserk.compulsion.check_type,
+            base_difficulty=10,
+            difficulty_per_severity=0,
+        )
+        apply_condition(self.mira, fever, severity=5, duration_rounds=3)
+        self.telnet(self.mira, "combat flee")
+
+        with force_check_outcome(self.success):
+            self.resolve()
+
+        self.assertTold(
+            self.mira, "Mira tries to flee against Battle fever. compulsion_resist vs 10: Success."
+        )
+        self.assertNotTold(self.mira, "against Berserk")

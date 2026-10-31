@@ -26,7 +26,11 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction, FleeConfig
 from world.combat.services import resolve_round
-from world.conditions.factories import ConditionCheckModifierFactory, ConditionInstanceFactory
+from world.conditions.factories import (
+    CompulsionFactory,
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+)
 from world.magic.factories import BerserkConditionTemplateFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
@@ -133,6 +137,8 @@ class ARagingCharacterMayParley(_RagingMira):
 
 class ARagingCharacterWillNotWalkAway(_RagingMira):
     def test_leaving_is_refused_with_a_pointer_at_fleeing(self) -> None:
+        # The refusal follows the compulsion on the condition (#4802), not its name.
+        CompulsionFactory(condition=self.berserk)
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
         self.encounter.save()

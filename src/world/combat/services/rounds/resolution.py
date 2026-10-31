@@ -178,12 +178,18 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         select_npc_actions(enc)
     ensure_opponent_plans(enc)
 
-    # Berserk compulsion (#2845): rage-driven participants who declared nothing
-    # get their simplest damaging technique auto-declared. Idempotent — a
-    # participant who steered their own rage (declared an attack) is skipped.
-    from world.combat.berserk_compulsion import select_berserk_actions  # noqa: PLC0415
+    # Compulsions (#2845, #4802): a compelled PC whose declaration goes against the
+    # compulsion rolls to resist it, and a failure replaces the declaration with the
+    # compulsion attack. Then compelled participants who declared nothing get their
+    # simplest damaging technique auto-declared; a participant who steered their own
+    # rage (declared an attack) is skipped.
+    from world.combat.compulsion import (  # noqa: PLC0415
+        resolve_compulsions,
+        select_compelled_actions,
+    )
 
-    select_berserk_actions(enc)
+    resolve_compulsions(enc)
+    select_compelled_actions(enc)
 
     enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])

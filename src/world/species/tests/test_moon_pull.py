@@ -185,7 +185,7 @@ class MoonReconcileTest(TestCase):
         with (
             _night_full_moon(),
             patch("world.conditions.control_loss.has_compulsion", return_value=True),
-            patch("world.combat.berserk_compulsion.berserk_rampage_window") as rampage,
+            patch("world.combat.compulsion.berserk_rampage_window") as rampage,
             patch("world.checks.services.perform_check_with_modifiers") as check,
         ):
             reconcile_moon_pull(self.character)

@@ -70,7 +70,7 @@ def reconcile_moon_pull_safely(character) -> None:
 
 def _rampage_window(character) -> None:
     """One out-of-combat rampage window while the moon-swept character rages."""
-    from world.combat.berserk_compulsion import berserk_rampage_window  # noqa: PLC0415
+    from world.combat.compulsion import berserk_rampage_window  # noqa: PLC0415
 
     berserk_rampage_window(character)
 

@@ -1,5 +1,5 @@
 """Berserk compulsion (#2845). SQLite tier — condition state is patched via
-``is_berserk`` (apply_condition is PG-only); declaration plumbing is observed
+``has_compulsion`` (apply_condition is PG-only); declaration plumbing is observed
 at the ``_declare_rage_attack`` seam where full validation isn't the subject."""
 
 from unittest.mock import MagicMock, patch
@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.berserk_compulsion import (
+from world.combat.compulsion import (
     berserk_rampage_window,
     compulsion_technique_for,
-    select_berserk_actions,
+    select_compelled_actions,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -23,10 +23,10 @@ from world.magic.models.techniques import CharacterTechnique
 
 
 def _berserk_only(*characters):
-    """Patch is_berserk to be True only for the given characters."""
+    """Patch has_compulsion to be True only for the given characters."""
     pks = {c.pk for c in characters}
     return patch(
-        "world.combat.berserk_compulsion.is_berserk",
+        "world.combat.compulsion.has_compulsion",
         side_effect=lambda c: c is not None and c.pk in pks,
     )
 
@@ -65,17 +65,17 @@ class SelectBerserkActionsTest(TestCase):
     def test_non_berserk_participants_are_left_alone(self):
         with (
             _berserk_only(),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
+            patch("world.combat.compulsion._declare_rage_attack") as declare,
         ):
-            select_berserk_actions(self.encounter)
+            select_compelled_actions(self.encounter)
         declare.assert_not_called()
 
     def test_berserk_participant_gets_an_auto_attack(self):
         with (
             _berserk_only(self.character),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
+            patch("world.combat.compulsion._declare_rage_attack") as declare,
         ):
-            select_berserk_actions(self.encounter)
+            select_compelled_actions(self.encounter)
         declare.assert_called_once()
         _participant, technique, target = declare.call_args.args
         self.assertEqual(technique, self.technique)
@@ -88,9 +88,9 @@ class SelectBerserkActionsTest(TestCase):
         )
         with (
             _berserk_only(self.character),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
+            patch("world.combat.compulsion._declare_rage_attack") as declare,
         ):
-            select_berserk_actions(self.encounter)
+            select_compelled_actions(self.encounter)
         declare.assert_not_called()
 
 
@@ -154,7 +154,7 @@ class RampageWindowTest(TestCase):
             _berserk_only(self.character),
             patch.object(type(self.character), "location", room, create=True),
             patch(
-                "world.combat.berserk_compulsion._in_uncompleted_encounter",
+                "world.combat.compulsion._in_uncompleted_encounter",
                 return_value=True,
             ),
         ):

@@ -33,8 +33,9 @@ from world.combat.models import MovementConfig
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.combat.models import CombatOpponentAction, CombatParticipant
-    from world.conditions.models import CapabilityType, ConditionInstance
+    from world.conditions.models import CapabilityType, Compulsion, ConditionInstance
 
 #: True while an NPC attack is resolving through the automatic dodge, so the Phase
 #: Step interceptor (``blink_dodge``) leaves the hit to the roll (#4676).
@@ -301,3 +302,17 @@ def dodge_cost_line(source: DodgeSource) -> str:
     else:
         cost = f"{tuning.dodge_anima_cost} anima"
     return f"Each dodge costs {cost}. Each dodge after the first this round is harder."
+
+
+def try_steady(
+    participant: CombatParticipant,  # noqa: ARG001 - read by steadying (#4802 Task 5)
+    compulsion: Compulsion,  # noqa: ARG001 - read by steadying (#4802 Task 5)
+    difficulty: int,  # noqa: ARG001 - read by steadying (#4802 Task 5)
+) -> CheckResult | None:
+    """An ally's steadying: a second resist roll for a compelled *participant* (#4802).
+
+    Called by compulsion resolution when the first resist roll lets the compulsion act.
+    Returns the second roll's result, or None when nobody steadies. Until the steadying
+    reaction is built (#4802 Task 5) nobody does, so this returns None.
+    """
+    return None

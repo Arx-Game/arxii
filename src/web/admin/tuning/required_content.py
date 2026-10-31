@@ -2714,7 +2714,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/fury.py get_berserk_template(); "
-                "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
+                "world/species/moon_sensitivity.py; world/combat/compulsion.py"
             ),
             consequence=(
                 "Berserk cannot be found: choosing a Berserk Fury tier or losing control to "
@@ -2728,7 +2728,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="berserk-compulsion",
             label="Berserk has a compulsion",
             tier=DependencyTier.REQUIRED,
-            consumer="world/combat/berserk_compulsion.py; world/conditions/models.py Compulsion",
+            consumer="world/combat/compulsion.py; world/conditions/models.py Compulsion",
             consequence=(
                 "A raging character is not compelled to attack: Berserk takes no action "
                 "from them and refuses nothing."
