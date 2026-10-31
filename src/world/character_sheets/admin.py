@@ -184,7 +184,7 @@ class MoodOptionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterSheet)
 class CharacterSheetAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["active_persona", "character", "current_residence"]
+    autocomplete_fields = ["active_persona", "character", "current_residence", "combat_style"]
     # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
     large_table_widget_exempt = ["roster_entry"]
 
@@ -277,6 +277,14 @@ class CharacterSheetAdmin(admin.ModelAdmin):
                 "description": "Narrative bio (concept/quote/background/…) AND lineage "
                 "(family/heritage/tarot/origin) live on the linked Profile (#1270) — "
                 "edit them there.",
+            },
+        ),
+        (
+            "Combat Style (#4759)",
+            {
+                "fields": ("combat_style",),
+                "description": "How this character fights with magic. It replaces the "
+                "vow's defense profile; blank keeps the vow's.",
             },
         ),
         (

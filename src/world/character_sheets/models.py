@@ -582,6 +582,21 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
+    # How this character was taught to fight with magic (#4759). Replaces the vow's
+    # defense profile; null keeps the vow profile's behavior.
+    combat_style = models.ForeignKey(
+        "arxii.CombatStyle",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="character_sheets",
+        help_text=(
+            "How this character fights with magic: sets their defense type and how much "
+            "of their armor counts, in place of their vow's defense profile. Blank keeps "
+            "the vow's."
+        ),
+    )
+
     # Residence & Trickle
     current_residence = models.ForeignKey(
         "arxii.RoomProfile",

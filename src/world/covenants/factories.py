@@ -8,11 +8,13 @@ from factory import django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import (
+    FOCUS_PICK_LIMIT_FREQUENCY_FULL,
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
     CovenantType,
     DefenseStyle,
+    FocusPickLimitKind,
     InsightTargetKind,
     MentorBondAdjusted,
     VowEffectContext,
@@ -20,6 +22,8 @@ from world.covenants.constants import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CharacterVowFocusPick,
+    CombatStyle,
     CourtPact,
     Covenant,
     CovenantLevelBonus,
@@ -41,6 +45,9 @@ from world.covenants.models import (
     VowAddedEffectDamageProfile,
     VowAddedEffectRemovedCondition,
     VowAddedEffectTreatment,
+    VowFocusPick,
+    VowFocusPickConfig,
+    VowFocusPickLimit,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
@@ -1504,3 +1511,75 @@ def make_court_with_mission(
         themed_role=themed_role,
         service_offer=offer,
     )
+
+
+class VowFocusPickFactory(factory_django.DjangoModelFactory):
+    """Factory for VowFocusPick (#4759): a level 1 pick worth 4 with no limits."""
+
+    class Meta:
+        model = VowFocusPick
+        django_get_or_create = ("covenant_role", "name")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    pick_level = 1
+    name = factory.Sequence(lambda n: f"Focus Pick {n}")
+    description = ""
+    value = 4
+
+
+class VowFocusPickLimitFactory(factory_django.DjangoModelFactory):
+    """Factory for VowFocusPickLimit (#4759): a TARGET limit met half the time."""
+
+    class Meta:
+        model = VowFocusPickLimit
+
+    pick = factory.SubFactory(VowFocusPickFactory)
+    kind = FocusPickLimitKind.TARGET
+    frequency_tenths = 5
+    reduction = 0
+    description = ""
+
+
+class VowFocusPickReductionLimitFactory(VowFocusPickLimitFactory):
+    """A COST limit taking a flat point off the price (#4759)."""
+
+    kind = FocusPickLimitKind.COST
+    frequency_tenths = FOCUS_PICK_LIMIT_FREQUENCY_FULL
+    reduction = 1
+
+
+class VowFocusPickConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for the VowFocusPickConfig singleton (#4759)."""
+
+    class Meta:
+        model = VowFocusPickConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+    budget_per_level = 4
+
+
+class CharacterVowFocusPickFactory(factory_django.DjangoModelFactory):
+    """Factory for CharacterVowFocusPick (#4759). Saves without running clean()."""
+
+    class Meta:
+        model = CharacterVowFocusPick
+
+    character_role = factory.SubFactory(CharacterCovenantRoleFactory)
+    pick = factory.SubFactory(
+        VowFocusPickFactory,
+        covenant_role=factory.SelfAttribute("..character_role.covenant_role"),
+    )
+
+
+class CombatStyleFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatStyle (#4759): an evasion style counting half its armor."""
+
+    class Meta:
+        model = CombatStyle
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Combat Style {n}")
+    description = ""
+    defense_style = DefenseStyle.EVASION
+    armor_share_tenths = 5
