@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.harness import JourneyCase
 from world.action_points.models import ActionPointConfig
 from world.character_creation.sheet_writers import set_skill_values
@@ -23,6 +24,16 @@ from world.checks.services import perform_check
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import (
+    CraftedItemRecipeFactory,
+    CraftingRecipeFactory,
+    CraftingRecipeModifierFactory,
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+    QualityTierFactory,
+    TemplateSlotFactory,
+)
 from world.mechanics.services import ensure_skill_target
 from world.skills.factories import SkillFactory
 from world.skills.models import CharacterSkillValue
@@ -111,3 +122,29 @@ class ASkillBonusFromACard(JourneyCase):
         row = self.sheet_row()
         self.assertEqual(self.stored(), 12, "a bonus does not raise the cost of the next rank")
         self.assertEqual((self.roll_points(), row["value"], row["modifier"]), (22, 22, 10))
+
+    def test_a_worn_pieces_bonus_shows_on_the_sheet_with_no_card(self) -> None:
+        """A sea-cloak crafted with +5 sailing, worn, and no card: the roll and the sheet
+        both read 16. The sheet first priced only skills with a card or condition row, so
+        it showed 11 while the roll was 16."""
+        recipe = CraftingRecipeFactory()
+        CraftingRecipeModifierFactory(
+            recipe=recipe, target=ensure_skill_target(self.sailing.trait), base_value=5
+        )
+        template = ItemTemplateFactory(name="Sea-cloak")
+        TemplateSlotFactory(
+            template=template, body_region=BodyRegion.TORSO, equipment_layer=EquipmentLayer.BASE
+        )
+        template.__dict__.pop("cached_slots", None)
+        item = ItemInstanceFactory(
+            template=template,
+            game_object=ObjectDBFactory(db_key="Sea-cloak", location=self.rhoswen),
+            holder_character_sheet=self.sheet,
+            quality_tier=QualityTierFactory(name="Sound"),
+        )
+        CraftedItemRecipeFactory(item_instance=item, recipe=recipe, quality_tier=item.quality_tier)
+        self.assertIn("You equip Sea-cloak.", self.telnet(self.rhoswen, "wear Sea-cloak"))
+
+        row = self.sheet_row()
+        self.assertEqual((self.roll_points(), row["value"], row["modifier"]), (16, 16, 5))
+        self.assertEqual(self.stored(), 11)

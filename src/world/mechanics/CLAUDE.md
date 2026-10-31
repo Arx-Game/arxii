@@ -28,7 +28,7 @@ Service functions for modifier operations:
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
 - **`ensure_aspect_target(aspect)`** (#4827): the aspect-category target (`target_aspect`) a card's `+N <aspect>` lands on, created if missing; `None` when another category owns the name. Called by `AspectAdmin.save_model` and the `ensure_aspect_targets` seed.
 - **`ensure_skill_target(trait)`** (#4820): the stat-category target a skill's bonuses land on, created if missing; `None` when another category owns the name. Called by `SkillAdmin.save_model` and the Distinction Builder's paste.
-- **`skill_modifiers_for_sheet(sheet, skills)`** (#4820): skill pk to the modifier a roll on it gets, for the character sheet; three queries in all.
+- **`skill_modifiers_for_sheet(sheet, skills)`** (#4820): skill pk to the modifier a roll on it gets, for the character sheet; picks skills from card, condition and worn-equipment (crafted piece, equipment walk) sources, the last read from cached handlers.
 - **`property_damage_bonus(target, damage_type)`**: Sum `PropertyDamageModifier` values for a target's active `Property` rows (see below).
 
 ## Models

@@ -88,7 +88,9 @@ calls it on every save, and the Distinction Builder's paste calls it at create t
 effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
 the first time a card names it. A same-named target in another category (the `stealth` roll
 modifier that predates the Stealth skill) is left alone: staff retarget it by hand. The sheet
-prices skills through `skill_modifiers_for_sheet` (three queries however many skills).
+prices skills through `skill_modifiers_for_sheet`, which picks a skill when a card, a
+condition or worn equipment (a crafted piece or the equipment walk) bonuses it, so a bonus
+from gear alone shows on the sheet as it rolls.
 Journeys: `integration_tests/test_skill_bonus_journeys.py`.
 
 ### XP Boundaries (19, 29, 39, 49) — plateau, not a stop (#2115)

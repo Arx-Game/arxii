@@ -2338,21 +2338,26 @@ def skill_modifiers_for_sheet(
 ) -> dict[int, int]:
     """``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).
 
-    Bounded at three queries whatever the skill count: the sheet's ``CharacterModifier``
-    rows on any skill target, the character's active conditions, and those conditions'
-    effects on the skill targets pick the skills worth pricing; each of those then reads
+    Picks the skills worth pricing from every source ``get_trait_modifier`` reads: the
+    sheet's ``CharacterModifier`` rows on any skill target, the active conditions'
+    effects on them (three queries whatever the skill count), and the equipment the
+    roll counts, a worn crafted piece or the equipment walk (facet, covenant-role,
+    mantle and motif passives), read per target from the character's cached
+    equipment and thread handlers. Each picked skill then reads
     ``TraitHandler.get_trait_modifier`` (character, equipment and condition
     contributions, tapered in the stat lane), so the sheet and the roll agree. A skill
-    with neither kind of row is left out and shows its stored value.
+    with no source is left out and shows its stored value.
     """
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
 
     by_target: dict[int, Skill] = {}
+    targets: dict[int, ModifierTarget] = {}
     for skill in skills:
         target = ModifierTarget.get_for_trait(skill.trait)
         if target is not None:
             by_target[target.pk] = skill
+            targets[target.pk] = target
     character = character_sheet.character
     if not by_target or character is None:
         return {}
@@ -2370,11 +2375,33 @@ def skill_modifiers_for_sheet(
                 modifier_target_id__in=by_target,
             ).values_list("modifier_target_id", flat=True)
         )
+    for target_id, target in targets.items():
+        if target_id in hit:
+            continue
+        if equipment_walk_parts(character_sheet, target).total or _crafted_pieces_on(
+            character_sheet, target
+        ):
+            hit.add(target_id)
     handler = character.traits
     return {
         by_target[target_id].pk: handler.get_trait_modifier(by_target[target_id].trait)
         for target_id in hit
     }
+
+
+def _crafted_pieces_on(character_sheet: CharacterSheet, target: ModifierTarget) -> bool:
+    """Whether a worn crafted piece carries a modifier for ``target`` (#4820).
+
+    The guard mirrors ``modifier_target_contributions``: a character without the
+    equipped-items handler (a raw ObjectDB fixture) wears nothing.
+    """
+    character = character_sheet.character
+    if character is None:
+        return False
+    try:
+        return bool(character.equipped_items.crafted_modifier_by_piece(target))
+    except AttributeError:
+        return False
 
 
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:

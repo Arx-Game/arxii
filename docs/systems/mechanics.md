@@ -142,7 +142,8 @@ from world.mechanics.services import ensure_skill_target, skill_modifiers_for_sh
 # created if missing; None when another category already owns the name (retarget by hand).
 target = ensure_skill_target(skill.trait)   # SkillAdmin.save_model and the paste call this
 
-# skill.pk -> the modifier a roll on that skill gets, for the sheet; three queries in all.
+# skill.pk -> the modifier a roll on that skill gets, for the sheet: card and condition
+# rows in three queries, worn crafted pieces and the equipment walk from cached handlers.
 modifiers = skill_modifiers_for_sheet(sheet, skills)
 ```
 

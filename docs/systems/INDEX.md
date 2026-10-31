@@ -7003,7 +7003,8 @@ Unified modifier system — categories, types, sources, and per-character modifi
     skill's bonuses land on, created if missing; called by `SkillAdmin.save_model` and the
     Distinction Builder's paste at create time
   - `skill_modifiers_for_sheet(sheet, skills) -> dict[int, int]` (#4820) — the modifier a roll
-    on each skill gets, for the sheet's `SkillEntry.modifier`; three queries in all
+    on each skill gets, for the sheet's `SkillEntry.modifier`; cards, conditions and worn
+    equipment (crafted pieces, the equipment walk) all count
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
