@@ -451,14 +451,11 @@ class CombatEncounterViewSet(ModelViewSet):
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Create, then re-serialize through the prefetch-primed queryset (#3067).
 
-        ``EncounterDetailSerializer``'s nested fields (participants/opponents/
-        clashes/etc.) read ``*_cached`` attrs that only exist on instances
-        fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
-        calls. The bare instance ``perform_create`` leaves on ``serializer``
-        doesn't carry them, so DRF's default ``CreateModelMixin.create()``
-        (serializing that bare instance) raises ``AttributeError`` — this
-        endpoint had no caller before the web GM-start-encounter flow, so the
-        gap was never exercised.
+        ``EncounterDetailSerializer`` reads the encounter's payload lists
+        (``participants_cached`` and the rest). Re-fetching through
+        ``_base_queryset()`` fills them and the room's position graph in a few
+        batched queries; the bare instance ``perform_create`` leaves would load
+        each lazily instead.
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -656,7 +653,7 @@ class CombatEncounterViewSet(ModelViewSet):
     def resolve_round(self, request: Request, pk: int | None = None) -> Response:
         """Resolve the current round.
 
-        Every row resolution saves pops the encounter's matching payload list
+        Each row resolution saves or deletes pops the encounter's matching list
         (#4784), so the response reloads only the lists that changed.
         """
         encounter = self.get_object()
@@ -1474,8 +1471,9 @@ class CombatEncounterViewSet(ModelViewSet):
         """Serialize the encounter as-is — no re-fetch.
 
         The payload lists (``participants_cached`` and the rest) are cached
-        properties that every row write pops (#4784), so an action that added,
-        removed or changed a row is reflected here without touching the list.
+        properties that each row's save() or delete() pops (#4784), so an
+        action that added, removed or changed a row is reflected here without
+        touching the list.
         """
         context = self._build_serializer_context(request, encounter)
         return Response(

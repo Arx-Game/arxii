@@ -15,6 +15,8 @@ room, sheet or bestiary row the first read loaded.
   aftermath lists him again, so he can reach his own digest.
 - Hobb takes a new face: his account payload lists it on the next read.
 - Staff add a phase to a bestiary entry: the bestiary list says it has phases.
+- A wolf with one round left on its broken wall: once the round resolves Ada's read says
+  the wall is no longer broken, the row holds 0, and the wolf's next save keeps 0.
 
 Expected values come from the issue: a participant who joins, an opponent added mid-fight,
 a new clash or engagement lock, or a builder's position or edge edit shows up in the next
@@ -34,6 +36,7 @@ from world.combat.factories import (
     CreatureTemplateFactory,
     EngagementLockFactory,
 )
+from world.combat.models import CombatOpponent
 from world.combat.services import add_participant
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.services import create_persona
@@ -148,6 +151,27 @@ class ANewFaceOnTheAccount(_AdaWatchesTheCauseway):
         )
 
         self.assertIn("The Grey Hood", self.faces())
+
+
+class ABrokenWallClosesOnTime(_AdaWatchesTheCauseway):
+    def test_the_window_shuts_after_its_last_round(self) -> None:
+        wolf = self.creature("Grey Wolf", at=self.tower)
+        wolf.vulnerability_rounds_remaining = 1
+        wolf.save()
+        (row,) = self.ada_reads()["opponents"]
+        self.assertTrue(row["is_wall_broken"])
+
+        self.resolve()
+
+        (row,) = self.ada_reads()["opponents"]
+        self.assertFalse(row["is_wall_broken"])
+        wolf.save()
+        stored = (
+            CombatOpponent.objects.filter(pk=wolf.pk)
+            .values_list("vulnerability_rounds_remaining", flat=True)
+            .get()
+        )
+        self.assertEqual(stored, 0)
 
 
 class ABestiaryEntryGainsAPhase(_TheCauseway):
