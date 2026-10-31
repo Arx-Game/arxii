@@ -21,7 +21,7 @@ from world.mechanics.constants import (
     EffectKind,
     ManeuverEffectKey,
 )
-from world.mechanics.effect_targets import effect_value
+from world.mechanics.effect_targets import effect_modifier_total, effect_value
 from world.mechanics.factories import (
     CharacterModifierFactory,
     DistinctionModifierSourceFactory,
@@ -125,6 +125,13 @@ class EffectValueTests(TestCase):
         target = self._effect_target("Charge damage down", effect=self.charge_damage)
         self._distinction_modifier(target, -80)
         assert effect_value(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE) == 0
+
+    def test_modifier_total_is_the_unclamped_sum(self):
+        target = self._effect_target("Charge damage down", effect=self.charge_damage)
+        self._distinction_modifier(target, -8)
+        assert effect_modifier_total(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE) == -8
+        assert effect_value(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE) == 0
+        assert effect_modifier_total(None, ManeuverEffectKey.CHARGE_DAMAGE) == 0
 
     def test_partial_protection_caps_at_100(self):
         target = self._effect_target("Succor stops more", kind=EffectKind.PARTIAL_PROTECTION)

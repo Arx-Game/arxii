@@ -170,8 +170,8 @@ class _ChargeField(JourneyCase):
         self.assertEqual(len(rolled), 1)
         return rolled[0], before - after
 
-    def swear_to_charge_harder(self, bonus_per_level: int = 1) -> None:
-        """Hobb engages a vow at shown thread level 3 that scales Charge damage per level."""
+    def swear_to_charge_harder(self, bonus_per_level: int = 1, thread_level: int = 3) -> None:
+        """Hobb engages a vow at shown ``thread_level`` that scales Charge damage per level."""
         category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
         target = ModifierTargetFactory(
             category=category,
@@ -183,7 +183,7 @@ class _ChargeField(JourneyCase):
             self.sheet,
             role,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
-            thread_level=3,
+            thread_level=thread_level,
         )
         VowStatScaling.objects.create(
             covenant_role=role, modifier_target=target, bonus_per_level=bonus_per_level
@@ -221,6 +221,21 @@ class ChargeReadsTheCatalog(_ChargeField):
 
         self.assertEqual(damage, 2 * DAMAGE + 3)
         self.assertEqual(to_hit, 2 * TO_HIT)
+
+    def test_a_negative_vow_is_floored_once_on_a_lances_whole_total(self) -> None:
+        self.swear_to_charge_harder(bonus_per_level=-8, thread_level=1)  # a -8 modifier
+        _equip_weapon(self.hobb, archetype=GearArchetype.LANCE)
+
+        _to_hit, damage = self.charge_and_resolve()
+
+        self.assertEqual(damage, 2 * DAMAGE - 8)
+
+    def test_a_negative_vow_floors_an_unlanced_charge_at_nothing(self) -> None:
+        self.swear_to_charge_harder(bonus_per_level=-8, thread_level=1)
+
+        _to_hit, damage = self.charge_and_resolve()
+
+        self.assertEqual(damage, 0)
 
     def test_edited_base_value_is_used(self) -> None:
         staff = get_user_model().objects.create_user(

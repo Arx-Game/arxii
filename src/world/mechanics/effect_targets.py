@@ -32,15 +32,26 @@ def effect_value(sheet: "CharacterSheet | None", key: str) -> int:
     are no modifiers, so the base value comes back.
     """
     effect = get_maneuver_effect(key)
+    return _clamp(effect.kind, effect.base_value + effect_modifier_total(sheet, key))
+
+
+def effect_modifier_total(sheet: "CharacterSheet | None", key: str) -> int:
+    """The unclamped sum of every modifier on maneuver effect ``key`` for ``sheet``.
+
+    The same targets ``effect_value`` counts, without the base value and without the floor
+    or cap, so a caller that scales the base itself (a lance doubling a charge) can clamp
+    once, on its own total. With no sheet there are no modifiers: 0.
+    """
     if sheet is None:
-        return _clamp(effect.kind, effect.base_value)
+        return 0
+    effect = get_maneuver_effect(key)
     targets = ModifierTarget.objects.filter(
         category__name=MANEUVER_EFFECT_CATEGORY_NAME, is_active=True
     ).filter(Q(scope_maneuver_effect_id=effect.pk) | Q(scope_effect_kind=effect.kind))
-    total = effect.base_value
-    for target in targets:
-        total += get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
-    return _clamp(effect.kind, total)
+    return sum(
+        get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
+        for target in targets
+    )
 
 
 def _clamp(kind: str, value: int) -> int:

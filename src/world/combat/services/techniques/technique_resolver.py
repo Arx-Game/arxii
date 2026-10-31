@@ -49,7 +49,7 @@ from world.conditions.services import spend_contributing_conditions
 from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.constants import ManeuverEffectKey
-from world.mechanics.effect_targets import effect_value
+from world.mechanics.effect_targets import effect_modifier_total
 from world.mechanics.maneuver_effects import get_maneuver_effect
 
 if TYPE_CHECKING:
@@ -70,10 +70,10 @@ if TYPE_CHECKING:
 
 def _charge_effect(sheet: CharacterSheet, key: str, *, lance: bool) -> int:
     """A charge's to-hit or damage for ``sheet`` (#4783): the catalog base, doubled by a
-    lance, plus every modifier on top. A lance doubles only the base; a +3 stays +3."""
+    lance, plus every modifier on top, floored at 0 once. A lance doubles only the base; a
+    +3 stays +3 and a -8 stays -8."""
     base = get_maneuver_effect(key).base_value
-    modifiers = effect_value(sheet, key) - base
-    return (base * 2 if lance else base) + modifiers
+    return max(0, (base * 2 if lance else base) + effect_modifier_total(sheet, key))
 
 
 # ---------------------------------------------------------------------------
