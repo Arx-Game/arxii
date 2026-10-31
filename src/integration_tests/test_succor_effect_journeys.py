@@ -38,6 +38,9 @@ from world.conditions.services import apply_condition
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
 from world.covenants.models import VowStatScaling
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
+from world.distinctions.services import grant_distinction
+from world.distinctions.types import DistinctionOrigin
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
     EffectKind,
@@ -129,9 +132,25 @@ class _SuccorField(JourneyCase):
             covenant_role=role, modifier_target=target, bonus_per_level=bonus
         )
 
+    def give_partial_protection_distinction(self, character, bonus: int) -> None:
+        """Grant ``character`` a real distinction through the game's grant service.
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
-class SuccorInAFight(_SuccorField):
+        The distinction carries one flat (unsized) ``+bonus`` effect on a target scoped to the
+        KIND partial protection, so it reaches Succor through ``CharacterModifier`` and not
+        through a vow.
+        """
+        category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        target = ModifierTargetFactory(
+            category=category,
+            name=f"Partial protection gift {character.key}",
+            scope_effect_kind=EffectKind.PARTIAL_PROTECTION,
+        )
+        distinction = DistinctionFactory(name=f"Sheltering hands {character.key}")
+        DistinctionEffectFactory(distinction=distinction, target=target, value_per_rank=bonus)
+        grant_distinction(character.sheet_data, distinction, origin=DistinctionOrigin.GM_AWARD)
+
+
+class _FightRound(_SuccorField):
     """Mara declares Succor for Hobb; the round resolves with the hazard ticking."""
 
     def setUp(self) -> None:
@@ -156,6 +175,11 @@ class SuccorInAFight(_SuccorField):
         )
         self.assertTrue(result.detail.success, result.detail.message)
         resolve_round(self.encounter)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
+class SuccorInAFight(_FightRound):
+    """Succor in a fight, with a vow and the catalog default as the sources."""
 
     def test_unmodified_partial_halves_the_hazard(self) -> None:
         self.shelter_and_resolve()
@@ -187,7 +211,18 @@ class SuccorInAFight(_SuccorField):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
-class SuccorInASceneRound(_SuccorField):
+class SuccorFromADistinctionInAFight(_FightRound):
+    """A granted distinction, not a vow, adds to the same partial protection (#4783)."""
+
+    def test_a_granted_distinction_changes_a_partial_succor(self) -> None:
+        self.give_partial_protection_distinction(self.mara, 10)
+
+        self.shelter_and_resolve()
+
+        self.assertEqual(self.hobb_health(), 100 - (HAZARD - STOPPED_WITH_TEN_MORE))
+
+
+class _SceneRound(_SuccorField):
     """No fight: a strict danger round at the yard, and Mara types ``scene succor Hobb``."""
 
     def setUp(self) -> None:
@@ -202,6 +237,11 @@ class SuccorInASceneRound(_SuccorField):
         # and with both declared the round resolves on its own.
         self.assertEqual(self.web(self.hobb, "pass_round").detail.message, "You pass.")
 
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
+class SuccorInASceneRound(_SceneRound):
+    """Succor in a scene round, with a vow and the catalog default as the sources."""
+
     def test_unmodified_partial_halves_the_hazard_in_a_scene_round(self) -> None:
         self.shelter_and_resolve()
 
@@ -209,6 +249,18 @@ class SuccorInASceneRound(_SuccorField):
 
     def test_partial_protection_modifier_in_a_scene_round(self) -> None:
         self.give_partial_protection_bonus(self.mara, 10)
+
+        self.shelter_and_resolve()
+
+        self.assertEqual(self.hobb_health(), 100 - (HAZARD - STOPPED_WITH_TEN_MORE))
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
+class SuccorFromADistinctionInASceneRound(_SceneRound):
+    """The same granted distinction reaches a scene-round Succor (#4783)."""
+
+    def test_a_granted_distinction_changes_a_partial_succor_in_a_scene_round(self) -> None:
+        self.give_partial_protection_distinction(self.mara, 10)
 
         self.shelter_and_resolve()
 
