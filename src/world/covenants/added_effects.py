@@ -26,6 +26,15 @@ vow's anchor only) and every co-present covenant ally's vows. A row rides a
 cast when its ``beneficiary`` counts for that holder: SELF and WHOLE_GROUP on
 the caster's own vow, COVENANT_ALLIES and WHOLE_GROUP on an ally's.
 
+## Focus picks
+
+A row whose ``focus_pick`` is set fires only for a holder who chose that pick
+(``CharacterVowFocusPick``, #4759). A row with no pick is the base vow and fires
+for every holder. The chosen picks are read in one query, and only when a
+fetched row carries a pick, so a vow with no picks costs nothing extra. A pick
+row that a holder did not choose is not live, so a base row it ``upgrades``
+stays in place for that holder.
+
 ## Scaling
 
 The holder's COVENANT_ROLE thread level on the vow's anchor role, shown scale
@@ -52,7 +61,8 @@ base never fires again just because its upgrade is used up.
 1. The technique's function tags; none returns ``[]``.
 2. The holder candidates; none returns ``[]``.
 3. One ``VowAddedEffect`` query with the four payload prefetches; none returns ``[]``.
-4. Thread levels, the in-combat flag and one ``SituationCheck``.
+4. Thread levels, the chosen focus picks (only when a row has one), the in-combat
+   flag and one ``SituationCheck``.
 5. The per-holder gates, the situation last.
 6. The upgrade rule, per holder.
 7. In combat, the frequency ledger (one query, only when a live row is limited).
@@ -65,8 +75,9 @@ Every cast in the game calls ``vow_added_effects_for_cast``, so the order is
 fixed to keep the common cast cheap: a technique with no function tag returns
 before any query, and a caster with no engaged vow and no co-present holder
 returns before the ``VowAddedEffect`` query. Past that it is one row query plus
-four payload prefetches (whatever the row count), one thread-level query, the
-situations the live rows name, and, in combat, one ledger query when a live
+four payload prefetches (whatever the row count), one thread-level query, one
+chosen-pick query when a fetched row carries a focus pick, the situations the
+live rows name, and, in combat, one ledger query when a live
 row is limited.
 """
 
@@ -81,6 +92,7 @@ from django.db.models import Prefetch, Q
 
 from world.combat.models import CombatParticipant, VowAddedEffectFiring
 from world.covenants.constants import VowEffectContext, VowEffectFrequency
+from world.covenants.focus_picks import chosen_pick_ids_by_holder, holder_has_pick
 from world.covenants.models import (
     VowAddedEffect,
     VowAddedEffectAppliedCondition,
@@ -144,7 +156,8 @@ def vow_added_effects_for_cast(
     hold: the beneficiary counts for that holder; the gift and technique
     narrowing (when set) match; the cast context matches; the holder's thread
     level on the anchor role reaches ``unlock_thread_level``; the row's
-    situation holds for the holder. Then the upgrade rule (see the module
+    situation holds for the holder; a row with a ``focus_pick`` also needs the
+    holder to have chosen that pick. Then the upgrade rule (see the module
     docstring) runs over those live rows. Then, in combat, a once-per-round row
     already in the ledger for this round, or a once-per-fight row in the ledger
     for this fight, is dropped. Last, one holder fires one row at most once.
@@ -167,6 +180,7 @@ def vow_added_effects_for_cast(
         effects_by_role,
         technique=technique,
         levels=vow_holder_thread_levels(candidates),
+        chosen_picks=_chosen_picks_for(candidates, effects_by_role),
         in_combat=participant is not None,
         check=SituationCheck(subject=subject, target=target, resolution=resolution),
     )
@@ -189,7 +203,9 @@ def vow_added_effects_on_technique(
     technique narrowing (when set) match. Nothing that depends on a cast is
     applied: not the unlock level, the context, the situation or the frequency.
     The rows keep their ``beneficiary``, so a display can tell a row riding the
-    sheet's own casts from one riding its allies'.
+    sheet's own casts from one riding its allies'. A row with a ``focus_pick`` is
+    listed only when the sheet chose that pick, since it never rides the sheet's
+    casts otherwise.
     """
     functions = {tag.function for tag in technique.cached_function_tags}
     if not functions:
@@ -197,7 +213,7 @@ def vow_added_effects_on_technique(
     candidates = _self_candidates(sheet)
     if not candidates:
         return []
-    return list(
+    effects = list(
         VowAddedEffect.objects.filter(
             Q(gift__isnull=True) | Q(gift_id=technique.gift_id),
             Q(technique__isnull=True) | Q(technique_id=technique.pk),
@@ -205,6 +221,10 @@ def vow_added_effects_on_technique(
             function__in=functions,
         )
     )
+    if not any(effect.focus_pick_id is not None for effect in effects):
+        return effects
+    chosen = chosen_pick_ids_by_holder({sheet.pk})
+    return [effect for effect in effects if holder_has_pick(effect.focus_pick_id, sheet.pk, chosen)]
 
 
 def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own parameters
@@ -405,12 +425,28 @@ def _fetch_effects(role_ids: set[int], functions: set[str]) -> dict[int, list[Vo
     return by_role
 
 
+def _chosen_picks_for(
+    candidates: list[VowHolderCandidate], effects_by_role: dict[int, list[VowAddedEffect]]
+) -> dict[int, set[int]]:
+    """Each candidate holder's chosen focus picks, or ``{}`` with no query when no
+    fetched row carries a pick (#4759 slice 2)."""
+    has_pick = any(
+        effect.focus_pick_id is not None
+        for effects in effects_by_role.values()
+        for effect in effects
+    )
+    if not has_pick:
+        return {}
+    return chosen_pick_ids_by_holder({c.holder.pk for c in candidates})
+
+
 def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
     candidates: list[VowHolderCandidate],
     effects_by_role: dict[int, list[VowAddedEffect]],
     *,
     technique: Technique,
     levels: dict[tuple[int, int], int],
+    chosen_picks: dict[int, set[int]],
     in_combat: bool,
     check: SituationCheck,
 ) -> list[_LiveRow]:
@@ -430,6 +466,7 @@ def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
                 and effect.technique_id in (None, technique.pk)
                 and _context_allows(effect.cast_context, in_combat=in_combat)
                 and level >= effect.unlock_thread_level
+                and holder_has_pick(effect.focus_pick_id, candidate.holder.pk, chosen_picks)
                 and check.holds(effect.situation, effect.params, candidate.holder)
             )
         )

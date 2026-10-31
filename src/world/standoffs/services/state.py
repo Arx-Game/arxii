@@ -158,6 +158,9 @@ def end_standoff_into_fight(
     passes ``attack_sink``: then the line is appended there instead and the caller sends it,
     so a verb's room lines read press, morale shift, attack.
 
+    When the party springs it (``initiated_by_pc_side=True``) the encounter is stamped
+    ``opened_from_parley``, so the ambush perks fire in round one.
+
     Locks the encounter row first and rechecks, so when two things break the standoff at
     once only the first writes; the second returns False and changes nothing.
     """
@@ -175,7 +178,14 @@ def end_standoff_into_fight(
         close_group_prompts(group, "The fight began.")
         attackers.append(group)
     encounter.initiated_by_pc_side = initiated_by_pc_side
-    encounter.save(update_fields=["initiated_by_pc_side"])
+    # The party springing a standoff is a parley that turned hostile: round one is an
+    # ambush (COMBAT_OPENED_FROM_PARLEY, AMBUSH_UNDERWAY; #4808). A cause firing or a GM
+    # starting the round leaves the flag as it was.
+    update_fields = ["initiated_by_pc_side"]
+    if initiated_by_pc_side is True:
+        encounter.opened_from_parley = True
+        update_fields.append("opened_from_parley")
+    encounter.save(update_fields=update_fields)
     begin_declaration_phase(encounter)
     if initiated_by_pc_side is False:
         if attack_sink is not None:

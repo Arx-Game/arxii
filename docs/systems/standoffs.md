@@ -35,6 +35,10 @@ Later slices are listed at the end.
   round one: all go through `end_standoff_into_fight` (`state.py:115`), which locks the
   encounter row, rechecks, sets every live group FIGHTING (closing any pending proposal) and calls
   `begin_declaration_phase`; a second simultaneous breaker returns False and writes nothing.
+  When the party springs it (`initiated_by_pc_side=True`: `standoff_fight`, or a hostile cast
+  through `begin_round_or_break_standoff`) it also stamps `CombatEncounter.opened_from_parley`
+  (#4808), so `COMBAT_OPENED_FROM_PARLEY` holds for the fight and `AMBUSH_UNDERWAY` in round
+  one. A cause firing (False) or a GM starting the round (None) leaves the flag alone.
   `begin_round_or_break_standoff` (`state.py:169`) is what cast seeding
   (`combat/cast_seed.py:333`, PC side) and the GM begin-round view and action
   (`combat/views.py:497`, `actions/definitions/gm_combat.py:217`, `initiated_by_pc_side=None`)
@@ -51,7 +55,7 @@ Later slices are listed at the end.
 |---|---|
 | `CreatureDrive` (:28) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
 | `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `cause_effect` (#4415, `CauseEffect`: NONE, SUPPRESS, PROVOKE; was the boolean `suppresses_cause`), `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
-| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes`, `display_order`, and (#4759) `target_condition` / `ally_condition`, nullable `ConditionTemplate` FKs a successful press lays on its target / an ally of the actor. Authorable now; laid by #4759 slice 4 [BUILT, NOT WIRED]. |
+| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes`, `display_order`, and (#4759) `target_condition` / `ally_condition`, nullable `ConditionTemplate` FKs a successful press lays on its target / an ally of the actor. Laid by `standoff_press` since #4808 (see Press). |
 | `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
 | `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`, and (#4415) `hunger_margin_step` (default 10) and `territory_patience` (default 3, at least 1). `load()` returns it. |
 | `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
@@ -189,7 +193,18 @@ admins in `world/standoffs/admin.py`.
 - **Press**: each successful press adds exactly 1 to `terms_ease` (whatever its tier); a botch
   (-2) emboldens the group by `botch_force_bands`; morale damage when `damages_morale`. The
   eased difficulty is the sum of hit-drive strengths in bands; the sway modifier counts once
-  plus once per eased band.
+  plus once per eased band. A success (tier 1 or better) also lays the approach's conditions
+  (#4808, `_lay_approach_conditions`): `target_condition` on every active member of the pressed
+  group, `ally_condition` on the actor, both through `apply_condition` with the actor as source.
+  A partial, failure or botch lays nothing. They are ordinary conditions on the game objects,
+  so a fight that breaks out finds them still in place in round one.
+- **Vow perks on standoff rolls** (#4808): the read, press (plain and display cast) and terms
+  checks pass the actor's own `SituationContext` (`_situation`: holder and subject the actor,
+  no target, `resolution=None`). With no combat context, `DURING_NEGOTIATION` holds whenever
+  the room has an active scene (the encounter's own scene does), so a negotiation
+  `CHECK_BONUS` perk raises the roll; combat-positioning situations stay False. The shown
+  grade (`press_grade`, `terms_difficulty`) does not include perk bonuses, the same as every
+  other check preview.
 - **Terms**: a partial or better settles the group, stamps `settled_outcome`, applies the
   effect (PASS and TOLL the pass condition, TURN the turn condition, FLEE sets opponents
   FLED). A terms entry with a `required_drive` is refused until that drive is read. TOLL is

@@ -85,6 +85,12 @@ matching perk, one shared anchor role among the mates) is **6** — see
 invariance, self-only shape, ceiling 3) and
 ``test_perk_resolution.AllyMateCountQueryBudgetTests`` (mate-count
 invariance, 2 vs 5 mates on one shared role, ceiling 6).
+
+A perk whose ``focus_pick`` is set fires only for a holder who chose that pick
+(#4759 slice 2). The chosen picks are one more query, issued only when a fetched
+candidate perk carries a pick, so a vow with no picks keeps the ceilings above.
+This applies to the live and the dormant firings alike (both go through
+``_resolve_candidate_perks``).
 """
 
 from __future__ import annotations
@@ -250,11 +256,25 @@ def _resolve_candidate_perks(
     perks_by_role: dict[int, list[VowSituationalPerk]],
     resolver: _PerkResolver,
 ) -> list[FiredPerk]:
-    """Resolve every fetched perk against each candidate whose beneficiaries allow it."""
+    """Resolve every fetched perk against each candidate whose beneficiaries allow it.
+
+    A perk with a ``focus_pick`` is skipped for a holder who did not choose it.
+    """
+    from world.covenants.focus_picks import (  # noqa: PLC0415
+        chosen_pick_ids_by_holder,
+        holder_has_pick,
+    )
+
+    has_pick = any(
+        perk.focus_pick_id is not None for perks in perks_by_role.values() for perk in perks
+    )
+    chosen = chosen_pick_ids_by_holder({c.holder.pk for c in candidates}) if has_pick else {}
     fired: list[FiredPerk] = []
     for candidate in candidates:
         for perk in perks_by_role.get(candidate.role_id, ()):
             if perk.beneficiary not in candidate.beneficiaries:
+                continue
+            if not holder_has_pick(perk.focus_pick_id, candidate.holder.pk, chosen):
                 continue
             result = resolver.resolve(
                 perk, holder=candidate.holder, is_secondary=candidate.is_secondary

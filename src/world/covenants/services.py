@@ -1097,7 +1097,9 @@ def covenant_role_action_scaling_bonus(character: object, action: CovenantScaled
     Rows and COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged
     roles are resolved sub-roles (ADR-0055), so normalize before lookup.
     Returns 0.0 when no engaged role has a row. PRIMARY-only (#2641, Layer 1
-    — chassis): a secondary vow never scales a combat action.
+    — chassis): a secondary vow never scales a combat action. A row whose
+    ``focus_pick`` is set counts only when the character chose that pick
+    (#4759 slice 2); the chosen picks are read only when a fetched row has one.
 
     The returned float is a multiplier bonus — callers add it to the action's
     base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
@@ -1122,10 +1124,20 @@ def covenant_role_action_scaling_bonus(character: object, action: CovenantScaled
         if anchor not in anchors:
             anchors.append(anchor)
 
-    scalings = CovenantRoleActionScaling.objects.filter(
-        action_key=action,
-        covenant_role__in=anchors,
+    scalings = list(
+        CovenantRoleActionScaling.objects.filter(
+            action_key=action,
+            covenant_role__in=anchors,
+        )
     )
+    if any(scaling.focus_pick_id is not None for scaling in scalings):
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            chosen_pick_ids_by_holder,
+            holder_has_pick,
+        )
+
+        chosen = chosen_pick_ids_by_holder({sheet.pk})
+        scalings = [s for s in scalings if holder_has_pick(s.focus_pick_id, sheet.pk, chosen)]
     total = Decimal(0)
     for scaling in scalings:
         thread_level = _covenant_role_thread_level(sheet, scaling.covenant_role)

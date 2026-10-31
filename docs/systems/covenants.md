@@ -206,8 +206,8 @@ modules import combat/checks contexts at function level, never the reverse):
   for its evaluator's data source, its Situation Parameters, and any v1 approximation.
   #4759 slice 1 added `TARGET_HAS_CONDITION_PROPERTY`, `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`
   (both require `condition_property`, allow `count_threshold`) and `TARGET_LOW_HEALTH` (allows
-  `threshold_percent`); their registered evaluators return False until #4759 slice 3
-  [BUILT, NOT WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
+  `threshold_percent`); slice 3 wired their evaluators, see "Target-state situations" below
+  [BUILT & WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
   `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the five `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
@@ -968,6 +968,34 @@ clearing the input on a business-rule rejection.
 `NotAuthorizedToSpendCovenantTreasuryError`, `CovenantTreasuryTransferError` — see
 "Exceptions" below.
 
+## Target-state situations (#4759 slice 3) [BUILT & WIRED]
+
+Situations that read the state a target is in, so one character's condition or hold is
+another's trigger. All live in `world.covenants.perks.evaluators` and fire through
+`applicable_perks` like every other situation.
+
+- **"The target"** is `SituationContext.target`'s character when the action has a sheet-backed
+  target; otherwise, in combat, the opponent the subject declared as this round's focused
+  target (`_subject_focused_opponent`, the `TARGET_IS_BOSS` read). An NPC `CombatOpponent`
+  never fills `ctx.target`, so this fallback is what makes the situations work against mooks.
+- **"Carries a property"** means an active (unresolved, unsuppressed) `ConditionInstance` whose
+  template's `properties` OR whose current stage's `properties` include the row's
+  `condition_property`. Whoever laid the condition does not matter.
+- **`TARGET_HAS_CONDITION_PROPERTY`** - the target carries the property. `count_threshold`,
+  when set, is the minimum `effective_severity` (stage multiplier applied) of that condition.
+- **`ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`** - at least `count_threshold` (default 1)
+  distinct opponents near the subject carry the property. "Near" is `SURROUNDED`'s scope: an
+  ACTIVE opponent holding an ACTIVE `EngagementLock` on the subject. One query.
+- **`TARGET_LOW_HEALTH`** - the focused opponent's `health_percentage` (or, with none, a sheet
+  target's `CharacterVitals.health_percentage`) is below `threshold_percent`, default
+  `ALLY_LOW_HEALTH_FRACTION` (50%).
+- **`ENEMY_HELD_BY_ALLY`** now also counts two more hold shapes (`_holder_sheet_ids_on_opponent`):
+  an active clash-lock condition (`ConditionTemplate.is_clash_lock`) on the opponent whose
+  `source_character` is a covenant-mate, and an ACTIVE LOCK/SUSTAINING `Clash` on the opponent
+  that a mate started (`initiator`) or contributed to (`ClashContribution`). LOCK/ESCAPING
+  does not count: that is the enemy holding a PC. Mate scoping is unchanged (one batched
+  `CharacterCovenantRole` query over every candidate, subject excluded).
+
 ## Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]
 
 A vow can add staff-authored effects to a technique cast: "when my ally casts a Weaken
@@ -1168,11 +1196,11 @@ summary with a link to its own page.
   `SituationCheck` owns the per-resolution situation-evaluation cache (keyed
   `(situation, params, holder_pk)`); `_PerkResolver` now delegates to one.
 
-## Vow focus picks and combat styles (#4759 slice 1, ADR-4759)
+## Vow focus picks and combat styles (#4759, ADR-4759)
 
-Slice 1 of #4759 adds the authoring schema and admin. Focus picks are [BUILT, NOT WIRED]:
-slice 2 makes a picked row fire only for holders who chose it, and until then a
-`focus_pick` row still applies to every holder. Combat styles are [BUILT & WIRED] since
+Slice 1 of #4759 added the authoring schema and admin. Slice 2 (#4806) wires focus picks
+into play [BUILT & WIRED]: a payload row whose `focus_pick` is set fires only for a holder
+who chose it (see "Focus picks in play" below). Combat styles are [BUILT & WIRED] since
 slice 5 (#4809): `world.covenants.defense.defense_style_for` reads them (see "Combat style
 decides defense" under Combat Seams).
 
@@ -1216,6 +1244,28 @@ decides defense" under Combat Seams).
   the membership is secondary, the pick is not in the held role's, its anchor's or its
   resolved sub-role's catalog (`resolve_effective_role`), the pick level is above the shown
   vow level, or the level's chosen prices exceed `budget_per_level`.
+
+- `chosen_pick_ids_by_holder(holder_ids) -> dict[int, set[int]]` - each holder's chosen
+  pick ids, keyed by CharacterSheet pk, from one query; only memberships the holder has not
+  left count. A holder with no pick is absent.
+- `holder_has_pick(focus_pick_id, holder_id, chosen) -> bool` - True for a row with no pick
+  (the base vow), else only when the holder chose it.
+
+### Focus picks in play (#4806, slice 2)
+
+Three readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
+only when a row it fetched carries a pick, so a vow without picks costs no extra query:
+
+- `added_effects.vow_added_effects_for_cast` - a gate in `_live_rows`, next to the unlock
+  level. An unchosen pick row is not live, so a base row it `upgrades` stays for that
+  holder. `vow_added_effects_on_technique` (the static view) lists a pick row only for a
+  sheet that chose it.
+- `perks.services._resolve_candidate_perks` - skips a pick perk for a holder who did not
+  choose it, so `applicable_perks` and `dormant_perk_firings` both respect picks.
+- `services.covenant_role_action_scaling_bonus` - drops a pick scaling row the character
+  did not choose before summing.
+
+The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not.
 
 ### Admin
 
