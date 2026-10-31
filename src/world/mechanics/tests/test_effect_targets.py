@@ -82,6 +82,13 @@ class EffectValueTests(TestCase):
         assert effect_value(self.sheet, ManeuverEffectKey.CHARGE_TO_HIT) == 10
         assert effect_value(self.sheet, ManeuverEffectKey.COVER_ESCAPE_BONUS) == 10
 
+    def test_inactive_target_is_ignored(self):
+        target = self._effect_target("Switched off", effect=self.charge_damage)
+        self._distinction_modifier(target, 3)
+        target.is_active = False
+        target.save()
+        assert effect_value(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE) == 5
+
     def test_target_outside_the_category_matches_nothing(self):
         other = ModifierCategory.objects.create(name="not_a_maneuver_category")
         target = ModifierTarget.objects.create(
