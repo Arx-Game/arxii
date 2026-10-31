@@ -4,8 +4,9 @@ Mira holds an engaged covenant vow at thread level 2. Staff open the vow stat sc
 add page and save "+50 per level" for Mira's role on a "Rally: surge intensity" target (the
 maneuver effect catalog, #4783). Mira then types ``combat rally Tomas``; her Rally roll's
 Success band is worth 3 intensity, and her surge intensity is 100 + 2 x 50 = 200%, so Tomas
-surges 6 and his roll line reads "Success · Intensity +6", live over telnet and in his
-round payload's ``roll``. Without the row, the same rally surges 3 and the line ends there.
+surges 6 and his roll line ends "Success · Intensity +6 · surge +3" (the intensity the
+surge intensity added), live over telnet and in his round payload's ``roll``. Without the
+row, the same rally surges 3 with no surge note.
 
 The rally roll is forced with ``force_check_outcome`` so the band is chosen by the test.
 """
@@ -29,6 +30,8 @@ THREAD_LEVEL = 2
 BONUS_PER_LEVEL = 50
 # 100 + 2 x 50 = 200%: the Success band's intensity, doubled.
 VOWED_SUCCESS_INTENSITY = BAND_INTENSITY * 2
+# The roll line notes what the surge intensity added: the scaled total minus the band's 3.
+SURGE_EXTRA = VOWED_SUCCESS_INTENSITY - BAND_INTENSITY
 
 
 class AVowedRallySurgesMore(_SurgeField):
@@ -84,8 +87,9 @@ class AVowedRallySurgesMore(_SurgeField):
         self.resolve(self.success)
 
         self.assertEqual(self.intensity(self.tomas), VOWED_SUCCESS_INTENSITY)
+        vowed_line = f"Success · Intensity +{VOWED_SUCCESS_INTENSITY} · surge +{SURGE_EXTRA}"
         told = self.told_roll_line(self.tomas)
-        self.assertIn(f"Success · Intensity +{VOWED_SUCCESS_INTENSITY} · ", told)
+        self.assertTrue(told.endswith(vowed_line), told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
         self.assertEqual(beat["amount"], VOWED_SUCCESS_INTENSITY)
         self.assertEqual(beat["roll"], told)
@@ -100,6 +104,7 @@ class AVowedRallySurgesMore(_SurgeField):
         self.assertEqual(self.intensity(self.tomas), BAND_INTENSITY)
         told = self.told_roll_line(self.tomas)
         self.assertTrue(told.endswith(f"Success · Intensity +{BAND_INTENSITY}"), told)
+        self.assertNotIn("surge +", told)
         (beat,) = self.beats_seen_by(self.account_of(self.tomas))
         self.assertEqual(beat["amount"], BAND_INTENSITY)
         self.assertEqual(beat["roll"], told)

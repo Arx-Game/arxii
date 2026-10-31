@@ -96,7 +96,7 @@ def _surge_rallied_ally(
     The band's intensity is scaled by the rallier's Rally surge intensity (the maneuver
     effect catalog, #4783: a percentage, base 100, plus the rallier's own modifiers such as
     a vow stat scaling row); the band's control change and condition are not scaled. When
-    the scale is not 100% the roll line notes it (``vow_scaled``).
+    the scale is above 100% the roll line notes the extra intensity as ``surge +N``.
     """
     from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
     from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
