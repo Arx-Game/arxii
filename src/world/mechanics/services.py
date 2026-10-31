@@ -33,6 +33,7 @@ from world.magic.models import (
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
     FAVOR_CATEGORY_NAMES,
+    MANEUVER_EFFECT_CATEGORY_NAME,
     POWER_CATEGORY_NAME,
     POWER_MULTIPLIER_TARGET_NAME,
     RESONANCE_CATEGORY_NAME,
@@ -1142,6 +1143,7 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         VowStatScaling,
     )
     from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
@@ -1162,13 +1164,18 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         covenant_role__in=applicable_roles,
         modifier_target=target,
     ).select_related("covenant_role")
+    # Stats are stored x10 like threads, so the stored level times the per-level bonus
+    # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
+    # morale), so there the bonus counts the SHOWN level.
+    in_natural_units = target is not None and target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
     total = 0
     anchor_levels: dict[int, int] = {}
     for config in configs:
         role = config.covenant_role
         anchor = role.parent_role if role.parent_role_id is not None else role
         if anchor.pk not in anchor_levels:
-            anchor_levels[anchor.pk] = _covenant_role_thread_level(sheet, anchor)
+            level = _covenant_role_thread_level(sheet, anchor)
+            anchor_levels[anchor.pk] = shown_thread_level(level) if in_natural_units else level
         total += anchor_levels[anchor.pk] * config.bonus_per_level
     return total
 

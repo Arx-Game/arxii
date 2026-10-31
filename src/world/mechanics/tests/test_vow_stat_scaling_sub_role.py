@@ -18,7 +18,14 @@ from world.covenants.models import VowStatScaling
 from world.covenants.services import set_engaged_membership
 from world.magic.constants import TargetKind
 from world.magic.factories import ResonanceFactory, ThreadFactory
+from world.mechanics.constants import (
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    ManeuverEffectKey,
+)
+from world.mechanics.effect_targets import effect_value
 from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
+from world.mechanics.models import ModifierCategory
 from world.mechanics.services import vow_stat_scaling_bonus
 
 
@@ -83,3 +90,18 @@ class VowStatScalingSubRoleTests(TestCase):
             sheet.character.covenant_roles.currently_engaged_primary_roles(), [self.anchor]
         )
         self.assertEqual(vow_stat_scaling_bonus(sheet, self.target), 60)
+
+    def test_maneuver_effect_target_counts_shown_level(self):
+        """Effects are in natural units, so a +1 per level row adds the SHOWN level."""
+        ensure_maneuver_effects()
+        target = ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name="Charge damage vow",
+            scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.CHARGE_DAMAGE),
+        )
+        VowStatScaling.objects.create(
+            covenant_role=self.anchor, modifier_target=target, bonus_per_level=1
+        )
+        sheet = self._engaged_holder(thread_level=30)
+        self.assertEqual(vow_stat_scaling_bonus(sheet, target), 3)
+        self.assertEqual(effect_value(sheet, ManeuverEffectKey.CHARGE_DAMAGE), 8)

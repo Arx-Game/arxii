@@ -107,7 +107,7 @@ class EffectValueTests(TestCase):
             target_kind=TargetKind.COVENANT_ROLE,
             target_covenant_role=role,
             resonance=ResonanceFactory(),
-            level=3,
+            level=30,  # stored; shows 3
         )
         assert effect_value(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE) == 8
 
