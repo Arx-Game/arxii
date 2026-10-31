@@ -434,11 +434,10 @@ describe('Header', () => {
         </Wrapper>
       );
 
-      expect(screen.getAllByText('Aria')[0]).toBeInTheDocument();
-      expect(screen.getAllByTestId('persona-switcher-stub').length).toBeGreaterThan(0);
-      const enterLinks = screen.getAllByRole('link', { name: /enter the world/i });
-      expect(enterLinks.length).toBeGreaterThan(0);
-      expect(enterLinks[0]).toHaveAttribute('href', '/game');
+      expect(screen.getByText('Aria')).toBeInTheDocument();
+      expect(screen.getByTestId('persona-switcher-stub')).toBeInTheDocument();
+      const enterLink = screen.getByRole('link', { name: /enter the world/i });
+      expect(enterLink).toHaveAttribute('href', '/game');
       // No clear-selection control in the chip (Apostate ruling 2026-08-28 —
       // "step away" read as logout; "Clear Active Character" lands in the
       // Hall's "Your Characters" band in slice 2).
