@@ -39,6 +39,7 @@ from world.combat.morale import (
 )
 from world.combat.spectacle import apply_spectacle, classify_cast
 from world.conditions.services import apply_condition, spend_contributing_conditions
+from world.covenants.perks.context import SituationContext
 from world.fatigue.constants import EffortLevel
 from world.magic.services.capability_requirements import technique_performable
 from world.magic.services.magic_skills import technique_skill_term, technique_skill_term_for_path
@@ -148,6 +149,16 @@ def _refusal(
     if group is not None and actor_sheet is not None:
         return target_refusal(group.persona, actor_sheet)
     return None
+
+
+def _situation(sheet: CharacterSheet) -> SituationContext:
+    """The actor's own ``SituationContext`` for a standoff roll (#4808).
+
+    A standoff is round zero, not a combat round, so ``resolution`` is ``None``: that is
+    what lets ``DURING_NEGOTIATION`` hold here (an active scene, no combat context) and
+    keeps every combat-positioning situation False. No target: a group is not one sheet.
+    """
+    return SituationContext(holder=sheet, subject=sheet, target=None, resolution=None)
 
 
 def _word(tier: int) -> str:
@@ -279,6 +290,7 @@ def standoff_read(
         config.read_check_type,
         target_difficulty=difficulty,
         extra_modifiers=breakdown.extra_modifiers_total,
+        situation_ctx=_situation(sheet),
     )
     spend_contributing_conditions(breakdown)
     tier = result.success_level
@@ -572,6 +584,7 @@ def _press_check(
             approach.check_type,
             target_difficulty=graded.difficulty,
             extra_modifiers=plain_breakdown.extra_modifiers_total,
+            situation_ctx=_situation(sheet),
         )
         spend_contributing_conditions(plain_breakdown)
         return plain_check, None
@@ -591,6 +604,7 @@ def _press_check(
             target_difficulty=graded.difficulty,
             extra_modifiers=extra_modifiers + cast_breakdown.extra_modifiers_total,
             extra_traits=terms,
+            situation_ctx=_situation(sheet),
         )
         # In the closure: a Soulfray gate can stop the cast before it runs (#4584).
         spend_contributing_conditions(cast_breakdown)
@@ -734,6 +748,7 @@ def standoff_press(
     if tier >= 1:
         group.terms_ease += 1
         group.save(update_fields=["terms_ease"])
+        _lay_approach_conditions(approach, members, sheet)
         display_line = (
             None
             if use is None or technique is None
@@ -783,6 +798,25 @@ def _morale_shift_line(
         return ""
     word = "break" if OpponentMoraleState.BREAK in changed else "falter"
     return f"{active_persona_for_sheet(sheet).name} shakes {group.referent}: they {word}."
+
+
+def _lay_approach_conditions(
+    approach: StandoffApproach, members: list[CombatOpponent], actor: CharacterSheet
+) -> None:
+    """A successful press lays its approach's conditions, sourced to the actor (#4808).
+
+    ``target_condition`` goes on every active member of the pressed group, ``ally_condition``
+    on the actor. Both are ordinary conditions on the game objects, so they are still there
+    when the standoff breaks into round one.
+    """
+    if approach.target_condition is not None:
+        for member in members:
+            if member.objectdb is not None:
+                apply_condition(
+                    member.objectdb, approach.target_condition, source_character=actor.character
+                )
+    if approach.ally_condition is not None:
+        apply_condition(actor.character, approach.ally_condition, source_character=actor.character)
 
 
 def _drive_revealed(group: StandoffGroup, property_id: int) -> bool:
@@ -840,6 +874,7 @@ def standoff_terms(
         config.terms_check_type,
         target_difficulty=graded.difficulty,
         extra_modifiers=breakdown.extra_modifiers_total,
+        situation_ctx=_situation(sheet),
     )
     spend_contributing_conditions(breakdown)
     if result.outcome is None:
