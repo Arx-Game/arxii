@@ -1,6 +1,6 @@
 # Review evidence: #4669 staff technique builder Gift list
 
-- Reviewed revision: `c639d626f7f07b0bc0923f6fec14c6af90e6295e`
+- Reviewed revision: `85ff89e4427389c8d2627bd331d39ad81a3d97e4`
 - Reviewer: Claude Opus 5.5 (implementing agent; no demo exists, so demo-fidelity-reviewer does not apply)
 - Reviewer verdict: PASS
 - Application/build identity: production bundle built with `pnpm build` from the reviewed revision, served by Evennia (banner `Arx Server 5.0.1 (rev 6d72b737a)`; the later commit c639d626f touches only the skill doc and the evidence spec)
@@ -10,7 +10,7 @@
 - Visual review: completed against the running app, before (main's getGifts) and after (this branch)
 - Visual verdict: PASS
 - Screenshots: ![Builder with the fix](docs/reviews/4669/builder.png) ![Gift picker open with the fix](docs/reviews/4669/gift-picker-open.png) ![Builder on main](docs/reviews/4669/before-main.png)
-- Comparison notes: on main the page shows "Something went wrong / l.map is not a function" instead of the builder. With the fix the full form renders, the Gift field defaults to the first gift, and opening it lists the gifts in name order.
+- Comparison notes: on main the page shows "Something went wrong / l.map is not a function" instead of the builder. With the fix the full form renders, the Gift field defaults to the first gift, and opening it lists the gifts in name order. The screenshots were taken at c639d626f; the one later code commit, 85ff89e44, changes only the GiftListItem type alias in frontend/src/character-creation/types.ts (`git diff --stat c639d626f 85ff89e44 -- . ":!docs/reviews"`: that 1 file), which TypeScript erases at build, and `tsc -b` passes on it.
 - Tested interactions: log in as the staff account through the login form; open /techniques/build; read the /api/magic/gifts/ response the page fetched; open the Gift picker and count its options; repeat on a bundle built from main's api.ts
 - Fixture/live boundary: everything live. No /api route was mocked. Data: the e2e_test_account seed made staff, plus 25 Gift rows named "RT Ashfall" to "RT Zephyr" (more than the endpoint's default page of 20)
 - Overall outcome: PASS
