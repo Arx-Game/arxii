@@ -560,13 +560,28 @@ def _charge_interpose_fatigue(
     *,
     reactions_before: int,
 ) -> None:
-    """Charge only a fired, non-technique interpose, rising with reactions this round."""
+    """Charge only a fired, non-technique interpose, rising with reactions this round.
+
+    The effort multiplier and its floor apply to the first interpose's cost, and the
+    rise multiplies that: a declared interpose and a standing guard are both VERY_LOW
+    (x0.1), so rising the base first (3, 9, 15) would floor every one of them to 1.
+    Effort-scaled first, VERY_LOW pays 1, 3, 5 and MEDIUM 3, 9, 15. The scaled cost
+    goes to ``apply_fatigue`` at MEDIUM (x1.0) so the multiplier is not applied twice.
+    """
+    from world.fatigue.constants import (  # noqa: PLC0415
+        EFFORT_COST_MULTIPLIER,
+        MIN_FATIGUE_COST,
+    )
+
     category = (
         action.focused_category or ActionCategory.PHYSICAL if action else ActionCategory.PHYSICAL
     )
     effort = action.effort_level if action is not None else EffortLevel.VERY_LOW
-    base_cost = rising_reaction_cost(INTERPOSE_BASE_FATIGUE_COST, reactions_before)
-    apply_fatigue(guardian.character_sheet, category, base_cost, effort)
+    first_cost = max(
+        MIN_FATIGUE_COST, int(INTERPOSE_BASE_FATIGUE_COST * EFFORT_COST_MULTIPLIER[effort])
+    )
+    cost = rising_reaction_cost(first_cost, reactions_before)
+    apply_fatigue(guardian.character_sheet, category, cost, EffortLevel.MEDIUM)
 
 
 def _attempt_guardian_interpose(

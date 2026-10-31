@@ -151,10 +151,13 @@ as one of her reactions this round (each one makes her next roll harder by
 her own turn.
 
 **Interpose fatigue rises per reaction [BUILT & WIRED] (#4810).** A mundane interpose
-(declared or standing) charges `INTERPOSE_BASE_FATIGUE_COST x (1 + step x reactions she
-already made this round)`, with the step `MovementConfig.reaction_difficulty_step`
-(`interception.rising_reaction_cost`, then the effort multiplier). With the defaults a
-first, second and third interpose at medium effort cost 3, 9 and 15. A technique interpose
+(declared or standing) charges its first cost, `INTERPOSE_BASE_FATIGUE_COST` x the effort
+multiplier (floored at 1), times `(1 + step x reactions she already made this round)`, with
+the step `MovementConfig.reaction_difficulty_step` (`interception.rising_reaction_cost`).
+The effort scaling comes first so the floor cannot swallow the rise: a declared interpose
+and a standing guard are both very low effort, and scaling after the rise floored all three
+of 3, 9, 15 to 1. With the defaults a first, second and third interpose cost 1, 3 and 5 at
+very low effort and 3, 9 and 15 at medium. A technique interpose
 pays its anima as before. A guardian who cannot act (`can_act`: knocked unconscious, though still
 ACTIVE) is never tried. An unavailable guardian falls through to the next; an attempt, even
 a failed roll, ends the search. Standing guards cover PC wards in combat only: not an ALLY summon
