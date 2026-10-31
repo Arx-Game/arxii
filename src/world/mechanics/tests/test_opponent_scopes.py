@@ -1,6 +1,7 @@
 """The opponent scopes of a maneuver effect target (#4823)."""
 
 from dataclasses import replace
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -181,7 +182,7 @@ class OpponentFactsTests(TestCase):
             target=self.victim,
             condition=self.bleeding,
             is_suppressed=True,
-            suppressed_until=timezone.now() - timezone.timedelta(minutes=1),
+            suppressed_until=timezone.now() - timedelta(minutes=1),
         )
         assert opponent_facts(self.victim).condition_ids == frozenset({self.bleeding.pk})
 
