@@ -21,9 +21,16 @@ from world.species.moon_constants import WOLFS_FURY_GIFT_NAME
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import ConditionTemplate, ControlLossTrigger
     from world.forms.models import AlternateSelf
 
 logger = logging.getLogger(__name__)
+
+LYCAN_BLOOD_NAME = "Lycan blood"
+# Seed-only lookup literals: the lycan species and its gift are found by name once, when
+# the seed wires the grant. Runtime code finds the vulnerability through conditions.
+SEED_LYCAN_SPECIES_NAME = "Lycan"
+SEED_LYCAN_GIFT_NAME = "The Wolf's Fury"
 
 BATTLE_FORM_NAME = "Battle Form"
 # PLACEHOLDER stat suite: (stat trait name, modifier value).
@@ -117,3 +124,79 @@ def _gift_thread_level(sheet: CharacterSheet) -> int:
         retired_at__isnull=True,
     ).first()
     return thread.level if thread is not None else 0
+
+
+def ensure_lycan_blood_condition() -> ConditionTemplate:
+    """Idempotently seed the permanent "Lycan blood" vulnerability condition (#4802).
+
+    It sits in a category that does not alter behavior (a vulnerability is carried, it
+    does not drive the bearer), and is the lycan grant's ``drawback_condition``.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+
+    category, _ = ConditionCategory.objects.get_or_create(
+        name="Instinct",
+        defaults={"description": "Instinctive species states.", "is_negative": False},
+    )
+    template, _ = ConditionTemplate.objects.get_or_create(
+        name=LYCAN_BLOOD_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: the blood remembers the moon (#4802).",
+            "default_duration_type": DurationType.PERMANENT,
+            "is_stackable": False,
+            "can_be_dispelled": False,
+        },
+    )
+    return template
+
+
+def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
+    """Idempotently seed the moon's control-loss trigger on Lycan blood (#4802).
+
+    Returns None, writing nothing, until the Berserk designation (``FuryConfig``) and
+    the lycan species gift both exist. A row staff already authored is not overwritten.
+    """
+    from world.conditions.berserk_content import outcome_at_level  # noqa: PLC0415
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ControlLossBand, ControlLossTrigger  # noqa: PLC0415
+    from world.magic.models import FuryConfig  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+    from world.species.moon_sensitivity import _ensure_moon_control_check_type  # noqa: PLC0415
+
+    config, _ = FuryConfig.objects.get_or_create(pk=1)
+    berserk = config.berserk_condition
+    grant = SpeciesGiftGrant.objects.filter(
+        species__name=SEED_LYCAN_SPECIES_NAME, gift__name=SEED_LYCAN_GIFT_NAME
+    ).first()
+    if berserk is None or grant is None:
+        return None
+    trigger, _ = ControlLossTrigger.objects.get_or_create(
+        vulnerability=ensure_lycan_blood_condition(),
+        fires_on=ControlLossFiresOn.MOON_PULL,
+        defaults={
+            "min_moon_pull": 6,
+            "check_type": _ensure_moon_control_check_type(),
+            "base_difficulty": 20,
+            "difficulty_per_pull": 5,
+            "relief_per_level": 10,
+            "relief_gift": grant.gift,
+            "relief_per_thread_level": 5,
+            "relief_cap": 30,
+            "exempt_from_level": 6,
+            "impaired_willpower_drop": 10,
+        },
+    )
+    # (success_level, applies Berserk): Partial Success and up give nothing.
+    for level, applies in ((2, False), (1, False), (0, False), (-1, True), (-2, True)):
+        ControlLossBand.objects.get_or_create(
+            trigger=trigger,
+            outcome=outcome_at_level(level),
+            defaults=(
+                {"applies": berserk, "severity": 3, "duration_rounds": 3, "forces_form": True}
+                if applies
+                else {}
+            ),
+        )
+    return trigger

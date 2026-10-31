@@ -1761,6 +1761,10 @@ def _seed_moon_content() -> None:
         MOON_BOUND_TAG,
         WOLFS_FURY_GIFT_NAME,
     )
+    from world.species.moon_provisioning import (  # noqa: PLC0415
+        ensure_lycan_blood_condition,
+        ensure_moon_control_loss_trigger,
+    )
 
     category = authored_or_sample(
         DistinctionCategory,
@@ -1805,12 +1809,21 @@ def _seed_moon_content() -> None:
     )
     if gift is None:
         return
-    authored_or_sample(
+    grant = authored_or_sample(
         SpeciesGiftGrant,
         {"drawback_distinction": distinction, "cg_point_cost": 0},
         species=lycan,
         gift=gift,
     )
+    if grant is None:
+        return
+    # Lycan blood (#4802): the vulnerability the moon trigger hangs on. Only an unset
+    # drawback is filled; a staff-chosen one is left alone.
+    lycan_blood = ensure_lycan_blood_condition()
+    if grant.drawback_condition_id is None:
+        grant.drawback_condition = lycan_blood
+        grant.save(update_fields=["drawback_condition"])
+    ensure_moon_control_loss_trigger()
 
 
 def _seed_cg_explanations() -> None:
