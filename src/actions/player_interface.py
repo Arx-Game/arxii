@@ -81,6 +81,8 @@ from actions.types import (
     ActionRef,
     ActionResult,
     AnchorOption,
+    AnchorTierIntensity,
+    CastPreview,
     DispatchResult,
     FuryTierOption,
     PlayerAction,
@@ -90,7 +92,7 @@ from actions.types import (
     TargetType,
 )
 from world.areas.positioning.constants import CreatureTraversal
-from world.magic.models import CharacterTechnique
+from world.magic.models import CharacterTechnique, FuryTier
 from world.mechanics.services import get_available_actions
 
 if TYPE_CHECKING:
@@ -102,7 +104,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.types import PassOption
     from world.consent.models import SocialConsentCategory
-    from world.magic.models import CharacterAnima
+    from world.magic.models import CharacterAnima, Technique
     from world.mechanics.types import AvailableAction
     from world.scenes.action_availability import AvailableEnhancement
 
@@ -574,28 +576,47 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
     return result
 
 
-def _fury_tier_options() -> tuple[FuryTierOption, ...]:
-    """The authored fury ladder, offered alongside every combat declaration."""
+def _fury_ladder() -> list[FuryTier]:
+    """The authored fury ladder, shallowest first."""
     from world.magic.models import FuryTier  # noqa: PLC0415
 
+    return list(FuryTier.objects.order_by("depth"))
+
+
+def _fury_tier_options(ladder: list[FuryTier]) -> tuple[FuryTierOption, ...]:
+    """The fury ladder, offered alongside every combat declaration (#4738)."""
+    from world.magic.services.fury import full_trade_intensities  # noqa: PLC0415
+
+    full = full_trade_intensities(ladder)
     return tuple(
         FuryTierOption(
             id=tier.pk,
             name=tier.name,
             depth=tier.depth,
-            control_penalty=tier.control_penalty,
-            intensity_bonus=tier.intensity_bonus,
-            berserk_severity=tier.berserk_severity,
+            control_surrendered=tier.control_surrendered,
+            is_berserk=tier.berserk_severity > 0,
+            full_intensity=full[tier.pk],
         )
-        for tier in FuryTier.objects.order_by("depth")
+        for tier in ladder
     )
 
 
-def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[AnchorOption, ...]:
-    """Active relationships whose bond can carry a provocation (#1543, #3957)."""
-    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+def _eligible_fury_anchors(
+    character: ObjectDB, sheet: CharacterSheet, ladder: list[FuryTier]
+) -> tuple[AnchorOption, ...]:
+    """Active relationships whose bond can carry a provocation (#1543, #3957).
+
+    Each carries the most every tier can buy under its cap: the trade at the highest
+    authored degree share (#4738).
+    """
+    from world.magic.services.fury import (  # noqa: PLC0415
+        full_trade_intensities,
+        provocation_cap,
+        top_share_percent,
+    )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
+    top_percent = top_share_percent()
     anchors: list[AnchorOption] = []
     for rel in CharacterRelationship.objects.filter(source=sheet, is_active=True).select_related(
         "target", "target__character"
@@ -606,7 +627,18 @@ def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[
             continue
         anchor_char = anchor_sheet.character
         name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-        anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
+        full = full_trade_intensities(ladder, cap, top_percent=top_percent)
+        anchors.append(
+            AnchorOption(
+                id=anchor_sheet.pk,
+                name=name,
+                provocation_cap=cap,
+                tier_full_intensities=tuple(
+                    AnchorTierIntensity(tier_id=tier.pk, full_intensity=full[tier.pk])
+                    for tier in ladder
+                ),
+            )
+        )
     return tuple(anchors)
 
 
@@ -687,12 +719,17 @@ def _combat_actions(
     if not techniques:
         return []
 
-    fury_tiers = _fury_tier_options()
+    fury_ladder = _fury_ladder()
+    fury_tiers = _fury_tier_options(fury_ladder)
     soulfray_warning = get_soulfray_warning(character)
-    eligible_fury_anchors = _eligible_fury_anchors(character, sheet)
+    eligible_fury_anchors = _eligible_fury_anchors(character, sheet, fury_ladder)
 
     # The caster's personal magic check is the same for every technique: read it once.
     personal_check = get_character_cast_check(character)
+    # The cast is priced as its encounter will charge it (#4799); lethal unless told otherwise.
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+
+    lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
     result: list[PlayerAction] = []
     for technique in techniques:
         if not technique_performable(character, technique):
@@ -735,10 +772,33 @@ def _combat_actions(
                 available_fury_tiers=fury_tiers,
                 eligible_fury_anchors=eligible_fury_anchors,
                 is_ultimate=technique.is_ultimate,
+                cast_preview=_cast_preview(character, technique, lethal=lethal),
             )
         )
 
     return result
+
+
+def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) -> CastPreview:
+    """The intensity, control and anima cost this cast would run at now (#4799).
+
+    Priced by the cast's own cost function, so the card agrees with the charge: the
+    cheaper of the variant and base form, and capped at current anima in a non-lethal
+    fight. Declared strain is added at declaration, not here.
+    """
+    from world.magic.services.techniques import _calculate_technique_cost  # noqa: PLC0415
+
+    stats, _anima, cost, _strain = _calculate_technique_cost(
+        character=character,
+        technique=technique,
+        strain_commitment=0,
+        lethal=lethal,
+        apply_variant=True,
+        preferred_resonance=None,
+    )
+    return CastPreview(
+        intensity=stats.intensity, control=stats.control, effective_anima_cost=cost.effective_cost
+    )
 
 
 def _clash_contribution_actions(

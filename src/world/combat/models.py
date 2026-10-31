@@ -2670,6 +2670,15 @@ class StrainConfig(SharedMemoryModel):
             "it; the Rally resolution reads it. 0 means a Rally grants none."
         ),
     )
+    intensity_per_control_surrendered = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=(
+            "Intensity bought per point of control surrendered to Fury, before the roll's "
+            "share and the anchor's scaling."
+        ),
+    )
     strain_check_difficulty = models.PositiveSmallIntegerField(
         default=0,
         help_text=(

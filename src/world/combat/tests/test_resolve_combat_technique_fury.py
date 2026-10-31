@@ -2,8 +2,9 @@
 
 Cases:
 a) confirm_soulfray_risk=False + soulfray warning → no-op (no damage), anima unchanged.
-b) fury_commitment set → use_technique called with control_penalty + power_intensity_bonus
-   from the FuryResolution; CombatTechniqueResult.fury_committed == realized_tier.
+b) fury_commitment set → CombatTechniqueResult.fury_committed == realized_tier. (Fury's
+   trade lands on the engagement before use_technique, #4738; the journey
+   integration_tests/test_surrendering_control_to_fury_journeys.py covers what it buys.)
 """
 
 from __future__ import annotations
@@ -42,10 +43,6 @@ from world.vitals.models import CharacterVitals
 # get_soulfray_warning is imported at module-level in world.magic.services.techniques
 # (not lazy), so we must patch the bound name there.
 _SOULFRAY_WARNING_PATCH = "world.magic.services.techniques.get_soulfray_warning"
-
-# run_fury_for_action is imported lazily inside resolve_combat_technique, so
-# patching the origin module is correct (repo convention: lazy-import + patch-origin).
-_RUN_FURY_PATCH = "world.magic.services.fury.run_fury_for_action"
 
 # use_technique is imported lazily inside resolve_combat_technique via
 # `from world.magic.services import use_technique` — patch the re-export point.
@@ -152,90 +149,8 @@ class SoulfrayGateHonorsActionFlagTests(TestCase):
         )
 
 
-class FuryParamsThreadedTests(TestCase):
-    """resolve_combat_technique threads fury control_penalty + power_intensity_bonus."""
-
-    def test_fury_commitment_threads_control_penalty_into_use_technique(self) -> None:
-        """When fury_commitment set, use_technique receives control_penalty from FuryResolution."""
-        participant, action, _opponent, _anima, technique = _setup_combat_scenario()
-
-        fury_tier = FuryTierFactory()
-        fury_res = FuryResolution(
-            realized_tier=fury_tier,
-            control_penalty=7,
-            intensity_bonus=4,
-            berserk_severity=0,
-        )
-        action.fury_commitment = fury_tier
-        action.save(update_fields=["fury_commitment"])
-
-        from world.magic.types import TechniqueUseResult
-        from world.magic.types.techniques import AnimaCostResult
-
-        fake_cost = AnimaCostResult(
-            base_cost=3, effective_cost=3, control_delta=5, current_anima=20, deficit=0
-        )
-        fake_use_result = TechniqueUseResult(
-            anima_cost=fake_cost, confirmed=False, technique=technique
-        )
-
-        with patch(_RUN_FURY_PATCH, return_value=fury_res):
-            with patch(_USE_TECHNIQUE_PATCH, return_value=fake_use_result) as mock_use:
-                resolve_combat_technique(
-                    participant=participant,
-                    action=action,
-                    fatigue_category=ActionCategory.PHYSICAL,
-                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
-                    offense_check_fn=None,
-                )
-
-        call_kwargs = mock_use.call_args.kwargs
-        self.assertEqual(
-            call_kwargs.get("control_penalty"),
-            7,
-            "use_technique must receive control_penalty from FuryResolution.",
-        )
-
-    def test_fury_commitment_threads_intensity_bonus_into_use_technique(self) -> None:
-        """When fury_commitment set, use_technique receives power_intensity_bonus."""
-        participant, action, _opponent, _anima, technique = _setup_combat_scenario()
-
-        fury_tier = FuryTierFactory()
-        fury_res = FuryResolution(
-            realized_tier=fury_tier,
-            control_penalty=7,
-            intensity_bonus=4,
-            berserk_severity=0,
-        )
-        action.fury_commitment = fury_tier
-        action.save(update_fields=["fury_commitment"])
-
-        from world.magic.types import TechniqueUseResult
-        from world.magic.types.techniques import AnimaCostResult
-
-        fake_cost = AnimaCostResult(
-            base_cost=3, effective_cost=3, control_delta=5, current_anima=20, deficit=0
-        )
-        fake_use_result = TechniqueUseResult(
-            anima_cost=fake_cost, confirmed=False, technique=technique
-        )
-
-        with patch(_RUN_FURY_PATCH, return_value=fury_res):
-            with patch(_USE_TECHNIQUE_PATCH, return_value=fake_use_result) as mock_use:
-                resolve_combat_technique(
-                    participant=participant,
-                    action=action,
-                    fatigue_category=ActionCategory.PHYSICAL,
-                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
-                    offense_check_fn=None,
-                )
-
-        call_kwargs = mock_use.call_args.kwargs
-        self.assertEqual(
-            call_kwargs.get("power_intensity_bonus"),
-            4,
-            "use_technique must receive power_intensity_bonus from FuryResolution.",
-        )
+class FuryAuditTests(TestCase):
+    """resolve_combat_technique records the realized Fury tier on its result."""
 
     def test_fury_committed_on_result(self) -> None:
         """CombatTechniqueResult.fury_committed is set to the realized_tier from FuryResolution."""
@@ -244,8 +159,8 @@ class FuryParamsThreadedTests(TestCase):
         fury_tier = FuryTierFactory()
         fury_res = FuryResolution(
             realized_tier=fury_tier,
-            control_penalty=7,
-            intensity_bonus=4,
+            control_surrendered=7,
+            intensity_gained=4,
             berserk_severity=0,
         )
         action.fury_commitment = fury_tier
@@ -261,48 +176,22 @@ class FuryParamsThreadedTests(TestCase):
             anima_cost=fake_cost, confirmed=False, technique=technique
         )
 
-        with patch(_RUN_FURY_PATCH, return_value=fury_res):
-            with patch(_USE_TECHNIQUE_PATCH, return_value=fake_use_result):
-                result = resolve_combat_technique(
-                    participant=participant,
-                    action=action,
-                    fatigue_category=ActionCategory.PHYSICAL,
-                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
-                    offense_check_fn=None,
-                )
+        def cast(**kwargs):
+            # The cast surrendered: use_technique drives the FuryCast it is handed.
+            kwargs["fury"].resolution = fury_res
+            return fake_use_result
+
+        with patch(_USE_TECHNIQUE_PATCH, side_effect=cast):
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
+                offense_check_fn=None,
+            )
 
         self.assertIs(
             result.fury_committed,
             fury_tier,
             "CombatTechniqueResult.fury_committed must be the realized_tier from FuryResolution.",
         )
-
-    def test_no_fury_commitment_zeros_params(self) -> None:
-        """When action.fury_commitment is None, run_fury_for_action returns None
-        → use_technique gets control_penalty=0, power_intensity_bonus=0."""
-        participant, action, _opponent, _anima, technique = _setup_combat_scenario()
-
-        from world.magic.types import TechniqueUseResult
-        from world.magic.types.techniques import AnimaCostResult
-
-        fake_cost = AnimaCostResult(
-            base_cost=3, effective_cost=3, control_delta=5, current_anima=20, deficit=0
-        )
-        fake_use_result = TechniqueUseResult(
-            anima_cost=fake_cost, confirmed=False, technique=technique
-        )
-
-        # action.fury_commitment is None by default (no fury).
-        with patch(_RUN_FURY_PATCH, return_value=None):
-            with patch(_USE_TECHNIQUE_PATCH, return_value=fake_use_result) as mock_use:
-                resolve_combat_technique(
-                    participant=participant,
-                    action=action,
-                    fatigue_category=ActionCategory.PHYSICAL,
-                    cast_check=CastCheck(check_type=MagicMock(), extra_traits=()),
-                    offense_check_fn=None,
-                )
-
-        call_kwargs = mock_use.call_args.kwargs
-        self.assertEqual(call_kwargs.get("control_penalty"), 0)
-        self.assertEqual(call_kwargs.get("power_intensity_bonus"), 0)

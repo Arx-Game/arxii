@@ -272,7 +272,10 @@ per-row query). `.retrieve` returns the full step tree in depth-first
 authored order plus an `interactions` block (see below).
 `TriggerDefinitionViewSet` filters on `event_name`, searches `name`;
 `TriggerViewSet` filters on `trigger_definition`/`obj`, searches
-`trigger_definition__name`.
+`trigger_definition__name`. Every trigger write (create, edit, delete, and a
+definition edit or delete) invalidates the `trigger_handler` of each object it
+touches, so the change takes effect on commit rather than at the next restart
+(#4800).
 
 ### Permission tiers
 

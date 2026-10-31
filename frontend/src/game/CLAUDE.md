@@ -325,7 +325,9 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   An ambient row's body is the server's `line` (#3858) through
   `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`, and
   since #4128 the same prose line: avatar as indent, time on hover, no header row;
-  left-click on the avatar is the persona menu, the right button is the frame's.
+  left-click on the avatar, and on the name that opens the line (`[data-pose-actor]`,
+  #4791), is the persona menu, the right button on either is the frame's sorting menu
+  at once.
   It owns its scroll container and follows its newest line through
   `useStickToBottom`.
 - **`hooks/useStickToBottom.ts`**: The one rule for every feed: the newest line
@@ -367,7 +369,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   ADR-4128) and owns its sorting. Nothing sits on the block: a quick right-click on the
   text folds it to a one-line stub ("Nyx · 11:29", "Look · 11:30") and unfolds it again;
   a held right-click (`HOLD_MS`), a long-press, or a right-click on the avatar
-  (`[data-pose-avatar]`) opens `LineMenu` at the pointer. The stub keeps a reopen press
+  (`[data-pose-avatar]`) or on the name that opens the line (`[data-pose-actor]`, #4791)
+  opens `LineMenu` at the pointer. The stub keeps a reopen press
   and a Hide control. Callers pass `persona`, `keysOf` and `allKeys` so the menu's
   per-character and all-lines items act on every loaded line: `PoseReadTarget` (the
   reader's `sorting` memo) for poses in both scene views, `ExplorationReader` for its
@@ -382,7 +385,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   pointer, so a guard on the line never sees it. Labels are American English (Minimize).
 - **`hooks/useLineGestures.ts`**: The right button and the long-press on a line (#4128):
   `onFold` on a quick right-click on the text, `onMenu(x, y)` on a held one, on a
-  right-click on the avatar, or on a touch held for `HOLD_MS`; a plain tap does nothing,
+  right-click on the avatar or on the line's opening name (`[data-pose-avatar]`,
+  `[data-pose-actor]`; #4791), or on a touch held for `HOLD_MS`; a plain tap does nothing,
   so scrolling on a phone never folds; `contextmenu` is always prevented. Left click is
   play flow and is not read here. The test pointer polyfill carries `pointerType`.
 - **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
@@ -553,9 +557,10 @@ list (never populated in production): the server-composed persona menu is that f
   out alts").
 - **Dynamic commands**: Commands discovered from server with generated forms
 - **Real-time updates**: WebSocket integration for live game state
-- **Two menus by button (#4128, ADR-4128)**: left click is play flow (the avatar's
-  persona menu with Reply and Kudos first), right click is information flow (fold, hide,
-  per-character and all-lines sorting through `LineMenu`)
+- **Two menus by button (#4128, ADR-4128)**: left click is play flow (the persona menu
+  with Reply and Kudos first, on the avatar and on the name that opens the line, #4791),
+  right click is information flow (fold, hide, per-character and all-lines sorting
+  through `LineMenu`)
 - **Message formatting**: Rich text display for game messages
 
 ## Integration Points

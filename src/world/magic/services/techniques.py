@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatPull
     from world.forms.models import FormCombatProfile
     from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.services.fury import FuryCast
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult
@@ -711,7 +712,10 @@ def get_runtime_technique_stats(
 
     return RuntimeTechniqueStats(
         intensity=runtime_intensity,
-        control=runtime_control,
+        # Floored at 0 (#4738): control surrendered to Fury, round after round, can push the
+        # engagement's control_modifier far down, and a negative figure would raise the
+        # anima cost without limit. The old per-cast Fury penalty floored the same way.
+        control=max(runtime_control, 0),
     )
 
 
@@ -1186,7 +1190,6 @@ def _calculate_technique_cost(  # noqa: PLR0913
     *,
     character,
     technique,
-    control_penalty: int,
     strain_commitment: int,
     lethal: bool,
     apply_variant: bool,
@@ -1196,8 +1199,6 @@ def _calculate_technique_cost(  # noqa: PLR0913
     stats = get_runtime_technique_stats(
         technique, character, apply_variant=apply_variant, preferred_resonance=preferred_resonance
     )
-    if control_penalty:
-        stats = replace(stats, control=max(stats.control - control_penalty, 0))
     anima = CharacterAnima.objects.filter(character_id=character.pk).first()
     anima_current = anima.current if anima is not None else 0
     runtime_cost = calculate_effective_anima_cost(
@@ -1209,8 +1210,6 @@ def _calculate_technique_cost(  # noqa: PLR0913
         lethal=True,
     )
     base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
-    if control_penalty:
-        base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
     base_cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
         runtime_intensity=base_stats.intensity,
@@ -1540,8 +1539,8 @@ def _complete_technique_cast(  # noqa: PLR0913
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
-    # stats.control is the control as cast, after any Fury penalty: high control lets the
-    # offer open at an earlier Soulfray stage (#4740).
+    # stats.control is the control as cast, after any control surrendered to Fury: high
+    # control lets the offer open at an earlier Soulfray stage (#4740).
     maybe_create_audere_offer(
         character, stats.intensity, runtime_control=stats.control, sheet=sheet
     )
@@ -1589,7 +1588,6 @@ def use_technique(  # noqa: PLR0913
     pull_target: ObjectDB | None = None,
     power_intensity_bonus: int = 0,
     lethal: bool = True,
-    control_penalty: int = 0,
     apply_variant: bool = True,
     preferred_resonance=None,
     situation_ctx: object | None = None,
@@ -1600,8 +1598,14 @@ def use_technique(  # noqa: PLR0913
     cast_check: CastCheck | None = None,
     combat_burn_for: str = "",
     pulled_resonance: Resonance | None = None,
+    fury: FuryCast | None = None,
 ) -> TechniqueUseResult:
     """Orchestrate technique use from cost validation through post-cast events.
+
+    ``fury`` (#4738) is the Fury declared with this cast. It surrenders (rolls and lands
+    its trade on her engagement) only once the Soulfray gate has passed, and the runtime
+    stats are re-read so this cast channels it; a ``TECHNIQUE_PRE_CAST`` cancel withdraws
+    the trade; a cast that proceeds settles it (her message on commit, Berserk).
 
     Burning resonance (#4736): a non-combat ``cast_pull`` with ``burn > 0`` is resolved
     here (ceiling, strain check, reach) once the Soulfray gate passes, and its strain
@@ -1628,7 +1632,6 @@ def use_technique(  # noqa: PLR0913
     stats, anima, cost, effective_strain = _calculate_technique_cost(
         character=character,
         technique=technique,
-        control_penalty=control_penalty,
         strain_commitment=strain_commitment,
         lethal=lethal,
         apply_variant=apply_variant,
@@ -1645,6 +1648,19 @@ def use_technique(  # noqa: PLR0913
             declared_strain_commitment=strain_commitment,
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
+        )
+    if fury is not None and fury.surrender():
+        # The trade is on her engagement now; this cast reads it like any later one.
+        stats, anima, cost, effective_strain = _calculate_technique_cost(
+            character=character,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            lethal=lethal,
+            apply_variant=apply_variant,
+            preferred_resonance=preferred_resonance,
+        )
+        strain_power_bonus = _strain_power_bonus(
+            effective_strain, strain_config, strain_power_enabled
         )
     # #4099: the ONE decision whether this cast pays the caster's price. Made here, at
     # resolution (combat calls use_technique when the round resolves, not when the
@@ -1687,6 +1703,8 @@ def use_technique(  # noqa: PLR0913
         burn_result=burn_result,
     )
     if preparation is None:
+        if fury is not None:
+            fury.withdraw()
         return TechniqueUseResult(
             anima_cost=cost,
             confirmed=False,
@@ -1695,6 +1713,8 @@ def use_technique(  # noqa: PLR0913
             effective_strain_commitment=effective_strain,
             strain_power_bonus=strain_power_bonus,
         )
+    if fury is not None:
+        fury.settle()
     preparation.strain_power_bonus = strain_power_bonus
     preparation.combat_burn_for = combat_burn_for
     # Resolution may supply an explicit check result; retain it over extraction.

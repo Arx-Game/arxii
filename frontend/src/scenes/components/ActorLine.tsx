@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { FormattedContent } from '@/components/FormattedContent';
 import { markMatches, useFeedFind } from '@/game/feedFind';
 
@@ -8,6 +9,13 @@ interface ActorLineProps {
   content: string;
   /** The name on the card: the companion's for a companion pose, else the persona's. */
   actorName: string;
+  /**
+   * Wraps the semibold name once it is found at the line's opening (#4791): the
+   * caller's play menu around it, so the name carries the avatar's interactions.
+   * Called only when the line opens with the name; a line that does not is
+   * rendered as sent, with nothing to wrap.
+   */
+  renderName?: (name: ReactNode) => ReactNode;
 }
 
 /**
@@ -26,7 +34,7 @@ const LEAD_IN = /^(?:At [^,]+, )?(?:Quietly, )?/;
  * renders as sent). Without a line, the recorded content renders as it always
  * did.
  */
-export function ActorLine({ line, content, actorName }: ActorLineProps) {
+export function ActorLine({ line, content, actorName, renderName }: ActorLineProps) {
   const find = useFeedFind();
   if (!line) return <FormattedContent content={content} />;
   const leadIn = LEAD_IN.exec(line)?.[0] ?? '';
@@ -38,10 +46,11 @@ export function ActorLine({ line, content, actorName }: ActorLineProps) {
       </span>
     );
   }
+  const name = <span className="font-semibold">{markMatches(actorName, find)}</span>;
   return (
     <span data-testid="actor-line" data-actor={actorName}>
       {markMatches(leadIn, find)}
-      <span className="font-semibold">{markMatches(actorName, find)}</span>
+      {renderName ? renderName(name) : name}
       <FormattedContent content={line.slice(leadIn.length + actorName.length)} />
     </span>
   );

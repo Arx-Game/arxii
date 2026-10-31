@@ -122,3 +122,28 @@ class ApiAuthoredRedirectJourneyTests(TestCase):
             self.decoy.pk,
             "The exit's own destination must never win once the redirect fires",
         )
+
+    def test_a_trigger_authored_on_a_room_already_in_use_takes_effect_at_once(self) -> None:
+        """A room that has already loaded its triggers hears an authored change now (#4800).
+
+        Before, the room kept the trigger list it loaded first, so a trigger installed
+        or removed through the API did nothing until the server restarted.
+        """
+        char = CharacterFactory()
+        char.location = self.origin
+        char.move_to(self.exit_obj, quiet=True)
+        self.assertEqual(char.location.pk, self.decoy.pk)
+
+        # A request commits; the room drops its cached triggers when it does.
+        with self.captureOnCommitCallbacks(execute=True):
+            trigger_id = self._install_trigger(self._create_trigger_definition(self._create_flow()))
+        char.location = self.origin
+        char.move_to(self.exit_obj, quiet=True)
+        self.assertEqual(char.location.pk, self.redirect_target.pk)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(f"{TRIGGERS_URL}{trigger_id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        char.location = self.origin
+        char.move_to(self.exit_obj, quiet=True)
+        self.assertEqual(char.location.pk, self.decoy.pk)

@@ -4451,11 +4451,9 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
 
     name = "Unleashed"
     depth = 2
-    control_penalty = 4
-    intensity_bonus = 5
+    control_surrendered = 4
     base_check_difficulty = 10
-    lucid_grade_floor = 2
-    berserk_severity = 3
+    berserk_severity = 0
 
 
 class FuryConfigFactory(factory.django.DjangoModelFactory):
@@ -4474,6 +4472,16 @@ class FuryConfigFactory(factory.django.DjangoModelFactory):
         pk = kwargs.pop("pk")
         instance, _ = model_class.objects.update_or_create(pk=pk, defaults=kwargs)
         return instance
+
+
+class FuryDegreeShareFactory(factory.django.DjangoModelFactory):
+    """Percent of the Fury trade one outcome tier of the control roll buys (#4738)."""
+
+    class Meta:
+        model = "arxii.FuryDegreeShare"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    intensity_percent = 100
 
 
 # =============================================================================

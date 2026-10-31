@@ -28243,6 +28243,7 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly provocation_cap: number;
+      readonly tier_full_intensities: components['schemas']['AnchorTierIntensity'][];
     };
     /**
      * @description * `pool` - Every group of a type in a realm
@@ -28253,6 +28254,11 @@ export interface components {
      * @enum {string}
      */
     AnchorSourceEnum: 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
+    /** @description Read-only full-share intensity of one Fury tier under one anchor (#4738). */
+    AnchorTierIntensity: {
+      readonly tier_id: number;
+      readonly full_intensity: number;
+    };
     AngleView: {
       group_id: number;
       faction_rule_id: number;
@@ -30058,6 +30064,12 @@ export interface components {
      * @enum {string}
      */
     CastListEntryKindEnum: 'npc' | 'crowd';
+    /** @description Read-only serializer for CastPreview: what a cast would run at right now (#4799). */
+    CastPreview: {
+      readonly intensity: number;
+      readonly control: number;
+      readonly effective_anima_cost: number;
+    };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
@@ -34692,9 +34704,9 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly depth: number;
-      readonly control_penalty: number;
-      readonly intensity_bonus: number;
-      readonly berserk_severity: number;
+      readonly control_surrendered: number;
+      readonly is_berserk: boolean;
+      readonly full_intensity: number;
     };
     /** @description For players submitting a GM application. */
     GMApplicationCreate: {
@@ -44600,10 +44612,12 @@ export interface components {
       readonly thumbnail_media_url: string | null;
       /** @description Escalation pressure on this combatant — public dramatic state. */
       readonly escalation_level: number | null;
-      /** @description Process-derived intensity bonus from the COMBAT engagement. */
+      /** @description Process-derived intensity bonus from her engagement, whatever its type. */
       readonly intensity_modifier: number | null;
-      /** @description Process-derived control bonus from the COMBAT engagement. */
+      /** @description Process-derived control bonus from her engagement, whatever its type. */
       readonly control_modifier: number | null;
+      /** @description Control surrendered to Fury in her engagement so far, whatever its type (#4738). */
+      readonly fury_control_surrendered: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;
       readonly aftermath: components['schemas']['AftermathDigest'] | null;
@@ -47380,6 +47394,7 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+      readonly cast_preview: components['schemas']['CastPreview'] | null;
       readonly is_ultimate: boolean;
     };
     /**

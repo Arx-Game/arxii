@@ -168,6 +168,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     Usage:
         cast
         cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
+        cast <technique> [at <target>] fury=<tier> anchor=<name>
         declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
 
     Bare ``cast`` lists everything you can cast, with what each one does.
@@ -189,6 +190,12 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     With a thread pull (``pull=<thread> resonance=<name>``), ``burn=<n>`` burns
     that much resonance from it on top of any ``strain=<n>`` to push harder.
+
+    Use ``fury=<tier> anchor=<name>`` to surrender control for intensity: the tier
+    (by name or depth) is how much control you surrender for the rest of the fight,
+    the one you answer to (``anchor=``) caps how deep you can go, and your control
+    roll decides how much intensity it buys. The deepest tiers are Berserk. Bare
+    ``combat`` lists the tiers.
 
     Use ``soulfray`` to consent up front to holding this cast's protective
     ward alive past zero anima by drawing on Soulfray, skipping the separate

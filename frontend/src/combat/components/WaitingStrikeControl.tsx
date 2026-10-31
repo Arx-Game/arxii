@@ -93,7 +93,7 @@ export function WaitingStrikeControl({
         <SoulfrayAcceptGate
           warning={warning}
           techniqueName={selected.display_name}
-          animaCost={0}
+          animaCost={selected.cast_preview?.effective_anima_cost ?? null}
           accepted={soulfrayAccepted}
           onAcceptChange={setSoulfrayAccepted}
           disabled={disabled}

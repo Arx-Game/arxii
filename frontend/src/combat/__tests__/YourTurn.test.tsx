@@ -281,6 +281,7 @@ function makeParticipant(
     escalation_level: null,
     intensity_modifier: null,
     control_modifier: null,
+    fury_control_surrendered: null,
     current_square: null,
     current_position: null,
     aftermath: null,
@@ -420,7 +421,7 @@ function makeCastPlayerAction(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockMutateAsync.mockResolvedValue({ backend: 'COMBAT', deferred: true });
+  mockMutateAsync.mockResolvedValue({ backend: 'combat', deferred: true });
   mockManeuverMutateAsync.mockResolvedValue({ success: true });
   mockFleeMutate.mockImplementation((_arg: unknown, opts?: { onError?: (e: Error) => void }) => {
     void opts;
@@ -956,13 +957,13 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
 
     // Focused dispatch: action_slot 'focused', effort_level mapped to 'high'.
     expect(calls[0][0]).toMatchObject({
-      ref: { backend: 'COMBAT', technique_id: 10, action_slot: 'focused' },
+      ref: { backend: 'combat', technique_id: 10, action_slot: 'focused' },
       kwargs: { effort_level: 'high' },
     });
 
     // Passive dispatch: action_slot carries the slot string, same round effort.
     expect(calls[1][0]).toMatchObject({
-      ref: { backend: 'COMBAT', technique_id: 20, action_slot: 'passive-social' },
+      ref: { backend: 'combat', technique_id: 20, action_slot: 'passive-social' },
       kwargs: { effort_level: 'high' },
     });
 
@@ -1779,7 +1780,7 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455, #4736)', () => {
     setupMocks();
     // Focused (with the pull) succeeds; the combat_ready dispatch after it fails once.
     mockMutateAsync
-      .mockResolvedValueOnce({ backend: 'COMBAT', deferred: true })
+      .mockResolvedValueOnce({ backend: 'combat', deferred: true })
       .mockResolvedValueOnce({
         backend: 'REGISTRY',
         deferred: false,
@@ -1844,24 +1845,88 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
       id: 10,
       name: 'Spark',
       depth: 1,
-      control_penalty: 1,
-      intensity_bonus: 1,
-      berserk_severity: 0,
+      control_surrendered: 3,
+      is_berserk: false,
+      full_intensity: 4,
     },
     {
       id: 11,
       name: 'Blaze',
       depth: 3,
-      control_penalty: 2,
-      intensity_bonus: 3,
-      berserk_severity: 1,
+      control_surrendered: 8,
+      is_berserk: true,
+      full_intensity: 12,
     },
   ];
 
   const furyAnchors = [
-    { id: 20, name: 'Keth', provocation_cap: 2 },
-    { id: 21, name: 'Lira', provocation_cap: 5 },
+    { id: 20, name: 'Keth', provocation_cap: 2, tier_full_intensities: [] },
+    { id: 21, name: 'Lira', provocation_cap: 5, tier_full_intensities: [] },
   ];
+
+  it('shows the Soulfray gate the anima the cast will really cost (#4799)', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(7, 'Doom Touch', {
+      soulfray_warning: warning,
+      cast_preview: { intensity: 41, control: 20, effective_anima_cost: 22 },
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
+          }
+        >
+          select technique
+        </button>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    expect(screen.getByTestId('soulfray-accept-gate')).toHaveTextContent(
+      'Casting Doom Touch will cost 22 anima and may worsen your condition.'
+    );
+  });
+
+  it('adds the declared strain to the cost the Soulfray gate names', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(7, 'Doom Touch', {
+      soulfray_warning: warning,
+      cast_preview: { intensity: 41, control: 20, effective_anima_cost: 22 },
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <button
+          type="button"
+          data-testid={`card-select-technique-${slot}`}
+          onClick={() =>
+            onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 5, techniqueId: 7 })
+          }
+        >
+          select technique
+        </button>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    expect(screen.getByTestId('soulfray-accept-gate')).toHaveTextContent(
+      'Casting Doom Touch will cost 27 anima and may worsen your condition.'
+    );
+  });
 
   it('sends confirm_soulfray_risk when warning is present and accepted', async () => {
     setupMocks();
@@ -1987,7 +2052,7 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     // Pick tier Spark (depth 1) and anchor Keth (cap 2) — within cap.
     const tierTrigger = screen.getByTestId('fury-tier-select');
     await userEvent.click(tierTrigger);
-    const tierOption = await screen.findByText('Spark (depth 1)');
+    const tierOption = await screen.findByText('Spark: surrender 3 control');
     await userEvent.click(tierOption);
 
     const anchorTrigger = screen.getByTestId('fury-anchor-select');
@@ -2396,7 +2461,7 @@ describe('YourTurn — server is_ready lock (#2423)', () => {
     // The dispatch endpoint always resolves 200 — a business-rule rejection
     // surfaces as success:false, not a thrown error.
     mockMutateAsync.mockResolvedValueOnce({
-      backend: 'COMBAT',
+      backend: 'combat',
       deferred: false,
       success: false,
       message: 'Rejected.',

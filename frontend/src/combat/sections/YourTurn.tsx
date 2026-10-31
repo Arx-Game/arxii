@@ -415,7 +415,7 @@ function buildFocusedJob(
   return () =>
     dispatchAction({
       ref: {
-        backend: 'COMBAT',
+        backend: 'combat',
         technique_id: focusedContext.techniqueId ?? null,
         action_slot: 'focused',
       },
@@ -448,7 +448,7 @@ function buildPassiveJobs(
       jobs.push(() =>
         dispatchAction({
           ref: {
-            backend: 'COMBAT',
+            backend: 'combat',
             technique_id: ctx.techniqueId ?? null,
             // `slot` is already the 'passive-<category>' string the backend's
             // CombatActionSlot expects — pass it straight through.
@@ -487,7 +487,7 @@ function buildClashJob(
   return () =>
     dispatchAction({
       ref: {
-        backend: 'COMBAT',
+        backend: 'combat',
         clash_id: clashId,
         clash_action_slot: selectedClashRef.clash_action_slot ?? null,
       },
@@ -2674,7 +2674,12 @@ export function YourTurn({
           <SoulfrayAcceptGate
             warning={soulfrayWarning}
             techniqueName={focusedCastDescriptor?.display_name ?? 'Cast'}
-            animaCost={0}
+            animaCost={
+              focusedCastDescriptor?.cast_preview
+                ? focusedCastDescriptor.cast_preview.effective_anima_cost +
+                  focusedContext.strainCommitment
+                : null
+            }
             accepted={soulfrayAccepted}
             onAcceptChange={setSoulfrayAccepted}
             disabled={isLocked}

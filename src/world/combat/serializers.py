@@ -540,6 +540,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     escalation_level = serializers.SerializerMethodField()
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
+    fury_control_surrendered = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     current_square = serializers.SerializerMethodField()
     aftermath = serializers.SerializerMethodField()
@@ -566,6 +567,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "escalation_level",
             "intensity_modifier",
             "control_modifier",
+            "fury_control_surrendered",
             "current_position",
             "current_square",
             "aftermath",
@@ -827,15 +829,35 @@ class ParticipantSerializer(serializers.ModelSerializer):
         engagement = self._combat_engagement(obj)
         return engagement.escalation_level if engagement else None
 
+    @staticmethod
+    def _any_engagement(obj: CombatParticipant) -> CharacterEngagement | None:
+        """The participant's engagement whatever its type (#4738).
+
+        The Pressure figures read this: a fight that starts while she holds a challenge
+        or mission engagement runs on that row, and Fury's trade lands there.
+        """
+        from world.combat.services import engagement_of_any_type_for  # noqa: PLC0415
+
+        try:
+            character = obj.character_sheet.character
+        except AttributeError:
+            return None
+        return engagement_of_any_type_for(character)
+
     def get_intensity_modifier(self, obj: CombatParticipant) -> int | None:
-        """Process-derived intensity bonus from the COMBAT engagement."""
-        engagement = self._combat_engagement(obj)
+        """Process-derived intensity bonus from her engagement, whatever its type."""
+        engagement = self._any_engagement(obj)
         return engagement.intensity_modifier if engagement else None
 
     def get_control_modifier(self, obj: CombatParticipant) -> int | None:
-        """Process-derived control bonus from the COMBAT engagement."""
-        engagement = self._combat_engagement(obj)
+        """Process-derived control bonus from her engagement, whatever its type."""
+        engagement = self._any_engagement(obj)
         return engagement.control_modifier if engagement else None
+
+    def get_fury_control_surrendered(self, obj: CombatParticipant) -> int | None:
+        """Control surrendered to Fury in her engagement so far, whatever its type (#4738)."""
+        engagement = self._any_engagement(obj)
+        return engagement.fury_control_surrendered if engagement else None
 
     def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
         """Resolve the participant's PRIMARY persona through the cached accessor.

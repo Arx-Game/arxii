@@ -2090,6 +2090,85 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
 
 Journeys: `src/integration_tests/test_resonance_strain_journeys.py`.
 
+### Fury: surrendering control for intensity (#4738 part B, #4727 decision 5) [BUILT & WIRED]
+
+Fury is a chosen trade, not a per-cast bonus. A character declares a `FuryTier` and an anchor
+(a character she has a tie toward) with a technique cast; the tier is a preset amount of control
+she surrenders for the rest of her engagement, and her control roll's outcome picks how much
+intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magic/models/fury.py`.
+
+- **Models.** `FuryTier`: `name`, `depth`, `control_surrendered`, `base_check_difficulty`,
+  `berserk_severity`. `FuryConfig` (singleton): `check_trait`, `provocation_cap_per_tier`,
+  `bonus_scale_per_cap_point`, `cap_ease_per_point`, `default_berserk_duration_rounds`,
+  `berserk_condition`. `FuryDegreeShare` (an `OutcomeTierAward`): `intensity_percent` per
+  outcome tier; `clean()` enforces that a better outcome never buys a smaller percent.
+  `StrainConfig.intensity_per_control_surrendered` (Decimal, default 0) is the rate.
+  `CharacterEngagement.fury_control_surrendered` tallies what was surrendered, for display.
+  Migration 0327 (`control_penalty` renamed to `control_surrendered`; `intensity_bonus` and
+  `lucid_grade_floor` removed, empty in production).
+- **Cap.** The anchor caps the depth: `provocation_cap` = her own side's relationship tier
+  toward the anchor // `provocation_cap_per_tier`; `clamp_tier` drops a deeper declaration to
+  the deepest tier within the cap. Each cap point also eases the control roll by
+  `cap_ease_per_point` and scales the trade up by `bonus_scale_per_cap_point` percent.
+- **The trade.** `fury_intensity_for(tier, cap, outcome)` = floor(`control_surrendered` x
+  `intensity_per_control_surrendered` x (100 + `bonus_scale_per_cap_point` x cap) / 100 x
+  `intensity_percent` / 100), Decimal math floored once. An outcome with no `FuryDegreeShare`
+  row buys nothing; the control is still surrendered.
+- **Where it lands.** Each path builds a `FuryCast` (`fury_cast_for`) and hands it to
+  `use_technique(fury=...)`, which drives it. Once the Soulfray gate has passed,
+  `FuryCast.surrender()` rolls the control check (`FuryConfig.check_trait` plus the
+  `FURY_CONTROL` magic-skill terms, difficulty `base_check_difficulty` minus the ease) and writes
+  her `CharacterEngagement` (any engagement type) under a row lock:
+  `intensity_modifier += intensity_gained`, `control_modifier -= control_surrendered`,
+  `fury_control_surrendered += control_surrendered`. `use_technique` then re-reads her runtime
+  stats, so the cast Fury was declared with channels the trade, and every later cast in the
+  engagement does too. A `TECHNIQUE_PRE_CAST` cancel calls `withdraw()`, which takes the trade
+  back off (the roll stands). A cast that proceeds calls `settle()`: the caster alone is told
+  "You surrender N control: intensity +M." on commit, and Berserk is applied for a Berserk tier.
+  A cast stopped at the Soulfray gate surrenders nothing and tells her nothing. With no
+  engagement, or when the anchor's tie clamps the tier to nothing, nothing is rolled and nothing
+  changes. Fury may be declared again each round, and each declaration surrenders and buys again.
+  `get_runtime_technique_stats` floors runtime control at 0, so repeated surrenders cannot push
+  the anima cost up without limit (the stored `control_modifier` is not floored).
+- **Berserk is chosen.** A tier with `berserk_severity` above 0 is a Berserk tier: choosing it
+  applies Berserk (`FuryConfig.berserk_condition`) at that severity whatever the roll. No roll
+  ever causes Berserk. Declaring Fury while already Berserk is allowed.
+- **Callers.** Combat (`resolve_combat_technique`), scene cast (`cast_services._resolve_cast`)
+  and technique-enhanced scene actions (`action_services`) each pass `fury=` to
+  `use_technique` and read `FuryCast.realized_tier` back for the audit. None passes a Fury power
+  term; `use_technique`'s `control_penalty` parameter is gone.
+- **Validation.** `_cap_fury_by_provocation` (scene action and cast serializers) refuses Fury
+  without a technique, without an anchor, above the cap, and with no engagement ("Fury needs
+  something at stake: you are not engaged."). A combat cast declaration (web or telnet) refuses a
+  tier deeper than the anchor's cap with the same message (`fury_over_cap_message`, from
+  `CastTechniqueAction._combat_fury_cap_refusal` in `round_declaration`); nothing is recorded or
+  charged. Resolution still clamps, for a tie that lapsed after declaring.
+- **Required content.** `fury-degree-shares` lists every `CheckOutcome` (matched by FK) with no
+  `FuryDegreeShare`; `fury-intensity-per-control` is absent while the rate is 0.
+- **Surfaces.** The cast picker (`FuryTierOption`) carries `control_surrendered`, `is_berserk`
+  and `full_intensity` (`full_trade_intensities`: the trade at the highest authored
+  `FuryDegreeShare.intensity_percent`, 0 when none exists, with no anchor scaling); each
+  `AnchorOption` carries `tier_full_intensities`, the same figure under that anchor's cap. The web `FuryDeclaration` ("Surrender control") lists tiers as "Seething:
+  surrender 6 control" (`(Berserk)` on a Berserk tier) and previews "6 control -> up to +10
+  intensity, by your roll" from those server figures. The participant payload carries
+  `fury_control_surrendered` beside `intensity_modifier` / `control_modifier`; the
+  `Pressure` rail section (`frontend/src/combat/sections/Pressure.tsx`) shows them, with a
+  "Fury: surrendered N control" chip once N > 0, read from her engagement whatever its type.
+  `FuryCast.settle` tells the caster alone, on commit, "You surrender N control: intensity +M." (`fury_trade_message`), so all three
+  resolution paths say it. Telnet: bare `combat` lists the tiers (`fury_tier_label`), the
+  declared tier and a `Pressure:` line.
+- **Berserk penalises, it does not refuse (#4738 part B).** A Berserk character may declare
+  flee and parley; both roll through `collect_check_modifiers`, so any
+  `ConditionCheckModifier` staff author on the Berserk template (template or stage level)
+  against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
+  roll. Only `leave_encounter` is refused (`reject_leave_if_berserk`: "The rage will not
+  walk away. You can still try to flee."). Required content `berserk-disengage-penalty`
+  lists a Berserk with no penalty against either check: a negative modifier authored on the
+  check type or on its category, at template or stage level. Journeys:
+  `src/integration_tests/test_berserk_disengage_journeys.py`.
+
+Journeys: `src/integration_tests/test_surrendering_control_to_fury_journeys.py`.
+
 ### Target-Aware Pulls — Court Regard Modulation (#1831 — ADR-0086) [BUILT & WIRED]
 
 Thread pulls are **target-aware**: the live target the pull's action is directed at
@@ -2991,7 +3070,8 @@ never names. Unset: no offer, nothing applied (the dashboard lists it). The comb
 payload carries `audere_state` (`audere` | `audere_majora` | null) for the web Audere strip.
 Berserk likewise is `FuryConfig.berserk_condition` (`get_berserk_template()`,
 `berserk_condition_id()`), read by fury, moon-sensitivity, the rampage compulsion's
-`is_berserk`, the fury declaration serializer and the combat status line.
+`is_berserk` and the combat status line (the fury declaration serializer no longer reads it,
+#4738).
 
 **High control opens Audere earlier (#4740, #4727 decision 6).**
 `AudereThreshold.control_per_stage_earlier` (PositiveSmallIntegerField, default 0 = off):
@@ -3008,7 +3088,7 @@ through one Soulfray stage earlier than usual." (or "N Soulfray stages") when it
 `check_audere_eligibility(character, runtime_intensity, runtime_control=0)` and
 `maybe_create_audere_offer(character, runtime_intensity, *, runtime_control=0, sheet=None)`
 take the control; the cast hook in `use_technique` passes `stats.control` (the control as
-cast, after any Fury penalty). `PendingAudereOffer.fired_control` stores it so
+cast, after any control surrendered to Fury). `PendingAudereOffer.fired_control` stores it so
 `resolve_audere_offer`'s stale re-check asks for the same stage the cast did. Audere Majora's
 own `minimum_warp_stage` gate is unchanged (by default it also requires an active Audere).
 

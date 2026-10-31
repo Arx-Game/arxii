@@ -64,6 +64,7 @@ from world.magic.models import (
     Facet,
     FacetAlias,
     FuryConfig,
+    FuryDegreeShare,
     FuryTier,
     Gift,
     GiftAcquisitionConfig,
@@ -2438,17 +2439,25 @@ class FeedingRecordAdmin(admin.ModelAdmin):
 
 @admin.register(FuryTier)
 class FuryTierAdmin(admin.ModelAdmin):
-    """#3831 - authored, player-chosen depth-of-rage catalog (analogous to IntensityTier)."""
+    """#3831, #4738 - authored Fury tiers: how much control each surrenders; Berserk tiers."""
 
     list_display = [
         "name",
         "depth",
-        "control_penalty",
-        "intensity_bonus",
-        "lucid_grade_floor",
+        "control_surrendered",
+        "base_check_difficulty",
         "berserk_severity",
     ]
     search_fields = ["name"]
+
+
+@admin.register(FuryDegreeShare)
+class FuryDegreeShareAdmin(admin.ModelAdmin):
+    """#4738 - the percent of the Fury trade the control roll buys, per outcome tier."""
+
+    list_display = ("outcome_tier", "intensity_percent")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
 
 
 @admin.register(FuryConfig)

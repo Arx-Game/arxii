@@ -46067,10 +46067,16 @@ components:
         provocation_cap:
           type: integer
           readOnly: true
+        tier_full_intensities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnchorTierIntensity'
+          readOnly: true
       required:
       - id
       - name
       - provocation_cap
+      - tier_full_intensities
     AnchorSourceEnum:
       enum:
       - pool
@@ -46085,6 +46091,20 @@ components:
         * `same_as` - The same group as an earlier question
         * `served_house` - The house the character's family served
         * `own_family` - The character's own family
+    AnchorTierIntensity:
+      type: object
+      description: Read-only full-share intensity of one Fury tier under one anchor
+        (#4738).
+      properties:
+        tier_id:
+          type: integer
+          readOnly: true
+        full_intensity:
+          type: integer
+          readOnly: true
+      required:
+      - full_intensity
+      - tier_id
     AngleView:
       type: object
       properties:
@@ -49802,6 +49822,24 @@ components:
       description: |-
         * `npc` - npc
         * `crowd` - crowd
+    CastPreview:
+      type: object
+      description: 'Read-only serializer for CastPreview: what a cast would run at
+        right now (#4799).'
+      properties:
+        intensity:
+          type: integer
+          readOnly: true
+        control:
+          type: integer
+          readOnly: true
+        effective_anima_cost:
+          type: integer
+          readOnly: true
+      required:
+      - control
+      - effective_anima_cost
+      - intensity
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -59749,21 +59787,21 @@ components:
         depth:
           type: integer
           readOnly: true
-        control_penalty:
+        control_surrendered:
           type: integer
           readOnly: true
-        intensity_bonus:
-          type: integer
+        is_berserk:
+          type: boolean
           readOnly: true
-        berserk_severity:
+        full_intensity:
           type: integer
           readOnly: true
       required:
-      - berserk_severity
-      - control_penalty
+      - control_surrendered
       - depth
+      - full_intensity
       - id
-      - intensity_bonus
+      - is_berserk
       - name
     GMApplicationCreate:
       type: object
@@ -78330,12 +78368,20 @@ components:
         intensity_modifier:
           type: integer
           nullable: true
-          description: Process-derived intensity bonus from the COMBAT engagement.
+          description: Process-derived intensity bonus from her engagement, whatever
+            its type.
           readOnly: true
         control_modifier:
           type: integer
           nullable: true
-          description: Process-derived control bonus from the COMBAT engagement.
+          description: Process-derived control bonus from her engagement, whatever
+            its type.
+          readOnly: true
+        fury_control_surrendered:
+          type: integer
+          nullable: true
+          description: Control surrendered to Fury in her engagement so far, whatever
+            its type (#4738).
           readOnly: true
         current_position:
           allOf:
@@ -78382,6 +78428,7 @@ components:
       - dodge_plan
       - escalation_level
       - fatigue
+      - fury_control_surrendered
       - health
       - id
       - intensity_modifier
@@ -83409,6 +83456,11 @@ components:
           items:
             $ref: '#/components/schemas/AnchorOption'
           readOnly: true
+        cast_preview:
+          allOf:
+          - $ref: '#/components/schemas/CastPreview'
+          readOnly: true
+          nullable: true
         is_ultimate:
           type: boolean
           readOnly: true
@@ -83417,6 +83469,7 @@ components:
       - action_template
       - available_fury_tiers
       - backend
+      - cast_preview
       - check_type
       - description
       - difficulty

@@ -339,7 +339,7 @@ class SoulfrayRevealDeliveryTests(TestCase):
                 "world.magic.services.use_technique", return_value=technique_result
             ) as use_technique,
             patch("world.magic.services.cast_threads.applicable_threads_for_cast", return_value=[]),
-            patch("world.magic.services.fury.run_fury_for_action", return_value=None),
+            patch("world.magic.services.fury.fury_cast_for", return_value=None),
         ):
             result = _resolve_enhanced_action(
                 character=MagicMock(),

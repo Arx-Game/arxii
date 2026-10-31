@@ -8,8 +8,8 @@ plays on unchanged:
 
 - Ysmay's Audere offer opens and ``accept surge`` puts her in Audere, now called
   "Breakthrough"; her own combat payload reads ``audere_state: "audere"``.
-- Mira, raging under a Berserk renamed "Red Haze", types ``combat flee`` and is
-  refused: the rage does not retreat.
+- Mira, raging under a Berserk renamed "Red Haze", still cannot walk away
+  (``combat_leave``), while Tomas, not raging, can.
 - Mira's ``combat rally Tomas`` still rolls the renamed Rally check and leaves Tomas
   holding the renamed success condition.
 - The Required content dashboard still lists every designation as present.
@@ -38,7 +38,7 @@ from integration_tests.test_surge_rolls_journeys import (
     SUCCESS_INTENSITY,
     _SurgeField,
 )
-from world.combat.constants import SurgeTriggerKind, TargetingMode, TargetSelection
+from world.combat.constants import EncounterType, SurgeTriggerKind, TargetingMode, TargetSelection
 from world.combat.factories import (
     CombatOpponentActionFactory,
     SocialManeuverConfigFactory,
@@ -146,21 +146,28 @@ class RenamingBerserkChangesNothing(_StaffRenameRows, _SurgeField):
         self.sign_in_staff()
         self.berserk = BerserkConditionTemplateFactory()
 
-    def test_a_renamed_rage_still_refuses_to_flee(self) -> None:
+    def leave(self, character):
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
+        self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
+        self.encounter.save()
+        return self.web(character, "combat_leave").detail
+
+    def test_a_renamed_rage_still_refuses_to_walk_away(self) -> None:
         self.rename("conditiontemplate", self.berserk.pk, "Red Haze")
         ConditionInstanceFactory(target=self.mira, condition=self.berserk)
 
-        told = self.telnet(self.mira, "combat flee")
+        detail = self.leave(self.mira)
 
-        self.assertIn("rage does not retreat", told)
+        self.assertFalse(detail.success)
+        self.assertIn("rage will not walk away", detail.message)
 
-    def test_tomas_without_the_rage_may_flee(self) -> None:
+    def test_tomas_without_the_rage_may_leave(self) -> None:
         self.rename("conditiontemplate", self.berserk.pk, "Red Haze")
         ConditionInstanceFactory(target=self.mira, condition=self.berserk)
 
-        told = self.telnet(self.tomas, "combat flee")
+        detail = self.leave(self.tomas)
 
-        self.assertNotIn("rage does not retreat", told)
+        self.assertTrue(detail.success)
 
 
 class RenamingRallysRowsChangesNothing(_StaffRenameRows, _SurgeField):

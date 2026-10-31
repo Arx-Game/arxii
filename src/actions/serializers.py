@@ -91,9 +91,16 @@ class FuryTierOptionSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
     depth = serializers.IntegerField(read_only=True)
-    control_penalty = serializers.IntegerField(read_only=True)
-    intensity_bonus = serializers.IntegerField(read_only=True)
-    berserk_severity = serializers.IntegerField(read_only=True)
+    control_surrendered = serializers.IntegerField(read_only=True)
+    is_berserk = serializers.BooleanField(read_only=True)
+    full_intensity = serializers.IntegerField(read_only=True)
+
+
+class AnchorTierIntensitySerializer(serializers.Serializer):
+    """Read-only full-share intensity of one Fury tier under one anchor (#4738)."""
+
+    tier_id = serializers.IntegerField(read_only=True)
+    full_intensity = serializers.IntegerField(read_only=True)
 
 
 class AnchorOptionSerializer(serializers.Serializer):
@@ -102,6 +109,7 @@ class AnchorOptionSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
     provocation_cap = serializers.IntegerField(read_only=True)
+    tier_full_intensities = AnchorTierIntensitySerializer(many=True, read_only=True)
 
 
 class AvailableEnhancementSerializer(serializers.Serializer):
@@ -127,6 +135,14 @@ class TargetSpecSerializer(serializers.Serializer):
     kind = serializers.CharField(read_only=True)
     cardinality = serializers.CharField(read_only=True)
     filters = TargetFiltersSerializer(read_only=True)
+
+
+class CastPreviewSerializer(serializers.Serializer):
+    """Read-only serializer for CastPreview: what a cast would run at right now (#4799)."""
+
+    intensity = serializers.IntegerField(read_only=True)
+    control = serializers.IntegerField(read_only=True)
+    effective_anima_cost = serializers.IntegerField(read_only=True)
 
 
 class StrainAvailabilitySerializer(serializers.Serializer):
@@ -171,6 +187,7 @@ class PlayerActionSerializer(serializers.Serializer):
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
     eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
+    cast_preview = CastPreviewSerializer(read_only=True, allow_null=True)
     is_ultimate = serializers.BooleanField(read_only=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
