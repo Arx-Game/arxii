@@ -248,6 +248,12 @@ number wherever the stat is read. The stat lane's piles are separate from the ch
 check reads the buffed stat through its trait points. Every other `get_modifier_breakdown`
 caller reads flat values.
 
+**The aspect lever (#4827).** After the CHARACTER block, `_aspect_contributions` adds, for each
+`CheckTypeAspect` on the check whose Aspect has an active `ModifierTarget` (`target_aspect`), that
+target's `modifier_target_contributions` in the check lane, each value times the row's weight and
+truncated, labelled `"<source> (<Aspect>)"`, source kind kept. A card's `+10 diplomacy` thus reaches
+every Diplomacy-weighted check through the seam; the path aspect term in the roll path is unchanged.
+
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`
 (`scene=request.scene`), so conditions / rollmod / scene / equipment / CHARACTER /

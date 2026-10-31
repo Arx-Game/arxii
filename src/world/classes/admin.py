@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 
 from world.admin_utils import OneRowPerFormSet
 from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
@@ -7,6 +7,7 @@ from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.magic.models import PathGiftGrant
 from world.magic.services.magic_skills import invalidate_technique_own_paths
+from world.mechanics.services import ensure_aspect_target
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -149,6 +150,22 @@ class AspectAdmin(admin.ModelAdmin):
     @admin.display(description="Paths")
     def path_count(self, obj):
         return obj.path_aspects.count()
+
+    def save_model(self, request, obj, form, change):
+        """Save the Aspect and make sure a modifier target points at it (#4827).
+
+        A distinction's ``+10 <aspect>`` can only name a ``ModifierTarget``, so every
+        Aspect row needs one with ``target_aspect`` set. An explicit call, not a signal
+        (ADR-0009).
+        """
+        super().save_model(request, obj, form, change)
+        if ensure_aspect_target(obj) is None:
+            messages.warning(
+                request,
+                f"No modifier target was made for {obj.name}: another category already "
+                "has a target of that name. Point that row's target aspect at this Aspect "
+                "on the Modifier targets admin, or rename one of them.",
+            )
 
 
 # ---------------------------------------------------------------------------
