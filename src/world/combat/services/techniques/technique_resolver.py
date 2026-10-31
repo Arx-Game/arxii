@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -158,17 +158,8 @@ class TechniqueDamageBonus:
         opponent_key = opponent.pk if self.narrowed and opponent is not None else None
         key = (damage_type_id, opponent_key)
         if key not in self.totals:
-            facts = self.read_opponent(opponent)
-            self.totals[key] = technique_effect_total(
-                self.sheet,
-                replace(
-                    context,
-                    damage_type_id=damage_type_id,
-                    opponent_property_ids=facts.property_ids,
-                    opponent_condition_ids=facts.condition_ids,
-                ),
-                self.targets,
-            )
+            hit = context.landing_on(self.read_opponent(opponent), damage_type_id)
+            self.totals[key] = technique_effect_total(self.sheet, hit, self.targets)
         return self.totals[key]
 
 

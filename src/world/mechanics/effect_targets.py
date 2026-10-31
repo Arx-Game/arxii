@@ -6,7 +6,7 @@ its kind). Combat and scene maneuvers call it instead of a constant.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -257,12 +257,7 @@ class TechniqueConditionBonus:
         key = target.pk if narrowed else None
         if key not in self.totals:
             if narrowed:
-                facts = opponent_facts(target)
-                context = replace(
-                    context,
-                    opponent_property_ids=facts.property_ids,
-                    opponent_condition_ids=facts.condition_ids,
-                )
+                context = context.landing_on(opponent_facts(target))
             self.totals[key] = (
                 technique_effect_total(self.sheet, context, self.severity_targets),
                 technique_effect_total(self.sheet, context, self.duration_targets),
