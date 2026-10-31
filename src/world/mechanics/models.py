@@ -219,26 +219,26 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "not SET_NULL: clearing it would widen a being's target to every being."
         ),
     )
+    # CASCADE, not SET_NULL, on scope_maneuver_effect: clearing it would widen the
+    # target to every effect. Maneuver effect category only (#4783); set this or the
+    # kind, not both (modifier_target_one_scope).
     scope_maneuver_effect = models.ForeignKey(
         "arxii.ManeuverEffect",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="modifier_targets",
-        help_text=(
-            "Maneuver effect category only (#4783): this one effect and no other. CASCADE, "
-            "not SET_NULL: clearing it would widen the target to every effect. Set this or "
-            "the kind below, not both."
-        ),
+        verbose_name="Scope - one effect",
+        help_text="This effect only.",
     )
     scope_effect_kind = models.CharField(
         max_length=32,
         choices=EffectKind.choices,
         blank=True,
         default="",
+        verbose_name="Scope - kind of effect",
         help_text=(
-            "Maneuver effect category only (#4783): this kind of effect on every "
-            "maneuver. Set this or the effect above, not both."
+            "This kind of effect on every maneuver. Set this or the effect above, not both."
         ),
     )
     # Future target FKs — added when their systems are built:

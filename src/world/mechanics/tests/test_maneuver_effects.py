@@ -6,7 +6,7 @@ from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.mechanics.admin import ManeuverEffectAdmin
+from world.mechanics.admin import ManeuverEffectAdmin, ModifierTargetAdmin
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
     MANEUVER_EFFECT_DEFAULTS,
@@ -100,3 +100,18 @@ class ManeuverEffectAdminTests(TestCase):
         assert model_admin.has_add_permission(request) is False
         assert model_admin.has_delete_permission(request, row) is False
         assert "key" in model_admin.get_readonly_fields(request, row)
+
+
+class ModifierTargetFormTests(TestCase):
+    def test_form_labels_the_two_scope_fields_as_the_mockup_does(self):
+        request = RequestFactory().get("/")
+        request.user = AccountFactory(is_superuser=True, is_staff=True)
+        form = ModifierTargetAdmin(ModifierTarget, site).get_form(request)()
+        one = form.fields["scope_maneuver_effect"]
+        kind = form.fields["scope_effect_kind"]
+        assert one.label == "Scope - one effect"
+        assert one.help_text == "This effect only."
+        assert kind.label == "Scope - kind of effect"
+        assert kind.help_text == (
+            "This kind of effect on every maneuver. Set this or the effect above, not both."
+        )

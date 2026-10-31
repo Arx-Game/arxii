@@ -76,8 +76,9 @@ class Migration(migrations.Migration):
                     ("surge_intensity", "Surge intensity"),
                 ],
                 default="",
-                help_text="Maneuver effect category only (#4783): this kind of effect on every maneuver. Set this or the effect above, not both.",
+                help_text="This kind of effect on every maneuver. Set this or the effect above, not both.",
                 max_length=32,
+                verbose_name="Scope - kind of effect",
             ),
         ),
         migrations.AddField(
@@ -85,11 +86,12 @@ class Migration(migrations.Migration):
             name="scope_maneuver_effect",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Maneuver effect category only (#4783): this one effect and no other. CASCADE, not SET_NULL: clearing it would widen the target to every effect. Set this or the kind below, not both.",
+                help_text="This effect only.",
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="modifier_targets",
                 to="arxii.maneuvereffect",
+                verbose_name="Scope - one effect",
             ),
         ),
     ]
