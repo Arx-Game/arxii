@@ -280,3 +280,50 @@ class CovenantRoleAdminFocusPickTests(TestCase):
         self.assertIn("Held Strike", content)
         self.assertInHTML('<td class="field-price"><p>2</p></td>', content)
         self.assertInHTML('<td class="field-price"><p>4</p></td>', content)
+
+
+class CharacterFocusPickAdminTests(TestCase):
+    """Staff setting a character's pick in the admin see a refused save's reason."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountDB.objects.create_superuser("pickstaff2", "p2@example.com", "pw-123456")
+        VowFocusPickConfigFactory(budget_per_level=4)
+        cls.role = CovenantRoleFactory()
+        cls.membership = CharacterCovenantRoleFactory(
+            covenant=CovenantFactory(covenant_type=cls.role.covenant_type),
+            covenant_role=cls.role,
+            engaged=True,
+        )
+        ThreadFactory(
+            owner=cls.membership.character_sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=cls.role,
+            target_trait=None,
+            level=10,
+        )
+        cls.level_one = VowFocusPickFactory(covenant_role=cls.role, pick_level=1)
+        cls.level_two = VowFocusPickFactory(covenant_role=cls.role, pick_level=2)
+
+    def _post(self, pick):
+        self.client.force_login(self.staff)
+        return self.client.post(
+            reverse("admin:arxii_charactervowfocuspick_add"),
+            {"character_role": str(self.membership.pk), "pick": str(pick.pk)},
+        )
+
+    def test_a_level_two_pick_is_refused_with_the_reason(self) -> None:
+        response = self._post(self.level_two)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "is a level 2 pick")
+        self.assertFalse(CharacterVowFocusPick.objects.filter(pick=self.level_two).exists())
+
+    def test_a_level_one_pick_saves(self) -> None:
+        response = self._post(self.level_one)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            CharacterVowFocusPick.objects.filter(
+                character_role=self.membership, pick=self.level_one
+            ).exists()
+        )

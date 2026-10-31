@@ -1587,7 +1587,7 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """How a character was taught to fight with magic (#4759).
 
     A character's combat style (``CharacterSheet.combat_style``) replaces their
-    vow's ``CovenantRoleDefenseProfile``: it sets the defense type (evasion,
+    vow's ``CovenantRoleDefenseProfile``: it sets the defense style (evasion,
     barrier or mitigation) and how much of their armor counts. A character with
     no style keeps the vow profile's behavior. Not a ``TechniqueStyle``, which is
     how a Path or Gift casts; a Path and a character choose those separately

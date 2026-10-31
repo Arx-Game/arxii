@@ -1660,6 +1660,7 @@
   - species -> species.Species [FK] (nullable)
   - current_language -> species.Language [FK] (nullable)
   - current_mood -> character_sheets.MoodOption [FK] (nullable)
+  - combat_style -> covenants.CombatStyle [FK] (nullable)
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
@@ -2906,6 +2907,7 @@
 - `elevation_bonus(attacker_sheet: 'CharacterSheet', attacker_pos: 'Position', target_pos: 'Position') -> 'int' - Flat to-hit bonus when attacker is elevated/aerial and target is not.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' - GM force-end: completes as ABANDONED (#876 §8).`
+- `engagement_of_any_type_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live ``CharacterEngagement`` whatever its type, or None (#4738).`
 - `ensure_opponent_plans(encounter: 'CombatEncounter') -> 'None' - Give every plannable opponent still without a plan this round its plan (#4607).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' - Delete all CombatPull rows from prior rounds and recompute affected max_health.`
 - `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
@@ -3489,6 +3491,19 @@
   - sworn_as -> scenes.Persona [FK]
 **Pointed to by:**
   - granted_techniques <- magic.CharacterTechnique
+  - focus_picks <- covenants.CharacterVowFocusPick
+
+### CharacterVowFocusPick
+**Foreign Keys:**
+  - character_role -> covenants.CharacterCovenantRole [FK]
+  - pick -> covenants.VowFocusPick [FK]
+
+### CombatStyle
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - character_sheets <- character_sheets.CharacterSheet
 
 ### CourtGrantConfig
 **Foreign Keys:**
@@ -3586,6 +3601,7 @@
   - action_scalings <- covenants.CovenantRoleActionScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
+  - focus_picks <- covenants.VowFocusPick
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
@@ -3597,6 +3613,7 @@
 ### CovenantRoleActionScaling
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 
 ### CovenantRoleBonus
 **Foreign Keys:**
@@ -3643,10 +3660,12 @@
 ### VowAddedEffect
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
   - upgrades -> covenants.VowAddedEffect [FK] (nullable)
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 **Pointed to by:**
   - upgraded_by <- covenants.VowAddedEffect
   - applied_conditions <- covenants.VowAddedEffectAppliedCondition
@@ -3675,6 +3694,28 @@
   - effect -> covenants.VowAddedEffect [FK]
   - treatment_template -> conditions.TreatmentTemplate [FK]
 
+### VowFocusPick
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - covenant_role -> covenants.CovenantRole [FK]
+**Pointed to by:**
+  - action_scalings <- covenants.CovenantRoleActionScaling
+  - limits <- covenants.VowFocusPickLimit
+  - character_choices <- covenants.CharacterVowFocusPick
+  - situational_perks <- covenants.VowSituationalPerk
+  - added_effects <- covenants.VowAddedEffect
+
+### VowFocusPickConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### VowFocusPickLimit
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - pick -> covenants.VowFocusPick [FK]
+
 ### VowSituationalPerk
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -3683,6 +3724,7 @@
   - check_type -> checks.CheckType [FK] (nullable)
   - mission_category -> missions.MissionCategory [FK] (nullable)
   - mission_template -> missions.MissionTemplate [FK] (nullable)
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 **Pointed to by:**
   - situations <- covenants.VowSituationalPerkSituation
   - rungs <- covenants.VowSituationalPerkRung
@@ -3690,11 +3732,13 @@
 ### VowSituationalPerkRung
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowSituationalPerkSituation
 **Foreign Keys:**
   - affinity -> magic.Affinity [FK] (nullable)
+  - condition_property -> mechanics.Property [FK] (nullable)
   - perk -> covenants.VowSituationalPerk [FK]
 
 ### VowStatScaling
@@ -6884,7 +6928,7 @@
 - `technique_skill_term(character: 'ObjectDB', technique: 'Technique') -> 'ExtraTraitTerm | None' - The technique skill as a roll term for ``character``, or None.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonance: 'Resonance | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonance: 'Resonance | None' = None, fury: 'FuryCast | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -10552,6 +10596,8 @@
   - check_type -> checks.CheckType [FK]
   - capability -> conditions.CapabilityType [FK]
   - sway_target -> mechanics.ModifierTarget [FK] (nullable)
+  - target_condition -> conditions.ConditionTemplate [FK] (nullable)
+  - ally_condition -> conditions.ConditionTemplate [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - reaction_lines <- standoffs.StandoffReactionLine
@@ -11312,6 +11358,7 @@
 ### WoundDetails
 **Foreign Keys:**
   - condition_instance -> conditions.ConditionInstance [OneToOne]
+  - created_encounter -> combat.CombatEncounter [FK] (nullable)
 
 ### Service Functions
 - `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' - Advance staged bleed-out conditions toward death.`

@@ -591,7 +591,7 @@ class CharacterSheet(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="character_sheets",
         help_text=(
-            "How this character fights with magic: sets their defense type and how much "
+            "How this character fights with magic: sets their defense style and how much "
             "of their armor counts, in place of their vow's defense profile. Blank keeps "
             "the vow's."
         ),

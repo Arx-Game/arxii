@@ -214,6 +214,6 @@ Flat damage reduction applied after evasion and barrier.
   `gear_additive_fraction(character)` (`world.covenants.services`) — the MAX
   `CovenantRoleDefenseProfile.gear_additive_tenths` fraction across the
   character's engaged roles, `1` (fully additive) with no profile. A vow whose
-  `DefenseStyle` is EVASION or BARRIER rather than GEAR_SOAK can author a lower
+  `DefenseStyle` is EVASION or BARRIER rather than GEAR_SOAK ("Mitigation") can author a lower
   fraction so its own defense substitutes for gear instead of stacking with it.
   See `docs/systems/covenants.md`'s "Defense styles + gear substitution" for detail.

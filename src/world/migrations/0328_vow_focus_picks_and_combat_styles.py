@@ -535,7 +535,7 @@ class Migration(migrations.Migration):
             name="combat_style",
             field=models.ForeignKey(
                 blank=True,
-                help_text="How this character fights with magic: sets their defense type and how much of their armor counts, in place of their vow's defense profile. Blank keeps the vow's.",
+                help_text="How this character fights with magic: sets their defense style and how much of their armor counts, in place of their vow's defense profile. Blank keeps the vow's.",
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="character_sheets",
