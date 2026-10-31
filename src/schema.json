@@ -47730,8 +47730,11 @@ components:
         allowance:
           type: integer
           nullable: true
+        allowance_is_points:
+          type: boolean
       required:
       - allowance
+      - allowance_is_points
       - answer_offer_ids
       - beat_id
       - life_stage

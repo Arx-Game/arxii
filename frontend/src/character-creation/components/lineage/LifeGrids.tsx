@@ -36,6 +36,13 @@ interface Props {
 /** The pick line beside a beat's name: one, any, or the allowance the years lived give. */
 function pickLine(beat: BeatPoolEntry, copy: CGExplanations | undefined): string {
   if (beat.allowance === null) return copy?.beats_pick_any ?? 'pick any';
+  if (beat.allowance_is_points) {
+    // Career points (#4829): one at nineteen, one more every five years to fifty-nine;
+    // a point buys a card or a rank on one.
+    return (
+      copy?.beats_pick_points ?? '{n} career points: one at 19 and one more every five years, to 59'
+    ).replace('{n}', String(beat.allowance));
+  }
   if (beat.allowance === 1) return copy?.beats_pick_one ?? 'pick one';
   return (copy?.beats_pick_up_to ?? 'pick up to {n}; an older character takes more').replace(
     '{n}',
@@ -124,8 +131,9 @@ export function LifeGrids({ draft, copy }: Props) {
                       showClosed={false}
                       firstLook={false}
                       layout="grid"
-                      exclusive={beat.allowance === 1}
+                      exclusive={beat.allowance === 1 && !beat.allowance_is_points}
                       maxPicks={beat.allowance}
+                      pointsPicks={beat.allowance_is_points}
                       syncErrorHint={copy?.offers_sync_error}
                       wordPerRank={copy?.offers_word_per_rank}
                       wordSpent={copy?.offers_word_spent}

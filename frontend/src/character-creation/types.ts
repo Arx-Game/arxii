@@ -1543,6 +1543,9 @@ export interface BeatPoolEntry {
   /** How many answers the beat allows this draft (#4395): one, more with the years
    * lived on an age-scaled beat, or null for any number. */
   allowance: number | null;
+  /** True when `allowance` is career points spent by rank (#4829): a rank-four card
+   * spends four. False when it counts cards. */
+  allowance_is_points: boolean;
 }
 
 /** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */

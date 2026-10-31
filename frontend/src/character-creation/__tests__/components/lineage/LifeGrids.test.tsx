@@ -41,6 +41,7 @@ function beat(over: Partial<BeatPoolEntry>): BeatPoolEntry {
     line: '',
     answer_offer_ids: [],
     allowance: 1,
+    allowance_is_points: false,
     ...over,
   };
 }

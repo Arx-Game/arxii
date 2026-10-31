@@ -161,6 +161,7 @@ describe('LineageStage', () => {
           line: '',
           answer_offer_ids: [],
           allowance: 1,
+          allowance_is_points: false,
         },
       ]);
       const queryClient = createTestQueryClient();

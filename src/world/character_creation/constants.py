@@ -340,12 +340,15 @@ BEAT_LINE_MAX_LENGTH = 200
 RECENT_HISTORY_MAX_LENGTH = 2000
 
 
-#: The age rule for a beat whose picks scale with age (#4395): one pick at or under
-#: ``AGE_PICKS_FROM_AGE``, one more for every ``AGE_PICKS_YEARS_PER_PICK`` years lived past
-#: it. Nineteen is one "known for" pick; fifty is four. The rule is
-#: ``offers.age_pick_allowance``; these two numbers are the whole of it.
-AGE_PICKS_FROM_AGE = 20
-AGE_PICKS_YEARS_PER_PICK = 10
+#: The age rule for a beat whose picks scale with age (#4395, re-ruled #4829): one career
+#: point at or under ``AGE_PICKS_FROM_AGE``, one more for every ``AGE_PICKS_YEARS_PER_PICK``
+#: full years lived past it, and no more past ``AGE_PICKS_CAP_AGE``. Nineteen is one point,
+#: twenty-four two, fifty seven, fifty-nine and older nine. A point buys a Past Career or a
+#: rank on one (the beat counts ranks, not cards). The rule is ``offers.age_pick_allowance``;
+#: these three numbers are the whole of it.
+AGE_PICKS_FROM_AGE = 19
+AGE_PICKS_YEARS_PER_PICK = 5
+AGE_PICKS_CAP_AGE = 59
 
 
 class BeatSelection(models.TextChoices):
