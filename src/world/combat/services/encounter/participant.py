@@ -146,6 +146,9 @@ def leave_encounter(participant: CombatParticipant) -> None:
     Unlike flee (a check-gated exit), this needs no check of its own. A compelled player
     character rolls the compulsion's resist check first (#4802): leaving an encounter is
     combat by definition. A failed roll raises with the roll line and the character stays.
+    The legality check before the roll and the locked re-check inside the leave are
+    separate reads: a round that locks between them wastes the roll, and the locked
+    check then refuses the leave with its own message.
     If the departing participant is the last active participant, the encounter completes
     as ABANDONED.
 

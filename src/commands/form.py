@@ -15,6 +15,7 @@ from actions.constants import ActionBackend
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
 from world.conditions.control_loss import has_compulsion
+from world.roster.services.activity import is_player_character
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
@@ -141,7 +142,8 @@ class CmdForm(DispatchCommand):
         else:
             lines.append("You have no alternate selves.")
 
-        if has_compulsion(sheet.character):
+        # Only a player character rolls; an NPC changes back with no roll.
+        if has_compulsion(sheet.character) and is_player_character(sheet):
             lines.append("You are compelled; changing back takes a roll against it.")
 
         self.msg("\n".join(lines))

@@ -44,10 +44,11 @@ from world.combat.models import CombatParticipant, CombatRoundAction, FleeConfig
 from world.combat.services import leave_encounter, resolve_round
 from world.combat.services.damage.damage import apply_damage_to_participant
 from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
-from world.conditions.constants import ControlLossFiresOn
+from world.conditions.constants import CompulsionResult, ControlLossFiresOn
 from world.conditions.factories import (
     CapabilityTypeFactory,
     CompulsionFactory,
+    CompulsionResistBandFactory,
     ConditionCategoryFactory,
     ConditionCheckModifierFactory,
     ConditionStageFactory,
@@ -60,6 +61,7 @@ from world.conditions.services import (
     apply_condition,
     get_active_conditions,
 )
+from world.forms.constants import AlternateSelfRevertKind
 from world.forms.factories import (
     AlternateSelfFactory,
     CharacterFormFactory,
@@ -869,6 +871,10 @@ class _AltSelfMira(_ControlLossCase):
 
     resist_rolls = staticmethod(_CompelledMira.resist_rolls)
 
+    def alt_kwargs(self) -> dict:
+        """Extra fields for the worn self; a subclass makes it a talked-down one."""
+        return {}
+
     def setUp(self) -> None:
         super().setUp()
         self.road = self.make_room("The Road")
@@ -879,7 +885,7 @@ class _AltSelfMira(_ControlLossCase):
         persona = PersonaFactory(
             character_sheet=self.sheet, persona_type=PersonaType.ALTERNATE, name="the Beast"
         )
-        alt = AlternateSelfFactory(character=self.sheet, persona=persona)
+        alt = AlternateSelfFactory(character=self.sheet, persona=persona, **self.alt_kwargs())
         trigger_transformation(self.sheet, alt, cause="command")
         self.watch(self.mira)
 
@@ -928,3 +934,51 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
             revert_alternate_self(self.sheet)
 
         self.assertTrue(self.wearing_the_beast())
+
+
+class _ATalkedDownBeast(_AltSelfMira):
+    """The Beast must be talked down: it is held by a Beast Fury condition."""
+
+    def setUp(self) -> None:
+        self.fury = ConditionTemplateFactory(
+            name="Beast Fury", category=ConditionCategoryFactory(alters_behavior=True)
+        )
+        super().setUp()
+        apply_condition(self.mira, self.fury)
+
+    def alt_kwargs(self) -> dict:
+        return {
+            "revert_kind": AlternateSelfRevertKind.TALKED_DOWN,
+            "emergence_condition": self.fury,
+        }
+
+
+class ATalkedDownSelfWithNoCompulsion(_ATalkedDownBeast):
+    def test_changing_back_stays_blocked_while_the_condition_holds(self) -> None:
+        with self.resist_rolls() as spy:
+            told = self.telnet(self.mira, "form revert")
+
+        self.assertIn("You can't revert while not in control of yourself.", told)
+        self.assertEqual(spy.call_count, 0)
+        self.assertTrue(self.wearing_the_beast())
+
+
+class ATalkedDownSelfWhoseConditionCompels(_ATalkedDownBeast):
+    def test_changing_back_rolls_instead_of_being_blocked(self) -> None:
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=self.fury),
+            outcome=self.failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
+
+        with force_check_outcome(self.failure):
+            told = self.telnet(self.mira, "form revert")
+
+        self.assertIn("You cannot change back.", told)
+        self.assertNotIn("not in control", told)
+        self.assertTrue(self.wearing_the_beast())
+
+        with force_check_outcome(self.success):
+            self.telnet(self.mira, "form revert")
+
+        self.assertFalse(self.wearing_the_beast())

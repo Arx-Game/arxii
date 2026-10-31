@@ -35,6 +35,8 @@ from world.mechanics.models import CharacterModifier, ModifierSource
 from world.species.models import Species
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.types import CompulsionAttempt
     from world.scenes.models import Persona
@@ -373,8 +375,11 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     """Revert the active alternate self — restore return anchors, delete the
     granted stat-suite and ability-suite rows.
 
-    Blocked while ``not sheet.in_control`` (rage/possession/charm) — raises
-    ``RevertBlockedError``. Only revert is blocked; assumption stays allowed.
+    The system entry point (Audere end, TALKED_DOWN): blocked while
+    ``not sheet.in_control`` (rage/possession/charm) — raises ``RevertBlockedError``.
+    A player's own revert goes through ``attempt_revert_form``, which rolls against a
+    compulsion, keeps the block only for a talked-down self whose condition holds them,
+    and otherwise reverts freely. Assumption is never blocked.
     Removing an alters_behavior condition does NOT call this — it re-derives
     ``in_control=True`` and unblocks a later self-revert.
 
@@ -399,25 +404,51 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
 def attempt_revert_form(sheet: CharacterSheet) -> CompulsionAttempt:
     """The player's entry point for changing back (#4802).
 
-    A character carrying a compulsion rolls its resist check for ``REVERT_FORM`` and
-    changes back only when the roll lets them. A character who is not in control but has
-    no compulsion (Charmed, Calm) changes back freely, as does an NPC (NPCs never roll).
+    Three cases, in order:
+
+    1. The character carries a compulsion: they roll its resist check for
+       ``REVERT_FORM`` and change back only when the roll lets them (an NPC changes back
+       with no roll, since NPCs never roll). The roll is committed even when it fails.
+    2. No compulsion, but the worn self is ``TALKED_DOWN`` and its ``emergence_condition``
+       is active on the character: the ratified "must be talked down" block holds and
+       ``RevertBlockedError`` is raised. This is not a compulsion refusal.
+    3. Otherwise (Charmed, Calm, any other alters_behavior condition): change back freely.
+
+    A revert that fails during DECLARING needs nothing here: a compelled fighter with no
+    declared action is covered by ``select_compelled_actions`` at the round lock.
+
     The system paths (Audere end, TALKED_DOWN) call ``revert_alternate_self`` and keep its
     ``in_control`` check.
 
-    The roll is committed even when it fails: only the revert itself is atomic.
-
     Raises:
         ValueError: if no active alternate self exists for this sheet.
+        RevertBlockedError: a talked-down self whose condition still holds the character.
     """
     from world.combat.compulsion import resist_compulsion_now  # noqa: PLC0415
+    from world.combat.types import CompulsionAttempt  # noqa: PLC0415
     from world.conditions.constants import CompulsionForbidden  # noqa: PLC0415
+    from world.conditions.control_loss import has_compulsion  # noqa: PLC0415
 
     active = _active_alternate_self(sheet)
-    attempt = resist_compulsion_now(sheet.character, CompulsionForbidden.REVERT_FORM)
-    if attempt.allowed:
-        _revert(sheet, active)
-    return attempt
+    character = sheet.character
+    if has_compulsion(character):
+        attempt = resist_compulsion_now(character, CompulsionForbidden.REVERT_FORM)
+        if attempt.allowed:
+            _revert(sheet, active)
+        return attempt
+    if _held_until_talked_down(character, active.alternate_self):
+        raise RevertBlockedError
+    _revert(sheet, active)
+    return CompulsionAttempt(allowed=True, line="", check_result=None)
+
+
+def _held_until_talked_down(character: ObjectDB, alt: AlternateSelf) -> bool:  # noqa: OBJECTDB_PARAM
+    """Whether *alt* must be talked down and its emergence condition still holds *character*."""
+    if alt.revert_kind != AlternateSelfRevertKind.TALKED_DOWN:
+        return False
+    return any(
+        inst.condition_id == alt.emergence_condition_id for inst in character.conditions.active()
+    )
 
 
 def _active_alternate_self(sheet: CharacterSheet) -> ActiveAlternateSelf:

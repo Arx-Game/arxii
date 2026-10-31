@@ -17,6 +17,7 @@ from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import collect_check_modifiers
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import CombatManeuver, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -26,13 +27,16 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction, FleeConfig
 from world.combat.services import resolve_round
+from world.conditions.constants import CompulsionResult
 from world.conditions.factories import (
     CompulsionFactory,
+    CompulsionResistBandFactory,
     ConditionCheckModifierFactory,
     ConditionInstanceFactory,
 )
 from world.magic.factories import BerserkConditionTemplateFactory
 from world.scenes.constants import RoundStatus
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
 
 FLEE_PENALTY = -7
@@ -138,11 +142,19 @@ class ARagingCharacterMayParley(_RagingMira):
 class ARagingCharacterRollsToWalkAway(_RagingMira):
     def test_leaving_rolls_against_the_rage_instead_of_being_refused(self) -> None:
         # The roll follows the compulsion on the condition (#4802), not its name.
-        CompulsionFactory(condition=self.berserk)
+        failure = ensure_canonical_check_outcome("Failure")
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=self.berserk),
+            outcome=failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
         self.encounter.save()
 
-        result = self.web(self.mira, "combat_leave")
+        with force_check_outcome(failure):
+            result = self.web(self.mira, "combat_leave")
 
-        self.assertNotIn("will not walk away", result.detail.message)
+        self.assertFalse(result.detail.success)
+        self.assertIn("vs 12: Failure.", result.detail.message)
+        self.assertIn("You cannot break away.", result.detail.message)
