@@ -51,6 +51,7 @@ from world.magic.constants import EffectKind
 from world.mechanics.constants import EffectKind as MechanicsEffectKind, ManeuverEffectKey
 from world.mechanics.effect_targets import (
     effect_modifier_total,
+    technique_condition_bonuses,
     technique_effect_context,
     technique_effect_targets,
     technique_effect_total,
@@ -670,6 +671,11 @@ class CombatTechniqueResolver:
             position_params["position_a_id"] = self.action.cast_position_a_id
             position_params["position_b_id"] = self.action.cast_position_b_id
 
+        # The caster's condition severity and duration modifiers (#4822) ride the
+        # technique's own rows only; the signature and vow rows below keep their own sources.
+        severity_bonus, duration_bonus = technique_condition_bonuses(
+            self.participant.character_sheet, technique
+        )
         applied = apply_technique_conditions(
             technique=technique,
             success_level=check_result.success_level,
@@ -678,6 +684,8 @@ class CombatTechniqueResolver:
             source_character=caster_od,
             position_params=position_params or None,
             soulfray_consented=self.action.confirm_soulfray_risk,
+            severity_bonus=severity_bonus,
+            duration_bonus=duration_bonus,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the

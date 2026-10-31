@@ -145,6 +145,28 @@ def technique_effect_total(
     return _modifier_total(sheet, [t for t in targets if _fits(t, context)])
 
 
+def technique_condition_bonuses(
+    sheet: "CharacterSheet | None", technique: "Technique"
+) -> tuple[int, int]:
+    """The severity and duration ``sheet``'s modifiers add to ``technique``'s own conditions.
+
+    Worked out once per cast, not per row or target. Both target lists load first; with
+    neither in the game there is nothing to match, so no context is built. Unclamped: the
+    condition builder floors a negative bonus at 1. With no sheet: ``(0, 0)``.
+    """
+    if sheet is None:
+        return 0, 0
+    severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
+    duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
+    if not severity_targets and not duration_targets:
+        return 0, 0
+    context = technique_effect_context(sheet, technique)
+    return (
+        technique_effect_total(sheet, context, severity_targets),
+        technique_effect_total(sheet, context, duration_targets),
+    )
+
+
 def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
     """Whether every technique scope ``target`` sets matches ``context``."""
     checks = (
