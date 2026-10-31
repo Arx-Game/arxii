@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from world.combat.constants import OpponentStatus, ParticipantStatus
 from world.combat.models import (
@@ -19,10 +19,11 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.magic.models import Technique
+    from world.magic.models.techniques import TechniqueAppliedCondition
 
 
 def _passive_row_targets(
-    row: Any,
+    row: TechniqueAppliedCondition,
     actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's character
     active_opponents: list[CombatOpponent],
     allegiances: dict[int, str],

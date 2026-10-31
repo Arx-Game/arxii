@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -19,6 +20,7 @@ from world.distinctions.factories import DistinctionEffectFactory
 from world.magic.factories import GiftFactory, TechniqueFactory
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind, ManeuverEffectKey
 from world.mechanics.effect_targets import (
+    TechniqueConditionBonus,
     effect_value,
     opponent_facts,
     opponent_targets_exist,
@@ -289,3 +291,55 @@ class OpponentReaderTests(TestCase):
         assert not opponent_targets_exist([plain])
         assert opponent_targets_exist([plain, scoped])
         assert not opponent_targets_exist([])
+
+
+class TechniqueConditionBonusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        cls.character = CharacterFactory(db_key="ConditionBonusChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character, primary_persona=False)
+        cls.technique = TechniqueFactory(gift=GiftFactory(name="Condition Bonus Gift"))
+        cls.bleeding = ConditionTemplateFactory(name="Condition Bonus Bleeding")
+        cls.first = ObjectDBFactory(db_key="Condition Bonus First")
+        cls.second = ObjectDBFactory(db_key="Condition Bonus Second")
+
+    def _grant(self, name: str, value: int, **scopes) -> ModifierTarget:
+        target = ModifierTargetFactory(
+            category=self.category,
+            name=name,
+            scope_effect_kind=EffectKind.CONDITION_SEVERITY,
+            **scopes,
+        )
+        CharacterModifierFactory(
+            character=self.sheet,
+            target=target,
+            value=value,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=DistinctionEffectFactory(target=target)
+            ),
+        )
+        return target
+
+    def test_a_plain_target_reads_no_opponent_facts(self):
+        self._grant("Plain condition severity", 2)
+        bonus = TechniqueConditionBonus.for_cast(self.sheet, self.technique)
+        with patch("world.mechanics.effect_targets.opponent_facts", wraps=opponent_facts) as read:
+            assert bonus.for_target(self.first) == (2, 0)
+            assert bonus.for_target(self.second) == (2, 0)
+        assert read.call_count == 0
+
+    def test_an_opponent_scoped_target_reads_each_target_once(self):
+        self._grant("Vs bleeding condition severity", 2, scope_opponent_condition=self.bleeding)
+        ConditionInstanceFactory(target=self.first, condition=self.bleeding, rounds_remaining=50)
+        bonus = TechniqueConditionBonus.for_cast(self.sheet, self.technique)
+        with patch("world.mechanics.effect_targets.opponent_facts", wraps=opponent_facts) as read:
+            assert bonus.for_target(self.first) == (2, 0)
+            assert bonus.for_target(self.first) == (2, 0)
+            assert bonus.for_target(self.second) == (0, 0)
+        assert read.call_count == 2
+
+    def test_none_and_a_missing_sheet_add_nothing(self):
+        assert TechniqueConditionBonus.none().for_target(self.first) == (0, 0)
+        bonus = TechniqueConditionBonus.for_cast(None, self.technique)
+        assert bonus.for_target(self.first) == (0, 0)
