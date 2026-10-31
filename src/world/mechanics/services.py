@@ -1142,7 +1142,10 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     from world.covenants.models import (  # noqa: PLC0415
         VowStatScaling,
     )
-    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+    from world.covenants.services import (  # noqa: PLC0415
+        _anchor_role_id,
+        _covenant_role_thread_level,
+    )
     from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     char = sheet.character
@@ -1163,20 +1166,21 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     configs = VowStatScaling.objects.filter(
         covenant_role__in=applicable_roles,
         modifier_target=target,
-    ).select_related("covenant_role")
+    ).select_related("covenant_role__parent_role")
     # Stats are stored x10 like threads, so the stored level times the per-level bonus
     # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
     # morale), so there the bonus counts the SHOWN level.
-    in_natural_units = target is not None and target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
+    in_natural_units = target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
     total = 0
     anchor_levels: dict[int, int] = {}
     for config in configs:
         role = config.covenant_role
-        anchor = role.parent_role if role.parent_role_id is not None else role
-        if anchor.pk not in anchor_levels:
+        anchor_id = _anchor_role_id(role)
+        if anchor_id not in anchor_levels:
+            anchor = role.parent_role if role.parent_role_id is not None else role
             level = _covenant_role_thread_level(sheet, anchor)
-            anchor_levels[anchor.pk] = shown_thread_level(level) if in_natural_units else level
-        total += anchor_levels[anchor.pk] * config.bonus_per_level
+            anchor_levels[anchor_id] = shown_thread_level(level) if in_natural_units else level
+        total += anchor_levels[anchor_id] * config.bonus_per_level
     return total
 
 

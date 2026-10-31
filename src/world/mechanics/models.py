@@ -280,7 +280,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["category", "name"]
-        dependencies = ["arxii.ModifierCategory"]
+        dependencies = ["arxii.ModifierCategory", "arxii.ManeuverEffect"]
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"
@@ -313,7 +313,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if self.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
             if has_effect or has_kind:
                 msg = "Only a maneuver effect target names an effect or a kind of effect."
-                raise ValidationError({"scope_maneuver_effect": msg})
+                field = "scope_maneuver_effect" if has_effect else "scope_effect_kind"
+                raise ValidationError({field: msg})
             return
         if has_effect and has_kind:
             msg = "Set the effect or the kind of effect, not both."

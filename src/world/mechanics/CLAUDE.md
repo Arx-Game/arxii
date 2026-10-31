@@ -14,6 +14,7 @@ The mechanics app centralizes all game mechanical calculations:
 ### `models.py`
 - **`ModifierCategory`**: Categories for organizing modifier targets (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
 - **`ModifierTarget`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching. Has an optional `target_trait` FK for stat-category targets.
+- **`ManeuverEffect`** (#4783): the fixed catalog of eight named maneuver numbers (`key` unique, `base_value`, staff `notes`). Staff edit a base value and cannot add or delete a row; code finds a row by `key`, never by name (`ensure_maneuver_effects`, `get_maneuver_effect` in `maneuver_effects.py`).
 - **`CharacterModifier`**: Active modifiers on a character with source tracking and direct target FK. Uses regular Model (not SharedMemoryModel) since this is per-character data.
 
 ### `types.py`
@@ -21,6 +22,7 @@ Dataclasses for service layer results and intermediate calculations.
 
 ### `services.py`
 Service functions for modifier operations:
+- **`effect_value(sheet, key)` / `effect_modifier_total(sheet, key)`** (`effect_targets.py`, #4783): a character's number for a maneuver effect. `effect_modifier_total` is the unclamped sum of every modifier on a target in the "maneuver_effect" category scoped to that effect or its kind; `effect_value` adds the catalog base, floors at 0 and caps partial protection at 100.
 - **`get_modifier_total(sheet, modifier_target)`**: Get total for a specific ModifierTarget.
 - **`get_modifier_breakdown(sheet, modifier_target)`**: Get detailed breakdown with amplification/immunity.
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
@@ -53,6 +55,8 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
 | target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |
 | target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
+| scope_maneuver_effect | FK(ManeuverEffect, null, CASCADE) | A "maneuver_effect" target scoped to one effect (#4783) |
+| scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing |
 
 ### CharacterModifier
 Per-character modifier values with source tracking. Sources are responsible for creating/deleting their modifier records.

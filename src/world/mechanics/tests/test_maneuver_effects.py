@@ -86,8 +86,19 @@ class ModifierTargetScopeTests(TestCase):
         target = ModifierTarget(
             category=self.other_category, name="Stray", scope_maneuver_effect=self.effect
         )
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as caught:
             target.clean()
+        self.assertEqual(list(caught.exception.message_dict), ["scope_maneuver_effect"])
+
+    def test_other_category_refuses_a_kind_on_the_kind_field(self):
+        target = ModifierTarget(
+            category=self.other_category,
+            name="Stray kind",
+            scope_effect_kind=EffectKind.PARTIAL_PROTECTION,
+        )
+        with self.assertRaises(ValidationError) as caught:
+            target.clean()
+        self.assertEqual(list(caught.exception.message_dict), ["scope_effect_kind"])
 
 
 class ManeuverEffectAdminTests(TestCase):
