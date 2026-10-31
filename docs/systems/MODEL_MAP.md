@@ -3218,6 +3218,7 @@
   - conditioninstance_set <- conditions.ConditionInstance
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
+  - opponent_modifier_targets <- mechanics.ModifierTarget
   - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
@@ -7084,6 +7085,8 @@
   - scope_gift -> magic.Gift [FK] (nullable)
   - scope_damage_type -> conditions.DamageType [FK] (nullable)
   - scope_resonance -> magic.Resonance [FK] (nullable)
+  - scope_opponent_property -> mechanics.Property [FK] (nullable)
+  - scope_opponent_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
@@ -7132,6 +7135,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
+  - opponent_modifier_targets <- mechanics.ModifierTarget
   - prerequisites <- mechanics.Prerequisite
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty

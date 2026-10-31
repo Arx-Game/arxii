@@ -339,9 +339,9 @@ reach an effect target: it needs a resonance on the target, and an effect target
 modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
 target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
 the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts and sized modifiers
-on effects (#4824) and scopes for the opponent (#4823) are not built. A maneuver reads only the
-targets that carry no technique scope, so a technique-scoped target never reaches a maneuver
-(see "Technique effect scopes"). A kind-wide "damage" target with no technique scope reaches the
+on effects (#4824) are not built. A maneuver reads only the targets that carry no technique or
+opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
+"Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
 damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
 targets scoped to "Charge: damage". The battle Rally
 (`world/battles`, `RALLY_MORALE_PER_LEVEL`) is a different action and is untouched.
@@ -371,6 +371,8 @@ reaches every source. Rules, held by `ModifierTarget.clean()` and the
 - A gift scope matches the technique's gift and that gift's parent, so a target scoped to an
   umbrella gift reaches the techniques of its child gifts. A target scoped to a child gift does not
   reach the parent's own techniques.
+- Slice 3 adds two more narrowing scopes with the same rules, for the opponent (see "Opponent
+  scopes").
 
 **What a kind modifier reaches.** A kind-only damage modifier applies to every damage profile a
 cast deals, signature and vow-added profiles included, and a negative one lowers the whole hit
@@ -389,8 +391,9 @@ already existed. Neither new kind has a catalog effect, so they are reached by a
   that name no one maneuver effect. Kind-wide and technique-scoped targets both come back.
 - `technique_effect_total(sheet, context, targets)`: the unclamped sum over the targets that fit
   the context. No sheet gives 0.
-- `technique_condition_bonuses(sheet, technique)`: the `(severity, duration)` pair for a cast,
-  loaded once; with neither kind authored anywhere it builds no context.
+- `TechniqueConditionBonus.for_cast(sheet, technique).for_target(target)`: the
+  `(severity, duration)` pair for a condition landing on one target (see "Opponent scopes");
+  `for_cast` loads both kinds once, and with neither authored anywhere it builds no context.
 - `effect_modifier_total(sheet, key, kind_wide=False)` leaves out targets that name only the kind,
   which Charge damage uses so a kind-wide damage target is not counted twice.
 
@@ -405,19 +408,76 @@ with two profiles gains the bonus twice, and an area technique gains it on every
 type. In a Charge a kind-only damage target is counted by this term; the Charge damage term counts
 only targets scoped to "Charge: damage". Charge to hit is unchanged.
 
-**Conditions.** `technique_condition_bonuses` feeds the `severity_bonus` and `duration_bonus` of
+**Conditions.** `TechniqueConditionBonus.for_target` feeds the `target_bonus` argument of
 `apply_technique_conditions` on the technique's own condition rows in a combat cast
 (`CombatTechniqueResolver`), a scene cast (`scenes.cast_services`) and a passive technique
-(`combat/services/damage/passive_techniques.py`). Signature-motif and vow-added rows keep their own
+(`combat/services/damage/passive_techniques.py`); the flat `severity_bonus` and `duration_bonus`
+arguments stay for the vow-added path. Signature-motif and vow-added rows keep their own
 sources. `bonused_severity` and `bonused_duration` (`world/magic/services/condition_application.py`)
 floor a negative bonus at 1; a condition with no duration stays without one; a team-lane row
 ignores both bonuses.
 
-**Not built.** Opponent scopes (#4823); derived and sized amounts (#4824), so technique-scoped
-modifiers are flat. The staff power evaluator values a technique alone, so per-character modifiers
-do not show there. Power-category targets that gate on `target_resonance` or `target_damage_type`
+**Not built.** Derived and sized amounts (#4824), so technique-scoped and opponent-scoped
+modifiers are flat. Opponent scopes on a single maneuver effect and on to hit are not built either
+(see "Opponent scopes"). The staff power evaluator values a technique alone, so per-character
+modifiers do not show there. Power-category targets that gate on `target_resonance` or `target_damage_type`
 raise power, which scales a profile; this term is a flat amount after scaling, and neither counts
 the other.
+
+## Opponent scopes (#4823, slice 3 of #4783)
+
+A modifier can name who it lands on: "+5 damage against abyssal opponents", "+2 severity on
+conditions that land on a Bleeding target". Two more nullable columns on `ModifierTarget`, in the
+same "maneuver_effect" category, reached by every source a technique-scoped target is.
+
+**Scopes.** `scope_opponent_property` (FK `Property`) and `scope_opponent_condition` (FK
+`ConditionTemplate`), both `CASCADE`, since clearing one would widen the target to every opponent.
+They follow the technique scope rules: they need `scope_effect_kind` and no `scope_maneuver_effect`
+(the `modifier_target_technique_scope_needs_kind` constraint, extended in migration `0341`), they
+combine with each other and with the technique scopes (every scope set must match), and an unset
+scope means any. `ModifierTarget.has_opponent_scope` is true when either is set;
+`has_technique_scope` is true for any narrowing scope, opponent side included. They narrow damage,
+condition severity and condition duration; the admin refuses any other kind.
+
+**What counts as having a property or condition.** `opponent_facts(target)`
+(`world/mechanics/effect_targets.py`) returns an `OpponentFacts` (`world/mechanics/types.py`):
+- A property is had when the target has a stored `ObjectProperty` row, when the template or the
+  current stage of one of its active conditions grants it (the same route
+  `PropertyRequirement._granted_by_condition` reads), or, for a player character, when its primary
+  persona carries it as a tag (`CharacterSheet.has_property`).
+- A condition is had when the target holds an active instance of the template. Active is the
+  conditions app's own meaning: not suppressed and not past an in-game expiry.
+- It is four bounded queries however many conditions the target holds, and nothing for no object.
+
+**When it reads.** The facts are read only when an opponent-scoped target exists
+(`opponent_targets_exist(targets)`); with none in the game no opponent is looked at.
+- Damage: `TechniqueDamageBonus.read_opponent(opponent)` reads once per opponent, before that
+  opponent's first damage profile lands, so a condition one profile consumes does not change the
+  next profile's bonus. `for_type(damage_type_id, opponent)` caches the total per resolved damage
+  type and opponent.
+- Conditions: `TechniqueConditionBonus` (built once per cast by `for_cast`) answers
+  `for_target(target)` once per target and reuses it for every later row. The facts are read
+  before the cast's first condition lands, since the builder works out every row before any is
+  applied. `apply_technique_conditions` takes it as `target_bonus`, adds it to the flat bonuses
+  per target, and a team-lane row still ignores it. A passive technique's rows read whoever each
+  lands on: the actor, the opponents not fighting on the actor's side, or the other participants.
+- The signature-motif and vow-added rows keep their own sources and are unchanged.
+
+**Maneuvers.** A maneuver reader never matches an opponent-scoped target
+(`_matching_targets` leaves out any target with either scope set), as it never matches a
+technique-scoped one.
+
+**Stacking.** An opponent-scoped modifier is the attacker's own term. It is added in the same sum
+as the technique's other flat terms and `property_damage_bonus` (the defender-side
+`PropertyDamageModifier` rows on the properties the target has), inside the one floor at 0. It does
+not replace that lane: a target with the property gets both the staff-authored defender-side amount
+and the attacker's modifier. `ConditionDamageInteraction.damage_modifier_percent`, the other
+defender-side lane, is a percentage worked out afterward on the finished hit from the conditions the
+target is under (`process_damage_interactions`), so it scales the opponent-scoped bonus along with
+the rest of the damage.
+
+**Not built.** Opponent scopes on a single maneuver effect, on to hit, and on derived or sized
+amounts (#4824).
 
 ## API Endpoints
 

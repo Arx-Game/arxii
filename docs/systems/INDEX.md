@@ -6993,13 +6993,24 @@ Unified modifier system — categories, types, sources, and per-character modifi
   combine; unset means any; a technique scope needs a kind and no single maneuver effect;
   `modifier_target_technique_scope_needs_kind`), and `EffectKind` gained `CONDITION_SEVERITY` and
   `CONDITION_DURATION`. Readers in `world/mechanics/effect_targets.py`: `technique_effect_context`,
-  `technique_effect_targets`, `technique_effect_total`, `technique_condition_bonuses`, and
-  `effect_modifier_total(kind_wide=False)`; the frozen `TechniqueEffectContext` is in
+  `technique_effect_targets`, `technique_effect_total`, `TechniqueConditionBonus`
+  (`for_cast(...).for_target(...)`) and `effect_modifier_total(kind_wide=False)`; the frozen `TechniqueEffectContext` is in
   `world/mechanics/types.py`. Wired to a flat damage term per profile in combat
   (`TechniqueDamageBonus` in `technique_resolver.py`) and to the severity and duration of a
   technique's own conditions in combat, scene casts and passive techniques
   (`bonused_severity`, `bonused_duration` in `magic/services/condition_application.py`). Opponent
-  scopes are #4823; derived and sized amounts #4824. See `mechanics.md` "Technique effect scopes".
+  scopes shipped in #4823 (see below); derived and sized amounts are #4824. See `mechanics.md`
+  "Technique effect scopes".
+- **Opponent scopes (#4823, slice 3 of #4783):** `ModifierTarget` gained `scope_opponent_property`
+  (FK `Property`) and `scope_opponent_condition` (FK `ConditionTemplate`), with the technique scope
+  rules (they combine, need a kind, never ride with one maneuver effect) and
+  `has_opponent_scope`. `opponent_facts(target)` returns the frozen `OpponentFacts`
+  (`world/mechanics/types.py`), `opponent_targets_exist(targets)` gates the read, and
+  `TechniqueConditionBonus.for_cast(sheet, technique).for_target(target)` works out the condition
+  severity and duration per target; `apply_technique_conditions` takes it as `target_bonus`.
+  `TechniqueDamageBonus.read_opponent` / `for_type(type, opponent)` cache per (damage type,
+  opponent). Not built: opponent scopes on a single maneuver effect, to hit, or derived and sized
+  amounts. See `mechanics.md` "Opponent scopes".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".
