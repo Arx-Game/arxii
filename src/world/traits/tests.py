@@ -953,3 +953,60 @@ class GiantsBloodModifierCreationTests(TestCase):
         )
         assert height_modifiers.exists()
         assert height_modifiers.first().value == 1  # +1 height band
+
+
+class TraitHandlerSkillModifierTests(TestCase):
+    """A distinction's bonus on a skill reaches ``get_trait_value`` as a stat's does (#4820)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.sailing = TraitFactory(
+            name="sailing", trait_type=TraitType.SKILL, category=TraitCategory.GENERAL
+        )
+        cls.cant = TraitFactory(
+            name="thieves cant", trait_type=TraitType.OTHER, category=TraitCategory.GENERAL
+        )
+        stat_category = ModifierCategoryFactory(name="stat")
+        sailing_target = ModifierTargetFactory(
+            category=stat_category, name="sailing", target_trait=cls.sailing
+        )
+        ModifierTargetFactory(category=stat_category, name="thieves_cant", target_trait=cls.cant)
+        background = DistinctionCategoryFactory(slug="background", name="Background")
+        cls.sailor = DistinctionFactory(
+            slug="sailor", name="Sailor", category=background, cost_per_rank=0, max_rank=4
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.sailor, target=sailing_target, value_per_rank=10, description="+10"
+        )
+
+    def _grant_sailor(self) -> CharacterDistinction:
+        held = CharacterDistinction.objects.create(
+            character=self.sheet, distinction=self.sailor, rank=1
+        )
+        create_distinction_modifiers(held)
+        return held
+
+    def test_a_skill_bonus_is_added_in_skill_units(self):
+        """+10 sailing on a rating of 25 rolls as 35: a skill's units are its shown units."""
+        CharacterTraitValueFactory(character=self.sheet, trait=self.sailing, value=25)
+        self._grant_sailor()
+        handler = TraitHandler(self.character)
+        assert handler.get_base_trait_value("sailing") == 25
+        assert handler.get_trait_modifier(self.sailing) == 10
+        assert handler.get_trait_value("sailing") == 35
+        assert handler.get_trait_display_value("sailing") == 35
+
+    def test_a_skill_with_no_bonus_reads_its_stored_value(self):
+        CharacterTraitValueFactory(character=self.sheet, trait=self.sailing, value=25)
+        handler = TraitHandler(self.character)
+        assert handler.get_trait_modifier(self.sailing) == 0
+        assert handler.get_trait_value("sailing") == 25
+
+    def test_a_trait_of_another_type_is_never_modified(self):
+        """A target pointed at an OTHER trait by mistake changes nothing it reads."""
+        CharacterTraitValueFactory(character=self.sheet, trait=self.cant, value=3)
+        handler = TraitHandler(self.character)
+        assert handler.get_trait_modifier(self.cant) == 0
+        assert handler.get_trait_value("thieves cant") == 3

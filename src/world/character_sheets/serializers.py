@@ -779,7 +779,14 @@ _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
-    """Build the skills section: a list of skill entries with nested specializations."""
+    """Build the skills section: a list of skill entries with nested specializations.
+
+    A skill's ``value`` is the number a roll uses, the stored rating plus the modifier
+    its distinctions, equipment and conditions give it (#4820), read through
+    ``skill_modifiers_for_sheet`` in a bounded pass; the XP gate reads the stored rating.
+    """
+    from world.mechanics.services import skill_modifiers_for_sheet  # noqa: PLC0415
+
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[SpecializationEntry]] = {}
     for sv in sheet.cached_specialization_values:
@@ -790,13 +797,16 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
+    modifiers = skill_modifiers_for_sheet(sheet, [csv.skill for csv in sheet.cached_skill_values])
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
         skill = csv.skill
+        modifier = modifiers.get(skill.pk, 0)
         result.append(
             SkillEntry(
                 skill=SkillRef(id=skill.pk, name=skill.name, category=skill.category),
-                value=csv.value,
+                value=csv.value + modifier,
+                modifier=modifier,
                 at_boundary=is_skill_at_xp_boundary(csv.value),
                 specializations=spec_by_skill.get(skill.pk, []),
             )

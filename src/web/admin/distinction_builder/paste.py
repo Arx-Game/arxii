@@ -27,7 +27,7 @@ import re
 from django.contrib import messages
 from django.contrib.admin.models import ADDITION, LogEntry
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -56,6 +56,8 @@ from world.contributors.models import ContentContributor
 from world.distinctions.models import Distinction, DistinctionCategory, DistinctionEffect
 from world.magic.models import GlimpseTag
 from world.mechanics.models import ModifierTarget
+from world.mechanics.services import ensure_skill_target
+from world.traits.models import Trait, TraitType
 
 COLUMNS: tuple[str, ...] = (
     "name",
@@ -87,10 +89,13 @@ _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
 
 @dataclass
 class EffectSpec:
-    target_id: int
+    #: The resolved target, or ``None`` when ``skill_trait_id`` names a skill whose target
+    #: the create step makes first (#4820).
+    target_id: int | None
     value: int | None
     immune: bool
     label: str
+    skill_trait_id: int | None = None
 
 
 @dataclass
@@ -180,10 +185,22 @@ def _parse_effect_token(token: str, row: RowSpec) -> None:
             ModifierTarget.objects.filter(name__iexact=target_raw),
             f"modifier target {target_raw!r}",
         )
-    if target is None:
-        row.fail(why)
-        return
     value = None if immune else int(magnitude or 1) * (-1 if sign == "-" else 1)
+    if target is None:
+        # A skill with no target yet (#4820): the create step makes the target in the
+        # same transaction, so a new skill takes a bonus the first time a card names it.
+        skill_trait, _ = _one(
+            Trait.objects.filter(trait_type=TraitType.SKILL).filter(
+                Q(name__iexact=target_raw) | Q(name__iexact=target_raw.replace("_", " "))
+            ),
+            f"skill {target_raw!r}",
+        )
+        if skill_trait is None:
+            row.fail(why)
+            return
+        row.notes.append(f"makes the modifier target for the {skill_trait.name} skill")
+        row.effects.append(EffectSpec(None, value, immune, token, skill_trait_id=skill_trait.pk))
+        return
     row.effects.append(EffectSpec(target.pk, value, immune, token))
 
 
@@ -367,9 +384,18 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
             )
             stamp_written(distinction, contributor)
             for fx in row.effects:
+                target_id = fx.target_id
+                if target_id is None:
+                    target = ensure_skill_target(Trait.objects.get(pk=fx.skill_trait_id))
+                    if target is None:
+                        # Only when a same-named target appeared in another category
+                        # between the preview and the confirm; the batch rolls back.
+                        msg = f"no modifier target could be made for {fx.label!r}"
+                        raise ValueError(msg)
+                    target_id = target.pk
                 effect = DistinctionEffect.objects.create(
                     distinction=distinction,
-                    target_id=fx.target_id,
+                    target_id=target_id,
                     value_per_rank=fx.value,
                     grants_immunity_to_negative=fx.immune,
                     description=fx.label,

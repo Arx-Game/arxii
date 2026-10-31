@@ -25,6 +25,8 @@ from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 from world.distinctions.models import Distinction
 from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.models import ModifierTarget
+from world.skills.factories import SkillTraitFactory
 
 ROW = (
     "Oath-Bound | Personality | 5 | 1 | A word given is kept. | Long prose. | +Bonds goals | "
@@ -109,6 +111,25 @@ class ParseTableTest(PasteTestCase):
         ]
         assert [o.opener_field for o in row.offers] == ["prompt", "appearance_section_id"]
 
+    def test_a_skill_with_no_target_yet_reads_create_and_names_the_target_it_makes(self):
+        """+10 on a skill no target points at is not an error (#4820): the preview says the
+        create step makes the target, and nothing is written at parse time."""
+        SkillTraitFactory(name="Sailing")
+        (row,) = parse_table("Shipboard | Personality | 10 | 1 | At sea. | | +10 sailing | rules |")
+        assert row.status == "create", row.notes
+        assert row.notes == ["makes the modifier target for the Sailing skill"]
+        (effect,) = row.effects
+        assert effect.target_id is None
+        assert effect.value == 10
+        assert not ModifierTarget.objects.filter(name="sailing").exists()
+
+    def test_a_skill_name_with_a_space_or_underscore_resolves_the_same_skill(self):
+        SkillTraitFactory(name="Melee Combat")
+        (spaced,) = parse_table("A | Personality | 5 | 1 | a | | +5 melee combat | rules |")
+        (underscored,) = parse_table("B | Personality | 5 | 1 | b | | +5 melee_combat | rules |")
+        assert spaced.status == underscored.status == "create"
+        assert spaced.effects[0].skill_trait_id == underscored.effects[0].skill_trait_id
+
     def test_the_same_slug_twice_in_one_table_is_an_error(self):
         rows = parse_table(ROW + "\n" + ROW)
         assert [r.status for r in rows] == ["create", "error"]
@@ -167,6 +188,25 @@ class PasteViewTest(PasteTestCase):
         self.existing.refresh_from_db()
         assert self.existing.cost_per_rank != 25
         assert not DistinctionOffer.objects.filter(distinction=self.existing).exists()
+
+    def test_create_makes_the_skill_target_and_the_effect_lands_on_it(self):
+        """The create step makes the stat-category target for the skill's trait inside the
+        batch, so the pasted +10 sailing reaches the Sailing roll (#4820)."""
+        trait = SkillTraitFactory(name="Sailing")
+        text = "Shipboard | Personality | 10 | 1 | At sea. | | +10 sailing | rules |"
+        self.client.force_login(self.author)
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302, resp.content
+        target = ModifierTarget.objects.get(name="sailing")
+        assert target.category.name == "stat"
+        assert target.target_trait == trait
+        (effect,) = Distinction.objects.get(slug="shipboard").effects.all()
+        assert (effect.target, effect.value_per_rank) == (target, 10)
+        # A second paste that names the skill finds the target the ordinary way.
+        (row,) = parse_table("Wilderness | Personality | 10 | 1 | w | | +10 sailing | rules |")
+        assert row.effects[0].target_id == target.pk
+        assert row.notes == []
 
     def test_create_refuses_any_error_row_and_writes_nothing(self):
         self.client.force_login(self.author)
