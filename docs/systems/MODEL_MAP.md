@@ -2133,6 +2133,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_type_aspects <- checks.CheckTypeAspect
+  - modifier_target <- mechanics.ModifierTarget
   - path_aspects <- classes.PathAspect
 
 ### CharacterClass
@@ -2931,7 +2932,7 @@
 - `plan_opponent_round(opponent: 'CombatOpponent', ctx: 'NpcRoundContext') -> 'list[CombatOpponentAction]' - Plan one opponent's round: its attack rows and its one move plan (#4607, #4609).`
 - `refit_targets(npc_action: 'CombatOpponentAction') -> 'bool' - Drop the stored targets this action's strike no longer reaches; False when none is left.`
 - `remove_opponent(opponent: 'CombatOpponent') -> 'None' - Pull an opponent out of a live encounter (GM action, #3382).`
-- `remove_participant(participant: 'CombatParticipant') -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
+- `remove_participant(participant: 'CombatParticipant', *, by_gm: 'bool' = False) -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' - Validate declared cast positions against the encounter's room + technique reach.`
 - `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', cast_check: 'CastCheck', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' - Route a damage-path combat technique through use_technique.`
 - `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None) -> 'DefenseResult' - Resolve one NPC attack against one PC via a defensive check.`
@@ -7071,6 +7072,7 @@
   - target_resonance -> magic.Resonance [OneToOne] (nullable)
   - target_capability -> conditions.CapabilityType [OneToOne] (nullable)
   - target_check_type -> checks.CheckType [OneToOne] (nullable)
+  - target_aspect -> classes.Aspect [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
   - target_being -> worship.WorshippedBeing [FK] (nullable)
   - scope_maneuver_effect -> mechanics.ManeuverEffect [FK] (nullable)
@@ -7213,6 +7215,7 @@
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
+- `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `equipment_walk_parts(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'EquipmentWalkParts' - ``equipment_walk_total``'s terms, split into the worn-item part and the vow part.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`

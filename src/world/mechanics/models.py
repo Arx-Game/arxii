@@ -56,6 +56,7 @@ OBJECTDB_MODEL = "objects.ObjectDB"
 TRAIT_MODEL = "arxii.Trait"
 CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 CHECK_TYPE_MODEL = "arxii.CheckType"
+ASPECT_MODEL = "arxii.Aspect"
 CONSEQUENCE_MODEL = "arxii.Consequence"
 
 
@@ -198,6 +199,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="modifier_target",
         help_text="The check type this target represents (check category only).",
     )
+    # #4827: a distinction's +N on an Aspect is a modifier on every check that weights
+    # that Aspect, scaled by the check's aspect weight (the modifier seam's ASPECT block).
+    # An FK, not a name match, so a renamed Aspect keeps its lever (#3676's lesson).
+    target_aspect = models.OneToOneField(
+        ASPECT_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The Aspect this target represents (aspect category only).",
+    )
     target_damage_type = models.OneToOneField(
         _DAMAGE_TYPE_MODEL_PATH,
         on_delete=models.SET_NULL,
@@ -253,8 +265,13 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # by a non-PK field, so it misses the SharedMemoryModel identity map and
     # re-queries each call. This cache serves it from memory after the first
     # build (#552).
+    # The target_aspect map (#4827) is built by the same query: the check seam asks
+    # for the target of every Aspect a check weights, on every roll, and a roll already
+    # builds the trait map through its stat reads, so the aspect map comes for nothing
+    # and a game with no aspect target authored yet pays no query for the walk.
     _trait_cache_built = False
     _trait_to_target_map: dict[int, "ModifierTarget"] = {}
+    _aspect_to_target_map: dict[int, "ModifierTarget"] = {}
 
     class Meta:
         unique_together = ["category", "name"]
@@ -336,27 +353,73 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @classmethod
     def _build_trait_cache(cls) -> None:
-        """Build the target_trait_id -> ModifierTarget mapping."""
-        cls._trait_to_target_map = {
-            target.target_trait_id: target
-            for target in cls.objects.filter(target_trait__isnull=False)
-        }
+        """Build the target_trait_id and target_aspect_id -> ModifierTarget maps, one query."""
+        trait_map: dict[int, ModifierTarget] = {}
+        aspect_map: dict[int, ModifierTarget] = {}
+        for target in cls.objects.filter(
+            models.Q(target_trait__isnull=False) | models.Q(target_aspect__isnull=False)
+        ):
+            if target.target_trait_id is not None:
+                trait_map[target.target_trait_id] = target
+            if target.target_aspect_id is not None:
+                aspect_map[target.target_aspect_id] = target
+        cls._trait_to_target_map = trait_map
+        cls._aspect_to_target_map = aspect_map
         cls._trait_cache_built = True
 
     @classmethod
     def clear_trait_cache(cls) -> None:
-        """Clear the target_trait cache (call when targets are modified)."""
+        """Clear the target_trait and target_aspect caches (call when targets change)."""
         cls._trait_cache_built = False
         cls._trait_to_target_map = {}
+        cls._aspect_to_target_map = {}
+
+    @classmethod
+    def get_for_aspect(cls, aspect_id: int) -> "ModifierTarget | None":
+        """The target whose ``target_aspect`` is the Aspect with ``aspect_id`` (#4827).
+
+        Served from the same map build as ``get_for_trait``; ``None`` when no target
+        points at the Aspect.
+        """
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return cls._aspect_to_target_map.get(aspect_id)
+
+    @classmethod
+    def aspect_targets_exist(cls) -> bool:
+        """Whether any target points at an Aspect (#4827), so the check seam can skip
+        the aspect walk entirely on a game that has authored none."""
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return bool(cls._aspect_to_target_map)
+
+    def _touches_target_caches(self) -> bool:
+        """Whether saving or deleting this row can change the trait or aspect map: it
+        points at a trait or an Aspect now, or the built map still holds it from before.
+        A resonance, affinity or favor target saved mid-roll (#4827: the check seam reads
+        the aspect map on every roll) must not throw the maps away for nothing.
+        """
+        if self.target_trait_id is not None or self.target_aspect_id is not None:
+            return True
+        cls = type(self)
+        if not cls._trait_cache_built:
+            return False
+        return any(
+            held.pk == self.pk
+            for held in (*cls._trait_to_target_map.values(), *cls._aspect_to_target_map.values())
+        )
 
     def save(self, *args: object, **kwargs: object) -> None:
-        """Invalidate the target_trait cache on any ModifierTarget mutation."""
+        """Invalidate the target caches when a mutation can change them."""
+        touches = self._touches_target_caches()
         super().save(*args, **kwargs)
-        type(self).clear_trait_cache()
+        if touches or self.target_trait_id is not None or self.target_aspect_id is not None:
+            type(self).clear_trait_cache()
 
     def delete(self, *args: object, **kwargs: object) -> object:
-        """Invalidate the target_trait cache when a target is removed."""
-        type(self).clear_trait_cache()
+        """Invalidate the target caches when a mapped target is removed."""
+        if self._touches_target_caches():
+            type(self).clear_trait_cache()
         return super().delete(*args, **kwargs)
 
 

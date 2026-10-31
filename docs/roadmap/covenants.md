@@ -951,7 +951,7 @@ the vow-only action scaling table is gone. What was built:
 
 - **Removed**: `CovenantRoleActionScaling`, `CovenantScaledAction`,
   `covenant_role_action_scaling_bonus` and the "Surges given" row (migration
-  `0334_drop_action_scaling`; deliberate discard of placeholder rows, owner ruling 2026-10-31).
+  `0335_drop_action_scaling`; deliberate discard of placeholder rows, owner ruling 2026-10-31).
 - **Replacement**: a `VowStatScaling` row on a `ModifierTarget` in the "maneuver_effect"
   category, scoped to one effect or one kind of effect. The holder's shown thread level times
   `bonus_per_level` is added to the effect's catalog base value (`effect_value`).

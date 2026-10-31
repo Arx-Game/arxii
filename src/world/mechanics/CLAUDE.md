@@ -28,6 +28,7 @@ Service functions for modifier operations:
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
 - **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
+- **`ensure_aspect_target(aspect)`** (#4827): the aspect-category target (`target_aspect`) a card's `+N <aspect>` lands on, created if missing; `None` when another category owns the name. Called by `AspectAdmin.save_model` and the `ensure_aspect_targets` seed.
 - **`property_damage_bonus(target, damage_type)`**: Sum `PropertyDamageModifier` values for a target's active `Property` rows (see below).
 
 ## Models
@@ -54,6 +55,7 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | target_trait | FK(Trait, null) | FK to the Trait this target modifies (stat-category targets) |
 | target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
 | target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |
+| target_aspect | OneToOne(Aspect, null) | The Aspect this target represents (#4827); the check seam's ASPECT block reads it |
 | target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
 | scope_maneuver_effect | FK(ManeuverEffect, null, CASCADE) | A "maneuver_effect" target scoped to one effect (#4783) |
 | scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing |

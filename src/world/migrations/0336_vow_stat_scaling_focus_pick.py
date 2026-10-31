@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0334_drop_action_scaling")]
+    dependencies = [("arxii", "0335_drop_action_scaling")]
 
     operations = [
         migrations.RemoveConstraint(

@@ -118,12 +118,14 @@ def _seed_combat_checks() -> None:
 
 
 def _seed_social() -> None:
-    from world.seeds.levers import ensure_lever_targets  # noqa: PLC0415
+    from world.seeds.levers import ensure_aspect_targets, ensure_lever_targets  # noqa: PLC0415
     from world.seeds.social_checks import seed_social_check_content  # noqa: PLC0415
 
     seed_social_check_content()
     # #4394: the five IC levers live beside allure and menace.
     ensure_lever_targets()
+    # #4827: one aspect target per authored Aspect, so a card's +N on an Aspect has a row to name.
+    ensure_aspect_targets()
 
 
 def _seed_justice_laws() -> None:

@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0330_alter_combatparticipant_status"),
+        ("arxii", "0331_modifiertarget_target_aspect"),
     ]
 
     operations = [
