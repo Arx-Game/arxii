@@ -731,6 +731,22 @@ class CompulsionCost:
 
 
 @dataclass(frozen=True)
+class Steadier:
+    """An ally who could steady a compelled fighter, with the bonus she would give (#4802)."""
+
+    participant: CombatParticipant
+    bonus: int
+
+
+@dataclass(frozen=True)
+class SteadyResult:
+    """A steadying that happened: who steadied, and the second resist roll she gave (#4802)."""
+
+    steadier: CombatParticipant
+    check_result: CheckResult
+
+
+@dataclass(frozen=True)
 class CompulsionRoll:
     """One resist roll a compelled participant made at the round lock (#4802).
 

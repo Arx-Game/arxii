@@ -30,14 +30,16 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    EscalationCurveFactory,
     SocialManeuverConfigFactory,
 )
-from world.combat.models import CombatRoundAction, FleeConfig
+from world.combat.models import CombatParticipant, CombatRoundAction, FleeConfig, MovementConfig
 from world.combat.services import resolve_round
 from world.combat.services.damage.damage import apply_damage_to_participant
 from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
 from world.conditions.constants import ControlLossFiresOn
 from world.conditions.factories import (
+    CapabilityTypeFactory,
     CompulsionFactory,
     ConditionCheckModifierFactory,
     ConditionStageFactory,
@@ -61,8 +63,18 @@ from world.magic.factories import (
     ThreadFactory,
 )
 from world.magic.models import CharacterTechnique
+from world.magic.models.anima import CharacterAnima
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.magic.services.fury import get_berserk_template
+from world.magic.types.techniques import SoulfrayWarning
+from world.mechanics.factories import ModifierCategoryFactory
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
+from world.relationships.constants import TypeValence
+from world.relationships.factories import (
+    CharacterRelationshipFactory,
+    RelationshipLabelFactory,
+    RelationshipTypeFactory,
+)
 from world.scenes.constants import RoundStatus
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.species.moon_provisioning import (
@@ -555,3 +567,224 @@ class TwoCompulsionsAtOnce(_CompelledMira):
             self.mira, "Mira tries to flee against Battle fever. Resist compulsion vs 10: Success."
         )
         self.assertNotTold(self.mira, "against Berserk")
+
+
+STEADY_ANIMA = 3
+STEADY_PER_DEPTH = 2
+
+
+class _SteadyingAllies(_CompelledMira):
+    """Mira is in a rage and her allies may steady her: 3 anima a time, 2 per bond depth."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.steadying = CapabilityTypeFactory(name="steadying", innate_baseline=0)
+        MovementConfig.objects.all().delete()
+        MovementConfig.objects.create(
+            pk=1,
+            steadying_capability=self.steadying,
+            steady_anima_cost=STEADY_ANIMA,
+            steady_bonus_per_depth=STEADY_PER_DEPTH,
+        )
+        self.ally_seats: dict[str, CombatParticipant] = {}
+        self.encounter.escalation_curve = EscalationCurveFactory()
+        self.encounter.save(update_fields=["escalation_curve"])
+
+    def ally(self, name: str, *, capability: int = 4, bond_depth: int = 0):
+        """A fighter at Mira's side who holds the steadying capability at ``capability``."""
+        character = self.make_player(name, room=self.road)
+        sheet = character.sheet_data
+        CharacterVitals.objects.create(
+            character_sheet=sheet, health=100, max_health=100, base_max_health=100
+        )
+        CharacterAnimaFactory(character=sheet, current=20, maximum=20)
+        self.ally_seats[name] = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+        if capability:
+            target, _ = ModifierTarget.objects.get_or_create(
+                name=f"capability_{self.steadying.pk}",
+                category=ModifierCategoryFactory(name="capability"),
+                defaults={
+                    "description": "",
+                    "display_order": 0,
+                    "is_active": True,
+                    "target_capability": self.steadying,
+                },
+            )
+            CharacterModifier.objects.create(
+                character=sheet,
+                target=target,
+                value=capability,
+                source=ModifierSource.objects.create(),
+            )
+        if bond_depth:
+            rel_type = RelationshipTypeFactory(
+                valence=TypeValence.WARM, fuels_escalation_spikes=True
+            )
+            relationship = CharacterRelationshipFactory(
+                source=sheet, target=self.sheet, is_active=True
+            )
+            RelationshipLabelFactory(relationship=relationship, type=rel_type)
+            relationship.invested_depth = bond_depth
+            relationship.save()
+        self.watch(character)
+        return character
+
+    def resolve_with_rolls(self, *outcomes):
+        """Resolve the round with the compulsion's rolls landing on ``outcomes`` in turn.
+
+        Returns the real ``perform_check`` calls made on the compulsion's check type.
+        """
+        remaining = list(outcomes)
+        calls: list = []
+
+        def sequenced(*args, **kwargs):
+            if args[1] == self.berserk.compulsion.check_type:
+                calls.append((args, kwargs))
+            if not remaining:
+                return perform_check(*args, **kwargs)
+            with force_check_outcome(remaining.pop(0)):
+                return perform_check(*args, **kwargs)
+
+        with patch("world.checks.services.perform_check", sequenced):
+            self.resolve()
+        return calls
+
+    def anima(self, character) -> int:
+        return CharacterAnima.objects.get(character=character.sheet_data).current
+
+
+class AnAllyWhoSteadies(_SteadyingAllies):
+    def test_steady_grants_second_roll_and_costs_anima_and_a_reaction(self) -> None:
+        brann = self.ally("Brann", capability=4)
+        self.assertTrue(self.web(brann, "combat_steady", steady=True).detail.success)
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        first, second = calls[0][1]["extra_modifiers"], calls[1][1]["extra_modifiers"]
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(second - first, 4)
+        self.assertTold(self.mira, "Brann steadies Mira.")
+        self.assertNotTold(self.mira, "Berserk wins out")
+        self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
+        self.assertEqual(
+            self.ally_seats["Brann"]
+            .__class__.objects.get(pk=self.ally_seats["Brann"].pk)
+            .reactions_used,
+            1,
+        )
+        self.assertEqual(self.declared().maneuver, CombatManeuver.FLEE)
+
+    def test_without_the_plan_nobody_steadies(self) -> None:
+        brann = self.ally("Brann", capability=4)
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        self.assertEqual(len(calls), 1)
+        self.assertTold(self.mira, "Berserk wins out: Mira attacks Bandit Captain.")
+        self.assertEqual(self.anima(brann), 20)
+
+    def test_steady_bonus_scales_with_bond_depth(self) -> None:
+        brann = self.ally("Brann", capability=4, bond_depth=10)
+        cade = self.ally("Cade", capability=4)
+        for ally in (brann, cade):
+            self.web(ally, "combat_steady", steady=True)
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        bonus = calls[1][1]["extra_modifiers"] - calls[0][1]["extra_modifiers"]
+        self.assertEqual(bonus, 4 + STEADY_PER_DEPTH * 10)
+        self.assertTold(self.mira, "Brann steadies Mira.")
+        self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
+        self.assertEqual(self.anima(cade), 20)
+
+    def test_equal_bonuses_go_to_the_lowest_participant_pk(self) -> None:
+        brann = self.ally("Brann", capability=4)
+        cade = self.ally("Cade", capability=4)
+        for ally in (cade, brann):
+            self.web(ally, "combat_steady", steady=True)
+        self.telnet(self.mira, "combat flee")
+
+        self.resolve_with_rolls(self.failure, self.success)
+
+        self.assertTold(self.mira, "Brann steadies Mira.")
+        self.assertEqual(self.anima(cade), 20)
+
+    def test_a_compelled_ally_cannot_steady(self) -> None:
+        cade = self.ally("Cade", capability=4)
+        self.web(cade, "combat_steady", steady=True)
+        apply_condition(cade, self.berserk, severity=3, duration_rounds=3)
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        self.assertEqual(len(calls), 1)
+        self.assertNotTold(self.mira, "steadies Mira")
+        self.assertEqual(self.anima(cade), 20)
+
+    def test_an_ally_short_of_anima_cannot_steady(self) -> None:
+        brann = self.ally("Brann", capability=4)
+        self.web(brann, "combat_steady", steady=True)
+        CharacterAnima.objects.filter(character=brann.sheet_data).update_with_reason(
+            reason="issue #4802: leave her short of the steady cost", current=STEADY_ANIMA - 1
+        )
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        self.assertEqual(len(calls), 1)
+
+
+class TheSteadyPlan(_SteadyingAllies):
+    def test_steady_plan_toggles_by_telnet_and_web(self) -> None:
+        brann = self.ally("Brann", capability=4)
+        seat = self.ally_seats["Brann"]
+
+        self.assertTrue(self.web(brann, "combat_steady", steady=True).detail.success)
+        seat.refresh_from_db()
+        self.assertTrue(seat.steady_enabled)
+        self.assertTrue(self.web(brann, "combat_steady", steady=False).detail.success)
+        seat.refresh_from_db()
+        self.assertFalse(seat.steady_enabled)
+
+        self.assertIn("you'll steady them", self.telnet(brann, "combat steady"))
+        seat.refresh_from_db()
+        self.assertTrue(seat.steady_enabled)
+        self.assertIn("won't steady", self.telnet(brann, "combat steady off"))
+        seat.refresh_from_db()
+        self.assertFalse(seat.steady_enabled)
+
+    def test_nothing_to_steady_with_is_refused_plainly(self) -> None:
+        dara = self.ally("Dara", capability=0)
+
+        told = self.web(dara, "combat_steady", steady=True)
+
+        self.assertFalse(told.detail.success)
+        self.assertEqual(told.detail.message, "Nothing you have lets you steady an ally.")
+        self.assertFalse(
+            self.ally_seats["Dara"]
+            .__class__.objects.get(pk=self.ally_seats["Dara"].pk)
+            .steady_enabled
+        )
+
+
+class ACompelledStrikeThatFalters(_CompelledMira):
+    def test_a_compelled_strike_stopped_at_soulfray_is_told_so(self) -> None:
+        warning = SoulfrayWarning(
+            stage_name="Stage One", stage_description="Your soul frays.", has_death_risk=False
+        )
+        self.telnet(self.mira, "combat flee")
+
+        with (
+            force_check_outcome(self.failure),
+            patch("world.magic.services.techniques.get_soulfray_warning", return_value=warning),
+        ):
+            self.resolve()
+
+        self.assertTrue(self.declared().declared_by_compulsion)
+        self.assertTold(self.mira, "Your compulsion's strike faltered at the edge of Soulfray.")
+        self.assertNotTold(self.mira, "Accept the Soulfray risk")

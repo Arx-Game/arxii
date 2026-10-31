@@ -1740,6 +1740,14 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         choices=EffortLevel.choices,
         default=EffortLevel.MEDIUM,
     )
+    declared_by_compulsion = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when compulsion resolution declared this strike in place of the player's "
+            "own declaration (#4802). Set once at the round lock; the cast-stopped line reads "
+            "it so a compelled strike is not told to accept a risk it never chose."
+        ),
+    )
     compulsion_penalty = models.PositiveSmallIntegerField(
         default=0,
         help_text=(

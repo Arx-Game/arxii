@@ -571,6 +571,42 @@ def peril_spike_handler(*, payload: Any) -> None:
     apply_peril_escalation_spike(victim_character=payload.target, room=room)
 
 
+def qualifying_bond_depths(
+    sources: list[CharacterSheet],
+    target_sheet: CharacterSheet,
+    encounter: CombatEncounter,
+) -> dict[int, int]:
+    """Each source sheet's deepest qualifying bond to ``target_sheet``, by sheet pk (#4737).
+
+    One query. A bond qualifies when it is active, carries a live label whose type fuels
+    escalation spikes, and is at least the encounter's spike minimum deep (scene plus
+    invested depth). Sources with no qualifying bond are absent, and an encounter with no
+    escalation curve has none. Both the hurt-ally surge
+    and a steadying ally read bond depth through this one filter (#4802).
+    """
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    curve = encounter.escalation_curve
+    if curve is None:
+        return {}
+    depth_by_sheet: dict[int, int] = {}
+    bonds = (
+        CharacterRelationship.objects.filter(
+            source__in=sources,
+            target=target_sheet,
+            is_active=True,
+            labels__ended_at__isnull=True,
+            labels__type__fuels_escalation_spikes=True,
+        )
+        .annotate(_depth=F("scene_depth") + F("invested_depth"))
+        .filter(_depth__gte=curve.spike_minimum_track_points)
+        .values_list("source_id", "_depth")
+    )
+    for source_id, depth in bonds:
+        depth_by_sheet[source_id] = max(depth, depth_by_sheet.get(source_id, 0))
+    return depth_by_sheet
+
+
 def _hurt_ally_rollers(
     encounter: CombatEncounter,
     victim_sheet: CharacterSheet,
@@ -590,7 +626,6 @@ def _hurt_ally_rollers(
         DramaticSurgeRecord,
     )
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter, status=ParticipantStatus.ACTIVE)
@@ -599,21 +634,9 @@ def _hurt_ally_rollers(
     )
     if not participants:
         return []
-    depth_by_sheet: dict[int, int] = {}
-    bonds = (
-        CharacterRelationship.objects.filter(
-            source__in=[p.character_sheet for p in participants],
-            target=victim_sheet,
-            is_active=True,
-            labels__ended_at__isnull=True,
-            labels__type__fuels_escalation_spikes=True,
-        )
-        .annotate(_depth=F("scene_depth") + F("invested_depth"))
-        .filter(_depth__gte=encounter.escalation_curve.spike_minimum_track_points)
-        .values_list("source_id", "_depth")
+    depth_by_sheet = qualifying_bond_depths(
+        [p.character_sheet for p in participants], victim_sheet, encounter
     )
-    for source_id, depth in bonds:
-        depth_by_sheet[source_id] = max(depth, depth_by_sheet.get(source_id, 0))
     candidates = [p for p in participants if p.character_sheet_id in depth_by_sheet]
     if not candidates:
         return []

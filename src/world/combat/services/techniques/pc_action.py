@@ -138,7 +138,9 @@ def _broadcast_cast_stopped(
         unattributed_narration="",
         target_personas=[target_persona] if target_persona is not None else None,
     )
-    if combat_result.technique_use_result.soulfray_warning is not None:
+    if action.declared_by_compulsion:
+        reason = "Your compulsion's strike faltered at the edge of Soulfray."
+    elif combat_result.technique_use_result.soulfray_warning is not None:
         reason = (
             "Your Soulfray worsened before your turn and stopped the cast. "
             "Accept the Soulfray risk when you declare to cast through it."

@@ -249,17 +249,20 @@ def _resist(
         f"{_outcome_name(first)}.",
     )
     band = compulsion_band(compulsion, first.outcome)
+    steadied_by = None
     if band is not None and band.result == CompulsionResult.COMPULSION_ACTS:
-        second = try_steady(participant, compulsion, difficulty)
-        if second is not None:
-            band = compulsion_band(compulsion, second.outcome)
+        steady = try_steady(participant, compulsion, difficulty)
+        if steady is not None:
+            steadied_by = steady.steadier
+            _tell_room(participant, f"{_name(steadied_by)} steadies {name}.")
+            band = compulsion_band(compulsion, steady.check_result.outcome)
     _apply_band(participant, action, compulsion, band, name=name)
     return CompulsionRoll(
         participant=participant,
         action=action,
         difficulty=difficulty,
         first_result=first,
-        steadied_by=None,
+        steadied_by=steadied_by,
         final_band=band,
     )
 
@@ -445,7 +448,7 @@ def _declare_rage_attack(
     from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
     try:
-        return declare_action(
+        action = declare_action(
             participant,
             focused_action=technique,
             focused_category=technique.action_category,
@@ -453,6 +456,9 @@ def _declare_rage_attack(
             focused_opponent_target=target,
             confirm_soulfray_risk=False,
         )
+        action.declared_by_compulsion = True
+        action.save(update_fields=["declared_by_compulsion"])
+        return action
     except ValueError as exc:
         logger.info(
             "Compulsion could not declare for participant pk=%s: %s",
