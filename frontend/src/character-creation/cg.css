@@ -1249,6 +1249,16 @@
   align-items: center;
   margin-top: 0.6rem;
 }
+/* Every stage struck (#4830): the beginning's text where the stage rows would be. */
+.interview .life .absent {
+  margin: 1.2rem 0 0;
+  color: var(--cg-muted);
+  font-style: italic;
+}
+/* The Recent History box (#4830) sits under the last stage, before the footer. */
+.interview .life .recent-history {
+  margin-top: 1.6rem;
+}
 .interview .life-foot {
   display: flex;
   justify-content: space-between;

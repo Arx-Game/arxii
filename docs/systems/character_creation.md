@@ -775,7 +775,15 @@ free text of at most `RECENT_HISTORY_MAX_LENGTH` (2000) characters, validated wi
 beats; at finalize it becomes the lead-in paragraph of `Profile.background`, a blank line,
 then the told prose (`assemble_origin_prose`), or the whole background when nothing else
 was told. Public by ruling (2026-10-30, 2026-10-31). Journeys:
-`integration_tests/test_struck_life_journeys.py`. Apart from an age-scaled beat's allowance,
+`integration_tests/test_struck_life_journeys.py`. **On the leaf (#4831):** `LifeGrids` ends
+every life on the Recent History box (a textarea under the last stage, before the footer;
+copy keys `life_recent_history_label` and `life_recent_history_help`; `maxLength` from the
+frontend's mirror of `RECENT_HISTORY_MAX_LENGTH`), saved on blur to
+`draft_data.recent_history` by itself. When the pool is empty and the draft's beginning
+strikes all three stages, the beginning's `struck_stages_text` stands where the stage rows
+would be (a `.absent` paragraph over the box; copy key `life_struck_fallback` stands in until
+the text is authored), with no pick lines and no footer; an empty pool on a beginning that
+keeps its stages shows the box alone. Apart from an age-scaled beat's allowance,
 nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with
