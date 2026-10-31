@@ -513,7 +513,10 @@ class TheWoundClock(_TheYard):
         ).health_mended
 
     def _advance_to_round_four(self, encounter: CombatEncounter) -> None:
+        # Each round closes to Between Rounds before the next opens, as resolving a round does.
         for _ in range(3):
+            encounter.status = RoundStatus.BETWEEN_ROUNDS
+            encounter.save(update_fields=["status"])
             begin_declaration_phase(encounter)
         encounter.refresh_from_db()
         self.assertEqual(encounter.round_number, 4)
