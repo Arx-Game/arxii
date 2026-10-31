@@ -530,7 +530,7 @@ class AddEncounterParticipantActionTests(GMCombatActionTestBase):
 
 
 class RemoveEncounterParticipantActionTests(GMCombatActionTestBase):
-    """RemoveEncounterParticipantAction marks a participant REMOVED."""
+    """RemoveEncounterParticipantAction marks a participant REMOVED_BY_GM."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -543,7 +543,7 @@ class RemoveEncounterParticipantActionTests(GMCombatActionTestBase):
         )
         self.assertTrue(result.success, result.message)
         self.participant.refresh_from_db()
-        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
+        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED_BY_GM)
 
     def test_non_gm_denied(self) -> None:
         result = RemoveEncounterParticipantAction().run(
@@ -561,7 +561,7 @@ class RemoveEncounterParticipantActionTests(GMCombatActionTestBase):
         )
         self.assertTrue(result.success, result.message)
         self.participant.refresh_from_db()
-        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED)
+        self.assertEqual(self.participant.status, ParticipantStatus.REMOVED_BY_GM)
 
     def test_missing_target(self) -> None:
         result = RemoveEncounterParticipantAction().run(self.gm_actor)

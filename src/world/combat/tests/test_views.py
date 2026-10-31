@@ -405,7 +405,7 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         self.participant.refresh_from_db()
         self.assertEqual(
             self.participant.status,
-            ParticipantStatus.REMOVED,
+            ParticipantStatus.REMOVED_BY_GM,
         )
 
     def test_remove_opponent_as_gm(self) -> None:
