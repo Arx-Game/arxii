@@ -688,12 +688,17 @@ class CombatRoundContext(RoundContext):
         protected = target_participant.character_sheet.character
 
         # Bond combat bonus (#2021): relationship-scaled protection.
+        from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+        from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
         from world.relationships.services import bond_bonus  # noqa: PLC0415
 
         multiplier = dispatch_succor(
             succorer,
             protected,
             approach=None,
+            partial_protection=effect_value(
+                action.participant.character_sheet, ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION
+            ),
             extra_modifiers=bond_bonus(succorer, protected),
         )
 
