@@ -94,6 +94,31 @@ class UnattributedNarrationTests(TestCase):
         self.assertIn("Corvin", line)
         self.assertIn("misses", line)
 
+    def test_an_area_hit_names_each_opponent_with_its_own_damage(self) -> None:
+        """#4842: the unattributed line splits the figure as the attributed one does."""
+        outcome = MagicMock()
+        outcome.damage_results = [
+            OpponentDamageResult(
+                damage_dealt=damage,
+                health_damaged=True,
+                probed=False,
+                probing_increment=0,
+                defeated=False,
+                opponent_id=opponent_id,
+            )
+            for opponent_id, damage in ((1, 6), (2, 11))
+        ]
+        outcome.damage_consequences = []
+
+        line = render_unattributed_action_narration(
+            target_label="Hound",
+            outcome=outcome,
+            target_opponent_id=1,
+            opponent_labels={1: "Hound", 2: "Wyrm"},
+        )
+
+        self.assertEqual(line, "Hound is struck for 6 damage and Wyrm for 11 damage.")
+
     def test_target_less_action_has_no_outward_event_to_narrate(self) -> None:
         """A self-buff shows nothing; callers skip emitting on the empty string."""
         self.assertEqual(

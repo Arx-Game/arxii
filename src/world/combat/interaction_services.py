@@ -329,6 +329,46 @@ def synergy_clause(interaction_result: DamageInteractionResult | None) -> str | 
     return f"— {clause}" if clause else None
 
 
+def _damage_by_opponent(
+    *,
+    outcome: ActionOutcome,
+    target_label: str,
+    target_opponent_id: int | None,
+    opponent_labels: dict[int, str] | None,
+) -> list[tuple[str, int]] | None:
+    """Split an area hit's damage per opponent, the focused target first (#4842).
+
+    Returns ``(label, damage)`` for each opponent that took damage, or ``None`` when the
+    line should stay one summed figure: no labels supplied (the NPC caller, which damages
+    participants), a result that is not a labelled opponent's, or fewer than two distinct
+    opponents hit. Several results for one opponent (one per damage profile) are added up.
+    """
+    from world.combat.types import OpponentDamageResult  # noqa: PLC0415
+
+    if not opponent_labels:
+        return None
+    totals: dict[int, int] = {}
+    for dr in outcome.damage_results:
+        if not isinstance(dr, OpponentDamageResult) or dr.opponent_id not in opponent_labels:
+            return None
+        totals[dr.opponent_id] = totals.get(dr.opponent_id, 0) + dr.damage_dealt
+    if len(totals) < 2:  # noqa: PLR2004 - one opponent is the single-target line
+        return None
+    ordered = sorted(totals, key=lambda oid: oid != target_opponent_id)
+    return [
+        (target_label if oid == target_opponent_id else opponent_labels[oid], totals[oid])
+        for oid in ordered
+        if totals[oid] > 0
+    ]
+
+
+def _damage_figure(per_opponent: list[tuple[str, int]]) -> str:
+    """The figures after the first opponent's name: "6 damage and Wyrm for 11 damage"."""
+    first = f"{per_opponent[0][1]} damage"
+    rest = [f"{label} for {damage} damage" for label, damage in per_opponent[1:]]
+    return join_labels([first, *rest])
+
+
 def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one narration; cohesive
     *,
     actor_label: str,
@@ -341,6 +381,8 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     interaction_result: DamageInteractionResult | None = None,
     hit_text: str = "",
     miss_text: str = "",
+    target_opponent_id: int | None = None,
+    opponent_labels: dict[int, str] | None = None,
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -371,8 +413,15 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     and suffix clauses are appended exactly as for the default head. Blank means
     "use the default sentence". The untargeted branch never uses them.
 
+    When ``opponent_labels`` (opponent id to player-facing name) is supplied and the
+    action hit two or more opponents (an area cast, #4842), the figure is split per
+    opponent: the focused target (``target_opponent_id``) first with its own total, then
+    each other opponent that took damage, in result order. Without labels, or with one
+    opponent hit, the line carries a single summed figure as before.
+
     Examples:
         "Kira’s Frost Bolt strikes the Pyromancer for 24 damage."
+        "Kira’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage."
         "Kira’s Frost Bolt strikes the Pyromancer for 40 damage, defeating them."
         "Kira’s Frost Bolt misses the Pyromancer — the ward turns it aside."
         "Garruk uses Guard Stance."
@@ -409,11 +458,20 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
             base = f"{actor_label}’s {technique_name} misses {target_label}"
         return f"{base} {suffix}." if suffix else f"{base}."
 
+    per_opponent = _damage_by_opponent(
+        outcome=outcome,
+        target_label=target_label,
+        target_opponent_id=target_opponent_id,
+        opponent_labels=opponent_labels,
+    )
+    # The head names whoever leads the figures: the focused target, unless it took nothing.
+    lead_label = per_opponent[0][0] if per_opponent else target_label
     if hit_text:
-        blow = fill_narration_placeholders(hit_text, actor=actor_label, target=target_label)
+        blow = fill_narration_placeholders(hit_text, actor=actor_label, target=lead_label)
     else:
-        blow = f"{actor_label}’s {technique_name} strikes {target_label}"
-    head = f"{blow} for {total_damage} damage"
+        blow = f"{actor_label}’s {technique_name} strikes {lead_label}"
+    figure = _damage_figure(per_opponent) if per_opponent else f"{total_damage} damage"
+    head = f"{blow} for {figure}"
     tail = _build_tail_clauses(
         wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
     )
@@ -444,6 +502,8 @@ def render_unattributed_action_narration(
     *,
     target_label: str | None,
     outcome: ActionOutcome,
+    target_opponent_id: int | None = None,
+    opponent_labels: dict[int, str] | None = None,
 ) -> str:
     """Render what a concealed action *did*, with nothing that names who did it (#2734).
 
@@ -465,6 +525,7 @@ def render_unattributed_action_narration(
 
     Examples:
         "Corvin is struck for 24 damage."
+        "Corvin is struck for 6 damage and Wyrm for 11 damage."
         "Corvin is struck for 40 damage, defeating them."
         "Something lashes at Corvin and misses."
     """
@@ -484,7 +545,16 @@ def render_unattributed_action_narration(
     if total_damage <= 0 and not wounds:
         return f"Something lashes at {target_label} and misses."
 
-    head = f"{target_label} is struck for {total_damage} damage"
+    per_opponent = _damage_by_opponent(
+        outcome=outcome,
+        target_label=target_label,
+        target_opponent_id=target_opponent_id,
+        opponent_labels=opponent_labels,
+    )
+    if per_opponent:
+        head = f"{per_opponent[0][0]} is struck for {_damage_figure(per_opponent)}"
+    else:
+        head = f"{target_label} is struck for {total_damage} damage"
     tail = _build_tail_clauses(
         wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
     )
