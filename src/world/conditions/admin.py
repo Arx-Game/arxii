@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
+from world.conditions.constants import ControlLossFiresOn
 from world.conditions.control_loss_bands import (
     validate_compulsion_bands,
     validate_control_loss_bands,
@@ -670,6 +671,21 @@ class CompulsionResistBandFormSet(_MonotonicBandFormSet):
 
 class ControlLossBandFormSet(_MonotonicBandFormSet):
     validator = staticmethod(validate_control_loss_bands)
+
+    def clean(self) -> None:
+        """Also refuse a forced form unless the parent trigger fires on the moon.
+
+        On the add page the band's own ``clean()`` has no saved trigger to read, so the
+        formset reads ``fires_on`` from the parent instance the admin built from the
+        parent form.
+        """
+        super().clean()
+        if any(self.errors) or self.instance.fires_on == ControlLossFiresOn.MOON_PULL:
+            return
+        for form in self.forms:
+            data = form.cleaned_data
+            if data and not data.get("DELETE") and data.get("forces_form"):
+                form.add_error("forces_form", "Only a moon-pull trigger can force a form.")
 
 
 class CompulsionForbiddenActionInline(admin.TabularInline):

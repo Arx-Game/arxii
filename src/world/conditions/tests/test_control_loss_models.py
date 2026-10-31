@@ -1,9 +1,13 @@
 """Compulsion and control-loss trigger models, constraints and band validators (#4802)."""
 
+from types import SimpleNamespace
+
+from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 
+from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import CompulsionResult, ControlLossFiresOn
 from world.conditions.control_loss_bands import (
     validate_compulsion_bands,
@@ -18,6 +22,7 @@ from world.conditions.factories import (
     ControlLossBandFactory,
     ControlLossTriggerFactory,
 )
+from world.conditions.models import ControlLossTrigger
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -37,16 +42,25 @@ class CompulsionModelTests(TestCase):
 
 class ControlLossTriggerTests(TestCase):
     def test_trigger_kind_columns_enforced(self) -> None:
+        stage = ConditionStageFactory()
+        vulnerability = ConditionTemplateFactory()
+        check_type = CheckTypeFactory()
+        wound_with_stage = ControlLossTriggerFactory.build(
+            vulnerability=stage.condition,
+            fires_on=ControlLossFiresOn.WOUND_THRESHOLD,
+            health_below_percent=50,
+            stage=stage,
+            check_type=check_type,
+        )
+        stage_without_stage = ControlLossTriggerFactory.build(
+            vulnerability=vulnerability,
+            fires_on=ControlLossFiresOn.CONDITION_STAGE,
+            check_type=check_type,
+        )
         with self.assertRaises(IntegrityError), transaction.atomic():
-            stage = ConditionStageFactory()
-            ControlLossTriggerFactory(
-                vulnerability=stage.condition,
-                fires_on=ControlLossFiresOn.WOUND_THRESHOLD,
-                health_below_percent=50,
-                stage=stage,
-            )
+            wound_with_stage.save()
         with self.assertRaises(IntegrityError), transaction.atomic():
-            ControlLossTriggerFactory(fires_on=ControlLossFiresOn.CONDITION_STAGE)
+            stage_without_stage.save()
 
     def test_valid_wound_and_stage_triggers_save(self) -> None:
         ControlLossTriggerFactory(wound=True)
@@ -104,3 +118,33 @@ class BandValidatorTests(TestCase):
         problems = validate_control_loss_bands([worse, better])
         self.assertEqual(len(problems), 1)
         self.assertIn("severity", problems[0])
+
+
+class ControlLossBandFormSetTests(TestCase):
+    def test_formset_refuses_forced_form_on_non_moon_trigger(self) -> None:
+        from world.conditions.admin import ControlLossBandInline
+
+        request = RequestFactory().get("/")
+        request.user = SimpleNamespace(has_perm=lambda _perm: True, is_active=True)
+        outcome = CheckOutcomeFactory(success_level=1)
+        trigger = ControlLossTrigger(
+            fires_on=ControlLossFiresOn.WOUND_THRESHOLD, vulnerability=ConditionTemplateFactory()
+        )  # unsaved, as on the add page
+        formset_class = ControlLossBandInline(ControlLossTrigger, admin.site).get_formset(request)
+        data = {
+            "bands-TOTAL_FORMS": "1",
+            "bands-INITIAL_FORMS": "0",
+            "bands-MIN_NUM_FORMS": "0",
+            "bands-MAX_NUM_FORMS": "1000",
+            "bands-0-outcome": str(outcome.pk),
+            "bands-0-intensity": "0",
+            "bands-0-control_change": "0",
+            "bands-0-severity": "1",
+            "bands-0-duration_rounds": "1",
+            "bands-0-forces_form": "on",
+        }
+        formset = formset_class(data, instance=trigger, prefix="bands")
+        self.assertFalse(formset.is_valid())
+        trigger.fires_on = ControlLossFiresOn.MOON_PULL
+        moon = formset_class(data, instance=trigger, prefix="bands")
+        self.assertTrue(moon.is_valid(), moon.errors)
