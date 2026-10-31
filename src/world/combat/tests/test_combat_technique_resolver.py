@@ -35,7 +35,11 @@ from world.magic.factories import (
     TechniqueMoraleEffectFactory,
 )
 from world.magic.types.power_ledger import PowerLedger
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
+from world.mechanics.effect_targets import technique_effect_total
 from world.mechanics.factories import (
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
     ObjectPropertyFactory,
     PropertyDamageModifierFactory,
     PropertyFactory,
@@ -1288,3 +1292,27 @@ class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
         )
 
         self.assertEqual(scaled, 5)
+
+
+class TechniqueDamageBonusTests(TestCase):
+    """The technique damage bonus is worked out once per damage type per cast (#4822)."""
+
+    def test_for_type_computes_once_per_damage_type(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        ModifierTargetFactory(
+            category=category, name="Any damage", scope_effect_kind=EffectKind.DAMAGE
+        )
+        bonus = TechniqueDamageBonus.for_cast(
+            resolver.participant.character_sheet, resolver.action.focused_action
+        )
+
+        with patch(
+            "world.combat.services.techniques.technique_resolver.technique_effect_total",
+            wraps=technique_effect_total,
+        ) as total:
+            bonus.for_type(1)
+            bonus.for_type(1)
+            bonus.for_type(2)
+
+        self.assertEqual(total.call_count, 2)
