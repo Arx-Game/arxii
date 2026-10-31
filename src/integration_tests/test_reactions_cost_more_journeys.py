@@ -545,6 +545,7 @@ class TheWoundClock(_TheYard):
             character_sheet=self.cassian.sheet_data,
             status=ParticipantStatus.ACTIVE,
         )
+        CombatOpponentFactory(encounter=next_fight)  # a round opens only with an enemy present
         self._advance_to_round_four(next_fight)
 
         self.assertEqual(self._mend(), SAME_ROUND_MEND)
