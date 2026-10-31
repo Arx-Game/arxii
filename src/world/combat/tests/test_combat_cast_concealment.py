@@ -68,6 +68,24 @@ def _outcome(*, damage: int = 0, defeated: bool = False, wounds: tuple[str, ...]
     return outcome
 
 
+def _with_defeats(outcome, defeated_ids: set[int]):
+    """A copy of ``outcome`` where only the opponents in ``defeated_ids`` fell."""
+    copy = MagicMock()
+    copy.damage_consequences = outcome.damage_consequences
+    copy.damage_results = [
+        OpponentDamageResult(
+            damage_dealt=dr.damage_dealt,
+            health_damaged=dr.health_damaged,
+            probed=False,
+            probing_increment=0,
+            defeated=dr.opponent_id in defeated_ids,
+            opponent_id=dr.opponent_id,
+        )
+        for dr in outcome.damage_results
+    ]
+    return copy
+
+
 class UnattributedNarrationTests(TestCase):
     """``render_unattributed_action_narration`` — the effect without the actor."""
 
@@ -118,6 +136,47 @@ class UnattributedNarrationTests(TestCase):
         )
 
         self.assertEqual(line, "Hound is struck for 6 damage and Wyrm for 11 damage.")
+
+    def test_an_area_hit_names_who_it_defeated(self) -> None:
+        """#4842: "defeating them" would claim every opponent named fell."""
+        outcome = MagicMock()
+        outcome.damage_results = [
+            OpponentDamageResult(
+                damage_dealt=damage,
+                health_damaged=True,
+                probed=False,
+                probing_increment=0,
+                defeated=defeated,
+                opponent_id=opponent_id,
+            )
+            for opponent_id, damage, defeated in ((1, 6, False), (2, 11, True), (3, 4, True))
+        ]
+        outcome.damage_consequences = []
+        labels = {1: "Hound", 2: "Wyrm", 3: "Drake"}
+
+        one = render_unattributed_action_narration(
+            target_label="Hound",
+            outcome=_with_defeats(outcome, {2}),
+            target_opponent_id=1,
+            opponent_labels=labels,
+        )
+        both = render_unattributed_action_narration(
+            target_label="Hound",
+            outcome=outcome,
+            target_opponent_id=1,
+            opponent_labels=labels,
+        )
+
+        self.assertEqual(
+            one,
+            "Hound is struck for 6 damage, Wyrm for 11 damage and Drake for 4 damage, "
+            "defeating Wyrm.",
+        )
+        self.assertEqual(
+            both,
+            "Hound is struck for 6 damage, Wyrm for 11 damage and Drake for 4 damage, "
+            "defeating Wyrm and Drake.",
+        )
 
     def test_target_less_action_has_no_outward_event_to_narrate(self) -> None:
         """A self-buff shows nothing; callers skip emitting on the empty string."""

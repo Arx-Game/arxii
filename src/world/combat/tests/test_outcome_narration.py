@@ -357,7 +357,38 @@ class AreaOutcomeNarrationTest(SimpleTestCase):
         text = self._render(outcome, signature_snippet="a hiss of steel")
         assert text == (
             "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage, "
-            "defeating them — a hiss of steel."
+            "defeating Wyrm — a hiss of steel."
+        )
+
+    def test_only_the_defeated_opponent_is_named_in_the_clause(self) -> None:
+        outcome = _area_outcome((HOUND_ID, 6), (WYRM_ID, 11))
+        outcome.damage_results[0] = _opp_dmg(damage_dealt=6, defeated=True, opponent_id=HOUND_ID)
+        text = self._render(outcome)
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage, defeating Hound."
+        )
+
+    def test_every_defeated_opponent_is_named_in_the_clause(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Vesper")
+        for opponent_id, damage in ((WYRM_ID, 11), (HOUND_ID, 6), (DRAKE_ID, 4)):
+            outcome.damage_results.append(
+                _opp_dmg(
+                    damage_dealt=damage, defeated=opponent_id != DRAKE_ID, opponent_id=opponent_id
+                )
+            )
+        text = self._render(outcome)
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage, Wyrm for 11 damage and Drake for 4 "
+            "damage, defeating Hound and Wyrm."
+        )
+
+    def test_single_target_defeat_still_says_them(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Vesper")
+        outcome.damage_results.append(
+            _opp_dmg(damage_dealt=40, defeated=True, opponent_id=HOUND_ID)
+        )
+        assert (
+            self._render(outcome) == "Vesper’s Sweep strikes Hound for 40 damage, defeating them."
         )
 
     def test_without_labels_the_summed_line_stays(self) -> None:

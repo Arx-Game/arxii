@@ -12,7 +12,7 @@ Phase 3 — combat-resolution-loop PR.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from world.combat.constants import ClashResolution, EncounterOutcome
 from world.magic.narration import (
@@ -259,14 +259,25 @@ def render_clash_contribution_label(contribution: ClashContribution) -> str:
 
 
 def _build_tail_clauses(
-    *, wounds: list[str], defeated: bool, dying: bool, knocked_out: bool
+    *,
+    wounds: list[str],
+    defeated: bool,
+    dying: bool,
+    knocked_out: bool,
+    defeated_labels: list[str] | None = None,
 ) -> list[str]:
-    """Collect the consequence tail clauses for a damage hit."""
+    """Collect the consequence tail clauses for a damage hit.
+
+    ``defeated_labels`` names who fell when the line speaks of several opponents (#4842);
+    without it the clause is the single-target "defeating them".
+    """
     tail: list[str] = []
     if wounds:
         tail.append("leaving them " + ", ".join(wounds))
     if defeated:
-        tail.append("defeating them")
+        tail.append(
+            f"defeating {join_labels(defeated_labels)}" if defeated_labels else "defeating them"
+        )
     elif dying:
         tail.append("leaving them dying")
     elif knocked_out:
@@ -329,16 +340,24 @@ def synergy_clause(interaction_result: DamageInteractionResult | None) -> str | 
     return f"— {clause}" if clause else None
 
 
+class _AreaSplit(NamedTuple):
+    """An area hit split per opponent: who took what, and who fell (#4842)."""
+
+    damage: list[tuple[str, int]]
+    defeated: list[str]
+
+
 def _damage_by_opponent(
     *,
     outcome: ActionOutcome,
     target_label: str,
     target_opponent_id: int | None,
     opponent_labels: dict[int, str] | None,
-) -> list[tuple[str, int]] | None:
+) -> _AreaSplit | None:
     """Split an area hit's damage per opponent, the focused target first (#4842).
 
-    Returns ``(label, damage)`` for each opponent that took damage, or ``None`` when the
+    Returns ``(label, damage)`` for each opponent that took damage plus the labels of those
+    defeated (so the tail can say who fell, not "them"), or ``None`` when the
     line should stay one summed figure: no labels supplied (the NPC caller, which damages
     participants), a result that is not a labelled opponent's, or fewer than two distinct
     opponents hit. Several results for one opponent (one per damage profile) are added up.
@@ -348,24 +367,30 @@ def _damage_by_opponent(
     if not opponent_labels:
         return None
     totals: dict[int, int] = {}
+    fallen: set[int] = set()
     for dr in outcome.damage_results:
         if not isinstance(dr, OpponentDamageResult) or dr.opponent_id not in opponent_labels:
             return None
         totals[dr.opponent_id] = totals.get(dr.opponent_id, 0) + dr.damage_dealt
+        if dr.defeated:
+            fallen.add(dr.opponent_id)
     if len(totals) < 2:  # noqa: PLR2004 - one opponent is the single-target line
         return None
     ordered = sorted(totals, key=lambda oid: oid != target_opponent_id)
-    return [
-        (target_label if oid == target_opponent_id else opponent_labels[oid], totals[oid])
-        for oid in ordered
-        if totals[oid] > 0
-    ]
+
+    def label_of(oid: int) -> str:
+        return target_label if oid == target_opponent_id else opponent_labels[oid]
+
+    return _AreaSplit(
+        damage=[(label_of(oid), totals[oid]) for oid in ordered if totals[oid] > 0],
+        defeated=[label_of(oid) for oid in ordered if oid in fallen],
+    )
 
 
-def _damage_figure(per_opponent: list[tuple[str, int]]) -> str:
+def _damage_figure(split: _AreaSplit) -> str:
     """The figures after the first opponent's name: "6 damage and Wyrm for 11 damage"."""
-    first = f"{per_opponent[0][1]} damage"
-    rest = [f"{label} for {damage} damage" for label, damage in per_opponent[1:]]
+    first = f"{split.damage[0][1]} damage"
+    rest = [f"{label} for {damage} damage" for label, damage in split.damage[1:]]
     return join_labels([first, *rest])
 
 
@@ -458,22 +483,26 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
             base = f"{actor_label}’s {technique_name} misses {target_label}"
         return f"{base} {suffix}." if suffix else f"{base}."
 
-    per_opponent = _damage_by_opponent(
+    split = _damage_by_opponent(
         outcome=outcome,
         target_label=target_label,
         target_opponent_id=target_opponent_id,
         opponent_labels=opponent_labels,
     )
     # The head names whoever leads the figures: the focused target, unless it took nothing.
-    lead_label = per_opponent[0][0] if per_opponent else target_label
+    lead_label = split.damage[0][0] if split and split.damage else target_label
     if hit_text:
         blow = fill_narration_placeholders(hit_text, actor=actor_label, target=lead_label)
     else:
         blow = f"{actor_label}’s {technique_name} strikes {lead_label}"
-    figure = _damage_figure(per_opponent) if per_opponent else f"{total_damage} damage"
+    figure = _damage_figure(split) if split and split.damage else f"{total_damage} damage"
     head = f"{blow} for {figure}"
     tail = _build_tail_clauses(
-        wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
+        wounds=wounds,
+        defeated=defeated,
+        dying=dying,
+        knocked_out=knocked_out,
+        defeated_labels=split.defeated if split else None,
     )
     return _assemble_hit_line(head, tail, suffix)
 
@@ -545,18 +574,22 @@ def render_unattributed_action_narration(
     if total_damage <= 0 and not wounds:
         return f"Something lashes at {target_label} and misses."
 
-    per_opponent = _damage_by_opponent(
+    split = _damage_by_opponent(
         outcome=outcome,
         target_label=target_label,
         target_opponent_id=target_opponent_id,
         opponent_labels=opponent_labels,
     )
-    if per_opponent:
-        head = f"{per_opponent[0][0]} is struck for {_damage_figure(per_opponent)}"
+    if split and split.damage:
+        head = f"{split.damage[0][0]} is struck for {_damage_figure(split)}"
     else:
         head = f"{target_label} is struck for {total_damage} damage"
     tail = _build_tail_clauses(
-        wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
+        wounds=wounds,
+        defeated=defeated,
+        dying=dying,
+        knocked_out=knocked_out,
+        defeated_labels=split.defeated if split else None,
     )
     return _assemble_hit_line(head, tail, "")
 
