@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.types import FiredVowEffect
+    from world.magic.models import Technique
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types.power_ledger import PowerLedger
     from world.mechanics.models import ModifierTarget
@@ -86,6 +87,45 @@ def _charge_effect(sheet: CharacterSheet, key: str, *, lance: bool, kind_wide: b
     base = get_maneuver_effect(key).base_value
     modifiers = effect_modifier_total(sheet, key, kind_wide=kind_wide)
     return max(0, (base * 2 if lance else base) + modifiers)
+
+
+@dataclass(frozen=True)
+class TechniqueDamageBonus:
+    """The caster's modifiers on one cast's damage, by resolved damage type (#4822).
+
+    Built once per cast by ``for_cast``. ``for_type`` answers "what do the matching modifiers
+    add to a hit of this resolved damage type", worked out once per distinct type and reused
+    by every later profile and opponent of the cast. ``none`` is a bonus of 0 for a caller
+    with no modifiers to read.
+    """
+
+    sheet: CharacterSheet | None
+    context: TechniqueEffectContext | None
+    targets: list[ModifierTarget]
+    totals: dict[int | None, int] = field(default_factory=dict)
+
+    @classmethod
+    def none(cls) -> TechniqueDamageBonus:
+        return cls(sheet=None, context=None, targets=[])
+
+    @classmethod
+    def for_cast(cls, sheet: CharacterSheet, technique: Technique) -> TechniqueDamageBonus:
+        """The bonus for ``sheet`` casting ``technique``; with no damage-kind modifier
+        target in the game there is nothing to match, so no context is built."""
+        targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
+        if not targets:
+            return cls.none()
+        return cls(sheet=sheet, context=technique_effect_context(sheet, technique), targets=targets)
+
+    def for_type(self, damage_type_id: int | None) -> int:
+        """The unclamped bonus on a hit of resolved damage type ``damage_type_id``."""
+        if self.context is None:
+            return 0
+        if damage_type_id not in self.totals:
+            self.totals[damage_type_id] = technique_effect_total(
+                self.sheet, replace(self.context, damage_type_id=damage_type_id), self.targets
+            )
+        return self.totals[damage_type_id]
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +384,7 @@ class CombatTechniqueResolver:
         sl: int,
         multiplier: Decimal,
         eff_intensity: int,
-        effect_context: TechniqueEffectContext | None = None,
-        effect_targets: list[ModifierTarget] | None = None,
+        technique_bonus: TechniqueDamageBonus,
     ) -> tuple[list[OpponentDamageResult], bool]:
         """Apply each damage profile to a single target, returning results and weapon-hit flag.
 
@@ -353,8 +392,8 @@ class CombatTechniqueResolver:
         technique's own and its signature's profiles, the fired row's
         ``damage_bonus`` for a vow added effect's (#4581).
 
-        ``effect_context`` and ``effect_targets`` carry the cast's technique-scoped damage
-        modifiers (#4822), built once per cast by ``_apply_damage``.
+        ``technique_bonus`` is the cast's technique-scoped damage modifiers (#4822), built
+        once per cast by ``_apply_damage``.
 
         Skips profiles that deal zero damage and aborts early if the target is
         defeated mid-loop (can happen when a preceding profile triggers a kill).
@@ -370,8 +409,7 @@ class CombatTechniqueResolver:
                 multiplier=multiplier,
                 eff_intensity=eff_intensity,
                 budget_bonus=budget_bonus,
-                effect_context=effect_context,
-                effect_targets=effect_targets,
+                technique_bonus=technique_bonus,
             )
             if scaled <= 0:
                 continue
@@ -466,15 +504,11 @@ class CombatTechniqueResolver:
 
         weapon = effective_weapon_profile(attacker)
         any_weapon_landed = False
-        # The cast's technique-scoped damage modifiers (#4822): the context and the target
-        # list are built once for the cast; each profile adds its own damage type.
-        technique = self.action.focused_action
-        effect_context = (
-            technique_effect_context(self.participant.character_sheet, technique)
-            if technique is not None
-            else None
+        # The cast's technique-scoped damage modifiers (#4822), worked out once per damage
+        # type however many profiles and opponents the cast has.
+        technique_bonus = TechniqueDamageBonus.for_cast(
+            self.participant.character_sheet, self.action.focused_action
         )
-        effect_targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
 
         results: list[OpponentDamageResult] = []
         for target in targets:
@@ -488,8 +522,7 @@ class CombatTechniqueResolver:
                 sl=sl,
                 multiplier=multiplier,
                 eff_intensity=eff_intensity,
-                effect_context=effect_context,
-                effect_targets=effect_targets,
+                technique_bonus=technique_bonus,
             )
             results.extend(target_results)
             any_weapon_landed = any_weapon_landed or weapon_landed
@@ -508,8 +541,7 @@ class CombatTechniqueResolver:
         multiplier: Decimal,
         eff_intensity: int,
         budget_bonus: int = 0,
-        effect_context: TechniqueEffectContext | None = None,
-        effect_targets: list[ModifierTarget] | None = None,
+        technique_bonus: TechniqueDamageBonus,
     ) -> tuple[int, DamageType | None]:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
@@ -527,12 +559,10 @@ class CombatTechniqueResolver:
         weapon augment, before the CHARGE and property bonuses and the floor: a
         vow added effect's thread-level ``damage_bonus`` (#4581). Default 0.
 
-        ``effect_context`` (the cast's technique, gifts, functions and resonances) and
-        ``effect_targets`` (the active damage-kind modifier targets) are built once per
-        cast by ``_apply_damage``; the context takes this profile's resolved damage type
-        here. A modifier counts when every scope it sets matches the cast, once per
-        profile, so a technique with two profiles gains it twice. Without them (a direct
-        call) the term is left out.
+        ``technique_bonus`` is the cast's modifiers on this technique's damage (#4822), built once
+        per cast by ``_apply_damage``. A modifier counts when every scope it sets matches the
+        cast and this profile's resolved damage type, once per profile, so a technique with two
+        profiles gains it twice.
         """
         from world.conditions.services import (  # noqa: PLC0415
             resolved_damage_type,
@@ -563,18 +593,9 @@ class CombatTechniqueResolver:
         # Untyped damage is Physical (#4742), for the bonus below and the attacker's
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
         profile_damage_type = resolved_damage_type(profile_damage_type)
-        technique_total = 0
-        if effect_context is not None and effect_targets is not None:
-            technique_total = technique_effect_total(
-                self.participant.character_sheet,
-                replace(
-                    effect_context,
-                    damage_type_id=(
-                        profile_damage_type.pk if profile_damage_type is not None else None
-                    ),
-                ),
-                effect_targets,
-            )
+        technique_total = technique_bonus.for_type(
+            profile_damage_type.pk if profile_damage_type is not None else None
+        )
         budget = max(
             0,
             budget + technique_total + property_damage_bonus(target.objectdb, profile_damage_type),

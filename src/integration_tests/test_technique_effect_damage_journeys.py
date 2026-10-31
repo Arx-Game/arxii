@@ -15,6 +15,9 @@ Expected values come from the spec, not from running the code:
   technique stays 6 (4 is not added when any scope fails to match).
 * A kind-only "+2 damage" modifier counts once per damage profile, like a vow's damage bonus:
   a technique with a Fire profile of 6 and a Cold profile of 4 deals 6 + 2 + 4 + 2 = 14.
+* An area technique applies the modifier to each opponent it hits: a Fire profile of 6 with a
+  kind-only "+2 damage" costs each of two opponents 8.
+* A "-50 damage" modifier cannot heal: a hit of 6 deals 0.
 * Untyped damage is Physical. A "+3 damage, Physical" modifier lifts an untyped profile of 5 to
   8, and leaves a Fire hit of 6 alone.
 * A charge reads its own damage target for the catalog's Charge damage (5, with +3 on a target
@@ -27,7 +30,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from actions.constants import ActionBackend
+from actions.constants import ActionBackend, ActionTargetType
 from actions.factories import ActionTemplateFactory
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
@@ -116,10 +119,16 @@ class TechniqueDamageModifiers(JourneyCase):
             encounter=self.encounter, name="Bandit", health=200, max_health=200
         )
 
-    def technique(self, gift: Gift, *profiles: tuple[int, object]) -> Technique:
+    def technique(
+        self,
+        gift: Gift,
+        *profiles: tuple[int, object],
+        target_type: str = ActionTargetType.SINGLE,
+    ) -> Technique:
         """A technique of ``gift`` with one damage profile per ``(damage, type)`` given."""
         technique = TechniqueFactory(
             gift=gift,
+            target_type=target_type,
             anima_cost=1,
             effect_type=EffectTypeFactory(base_power=10),
             damage_profile=False,
@@ -160,6 +169,9 @@ class TechniqueDamageModifiers(JourneyCase):
     def bandit_health(self) -> int:
         return CombatOpponent.objects.get(pk=self.bandit.pk).health
 
+    def health_of(self, opponent: CombatOpponent) -> int:
+        return CombatOpponent.objects.get(pk=opponent.pk).health
+
     def designate_physical(self) -> None:
         config = get_vitals_consequence_config()
         config.physical_damage_type = DamageTypeFactory(name="Physical")
@@ -182,6 +194,24 @@ class TechniqueDamageModifiers(JourneyCase):
         twin = self.technique(self.ember, (6, self.fire), (4, self.cold))
 
         self.assertEqual(self.strike(twin), (6 + 2) + (4 + 2))
+
+    def test_bonus_raises_the_hit_on_every_opponent_of_an_area_technique(self) -> None:
+        grant_damage_modifier(self.sheet, "Any damage", 2)
+        second = CombatOpponentFactory(
+            encounter=self.encounter, name="Archer", health=200, max_health=200
+        )
+        sweep = self.technique(self.ember, (6, self.fire), target_type=ActionTargetType.AREA)
+
+        self.strike(sweep)
+
+        self.assertEqual(200 - self.bandit_health(), 6 + 2)
+        self.assertEqual(200 - self.health_of(second), 6 + 2)
+
+    def test_a_large_negative_modifier_floors_the_hit_at_nothing(self) -> None:
+        grant_damage_modifier(self.sheet, "Dulled", -50)
+        blow = self.technique(self.ember, (6, self.fire))
+
+        self.assertEqual(self.strike(blow), 0)
 
     def test_untyped_profile_matches_physical_scope(self) -> None:
         self.designate_physical()

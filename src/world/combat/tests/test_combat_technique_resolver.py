@@ -23,6 +23,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
+from world.combat.services.techniques.technique_resolver import TechniqueDamageBonus
 from world.combat.types import SpectacleShift
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
@@ -1251,7 +1252,13 @@ class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
         )
 
         scaled, resolved_type = resolver._profile_damage(
-            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+            profile,
+            None,
+            opponent,
+            sl=1,
+            multiplier=Decimal(1),
+            eff_intensity=0,
+            technique_bonus=TechniqueDamageBonus.none(),
         )
 
         self.assertEqual(scaled, 15)  # base_damage(5) + property bonus(10)
@@ -1271,7 +1278,13 @@ class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
         )
 
         scaled, _resolved_type = resolver._profile_damage(
-            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+            profile,
+            None,
+            opponent,
+            sl=1,
+            multiplier=Decimal(1),
+            eff_intensity=0,
+            technique_bonus=TechniqueDamageBonus.none(),
         )
 
         self.assertEqual(scaled, 5)
