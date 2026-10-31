@@ -15,6 +15,7 @@ function makeSkill(overrides: Partial<CharacterSheetSkill> = {}): CharacterSheet
   return {
     skill: { id: 1, name: 'melee', category: 'combat' },
     value: 25,
+    modifier: 0,
     at_boundary: false,
     specializations: [],
     ...overrides,

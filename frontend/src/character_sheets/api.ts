@@ -174,7 +174,10 @@ export interface CharacterSheetSpecialization {
 /** Mirrors `world.character_sheets.types.SkillEntry`. */
 export interface CharacterSheetSkill {
   skill: CharacterSheetSkillRef;
+  /** The number a roll uses: the stored rating plus `modifier` (#4820). */
   value: number;
+  /** Distinction, equipment and condition bonuses folded into `value`; 0 when none. */
+  modifier: number;
   /** True when the skill is parked at an XP boundary (19/29/39/49) — a breakthrough check. */
   at_boundary: boolean;
   specializations: CharacterSheetSpecialization[];

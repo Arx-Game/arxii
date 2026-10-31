@@ -72,6 +72,25 @@ training and its `(value - 9) x 100` cost) and `DevelopmentPoints.total_earned` 
 `cumulative_dp_for_level`). Merging them, or retiring one store, is a design question.
 Journeys: `integration_tests/test_trained_skills_journeys.py`.
 
+### A card's bonus on a skill (#4820, slice 1 of #4813)
+
+A distinction effect reaches a skill the way it reaches a stat: through a stat-category
+`mechanics.ModifierTarget` whose `target_trait` is the skill's trait. `TraitHandler.get_trait_value`
+folds that target's contributions for `TraitType.SKILL` as for `STAT` (the stat lane, #4726), in
+the skill's own units (`+10 sailing` is +10 shown), and `TraitHandler.get_trait_modifier(trait)`
+is the bonus alone. **The stored rating is never modified**: `CharacterSkillValue.value` and the
+trait row stay the trained value, so a bonus never raises the cost of the next rank, and the
+sheet's `SkillEntry` carries `value` (stored plus `modifier`, the number a roll uses) beside
+`modifier`, with `at_boundary` read from the stored rating.
+
+The target is made by `mechanics.services.ensure_skill_target(trait)`: `SkillAdmin.save_model`
+calls it on every save, and the Distinction Builder's paste calls it at create time when an
+effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
+the first time a card names it. A same-named target in another category (the `stealth` roll
+modifier that predates the Stealth skill) is left alone: staff retarget it by hand. The sheet
+prices skills through `skill_modifiers_for_sheet` (three queries however many skills).
+Journeys: `integration_tests/test_skill_bonus_journeys.py`.
+
 ### XP Boundaries (19, 29, 39, 49) — plateau, not a stop (#2115)
 
 A skill value ending in 9 (`_is_at_xp_boundary`, `services.py`) is a **breakthrough

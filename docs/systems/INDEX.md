@@ -3104,7 +3104,8 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   first look (`OfferFirstLook`), `offers_for` returns `opener_key`/`first_look`/`held`/
   `effect_line`, `degree_marks` replaces the retired `ENEMY_DEGREE_DISTINCTION_NAMES`, and the
   Distinction Builder's "Add from a table" (`web/admin/distinction_builder/paste.py`) lands new
-  rows in bulk, additions only.
+  rows in bulk, additions only (an effect on a skill with no modifier target yet is not an
+  error: the create step makes the target, #4820).
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
   `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
@@ -6998,6 +6999,11 @@ Unified modifier system — categories, types, sources, and per-character modifi
     (`ModifierTarget.target_aspect`) a card's `+N <aspect>` lands on, created if missing; called by
     `AspectAdmin.save_model` and `world/seeds/levers.py:ensure_aspect_targets`; read by the check
     seam's ASPECT block (checks.md, "The aspect lever")
+  - `ensure_skill_target(trait) -> ModifierTarget | None` (#4820) — the stat-category target a
+    skill's bonuses land on, created if missing; called by `SkillAdmin.save_model` and the
+    Distinction Builder's paste at create time
+  - `skill_modifiers_for_sheet(sheet, skills) -> dict[int, int]` (#4820) — the modifier a roll
+    on each skill gets, for the sheet's `SkillEntry.modifier`; three queries in all
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`

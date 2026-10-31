@@ -127,10 +127,16 @@ class SpecializationEntry(TypedDict):
 
 
 class SkillEntry(TypedDict):
-    """A skill with its value and nested specializations."""
+    """A skill with its value and nested specializations.
+
+    ``value`` is the number a roll on the skill uses: the stored rating plus
+    ``modifier``, the distinction, equipment and condition bonuses on it (#4820).
+    ``at_boundary`` reads the stored rating alone, since a bonus never moves an XP gate.
+    """
 
     skill: SkillRef
     value: int
+    modifier: int
     at_boundary: bool
     specializations: list[SpecializationEntry]
 

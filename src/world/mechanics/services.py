@@ -39,6 +39,7 @@ from world.mechanics.constants import (
     RESONANCE_CATEGORY_NAME,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
+    STAT_CATEGORY_NAME,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -66,17 +67,19 @@ from world.mechanics.types import (
     ModifierSourceDetail,
     PrerequisiteEvaluation,
 )
-from world.traits.models import CharacterTraitValue
+from world.traits.models import CharacterTraitValue, Trait
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.mechanics.engagement import CharacterEngagement
+    from world.skills.models import Skill
 
 
 # ---------------------------------------------------------------------------
@@ -2290,6 +2293,88 @@ def ensure_aspect_target(aspect: Aspect) -> ModifierTarget | None:
         target_aspect=aspect,
         description=f"Bonuses and penalties on every check that weights {aspect.name}.",
     )
+
+
+def ensure_skill_target(trait: Trait) -> ModifierTarget | None:
+    """The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).
+
+    A skill rolls a bonus only through a target whose ``target_trait`` is its trait
+    (``TraitHandler.get_trait_modifier``); production had one for every stat and none
+    for any skill, so ``+10 sailing`` was refused by the paste and would have reached no
+    roll if authored by hand. The Skill admin's save and the Distinction Builder's paste
+    call this, so a new skill takes a bonus the first time a card names it. Idempotent.
+
+    The target is named the way the paste spells an effect (lowercase, spaces to
+    underscores). A target of that name in another category (the ``stealth`` roll
+    modifier that predates the Stealth skill) is left alone and ``None`` is returned:
+    two categories sharing a name would make the paste refuse the name, so staff
+    retarget that row by hand instead.
+    """
+    existing = ModifierTarget.get_for_trait(trait)
+    if existing is not None:
+        return existing
+    name = trait.name.lower().replace(" ", "_")
+    same_name = ModifierTarget.objects.filter(name__iexact=name).first()
+    if same_name is not None:
+        if same_name.category.name != STAT_CATEGORY_NAME or same_name.target_trait_id:
+            return None
+        same_name.target_trait = trait
+        same_name.save()
+        return same_name
+    category, _ = ModifierCategory.objects.get_or_create(
+        name=STAT_CATEGORY_NAME,
+        defaults={"description": "A character's stats and skills, read by rolls and the sheet."},
+    )
+    return ModifierTarget.objects.create(
+        name=name,
+        category=category,
+        target_trait=trait,
+        description=f"Bonuses and penalties to the {trait.name} skill.",
+    )
+
+
+def skill_modifiers_for_sheet(
+    character_sheet: CharacterSheet, skills: Iterable[Skill]
+) -> dict[int, int]:
+    """``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).
+
+    Bounded at three queries whatever the skill count: the sheet's ``CharacterModifier``
+    rows on any skill target, the character's active conditions, and those conditions'
+    effects on the skill targets pick the skills worth pricing; each of those then reads
+    ``TraitHandler.get_trait_modifier`` (character, equipment and condition
+    contributions, tapered in the stat lane), so the sheet and the roll agree. A skill
+    with neither kind of row is left out and shows its stored value.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    by_target: dict[int, Skill] = {}
+    for skill in skills:
+        target = ModifierTarget.get_for_trait(skill.trait)
+        if target is not None:
+            by_target[target.pk] = skill
+    character = character_sheet.character
+    if not by_target or character is None:
+        return {}
+    hit = set(
+        CharacterModifier.objects.filter(
+            character=character_sheet, target_id__in=by_target
+        ).values_list("target_id", flat=True)
+    )
+    active = list(get_active_conditions(character))
+    if active:
+        hit.update(
+            ConditionModifierEffect.objects.filter(
+                Q(condition__in=[row.condition_id for row in active])
+                | Q(stage__in=[row.current_stage_id for row in active if row.current_stage_id]),
+                modifier_target_id__in=by_target,
+            ).values_list("modifier_target_id", flat=True)
+        )
+    handler = character.traits
+    return {
+        by_target[target_id].pk: handler.get_trait_modifier(by_target[target_id].trait)
+        for target_id in hit
+    }
 
 
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:
