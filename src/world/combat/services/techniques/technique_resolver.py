@@ -120,11 +120,12 @@ class TechniqueDamageBonus:
 
     def for_type(self, damage_type_id: int | None) -> int:
         """The unclamped bonus on a hit of resolved damage type ``damage_type_id``."""
-        if self.context is None:
+        context = self.context
+        if context is None:
             return 0
         if damage_type_id not in self.totals:
             self.totals[damage_type_id] = technique_effect_total(
-                self.sheet, replace(self.context, damage_type_id=damage_type_id), self.targets
+                self.sheet, replace(context, damage_type_id=damage_type_id), self.targets
             )
         return self.totals[damage_type_id]
 
