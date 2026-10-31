@@ -50,10 +50,10 @@ from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.constants import EffectKind as MechanicsEffectKind, ManeuverEffectKey
 from world.mechanics.effect_targets import (
+    TechniqueConditionBonus,
     effect_modifier_total,
     opponent_facts,
     opponent_targets_exist,
-    technique_condition_bonuses,
     technique_effect_context,
     technique_effect_targets,
     technique_effect_total,
@@ -709,9 +709,10 @@ class CombatTechniqueResolver:
             position_params["position_a_id"] = self.action.cast_position_a_id
             position_params["position_b_id"] = self.action.cast_position_b_id
 
-        # The caster's condition severity and duration modifiers (#4822) ride the
+        # The caster's condition severity and duration modifiers (#4822), worked out per
+        # target so an opponent scope reads who each condition lands on (#4823), ride the
         # technique's own rows only; the signature and vow rows below keep their own sources.
-        severity_bonus, duration_bonus = technique_condition_bonuses(
+        condition_bonus = TechniqueConditionBonus.for_cast(
             self.participant.character_sheet, technique
         )
         applied = apply_technique_conditions(
@@ -722,8 +723,7 @@ class CombatTechniqueResolver:
             source_character=caster_od,
             position_params=position_params or None,
             soulfray_consented=self.action.confirm_soulfray_risk,
-            severity_bonus=severity_bonus,
-            duration_bonus=duration_bonus,
+            target_bonus=condition_bonus.for_target,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the

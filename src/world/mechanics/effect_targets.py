@@ -6,6 +6,7 @@ its kind). Combat and scene maneuvers call it instead of a constant.
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -198,26 +199,74 @@ def opponent_facts(
     return OpponentFacts(frozenset(property_ids), frozenset(condition_ids))
 
 
-def technique_condition_bonuses(
-    sheet: "CharacterSheet | None", technique: "Technique"
-) -> tuple[int, int]:
-    """The severity and duration ``sheet``'s modifiers add to ``technique``'s own conditions.
+@dataclass(frozen=True)
+class TechniqueConditionBonus:
+    """The caster's modifiers on the conditions one cast applies, worked out per target (#4823).
 
-    Worked out once per cast, not per row or target. Both target lists load first; with
-    neither in the game there is nothing to match, so no context is built. Unclamped: the
-    condition builder floors a negative bonus at 1. With no sheet: ``(0, 0)``.
+    Built once per cast by ``for_cast``: both target lists load first, and with neither in
+    the game there is nothing to match, so no context is built. ``for_target`` answers "what
+    do the matching modifiers add to a condition landing on this target", as a
+    ``(severity, duration)`` pair, worked out once per target and reused by every later row.
+    A target's properties and conditions are read only when a severity or duration target is
+    narrowed by who it lands on, and are read before the cast's first condition lands, since
+    the builder works out every row before any is applied. ``none`` is ``(0, 0)`` for everyone.
+    Unclamped: the condition builder floors a negative bonus at 1.
     """
-    if sheet is None:
-        return 0, 0
-    severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
-    duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
-    if not severity_targets and not duration_targets:
-        return 0, 0
-    context = technique_effect_context(sheet, technique)
-    return (
-        technique_effect_total(sheet, context, severity_targets),
-        technique_effect_total(sheet, context, duration_targets),
-    )
+
+    sheet: "CharacterSheet | None"
+    context: TechniqueEffectContext | None
+    severity_targets: list[ModifierTarget]
+    duration_targets: list[ModifierTarget]
+    totals: dict[int | None, tuple[int, int]] = field(default_factory=dict)
+
+    @classmethod
+    def none(cls) -> "TechniqueConditionBonus":
+        return cls(sheet=None, context=None, severity_targets=[], duration_targets=[])
+
+    @classmethod
+    def for_cast(
+        cls, sheet: "CharacterSheet | None", technique: "Technique"
+    ) -> "TechniqueConditionBonus":
+        """The bonus for ``sheet`` casting ``technique``'s own conditions; none with no sheet."""
+        if sheet is None:
+            return cls.none()
+        severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
+        duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
+        if not severity_targets and not duration_targets:
+            return cls.none()
+        return cls(
+            sheet=sheet,
+            context=technique_effect_context(sheet, technique),
+            severity_targets=severity_targets,
+            duration_targets=duration_targets,
+        )
+
+    def for_target(
+        self,
+        target: "ObjectDB",  # noqa: OBJECTDB_PARAM - a condition may land on any object
+    ) -> tuple[int, int]:
+        """The ``(severity, duration)`` the modifiers add to a condition landing on ``target``."""
+        context = self.context
+        if context is None:
+            return 0, 0
+        narrowed = opponent_targets_exist(self.severity_targets) or opponent_targets_exist(
+            self.duration_targets
+        )
+        # Without an opponent scope every target gets the same answer: one entry, no reads.
+        key = target.pk if narrowed else None
+        if key not in self.totals:
+            if narrowed:
+                facts = opponent_facts(target)
+                context = replace(
+                    context,
+                    opponent_property_ids=facts.property_ids,
+                    opponent_condition_ids=facts.condition_ids,
+                )
+            self.totals[key] = (
+                technique_effect_total(self.sheet, context, self.severity_targets),
+                technique_effect_total(self.sheet, context, self.duration_targets),
+            )
+        return self.totals[key]
 
 
 def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:

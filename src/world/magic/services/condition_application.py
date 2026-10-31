@@ -8,7 +8,7 @@ split is in target resolution, not in condition application.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
@@ -76,6 +76,7 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
     duration_bonus: int,
     level_table: CastLevelTable | None = None,
     vow_step: VowStep | None = None,
+    target_bonus: Callable[[ObjectDB], tuple[int, int]] | None = None,
 ) -> list[BulkConditionApplication]:
     """Build BulkConditionApplication objects for one applied-condition row.
 
@@ -106,6 +107,9 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         vow_step: The caster's vow size step (#4747, ``caster_vow_step``): its level
             and share in tenths, stamped only on a sized application. None for no
             step.
+        target_bonus: The ``(severity, duration)`` the caster's modifiers add for the target a
+            condition lands on (#4823), added to the flat bonuses above per target. A
+            team-lane row ignores it as well. None for no per-target bonus.
 
     Returns:
         List of ``BulkConditionApplication`` objects, one per target.
@@ -123,6 +127,9 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         vow_level, vow_tenths = vow_step.level, vow_step.tenths
     applications: list[BulkConditionApplication] = []
     for target in targets:
+        target_severity, target_duration = (
+            target_bonus(target) if target_bonus is not None and not is_team_lane_row else (0, 0)
+        )
         if is_team_lane_row:
             severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
         else:
@@ -131,14 +138,14 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
                     effective_power=eff_intensity,
                     success_level=success_level,
                 ),
-                severity_bonus,
+                severity_bonus + target_severity,
             )
         duration = row.compute_duration_rounds(
             effective_power=eff_intensity,
             success_level=success_level,
         )
         if not is_team_lane_row:
-            duration = bonused_duration(duration, duration_bonus)
+            duration = bonused_duration(duration, duration_bonus + target_duration)
         applications.append(
             BulkConditionApplication(
                 target=target,
@@ -170,6 +177,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     soulfray_consented: bool = False,
     severity_bonus: int = 0,
     duration_bonus: int = 0,
+    target_bonus: Callable[[ObjectDB], tuple[int, int]] | None = None,
 ) -> list[AppliedConditionResult]:
     """Apply authored applied-condition rows to pre-resolved targets.
 
@@ -217,6 +225,9 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
             severity (#4581, a vow's added effect riding the cast). Default 0.
         duration_bonus: Flat rounds added to every non-team-lane row's duration when
             it has one (#4581). Default 0. Team-lane rows ignore both bonuses.
+        target_bonus: The ``(severity, duration)`` the caster's own modifiers add for each
+            target a condition lands on (#4823), so an opponent scope reads who it lands on.
+            Added to the flat bonuses per target. Default None. Team-lane rows ignore it.
 
     Returns:
         List of ``AppliedConditionResult``, one per ``BulkConditionApplication``
@@ -276,6 +287,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
                 duration_bonus=duration_bonus,
                 level_table=level_table,
                 vow_step=vow_step,
+                target_bonus=target_bonus,
             )
         )
 

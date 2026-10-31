@@ -51,7 +51,7 @@ from world.magic.services.targeting import (
     resolve_targets,
     validate_cast_target,
 )
-from world.mechanics.effect_targets import technique_condition_bonuses
+from world.mechanics.effect_targets import TechniqueConditionBonus
 from world.scenes.action_constants import (
     CAST_ACTION_KEY,
     CAST_DIFFICULTY_BANDS,
@@ -616,11 +616,10 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
             supplied_personas=_supplied,
         )
         targets_by_kind = {relationship: [p.character_sheet.character for p in resolved_personas]}
-    # The caster's condition severity and duration modifiers (#4822) ride the technique's
-    # own rows only; the signature and vow rows below keep their own sources.
-    severity_bonus, duration_bonus = technique_condition_bonuses(
-        caster_persona.character_sheet, technique
-    )
+    # The caster's condition severity and duration modifiers (#4822), worked out per target so
+    # an opponent scope reads who each condition lands on (#4823), ride the technique's own
+    # rows only; the signature and vow rows below keep their own sources.
+    condition_bonus = TechniqueConditionBonus.for_cast(caster_persona.character_sheet, technique)
     apply_technique_conditions(
         technique=technique,
         success_level=success_level,
@@ -629,8 +628,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         source_character=character,
         position_params=position_params,
         soulfray_consented=soulfray_consented,
-        severity_bonus=severity_bonus,
-        duration_bonus=duration_bonus,
+        target_bonus=condition_bonus.for_target,
     )
     # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
     # through the SAME shared seam, over the same resolved targets. No-op when the

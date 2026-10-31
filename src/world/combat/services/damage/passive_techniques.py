@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from world.combat.constants import OpponentStatus, ParticipantStatus
 from world.combat.models import (
@@ -13,10 +13,36 @@ from world.combat.models import (
 )
 from world.combat.services.damage.probing import increment_probing
 from world.conditions.constants import Allegiance
-from world.mechanics.effect_targets import technique_condition_bonuses
+from world.mechanics.effect_targets import TechniqueConditionBonus
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.magic.models import Technique
+
+
+def _passive_row_targets(
+    row: Any,
+    actor: ObjectDB,  # noqa: OBJECTDB_PARAM - the caster's character
+    active_opponents: list[CombatOpponent],
+    allegiances: dict[int, str],
+    active_allies: list[CombatParticipant],
+) -> list[ObjectDB]:
+    """The objects a passive's condition row lands on: the actor, the opponents not fighting
+    on the actor's side, or the other active participants."""
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    if row.target_kind == ConditionTargetKind.SELF:
+        return [actor]
+    if row.target_kind == ConditionTargetKind.ENEMY:
+        return [
+            opp.objectdb
+            for opp in active_opponents
+            if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER and opp.objectdb is not None
+        ]
+    if row.target_kind == ConditionTargetKind.ALLY:
+        return [ally.character_sheet.character for ally in active_allies]
+    return []
 
 
 def _apply_passive_technique(
@@ -54,7 +80,6 @@ def _apply_passive_technique(
     """
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
-    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
     from world.magic.services.condition_application import (  # noqa: PLC0415
         bonused_duration,
         bonused_severity,
@@ -97,11 +122,9 @@ def _apply_passive_technique(
     if not rows:
         return
 
-    # The actor's condition severity and duration modifiers (#4822), worked out once for the
-    # passive however many rows and targets it has.
-    severity_bonus, duration_bonus = technique_condition_bonuses(
-        participant.character_sheet, technique
-    )
+    # The actor's condition severity and duration modifiers (#4822), worked out once per target
+    # for the passive however many rows it has, so an opponent scope reads who each lands on.
+    condition_bonus = TechniqueConditionBonus.for_cast(participant.character_sheet, technique)
     applications: list[BulkConditionApplication] = []
     for row in rows:
         severity = row.compute_severity(
@@ -112,32 +135,20 @@ def _apply_passive_technique(
             effective_power=technique.intensity,
             success_level=row.minimum_success_level,
         )
-        severity = bonused_severity(severity, severity_bonus)
-        duration = bonused_duration(duration, duration_bonus)
 
-        if row.target_kind == ConditionTargetKind.SELF:
-            targets = [actor]
-        elif row.target_kind == ConditionTargetKind.ENEMY:
-            targets = [
-                opp.objectdb
-                for opp in active_opponents
-                if allegiances[opp.pk] != Allegiance.ALLY_OF_CASTER and opp.objectdb is not None
-            ]
-        elif row.target_kind == ConditionTargetKind.ALLY:
-            targets = [ally.character_sheet.character for ally in active_allies]
-        else:
-            targets = []
+        targets = _passive_row_targets(row, actor, active_opponents, allegiances, active_allies)
 
-        applications.extend(
-            BulkConditionApplication(
-                target=target,
-                template=row.condition,
-                severity=severity,
-                duration_rounds=duration,
-                stack_count=row.stack_count,
+        for target in targets:
+            severity_bonus, duration_bonus = condition_bonus.for_target(target)
+            applications.append(
+                BulkConditionApplication(
+                    target=target,
+                    template=row.condition,
+                    severity=bonused_severity(severity, severity_bonus),
+                    duration_rounds=bonused_duration(duration, duration_bonus),
+                    stack_count=row.stack_count,
+                )
             )
-            for target in targets
-        )
 
     if not applications:
         return
