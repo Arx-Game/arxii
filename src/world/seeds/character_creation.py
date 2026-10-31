@@ -1817,11 +1817,10 @@ def _seed_moon_content() -> None:
     )
     if grant is None:
         return
-    # Lycan blood (#4802): the vulnerability the moon trigger hangs on. Only an unset
-    # drawback is filled; a staff-chosen one is left alone.
-    lycan_blood = ensure_lycan_blood_condition()
+    # Lycan blood (#4802): the vulnerability the moon trigger hangs on. It is made only
+    # for a grant with no drawback; the trigger hangs on whatever the grant carries.
     if grant.drawback_condition_id is None:
-        grant.drawback_condition = lycan_blood
+        grant.drawback_condition = ensure_lycan_blood_condition()
         grant.save(update_fields=["drawback_condition"])
     ensure_moon_control_loss_trigger()
 

@@ -190,8 +190,8 @@ def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
     """Idempotently seed Berserk's compulsion, its forbidden actions and resist bands (#4802).
 
     The rage drives the bearer to attack; fleeing, parleying, leaving the fight and
-    reverting form each need a resist roll, harder than the base. A row staff already
-    authored is never overwritten: only missing rows are created.
+    reverting form each need a resist roll, harder than the base. A compulsion staff
+    already authored is returned untouched: its forbidden actions and bands are theirs.
     """
     from world.conditions.constants import (  # noqa: PLC0415
         CompulsionForbidden,
@@ -204,7 +204,7 @@ def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
         CompulsionResistBand,
     )
 
-    compulsion, _ = Compulsion.objects.get_or_create(
+    compulsion, created = Compulsion.objects.get_or_create(
         condition=template,
         defaults={
             "wants": CompulsionWant.ATTACK_OPPONENT,
@@ -213,6 +213,8 @@ def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
             "difficulty_per_severity": 2,
         },
     )
+    if not created:
+        return compulsion
     for action, extra in (
         (CompulsionForbidden.FLEE, 5),
         (CompulsionForbidden.PARLEY, 5),

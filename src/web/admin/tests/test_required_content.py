@@ -2049,6 +2049,24 @@ class TestDesignationProbes(TestCase):
         config.save()
         self.assertTrue(self._present("berserk-condition"))
 
+    def test_berserk_compulsion(self) -> None:
+        from world.conditions.factories import CompulsionFactory
+        from world.magic.factories import FuryConfigFactory
+
+        berserk = ConditionTemplateFactory()
+        FuryConfigFactory(berserk_condition=berserk)
+        self.assertFalse(self._present("berserk-compulsion"))
+        CompulsionFactory(condition=berserk)
+        self.assertTrue(self._present("berserk-compulsion"))
+
+    def test_moon_control_loss_trigger(self) -> None:
+        from world.conditions.constants import ControlLossFiresOn
+        from world.conditions.factories import ControlLossTriggerFactory
+
+        self.assertFalse(self._present("moon-control-loss-trigger"))
+        ControlLossTriggerFactory(fires_on=ControlLossFiresOn.MOON_PULL)
+        self.assertTrue(self._present("moon-control-loss-trigger"))
+
     def test_berserk_disengage_penalty(self) -> None:
         from world.combat.factories import SocialManeuverConfigFactory
         from world.combat.models import FleeConfig

@@ -143,7 +143,6 @@ def ensure_lycan_blood_condition() -> ConditionTemplate:
         name=LYCAN_BLOOD_NAME,
         defaults={
             "category": category,
-            "description": "PLACEHOLDER: the blood remembers the moon (#4802).",
             "default_duration_type": DurationType.PERMANENT,
             "is_stackable": False,
             "can_be_dispelled": False,
@@ -155,8 +154,9 @@ def ensure_lycan_blood_condition() -> ConditionTemplate:
 def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
     """Idempotently seed the moon's control-loss trigger on Lycan blood (#4802).
 
-    Returns None, writing nothing, until the Berserk designation (``FuryConfig``) and
-    the lycan species gift both exist. A row staff already authored is not overwritten.
+    The trigger hangs on the lycan grant's ``drawback_condition``. Returns None, writing
+    nothing, until the Berserk designation (``FuryConfig``) exists and the grant has a
+    drawback. A trigger that already exists is returned untouched, bands and all.
     """
     from world.conditions.berserk_content import outcome_at_level  # noqa: PLC0415
     from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
@@ -170,10 +170,10 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
     grant = SpeciesGiftGrant.objects.filter(
         species__name=SEED_LYCAN_SPECIES_NAME, gift__name=SEED_LYCAN_GIFT_NAME
     ).first()
-    if berserk is None or grant is None:
+    if berserk is None or grant is None or grant.drawback_condition is None:
         return None
-    trigger, _ = ControlLossTrigger.objects.get_or_create(
-        vulnerability=ensure_lycan_blood_condition(),
+    trigger, created = ControlLossTrigger.objects.get_or_create(
+        vulnerability=grant.drawback_condition,
         fires_on=ControlLossFiresOn.MOON_PULL,
         defaults={
             "min_moon_pull": 6,
@@ -188,12 +188,14 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
             "impaired_willpower_drop": 10,
         },
     )
+    if not created:
+        return trigger
     # (success_level, applies Berserk): Partial Success and up give nothing.
     for level, applies in ((2, False), (1, False), (0, False), (-1, True), (-2, True)):
-        ControlLossBand.objects.get_or_create(
+        ControlLossBand.objects.create(
             trigger=trigger,
             outcome=outcome_at_level(level),
-            defaults=(
+            **(
                 {"applies": berserk, "severity": 3, "duration_rounds": 3, "forces_form": True}
                 if applies
                 else {}

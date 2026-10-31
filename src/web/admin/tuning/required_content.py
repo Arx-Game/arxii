@@ -1627,6 +1627,30 @@ def _probe_berserk_condition() -> ProbeResult:
     )
 
 
+def _probe_berserk_compulsion() -> ProbeResult:
+    """The designated Berserk template carries a Compulsion (#4802)."""
+    from world.conditions.models import Compulsion  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+
+    berserk = get_berserk_template()
+    if berserk is None:
+        return ProbeResult(
+            present=False,
+            detail="Berserk cannot be found, so it cannot carry a compulsion.",
+        )
+    return ProbeResult(present=Compulsion.objects.filter(condition=berserk).exists())
+
+
+def _probe_moon_control_loss_trigger() -> ProbeResult:
+    """A control-loss trigger fires on the moon's pull (#4802)."""
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ControlLossTrigger  # noqa: PLC0415
+
+    return ProbeResult(
+        present=ControlLossTrigger.objects.filter(fires_on=ControlLossFiresOn.MOON_PULL).exists()
+    )
+
+
 def _probe_berserk_disengage_penalty() -> ProbeResult:
     """Berserk carries a penalty against both flee and parley (#4738).
 
@@ -2699,6 +2723,32 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="berserk-compulsion",
+            label="Berserk has a compulsion",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/berserk_compulsion.py; world/conditions/models.py Compulsion",
+            consequence=(
+                "A raging character is not compelled to attack: Berserk takes no action "
+                "from them and refuses nothing."
+            ),
+            probe=CustomProbe(fn=_probe_berserk_compulsion),
+            admin_model="Compulsion",
+        ),
+        ContentDependency(
+            key="moon-control-loss-trigger",
+            label="A moon's-pull control-loss trigger exists",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/species/moon_sensitivity.py; world/conditions/models.py ControlLossTrigger"
+            ),
+            consequence=(
+                "The moon never takes anyone: a lycan under a full moon rolls no control "
+                "check and is never forced into the battle form."
+            ),
+            probe=CustomProbe(fn=_probe_moon_control_loss_trigger),
+            admin_model="ControlLossTrigger",
         ),
         ContentDependency(
             key="berserk-disengage-penalty",
