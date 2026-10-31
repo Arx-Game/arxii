@@ -35,6 +35,8 @@ from world.combat.services.reactions import (
 )
 from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
+from world.covenants.constants import DefenseStyle
+from world.covenants.defense import NpcHitDefense, defense_style_for, npc_hit_defense
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -118,6 +120,32 @@ def _execute_npc_attack(  # noqa: PLR0913
     )
     actions.append(action)
     return False
+
+
+def _npc_hit_defense(  # noqa: PLR0913
+    opponent_action: CombatOpponentAction,
+    participant: CombatParticipant,
+    check_type: CheckType,
+    *,
+    target_difficulty: int,
+    extra_modifiers: int,
+    perform_check_fn: PerformCheckFn,
+) -> NpcHitDefense | None:
+    """The barrier or mitigation defense this blow meets, or None (#4759)."""
+    character = participant.character_sheet.character
+    style = defense_style_for(character).style
+    if style not in (DefenseStyle.BARRIER, DefenseStyle.GEAR_SOAK):
+        return None
+    return NpcHitDefense(
+        defender=character,
+        style=style,
+        attacker_level=opponent_action.opponent.level,
+        defender_level=participant.character_sheet.current_level,
+        check_type=check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers,
+        perform_check_fn=perform_check_fn,
+    )
 
 
 def resolve_npc_attack(
@@ -297,7 +325,19 @@ def resolve_npc_attack(
     )
     final_damage = math.floor(base_damage * multiplier)
 
-    with dodge_roll_active():
+    # The defender's defense style (#4759) decides what the blow meets below: a
+    # barrier's ward rolls this same check before it absorbs, and a mitigation
+    # defender's armor leaks against a much higher-level attacker. Evasion is the
+    # dodge above; no style is the behavior before #4759.
+    hit_defense = _npc_hit_defense(
+        opponent_action,
+        participant,
+        check_type,
+        target_difficulty=difficulty,
+        extra_modifiers=breakdown.extra_modifiers_total,
+        perform_check_fn=perform_check_fn,
+    )
+    with dodge_roll_active(), npc_hit_defense(hit_defense):
         damage_result = _svc.apply_damage_to_participant(
             participant,
             final_damage,

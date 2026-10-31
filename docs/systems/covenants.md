@@ -1200,8 +1200,9 @@ summary with a link to its own page.
 
 Slice 1 of #4759 added the authoring schema and admin. Slice 2 (#4806) wires focus picks
 into play [BUILT & WIRED]: a payload row whose `focus_pick` is set fires only for a holder
-who chose it (see "Focus picks in play" below). Combat styles are [BUILT, NOT WIRED] until
-slice 5 makes a style decide defense.
+who chose it (see "Focus picks in play" below). Combat styles are [BUILT & WIRED] since
+slice 5 (#4809): `world.covenants.defense.defense_style_for` reads them (see "Combat style
+decides defense" under Combat Seams).
 
 ### Models (`world.covenants.models`)
 
@@ -1229,7 +1230,7 @@ slice 5 makes a style decide defense.
 - **`CombatStyle`** (NK `name`, `CreditedContent`, in `CONTENT_MODELS`) - `name`,
   `description`, `defense_style` (`DefenseStyle`), `armor_share_tenths` (0 to 10, default 10).
   A character's style is `CharacterSheet.combat_style` (nullable, PROTECT); it replaces the
-  vow's `CovenantRoleDefenseProfile` once slice 5 reads it (ADR-4759).
+  vow's `CovenantRoleDefenseProfile` (ADR-4759, read by `defense_style_for` since #4809).
 
 ### Price and choice rules (`world.covenants.focus_picks`)
 
@@ -1305,6 +1306,25 @@ passes the result as `level_override` through `get_modifier_total` →
 `equipment_walk_total` → `covenant_role_bonus`. A suppressed mentor's role bonus
 shrinks; an elevated sidekick's bonus grows.
 
+### Combat style decides defense (#4809, slice 5 of #4759)
+
+`world.covenants.defense`:
+
+- `defense_style_for(character) -> DefenseResolution` (`style`, `armor_share_tenths`,
+  `from_combat_style`). Resolution order: the character's `CombatStyle`, then the engaged
+  PRIMARY vow profile from `engaged_primary_defense_profile`, then `(None, 10, False)`, the
+  legacy behavior.
+- `engaged_primary_defense_profile(character)` is the profile chooser, shared with
+  `gear_additive_fraction` below: it picks the highest `gear_additive_tenths`, the first on a
+  tie, and a sub-role falls back to its anchor's row.
+- `NpcHitDefense` / `npc_hit_defense(...)` is the context `resolve_npc_attack` sets for a
+  barrier or mitigation defender. `barrier_absorb_fraction(character)` rolls the barrier
+  ward's check (called by `absorb_pool`). `mitigation_leak(character, soaked)` and
+  `mitigation_tuning()` read `MovementConfig.mitigation_level_gap_cap` and
+  `mitigation_leak_percent`, falling back to the field defaults when there is no row.
+
+The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles".
+
 ### Defense styles + gear substitution (#2533, ADR-0149 Layer 3)
 
 `gear_additive_fraction(character)` (`world.covenants.services`) returns the MAX
@@ -1316,8 +1336,8 @@ anchor's; no engaged role has a profile at all → `Decimal(1)` (legacy
 fully-additive behavior, byte-identical to pre-#2533). One batched query over the
 role + parent pks — no per-role query loop.
 
-`apply_equipped_armor_soak` (`world.combat.services`, #1174) applies the fraction
-to the COMPATIBLE armor bucket only, once, right after the role-compatibility
+With no combat style (#4809), `apply_equipped_armor_soak` (`world.combat.services`,
+#1174) applies the fraction to the COMPATIBLE armor bucket only, once, right after the role-compatibility
 split and before the compatible-additive/incompatible-max blend:
 
     compat_soak = int(compat_soak * gear_additive_fraction(character))

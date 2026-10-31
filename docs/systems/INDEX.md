@@ -9091,6 +9091,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     only `opponents_in_reach` (`techniques/technique_targets.py`).
   - Path service and reach rule live in positioning (`find_path`, `step_costs`,
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
+- **Defense styles (#4809, slice 5 of #4759) [BUILT & WIRED]:** see
+  `docs/systems/COMBAT_DEFENSES.md` "Defense styles". `world/covenants/defense.py`:
+  `defense_style_for` (combat style, then vow profile, then legacy), `NpcHitDefense` /
+  `npc_hit_defense`, `barrier_absorb_fraction` (the barrier ward rolls), `mitigation_leak`.
+  Tuning: `MovementConfig.mitigation_level_gap_cap` / `mitigation_leak_percent`; also on the
+  row for slice 6, `wound_cap_shrink_per_round` / `reactive_save_max_cut` (percent).
 - **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED]:** see
   `docs/systems/COMBAT_DEFENSES.md` "Dodging and area attacks".
   - Models: `CapabilityType.reaction_reach`/`reaction_cost_kind` (`ReactionReach`,
