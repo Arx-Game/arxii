@@ -25,18 +25,32 @@ def _create_participant(
     covenant_role: CovenantRole | None = None,
     status: str = ParticipantStatus.ACTIVE,
 ) -> CombatParticipant:
-    """Create a CombatParticipant + its engagement, and record the fighter as a
-    scene participant (combat participation implies SceneParticipation, #1236)."""
+    """Seat a fighter: a CombatParticipant + its engagement, and the fighter recorded as a
+    scene participant (combat participation implies SceneParticipation, #1236).
+
+    One row per fighter per encounter. A fighter who fled or left keeps their row, so
+    coming back reactivates it rather than inserting a second one (#4794); the row's
+    once-per-fight ledgers (insight, vow effects fired) carry over, so leaving and
+    rejoining resets nothing.
+    """
     if covenant_role is None:
         from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
         covenant_role = precedence_role_for_combat(character_sheet)
-    participant = CombatParticipant.objects.create(
-        encounter=encounter,
-        character_sheet=character_sheet,
-        covenant_role=covenant_role,
-        status=status,
-    )
+    participant = CombatParticipant.objects.filter(
+        encounter=encounter, character_sheet=character_sheet
+    ).first()
+    if participant is None:
+        participant = CombatParticipant.objects.create(
+            encounter=encounter,
+            character_sheet=character_sheet,
+            covenant_role=covenant_role,
+            status=status,
+        )
+    else:
+        participant.covenant_role = covenant_role
+        participant.status = status
+        participant.save(update_fields=["covenant_role", "status"])
     _ensure_combat_engagement(participant)
 
     from world.combat.escalation import check_hated_foe_surges_for_new_participant  # noqa: PLC0415
@@ -86,7 +100,8 @@ def join_encounter(
 ) -> CombatParticipant:
     """Allow a PC to join an active combat encounter.
 
-    Can join during DECLARING or BETWEEN_ROUNDS status.
+    Can join during DECLARING or BETWEEN_ROUNDS status. A fighter who fled or left
+    comes back on their existing row (#4794).
     Raises ValueError if already participating or encounter is completed.
     """
     allowed = {RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS}
