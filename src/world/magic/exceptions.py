@@ -965,3 +965,13 @@ class UnknownOwnedThread(MagicError):
     def __init__(self, thread_id: object = None) -> None:
         super().__init__(thread_id)
         self.user_message = UnknownOwnedThread.user_message
+
+
+class CasterRemovedFromFight(MagicError):
+    """A hostile cast would reseat a caster a GM removed from that fight (#4794).
+
+    Only a GM add brings such a fighter back, so the cast is refused rather than
+    quietly seating them through the cast path.
+    """
+
+    user_message = "A GM removed you from this fight."

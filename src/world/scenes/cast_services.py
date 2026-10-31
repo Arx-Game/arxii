@@ -29,6 +29,7 @@ from actions.services import spend_or_defer_condition_uses, start_action_resolut
 from world.checks.types import ResolutionContext
 from world.combat.cast_seed import (
     encounter_requiring_risk_acknowledgement,
+    refuse_caster_removed_by_gm,
     seat_caster_for_benign_intervention,
     seed_or_feed_encounter_from_cast,
 )
@@ -1405,6 +1406,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
     (#777), it becomes a PENDING consent request instead; acceptance resolves it
     via the hostile branch of resolve_accepted_cast.
     """
+    refuse_caster_removed_by_gm(scene, initiator_persona.character_sheet)
     gating_encounter = encounter_requiring_risk_acknowledgement(
         scene, target_persona.character_sheet
     )
