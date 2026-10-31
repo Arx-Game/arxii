@@ -126,16 +126,24 @@ def _gift_thread_level(sheet: CharacterSheet) -> int:
     from world.conditions.models import ControlLossTrigger  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
 
-    trigger = ControlLossTrigger.objects.filter(
-        fires_on=ControlLossFiresOn.MOON_PULL,
-        relief_gift__isnull=False,
-        vulnerability__conditioninstance__target_id=sheet.pk,
-    ).first()
+    trigger = (
+        ControlLossTrigger.objects.filter(
+            fires_on=ControlLossFiresOn.MOON_PULL,
+            relief_gift__isnull=False,
+            vulnerability__conditioninstance__target_id=sheet.pk,
+        )
+        .order_by("pk")
+        .first()
+    )
     if trigger is None:
         return 0
-    thread = Thread.objects.filter(
-        owner=sheet, target_gift_id=trigger.relief_gift_id, retired_at__isnull=True
-    ).first()
+    thread = (
+        Thread.objects.filter(
+            owner=sheet, target_gift_id=trigger.relief_gift_id, retired_at__isnull=True
+        )
+        .order_by("pk")
+        .first()
+    )
     return thread.level if thread is not None else 0
 
 
@@ -179,9 +187,13 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
 
     config, _ = FuryConfig.objects.get_or_create(pk=1)
     berserk = config.berserk_condition
-    grant = SpeciesGiftGrant.objects.filter(
-        species__name=SEED_LYCAN_SPECIES_NAME, gift__name=SEED_LYCAN_GIFT_NAME
-    ).first()
+    grant = (
+        SpeciesGiftGrant.objects.filter(
+            species__name=SEED_LYCAN_SPECIES_NAME, gift__name=SEED_LYCAN_GIFT_NAME
+        )
+        .order_by("pk")
+        .first()
+    )
     if berserk is None or grant is None or grant.drawback_condition is None:
         return None
     trigger, created = ControlLossTrigger.objects.get_or_create(
