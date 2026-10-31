@@ -1168,11 +1168,12 @@ summary with a link to its own page.
   `SituationCheck` owns the per-resolution situation-evaluation cache (keyed
   `(situation, params, holder_pk)`); `_PerkResolver` now delegates to one.
 
-## Vow focus picks and combat styles (#4759 slice 1, ADR-4759) [BUILT, NOT WIRED]
+## Vow focus picks and combat styles (#4759, ADR-4759)
 
-Slice 1 of #4759 adds the authoring schema and admin. Nothing in play reads it yet:
-slice 2 makes a picked row fire only for holders who chose it, slice 5 makes a combat
-style decide defense. Until then a `focus_pick` row still applies to every holder.
+Slice 1 of #4759 added the authoring schema and admin. Slice 2 (#4806) wires focus picks
+into play [BUILT & WIRED]: a payload row whose `focus_pick` is set fires only for a holder
+who chose it (see "Focus picks in play" below). Combat styles are [BUILT, NOT WIRED] until
+slice 5 makes a style decide defense.
 
 ### Models (`world.covenants.models`)
 
@@ -1214,6 +1215,28 @@ style decide defense. Until then a `focus_pick` row still applies to every holde
   the membership is secondary, the pick is not in the held role's, its anchor's or its
   resolved sub-role's catalog (`resolve_effective_role`), the pick level is above the shown
   vow level, or the level's chosen prices exceed `budget_per_level`.
+
+- `chosen_pick_ids_by_holder(holder_ids) -> dict[int, set[int]]` - each holder's chosen
+  pick ids, keyed by CharacterSheet pk, from one query; only memberships the holder has not
+  left count. A holder with no pick is absent.
+- `holder_has_pick(focus_pick_id, holder_id, chosen) -> bool` - True for a row with no pick
+  (the base vow), else only when the holder chose it.
+
+### Focus picks in play (#4806, slice 2)
+
+Three readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
+only when a row it fetched carries a pick, so a vow without picks costs no extra query:
+
+- `added_effects.vow_added_effects_for_cast` - a gate in `_live_rows`, next to the unlock
+  level. An unchosen pick row is not live, so a base row it `upgrades` stays for that
+  holder. `vow_added_effects_on_technique` (the static view) lists a pick row only for a
+  sheet that chose it.
+- `perks.services._resolve_candidate_perks` - skips a pick perk for a holder who did not
+  choose it, so `applicable_perks` and `dormant_perk_firings` both respect picks.
+- `services.covenant_role_action_scaling_bonus` - drops a pick scaling row the character
+  did not choose before summing.
+
+The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not.
 
 ### Admin
 

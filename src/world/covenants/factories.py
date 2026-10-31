@@ -137,11 +137,12 @@ class CovenantRoleActionScalingFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = CovenantRoleActionScaling
-        django_get_or_create = ("covenant_role", "action_key")
+        django_get_or_create = ("covenant_role", "action_key", "focus_pick")
 
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     action_key = "combat_interpose"
     thread_level_multiplier = 0
+    focus_pick = None
 
 
 class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
