@@ -126,8 +126,10 @@ character-creation/
         │                         #   stage is absent), each beat a `ChapterOffers`
         │                         #   `layout="grid"` of its `backgrounds` offers picked
         │                         #   straight from the cards, the pick line from the
-        │                         #   entry's `allowance` (one, up to N with the years
-        │                         #   lived, any), a line of the player's own once a card
+        │                         #   entry's `allowance` (one, N career points on a beat
+        │                         #   whose `allowance_is_points` is on (#4829: a ranked
+        │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
+        │                         #   a line of the player's own once a card
         │                         #   is picked, the unknown mark; the footer counts the
         │                         #   taken beats and the purse. Replaces BeatsBlock.
         ├── UpbringingPrompts.tsx # Route prompts; `scope: 'any'` renders the pick-lists

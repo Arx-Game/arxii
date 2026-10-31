@@ -549,8 +549,8 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
     def _validate_beat_allowances(self, entries: list[dict], draft) -> None:
         """A beat takes no more answers than it allows (#4124, #4395): one on a one-of
-        beat, ``age_pick_allowance`` on a beat that scales with the draft's age; more of
-        its offers in one payload is refused.
+        beat, ``age_pick_allowance`` career points on a beat that scales with the draft's
+        age, a point per rank (#4829); more of its offers in one payload is refused.
 
         Called by ``sync`` after the entries resolve. Reads the offers the entries
         name, so an unbounded any-that-apply beat and every other chapter pass untouched.
@@ -566,12 +566,23 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         offers = DistinctionOffer.objects.filter(
             pk__in=offer_ids, beat__isnull=False
         ).select_related("beat")
-        conflicts = beat_pick_conflicts(offers, age=draft.age)
+        # A beat that spends career points counts ranks (#4829): the rank each entry asks.
+        ranks = {
+            entry["distinction_id"]: entry["rank"]
+            for entry in entries
+            if isinstance(entry.get("rank"), int)
+        }
+        conflicts = beat_pick_conflicts(offers, age=draft.age, ranks=ranks)
         if conflicts:
-            lines = [
-                f"one answer on {name}" if allowance == 1 else f"{allowance} answers on {name}"
-                for name, allowance in conflicts
-            ]
+            lines = []
+            for conflict in conflicts:
+                if conflict.points:
+                    unit = "career point" if conflict.allowance == 1 else "career points"
+                    lines.append(f"{conflict.allowance} {unit} on {conflict.name}")
+                elif conflict.allowance == 1:
+                    lines.append(f"one answer on {conflict.name}")
+                else:
+                    lines.append(f"{conflict.allowance} answers on {conflict.name}")
             raise ValidationError({"detail": f"At most {', '.join(lines)}: fewer, not more."})
 
     def _parse_sync_payload(self, raw_distinctions: object) -> list[dict]:

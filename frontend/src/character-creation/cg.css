@@ -1284,6 +1284,40 @@
   text-align: left;
   margin-top: 0.3rem;
 }
+/* Career-point pips (#4829): a ranked card's ranks, top right, where the card is picked.
+   On = held; off = past the points left in the block. */
+.interview .stances.grid > li .stance {
+  position: relative;
+}
+.interview .stance .pips {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.85rem;
+  display: flex;
+  gap: 0.32rem;
+  align-items: center;
+}
+.interview .stance .pip {
+  width: 0.62rem;
+  height: 0.62rem;
+  padding: 0;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.interview .stance .pip.on {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .stance .pip.off {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.interview .stances.grid .stance.ranked > span:nth-child(2) > b {
+  display: block;
+  padding-right: 3.6rem;
+}
 @media (max-width: 40rem) {
   .interview .stances.grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
