@@ -2120,9 +2120,12 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   nothing free; open while the beat is pooled and not unknown, `open_beat_ids`),
   `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat),
   `draft_data["beats"]`, `GET drafts/<id>/beats/` (`offers.beats_for`,
-  `BeatPoolEntry` with `allowance`: `beat_allowance`, `age_pick_allowance`,
-  `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`), `beat_pick_conflicts` in the
-  distinctions sync, `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
+  `BeatPoolEntry` with `allowance` and `allowance_is_points`: `beat_allowance`,
+  `age_pick_allowance` (#4829: career points, 19 / every 5 years / cap 59,
+  `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`/`AGE_PICKS_CAP_AGE`),
+  `youngest_age_for_points` and `age_scaled_points_spent` behind the serializer's age
+  floor), `beat_pick_conflicts(offers, age=, ranks=) -> list[BeatConflict]` in the
+  distinctions sync (ranks summed on a career-point beat), `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
   `_bind_kin_rows` at finalize),
   `_finalize_beats`, the background drafted from answers and beats
   (`assemble_origin_prose`), the sheet's private block (`_build_beats`, `BeatEntry`),
