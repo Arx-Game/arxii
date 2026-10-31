@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.conditions.factories import DamageTypeFactory
+from world.magic.constants import TechniqueFunction
 from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind, ManeuverEffectKey
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
@@ -74,4 +75,23 @@ class TechniqueScopeRuleTests(TestCase):
                 category=self.category,
                 name="No kind",
                 scope_technique=self.technique,
+            )
+
+    def test_function_only_scope_needs_a_kind(self):
+        target = self._build(scope_technique_function=TechniqueFunction.STRIKE)
+        self.assertTrue(target.has_technique_scope)
+        with self.assertRaises(ValidationError) as ctx:
+            target.full_clean()
+        self.assertIn("scope_effect_kind", ctx.exception.message_dict)
+
+    def test_constraint_refuses_scope_beside_a_maneuver_effect(self):
+        ensure_maneuver_effects()
+        effect = get_maneuver_effect(ManeuverEffectKey.CHARGE_DAMAGE)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ModifierTarget.objects.create(
+                category=self.category,
+                name="Effect and gift",
+                scope_maneuver_effect=effect,
+                scope_effect_kind=EffectKind.DAMAGE,
+                scope_gift=self.gift,
             )
