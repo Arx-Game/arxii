@@ -42,16 +42,18 @@ class VowStatScalingTests(TestCase):
 
     def test_no_scaling_when_not_engaged(self):
         """An unengaged character gets 0 from vow stat scaling."""
+        from world.mechanics.factories import ModifierTargetFactory
         from world.mechanics.services import vow_stat_scaling_bonus
 
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
         membership = CharacterCovenantRoleFactory(covenant_role=role)
         sheet = membership.character_sheet
 
-        self.assertEqual(vow_stat_scaling_bonus(sheet, None), 0)
+        self.assertEqual(vow_stat_scaling_bonus(sheet, ModifierTargetFactory()), 0)
 
     def test_no_scaling_when_no_config_row(self):
         """An engaged character with no VowStatScaling row gets 0."""
+        from world.mechanics.factories import ModifierTargetFactory
         from world.mechanics.services import vow_stat_scaling_bonus
 
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, sword_weight=1)
@@ -60,7 +62,7 @@ class VowStatScalingTests(TestCase):
 
         set_engaged_membership(membership=membership)
 
-        self.assertEqual(vow_stat_scaling_bonus(sheet, None), 0)
+        self.assertEqual(vow_stat_scaling_bonus(sheet, ModifierTargetFactory()), 0)
 
     def test_scaling_with_thread_level(self):
         """When the character has a COVENANT_ROLE thread, the scaling fires."""
