@@ -302,6 +302,106 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
             self._seed(caster, target, technique, scene, room)
 
 
+class CasterComingBackThroughACastTests(EvenniaTestCase):
+    """A caster who already has a row in the fight casts into it between rounds (#4794).
+
+    Between rounds the cast path seats through ``add_participant``, not
+    ``join_encounter``, so a GM's removal has to be honoured here too.
+    """
+
+    def _fight_with_caster(self, status):
+        from world.combat.constants import EncounterType, RiskLevel
+        from world.combat.factories import CombatParticipantFactory
+        from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
+
+        caster, target = SeedOrFeedEncounterFromCastTests._make_caster_and_target()
+        scene, room = SeedOrFeedEncounterFromCastTests._make_scene_with_room()
+        encounter = CombatEncounter.objects.create(
+            room=room,
+            scene=scene,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            risk_level=RiskLevel.MODERATE,
+            encounter_type=EncounterType.PARTY_COMBAT,
+        )
+        seat = CombatParticipantFactory(encounter=encounter, character_sheet=caster, status=status)
+        return caster, target, scene, room, seat
+
+    def test_a_gm_removed_caster_is_refused_and_stays_out(self):
+        from world.combat.constants import ParticipantStatus
+        from world.magic.exceptions import CasterRemovedFromFight
+
+        caster, target, scene, room, seat = self._fight_with_caster(ParticipantStatus.REMOVED_BY_GM)
+
+        with self.assertRaises(CasterRemovedFromFight) as raised:
+            SeedOrFeedEncounterFromCastTests._seed(
+                self,
+                caster,
+                target,
+                SeedOrFeedEncounterFromCastTests._make_damage_technique(),
+                scene,
+                room,
+            )
+
+        self.assertEqual(raised.exception.user_message, "A GM removed you from this fight.")
+        seat.refresh_from_db()
+        self.assertEqual(seat.status, ParticipantStatus.REMOVED_BY_GM)
+
+    def test_a_caster_who_fled_is_seated_again_on_the_same_row(self):
+        from world.combat.constants import ParticipantStatus
+        from world.combat.models import CombatParticipant
+
+        caster, target, scene, room, seat = self._fight_with_caster(ParticipantStatus.FLED)
+
+        encounter = SeedOrFeedEncounterFromCastTests._seed(
+            self,
+            caster,
+            target,
+            SeedOrFeedEncounterFromCastTests._make_damage_technique(),
+            scene,
+            room,
+        )
+
+        rows = CombatParticipant.objects.filter(encounter=encounter, character_sheet=caster)
+        self.assertEqual(list(rows.values_list("pk", "status")), [(seat.pk, "active")])
+
+    def test_a_protective_cast_does_not_seat_a_gm_removed_caster(self):
+        from world.combat.cast_seed import seed_or_feed_encounter_from_benign_intervention
+        from world.combat.constants import ParticipantStatus
+        from world.combat.factories import CombatParticipantFactory
+
+        caster, target, scene, _room, seat = self._fight_with_caster(
+            ParticipantStatus.REMOVED_BY_GM
+        )
+        CombatParticipantFactory(
+            encounter=seat.encounter, character_sheet=target, status=ParticipantStatus.ACTIVE
+        )
+
+        seated = seed_or_feed_encounter_from_benign_intervention(
+            caster_sheet=caster, target_sheet=target, scene=scene
+        )
+
+        self.assertIsNone(seated)
+        seat.refresh_from_db()
+        self.assertEqual(seat.status, ParticipantStatus.REMOVED_BY_GM)
+
+    def test_a_hostile_cast_is_refused_before_any_request_for_a_gm_removed_caster(self):
+        from world.combat.cast_seed import refuse_caster_removed_by_gm
+        from world.combat.constants import ParticipantStatus
+        from world.magic.exceptions import CasterRemovedFromFight
+
+        removed, _target, scene, _room, _seat = self._fight_with_caster(
+            ParticipantStatus.REMOVED_BY_GM
+        )
+        left, _target2, left_scene, _room2, _seat2 = self._fight_with_caster(
+            ParticipantStatus.REMOVED
+        )
+
+        with self.assertRaises(CasterRemovedFromFight):
+            refuse_caster_removed_by_gm(scene, removed)
+        refuse_caster_removed_by_gm(left_scene, left)
+
+
 class SeedOrFeedEncounterOpenedFromParleyTests(EvenniaTestCase):
     """``opened_from_parley`` stamping (#2536 slice 3, Task 4): a CREATE from an
     active non-Battle-backed Scene stamps True; feeding an existing encounter

@@ -17,6 +17,9 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
 
+ALREADY_PARTICIPATING_MESSAGE = "Already participating in this encounter."
+REMOVED_BY_GM_MESSAGE = "A GM removed you from this fight."
+
 
 def _create_participant(
     encounter: CombatEncounter,
@@ -25,18 +28,34 @@ def _create_participant(
     covenant_role: CovenantRole | None = None,
     status: str = ParticipantStatus.ACTIVE,
 ) -> CombatParticipant:
-    """Create a CombatParticipant + its engagement, and record the fighter as a
-    scene participant (combat participation implies SceneParticipation, #1236)."""
+    """Seat a fighter: a CombatParticipant + its engagement, and the fighter recorded as a
+    scene participant (combat participation implies SceneParticipation, #1236).
+
+    One row per fighter per encounter. A fighter who fled or left keeps their row, so
+    coming back reactivates it rather than inserting a second one (#4794); the row's
+    once-per-fight ledgers (insight, vow effects fired) carry over, so leaving and
+    rejoining resets nothing.
+    """
     if covenant_role is None:
         from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
 
         covenant_role = precedence_role_for_combat(character_sheet)
-    participant = CombatParticipant.objects.create(
-        encounter=encounter,
-        character_sheet=character_sheet,
-        covenant_role=covenant_role,
-        status=status,
-    )
+    participant = CombatParticipant.objects.filter(
+        encounter=encounter, character_sheet=character_sheet
+    ).first()
+    if participant is not None and participant.status == ParticipantStatus.ACTIVE:
+        raise ValueError(ALREADY_PARTICIPATING_MESSAGE)
+    if participant is None:
+        participant = CombatParticipant.objects.create(
+            encounter=encounter,
+            character_sheet=character_sheet,
+            covenant_role=covenant_role,
+            status=status,
+        )
+    else:
+        participant.covenant_role = covenant_role
+        participant.status = status
+        participant.save(update_fields=["covenant_role", "status"])
     _ensure_combat_engagement(participant)
 
     from world.combat.escalation import check_hated_foe_surges_for_new_participant  # noqa: PLC0415
@@ -64,12 +83,16 @@ def add_participant(
     return _create_participant(encounter, character_sheet, covenant_role=covenant_role)
 
 
-def remove_participant(participant: CombatParticipant) -> None:
-    """Remove a participant: status write + combat engagement teardown (#872)."""
+def remove_participant(participant: CombatParticipant, *, by_gm: bool = False) -> None:
+    """Remove a participant: status write + combat engagement teardown (#872).
+
+    ``by_gm`` marks a GM's removal, which a self-join will not undo (#4794); a
+    participant who leaves on their own may come back.
+    """
     from world.mechanics.constants import EngagementType  # noqa: PLC0415
     from world.mechanics.services import end_engagement  # noqa: PLC0415
 
-    participant.status = ParticipantStatus.REMOVED
+    participant.status = ParticipantStatus.REMOVED_BY_GM if by_gm else ParticipantStatus.REMOVED
     participant.save(update_fields=["status"])
     end_engagement(
         participant.character_sheet.character,
@@ -86,8 +109,10 @@ def join_encounter(
 ) -> CombatParticipant:
     """Allow a PC to join an active combat encounter.
 
-    Can join during DECLARING or BETWEEN_ROUNDS status.
-    Raises ValueError if already participating or encounter is completed.
+    Can join during DECLARING or BETWEEN_ROUNDS status. A fighter who fled or left
+    comes back on their existing row (#4794); one a GM removed does not.
+    Raises ValueError if already participating, removed by a GM, or the encounter
+    is not taking joiners.
     """
     allowed = {RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS}
     if encounter.status not in allowed:
@@ -96,13 +121,15 @@ def join_encounter(
 
     # Query instead of cache — write path needs fresh data to prevent races.
     # The unique constraint is the real safety net.
-    if CombatParticipant.objects.filter(
-        encounter=encounter,
-        character_sheet=character_sheet,
-        status=ParticipantStatus.ACTIVE,
-    ).exists():
-        msg = "Already participating in this encounter."
-        raise ValueError(msg)
+    status = (
+        CombatParticipant.objects.filter(encounter=encounter, character_sheet=character_sheet)
+        .values_list("status", flat=True)
+        .first()
+    )
+    if status == ParticipantStatus.ACTIVE:
+        raise ValueError(ALREADY_PARTICIPATING_MESSAGE)
+    if status == ParticipantStatus.REMOVED_BY_GM:
+        raise ValueError(REMOVED_BY_GM_MESSAGE)
 
     participant = _create_participant(
         encounter, character_sheet, covenant_role=covenant_role, status=ParticipantStatus.ACTIVE

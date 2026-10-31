@@ -126,6 +126,26 @@ def _feedable_encounter(scene: Scene) -> CombatEncounter | None:
     ).first()
 
 
+def refuse_caster_removed_by_gm(scene: Scene, caster_sheet: CharacterSheet) -> None:
+    """Refuse a hostile cast by a caster a GM removed from the scene's fight (#4794).
+
+    Called before any cast request exists, so a cast that waits on the target's
+    risk acknowledgement is refused up front rather than at the target's accept.
+    """
+    encounter = _feedable_encounter(scene)
+    if (
+        encounter is not None
+        and CombatParticipant.objects.filter(
+            encounter=encounter,
+            character_sheet=caster_sheet,
+            status=ParticipantStatus.REMOVED_BY_GM,
+        ).exists()
+    ):
+        from world.magic.exceptions import CasterRemovedFromFight  # noqa: PLC0415
+
+        raise CasterRemovedFromFight
+
+
 def encounter_requiring_risk_acknowledgement(
     scene: Scene,
     character_sheet: CharacterSheet,
@@ -165,14 +185,20 @@ def _caster_participant(
     encounter: CombatEncounter,
     caster_sheet: CharacterSheet,
 ) -> CombatParticipant:
-    """Return the caster's active participant, creating/joining it if absent."""
+    """Return the caster's active participant, creating/joining it if absent.
+
+    A caster a GM removed from this fight is refused (#4794): only a GM add
+    reseats them, never their own cast.
+    """
     existing = CombatParticipant.objects.filter(
-        encounter=encounter,
-        character_sheet=caster_sheet,
-        status=ParticipantStatus.ACTIVE,
+        encounter=encounter, character_sheet=caster_sheet
     ).first()
-    if existing is not None:
+    if existing is not None and existing.status == ParticipantStatus.ACTIVE:
         return existing
+    if existing is not None and existing.status == ParticipantStatus.REMOVED_BY_GM:
+        from world.magic.exceptions import CasterRemovedFromFight  # noqa: PLC0415
+
+        raise CasterRemovedFromFight
     if encounter.status == RoundStatus.DECLARING:
         # join_encounter is the PC self-join path; valid during DECLARING.
         return join_encounter(encounter, caster_sheet)
@@ -212,6 +238,14 @@ def seed_or_feed_encounter_from_benign_intervention(
         ).exists()
     )
     if not target_embattled:
+        return None
+    # A protective cast still lands for a caster a GM removed; it just never seats
+    # them back in the fight (#4794).
+    if CombatParticipant.objects.filter(
+        encounter=encounter,
+        character_sheet=caster_sheet,
+        status=ParticipantStatus.REMOVED_BY_GM,
+    ).exists():
         return None
     participant = _caster_participant(encounter, caster_sheet)
     acknowledge_encounter_risk(encounter, caster_sheet)
