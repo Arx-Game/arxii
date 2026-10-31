@@ -56,6 +56,9 @@ export interface Beginnings {
   strikes_childhood: boolean;
   strikes_youth: boolean;
   strikes_adulthood: boolean;
+  /** What the life page shows in place of the stage rows when every stage is struck
+   * (#4830, the Sleeper's); blank on a beginning that keeps its stages. */
+  struck_stages_text: string;
   art_image: string | null;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
@@ -981,6 +984,9 @@ export interface DraftData {
   // The beats of the life (#4124): beat id -> taken / unknown / the optional line.
   // The whole map is sent on every save; a beat absent from it is not taken.
   beats?: Record<string, DraftBeatState>;
+  // The optional text a life ends on (#4830), up to RECENT_HISTORY_MAX_LENGTH characters;
+  // finalize writes it as the lead-in paragraph of the background.
+  recent_history?: string;
   // The people seated beside the parents (#4395); the whole list is sent on every save.
   kin_rows?: KinRow[];
   // The name given to a newly founded family on the 'named' family path (#3617)
@@ -1543,7 +1549,14 @@ export interface BeatPoolEntry {
   /** How many answers the beat allows this draft (#4395): one, more with the years
    * lived on an age-scaled beat, or null for any number. */
   allowance: number | null;
+  /** True when `allowance` is career points spent by rank (#4829): a rank-four card
+   * spends four. False when it counts cards. */
+  allowance_is_points: boolean;
 }
+
+/** The most a Recent History may run (#4830); mirrors the backend's
+ * `RECENT_HISTORY_MAX_LENGTH`, which refuses a longer one naming this number. */
+export const RECENT_HISTORY_MAX_LENGTH = 2000;
 
 /** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */
 export interface DraftBeatState {

@@ -144,6 +144,12 @@ interface ChapterOffersProps {
    * refuses the extra pick as well. `null` or omitted is any number.
    */
   maxPicks?: number | null;
+  /**
+   * The block spends career points (#4829): `maxPicks` counts ranks, not cards, and a
+   * ranked card shows its ranks as pips in its top right (a click sets the rank, the
+   * pips past the points left are dimmed) instead of the +/- stepper.
+   */
+  pointsPicks?: boolean;
 }
 
 interface PriceWords {
@@ -245,6 +251,7 @@ export function ChapterOffers({
   exclusive = false,
   layout = 'list',
   maxPicks = null,
+  pointsPicks = false,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -321,9 +328,16 @@ export function ChapterOffers({
   if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
 
   // The allowance (#4395): once this block holds as many picks as it allows, the rest
-  // wait; an exclusive block swaps instead, so it never counts as full.
-  const pickedHere = offers.filter((o) => (entryByOfferId.get(o.offer_id)?.rank ?? 0) > 0).length;
-  const full = !exclusive && maxPicks !== null && maxPicks > 1 && pickedHere >= maxPicks;
+  // wait; an exclusive block swaps instead, so it never counts as full. A block that
+  // spends career points (#4829) counts ranks: a rank-four card is four of them.
+  const rankOf = (o: VisibleOffer) => entryByOfferId.get(o.offer_id)?.rank ?? 0;
+  const pickedHere = pointsPicks
+    ? offers.reduce((sum, o) => sum + rankOf(o), 0)
+    : offers.filter((o) => rankOf(o) > 0).length;
+  const full =
+    !exclusive && maxPicks !== null && (pointsPicks || maxPicks > 1) && pickedHere >= maxPicks;
+  // The points still free in this block, for the pips (#4829); null when nothing bounds it.
+  const pointsLeft = pointsPicks && maxPicks !== null ? Math.max(0, maxPicks - pickedHere) : null;
 
   // The fold (#3709): the Beginning's pinned lines show at rest; when none is
   // pinned the first three by the server's order stand in; everything else waits
@@ -345,6 +359,15 @@ export function ChapterOffers({
     const ranked = offer.max_rank > 1;
     const waiting = full && !selected;
     const busy = offer.is_locked || syncDistinctions.isPending || waiting;
+    // Pips (#4829): on a career-point grid the rank is the pips in the card's top
+    // right. A pip at or under the held rank is on; one past the points this card could
+    // still take is off; a click sets that rank (the first pip of an unpicked card picks
+    // it; the held rank's own pip clears it).
+    const pips =
+      pointsPicks && ranked && !offer.held
+        ? Array.from({ length: offer.max_rank }, (_, i) => i + 1)
+        : null;
+    const reach = pointsLeft === null ? offer.max_rank : rank + pointsLeft;
     const showsDistinction =
       layout === 'grid' && offer.distinction_name && offer.distinction_name !== offer.name;
     const body = (
@@ -353,7 +376,7 @@ export function ChapterOffers({
         <span>
           <b>
             {offer.name}
-            {ranked && !offer.held && (
+            {ranked && !offer.held && !pips && (
               <RankControl
                 name={offer.name}
                 rank={rank}
@@ -375,6 +398,32 @@ export function ChapterOffers({
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
           <PriceLine offer={offer} rank={rank} words={priceWords} />
         </span>
+        {pips && (
+          <span
+            className="pips"
+            role="group"
+            aria-label={`${offer.name}, rank ${rank} of ${offer.max_rank}`}
+          >
+            {pips.map((pip) => {
+              const on = pip <= rank;
+              const off = pip > reach;
+              return (
+                <button
+                  key={pip}
+                  type="button"
+                  className={cn('pip', on && 'on', off && 'off')}
+                  aria-pressed={on}
+                  aria-label={`${offer.name}, rank ${pip}`}
+                  disabled={(offer.is_locked || syncDistinctions.isPending || off) && !on}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    applyRank(offer, pip === rank ? 0 : pip);
+                  }}
+                />
+              );
+            })}
+          </span>
+        )}
       </>
     );
     // Held elsewhere (#3709): the draft already has this distinction from
@@ -392,7 +441,7 @@ export function ChapterOffers({
       <li key={offer.offer_id}>
         {ranked ? (
           <div
-            className="stance"
+            className={cn('stance', pips && 'ranked')}
             role="group"
             aria-label={offer.name}
             aria-disabled={busy || undefined}

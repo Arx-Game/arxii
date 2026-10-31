@@ -749,13 +749,25 @@ The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unkn
 #4395 `allowance`). A beat's answers are open while it is in the pool and not unknown
 (`open_beat_ids`, `_opener_satisfied`); a pick under it, a line, or the unknown mark is
 what takes it (the grids never ask the player to add a beat first), and marking it
-unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395):**
+unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395, career points since #4829):**
 `beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
-beat whose `picks_scale_with_age` is on `age_pick_allowance(age)`: one at or under
-`AGE_PICKS_FROM_AGE` (20) and one more per `AGE_PICKS_YEARS_PER_PICK` (10) years lived
-past it, so nineteen is one "known for" pick and fifty four. The distinctions sync
-refuses more picks than the allowance (`beat_pick_conflicts`); the leaf disables the
-rest at it. `Beginnings.beat_mode`
+beat whose `picks_scale_with_age` is on `age_pick_allowance(age)` career points: one at or
+under `AGE_PICKS_FROM_AGE` (19), one more per `AGE_PICKS_YEARS_PER_PICK` (5) full years
+lived past it, none past `AGE_PICKS_CAP_AGE` (59), so nineteen is one point, fifty seven,
+fifty-nine and older nine. A point buys a card on the beat or a rank on one, so the beat
+counts ranks: `beat_pick_conflicts(offers, age=, ranks=)` sums the ranks the payload asks
+for on such a beat (a one-of beat still counts cards) and returns `BeatConflict(name,
+allowance, points)`; the sync's refusal reads "At most 7 career points on Past Careers".
+`BeatPoolEntry.allowance_is_points` tells the leaf which it is. **The age floor:**
+`CharacterDraftSerializer.validate_age` refuses an age whose points are fewer than the
+ranks already held on such a beat (`age_scaled_points_spent`) and names the youngest age
+that fits (`youngest_age_for_points`): "Sailor at rank 4 and Soldier at rank 3 need 7
+career points; the youngest age with 7 is 49. Unpick a career or a rank first." On the
+leaf a ranked card in a career-point grid shows its ranks as pips in its top right
+(`ChapterOffers` `pointsPicks`; a pip sets the rank, the pips past the points left are
+dimmed) and the pick line reads copy key `beats_pick_points`. Finalize writes the entry's
+rank (`_create_distinctions`), so a rank-four career lands as rank four. Journeys:
+`integration_tests/test_career_points_journeys.py`. `Beginnings.beat_mode`
 has one value, `POOL`, since #4830: the one-kept mode (the Sleeper's one unexcluded beat
 as the whole stage) is retired, because the Sleeper strikes every stage and shows its
 `struck_stages_text` instead. **Recent History (#4830):** `draft_data["recent_history"]`,
@@ -763,7 +775,15 @@ free text of at most `RECENT_HISTORY_MAX_LENGTH` (2000) characters, validated wi
 beats; at finalize it becomes the lead-in paragraph of `Profile.background`, a blank line,
 then the told prose (`assemble_origin_prose`), or the whole background when nothing else
 was told. Public by ruling (2026-10-30, 2026-10-31). Journeys:
-`integration_tests/test_struck_life_journeys.py`. Apart from an age-scaled beat's allowance,
+`integration_tests/test_struck_life_journeys.py`. **On the leaf (#4831):** `LifeGrids` ends
+every life on the Recent History box (a textarea under the last stage, before the footer;
+copy keys `life_recent_history_label` and `life_recent_history_help`; `maxLength` from the
+frontend's mirror of `RECENT_HISTORY_MAX_LENGTH`), saved on blur to
+`draft_data.recent_history` by itself. When the pool is empty and the draft's beginning
+strikes all three stages, the beginning's `struck_stages_text` stands where the stage rows
+would be (a `.absent` paragraph over the box; copy key `life_struck_fallback` stands in until
+the text is authored), with no pick lines and no footer; an empty pool on a beginning that
+keeps its stages shows the box alone. Apart from an age-scaled beat's allowance,
 nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with

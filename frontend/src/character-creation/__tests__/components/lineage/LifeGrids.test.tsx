@@ -2,13 +2,15 @@
  * The life as grids by stage (#4395): each beat a grid of its answers picked straight
  * from the cards, a one-of swapping its sibling, an age-scaled beat holding to its
  * allowance, the line of the player's own once something is picked, the unknown mark
- * closing a beat's answers, and a struck stage simply absent.
+ * closing a beat's answers, and a struck stage simply absent. Every life ends on the Recent
+ * History box (#4830), and a beginning that strikes every stage shows its text where the
+ * stage rows would be.
  */
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LifeGrids } from '../../../components/lineage/LifeGrids';
-import { createMockDraft } from '../../fixtures';
+import { createMockDraft, mockBeginnings, mockBeginningsUnknownFamily } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
 import type { BeatPoolEntry, OffersResponse, VisibleOffer } from '../../../types';
 
@@ -41,6 +43,7 @@ function beat(over: Partial<BeatPoolEntry>): BeatPoolEntry {
     line: '',
     answer_offer_ids: [],
     allowance: 1,
+    allowance_is_points: false,
     ...over,
   };
 }
@@ -197,5 +200,79 @@ describe('LifeGrids', () => {
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
     const unknownHousehold = screen.getAllByRole('article', { name: 'The household' }).at(-1)!;
     expect(within(unknownHousehold).queryByRole('button', { name: /Patient/ })).toBeNull();
+  });
+
+  it('every life ends on the Recent History box, under the last stage, saved on blur', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({ draft_data: { recent_history: 'A debt in Umbros.' } });
+    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
+    const box = screen.getByLabelText('Recent History (Optional)');
+    expect(box).toHaveValue('A debt in Umbros.');
+    expect(box).toHaveAttribute('maxlength', '2000');
+    expect(
+      screen.getByText('What you want a GM or another player to pick up.')
+    ).toBeInTheDocument();
+    const order = Array.from(box.closest('.life')!.children).map((el) => el.className);
+    const at = order.indexOf('field recent-history');
+    expect(at).toBeGreaterThan(order.lastIndexOf('life-stage'));
+    expect(at).toBeLessThan(order.indexOf('life-foot'));
+    // Leaving the box unchanged saves nothing; a new text saves on blur, by itself.
+    await user.click(box);
+    await user.tab();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    await user.clear(box);
+    await user.type(box, 'Someone is looking for a man with my name.');
+    await user.tab();
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      draftId: draft.id,
+      data: { draft_data: { recent_history: 'Someone is looking for a man with my name.' } },
+    });
+  });
+
+  it('a beginning that strikes every stage shows its text where the stages were, then the box', () => {
+    pool = [];
+    const sleeper = {
+      ...mockBeginningsUnknownFamily,
+      strikes_childhood: true,
+      strikes_youth: true,
+      strikes_adulthood: true,
+      struck_stages_text: 'You woke in a tomb that was not yours.',
+    };
+    const draft = createMockDraft({ selected_beginnings: sleeper });
+    renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
+    const text = screen.getByText('You woke in a tomb that was not yours.');
+    expect(text).toHaveClass('absent');
+    expect(screen.queryAllByRole('region')).toHaveLength(0);
+    expect(screen.queryByText(/pick one|pick any|pick up to/)).toBeNull();
+    expect(screen.queryByText(/points spent$/)).toBeNull();
+    const box = screen.getByLabelText('Recent History (Optional)');
+    expect(text.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('a struck beginning with no text authored yet shows the fallback line', () => {
+    pool = [];
+    const sleeper = {
+      ...mockBeginningsUnknownFamily,
+      strikes_childhood: true,
+      strikes_youth: true,
+      strikes_adulthood: true,
+      struck_stages_text: '',
+    };
+    renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft({ selected_beginnings: sleeper })} copy={{}} />
+    );
+    expect(
+      screen.getByText('Every stage of this life is struck. What there is to say begins below.')
+    ).toHaveClass('absent');
+  });
+
+  it('an empty pool on a beginning that keeps its stages shows the box alone', () => {
+    pool = [];
+    renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft({ selected_beginnings: mockBeginnings })} copy={{}} />
+    );
+    expect(screen.getByLabelText('Recent History (Optional)')).toBeInTheDocument();
+    expect(document.querySelector('.absent')).toBeNull();
+    expect(screen.queryByText(/points spent$/)).toBeNull();
   });
 });

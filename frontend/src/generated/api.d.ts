@@ -29032,6 +29032,7 @@ export interface components {
       line: string;
       answer_offer_ids: number[];
       allowance: number | null;
+      allowance_is_points: boolean;
     };
     /**
      * @description GM readiness dashboard payload for a beat (#3562).

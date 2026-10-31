@@ -46,7 +46,13 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
-from world.character_creation.offers import RECENT_HISTORY_KEY, schooling_training_points
+from world.character_creation.offers import (
+    RECENT_HISTORY_KEY,
+    age_pick_allowance,
+    age_scaled_points_spent,
+    schooling_training_points,
+    youngest_age_for_points,
+)
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -1193,6 +1199,7 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     line = serializers.CharField(allow_blank=True)
     answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
     allowance = serializers.IntegerField(allow_null=True)
+    allowance_is_points = serializers.BooleanField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):
@@ -1747,6 +1754,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if value < AGE_MIN or value > AGE_MAX:
             msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
             raise serializers.ValidationError(msg)
+        self._refuse_age_under_career_points(value)
         if value <= bounds.maximum:
             return value
         # Name the cap that bound: eternal youth when it set the ceiling, else
@@ -1766,6 +1774,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         msg = (
             f"{heritage_name} can be at most {bounds.maximum} years old: "
             f"the first were born in {bounds.heritage_first_year} AS."
+        )
+        raise serializers.ValidationError(msg)
+
+    def _refuse_age_under_career_points(self, age: int) -> None:
+        """The age floor (#4829): an age whose career points are fewer than the ranks the
+        draft already holds on a career-point beat is refused, naming the youngest age
+        that fits, so a player unpicks a career or a rank before growing younger.
+        """
+        if self.instance is None:
+            return
+        spent = age_scaled_points_spent(self.instance)
+        total = sum(rank for _, rank in spent)
+        if total <= age_pick_allowance(age):
+            return
+        held = " and ".join(f"{name} at rank {rank}" for name, rank in spent)
+        points = "career point" if total == 1 else "career points"
+        msg = (
+            f"{held} need {total} {points}; the youngest age with {total} is "
+            f"{youngest_age_for_points(total)}. Unpick a career or a rank first."
         )
         raise serializers.ValidationError(msg)
 

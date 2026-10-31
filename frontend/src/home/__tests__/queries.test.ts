@@ -72,6 +72,7 @@ const mockBeginnings: Beginnings = {
   strikes_childhood: false,
   strikes_youth: false,
   strikes_adulthood: false,
+  struck_stages_text: '',
   art_image: null,
   allowed_species_ids: [],
   grants_species_languages: true,
