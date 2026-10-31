@@ -8596,7 +8596,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   free; with a control change or condition the record is written but the room gets no
   "power surges" line (`narrate=False`) and the round payload narration is "". The record
   stores `outcome`, `potency`, `control_change`, `condition` (the condition only if it
-  took hold), `vow_scaling` (#4739: the intensity a rallier's "Surges given by Rally" vow
+  took hold), `vow_scaling` (#4739, #4783: the intensity the rallier's Rally surge intensity effect
   added over the band's unscaled intensity, 0 otherwise) and `cause` (the line the surged player, GMs and staff read, in
   the third person with persona names: "<taunter> taunts <target>.", "<rallier> rallies
   <target>.", the NPC entry's authored taunt text as the room is told it (else "<opponent>
@@ -8842,7 +8842,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     encounter.is_lethal)` runs the guardian into deficit when consented, and a consented
     fire also accrues Soulfray through `world.magic.services.soulfray.accumulate_soulfray`
     (deficit>0 narrates "tears at their own soul to hold the line over {ally}"); grades via
-    the SAME `_grade_interpose_damage` the mundane path uses (SHIELD divisor included). A
+    the SAME `_grade_interpose_damage` the mundane path uses (Interpose partial protection included). A
     clean `blink`-flavored block relocates the ward to the guardian's own current position
     (`force_move_to_position`) - a stand-in for #2206's `CombatRoundAction.cast_destination`,
     preferred once that field lands. See ADR-0118 (amended by ADR-0255, #3573) for why this

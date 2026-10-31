@@ -107,8 +107,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   protection, any maneuver"). `effect_value(sheet, key)`
   (`world/mechanics/effect_targets.py`) adds that target's modifier total to the effect's
   catalog base value. See `docs/systems/mechanics.md` "Maneuver effects" for the catalog and
-  the five maneuvers' wiring. Two rules are specific to vows: (1) `vow_stat_scaling_bonus`
-  looks up rows on both an engaged role and its anchor role, so a holder who graduated to a
+  the five maneuvers' wiring. Vow scaling reads the holder's engaged PRIMARY roles only. Two rules are specific to vows:
+  (1) `vow_stat_scaling_bonus` looks up rows on both an engaged role and its anchor role, so a holder who graduated to a
   sub-role keeps rows authored on either, and they sum; the thread level is always read from
   the anchor's thread. (2) On a maneuver-effect target the bonus multiplies the SHOWN thread
   level (stored level // 10), because an effect is in natural units (damage, percent, hops,

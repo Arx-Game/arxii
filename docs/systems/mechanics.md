@@ -304,9 +304,9 @@ modifier, or a vow stat scaling row).
   their scaling (`docs/systems/covenants.md`).
 
 **Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
-modifier on an effect is a flat amount: a distinction effect's size is read only on stat
-targets (the value table's stat lane), so a sized effect on a maneuver-effect target counts as
-its flat value. Derived amounts, sized modifiers on effects, and scopes for a technique, a
+modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
+target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
+the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts, sized modifiers on effects, and scopes for a technique, a
 damage type, a resonance and the opponent are not built. "Damage, any maneuver" reaches only
 Charge today, so author damage targets as "Charge: damage". The battle Rally
 (`world/battles`, `RALLY_MORALE_PER_LEVEL`) is a different action and is untouched.

@@ -30,7 +30,9 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
   split in two. The kind is derived from the key by a constant map, not stored.
 - **A modifier on an effect is a flat amount for now (decision 9).** A sized modifier ("Large at
   level 6") needs a value table per effect kind, and filling those tables is tuning, so it waits.
-  A distinction effect's size is read only where a value-table lane exists (stats and checks).
+  A distinction effect with a size on a maneuver effect target is refused by `clean()` ("Maneuver
+  effects take flat amounts only; clear the size."), and so is a rank size row on such an effect,
+  so a sized amount can never silently count as its flat value.
 - **Derived amounts are their own later design (decision 10).** A source row choosing what its
   number scales from is not built. The fixed-input forms keep working: per thread level, per
   character level, per condition severity.
@@ -43,7 +45,8 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
   on an effect target multiplies the shown level (stored // 10). Other categories keep the stored
   level. `vow_stat_scaling_bonus` also reads rows on both an engaged role and its anchor role, so a
   holder who graduated to a sub-role keeps their scaling, with the thread level read from the
-  anchor.
+  anchor. Vow scaling reads the holder's engaged PRIMARY roles only; a secondary or minor vow adds
+  nothing to an effect.
 - **The Rally roll line says "surge +N".** When a rallier's surge intensity is above 100% the extra
   intensity is noted on the ally's roll line as "surge +N". It is the intensity the effect added,
   from any source, so the note no longer says "vow scaling".
