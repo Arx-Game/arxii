@@ -119,3 +119,49 @@ class MiraWalksOutThenComesBack(_MiraInAnOpenFight):
         told = self.telnet(self.mira, "combat join")
 
         self.assertIn("Already participating in this encounter.", told)
+
+
+class AGMsRemovalSticks(_MiraInAnOpenFight):
+    """Wren, staff, runs the fight from the GM panel (web dispatch)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wren = self.make_player("Wren", room=self.road)
+        gm_account = self.account_of(self.wren)
+        gm_account.is_staff = True
+        gm_account.save()
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
+        self.encounter.save(update_fields=["status"])
+
+    def remove_mira(self) -> None:
+        result = self.web(self.wren, "remove_encounter_participant", participant_id=self.seat.pk)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.REMOVED_BY_GM)
+
+    def test_she_cannot_join_back_on_her_own(self) -> None:
+        self.remove_mira()
+
+        told = self.telnet(self.mira, "combat join")
+
+        self.assertIn("A GM removed you from this fight.", told)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.REMOVED_BY_GM)
+
+    def test_the_gm_can_add_her_back_on_her_own_row(self) -> None:
+        self.remove_mira()
+
+        result = self.web(
+            self.wren, "add_encounter_participant", character_sheet_id=self.mira.sheet_data.pk
+        )
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assert_back_in_the_fight("You join the fight.")
+
+    def test_adding_her_while_she_is_in_is_refused(self) -> None:
+        result = self.web(
+            self.wren, "add_encounter_participant", character_sheet_id=self.mira.sheet_data.pk
+        )
+
+        self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, "Already participating in this encounter.")
