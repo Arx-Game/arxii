@@ -301,6 +301,14 @@ exceptions. File only for something substantial enough to need its own PR
 human call), with the reason stated in the issue body. Overrides any skill step
 that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
 
+**Work with no decision left in it never waits on the maintainer.** When the
+approved spec or recorded rulings already say what a piece of remaining scope
+is, it is the next slice (`Slice N of #M`, parent kept open), built straight
+after the current one without a new approval. The sequence stops only at a real
+design fork, and there the agent interviews the maintainer with the concrete
+choice instead of filing a question and walking away (owner ruling 2026-10-31,
+after #4822 and #4823). Detail in `issue-to-merged-pr` Steps 2 and 9.
+
 **Ask before filing a new capability.** Sort every candidate filing first. A
 **bug** is something built that behaves wrongly, or an authored field or row
 the code ignores: the field existing shows the intent, so file it after the
