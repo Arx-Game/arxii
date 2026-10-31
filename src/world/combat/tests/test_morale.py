@@ -10,7 +10,6 @@ from world.combat.constants import (
     MINDLESS_MORALE_RESISTANCE,
     PARLEY_DISPOSITION_FLOOR,
     RALLY_BASE_DIFFICULTY,
-    RALLY_MORALE_PER_LEVEL,
     TAUNT_THREAT_PER_LEVEL,
     CombatManeuver,
     TargetingMode,
@@ -24,6 +23,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
+from world.mechanics.constants import MANEUVER_EFFECT_DEFAULTS, ManeuverEffectKey
 
 
 class MoraleConstantsTests(TestCase):
@@ -32,7 +32,7 @@ class MoraleConstantsTests(TestCase):
         self.assertEqual(FALTER_MORALE_THRESHOLD, 50)
         self.assertEqual(BREAK_MORALE_THRESHOLD, 25)
         self.assertEqual(DEMORALIZE_MORALE_PER_LEVEL, 15)
-        self.assertEqual(RALLY_MORALE_PER_LEVEL, 15)
+        self.assertEqual(MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.RALLY_MORALE], 15)
         self.assertEqual(TAUNT_THREAT_PER_LEVEL, 25)
         self.assertEqual(RALLY_BASE_DIFFICULTY, 10)
         self.assertEqual(PARLEY_DISPOSITION_FLOOR, 20)

@@ -2870,7 +2870,7 @@
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
-- `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
+- `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer_sheet: 'CharacterSheet | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' - Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' - Intercept a strike against a rampart-covered position (#2209).`
 - `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' - Assess break-bar depletion for all boss opponents with a break bar (#2642).`
@@ -2899,13 +2899,14 @@
 - `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
-- `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
+- `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', partial_protection: 'int', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
 - `drain_reactive_upkeep(encounter: 'CombatEncounter') -> 'None' - Debit per-round upkeep from each active participant's sustained conditions.`
 - `effective_soak_from_armor(character: 'Character') -> 'int' - Sum effective armor soak across the character's equipped armor pieces.`
 - `effective_weapon_profile(character: 'Character') -> 'WeaponContribution | None' - The character's strongest equipped weapon as a combat contribution.`
 - `elevation_bonus(attacker_sheet: 'CharacterSheet', attacker_pos: 'Position', target_pos: 'Position') -> 'int' - Flat to-hit bonus when attacker is elevated/aerial and target is not.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' - GM force-end: completes as ABANDONED (#876 §8).`
+- `engagement_of_any_type_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live ``CharacterEngagement`` whatever its type, or None (#4738).`
 - `ensure_opponent_plans(encounter: 'CombatEncounter') -> 'None' - Give every plannable opponent still without a plan this round its plan (#4607).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' - Delete all CombatPull rows from prior rounds and recompute affected max_health.`
 - `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
@@ -3583,7 +3584,6 @@
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
-  - action_scalings <- covenants.CovenantRoleActionScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
   - gift_grants <- covenants.CovenantRoleGiftGrant
@@ -3593,10 +3593,6 @@
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - combat_participations <- combat.CombatParticipant
-
-### CovenantRoleActionScaling
-**Foreign Keys:**
-  - covenant_role -> covenants.CovenantRole [FK]
 
 ### CovenantRoleBonus
 **Foreign Keys:**
@@ -3722,7 +3718,6 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' - Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' - Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' - CharacterSheets of active `covenant` members present in `room`.`
-- `covenant_role_action_scaling_bonus(character: 'object', action: 'CovenantScaledAction') -> 'float' - Return the per-role scaling bonus for a scaled action (#2529, was #2022; #4739).`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' - Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' - Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' - Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
@@ -6884,7 +6879,7 @@
 - `technique_skill_term(character: 'ObjectDB', technique: 'Technique') -> 'ExtraTraitTerm | None' - The technique skill as a roll term for ``character``, or None.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonance: 'Resonance | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonance: 'Resonance | None' = None, fury: 'FuryCast | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -7003,6 +6998,10 @@
   - consequence_pool -> actions.ConsequencePool [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 
+### ManeuverEffect
+**Pointed to by:**
+  - modifier_targets <- mechanics.ModifierTarget
+
 ### ModifierCategory
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -7031,6 +7030,7 @@
   - target_check_type -> checks.CheckType [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
   - target_being -> worship.WorshippedBeing [FK] (nullable)
+  - scope_maneuver_effect -> mechanics.ManeuverEffect [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect

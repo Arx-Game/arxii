@@ -963,7 +963,7 @@ to functions the cast technique carries (`technique.cached_function_tags`), and 
 row. Returns 0 when the technique carries no `TechniqueFunctionTag`, no role is engaged,
 or no specialty row matches. **Sub-role rows ADD to the anchor's — they are never
 normalized away** — the opposite of the anchor-only rule
-`covenant_role_action_scaling_bonus` uses; a promoted (specialized) member reads as
+the blend weights use; a promoted (specialized) member reads as
 strictly more specialized than an unpromoted one.
 
 ### Vow Situational Power Term (#2536 slices 1 & 3, ADR-0151/ADR-0153) [BUILT & WIRED]

@@ -62,7 +62,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `(CovenantRole, ModifierTarget)` with `bonus_per_level` scaling by the
   **COVENANT_ROLE thread level** (not character level, which `CovenantRoleBonus`
   already handles). `vow_stat_scaling_bonus(sheet, target)` returns
-  `thread_level × bonus_per_level`; no row → 0. The mechanical heart of "solo
+  `thread_level × bonus_per_level`; no row → 0. Rows on an engaged role's anchor role count too
+  (#4783), and on a maneuver-effect target the level is the shown level (see below). The mechanical heart of "solo
   darkness" — a deepened vow is a substantially stronger character. When the vow
   dims (#2051), the scaling drops to 0. This is ADR-0149 Layer 3's stat-power pillar
   and stayed unaffected by the #2533 rework; as of #2533 it rides the lore-repo
@@ -96,26 +97,25 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   Seams" below), not a model-level restriction. Lore-repo content (`NaturalKeyMixin`
   NK `["covenant_role"]`, `covenants.covenantroledefenseprofile` in
   `CONTENT_MODELS`).
-- **`CovenantRoleActionScaling`** (#2529, ADR-0149; replaced `ArchetypeActionScaling`)
-  — authored config: one row per `(covenant_role, action_key)` with a
-  `thread_level_multiplier` (Decimal). `action_key` is a `CovenantScaledAction`
-  choice (#4739; `world/covenants/constants.py`): `combat_interpose` (Interpose),
-  `combat_rally` (Rally) and `surges_given` ("Surges given by Rally" - scales the
-  intensity a rallier's Rally surges the rallied ally by; the stored values of the
-  first two are the maneuvers' Action keys and did not change). Natural-key content
-  (`covenants.covenantroleactionscaling` in `CONTENT_MODELS`). Read by
-  `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction)` at the
-  combat action resolution seam (interpose's partial-block divisor, rally's morale
-  restore, and the rallied ally's surge: `intensity x (1 + bonus)` for `surges_given`,
-  intensity only, `world/combat/services/declarations/rally.py`; the ally's roll line
-  appends `· vow scaling +N`, N stored on `DramaticSurgeRecord.vow_scaling`), which sums `thread_level × multiplier` across the character's engaged
-  roles that have a row for the action, normalizing engaged (possibly resolved
-  sub-)roles to their anchor (parent) role before lookup, since rows and COVENANT_ROLE
-  threads both key on the anchor. Rows are authored per-role now, not per-archetype:
-  seed content gives Bulwark (SHIELD) an interpose row and Luminary (CROWN) a rally
-  row; the Vanguard's old `cast_technique` row is not recreated — that scaling moved to
-  the always-on `covenant_role_blend_power_term` power term
-  (`world.magic.services.power_terms`, see `docs/systems/magic.md`).
+- **Maneuver effects through `VowStatScaling`** (#4783, ADR-4783-A; **removed**
+  `CovenantRoleActionScaling`, `CovenantScaledAction` and
+  `covenant_role_action_scaling_bonus`, which #2529 and #4739 built to scale Interpose, Rally
+  and Rally's surge intensity per vow thread level; the rows were placeholders and were
+  discarded by owner ruling 2026-10-31). A vow now makes a maneuver stronger the way it makes
+  a stat stronger: a `VowStatScaling` row whose `modifier_target` is in the "maneuver_effect"
+  category (scoped to one effect such as "Charge: damage", or to a kind such as "partial
+  protection, any maneuver"). `effect_value(sheet, key)`
+  (`world/mechanics/effect_targets.py`) adds that target's modifier total to the effect's
+  catalog base value. See `docs/systems/mechanics.md` "Maneuver effects" for the catalog and
+  the five maneuvers' wiring. Two rules are specific to vows: (1) `vow_stat_scaling_bonus`
+  looks up rows on both an engaged role and its anchor role, so a holder who graduated to a
+  sub-role keeps rows authored on either, and they sum; the thread level is always read from
+  the anchor's thread. (2) On a maneuver-effect target the bonus multiplies the SHOWN thread
+  level (stored level // 10), because an effect is in natural units (damage, percent, hops,
+  morale) while stats are stored x10; every other category keeps the stored level. The Rally
+  roll line notes a surge intensity above 100% as "surge +N" (stored on
+  `DramaticSurgeRecord.vow_scaling`). A vow's old "Surges given" row is gone: author a row
+  on a target scoped to "Rally: surge intensity" instead.
 - **`CovenantRoleTechniqueSpecialty`** (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
   of the vow-power model) — one row per `(covenant_role, function)`, `function` drawn
   from `magic.TechniqueFunction` (a shared fine-grained vocabulary also consumed by

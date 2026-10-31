@@ -17,7 +17,7 @@ A special non-technique declaration a PC can make for a round (`CombatManeuver`:
 _Avoid_: special move, stance, command
 
 **Charge** (#1843):
-The CHARGE maneuver — a mounted PC (see `world/companions/AGENT_GLOSSARY.md`'s Mounted entry) closes distance to a declared opponent >= 1 hop away, then attacks. Resolution force-moves the rider onto the opponent's position and falls through to the normal weapon-attack pipeline; `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS` (doubled for an equipped Lance) fold into the existing check-modifier/damage-budget seams — never a bespoke bonus path. Requires Mounted; declaring it unmounted or against an already-in-reach target is rejected.
+The CHARGE maneuver — a mounted PC (see `world/companions/AGENT_GLOSSARY.md`'s Mounted entry) closes distance to a declared opponent >= 1 hop away, then attacks. Resolution force-moves the rider onto the opponent's position and falls through to the normal weapon-attack pipeline; the **Charge: to hit** and **Charge: damage** maneuver effects (the base value doubled for an equipped Lance, then plus the rider's modifiers, floored at 0 once; see the mechanics glossary's Maneuver effect) fold into the existing check-modifier/damage-budget seams — never a bespoke bonus path — and **Charge: reach** is how many hops a charge may cover (#4783, replacing flat constants). Requires Mounted; declaring it unmounted or against an already-in-reach target is rejected.
 _Avoid_: rush, gap-close, sprint attack
 
 **Joust** (#1843):

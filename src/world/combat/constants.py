@@ -161,21 +161,14 @@ class CombatManeuver(models.TextChoices):
 
 
 # ---------------------------------------------------------------------------
-# Mounted combat (#1843) — CHARGE/JOUST flat bonuses + JOUST margin bands.
+# Mounted combat (#1843) — the unmounted-lance penalty + JOUST margin bands.
+# A CHARGE's to-hit, damage and reach are maneuver effects (the catalog in
+# world.mechanics, #4783), not constants.
 # ---------------------------------------------------------------------------
-
-# Flat check/damage bonuses for a CHARGE maneuver (doubled when the attacker's
-# equipped weapon is GearArchetype.LANCE).
-CHARGE_CHECK_BONUS: int = 10
-CHARGE_DAMAGE_BONUS: int = 5
 
 # Flat check penalty for attacking with a LANCE-archetype weapon while not
 # Mounted — applies to any attack, not just CHARGE/JOUST.
 LANCE_UNMOUNTED_PENALTY: int = -10
-
-# Max hops a CHARGE may cover — generous but bounded (mirrors technique
-# REACH_N's reach_hops parameter).
-CHARGE_MAX_HOPS: int = 5
 
 # ---------------------------------------------------------------------------
 # Movement on the battle map (#4607, slice 2 of #4576)
@@ -466,7 +459,6 @@ PENETRATION_CHECK_TYPE_NAME: str = "penetration"
 
 FLEE_CHECK_TYPE_NAME: str = "flee"
 FLEE_BASE_DIFFICULTY: int = 15
-FLEE_COVER_BONUS: int = 10
 
 # PARTIAL's authored success_level. At or above it the fleer escapes; at or
 # below it the selected pool consequence applies (PARTIAL = escape at a cost;
@@ -602,9 +594,9 @@ BREAK_MORALE_THRESHOLD: int = 25  # at/below: broken -> FLED
 
 # Party-scale social-combat tuning (#2015). Values mirror the war-scale
 # ROUT/RALLY per-level magnitudes (battles/constants.py:131); adjust freely
-# during playtesting.
+# during playtesting. Rally's morale per level is the "Rally: morale" maneuver
+# effect (#4783).
 DEMORALIZE_MORALE_PER_LEVEL: int = 15
-RALLY_MORALE_PER_LEVEL: int = 15
 TAUNT_THREAT_PER_LEVEL: int = 25
 RALLY_BASE_DIFFICULTY: int = 10
 PARLEY_DISPOSITION_FLOOR: int = 20

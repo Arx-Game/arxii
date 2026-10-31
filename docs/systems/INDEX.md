@@ -6969,6 +6969,19 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
+- **Maneuver effects (#4783, ADR-4783-A):** `ManeuverEffect` (`key`, `base_value`, `notes`; eight
+  fixed rows, admin edit-only) holds each combat maneuver's numbers (Charge to hit, damage and
+  reach; Cover escape bonus; Succor and Interpose partial protection; Rally morale and surge
+  intensity). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
+  "maneuver_effect") let any modifier source target one effect or one kind across maneuvers.
+  `effect_value(sheet, key)` and `effect_modifier_total(sheet, key)` in
+  `world/mechanics/effect_targets.py`; `get_maneuver_effect(key)` and
+  `ensure_maneuver_effects()` in `world/mechanics/maneuver_effects.py`; `EffectKind`,
+  `ManeuverEffectKey`, `MANEUVER_EFFECT_KIND`, `MANEUVER_EFFECT_DEFAULTS` in
+  `world/mechanics/constants.py`. Replaced `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`/
+  `CHARGE_MAX_HOPS`, `FLEE_COVER_BONUS`, `FleeConfig.cover_bonus`, the combat
+  `RALLY_MORALE_PER_LEVEL`, the interpose divisor, the succor partial tier and
+  `CovenantRoleActionScaling`. See `mechanics.md` "Maneuver effects".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".
@@ -7706,16 +7719,14 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `magic.Resonance`), `unlock_thread_level` (PositiveInt, 0 for primary / >0 for sub-roles),
     `discovery_achievement` (FK → `achievements.Achievement`, nullable, sub-roles only),
     `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
-  - `CovenantRoleActionScaling` (#2529, ADR-0149; replaced `ArchetypeActionScaling`) —
-    one row per `(covenant_role, action_key)` with `thread_level_multiplier`. Read by
-    `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction)`,
-    anchor-role normalized. `surges_given` scales a rallier's Rally surge intensity
-    (#4739). Lore-repo content.
+  - `CovenantRoleActionScaling` and `CovenantScaledAction` — **removed in #4783**
+    (ADR-4783-A). A vow scales a maneuver through a `VowStatScaling` row on a "maneuver_effect"
+    `ModifierTarget` (see the Maneuver effects entry under Mechanics).
   - `CovenantRoleTechniqueSpecialty` (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
     of the vow-power model) — one row per `(covenant_role, function)` keyed on
     `magic.TechniqueFunction`, `multiplier_tenths` (default 10 = ×1.0). Valid on both
     primary roles AND sub-roles — sub-role rows ADD to the parent's (unlike the blend
-    weights/action-scaling anchor-only rule). Read by
+    weights anchor-only rule). Read by
     `covenant_role_specialty_power_term` (`world.magic.services.power_terms`).
     Lore-repo content.
   - `VowSituationalPerk` / `VowSituationalPerkSituation` / `VowSituationalPerkRung`
@@ -7882,10 +7893,6 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
-  - `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction) -> float` (#2529, #4739,
-    ADR-0149; replaces `archetype_action_scaling_bonus`) — sums `thread_level ×
-    multiplier` across engaged roles' `CovenantRoleActionScaling` rows, anchor-role
-    normalized
   - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
@@ -8459,11 +8466,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   companion`), encounter exit (`LeaveEncounterAction`), and companion defeat
   (`resolve_companion_defeat`'s die outcome, via `release_companion`).
   `CombatManeuver.CHARGE`: `declare_charge(participant, technique, opponent)` requires the
-  Mounted condition and a target >= 1 hop away and reachable within `CHARGE_MAX_HOPS`;
+  Mounted condition and a target >= 1 hop away and reachable within the "Charge: reach" maneuver effect (base 5 hops);
   resolution (`_resolve_charge_movement`, dispatched from `_resolve_pc_action`) force-moves
   the rider onto the opponent's position then falls through to the normal weapon-attack
-  pipeline — `CombatTechniqueResolver` folds `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`
-  (doubled for an equipped `GearArchetype.LANCE`) into the same
+  pipeline — `CombatTechniqueResolver` folds the "Charge: to hit" and "Charge: damage" effects
+  (base 10 and 5; an equipped `GearArchetype.LANCE` doubles the BASE only, then the rider's
+  modifiers are added and the total floored at 0 once, so a lance never undoes a penalty) into the same
   `collect_check_modifiers`/damage-budget seams every other check contribution uses; never
   `bypass_pre_apply` — defenses/guardians/ramparts fire unchanged.
   `CombatManeuver.JOUST`: `declare_joust(participant, technique)` only in a 2-participant
@@ -8603,8 +8611,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `npc_action._resolve_npc_taunt_on_target`; acts on player characters only, so an entry aimed
   at an opponent is skipped; one per target per round), Rally (`rally._surge_rallied_ally`:
   the Rally roll is the tuning's `check_type` against the fixed `RALLY_BASE_DIFFICULTY`, which
-  the roll line shows, and its outcome picks the band; a rallier's `SURGES_GIVEN` vow row
-  scales the intensity by `1 + bonus`, `apply_rolled_surge(vow_scaled=True)`, #4739), and a hurt bonded ally
+  the roll line shows, and its outcome picks the band; the rallier's "Rally: surge intensity" maneuver
+  effect (base 100, a percentage) scales the intensity by value / 100, `apply_rolled_surge(vow_scaled=True)`, #4739, #4783), and a hurt bonded ally
   (`escalation.apply_ally_hurt_surge`, fired by `ally_hurt_spike_handler` from the
   `escalation_spike_on_damage` room trigger, wound-scaled). Surfaces: `TauntAction`
   (`opponent_id` XOR `ally_participant_id`), REST `taunt` (`participant_id` XOR
@@ -8614,7 +8622,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   narration is empty), the round log (the cause line over the roll caption, which reads
   `Composure check vs taunt potency 60 · Failure · Intensity +2 · control -1 · Goaded`,
   with "bond difficulty" and "(scaled by the wound)" for a hurt ally, and
-  `· vow scaling +N` after the intensity when a rallier's vow added N), an ally taunt in the
+  `· surge +N` after the intensity when a rallier's surge intensity added N), an ally taunt in the
   Combatants row menu and a "Taunting <name>" badge in Your Turn. On a player character a compulsion such as Goaded is a
   debuff `ConditionTemplate` a band applies (owner call 2026-10-27), never a declaration
   lock. Not built: implore and challenge verbs, a Pressure card, a targeting lock. Journeys:
@@ -8883,14 +8891,17 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `_narrate_phase_transition` / `_narrate_held_back` (`services.py`) - room lines for a
     boss phase shift (authored `BossPhase.description` or generic; enrage line) and for a
     PC skipped with no declaration under TIMED/MANUAL. Both `_dual_dispatch_combat_narration`.
-- **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
-  `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
-  rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
-  into `world.combat` for a domain-agnostic concept). `apply_succor_outcome` maps a graded
-  Succor resolution to a float multiplier (clean block → 0.0, partial → 0.5, fail → 1.0);
-  consumed by round-tick hazard damage instead of mutating a payload in place (Interpose's
-  shape). Both `world.combat.services.dispatch_succor` and
-  `world.scenes.round_context.SceneRoundContext.get_cover_for` import from here.
+- **Key Services (`world/mechanics/succor_shared.py`, #1744, #4783):** `SUCCOR_CHALLENGE_NAME` +
+  `apply_succor_outcome(result, partial_protection)` — domain-agnostic Succor pieces shared by
+  combat and scene rounds (moved out of `world.combat` so `world.scenes` doesn't need a
+  one-directional import into `world.combat` for a domain-agnostic concept).
+  `apply_succor_outcome` maps a graded Succor resolution to a float multiplier (clean block →
+  0.0, partial → `1 - partial_protection / 100`, fail → 1.0); `partial_protection` is the
+  succorer's `effect_value(sheet, "Succor: partial protection")` (base 50, so a partial still
+  halves the hazard; capped at 100). Consumed by round-tick hazard damage instead of mutating a
+  payload in place (Interpose's shape). Both `world.combat.services.dispatch_succor` and
+  `world.scenes.round_context.SceneRoundContext.get_cover_for` import from here and pass the
+  value, so a scene-round Succor reads the same catalog row as combat Succor.
   - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
     `TriggerHandler.refresh()` on each active participant so passive-installed reactive
     triggers (e.g. Shielded) fire in the same round
