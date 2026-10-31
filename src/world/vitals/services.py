@@ -7,6 +7,7 @@ or any damage source.
 
 from __future__ import annotations
 
+from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING, Literal
 
@@ -41,7 +42,6 @@ from world.vitals.types import DamageConsequenceResult, WakeResult
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from datetime import datetime
-    from decimal import Decimal
 
     from evennia.objects.models import ObjectDB
 
@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from world.conditions.types import RoundTickResult
     from world.magic.types import ThreadSurvivabilitySaves
     from world.scenes.models import Interaction, Scene
-    from world.vitals.models import CharacterVitals, VitalsConsequenceConfig
+    from world.vitals.models import CharacterVitals, VitalsConsequenceConfig, WoundDetails
 
 logger = logging.getLogger(__name__)
 
@@ -543,7 +543,14 @@ def _record_wound_details(
             condition_instance=instance,
             defaults={"damage_taken": damage_dealt},
         )
-        if not created:
+        if created:
+            # A wound landing in a fight records its fight and round (#4810).
+            from world.combat.services.damage.damage import (  # noqa: PLC0415
+                stamp_combat_wound_origin,
+            )
+
+            stamp_combat_wound_origin(details, character_sheet)
+        else:
             details.damage_taken += damage_dealt
             details.save(update_fields=["damage_taken"])
 
@@ -585,6 +592,28 @@ def _apply_wound_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         )
 
 
+#: How much of a wound's mend fraction is lost per round since it landed, for a
+#: mend in the same fight (#4810). TODO(#4810): move to config.
+WOUND_CAP_SHRINK_PER_ROUND: Decimal = Decimal("0.05")
+
+
+def _rounds_since_wound(details: WoundDetails, target_sheet: CharacterSheet) -> int:
+    """Rounds since the wound landed, when this mend is in the fight it landed in.
+
+    Zero for a wound with no recorded round, and for a mend outside that fight
+    (another fight, or after it ended): the clock ticks between rounds of the
+    wound's own fight only (ratified decision 11 in #4759).
+    """
+    if details.created_round is None or details.created_encounter_id is None:
+        return 0
+    from world.combat.services.damage.damage import combat_wound_origin  # noqa: PLC0415
+
+    origin = combat_wound_origin(target_sheet)
+    if origin is None or origin.encounter.pk != details.created_encounter_id:
+        return 0
+    return max(0, origin.round_number - details.created_round)
+
+
 @transaction.atomic
 def mend_wound(
     healer_sheet: CharacterSheet,  # noqa: ARG001 - signature parity, see docstring
@@ -620,6 +649,10 @@ def mend_wound(
       passes the highest fraction any mend on the wound used: a low mend after
       a high one finds no room. Nothing new is stored. The remainder is
       permanent attrition, by design.
+    - **The healing clock (#4810):** a mend in the fight the wound landed in
+      loses ``WOUND_CAP_SHRINK_PER_ROUND`` of its fraction for each round since
+      ``WoundDetails.created_round``. A wound from another fight, or with no
+      recorded round, never shrinks.
 
     Also clamps to ``target_sheet.vitals.max_health``. Mends
     ``min(amount, remaining_fraction_cap, room_to_max_health)`` — 0 is a legal,
@@ -640,6 +673,10 @@ def mend_wound(
 
     fraction = NEVER_TO_FULL_FRACTION if cap_fraction is None else cap_fraction
     fraction = min(fraction, NEVER_TO_FULL_FRACTION)
+    fraction = max(
+        Decimal(0),
+        fraction - WOUND_CAP_SHRINK_PER_ROUND * _rounds_since_wound(details, target_sheet),
+    )
     cap_total = int(fraction * details.damage_taken)
     remaining_cap = max(0, cap_total - details.health_mended_total)
     if remaining_cap <= 0 or amount <= 0:
