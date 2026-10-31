@@ -150,6 +150,20 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         )
         raise ValueError(msg)
 
+    # Compulsions (#2845, #4802): a compelled PC whose declaration goes against the
+    # compulsion rolls to resist it, and a failure replaces the declaration with the
+    # compulsion attack. Then compelled participants who declared nothing get their
+    # simplest damaging technique auto-declared; a participant who steered their own
+    # rage (declared an attack) is skipped. Both run before NPC selection, so the
+    # enemies plan against the attack the compulsion declared.
+    from world.combat.compulsion import (  # noqa: PLC0415
+        resolve_compulsions,
+        select_compelled_actions,
+    )
+
+    resolve_compulsions(enc)
+    select_compelled_actions(enc)
+
     # NPC-selection wiring-gap fallback (#2637 design 8): select_npc_actions
     # has zero production callers outside the simulation harness in v1 — no
     # Action/command/task calls it before resolve_round. Auto-select here,
@@ -177,19 +191,6 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     if not already_selected:
         select_npc_actions(enc)
     ensure_opponent_plans(enc)
-
-    # Compulsions (#2845, #4802): a compelled PC whose declaration goes against the
-    # compulsion rolls to resist it, and a failure replaces the declaration with the
-    # compulsion attack. Then compelled participants who declared nothing get their
-    # simplest damaging technique auto-declared; a participant who steered their own
-    # rage (declared an attack) is skipped.
-    from world.combat.compulsion import (  # noqa: PLC0415
-        resolve_compulsions,
-        select_compelled_actions,
-    )
-
-    resolve_compulsions(enc)
-    select_compelled_actions(enc)
 
     enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])

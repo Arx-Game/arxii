@@ -582,6 +582,9 @@ def _attempt_guardian_interpose(
     # (#4676): each reaction already made this round makes this roll harder by
     # MovementConfig.reaction_difficulty_step.
     modifiers = bond_bonus(interposer, protected) - reaction_penalty(guardian)
+    if action is not None:
+        # A strained compulsion resist (#4802) lands its penalty on the declared guard.
+        modifiers -= action.compulsion_penalty
 
     technique_action = (
         action if action is not None and action.focused_action_id is not None else None

@@ -32,7 +32,7 @@ class BerserkCompulsionSeedTests(TestCase):
         ensure_berserk_content()  # idempotent
         compulsion = get_berserk_template().compulsion
         self.assertEqual(compulsion.wants, CompulsionWant.ATTACK_OPPONENT)
-        self.assertEqual(compulsion.check_type.name, "compulsion_resist")
+        self.assertEqual(compulsion.check_type.name, "Resist compulsion")
         weights = {row.trait.name: float(row.weight) for row in compulsion.check_type.traits.all()}
         self.assertEqual(weights, {"willpower": 1.0, "composure": 0.5})
         self.assertEqual((compulsion.base_difficulty, compulsion.difficulty_per_severity), (25, 2))

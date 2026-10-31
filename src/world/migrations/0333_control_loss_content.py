@@ -102,7 +102,7 @@ def _berserk_compulsion(apps):
         condition_id=config.berserk_condition_id,
         wants="attack_opponent",
         check_type=_check_type(
-            apps, "compulsion_resist", "Holding the self against a compulsion (#4802)."
+            apps, "Resist compulsion", "Holding the self against a compulsion (#4802)."
         ),
         base_difficulty=25,
         difficulty_per_severity=2,

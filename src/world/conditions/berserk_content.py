@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 BERSERK_SEED_TEMPLATE_NAME = "Berserk"
 CONTROL_CATEGORY_NAME = "Control"
-COMPULSION_RESIST_CHECK_NAME = "compulsion_resist"
+COMPULSION_RESIST_CHECK_NAME = "Resist compulsion"
 
 
 def ensure_berserk_content() -> None:
@@ -143,7 +143,7 @@ def ensure_restore_to_sense_effect(berserk_template: ConditionTemplate) -> None:
 
 
 def ensure_compulsion_resist_check_type() -> CheckType:
-    """Idempotently seed the ``compulsion_resist`` CheckType (#4802).
+    """Idempotently seed the "Resist compulsion" CheckType (#4802).
 
     Willpower-led, with composure at half weight, the same shape as ``moon_control``.
     The weights are only written when the trait link is first made, so staff edits

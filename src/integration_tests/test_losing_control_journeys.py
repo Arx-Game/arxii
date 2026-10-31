@@ -19,16 +19,18 @@ from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 
+from actions.constants import ActionTargetType
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
-from world.combat.constants import ActionCategory, ParticipantStatus
+from world.combat.constants import ActionCategory, CombatManeuver, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    SocialManeuverConfigFactory,
 )
 from world.combat.models import CombatRoundAction, FleeConfig
 from world.combat.services import resolve_round
@@ -49,7 +51,7 @@ from world.conditions.services import (
     get_active_conditions,
 )
 from world.game_clock.constants import TimePhase
-from world.magic.constants import TargetKind
+from world.magic.constants import TargetKind, TechniqueReach
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterGiftFactory,
@@ -363,6 +365,8 @@ class _CompelledMira(_ControlLossCase):
             action_category=ActionCategory.PHYSICAL,
             action_template=template,
             anima_cost=1,
+            reach=TechniqueReach.ADJACENT,
+            target_type=ActionTargetType.SINGLE,
         )
         self.mend = TechniqueFactory(
             name="Mend",
@@ -377,9 +381,9 @@ class _CompelledMira(_ControlLossCase):
         self.rage = apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3).instance
         self.watch(self.mira)
 
-    def resolve(self) -> None:
+    def resolve(self, offense=_land_the_swing) -> None:
         with self.captureOnCommitCallbacks(execute=True):
-            resolve_round(self.encounter, offense_check_fn=_land_the_swing)
+            resolve_round(self.encounter, offense_check_fn=offense)
 
     @staticmethod
     @contextmanager
@@ -418,6 +422,16 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
         self.assertEqual(self.rolled_on(spy, compulsion.check_type), [])
         self.assertNotTold(self.mira, "tries to")
 
+    def test_a_waiting_strike_is_an_attack_and_rolls_nothing(self) -> None:
+        told = self.telnet(self.mira, "combat await Claw")
+        self.assertEqual(self.declared().maneuver, CombatManeuver.AWAIT_OPENING, told)
+
+        with self.resist_rolls() as spy:
+            self.resolve()
+
+        self.assertEqual(self.rolled_on(spy, self.berserk.compulsion.check_type), [])
+        self.assertNotTold(self.mira, "tries to")
+
     def test_idle_compelled_pc_is_auto_declared(self) -> None:
         with self.resist_rolls() as spy:
             self.resolve()
@@ -426,6 +440,8 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
         action = self.declared()
         self.assertEqual(action.focused_action, self.claw)
         self.assertEqual(action.focused_opponent_target, self.captain)
+        # The rage never consents to Soulfray risk for the player (AFK never kills).
+        self.assertFalse(action.confirm_soulfray_risk)
 
 
 class ACompelledFighterWhoFlees(_CompelledMira):
@@ -438,7 +454,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
 
         self.assertTold(
             self.mira,
-            "Mira tries to flee against Berserk. compulsion_resist vs 36: Partial Success.",
+            "Mira tries to flee against Berserk. Resist compulsion vs 36: Partial Success.",
         )
         flee_rolls = self.rolled_on(spy, self.flee_check)
         self.assertEqual(len(flee_rolls), 1)
@@ -452,12 +468,13 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.failure):
             self.resolve()
 
-        self.assertTold(self.mira, "compulsion_resist vs 36: Failure.")
+        self.assertTold(self.mira, "Resist compulsion vs 36: Failure.")
         self.assertTold(self.mira, "Berserk wins out: Mira attacks Bandit Captain.")
         self.assertEqual(self.rolled_on(spy, self.flee_check), [])
         action = self.declared()
         self.assertIsNone(action.maneuver)
         self.assertEqual(action.focused_action, self.claw)
+        self.assertFalse(action.confirm_soulfray_risk)
         self.seat.refresh_from_db()
         self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
 
@@ -482,9 +499,41 @@ class ACompelledFighterWhoHeals(_CompelledMira):
 
         # 25 base + 2 per severity x 3, and Mend is not a forbidden action.
         self.assertTold(
-            self.mira, "Mira tries to use Mend against Berserk. compulsion_resist vs 31: Success."
+            self.mira, "Mira tries to use Mend against Berserk. Resist compulsion vs 31: Success."
         )
         self.assertEqual(self.declared().focused_action, self.mend)
+
+    def test_a_strained_mend_rolls_at_the_penalty(self) -> None:
+        self.telnet(self.mira, "cast Mend")
+        offense = MagicMock(wraps=_land_the_swing)
+
+        with force_check_outcome(self.partial):
+            self.resolve(offense)
+
+        self.assertTold(self.mira, "Resist compulsion vs 31: Partial Success.")
+        self.assertEqual(offense.call_args.kwargs["extra_modifiers"], -4)
+
+
+class ACompelledFighterWhoParleys(_CompelledMira):
+    def setUp(self) -> None:
+        super().setUp()
+        self.parley_check = CheckTypeFactory(name="Talk them down")
+        SocialManeuverConfigFactory(parley_check_type=self.parley_check)
+        self.captain.morale = 0
+        self.captain.save(update_fields=["morale"])
+
+    def test_a_strained_parley_rolls_at_the_penalty(self) -> None:
+        told = self.telnet(self.mira, "combat parley Bandit Captain")
+        self.assertEqual(self.declared().maneuver, CombatManeuver.PARLEY, told)
+
+        with self.resist_rolls() as spy, force_check_outcome(self.partial):
+            self.resolve()
+
+        # 31 + 5: parley is forbidden.
+        self.assertTold(self.mira, "Mira tries to parley against Berserk. Resist compulsion vs 36")
+        parley_rolls = self.rolled_on(spy, self.parley_check)
+        self.assertEqual(len(parley_rolls), 1)
+        self.assertEqual(parley_rolls[0].kwargs["extra_modifiers"], -4)
 
 
 class TwoCompulsionsAtOnce(_CompelledMira):
@@ -503,6 +552,6 @@ class TwoCompulsionsAtOnce(_CompelledMira):
             self.resolve()
 
         self.assertTold(
-            self.mira, "Mira tries to flee against Battle fever. compulsion_resist vs 10: Success."
+            self.mira, "Mira tries to flee against Battle fever. Resist compulsion vs 10: Success."
         )
         self.assertNotTold(self.mira, "against Berserk")

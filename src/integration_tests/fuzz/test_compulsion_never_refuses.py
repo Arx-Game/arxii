@@ -19,23 +19,46 @@ from evennia.objects.models import ObjectDB
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from integration_tests.test_losing_control_journeys import _CompelledMira
 from world.checks.test_helpers import force_check_outcome
+from world.combat.factories import CombatParticipantFactory
 from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
 from world.conditions.berserk_content import outcome_at_level
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.vitals.models import CharacterVitals
 
-# Every one is a declaration an uncompelled Mira can make in this fight.
+# Every one is a declaration an uncompelled Mira can make in this fight. Yield is left
+# out: it concedes a duel on the spot rather than declaring for the round, and this
+# fight is not a duel.
 TELNET_LINES = (
     "combat flee",
     "combat parley Bandit Captain",
+    "combat taunt Bandit Captain",
+    "combat demoralize Bandit Captain",
+    "combat rally Tomas",
+    "combat cover Tomas",
+    "combat await Claw",
     "cast Claw at Bandit Captain",
     "cast Mend",
 )
-WEB_KEYS = ("combat_flee", "combat_parley")
+WEB_KEYS = ("combat_flee", "combat_parley", "combat_rally", "combat_use")
 REFUSALS = ("Could not", "Cannot", "cannot", "will not", "You can't")
 
 
 class ACompulsionNeverRefuses(HypothesisTestCase, _CompelledMira):
+    def setUp(self) -> None:
+        super().setUp()
+        tomas = self.make_player("Tomas", room=self.road)
+        CharacterVitals.objects.create(
+            character_sheet=tomas.sheet_data, health=100, max_health=100, base_max_health=100
+        )
+        self.tomas_seat = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=tomas.sheet_data
+        )
+        tonic = ObjectDBFactory(db_key="Tonic", location=self.mira)
+        self.tonic = ItemInstanceFactory(template=ItemTemplateFactory(), game_object=tonic)
+
     def fresh(self) -> None:
         """Load the shared rows again: the identity map is emptied between examples, and
         a round leaves its writes on the old instances after the rollback."""
@@ -56,7 +79,11 @@ class ACompulsionNeverRefuses(HypothesisTestCase, _CompelledMira):
             for refusal in REFUSALS:
                 self.assertNotIn(refusal, told, f"{choice!r} was refused: {told!r}")
             return
-        kwargs = {"opponent_id": self.captain.pk} if choice == "combat_parley" else {}
+        kwargs = {
+            "combat_parley": {"opponent_id": self.captain.pk},
+            "combat_rally": {"ally_participant_id": self.tomas_seat.pk},
+            "combat_use": {"item_instance_id": self.tonic.pk},
+        }.get(choice, {})
         result = self.web(self.mira, choice, **kwargs)
         self.assertTrue(result.detail.success, f"{choice!r} was refused: {result.detail.message}")
 

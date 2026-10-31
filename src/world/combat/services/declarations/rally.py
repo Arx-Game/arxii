@@ -187,7 +187,13 @@ def _resolve_rally(
     # An inactive check type counts as unset, the same rule Taunt follows.
     if surge_tuning is None or not surge_tuning.check_type.is_active:
         return outcome
-    rally_result = roll_social_check(participant, surge_tuning.check_type, RALLY_BASE_DIFFICULTY)
+    rally_result = roll_social_check(
+        participant,
+        surge_tuning.check_type,
+        RALLY_BASE_DIFFICULTY,
+        # A strained compulsion resist (#4802) lands its penalty on the rally roll.
+        extra_modifiers=-action.compulsion_penalty,
+    )
     success_level = rally_result.success_level or 0
     ally = action.focused_ally_target
     if success_level >= 1 and ally is not None:

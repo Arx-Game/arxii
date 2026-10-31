@@ -53,7 +53,12 @@ if TYPE_CHECKING:
         CombatParticipant,
         CombatRoundAction,
     )
-    from world.conditions.models import Compulsion, CompulsionResistBand, ConditionInstance
+    from world.conditions.models import (
+        Compulsion,
+        CompulsionForbiddenAction,
+        CompulsionResistBand,
+        ConditionInstance,
+    )
     from world.magic.models import Technique
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
@@ -64,6 +69,11 @@ RAMPAGE_EMIT = (
     "{name} rages at nothing and everything, claws raking the air, hunting for something to break."
 )
 BERSERK_LEAVE_REFUSAL = "The rage will not walk away. You can still try to flee."
+
+#: Maneuvers that are attacks, so a compelled character makes them with no roll (R10).
+_ATTACK_MANEUVERS = frozenset(
+    {CombatManeuver.CHARGE, CombatManeuver.JOUST, CombatManeuver.AWAIT_OPENING}
+)
 
 #: The declared maneuvers a compulsion can name as forbidden, by maneuver.
 _FORBIDDEN_BY_MANEUVER: dict[str, str] = {
@@ -90,19 +100,26 @@ def compulsion_difficulty(
     compulsion: Compulsion,
     instance: ConditionInstance,
     forbidden: str | None,
+    *,
+    forbidden_row: CompulsionForbiddenAction | None = None,
 ) -> int:
     """The resist roll's difficulty: base, plus per severity, plus a forbidden extra.
 
     ``forbidden`` is a ``CompulsionForbidden`` value; it adds that action's
-    ``extra_difficulty`` only when the compulsion names it.
+    ``extra_difficulty`` only when the compulsion names it. A caller that already
+    fetched the row passes it as ``forbidden_row`` and no query is made.
     """
-    extra = 0
-    if forbidden is not None:
-        row = compulsion.forbidden.filter(action=forbidden).order_by("pk").first()
-        extra = row.extra_difficulty if row is not None else 0
+    if forbidden_row is None and forbidden is not None:
+        forbidden_row = _forbidden_row(compulsion, forbidden)
+    extra = forbidden_row.extra_difficulty if forbidden_row is not None else 0
     return (
         compulsion.base_difficulty + compulsion.difficulty_per_severity * instance.severity + extra
     )
+
+
+def _forbidden_row(compulsion: Compulsion, forbidden: str) -> CompulsionForbiddenAction | None:
+    """The compulsion's row naming *forbidden*, or None when it does not forbid it."""
+    return compulsion.forbidden.filter(action=forbidden).order_by("pk").first()
 
 
 def compulsion_band(
@@ -116,12 +133,17 @@ def compulsion_band(
 
 
 def _is_compelled_attack(action: CombatRoundAction) -> bool:
-    """Whether the declaration is what the compulsion wants: a technique at an opponent."""
-    return (
-        action.focused_action_id is not None
-        and action.focused_opponent_target_id is not None
-        and not action.maneuver
-    )
+    """Whether the declaration is what the compulsion wants: an attack on an opponent.
+
+    A technique at an opponent with no maneuver, or an attack maneuver with its strike
+    technique: a charge, a joust, a waiting strike (a joust and a waiting strike name no
+    opponent until they land).
+    """
+    if action.focused_action_id is None:
+        return False
+    if action.maneuver:
+        return action.maneuver in _ATTACK_MANEUVERS
+    return action.focused_opponent_target_id is not None
 
 
 def _forbidden_key(action: CombatRoundAction) -> str | None:
@@ -140,10 +162,10 @@ def _cost(
     if _is_compelled_attack(action):
         return None
     key = _forbidden_key(action)
-    forbidden = key is not None and compulsion.forbidden.filter(action=key).exists()
+    row = _forbidden_row(compulsion, key) if key is not None else None
     return CompulsionCost(
-        difficulty=compulsion_difficulty(compulsion, instance, key if forbidden else None),
-        forbidden=forbidden,
+        difficulty=compulsion_difficulty(compulsion, instance, key, forbidden_row=row),
+        forbidden=row is not None,
     )
 
 
@@ -219,9 +241,10 @@ def _resist(
     first = perform_check_with_modifiers(
         character, compulsion.check_type, target_difficulty=difficulty
     )
+    name = _name(participant)
     _tell_room(
         participant,
-        f"{_name(participant)} tries to {_action_label(action)} against "
+        f"{name} tries to {_action_label(action)} against "
         f"{compulsion.condition.name}. {compulsion.check_type.name} vs {difficulty}: "
         f"{_outcome_name(first)}.",
     )
@@ -230,7 +253,7 @@ def _resist(
         second = try_steady(participant, compulsion, difficulty)
         if second is not None:
             band = compulsion_band(compulsion, second.outcome)
-    _apply_band(participant, action, compulsion, band)
+    _apply_band(participant, action, compulsion, band, name=name)
     return CompulsionRoll(
         participant=participant,
         action=action,
@@ -246,15 +269,20 @@ def _apply_band(
     action: CombatRoundAction,
     compulsion: Compulsion,
     band: CompulsionResistBand | None,
+    *,
+    name: str,
 ) -> None:
-    """Strain the action, or replace it with the compulsion attack, and move control."""
+    """Strain the action, or replace it with the compulsion attack, and move control.
+
+    ``name`` is the participant's persona name, for the round line.
+    """
     if band is None:
         return
     if band.result == CompulsionResult.ACTS_STRAINED:
         action.compulsion_penalty = band.action_penalty
         action.save(update_fields=["compulsion_penalty"])
     elif band.result == CompulsionResult.COMPULSION_ACTS:
-        _compulsion_acts(participant, action, compulsion)
+        _compulsion_acts(participant, action, compulsion, name=name)
     if band.control_change:
         _shift_control(participant, band.control_change)
 
@@ -263,11 +291,13 @@ def _compulsion_acts(
     participant: CombatParticipant,
     action: CombatRoundAction,
     compulsion: Compulsion,
+    *,
+    name: str,
 ) -> None:
     """Delete the declaration and declare the compulsion attack in its place.
 
-    With no damaging technique or no active opponent the declaration is only cancelled;
-    the round says so and nothing is raised.
+    With no damaging technique, no active opponent, or a compulsion attack that fails to
+    declare, the declaration is only cancelled; the round says so and nothing is raised.
     """
     label = _action_label(action)
     action.delete()
@@ -276,7 +306,6 @@ def _compulsion_acts(
     replaced = None
     if target is not None and technique is not None:
         replaced = _declare_rage_attack(participant, technique, target)
-    name = _name(participant)
     condition = compulsion.condition.name
     if replaced is not None and target is not None:
         _tell_room(participant, f"{condition} wins out: {name} attacks {target.name}.")
@@ -407,7 +436,11 @@ def _declare_rage_attack(
     technique: Technique,
     target: CombatOpponent,
 ) -> CombatRoundAction | None:
-    """One compelled declaration; validation failures skip, never abort."""
+    """One compelled declaration; validation failures skip, never abort.
+
+    Never consents to Soulfray risk on the player's behalf (AFK never kills): a strike
+    that would need Soulfray lapses at resolution like any unconsented cast.
+    """
     from world.combat.services import declare_action  # noqa: PLC0415
     from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
@@ -418,7 +451,7 @@ def _declare_rage_attack(
             focused_category=technique.action_category,
             effort_level=EffortLevel.MEDIUM,
             focused_opponent_target=target,
-            confirm_soulfray_risk=True,
+            confirm_soulfray_risk=False,
         )
     except ValueError as exc:
         logger.info(
@@ -454,7 +487,7 @@ def berserk_rampage_window(character: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
     victim_sheet = _nearest_npc_sheet(character, room)
     scene = get_active_scene(room)
     if sheet is None or technique is None or victim_sheet is None or scene is None:
-        room.msg_contents(RAMPAGE_EMIT.format(name=character.key))
+        room.msg_contents(RAMPAGE_EMIT.format(name=_persona_name(character)))
         return
     _seed_rampage_encounter(sheet, victim_sheet, technique, scene, room)
 
@@ -479,7 +512,17 @@ def _seed_rampage_encounter(
         )
     except ValueError as exc:
         logger.info("Berserk rampage could not seed encounter: %s", exc)
-        room.msg_contents(RAMPAGE_EMIT.format(name=sheet.character.key))
+        room.msg_contents(RAMPAGE_EMIT.format(name=_persona_name(sheet.character)))
+
+
+def _persona_name(character: ObjectDB) -> str:  # noqa: OBJECTDB_PARAM - the rampage holds characters
+    """The persona name others know *character* by; the key when there is no sheet."""
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None:
+        return character.key
+    return persona_names_for_sheets([sheet.pk]).get(sheet.pk, character.key)
 
 
 def _nearest_npc_sheet(character: ObjectDB, room: ObjectDB) -> CharacterSheet | None:
