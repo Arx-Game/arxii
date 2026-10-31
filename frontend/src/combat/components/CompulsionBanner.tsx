@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
 
 export type Compulsion = components['schemas']['Compulsion'];
-type ActionCost = Compulsion['against'][number];
+export type ActionCost = Compulsion['against'][number];
 
 /** The panel key for a technique that names no opponent (a defend, a heal). */
 export const NO_TARGET_TECHNIQUE_KEY = 'technique_no_target';
@@ -23,6 +23,11 @@ export function compulsionCost(
 ): ActionCost | null {
   if (!compulsion) return null;
   return compulsion.against.find((cost) => cost.action_key === actionKey) ?? null;
+}
+
+/** "Forbidden, difficulty 36" or "Difficulty 31": the cost on a marked action. */
+export function costLabel(cost: ActionCost): string {
+  return `${cost.forbidden ? 'Forbidden, difficulty' : 'Difficulty'} ${cost.difficulty}`;
 }
 
 function lowerFirst(text: string): string {
@@ -70,8 +75,53 @@ export function CompulsionMark({
         className="px-2 pb-1 text-xs font-medium text-red-700 dark:text-red-300"
         data-testid={`compulsion-difficulty-${actionKey}`}
       >
-        {cost.forbidden ? 'Forbidden, difficulty' : 'Difficulty'} {cost.difficulty}
+        {costLabel(cost)}
       </p>
     </div>
+  );
+}
+
+/** The ring and the cost for a menu item, which cannot hold a wrapping block. */
+export const COMPULSION_ITEM_CLASS = 'ring-1 ring-red-500/70';
+
+export function CompulsionCostTag({ cost }: { cost: ActionCost }) {
+  return (
+    <span
+      className="ml-auto pl-3 text-xs font-medium text-red-700 dark:text-red-300"
+      data-testid="compulsion-cost-tag"
+    >
+      {costLabel(cost)}
+    </span>
+  );
+}
+
+function sentenceCase(key: string): string {
+  const text = key.replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The line under the chosen action: what the check is and what makes it hard. */
+export function CompulsionChosenLine({
+  compulsion,
+  actionKey,
+}: {
+  compulsion: Compulsion;
+  actionKey: string;
+}) {
+  const cost = compulsionCost(compulsion, actionKey);
+  if (cost === null) return null;
+  const { condition_name: name, check_name: check } = compulsion;
+  return (
+    <p
+      className="rounded-md border border-red-500/60 bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200"
+      data-testid="compulsion-chosen-line"
+    >
+      <span className="font-semibold">Against {name}.</span>{' '}
+      {cost.forbidden
+        ? `${name} forbids ${sentenceCase(actionKey)}: ${check} check, difficulty ${cost.difficulty} ` +
+          `(${cost.difficulty - cost.extra_difficulty} to resist, +${cost.extra_difficulty} ` +
+          'because it is forbidden).'
+        : `${check} check, difficulty ${cost.difficulty}.`}
+    </p>
   );
 }

@@ -50,6 +50,8 @@ from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import active_compulsion, has_compulsion
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -235,32 +237,64 @@ def compulsion_against(
 #: The panel key for a technique that names no opponent (a defend, a heal).
 NO_TARGET_TECHNIQUE_KEY = "technique_no_target"
 
+#: The maneuvers that write a round action and so are charged by ``resolve_compulsions``
+#: when they are not attacks. Engage, disengage and yield declare no round action.
+_ROUND_MANEUVERS = (
+    CombatManeuver.FLEE,
+    CombatManeuver.COVER,
+    CombatManeuver.INTERPOSE,
+    CombatManeuver.SUCCOR,
+    CombatManeuver.RALLY,
+    CombatManeuver.DEMORALIZE,
+    CombatManeuver.TAUNT,
+    CombatManeuver.PARLEY,
+    CombatManeuver.USE_ITEM,
+)
 
-def compulsion_summary(participant: CombatParticipant) -> CompulsionSummary | None:
-    """The participant's compulsion and every declarable action's cost, for the declare panel.
+#: Actions resolved outside the round, each rolled at once by ``resist_compulsion_now``.
+_OUTSIDE_ROUND = (CompulsionForbidden.LEAVE, CompulsionForbidden.REVERT_FORM)
+
+
+def compulsion_summary(
+    participant: CombatParticipant,
+    active_instances: Sequence[ConditionInstance] | None = None,
+) -> CompulsionSummary | None:
+    """The participant's compulsion and every declarable action's cost, for the declare panel."""
+    return compulsion_summary_for(participant.character_sheet.character, active_instances)
+
+
+def compulsion_summary_for(
+    character: ObjectDB | None,  # noqa: OBJECTDB_PARAM - the forms read holds a character
+    active_instances: Sequence[ConditionInstance] | None = None,
+) -> CompulsionSummary | None:
+    """The character's compulsion and what each action that goes against it costs.
 
     The compulsion and its forbidden rows are read once; each action's cost is derived
     from them, so the number of options adds no queries. Attacks are free and are left out.
+    Covers the round's maneuvers, a technique with no opponent, and the two actions
+    resolved outside the round (leave, change back).
     """
-    character = participant.character_sheet.character
     if character is None:
         return None
-    found = active_compulsion(character)
+    found = active_compulsion(character, active_instances)
     if found is None:
         return None
     compulsion, instance = found
     rows = {row.action: row for row in compulsion.forbidden.all()}
+    options: list[tuple[str, str | None]] = [
+        *((m.value, _FORBIDDEN_BY_MANEUVER.get(m)) for m in _ROUND_MANEUVERS),
+        (NO_TARGET_TECHNIQUE_KEY, None),
+        *((o.value, o.value) for o in _OUTSIDE_ROUND),
+    ]
     against: list[CompulsionActionCost] = []
-    for key in [*CombatManeuver.values, NO_TARGET_TECHNIQUE_KEY]:
-        if key in _ATTACK_MANEUVERS:
-            continue
-        forbidden_key = _FORBIDDEN_BY_MANEUVER.get(key)
+    for key, forbidden_key in options:
         row = rows.get(forbidden_key) if forbidden_key is not None else None
         against.append(
             CompulsionActionCost(
                 action_key=key,
                 difficulty=compulsion_difficulty(compulsion, instance, None, forbidden_row=row),
                 forbidden=row is not None,
+                extra_difficulty=row.extra_difficulty if row is not None else 0,
             )
         )
     return CompulsionSummary(
@@ -273,13 +307,14 @@ def compulsion_summary(participant: CombatParticipant) -> CompulsionSummary | No
 
 def compulsion_warning(participant: CombatParticipant, action: CombatRoundAction) -> str | None:
     """The line a telnet declare prints when *action* goes against the compulsion."""
-    cost = compulsion_against(participant, action)
-    if cost is None:
-        return None
-    found = active_compulsion(participant.character_sheet.character)
+    character = participant.character_sheet.character
+    found = active_compulsion(character) if character is not None else None
     if found is None:
         return None
-    compulsion, _ = found
+    compulsion, instance = found
+    cost = _cost(compulsion, instance, action)
+    if cost is None:
+        return None
     return (
         f"Against {compulsion.condition.name}: {compulsion.check_type.name} check, "
         f"difficulty {cost.difficulty}. If it fails, you attack instead."

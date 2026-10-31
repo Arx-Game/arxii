@@ -157,6 +157,11 @@ class AlternateSelfViewSet(
         context["active_alternate_self_id"] = (
             active.alternate_self_id if active is not None else None
         )
+        # What changing back costs under a compulsion (#4802), also one fact per request.
+        from world.combat.compulsion import compulsion_summary_for  # noqa: PLC0415
+        from world.combat.serializers import serialize_compulsion_summary  # noqa: PLC0415
+
+        context["compulsion"] = serialize_compulsion_summary(compulsion_summary_for(character))
         return context
 
     def get_queryset(self):

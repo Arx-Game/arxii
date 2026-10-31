@@ -1,15 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { CompulsionBanner, CompulsionMark, compulsionCost } from '../CompulsionBanner';
+import {
+  CompulsionBanner,
+  CompulsionChosenLine,
+  CompulsionMark,
+  compulsionCost,
+} from '../CompulsionBanner';
 
 const COMPULSION = {
   condition_name: 'Berserk',
   wants_label: 'Attack an opponent',
   check_name: 'Resist compulsion',
   against: [
-    { action_key: 'flee', difficulty: 36, forbidden: true },
-    { action_key: 'technique_no_target', difficulty: 31, forbidden: false },
+    { action_key: 'flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
+    { action_key: 'technique_no_target', difficulty: 31, forbidden: false, extra_difficulty: 0 },
   ],
 };
 
@@ -52,5 +57,22 @@ describe('CompulsionMark', () => {
     );
     expect(screen.queryByTestId('compulsion-mark-flee')).not.toBeInTheDocument();
     expect(compulsionCost(COMPULSION, 'technique_no_target')?.difficulty).toBe(31);
+  });
+});
+
+describe('CompulsionChosenLine', () => {
+  it('says what a forbidden action adds to the difficulty', () => {
+    render(<CompulsionChosenLine compulsion={COMPULSION} actionKey="flee" />);
+    expect(screen.getByTestId('compulsion-chosen-line')).toHaveTextContent(
+      'Against Berserk. Berserk forbids Flee: Resist compulsion check, difficulty 36 ' +
+        '(31 to resist, +5 because it is forbidden).'
+    );
+  });
+
+  it('gives the plain check for an action that is not forbidden', () => {
+    render(<CompulsionChosenLine compulsion={COMPULSION} actionKey="technique_no_target" />);
+    expect(screen.getByTestId('compulsion-chosen-line')).toHaveTextContent(
+      'Against Berserk. Resist compulsion check, difficulty 31.'
+    );
   });
 });

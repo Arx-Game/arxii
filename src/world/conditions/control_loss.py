@@ -19,6 +19,8 @@ from world.conditions.constants import ControlLossFiresOn
 from world.conditions.types import ControlLossOutcome
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -34,15 +36,19 @@ if TYPE_CHECKING:
 
 def active_compulsion(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - the cron and combat hold characters
+    active_instances: Sequence[ConditionInstance] | None = None,
 ) -> tuple[Compulsion, ConditionInstance] | None:
     """The compulsion currently driving *character*: highest severity, ties by instance pk.
 
     Reads the condition handler's cached active list, then one query for the compulsion
-    rows of those conditions.
+    rows of those conditions. A caller that already holds the character's active
+    instances (the encounter read preloads them) passes them as ``active_instances``.
     """
     from world.conditions.models import Compulsion  # noqa: PLC0415
 
-    instances = {inst.condition_id: inst for inst in character.conditions.active()}
+    if active_instances is None:
+        active_instances = character.conditions.active()
+    instances = {inst.condition_id: inst for inst in active_instances}
     if not instances:
         return None
     best: tuple[Compulsion, ConditionInstance] | None = None

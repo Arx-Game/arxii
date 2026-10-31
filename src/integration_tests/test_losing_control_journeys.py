@@ -113,6 +113,9 @@ def _berserk_of(character):
     return next((i for i in get_active_conditions(character) if i.condition_id == berserk.pk), None)
 
 
+COMPELLED_PAYLOAD_QUERIES = 6
+
+
 class _ControlLossCase(JourneyCase):
     def setUp(self) -> None:
         super().setUp()
@@ -913,6 +916,20 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertFalse(self.wearing_the_beast())
 
+    def test_the_worn_self_lists_what_changing_back_costs(self) -> None:
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+        # The factory leaves the stage's multiplier a string; the read needs the stored one.
+        for stage in self.berserk.stages.all():
+            stage.refresh_from_db()
+        client = self.api(self.account_of(self.mira))
+
+        response = client.get(f"/api/forms/alternate-selves/?character_sheet={self.sheet.pk}")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        worn = response.data["results"][0]["compulsion"]
+        revert = next(c for c in worn["against"] if c["action_key"] == "revert_form")
+        self.assertEqual((revert["difficulty"], revert["forbidden"]), (41, True))
+
     def test_charmed_pc_reverts_freely(self) -> None:
         charm = ConditionTemplateFactory(
             name="Charmed", category=ConditionCategoryFactory(alters_behavior=True)
@@ -1014,8 +1031,15 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         against = {row["action_key"]: row for row in own["against"]}
         # 25 base + 2 per severity x 3; flee also carries Berserk's +5 for being forbidden.
         self.assertEqual(
-            against["flee"], {"action_key": "flee", "difficulty": 36, "forbidden": True}
+            against["flee"],
+            {"action_key": "flee", "difficulty": 36, "forbidden": True, "extra_difficulty": 5},
         )
+        # Leaving and changing back roll too, though neither is declared in the round.
+        self.assertIn("leave", against)
+        self.assertEqual(against["revert_form"]["difficulty"], 41)
+        self.assertTrue(against["revert_form"]["forbidden"])
+        self.assertNotIn("engage", against)
+        self.assertNotIn("yield", against)
         self.assertEqual(against["technique_no_target"]["difficulty"], 31)
         self.assertFalse(against["technique_no_target"]["forbidden"])
         self.assertNotIn("charge", against)
@@ -1053,3 +1077,20 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         told = self.telnet(self.mira, "combat dodge off")
 
         self.assertNotIn("Against Berserk", told)
+
+    def test_flee_then_engage_does_not_repeat_the_warning(self) -> None:
+        self.telnet(self.mira, "combat flee")
+
+        told = self.telnet(self.mira, f"combat engage {self.captain.name}")
+
+        self.assertNotIn("Against Berserk", told)
+
+    def test_a_compelled_viewers_payload_costs_a_fixed_query_count(self) -> None:
+        """The compulsion and every option's cost come from one read, not one per option."""
+        self.payload(self.mira, self.seat)  # warm the caches
+
+        with self.assertNumQueries(COMPELLED_PAYLOAD_QUERIES):
+            own = self.payload(self.mira, self.seat)["compulsion"]
+
+        self.assertEqual(own["condition_name"], "Berserk")
+        self.assertGreater(len(own["against"]), 5)

@@ -122,11 +122,18 @@ class _CombatCommandMixin(PullParsingMixin):
     def _report_dispatch_result(self, result: DispatchResult) -> None:
         """Confirm the dispatch, led by the compulsion's warning when the declare goes
         against it (#4802)."""
-        if self._declares_a_round_action():
+        if self._declares_a_round_action() and self._dispatch_succeeded(result):
             warning = self._compulsion_warning()
             if warning:
                 self.msg(warning)
         super()._report_dispatch_result(result)
+
+    @staticmethod
+    def _dispatch_succeeded(result: DispatchResult) -> bool:
+        """A deferred round declaration landed, or the immediate result succeeded."""
+        if result.deferred:
+            return True
+        return result.detail is not None and result.detail.success
 
     def _compulsion_warning(self) -> str | None:
         """The "Against X" line for the caller's declared action this round, or None."""
@@ -265,6 +272,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _variant_resonance_str: str | None = None
 
     # --------------------------------------------------------------------------
+
+    def _declares_a_round_action(self) -> bool:
+        """A secondary (passive-slot) declaration leaves the focused action as it was."""
+        return not self._secondary
 
     def _parse_args(self) -> None:  # noqa: PLR0915 - one strip step per cast keyword
         """Parse ``self.args`` once; cache technique name, optional target, effort, secondary.

@@ -2896,7 +2896,10 @@ describe('YourTurn — compulsion', () => {
     condition_name: 'Berserk',
     wants_label: 'Attack an opponent',
     check_name: 'Resist compulsion',
-    against: [{ action_key: 'flee', difficulty: 36, forbidden: true }],
+    against: [
+      { action_key: 'flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
+      { action_key: 'use_item', difficulty: 31, forbidden: false, extra_difficulty: 0 },
+    ],
   };
 
   it('shows the banner and marks flee with its difficulty', () => {
@@ -2911,6 +2914,29 @@ describe('YourTurn — compulsion', () => {
     expect(screen.getByTestId('compulsion-banner')).toHaveTextContent('Berserk compels');
     expect(screen.getByTestId('compulsion-difficulty-flee')).toHaveTextContent('difficulty 36');
     expect(screen.queryByTestId('compulsion-mark-cover')).not.toBeInTheDocument();
+  });
+
+  it('says what a declared forbidden maneuver adds, under the banner', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-chosen-line')).toHaveTextContent(
+      'Berserk forbids Flee: Resist compulsion check, difficulty 36 (31 to resist, +5'
+    );
   });
 
   it('shows neither without a compulsion', () => {

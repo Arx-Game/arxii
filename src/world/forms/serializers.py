@@ -1,5 +1,9 @@
+from typing import Any
+
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.combat.serializers import CompulsionSerializer
 from world.forms.models import (
     AlternateSelf,
     Build,
@@ -104,6 +108,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
     has_techniques = serializers.SerializerMethodField()
     resonance_name = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
+    compulsion = serializers.SerializerMethodField()
 
     class Meta:
         model = AlternateSelf
@@ -116,6 +121,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             "has_techniques",
             "resonance_name",
             "is_active",
+            "compulsion",
         ]
 
     def get_persona_name(self, obj: AlternateSelf) -> str | None:
@@ -132,6 +138,13 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
 
     def get_resonance_name(self, obj: AlternateSelf) -> str | None:
         return obj.resonance.name if obj.resonance_id is not None else None
+
+    @extend_schema_field(CompulsionSerializer(allow_null=True))
+    def get_compulsion(self, obj: AlternateSelf) -> dict[str, Any] | None:
+        """What changing back costs under the wearer's compulsion (#4802); worn self only."""
+        if not self.get_is_active(obj):
+            return None
+        return self.context.get("compulsion")
 
     def get_is_active(self, obj: AlternateSelf) -> bool:
         """Whether this is the alternate self the character is currently wearing."""

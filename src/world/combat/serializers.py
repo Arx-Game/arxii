@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
-    from world.combat.types import ComboSlotFill
+    from world.combat.types import ComboSlotFill, CompulsionSummary
     from world.mechanics.engagement import CharacterEngagement
     from world.scenes.models import Persona
 
@@ -505,6 +505,9 @@ class CompulsionActionCostSerializer(serializers.Serializer):
     action_key = serializers.CharField(help_text="A maneuver value, or technique_no_target.")
     difficulty = serializers.IntegerField()
     forbidden = serializers.BooleanField()
+    extra_difficulty = serializers.IntegerField(
+        help_text="What is added to the difficulty because the compulsion forbids the action."
+    )
 
 
 class CompulsionSerializer(serializers.Serializer):
@@ -514,6 +517,26 @@ class CompulsionSerializer(serializers.Serializer):
     wants_label = serializers.CharField()
     check_name = serializers.CharField()
     against = CompulsionActionCostSerializer(many=True)
+
+
+def serialize_compulsion_summary(summary: CompulsionSummary | None) -> dict[str, Any] | None:
+    """The wire shape of a compulsion summary (``CompulsionSerializer``); None stays None."""
+    if summary is None:
+        return None
+    return {
+        "condition_name": summary.condition_name,
+        "wants_label": summary.wants_label,
+        "check_name": summary.check_name,
+        "against": [
+            {
+                "action_key": c.action_key,
+                "difficulty": c.difficulty,
+                "forbidden": c.forbidden,
+                "extra_difficulty": c.extra_difficulty,
+            }
+            for c in summary.against
+        ],
+    }
 
 
 class SteadyPlanSerializer(serializers.Serializer):
@@ -671,18 +694,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
         from world.combat.compulsion import compulsion_summary  # noqa: PLC0415
 
-        summary = compulsion_summary(obj)
-        if summary is None:
-            return None
-        return {
-            "condition_name": summary.condition_name,
-            "wants_label": summary.wants_label,
-            "check_name": summary.check_name,
-            "against": [
-                {"action_key": c.action_key, "difficulty": c.difficulty, "forbidden": c.forbidden}
-                for c in summary.against
-            ],
-        }
+        character = obj.character_sheet.character
+        summary = compulsion_summary(obj, _context_active_conditions(character, self.context))
+        return serialize_compulsion_summary(summary)
 
     @extend_schema_field(SteadyPlanSerializer(allow_null=True))
     def get_steady_plan(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -693,9 +707,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
         from world.combat.services.reactions import steady_capability_value  # noqa: PLC0415
 
         capability = steady_capability_value(obj)
-        config = MovementConfig.objects.cached_singleton()
-        if capability <= 0 or config is None:
+        if capability <= 0:
             return None
+        config = MovementConfig.objects.cached_singleton()
         return {
             "enabled": obj.steady_enabled,
             "cost_line": f"{config.steady_anima_cost} anima each",

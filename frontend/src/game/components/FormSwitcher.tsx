@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { CompulsionMark } from '@/combat/components/CompulsionBanner';
 import { extractErrorMessage } from '@/lib/errors';
 
 import {
@@ -108,15 +109,17 @@ export function FormSwitcher({ characterSheetId }: FormSwitcherProps) {
       </DropdownMenu>
 
       {worn ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={isShiftingOrReverting}
-          onClick={() => revert.mutate(undefined)}
-        >
-          Revert
-        </Button>
+        <CompulsionMark compulsion={worn.compulsion} actionKey="revert_form">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={isShiftingOrReverting}
+            onClick={() => revert.mutate(undefined)}
+          >
+            Revert
+          </Button>
+        </CompulsionMark>
       ) : null}
 
       {(shift.error ?? revert.error) ? (

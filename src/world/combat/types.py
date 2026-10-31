@@ -737,6 +737,7 @@ class CompulsionActionCost:
     action_key: str
     difficulty: int
     forbidden: bool
+    extra_difficulty: int
 
 
 @dataclass(frozen=True)

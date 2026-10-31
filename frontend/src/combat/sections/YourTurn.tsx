@@ -31,6 +31,7 @@ import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
 import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
 import {
   CompulsionBanner,
+  CompulsionChosenLine,
   CompulsionMark,
   NO_TARGET_TECHNIQUE_KEY,
   type Compulsion,
@@ -767,6 +768,33 @@ function submitBlockReason(args: {
   return null;
 }
 
+/**
+ * The compulsion key of a focused technique that names no opponent (a heal, a defend).
+ * A technique that takes a target and has none picked yet is still being set up, so it
+ * is not marked until she picks something other than an opponent.
+ */
+function noTargetTechniqueKey(
+  context: ActionContext,
+  descriptor: PlayerAction | undefined | null
+): string {
+  if (context.techniqueId === undefined || !descriptor) return '';
+  if (context.targetKind === 'opponent' && context.targetId !== undefined) return '';
+  if (descriptor.target_spec !== null && context.targetId === undefined) return '';
+  return NO_TARGET_TECHNIQUE_KEY;
+}
+
+/** The action her compulsion is judging right now: her declared maneuver, else the technique. */
+function chosenActionKey(
+  compulsion: Compulsion | null,
+  declaredManeuver: string | null,
+  noTargetKey: string
+): string {
+  if (declaredManeuver && compulsion?.against.some((c) => c.action_key === declaredManeuver)) {
+    return declaredManeuver;
+  }
+  return noTargetKey;
+}
+
 type Opponent = NonNullable<EncounterDetail['opponents']>[number];
 type InventoryItem = NonNullable<ReturnType<typeof useInventory>['data']>[number];
 
@@ -785,6 +813,7 @@ interface UseItemSectionProps {
   onInstanceChange: (value: string) => void;
   onTargetChange: (value: string) => void;
   onConfirm: () => void;
+  compulsion: Compulsion | null;
 }
 
 /**
@@ -805,76 +834,79 @@ function UseItemSection({
   onInstanceChange,
   onTargetChange,
   onConfirm,
+  compulsion,
 }: UseItemSectionProps) {
   if (usableItems.length === 0) return null;
   return (
-    <div
-      className="space-y-1.5 rounded border border-border bg-card/60 p-2"
-      data-testid="use-item-section"
-    >
-      <p
-        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-        title="Use a held item as your round action, optionally against an ally or opponent."
+    <CompulsionMark compulsion={compulsion} actionKey="use_item">
+      <div
+        className="space-y-1.5 rounded border border-border bg-card/60 p-2"
+        data-testid="use-item-section"
       >
-        Use Item
-      </p>
-      <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
-        <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
-          <SelectValue placeholder="Choose an item…" />
-        </SelectTrigger>
-        <SelectContent>
-          {usableItems.map((item) => (
-            <SelectItem key={item.id} value={String(item.id)}>
-              {item.display_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
-        <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
-          <SelectValue placeholder="Target" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
-          {coverableAllies.map((ally) => (
-            <SelectItem
-              key={`use-item-ally-${ally.id}`}
-              value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
-            >
-              {ally.character_name}
-            </SelectItem>
-          ))}
-          {activeOpponents.map((opponent) => (
-            <SelectItem
-              key={`use-item-opponent-${opponent.id}`}
-              value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
-            >
-              {opponent.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <button
-        type="button"
-        disabled={disabled || instanceId === ''}
-        onClick={onConfirm}
-        data-testid="use-item-confirm-btn"
-        className={cn(
-          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-          inactive || instanceId === ''
-            ? 'border-border bg-muted text-muted-foreground'
-            : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
-        )}
-      >
-        {pending ? 'Using item…' : 'Use Item'}
-      </button>
-      {error !== null && (
-        <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
-          {error}
+        <p
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          title="Use a held item as your round action, optionally against an ally or opponent."
+        >
+          Use Item
         </p>
-      )}
-    </div>
+        <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
+          <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
+            <SelectValue placeholder="Choose an item…" />
+          </SelectTrigger>
+          <SelectContent>
+            {usableItems.map((item) => (
+              <SelectItem key={item.id} value={String(item.id)}>
+                {item.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
+          <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
+            <SelectValue placeholder="Target" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
+            {coverableAllies.map((ally) => (
+              <SelectItem
+                key={`use-item-ally-${ally.id}`}
+                value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
+              >
+                {ally.character_name}
+              </SelectItem>
+            ))}
+            {activeOpponents.map((opponent) => (
+              <SelectItem
+                key={`use-item-opponent-${opponent.id}`}
+                value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
+              >
+                {opponent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={disabled || instanceId === ''}
+          onClick={onConfirm}
+          data-testid="use-item-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            inactive || instanceId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+          )}
+        >
+          {pending ? 'Using item…' : 'Use Item'}
+        </button>
+        {error !== null && (
+          <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
+            {error}
+          </p>
+        )}
+      </div>
+    </CompulsionMark>
   );
 }
 
@@ -2144,6 +2176,7 @@ export function YourTurn({
   // the reach constraint (#532), the position-targeting shape (#2206), and the
   // soulfray/fury descriptor (#1543) below.
   const focusedCastDescriptor = focusedActionFor(focusedContext, availableActions);
+  const focusedNoTargetKey = noTargetTechniqueKey(focusedContext, focusedCastDescriptor);
 
   // Reach constraint for the currently selected focused technique (#532).
   const focusedTechniqueReach: string | null = focusedCastDescriptor?.reach ?? null;
@@ -2184,6 +2217,7 @@ export function YourTurn({
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
+  const chosenCompulsionKey = chosenActionKey(compulsion, declaredManeuver, focusedNoTargetKey);
 
   // Resolve covered ally's name from participants list.
   const coveredAllyName = maneuverAllyName('cover', declaredManeuver, ownRoundAction, participants);
@@ -2651,6 +2685,9 @@ export function YourTurn({
       />
 
       {compulsion && <CompulsionBanner compulsion={compulsion} />}
+      {compulsion && chosenCompulsionKey && (
+        <CompulsionChosenLine compulsion={compulsion} actionKey={chosenCompulsionKey} />
+      )}
 
       {/* Submitted / ready badge */}
       <ReadyBadge submitted={submitted} serverReady={serverReady} />
@@ -2663,15 +2700,7 @@ export function YourTurn({
         >
           Focused Action
         </p>
-        <CompulsionMark
-          compulsion={compulsion}
-          actionKey={
-            focusedContext.techniqueId !== undefined &&
-            !(focusedContext.targetKind === 'opponent' && focusedContext.targetId !== undefined)
-              ? NO_TARGET_TECHNIQUE_KEY
-              : ''
-          }
-        >
+        <CompulsionMark compulsion={compulsion} actionKey={focusedNoTargetKey}>
           <ActionDeclarationCard
             characterId={characterId}
             characterSheetId={characterSheetId}
@@ -2918,6 +2947,7 @@ export function YourTurn({
         onConfirm={() => {
           handleUseItem().catch(() => {});
         }}
+        compulsion={compulsion}
       />
 
       {isMounted && (

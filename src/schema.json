@@ -46031,7 +46031,13 @@ components:
           description: Whether this is the alternate self the character is currently
             wearing.
           readOnly: true
+        compulsion:
+          allOf:
+          - $ref: '#/components/schemas/Compulsion'
+          nullable: true
+          readOnly: true
       required:
+      - compulsion
       - form_name
       - has_combat_profile
       - has_techniques
@@ -52965,9 +52971,14 @@ components:
           type: integer
         forbidden:
           type: boolean
+        extra_difficulty:
+          type: integer
+          description: What is added to the difficulty because the compulsion forbids
+            the action.
       required:
       - action_key
       - difficulty
+      - extra_difficulty
       - forbidden
     ConditionCategory:
       type: object

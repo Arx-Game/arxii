@@ -55,17 +55,23 @@ _SUBVERBS: dict[str, str] = {
 # subverbs that take a single name argument.
 # subverbs that set a reaction plan for the round.
 _PLAN_SUBVERBS = {"dodge", "steady"}
-# subverbs that leave this round's declared action alone (#4802).
-_NON_DECLARING_SUBVERBS = _PLAN_SUBVERBS | {
-    "mark",
-    "ready",
-    "combo",
-    "revert",
-    "digdeep",
-    "join",
-    "leave",
-    "yield",
-}
+# subverbs that declare the round's focused action (#4802), so a compulsion may warn.
+_DECLARING_SUBVERBS = frozenset(
+    {
+        "flee",
+        "cover",
+        "interpose",
+        "succor",
+        "use",
+        "rally",
+        "demoralize",
+        "taunt",
+        "parley",
+        "charge",
+        "await",
+        "joust",
+    }
+)
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
 
@@ -178,8 +184,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
 
     def _declares_a_round_action(self) -> bool:
-        """Plans, marks, toggles and combo edits leave the declared action as it was."""
-        return self._subverb not in _NON_DECLARING_SUBVERBS
+        """Only the subverbs that declare a round action can go against a compulsion."""
+        return self._subverb in _DECLARING_SUBVERBS
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for the parsed subverb."""

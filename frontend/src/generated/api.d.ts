@@ -28224,6 +28224,7 @@ export interface components {
       readonly resonance_name: string | null;
       /** @description Whether this is the alternate self the character is currently wearing. */
       readonly is_active: boolean;
+      readonly compulsion: components['schemas']['Compulsion'] | null;
     };
     /**
      * @description Read shape for the alternate-self switcher (#1111 slice 4).
@@ -31452,6 +31453,8 @@ export interface components {
       action_key: string;
       difficulty: number;
       forbidden: boolean;
+      /** @description What is added to the difficulty because the compulsion forbids the action. */
+      extra_difficulty: number;
     };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
