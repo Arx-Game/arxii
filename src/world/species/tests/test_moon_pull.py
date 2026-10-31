@@ -7,16 +7,21 @@ from django.test import TestCase
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.distinctions.models import CharacterDistinction
-from world.game_clock.constants import TimePhase
-from world.species.factories import ensure_moon_bound_distinction
-from world.species.moon_constants import (
-    MOON_EXEMPT_LEVEL,
-    MOON_FORM_CLARITY_MAX_BONUS,
-    MOON_PULL_CHECK_THRESHOLD,
+from world.conditions.constants import ControlLossFiresOn
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    ControlLossTriggerFactory,
 )
+from world.game_clock.constants import TimePhase
+from world.species.moon_constants import MOON_FORM_CLARITY_MAX_BONUS
 from world.species.moon_pull import felt_moon_pull, moon_clarity_instance_value
-from world.species.moon_sensitivity import reconcile_moon_pull
+from world.species.moon_sensitivity import is_moon_bound, reconcile_moon_pull
+
+# What the seeded moon trigger authors (moon_provisioning): the pull that rolls, the tier
+# at which the roll stops unless impaired.
+TRIGGER_MIN_PULL = 6
+TRIGGER_EXEMPT_LEVEL = 6
 
 
 def _night_full_moon():
@@ -43,7 +48,7 @@ class FeltMoonPullTest(TestCase):
             exposure = felt_moon_pull(self.sheet.character, self.room)
         self.assertEqual(exposure.base, 10)
         self.assertEqual(exposure.pull, 10)
-        self.assertGreaterEqual(exposure.pull, MOON_PULL_CHECK_THRESHOLD)
+        self.assertGreaterEqual(exposure.pull, TRIGGER_MIN_PULL)
 
     def test_half_moon_stays_below_the_check_threshold(self):
         with patch.multiple(
@@ -52,7 +57,7 @@ class FeltMoonPullTest(TestCase):
             get_moon_illumination=lambda: 0.5,
         ):
             exposure = felt_moon_pull(self.sheet.character, self.room)
-        self.assertLess(exposure.pull, MOON_PULL_CHECK_THRESHOLD)
+        self.assertLess(exposure.pull, TRIGGER_MIN_PULL)
 
     def test_cloud_shade_dampens_the_pull(self):
         with (
@@ -77,9 +82,16 @@ class FeltMoonPullTest(TestCase):
 
 
 class MoonReconcileTest(TestCase):
+    """The moon window fires the character's MOON_PULL trigger; the engine decides."""
+
     @classmethod
     def setUpTestData(cls):
-        cls.distinction = ensure_moon_bound_distinction()
+        cls.trigger = ControlLossTriggerFactory(
+            fires_on=ControlLossFiresOn.MOON_PULL,
+            min_moon_pull=TRIGGER_MIN_PULL,
+            exempt_from_level=TRIGGER_EXEMPT_LEVEL,
+            impaired_willpower_drop=10,
+        )
 
     def setUp(self):
         self.sheet = CharacterSheetFactory()
@@ -88,15 +100,31 @@ class MoonReconcileTest(TestCase):
         self.character.location = self.room
 
     def _bind(self):
-        CharacterDistinction.objects.create(character=self.sheet, distinction=self.distinction)
+        ConditionInstanceFactory(target=self.character, condition=self.trigger.vulnerability)
+
+    def _level(self, level):
+        return patch.object(
+            type(self.sheet),
+            "current_level",
+            new_callable=lambda: property(lambda _self: level),
+        )
 
     def test_unbound_character_never_checks(self):
+        self.assertFalse(is_moon_bound(self.sheet))
         with (
             _night_full_moon(),
-            patch("world.species.moon_sensitivity._control_holds") as check,
+            patch("world.checks.services.perform_check_with_modifiers") as check,
         ):
             reconcile_moon_pull(self.character)
         check.assert_not_called()
+
+    def test_a_carrier_of_a_moon_trigger_condition_is_moon_bound(self):
+        self._bind()
+        self.assertTrue(is_moon_bound(self.sheet))
+        other = ConditionInstanceFactory(
+            target=CharacterSheetFactory().character, condition=ConditionTemplateFactory()
+        )
+        self.assertFalse(is_moon_bound(other.target.character_sheet))
 
     def test_weak_pull_never_checks(self):
         self._bind()
@@ -106,71 +134,57 @@ class MoonReconcileTest(TestCase):
                 get_ic_phase=lambda: TimePhase.NIGHT,
                 get_moon_illumination=lambda: 0.4,
             ),
-            patch("world.species.moon_sensitivity._control_holds") as check,
+            patch("world.checks.services.perform_check_with_modifiers") as check,
         ):
             reconcile_moon_pull(self.character)
         check.assert_not_called()
 
-    def test_failed_check_forces_shift_and_berserk(self):
+    def test_full_moon_rolls_the_trigger(self):
         self._bind()
         with (
             _night_full_moon(),
-            patch("world.species.moon_sensitivity._control_holds", return_value=False),
-            patch("world.species.moon_sensitivity._force_battle_form_shift") as shift,
-            patch("world.species.moon_sensitivity._apply_berserk") as berserk,
+            self._level(1),
+            patch(
+                "world.checks.services.perform_check_with_modifiers",
+                return_value=MagicMock(outcome=None),
+            ) as check,
         ):
             reconcile_moon_pull(self.character)
-        shift.assert_called_once()
-        berserk.assert_called_once()
-
-    def test_held_check_changes_nothing(self):
-        self._bind()
-        with (
-            _night_full_moon(),
-            patch("world.species.moon_sensitivity._control_holds", return_value=True),
-            patch("world.species.moon_sensitivity._lose_control") as lost,
-        ):
-            reconcile_moon_pull(self.character)
-        lost.assert_not_called()
+        check.assert_called_once()
+        self.assertEqual(check.call_args.args[1], self.trigger.check_type)
 
     def test_high_tier_exempt_unless_impaired(self):
         self._bind()
         with (
             _night_full_moon(),
-            patch.object(
-                type(self.sheet),
-                "current_level",
-                new_callable=lambda: property(lambda _self: MOON_EXEMPT_LEVEL),
-            ),
-            patch("world.species.moon_sensitivity._is_impaired", return_value=False),
-            patch("world.species.moon_sensitivity._control_holds") as check,
+            self._level(TRIGGER_EXEMPT_LEVEL),
+            patch("world.conditions.control_loss._is_impaired", return_value=False),
+            patch("world.checks.services.perform_check_with_modifiers") as check,
         ):
             reconcile_moon_pull(self.character)
         check.assert_not_called()
         with (
             _night_full_moon(),
-            patch.object(
-                type(self.sheet),
-                "current_level",
-                new_callable=lambda: property(lambda _self: MOON_EXEMPT_LEVEL),
-            ),
-            patch("world.species.moon_sensitivity._is_impaired", return_value=True),
-            patch("world.species.moon_sensitivity._control_holds", return_value=True) as check,
+            self._level(TRIGGER_EXEMPT_LEVEL),
+            patch("world.conditions.control_loss._is_impaired", return_value=True),
+            patch(
+                "world.checks.services.perform_check_with_modifiers",
+                return_value=MagicMock(outcome=None),
+            ) as check,
         ):
             reconcile_moon_pull(self.character)
         check.assert_called_once()
 
-    def test_already_berserk_skips_the_window(self):
+    def test_already_compelled_gets_the_rampage_window_not_a_roll(self):
         self._bind()
         with (
             _night_full_moon(),
-            patch(
-                "world.species.moon_sensitivity._active_berserk_instance",
-                return_value=object(),
-            ),
-            patch("world.species.moon_sensitivity._control_holds") as check,
+            patch("world.conditions.control_loss.has_compulsion", return_value=True),
+            patch("world.combat.berserk_compulsion.berserk_rampage_window") as rampage,
+            patch("world.checks.services.perform_check_with_modifiers") as check,
         ):
             reconcile_moon_pull(self.character)
+        rampage.assert_called_once_with(self.character)
         check.assert_not_called()
 
 
@@ -201,32 +215,23 @@ class BerserkContentTest(TestCase):
 
 
 class RenamedBerserkTest(TestCase):
-    """Moon control loss applies the designated Berserk, whatever it is called (#4739)."""
+    """A renamed Berserk still compels, because the compulsion row is what counts (#4739)."""
 
-    def setUp(self):
-        from world.character_sheets.factories import CharacterSheetFactory
+    def test_the_renamed_berserk_is_a_compulsion_on_the_character(self):
         from world.conditions.berserk_content import ensure_berserk_content
+        from world.conditions.control_loss import active_compulsion, has_compulsion
         from world.magic.services.fury import get_berserk_template
 
         ensure_berserk_content()
-        self.berserk = get_berserk_template()
-        self.berserk.name = "Red Haze"
-        self.berserk.save(update_fields=["name"])
-        self.character = CharacterSheetFactory().character
-
-    def test_control_loss_applies_the_renamed_berserk(self):
-        from world.species.moon_sensitivity import _apply_berserk
-
-        with patch("world.conditions.services.apply_condition") as apply:
-            _apply_berserk(self.character)
-        self.assertIs(apply.call_args.args[1], self.berserk)
-
-    def test_the_renamed_berserk_is_found_on_the_character(self):
-        from world.conditions.factories import ConditionInstanceFactory
-        from world.species.moon_sensitivity import _active_berserk_instance
-
-        instance = ConditionInstanceFactory(target=self.character, condition=self.berserk)
-        self.assertEqual(_active_berserk_instance(self.character), instance)
+        berserk = get_berserk_template()
+        berserk.name = "Red Haze"
+        berserk.save(update_fields=["name"])
+        character = CharacterSheetFactory().character
+        self.assertFalse(has_compulsion(character))
+        instance = ConditionInstanceFactory(target=character, condition=berserk)
+        character.conditions.invalidate()
+        self.assertTrue(has_compulsion(character))
+        self.assertEqual(active_compulsion(character)[1], instance)
 
 
 class LycanBattleFormProvisioningTest(TestCase):
@@ -356,8 +361,11 @@ class VoluntaryShiftMoonScalingTest(TestCase):
         from actions.definitions.forms import ShiftFormAction
 
         sheet = CharacterSheetFactory()
-        CharacterDistinction.objects.create(
-            character=sheet, distinction=ensure_moon_bound_distinction()
+        ConditionInstanceFactory(
+            target=sheet.character,
+            condition=ControlLossTriggerFactory(
+                fires_on=ControlLossFiresOn.MOON_PULL
+            ).vulnerability,
         )
         room = RoomProfileFactory(is_outdoor=True).objectdb
         sheet.character.location = room

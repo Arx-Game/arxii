@@ -836,14 +836,23 @@ class CombatAndSpeciesRollSiteTests(ActivityTermTestCase):
         )
 
     def test_moon_control(self) -> None:
-        from world.species.moon_sensitivity import _control_holds
+        from world.conditions.constants import ControlLossFiresOn
+        from world.conditions.control_loss import fire_control_loss_triggers
+        from world.conditions.factories import (
+            ConditionInstanceFactory,
+            ControlLossTriggerFactory,
+        )
 
         sheet = CharacterSheetFactory()
+        trigger = ControlLossTriggerFactory(fires_on=ControlLossFiresOn.MOON_PULL)
+        ConditionInstanceFactory(target=sheet.character, condition=trigger.vulnerability)
 
         self.assert_terms_reach(
             "world.checks.services.perform_check",
             MagicActivity.MOON_CONTROL,
-            lambda: _control_holds(sheet.character, sheet, 1, 1),
+            lambda: fire_control_loss_triggers(
+                sheet.character, ControlLossFiresOn.MOON_PULL, moon_pull=1
+            ),
         )
 
 

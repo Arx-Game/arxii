@@ -69,7 +69,9 @@ def _emit_post_damage_events(  # noqa: PLR0913
     effective_damage: int,
     damage_type: DamageType | None,
     damage_source: DamageSource,
+    health_before: int,
     health_after: int,
+    max_health: int,
     knockout_eligible: bool,
     was_in_knockout_band: bool,
     death_eligible: bool,
@@ -91,6 +93,12 @@ def _emit_post_damage_events(  # noqa: PLR0913
     )
     _svc.emit_event(EventName.DAMAGE_APPLIED, applied_payload, location=room)
     _answer_with_strike_backs(applied_payload)
+    # Lazy import: world.conditions.control_loss imports checks and magic services.
+    from world.conditions.control_loss import fire_wound_triggers  # noqa: PLC0415
+
+    fire_wound_triggers(
+        character, health_before=health_before, health_after=health_after, max_health=max_health
+    )
 
     will_emit_death_gate = death_eligible or force_death
     if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
@@ -363,7 +371,9 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
         effective_damage=effective_damage,
         damage_type=pre_payload.damage_type,
         damage_source=damage_source,
+        health_before=health_before,
         health_after=health_after,
+        max_health=vitals.max_health,
         knockout_eligible=knockout_eligible,
         was_in_knockout_band=was_in_knockout_band,
         death_eligible=death_eligible,

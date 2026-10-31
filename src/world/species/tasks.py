@@ -83,29 +83,29 @@ def _reconcile_safely(character) -> None:
 def moon_reconcile_tick() -> None:
     """Roll moon-control windows for every moon-bound character (#2845).
 
-    Sibling of ``sun_reconcile_tick``: sweeps holders of any ``moon-bound``
-    tagged distinction and runs their control-check window. All gating (night,
-    sky exposure, pull threshold, tier exemption, already-Berserk) lives in
-    ``reconcile_moon_pull`` — the sweep is deliberately dumb. Volume is
-    proportional to moon-bound PCs, not the grid.
+    Sibling of ``sun_reconcile_tick``: sweeps the sheets carrying a condition with a
+    MOON_PULL control-loss trigger and runs their window. All gating (night, sky exposure,
+    the trigger's minimum pull, tier exemption, already-compelled) lives in
+    ``reconcile_moon_pull`` and the trigger engine, so the sweep is deliberately dumb.
+    Volume is proportional to moon-bound PCs, not the grid.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
-    from world.species.moon_constants import (  # noqa: PLC0415
-        CANI_SPECIES_NAME,
-        MOON_BOUND_TAG,
-    )
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.species.moon_constants import CANI_SPECIES_NAME  # noqa: PLC0415
     from world.species.moon_sensitivity import (  # noqa: PLC0415
         reconcile_cani_unease_safely,
         reconcile_moon_pull_safely,
     )
 
     seen: set[int] = set()
-    holder_rows = CharacterDistinction.objects.filter(
-        distinction__tags__slug=MOON_BOUND_TAG,
-    ).select_related("character")
-    for row in holder_rows:
-        character = row.character.character
+    bound_sheets = CharacterSheet.objects.filter(
+        pk__in=ConditionInstance.objects.filter(
+            condition__control_loss_triggers__fires_on=ControlLossFiresOn.MOON_PULL
+        ).values("target_id")
+    )
+    for sheet in bound_sheets:
+        character = sheet.character
         if character is None or character.pk in seen:
             continue
         seen.add(character.pk)

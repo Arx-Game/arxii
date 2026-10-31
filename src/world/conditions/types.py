@@ -13,11 +13,14 @@ if TYPE_CHECKING:
     from django.db.models import Q
     from evennia.objects.models import ObjectDB
 
+    from world.checks.types import CheckResult
     from world.conditions.models import (
         ConditionDamageInteraction,
         ConditionInstance,
         ConditionStage,
         ConditionTemplate,
+        ControlLossBand,
+        ControlLossTrigger,
         DamageType,
         TreatmentAttempt,
     )
@@ -39,6 +42,20 @@ class BreakFreeOutcome(models.TextChoices):
     WEAKENED = "weakened", "Severity reduced"
     HELD = "held", "No change"
     STRENGTHENED = "strengthened", "Condition grew stronger"
+
+
+@dataclass(frozen=True)
+class ControlLossOutcome:
+    """What one fired control-loss trigger did (#4802).
+
+    ``band`` is None when the roll's outcome has no band authored; ``applied`` is the
+    condition instance the band applied or raised, if it applied one.
+    """
+
+    trigger: "ControlLossTrigger"
+    check_result: "CheckResult"
+    band: "ControlLossBand | None"
+    applied: "ConditionInstance | None"
 
 
 @dataclass(frozen=True)

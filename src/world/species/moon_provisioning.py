@@ -17,10 +17,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from world.species.moon_constants import WOLFS_FURY_GIFT_NAME
-
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.conditions.models import ConditionTemplate, ControlLossTrigger
     from world.forms.models import AlternateSelf
 
@@ -31,6 +30,13 @@ LYCAN_BLOOD_NAME = "Lycan blood"
 # the seed wires the grant. Runtime code finds the vulnerability through conditions.
 SEED_LYCAN_SPECIES_NAME = "Lycan"
 SEED_LYCAN_GIFT_NAME = "The Wolf's Fury"
+# Seed-only: the Moon-Bound distinction and its tag, stamped on the lycan grant at CG.
+SEED_MOON_BOUND_TAG = "moon-bound"
+SEED_MOON_BOUND_SLUG = "moon-bound"
+# Config row named by a code literal (ADR-0171), registered in config_prerequisites.
+MOON_CONTROL_CHECK_NAME = "moon_control"
+MOON_CONTROL_WILLPOWER_WEIGHT = "1.00"
+MOON_CONTROL_COMPOSURE_WEIGHT = "0.50"
 
 BATTLE_FORM_NAME = "Battle Form"
 # PLACEHOLDER stat suite: (stat trait name, modifier value).
@@ -60,7 +66,7 @@ def ensure_lycan_battle_form(sheet: CharacterSheet) -> AlternateSelf:
     )
     profile, _created = FormCombatProfile.objects.get_or_create(
         form=form,
-        defaults={"display_name": WOLFS_FURY_GIFT_NAME},
+        defaults={"display_name": SEED_LYCAN_GIFT_NAME},
     )
     for trait_name, value in BATTLE_FORM_STAT_SUITE:
         target = _stat_modifier_target(trait_name)
@@ -115,13 +121,20 @@ def _stat_modifier_target(trait_name: str):
 
 
 def _gift_thread_level(sheet: CharacterSheet) -> int:
-    """Thread level on the species gift (0 when unwoven)."""
+    """Thread level on the gift the sheet's moon trigger gives relief for (0 when unwoven)."""
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ControlLossTrigger  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
 
+    trigger = ControlLossTrigger.objects.filter(
+        fires_on=ControlLossFiresOn.MOON_PULL,
+        relief_gift__isnull=False,
+        vulnerability__conditioninstance__target_id=sheet.pk,
+    ).first()
+    if trigger is None:
+        return 0
     thread = Thread.objects.filter(
-        owner=sheet,
-        target_gift__name=WOLFS_FURY_GIFT_NAME,
-        retired_at__isnull=True,
+        owner=sheet, target_gift_id=trigger.relief_gift_id, retired_at__isnull=True
     ).first()
     return thread.level if thread is not None else 0
 
@@ -163,7 +176,6 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
     from world.conditions.models import ControlLossBand, ControlLossTrigger  # noqa: PLC0415
     from world.magic.models import FuryConfig  # noqa: PLC0415
     from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
-    from world.species.moon_sensitivity import _ensure_moon_control_check_type  # noqa: PLC0415
 
     config, _ = FuryConfig.objects.get_or_create(pk=1)
     berserk = config.berserk_condition
@@ -202,3 +214,35 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
             ),
         )
     return trigger
+
+
+def _ensure_moon_control_check_type() -> CheckType:
+    """Idempotently seed the ``moon_control`` CheckType (willpower + composure).
+
+    Config row named by a code literal (ADR-0171), also registered in
+    ``world.seeds.config_prerequisites`` so it exists after a press.
+    """
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.traits.services import ensure_stat_trait  # noqa: PLC0415
+
+    category, _ = CheckCategory.objects.get_or_create(
+        name="Species",
+        defaults={"description": "Species instinct-control checks", "display_order": 97},
+    )
+    check_type, _ = CheckType.objects.get_or_create(
+        name=MOON_CONTROL_CHECK_NAME,
+        defaults={
+            "category": category,
+            "description": "Holding the self against the moon's pull (#2845).",
+        },
+    )
+    for trait_name, weight in (
+        ("willpower", MOON_CONTROL_WILLPOWER_WEIGHT),
+        ("composure", MOON_CONTROL_COMPOSURE_WEIGHT),
+    ):
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type,
+            trait=ensure_stat_trait(trait_name),
+            defaults={"weight": weight},
+        )
+    return check_type

@@ -58,8 +58,8 @@ def _fury_rows() -> None:
 
 
 def _moon_rows() -> None:
-    """The `moon_control` CheckType `reconcile_moon_pull` rolls by name (#2845)."""
-    from world.species.moon_sensitivity import (  # noqa: PLC0415
+    """The `moon_control` CheckType the moon's control-loss trigger rolls (#2845)."""
+    from world.species.moon_provisioning import (  # noqa: PLC0415
         _ensure_moon_control_check_type,
     )
 

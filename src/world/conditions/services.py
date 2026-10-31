@@ -3909,6 +3909,11 @@ def _emit_stage_advanced(
     # gates internally on stage_order comparison.
     apply_stage_entry_aftermath(stage_change_payload)
 
+    # Control-loss triggers hung on this stage fire as the vulnerability enters it (#4802).
+    from world.conditions.control_loss import fire_stage_triggers  # noqa: PLC0415
+
+    fire_stage_triggers(instance)
+
 
 def advance_condition_severity(
     instance: ConditionInstance,
