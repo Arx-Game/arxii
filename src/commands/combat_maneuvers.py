@@ -197,7 +197,11 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     def _resolve_plan_args(self) -> dict[str, Any]:
         """The reaction plans: ``dodge ...`` (#4676) and ``steady [on|off]`` (#4802)."""
         if self._subverb == "steady":  # noqa: STRING_LITERAL
-            return {"steady": self._rest.strip().lower() != "off"}  # noqa: STRING_LITERAL
+            word = self._rest.strip().lower()
+            if word not in ("", "on", "off"):  # noqa: STRING_LITERAL
+                msg = "Usage: combat steady [on|off]."
+                raise CommandError(msg)
+            return {"steady": word != "off"}  # noqa: STRING_LITERAL
         return self._resolve_dodge_args(self._rest)
 
     @staticmethod

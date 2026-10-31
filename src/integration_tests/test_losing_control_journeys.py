@@ -758,6 +758,16 @@ class TheSteadyPlan(_SteadyingAllies):
         seat.refresh_from_db()
         self.assertFalse(seat.steady_enabled)
 
+    def test_steady_with_a_stray_word_prints_usage_and_changes_nothing(self) -> None:
+        brann = self.ally("Brann", capability=4)
+
+        told = self.telnet(brann, "combat steady maybe")
+
+        self.assertIn("Usage: combat steady [on|off].", told)
+        seat = self.ally_seats["Brann"]
+        seat.refresh_from_db()
+        self.assertFalse(seat.steady_enabled)
+
     def test_nothing_to_steady_with_is_refused_plainly(self) -> None:
         dara = self.ally("Dara", capability=0)
 

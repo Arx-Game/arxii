@@ -348,10 +348,11 @@ def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
         .select_related("character_sheet__character")
         .order_by("pk")
     )
+    capability_by_pk = {ally.pk: steady_capability_value(ally) for ally in allies}
     allies = [
         ally
         for ally in allies
-        if steady_capability_value(ally) > 0 and not has_compulsion(ally.character_sheet.character)
+        if capability_by_pk[ally.pk] > 0 and not has_compulsion(ally.character_sheet.character)
     ]
     if not allies:
         return []
@@ -368,7 +369,7 @@ def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
     steadiers = [
         Steadier(
             participant=ally,
-            bonus=steady_capability_value(ally)
+            bonus=capability_by_pk[ally.pk]
             + config.steady_bonus_per_depth * depth_by_sheet.get(ally.character_sheet_id, 0)
             - reaction_penalty(ally),
         )

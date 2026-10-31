@@ -19,6 +19,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="combatroundaction",
+            name="declared_by_compulsion",
+            field=models.BooleanField(
+                default=False,
+                help_text="True when compulsion resolution declared this strike in place of the player's own declaration (#4802). Set once at the round lock; the cast-stopped line reads it so a compelled strike is not told to accept a risk it never chose.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="combatroundaction",
             name="compulsion_penalty",
             field=models.PositiveSmallIntegerField(
                 default=0,
