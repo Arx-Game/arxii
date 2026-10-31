@@ -16,7 +16,7 @@ function movement(
   options: {
     backend?: string;
     key?: string | null;
-    positionId?: number;
+    positionId?: number | null;
     blocked?: boolean;
     reason?: string;
   } = {}
@@ -150,7 +150,8 @@ async function openCombat(page: Page, dispatches: unknown[]) {
               movement('Move to Gallery (blocked: Iron Railing)', {
                 backend: 'challenge',
                 key: null,
-                positionId: 3,
+                // The server's gated entry names no place, only the challenge (#4667).
+                positionId: null,
                 blocked: true,
                 reason: 'Gated by challenge: Iron Railing',
               }),
