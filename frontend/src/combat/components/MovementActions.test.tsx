@@ -143,6 +143,40 @@ describe('MovementActions', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it('keys each blocked crossing by the challenge on its wall (#4667)', () => {
+    // The server's shape for a gated edge: challenge backend, no place, one challenge per edge.
+    const blocked = (challengeId: number, name: string): PlayerAction => ({
+      ...makeMoveAction(null, `Move to ${name} (blocked: Iron Railing)`),
+      backend: 'challenge',
+      is_movement: true,
+      prerequisite_met: false,
+      prerequisite_reasons: ['Gated by challenge: Iron Railing'],
+      ref: {
+        backend: 'challenge',
+        challenge_instance_id: challengeId,
+        approach_id: null,
+        technique_id: null,
+        registry_key: null,
+        position_id: null,
+      },
+    });
+
+    render(
+      <MovementActions
+        actions={[blocked(91, 'Gallery'), blocked(92, 'Stair')]}
+        isLocked={false}
+        dispatchAction={vi.fn(okDispatch)}
+      />
+    );
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons.map((button) => button.getAttribute('data-testid'))).toEqual([
+      'move-btn-move-here-91',
+      'move-btn-move-here-92',
+    ]);
+    expect(buttons.every((button) => button.hasAttribute('disabled'))).toBe(true);
+  });
+
   it('disables a refused move and shows why under the label', () => {
     const refused: PlayerAction = {
       ...makeMoveAction(7, 'Move to Gate'),

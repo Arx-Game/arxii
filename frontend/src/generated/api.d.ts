@@ -47390,6 +47390,7 @@ export interface components {
       readonly protective_flavor: string | null;
       readonly reactive_anima_cost: number | null;
       readonly position_target_shape: string;
+      readonly is_movement: boolean;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];

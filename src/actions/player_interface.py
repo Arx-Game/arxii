@@ -1235,6 +1235,7 @@ def _flight_entry(
         action_category=ActionCategory.PHYSICAL,
         prerequisite_met=move_met,
         prerequisite_reasons=[] if move_met else [move_reason],
+        is_movement=True,
     )
 
 
@@ -1268,6 +1269,7 @@ def _crossing_entry(  # noqa: PLR0913 - the list's shared refusal state rides al
         action_category=ActionCategory.PHYSICAL,
         prerequisite_met=met,
         prerequisite_reasons=reasons,
+        is_movement=True,
     )
 
 
@@ -1310,6 +1312,7 @@ def _pass_entry(  # noqa: PLR0913 - the list's shared refusal state rides along
         action_category=ActionCategory.PHYSICAL,
         prerequisite_met=met,
         prerequisite_reasons=reasons,
+        is_movement=True,
     )
     return [entry]
 
@@ -1344,6 +1347,7 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=move_met,
                 prerequisite_reasons=[] if move_met else [move_reason],
+                is_movement=True,
             )
         )
     return entries
@@ -1394,6 +1398,7 @@ def _open_position_entries(
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=move_met,
                 prerequisite_reasons=[] if move_met else [move_reason],
+                is_movement=True,
             )
         )
         result.extend(_pass_entry(neighbor, holders, pass_ways, 1, hops, move_met, move_reason))
@@ -1457,6 +1462,7 @@ def _gated_position_entries(current: Position, context: _PositionMoveContext) ->
                 action_category=ActionCategory.PHYSICAL,
                 prerequisite_met=False,
                 prerequisite_reasons=[f"Gated by challenge: {challenge_name}"],
+                is_movement=True,
             )
         )
 

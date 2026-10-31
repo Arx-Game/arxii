@@ -338,6 +338,9 @@ class PlayerAction:
     # before declaring a combat cast (#2206).
     position_target_shape: str = "none"
 
+    # Whether this entry represents a movement option, including blocked crossings.
+    is_movement: bool = False
+
     # Soulfray + fury declaration context for combat cast techniques (#1543).
     # None/empty for non-cast actions; populated by _combat_actions for casts.
     soulfray_warning: SoulfrayWarning | None = None

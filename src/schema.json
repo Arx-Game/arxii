@@ -83438,6 +83438,9 @@ components:
         position_target_shape:
           type: string
           readOnly: true
+        is_movement:
+          type: boolean
+          readOnly: true
         soulfray_warning:
           allOf:
           - $ref: '#/components/schemas/SoulfrayWarning'
@@ -83473,6 +83476,7 @@ components:
       - display_name
       - eligible_fury_anchors
       - enhancements
+      - is_movement
       - is_ultimate
       - position_target_shape
       - prerequisite_met

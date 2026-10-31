@@ -206,8 +206,18 @@ class ClimbingABarricade(_TheYard):
         self.assertIn(GATED, told)
         self.assertEqual(position_of(self.hobb), self.west)
 
-        names = [action.display_name for action in get_player_actions(self.hobb)]
-        self.assertIn(f"Move to Middle (blocked: {CONJURED_BARRIER_CHALLENGE_NAME})", names)
+        actions = get_player_actions(self.hobb)
+        blocked_move = next(
+            action
+            for action in actions
+            if action.display_name == f"Move to Middle (blocked: {CONJURED_BARRIER_CHALLENGE_NAME})"
+        )
+        self.assertTrue(blocked_move.is_movement)
+        self.assertFalse(blocked_move.prerequisite_met)
+        self.assertEqual(
+            blocked_move.prerequisite_reasons,
+            [f"Gated by challenge: {CONJURED_BARRIER_CHALLENGE_NAME}"],
+        )
 
     def test_hobb_climbs_the_barricade_and_walks_through(self) -> None:
         self.raise_the_barricade()

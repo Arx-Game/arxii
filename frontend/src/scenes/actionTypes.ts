@@ -176,6 +176,8 @@ export interface PlayerAction {
    * engagement while the reveal holds — undefined/false everywhere else.
    */
   is_ultimate?: boolean;
+  /** Movement option, including blocked crossings that use the challenge backend. */
+  is_movement?: boolean;
   /**
    * What a combat cast would run at for this character right now (#4799): runtime
    * intensity and control and the anima cost they make, computed server-side.
