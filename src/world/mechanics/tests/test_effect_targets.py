@@ -21,7 +21,7 @@ from world.mechanics.constants import (
     EffectKind,
     ManeuverEffectKey,
 )
-from world.mechanics.effect_targets import effect_modifier_total, effect_value
+from world.mechanics.effect_targets import effect_modifier_total, effect_value, effect_values
 from world.mechanics.factories import (
     CharacterModifierFactory,
     DistinctionModifierSourceFactory,
@@ -142,6 +142,31 @@ class EffectValueTests(TestCase):
         target = self._effect_target("Succor stops less", kind=EffectKind.PARTIAL_PROTECTION)
         self._distinction_modifier(target, -80)
         assert effect_value(self.sheet, ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION) == 0
+
+    def test_effect_values_reads_each_sheet_its_own_value(self):
+        target = self._effect_target(
+            "Cover up", effect=get_maneuver_effect(ManeuverEffectKey.COVER_ESCAPE_BONUS)
+        )
+        self._distinction_modifier(target, 2)
+        other = CharacterSheetFactory(
+            character=CharacterFactory(db_key="EffectReaderOther"), primary_persona=False
+        )
+        values = effect_values([self.sheet, other], ManeuverEffectKey.COVER_ESCAPE_BONUS)
+        assert values == {self.sheet.pk: 12, other.pk: 10}
+
+    def test_effect_values_reads_the_catalog_and_targets_once(self):
+        others = [
+            CharacterSheetFactory(
+                character=CharacterFactory(db_key=f"EffectReaderBatch{i}"), primary_persona=False
+            )
+            for i in range(3)
+        ]
+        # No target matches, so the cost is the catalog row and the target list, read once
+        # for the batch: two queries however many sheets are asked about.
+        get_maneuver_effect(ManeuverEffectKey.COVER_ESCAPE_BONUS)
+        with self.assertNumQueries(2):
+            values = effect_values(others, ManeuverEffectKey.COVER_ESCAPE_BONUS)
+        assert values == {sheet.pk: 10 for sheet in others}
 
     def test_none_sheet_returns_base(self):
         target = self._effect_target("Ignored for no sheet", effect=self.charge_damage)

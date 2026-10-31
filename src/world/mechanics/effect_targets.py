@@ -5,6 +5,7 @@ value plus every modifier total a character has on a target scoped to that effec
 its kind). Combat and scene maneuvers call it instead of a constant.
 """
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -12,7 +13,7 @@ from django.db.models import Q
 from world.conditions.services import get_condition_modifier_total
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
 from world.mechanics.maneuver_effects import get_maneuver_effect
-from world.mechanics.models import ModifierTarget
+from world.mechanics.models import ManeuverEffect, ModifierTarget
 from world.mechanics.services import get_modifier_total
 
 if TYPE_CHECKING:
@@ -44,10 +45,35 @@ def effect_modifier_total(sheet: "CharacterSheet | None", key: str) -> int:
     """
     if sheet is None:
         return 0
+    return _modifier_total(sheet, _matching_targets(get_maneuver_effect(key)))
+
+
+def effect_values(sheets: Iterable["CharacterSheet"], key: str) -> dict[int, int]:
+    """``effect_value`` for several sheets at once, keyed by sheet pk.
+
+    The catalog row and its matching targets are read once for the whole batch; only each
+    sheet's own modifier totals are read per sheet. For a maneuver several characters
+    perform together (every ally covering one fleer).
+    """
     effect = get_maneuver_effect(key)
-    targets = ModifierTarget.objects.filter(
-        category__name=MANEUVER_EFFECT_CATEGORY_NAME, is_active=True
-    ).filter(Q(scope_maneuver_effect_id=effect.pk) | Q(scope_effect_kind=effect.kind))
+    targets = _matching_targets(effect)
+    return {
+        sheet.pk: _clamp(effect.kind, effect.base_value + _modifier_total(sheet, targets))
+        for sheet in sheets
+    }
+
+
+def _matching_targets(effect: ManeuverEffect) -> list[ModifierTarget]:
+    """The active maneuver-effect targets scoped to ``effect`` or to its kind."""
+    return list(
+        ModifierTarget.objects.filter(
+            category__name=MANEUVER_EFFECT_CATEGORY_NAME, is_active=True
+        ).filter(Q(scope_maneuver_effect_id=effect.pk) | Q(scope_effect_kind=effect.kind))
+    )
+
+
+def _modifier_total(sheet: "CharacterSheet", targets: list[ModifierTarget]) -> int:
+    """``sheet``'s modifier and active-condition totals summed over ``targets``."""
     return sum(
         get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
         for target in targets
