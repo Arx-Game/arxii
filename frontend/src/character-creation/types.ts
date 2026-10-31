@@ -1540,7 +1540,6 @@ export interface BeatPoolEntry {
   unknown: boolean;
   line: string;
   answer_offer_ids: number[];
-  kept: boolean;
   /** How many answers the beat allows this draft (#4395): one, more with the years
    * lived on an age-scaled beat, or null for any number. */
   allowance: number | null;

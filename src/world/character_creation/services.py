@@ -1477,10 +1477,15 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     if answers_present:
         _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
     beats_taken = _finalize_beats(sheet, draft)
-    if answers_present or beats_taken:
+    from world.character_creation.offers import RECENT_HISTORY_KEY  # noqa: PLC0415
+
+    recent_history = str(draft_data.get(RECENT_HISTORY_KEY) or "").strip()
+    if answers_present or beats_taken or recent_history:
         # The told background starts as a draft from the answers and the beats
-        # (#4124); the player edits it on the sheet from there.
-        profile.background = assemble_origin_prose(sheet)
+        # (#4124); the player edits it on the sheet from there. Recent History, when
+        # written, opens it as the lead-in paragraph (#4830, ruled 2026-10-31).
+        told = assemble_origin_prose(sheet)
+        profile.background = "\n\n".join(part for part in (recent_history, told) if part)
     # The Actor's Sheet answers (#3621), like concept and quote: set directly at CG; the
     # versioned write path takes over on the first post-CG edit.
     for key, _copy_key in ACTOR_SHEET_QUESTIONS:

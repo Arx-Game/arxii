@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import (
-    BeatMode,
+    RECENT_HISTORY_MAX_LENGTH,
     BeatSelection,
     LifeStage,
     OfferArrival,
@@ -151,16 +151,6 @@ class BeatPoolTests(TestCase):
         self.assertEqual(beat_pick_conflicts([spied, killed], age=19), [("Known for", 1)])
         self.assertEqual(beat_pick_conflicts([spied, killed], age=50), [])
 
-    def test_one_kept_beginning_takes_its_pool_by_itself(self):
-        sleeper = BeginningsFactory(name="Sleeper", beat_mode=BeatMode.ONE_KEPT)
-        for beat in (self.household, self.court):
-            LifeBeatExclusionFactory(beat=beat, beginning=sleeper)
-        draft = CharacterDraftFactory(selected_beginnings=sleeper)
-        entries = beats_for(draft)
-        self.assertEqual([e.name for e in entries], ["The work"])
-        self.assertTrue(entries[0].taken)
-        self.assertTrue(entries[0].kept)
-
 
 class BeatAnswerTests(TestCase):
     @classmethod
@@ -277,7 +267,6 @@ class BeatsEndpointTests(TestCase):
                     "unknown": False,
                     "line": "",
                     "answer_offer_ids": [self.patient.pk, self.spoiled.pk],
-                    "kept": False,
                     "allowance": 1,
                 }
             ],
@@ -343,6 +332,30 @@ class BeatsEndpointTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(len(resp.json()["distinctions"]), 2)
 
+    def test_recent_history_is_text_of_a_bounded_length(self):
+        """The optional text a life ends on (#4830): up to the limit saves, over it is
+        refused naming the limit, and null clears it."""
+        url = f"/api/character-creation/drafts/{self.draft.id}/"
+        resp = self.client.patch(
+            url,
+            {"draft_data": {"recent_history": "A ship went down with my name on it."}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            resp.json()["draft_data"]["recent_history"], "A ship went down with my name on it."
+        )
+        resp = self.client.patch(
+            url,
+            {"draft_data": {"recent_history": "x" * (RECENT_HISTORY_MAX_LENGTH + 1)}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn(str(RECENT_HISTORY_MAX_LENGTH), str(resp.json()))
+        resp = self.client.patch(url, {"draft_data": {"recent_history": None}}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["draft_data"]["recent_history"], "")
+
     def test_a_malformed_beats_map_is_refused(self):
         resp = self.client.patch(
             f"/api/character-creation/drafts/{self.draft.id}/",
@@ -405,6 +418,25 @@ class FinalizeBeatsTest(FinalizationTestMixin, TestCase):
         # Age is experience through beats, not banked points (#4124).
         self.assertEqual(sheet.maturation_floor, 25)
         self.assertEqual(available_points(sheet), 0)
+
+    def test_recent_history_opens_the_told_background(self) -> None:
+        """Recent History is the lead-in paragraph of the background (#4830, ruled
+        2026-10-31), before the told stages; alone, it is the whole background."""
+        draft = self._create_base_draft()
+        draft.draft_data["beats"] = {str(self.household.pk): {"taken": True, "line": "A line."}}
+        draft.draft_data["recent_history"] = "Last winter I came back from the dead."
+        draft.save()
+        character = finalize_character(draft, add_to_roster=True)
+        background = character.sheet_data.true_profile.background
+        self.assertTrue(background.startswith("Last winter I came back from the dead.\n\n"))
+        self.assertIn("Childhood: The household", background)
+
+        alone = self._create_base_draft(first_name="Alone")
+        alone.account = AccountDB.objects.create(username="beats_finalize_alone")
+        alone.draft_data["recent_history"] = "Only this."
+        alone.save()
+        lonely = finalize_character(alone, add_to_roster=True)
+        self.assertEqual(lonely.sheet_data.true_profile.background, "Only this.")
 
     def test_an_untaken_pool_writes_nothing(self) -> None:
         draft = self._create_base_draft()
