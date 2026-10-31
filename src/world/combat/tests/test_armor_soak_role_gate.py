@@ -169,12 +169,9 @@ class DefenseProfileGearSubstitutionTests(TestCase):
     ):
         """Engaged-membership on the ANCHOR (parent) role, resolved to the sub-role.
 
-        Mirrors the proven order from
-        ``test_vow_scaling.CovenantRoleActionScalingTests
-        .test_sub_role_scaling_resolves_via_parent_row``: the COVENANT_ROLE thread
-        must exist BEFORE ``set_engaged_membership`` runs, because engaging warms
-        (and thus freezes) the character's ``threads`` handler cache as a side
-        effect (``_invalidate_role_caches`` invalidates it, then the very next line
+        The COVENANT_ROLE thread must exist BEFORE ``set_engaged_membership`` runs,
+        because engaging warms (and thus freezes) the character's ``threads`` handler
+        cache as a side effect (``_invalidate_role_caches`` invalidates it, then the very next line
         reads it back via ``passive_capability_grants()``) — engaging first would
         cache an empty thread list and the sub-role would never resolve.
         """

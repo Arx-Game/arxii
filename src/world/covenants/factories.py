@@ -28,7 +28,6 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
-    CovenantRoleActionScaling,
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
@@ -123,18 +122,6 @@ class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
 
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     gear_archetype = GearArchetype.HEAVY_ARMOR
-
-
-class CovenantRoleActionScalingFactory(factory_django.DjangoModelFactory):
-    """Factory for CovenantRoleActionScaling (#2529, replaces ArchetypeActionScalingFactory)."""
-
-    class Meta:
-        model = CovenantRoleActionScaling
-        django_get_or_create = ("covenant_role", "action_key")
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    action_key = "combat_interpose"
-    thread_level_multiplier = 0
 
 
 class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):

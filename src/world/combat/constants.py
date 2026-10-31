@@ -460,7 +460,8 @@ PENETRATION_CHECK_TYPE_NAME: str = "penetration"
 #
 # Name of the seeded CheckType rolled for flee attempts. Difficulty is
 # FleeConfig.base_difficulty plus the max FleeTierModifier over active
-# opponents; cover_bonus is added per ally covering this round.
+# opponents; each ally covering this round adds that ally's Cover escape bonus
+# (the maneuver effect catalog, #4783).
 # ---------------------------------------------------------------------------
 
 FLEE_CHECK_TYPE_NAME: str = "flee"

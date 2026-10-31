@@ -1,14 +1,15 @@
-"""Tests for vow-driven stat scaling, per-role action scaling, role-source variant
-resolution, and capability grant wiring (#2022 completion).
+"""Tests for vow-driven stat scaling, role-source variant resolution, and capability
+grant wiring (#2022 completion).
 
 Covers the spec items that were missing from the prematurely-merged PR #2106:
 1. VowStatScaling — thread-level stat scaling in the modifier pipeline
 2. Role-source variant resolution — COVENANT_ROLE thread level for role-granted techniques
 3. Capability grant wiring — CovenantRole.granted_capabilities M2M read by the handler
-4. CovenantRoleActionScaling — interpose partial-block scaling per engaged role
-   (was ArchetypeActionScaling; #2529 Task 2 rewrites the consumer,
-   ``covenant_role_action_scaling_bonus``, against the blend + re-keyed model)
-5. Enhancement overlap — flat bonus when enhancement technique overlaps existing kit
+4. Enhancement overlap — flat bonus when enhancement technique overlaps existing kit
+
+The per-role action scaling table was removed by #4783: a
+vow scales a maneuver with a ``VowStatScaling`` row on a maneuver effect target instead
+(``world.mechanics.tests.test_effect_targets``, ``test_vow_stat_scaling_sub_role``).
 
 The former archetype-keyed "gear scaling" equipment-effectiveness multiplier model and
 its always-0 consumer function (#2022) were removed by #2533 — replaced by the
@@ -17,24 +18,17 @@ defense-profile gear-substitution fraction at the armor-soak seam (see
 ``world.combat.tests.test_armor_soak_role_gate``).
 """
 
-from decimal import Decimal
-
 from django.test import TestCase
 
-from world.covenants.constants import CovenantScaledAction, CovenantType
+from world.covenants.constants import CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
-    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
-    SubroleCovenantRoleFactory,
 )
 from world.covenants.models import (
     VowStatScaling,
 )
-from world.covenants.services import (
-    covenant_role_action_scaling_bonus,
-    set_engaged_membership,
-)
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
@@ -103,164 +97,6 @@ class VowStatScalingTests(TestCase):
 
         bonus = vow_stat_scaling_bonus(sheet, target)
         self.assertEqual(bonus, 30)  # 10 * 3
-
-
-class CovenantRoleActionScalingTests(TestCase):
-    """CovenantRoleActionScaling provides a bonus for combat actions per role (#2529, was #2022).
-
-    ``covenant_role_action_scaling_bonus`` sums thread_level × multiplier across the
-    character's engaged roles that have a scaling row for the given action_key. Rows
-    and COVENANT_ROLE threads key on the ANCHOR (parent) role — see
-    ``test_sub_role_scaling_resolves_via_parent_row`` for the sub-role normalization.
-    """
-
-    def test_no_bonus_when_not_engaged(self):
-        """An unengaged character gets 0.0 bonus."""
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        character = membership.character_sheet.character
-
-        CovenantRoleActionScalingFactory(
-            covenant_role=role,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
-        )
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
-        self.assertEqual(bonus, 0.0)
-
-    def test_no_bonus_when_no_scaling_row(self):
-        """An engaged character with no scaling row gets 0.0."""
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        character = membership.character_sheet.character
-
-        set_engaged_membership(membership=membership)
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
-        self.assertEqual(bonus, 0.0)
-
-    def test_bonus_scales_by_thread_level(self):
-        """thread_level * multiplier for the engaged role's scaling row."""
-        from world.magic.constants import TargetKind
-        from world.magic.models import Thread
-
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        sheet = membership.character_sheet
-        character = sheet.character
-
-        CovenantRoleActionScalingFactory(
-            covenant_role=role,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
-        )
-
-        resonance = ResonanceFactory()
-        Thread.objects.create(
-            owner=sheet,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=role,
-            resonance=resonance,
-            level=10,
-        )
-
-        set_engaged_membership(membership=membership)
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
-        self.assertEqual(bonus, 1.0)  # 10 * 0.10 = 1.0
-
-    def test_sub_role_scaling_resolves_via_parent_row(self):
-        """A resolved SUB-role still picks up the PARENT's scaling row (#2529 ADR-0055).
-
-        The membership row is stored on the parent role; ``currently_engaged_roles``
-        resolves it to the matching sub-role via the COVENANT_ROLE thread's resonance
-        and level. The scaling row and the thread both key on the parent (anchor)
-        role, so the bonus lookup must normalize the resolved sub-role back to its
-        parent before querying.
-        """
-        from world.magic.constants import TargetKind
-        from world.magic.models import Thread
-
-        parent = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, shield_weight=1)
-        resonance = ResonanceFactory()
-        subrole = SubroleCovenantRoleFactory(
-            parent_role=parent,
-            resonance=resonance,
-            unlock_thread_level=3,
-        )
-        membership = CharacterCovenantRoleFactory(covenant_role=parent)
-        sheet = membership.character_sheet
-        character = sheet.character
-
-        CovenantRoleActionScalingFactory(
-            covenant_role=parent,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
-        )
-
-        Thread.objects.create(
-            owner=sheet,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=parent,
-            resonance=resonance,
-            level=30,  # stored; shows 3, the sub-role's unlock level (#4585)
-        )
-
-        set_engaged_membership(membership=membership)
-
-        # Sanity: the engaged role resolves to the sub-role, not the parent.
-        engaged = character.covenant_roles.currently_engaged_roles()
-        self.assertEqual(engaged, [subrole])
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.INTERPOSE)
-        # 30 * 0.10, via the parent's scaling row; the multiplier reads the stored level.
-        self.assertEqual(bonus, 3.0)
-
-
-class SurgesGivenScalingTests(TestCase):
-    """A ``SURGES_GIVEN`` row scales only the surges a rallier gives (#4739)."""
-
-    def _engaged_with_thread(self, level: int):
-        from world.magic.constants import TargetKind
-        from world.magic.models import Thread
-
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE, crown_weight=1)
-        membership = CharacterCovenantRoleFactory(covenant_role=role)
-        sheet = membership.character_sheet
-        Thread.objects.create(
-            owner=sheet,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=role,
-            resonance=ResonanceFactory(),
-            level=level,
-        )
-        set_engaged_membership(membership=membership)
-        return role, sheet.character
-
-    def test_a_surges_given_row_scales_by_thread_level(self):
-        role, character = self._engaged_with_thread(level=2)
-        CovenantRoleActionScalingFactory(
-            covenant_role=role,
-            action_key=CovenantScaledAction.SURGES_GIVEN,
-            thread_level_multiplier=Decimal("0.5"),
-        )
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.SURGES_GIVEN)
-
-        self.assertEqual(bonus, 1.0)  # 2 * 0.5
-
-    def test_a_row_for_another_action_does_not_scale_surges(self):
-        role, character = self._engaged_with_thread(level=2)
-        CovenantRoleActionScalingFactory(
-            covenant_role=role,
-            action_key=CovenantScaledAction.RALLY,
-            thread_level_multiplier=Decimal("0.5"),
-        )
-
-        bonus = covenant_role_action_scaling_bonus(character, CovenantScaledAction.SURGES_GIVEN)
-
-        self.assertEqual(bonus, 0.0)
 
 
 class RoleSourceVariantResolutionTests(TestCase):
@@ -459,28 +295,3 @@ class EnhancementOverlapTests(TestCase):
 
         ctx = PowerTermContext(sheet=sheet, technique=technique, applicable_threads=[])
         self.assertEqual(enhancement_overlap_term(ctx), 0)
-
-
-class CovenantRoleActionScalingCleanTests(TestCase):
-    """A vow's action scaling never shrinks the action (#4739): clean() refuses below 0."""
-
-    def test_a_negative_multiplier_is_refused(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        row = CovenantRoleActionScalingFactory.build(
-            covenant_role=CovenantRoleFactory(),
-            action_key=CovenantScaledAction.SURGES_GIVEN,
-            thread_level_multiplier=Decimal("-0.5"),
-        )
-        with self.assertRaises(ValidationError) as caught:
-            row.full_clean()
-        self.assertIn("thread_level_multiplier", caught.exception.message_dict)
-
-    def test_zero_and_positive_multipliers_pass(self) -> None:
-        for value in (Decimal(0), Decimal("0.5")):
-            row = CovenantRoleActionScalingFactory.build(
-                covenant_role=CovenantRoleFactory(),
-                action_key=CovenantScaledAction.SURGES_GIVEN,
-                thread_level_multiplier=value,
-            )
-            row.full_clean()

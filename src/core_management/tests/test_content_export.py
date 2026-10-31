@@ -744,12 +744,10 @@ class SpeciesFormTraitContentExportTests(TestCase):
 
 
 class CovenantRoleContentExportTests(TestCase):
-    """Round-trip coverage for CovenantRole + CovenantRoleActionScaling (#2529).
+    """Round-trip coverage for CovenantRole and its per-role content rows (#2529).
 
-    ``covenants.covenantrole``/``covenants.covenantroleactionscaling`` were added
-    to ``CONTENT_MODELS`` with natural keys (``CovenantRole`` -> ``["slug"]``;
-    ``CovenantRoleActionScaling`` -> ``["covenant_role", "action_key"]``) but no
-    test round-tripped actual rows through export -> import, leaving the
+    ``covenants.covenantrole`` was added to ``CONTENT_MODELS`` with the natural key
+    ``["slug"]`` but no test round-tripped actual rows through export -> import, leaving the
     ``parent_role`` self-FK, the ``resonance`` FK (sub-roles), and the blend-weight
     Decimal fields unexercised in the pipeline.
     """
@@ -759,12 +757,11 @@ class CovenantRoleContentExportTests(TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def test_covenant_role_and_action_scaling_round_trip(self) -> None:
-        """A blended primary role + its scaling + a sub-role survive export -> import."""
+    def test_covenant_role_round_trip(self) -> None:
+        """A blended primary role + a sub-role survive export -> import."""
         from decimal import Decimal
 
         from world.covenants.factories import (
-            CovenantRoleActionScalingFactory,
             CovenantRoleFactory,
             SubroleCovenantRoleFactory,
         )
@@ -777,11 +774,6 @@ class CovenantRoleContentExportTests(TestCase):
             crown_weight=Decimal("0.6"),
         )
         primary.full_clean()  # proves the blend is a valid primary-role state
-        scaling = CovenantRoleActionScalingFactory(
-            covenant_role=primary,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.125"),
-        )
         sub_role = SubroleCovenantRoleFactory(
             parent_role=primary,
             name="Round Trip Vanguard (Ember)",
@@ -796,9 +788,7 @@ class CovenantRoleContentExportTests(TestCase):
         assert result.errors == []
 
         role_path = self.root / "fixtures" / "covenants" / "covenantrole.json"
-        scaling_path = self.root / "fixtures" / "covenants" / "covenantroleactionscaling.json"
         assert role_path.exists()
-        assert scaling_path.exists()
 
         role_records = {
             r["fields"]["slug"]: r for r in json.loads(role_path.read_text(encoding="utf-8"))
@@ -820,14 +810,6 @@ class CovenantRoleContentExportTests(TestCase):
         assert sub_record["fields"]["unlock_thread_level"] == 2
         assert Decimal(str(sub_record["fields"]["sword_weight"])) == 0
 
-        scaling_records = json.loads(scaling_path.read_text(encoding="utf-8"))
-        assert len(scaling_records) == 1
-        assert "pk" not in scaling_records[0]
-        assert scaling_records[0]["fields"]["covenant_role"] == ["round-trip-vanguard"]
-        assert Decimal(str(scaling_records[0]["fields"]["thread_level_multiplier"])) == Decimal(
-            "0.125"
-        )
-
         from core_management.content_fixtures import build_all, load_entries
 
         load_result = build_all(self.root)
@@ -843,10 +825,6 @@ class CovenantRoleContentExportTests(TestCase):
         assert sub_role.parent_role_id == primary.pk
         assert sub_role.resonance_id == original_resonance_id
         assert sub_role.unlock_thread_level == 2
-
-        scaling.refresh_from_db()
-        assert scaling.covenant_role_id == primary.pk
-        assert scaling.thread_level_multiplier == Decimal("0.125")
 
     def test_covenant_role_defense_profile_round_trips(self) -> None:
         """CovenantRoleDefenseProfile (#2533) survives export -> import via its NK.

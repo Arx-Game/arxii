@@ -119,7 +119,7 @@ class CoverReadsTheCatalog(JourneyCase):
             c.source_label: c.value for c in contributions if c.source_label.startswith("Covered")
         }
 
-    def give_cover_bonus(self, character, bonus: int) -> None:
+    def give_escape_bonus(self, character, bonus: int) -> None:
         """The character's vow adds ``bonus`` to Cover escape bonus (thread level 1)."""
         category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
         target = ModifierTargetFactory(
@@ -150,7 +150,7 @@ class CoverReadsTheCatalog(JourneyCase):
         )
 
     def test_coverers_own_modifier_counts_only_for_them(self) -> None:
-        self.give_cover_bonus(self.mara, 2)
+        self.give_escape_bonus(self.mara, 2)
         self.cover(self.mara, self.hobb)
         self.cover(self.perrin, self.hobb)
 

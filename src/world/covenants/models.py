@@ -30,7 +30,6 @@ from world.covenants.constants import (
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     BattleBinding,
     CommandTier,
-    CovenantScaledAction,
     CovenantType,
     DefenseStyle,
     InsightTargetKind,
@@ -1101,73 +1100,6 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
             f"{self.covenant_role.name} / {self.modifier_target.name}: "
             f"+{self.bonus_per_level}/thread-level"
         )
-
-
-class CovenantRoleActionScalingManager(NaturalKeyManager):
-    """Manager for CovenantRoleActionScaling with natural key support."""
-
-
-class CovenantRoleActionScaling(NaturalKeyMixin, SharedMemoryModel):
-    """Authored per-role scaling for universal combat actions (#2529, was #2022).
-
-    Keyed by ``(covenant_role, action_key)``. A Bulwark's interpose scales by
-    the COVENANT_ROLE thread level; a Luminary's rally scales. Roles without a
-    row contribute 0 (the action works at base). Replaced the archetype-keyed
-    ``ArchetypeActionScaling`` when the single-archetype enum became the
-    SWORD/SHIELD/CROWN blend; ``cast_technique`` scaling moved to the blend
-    power term (``covenant_role_blend_power_term``).
-    """
-
-    covenant_role = models.ForeignKey(
-        CovenantRole,
-        on_delete=models.CASCADE,
-        related_name="action_scalings",
-    )
-    action_key = models.CharField(
-        max_length=50,
-        choices=CovenantScaledAction.choices,
-        help_text=(
-            "What this scaling applies to: the Interpose or Rally maneuver, or the "
-            "surges this role gives by Rally."
-        ),
-    )
-    thread_level_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=3,
-        default=0,
-        help_text=(
-            "How much each COVENANT_ROLE thread level adds to the action's "
-            "effect. 0 = no scaling (action works at base)."
-        ),
-    )
-
-    objects = CovenantRoleActionScalingManager()
-
-    class Meta:
-        ordering = ["action_key", "covenant_role__slug"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["covenant_role", "action_key"],
-                name="covenant_role_action_scaling_unique",
-            ),
-        ]
-
-    class NaturalKeyConfig:
-        fields = ["covenant_role", "action_key"]
-        dependencies = [COVENANT_ROLE_MODEL]
-
-    def __str__(self) -> str:
-        return (
-            f"{self.action_key} + {self.covenant_role.name}: ×{self.thread_level_multiplier}/level"
-        )
-
-    def clean(self) -> None:
-        """Refuse a negative multiplier: a vow never shrinks the action it scales (#4739)."""
-        super().clean()
-        if self.thread_level_multiplier is not None and self.thread_level_multiplier < 0:
-            raise ValidationError(
-                {"thread_level_multiplier": "The multiplier cannot be negative; use 0 for none."}
-            )
 
 
 class CovenantRoleTechniqueSpecialtyManager(NaturalKeyManager):

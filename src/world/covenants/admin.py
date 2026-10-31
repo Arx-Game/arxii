@@ -12,7 +12,6 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
-    CovenantRoleActionScaling,
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleGiftGrant,
@@ -102,13 +101,6 @@ class CovenantRoleAdmin(admin.ModelAdmin):
         CovenantRoleDefenseProfileInline,
         VowAddedEffectInline,
     ]
-
-
-@admin.register(CovenantRoleActionScaling)
-class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
-    list_display = ("action_key", "covenant_role", "thread_level_multiplier")
-    list_filter = ("action_key",)
-    autocomplete_fields = ("covenant_role",)
 
 
 @admin.register(CovenantRoleTechniqueSpecialty)

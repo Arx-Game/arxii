@@ -2,25 +2,20 @@
 
 Covers the replacement of the single ``archetype`` enum with three weighted
 axes (``sword_weight``/``shield_weight``/``crown_weight``), the validation
-rules that keep the blend authored on primary roles only, ``blend_weight_for``'s
-sub-role-reads-parent delegation, and the ``CovenantRoleActionScaling`` unique
-constraint (the ``(covenant_role, action_key)``-keyed replacement for the old
-archetype-keyed ``ArchetypeActionScaling``).
+rules that keep the blend authored on primary roles only, and ``blend_weight_for``'s
+sub-role-reads-parent delegation.
 """
 
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.covenants.constants import RoleArchetype
 from world.covenants.factories import (
-    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
 )
-from world.covenants.models import CovenantRoleActionScaling
 from world.magic.factories import ResonanceFactory
 
 
@@ -117,36 +112,3 @@ class BlendWeightForTests(TestCase):
     def test_unknown_axis_returns_zero(self) -> None:
         role = CovenantRoleFactory(crown_weight=1)
         self.assertEqual(role.blend_weight_for("not-an-axis"), Decimal(0))
-
-
-class CovenantRoleActionScalingTests(TestCase):
-    """CovenantRoleActionScaling unique constraint on (covenant_role, action_key)."""
-
-    def test_unique_per_covenant_role_and_action_key(self) -> None:
-        role = CovenantRoleFactory()
-        CovenantRoleActionScaling.objects.create(
-            covenant_role=role,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
-        )
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            CovenantRoleActionScaling.objects.create(
-                covenant_role=role,
-                action_key="combat_interpose",
-                thread_level_multiplier=Decimal("0.20"),
-            )
-
-    def test_same_action_key_different_role_allowed(self) -> None:
-        role_a = CovenantRoleFactory()
-        role_b = CovenantRoleFactory()
-        CovenantRoleActionScalingFactory(covenant_role=role_a, action_key="combat_rally")
-        # Should not raise — different covenant_role, same action_key.
-        CovenantRoleActionScalingFactory(covenant_role=role_b, action_key="combat_rally")
-
-    def test_str(self) -> None:
-        row = CovenantRoleActionScalingFactory(
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
-        )
-        self.assertIn("combat_interpose", str(row))
-        self.assertIn(row.covenant_role.name, str(row))
