@@ -304,6 +304,29 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name="Scope - resonance",
         help_text="Techniques whose gift manifests as this resonance for the caster.",
     )
+    # #4823: the opponent-side scopes narrow the same kinds of effect by who the effect
+    # lands on: the opponent's property or the condition the opponent is under. They
+    # are narrowing scopes with the technique scopes' rules (combine, need a kind, never
+    # ride with one maneuver effect). CASCADE: clearing one would widen the target to
+    # every opponent.
+    scope_opponent_property = models.ForeignKey(
+        "arxii.Property",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="opponent_modifier_targets",
+        verbose_name="Scope - opponent property",
+        help_text="Only when the opponent has this property.",
+    )
+    scope_opponent_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="opponent_modifier_targets",
+        verbose_name="Scope - opponent condition",
+        help_text="Only while the opponent has this condition.",
+    )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
@@ -353,6 +376,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     & models.Q(scope_technique_function="")
                     & models.Q(scope_damage_type__isnull=True)
                     & models.Q(scope_resonance__isnull=True)
+                    & models.Q(scope_opponent_property__isnull=True)
+                    & models.Q(scope_opponent_condition__isnull=True)
                 )
                 | (
                     models.Q(scope_effect_kind__in=TECHNIQUE_SCOPE_KINDS)
@@ -377,6 +402,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "arxii.Gift",
             "arxii.DamageType",
             "arxii.Resonance",
+            "arxii.Property",
+            "arxii.ConditionTemplate",
         ]
 
     def __str__(self):
@@ -405,11 +432,20 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @property
     def has_technique_scope(self) -> bool:
-        """Whether any of the five technique-side scopes is set (#4822)."""
+        """Whether any narrowing scope is set: the five technique-side scopes (#4822) or
+        the two opponent-side ones (#4823)."""
         return bool(self._set_technique_scope_fields())
 
+    @property
+    def has_opponent_scope(self) -> bool:
+        """Whether the opponent property or opponent condition scope is set (#4823)."""
+        return self.scope_opponent_property_id is not None or (
+            self.scope_opponent_condition_id is not None
+        )
+
     def _set_technique_scope_fields(self) -> list[str]:
-        """The technique-side scope fields that are set, in the order they are reported."""
+        """The narrowing scope fields that are set (technique side, then opponent side), in
+        the order they are reported."""
         return [
             field
             for field, is_set in (
@@ -418,6 +454,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 ("scope_technique_function", bool(self.scope_technique_function)),
                 ("scope_damage_type", self.scope_damage_type_id is not None),
                 ("scope_resonance", self.scope_resonance_id is not None),
+                ("scope_opponent_property", self.scope_opponent_property_id is not None),
+                ("scope_opponent_condition", self.scope_opponent_condition_id is not None),
             )
             if is_set
         ]
