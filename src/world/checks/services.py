@@ -1956,12 +1956,15 @@ def _aspect_contributions(
     weight x path weight x level) is a different thing and is untouched: this needs no path
     and does not scale with level, the shape the rate card prices an Aspect at.
     """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    # No aspect target authored anywhere (the common case until the cards land): no
+    # query at all, so every existing roll keeps its query budget.
+    if not ModifierTarget.aspect_targets_exist():
+        return []
     contributions: list[ModifierContribution] = []
     for check_aspect in check_type.aspects.select_related("aspect").all():  # type: ignore[attr-defined] — reverse FK manager from CheckTypeAspect
-        try:
-            target = check_aspect.aspect.modifier_target
-        except ObjectDoesNotExist:
-            continue
+        target = ModifierTarget.get_for_aspect(check_aspect.aspect_id)
         if target is None or not target.is_active:
             continue
         weight = check_aspect.weight

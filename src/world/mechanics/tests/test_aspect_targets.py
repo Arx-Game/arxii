@@ -49,8 +49,8 @@ class EnsureAspectTargetTests(TestCase):
 
 
 class EnsureAspectTargetsSeedTests(TestCase):
-    @override_settings(SEED_SAMPLE_CONTENT=False)
-    def test_the_seed_completes_what_is_authored_and_invents_no_aspect(self):
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_with_sample_content_the_seed_makes_one_target_per_aspect_once(self):
         AspectFactory(name="Subterfuge")
         AspectFactory(name="Diplomacy")
         ensure_aspect_targets()
@@ -61,3 +61,11 @@ class EnsureAspectTargetsSeedTests(TestCase):
             )
         )
         assert names == ["diplomacy", "subterfuge"]
+
+    @override_settings(SEED_SAMPLE_CONTENT=False)
+    def test_without_sample_content_the_seed_invents_nothing(self):
+        """Targets are content rows (#2698): on production the Aspect admin's save makes
+        them, never a seeder."""
+        AspectFactory(name="Subterfuge")
+        ensure_aspect_targets()
+        assert not ModifierTarget.objects.filter(category__name=ASPECT_CATEGORY_NAME).exists()

@@ -26,13 +26,16 @@ _CATEGORY_DESCRIPTIONS = {
 def ensure_aspect_targets() -> None:
     """One aspect-category target per ``Aspect`` row (#4827), through ``ensure_aspect_target``.
 
-    Aspects are content rows too, so with sample content off this only completes what is
-    authored: a target for every Aspect that exists and has none. The category row is made
-    by the service function when the first target is.
+    ``ModifierTarget`` rows are content (#2698), so this invents them only when sample
+    content is on, the same rule as ``ensure_lever_targets``. On production the Aspect
+    admin's save makes an Aspect's target (``AspectAdmin.save_model``).
     """
     from world.classes.models import Aspect  # noqa: PLC0415
     from world.mechanics.services import ensure_aspect_target  # noqa: PLC0415
+    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
+    if not sample_content_enabled():
+        return
     for aspect in Aspect.objects.all():
         ensure_aspect_target(aspect)
 
