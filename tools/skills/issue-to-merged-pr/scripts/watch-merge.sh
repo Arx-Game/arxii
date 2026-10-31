@@ -20,6 +20,9 @@
 #   8  CONFLICTING   - merge conflicts with main; merge main in, push, re-enqueue
 #   9  DROPPED       - open, but neither queued nor armed (the queue ejected it,
 #                      a check failed in the queue, or auto-merge was turned off)
+#  10  NEEDS_ANSWER  - armed or queued, but an unresolved review thread or an open
+#                      evidence challenge is holding it (#4834): fix what it flags,
+#                      reply, resolve the thread or post an evidence-answer, re-enqueue
 #
 # Env: WATCH_MERGE_INTERVAL (seconds between polls, default 120),
 #      WATCH_MERGE_CAP (seconds, default 6600: under the harness's two-hour limit on a
@@ -38,20 +41,37 @@ CAP="${WATCH_MERGE_CAP:-6600}"
 # shellcheck disable=SC2016  # GraphQL variables, not shell expansions.
 QUERY='query($o:String!,$r:String!,$p:Int!){repository(owner:$o,name:$r){
   pullRequest(number:$p){state mergeStateStatus reviewDecision
-    autoMergeRequest{enabledAt} mergeQueueEntry{state position}}}}'
+    autoMergeRequest{enabledAt} mergeQueueEntry{state position}
+    reviewThreads(first:100){nodes{isResolved}}
+    comments(last:50){nodes{body}}}}}'
 
 REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 OWNER="${REPO%%/*}"
 NAME="${REPO##*/}"
 
-# Emit one of: MERGED, CLOSED, CONFLICTING, UNARMED, WAITING <detail>.
+# Emit one of: MERGED, CLOSED, CONFLICTING, NEEDS_ANSWER <detail>, UNARMED, WAITING <detail>.
+# An evidence challenge is open when the NEWEST challenge comment (any verdict) says
+# verdict=open and no evidence-answer comment comes after it. Both markers must open the
+# comment: the challenger's own text quotes the answer marker in its instructions.
 poll() {
   local json
   json=$(gh api graphql -f query="$QUERY" -f o="$OWNER" -f r="$NAME" -F p="$PR") || return 1
   jq -r '.data.repository.pullRequest
+    | [(.reviewThreads.nodes // [])[] | select(.isResolved | not)] as $open_threads
+    | ((.comments.nodes // []) | to_entries) as $comments
+    | ([$comments[] | select(.value.body | test("^\\s*<!-- evidence-challenge"))] | last)
+      as $challenge
+    | ([$comments[] | select(.value.body | test("^\\s*<!-- evidence-answer")) | .key]
+       | max // -1) as $answered_at
     | if .state == "MERGED" then "MERGED"
       elif .state == "CLOSED" then "CLOSED"
       elif .mergeStateStatus == "DIRTY" then "CONFLICTING"
+      elif ($open_threads | length) > 0
+        then "NEEDS_ANSWER \($open_threads | length) unresolved review thread(s)"
+      elif $challenge != null
+           and ($challenge.value.body | test("verdict=open"))
+           and $challenge.key > $answered_at
+        then "NEEDS_ANSWER evidence challenge open"
       elif .mergeQueueEntry != null then "WAITING queued \(.mergeQueueEntry.state) position \(.mergeQueueEntry.position)"
       elif .autoMergeRequest != null then "WAITING armed, review \(.reviewDecision)"
       else "UNARMED" end' <<<"$json"
@@ -76,6 +96,7 @@ while :; do
     MERGED) echo "MERGED #$PR"; exit 0 ;;
     CLOSED) echo "CLOSED #$PR without merging"; exit 7 ;;
     CONFLICTING) echo "CONFLICTING #$PR conflicts with main"; exit 8 ;;
+    NEEDS_ANSWER*) echo "${state/NEEDS_ANSWER/NEEDS_ANSWER #$PR:}"; exit 10 ;;
     UNARMED)
       # The queue drops its entry a moment before the merge lands, so one
       # unarmed poll is not enough; the second in a row is.

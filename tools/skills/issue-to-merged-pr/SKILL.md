@@ -605,12 +605,20 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
     published), run `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
+  - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
+    unresolved review thread or an open evidence challenge, so it will never merge on
+    its own. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
+    flags, push, reply on the thread, and resolve it (`gh api graphql` with
+    `resolveReviewThread`). For an evidence challenge with `verdict=open`, answer it
+    with an `<!-- evidence-answer -->` comment: what was run, expected, seen, and the
+    commit (quote the CI run rather than re-running locally). Then re-run
+    `enqueue-pr.sh` (a push can disarm auto-merge) and re-arm the watcher.
   - `CLOSED` (exit 7): tell the user; exit.
   - `TIMEOUT` (exit 6, after 110 minutes by default), exit 1 (`gh` kept failing), or
     the background run ending with no word at all (the harness killed it): re-arm it.
     The cap sits under the harness's two-hour limit on a background command, so
     normally the script says TIMEOUT first; any other ending also means re-arm.
-  While it waits, answer an open evidence challenge round (Step 6a) as usual.
+  Run the watcher after every `enqueue-pr.sh`, for every PR, never only the first.
 
   **Before judging any PR "ready", read
   [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
