@@ -64,6 +64,8 @@ from world.conditions.services import get_active_conditions
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.mechanics.constants import ManeuverEffectKey
+from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
@@ -629,11 +631,11 @@ class ResolveFleeTest(TestCase):
     Flee resolves as a graded check during round resolution: PARTIAL or
     better escapes (PARTIAL at a cost via the consequence pool);
     FAILURE/BOTCH stays ACTIVE. Difficulty = base + max active-opponent
-    tier modifier; covering allies add cover_bonus each.
+    tier modifier; covering allies add the catalog's Cover escape bonus each.
     """
 
     BASE_DIFFICULTY = 50
-    COVER_BONUS = 10
+    COVER_ESCAPE = 7
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -664,7 +666,6 @@ class ResolveFleeTest(TestCase):
         defaults = {
             "check_type": CheckTypeFactory(),
             "base_difficulty": self.BASE_DIFFICULTY,
-            "cover_bonus": self.COVER_BONUS,
         }
         defaults.update(overrides)
         return FleeConfig.objects.create(pk=1, **defaults)
@@ -806,12 +807,15 @@ class ResolveFleeTest(TestCase):
         assert capture.target_difficulty == self.BASE_DIFFICULTY
 
     def test_flee_cover_adds_bonus_per_covering_ally(self) -> None:
-        """Two same-round COVER declarations targeting the fleer add 2 × cover_bonus."""
+        """Two same-round COVER declarations targeting the fleer each add the catalog bonus."""
         encounter, _ = self._make_encounter()
         fleer = self._add_pc(encounter, role=self.fast_role)
         ally_one = self._add_pc(encounter)
         ally_two = self._add_pc(encounter)
         config = self._seed_config()
+        escape = get_maneuver_effect(ManeuverEffectKey.COVER_ESCAPE_BONUS)
+        escape.base_value = self.COVER_ESCAPE
+        escape.save()
 
         declare_cover(ally_one, fleer)
         declare_cover(ally_two, fleer)
@@ -837,7 +841,7 @@ class ResolveFleeTest(TestCase):
 
         mock_check.assert_called_once()
         extra_modifiers = mock_check.call_args.args[3]
-        assert extra_modifiers == 2 * self.COVER_BONUS
+        assert extra_modifiers == 2 * self.COVER_ESCAPE
 
         fleer.refresh_from_db()
         assert fleer.status == ParticipantStatus.FLED
