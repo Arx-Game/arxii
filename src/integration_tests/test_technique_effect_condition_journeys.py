@@ -14,7 +14,8 @@ Expected values come from the spec, not from running the code:
 * A "-50" modifier never takes either number below 1: severity 1, duration 1. (A combat round
   ticks the new condition, and a one-round duration would already be gone, so the duration
   floor is read in the scene cast, where nothing ticks.)
-* A condition that lasts until cured has no round count; a duration bonus gives it none.
+* A condition that lasts until cured has no round count; a duration bonus gives it none. (The
+  guard for a row with no duration at all is pinned in ``test_condition_application``.)
 * A modifier scoped to another technique changes nothing: severity 3, duration 4.
 * A team-lane row ignoring both bonuses is pinned by
   ``world.magic.tests.test_condition_application.VowSeamKwargTests``.
@@ -197,7 +198,7 @@ class TechniqueConditionModifiersInCombat(JourneyCase):
 
         self.assertEqual(instance.severity, 1)
 
-    def test_no_duration_stays_none(self) -> None:
+    def test_an_until_cured_condition_stays_without_a_duration(self) -> None:
         lasting = ConditionTemplateFactory(
             name="Branded", default_duration_type=DurationType.UNTIL_CURED
         )
