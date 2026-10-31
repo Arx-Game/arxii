@@ -753,6 +753,7 @@ def plan_retreat(opponent: CombatOpponent, ctx: NpcRoundContext) -> bool:
         ctx.encounter,
         allegiances=ctx.allegiances,
         active_opponents=ctx.all_active,
+        untargetable=ctx.untargetable_by_opponent.get(opponent.pk, set()),
     )
     profile = routing_profile(opponent, ctx.holds)
     with mover_origin(opponent, profile) as origin:

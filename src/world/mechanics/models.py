@@ -577,7 +577,13 @@ class Prerequisite(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         target_object: "ObjectDB",  # noqa: OBJECTDB_PARAM — the prop, per ChallengeInstance
         location: "ObjectDB",  # noqa: OBJECTDB_PARAM — may be a bare object, per the field
     ) -> "PrerequisiteEvaluation":
-        """Evaluate this prerequisite against the current game state."""
+        """Evaluate this prerequisite against the current game state.
+
+        The holder's value is its stored ``ObjectProperty`` value, or 1 when an active
+        condition on it grants the property (its template's or its current stage's
+        ``properties``, #4811), whichever is higher. A granted property carries no
+        magnitude, so it meets a presence check (minimum 1) and nothing above it.
+        """
         from world.mechanics.types import PrerequisiteEvaluation  # noqa: PLC0415
 
         entity_map = {
@@ -591,25 +597,47 @@ class Prerequisite(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             object=entity,
             property=self.property,
         ).first()
+        value = obj_prop.value if obj_prop is not None else None
+        if (value is None or value < self.minimum_value) and self._granted_by_condition(entity):
+            value = max(value or 0, 1)
 
-        if obj_prop is None:
+        if value is None:
             return PrerequisiteEvaluation(
                 met=False,
                 reason=(f"Requires {self.property.name} on {self.get_property_holder_display()}"),
             )
 
-        if obj_prop.value < self.minimum_value:
+        if value < self.minimum_value:
             return PrerequisiteEvaluation(
                 met=False,
                 reason=(
                     f"Requires {self.property.name} >="
                     f" {self.minimum_value} on"
                     f" {self.get_property_holder_display()}"
-                    f" (current: {obj_prop.value})"
+                    f" (current: {value})"
                 ),
             )
 
         return PrerequisiteEvaluation(met=True)
+
+    def _granted_by_condition(
+        self,
+        entity: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - the holder evaluate() resolved
+    ) -> bool:
+        """True when an active condition on ``entity`` grants this property, in one query.
+
+        Reads the template's and the current stage's ``properties`` together, with the
+        conditions app's notion of active (unsuppressed, not past an in-game expiry).
+        """
+        if entity is None:
+            return False
+        from world.conditions.services import _active_matching_instances  # noqa: PLC0415
+
+        return _active_matching_instances(
+            [entity],
+            models.Q(condition__properties=self.property)
+            | models.Q(current_stage__properties=self.property),
+        ).exists()
 
 
 class PropertyCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):

@@ -751,6 +751,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `resolve_combat_technique`, `world/combat/services/`): SINGLE and SELF raise
     `InvalidCastTarget` pre-flight (SELF checks the caster directly); AREA/FILTERED_GROUP get NO
     pre-flight check and instead silently filter ineligible targets out of the resolved set.
+    `Prerequisite.evaluate` counts a property an active condition grants (template or current
+    stage `properties`) as present at value 1, so "only bleeding enemies" works (#4811).
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -1355,7 +1357,7 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Conditions react when someone is struck (#4584, ADR-4584-A) [BUILT & WIRED]:**
   `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_source_by_target`),
   `source_guards_bearer` (standing guard; `guardians_by_target`), `spares_source` (#4759; an NPC
-  spares the source and its wards, read by #4759 slice 7, not yet wired), `prevents_knockout` (grace;
+  spares the source and its wards, read by NPC targeting, `untargetable_participant_ids`, #4811), `prevents_knockout` (grace;
   `knockout_preventing_instance`) and `retaliation_damage` / `retaliation_damage_type` /
   `retaliation_condition` (strike-back; `retaliating_instances`). `UNTIL_USED` conditions end by
   use: `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id`;

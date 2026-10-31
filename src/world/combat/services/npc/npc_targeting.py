@@ -228,13 +228,97 @@ def _targetable_participants(encounter: CombatEncounter) -> list[CombatParticipa
     return [p for p in candidates if can_act(p.character_sheet)]
 
 
-def _npc_action_target_pool(
+def _concealed_participant_ids(participants: list[CombatParticipant]) -> set[int]:
+    """Participants carrying an active perception-concealing condition, in one query.
+
+    The batched form of ``is_concealed`` (#4811): the same filter as
+    ``active_concealments``, read for every participant at once. NPCs have no sheet
+    to record a detection on, so any active concealment hides the fighter from them.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    by_character = {p.character_sheet.character.pk: p.pk for p in participants}
+    if not by_character:
+        return set()
+    concealed = (
+        ConditionInstance.objects.filter(
+            target_id__in=by_character,
+            condition__category__conceals_from_perception=True,
+            is_suppressed=False,
+            resolved_at__isnull=True,
+        )
+        .values_list("target_id", flat=True)
+        .distinct()
+    )
+    return {by_character[target_id] for target_id in concealed}
+
+
+def _spared_participant_ids(
+    opponents: list[CombatOpponent],
+    participants: list[CombatParticipant],
+) -> dict[int, set[int]]:
+    """Map each opponent to the participants its spares_source conditions spare (#4811).
+
+    An opponent carrying an active, sourced ``spares_source`` condition spares the
+    condition's source and everyone that source guards: a participant whose active
+    ``source_guards_bearer`` condition has the same source. It reads conditions only,
+    never the opponent's mind, so it binds beasts and the dead too (#4759 Decision 10).
+    Two queries for every opponent at once; opponents that spare nobody are absent.
+    """
+    from world.conditions.services import (  # noqa: PLC0415
+        _active_flagged_instances,
+        guardians_by_target,
+    )
+
+    bearers = [o.objectdb for o in opponents if o.objectdb_id is not None]
+    if not bearers or not participants:
+        return {}
+    sources_by_bearer: dict[int, set[int]] = {}
+    for bearer_id, source_id in (
+        _active_flagged_instances(bearers, flag_field="spares_source")
+        .filter(source_character__isnull=False)
+        .values_list("target_id", "source_character_id")
+    ):
+        sources_by_bearer.setdefault(bearer_id, set()).add(source_id)
+    if not sources_by_bearer:
+        return {}
+    by_character = {p.character_sheet.character.pk: p.pk for p in participants}
+    guardians = guardians_by_target([p.character_sheet.character for p in participants])
+    spared: dict[int, set[int]] = {}
+    for opponent in opponents:
+        sources = sources_by_bearer.get(opponent.objectdb_id)
+        if not sources:
+            continue
+        characters = set(sources) | {
+            ward for ward, ward_guardians in guardians.items() if sources & set(ward_guardians)
+        }
+        spared[opponent.pk] = {by_character[c] for c in characters if c in by_character}
+    return spared
+
+
+def untargetable_participant_ids(
+    opponents: list[CombatOpponent],
+    participants: list[CombatParticipant],
+) -> dict[int, set[int]]:
+    """Map each opponent to the participants it will not pick this round (#4811).
+
+    Concealed participants are hidden from every opponent; spared ones only from the
+    opponent whose spares_source condition names them. Three queries in all. Every
+    opponent in ``opponents`` gets an entry, possibly empty.
+    """
+    concealed = _concealed_participant_ids(participants)
+    spared = _spared_participant_ids(opponents, participants)
+    return {o.pk: concealed | spared.get(o.pk, set()) for o in opponents}
+
+
+def _npc_action_target_pool(  # noqa: PLR0913 - the routing inputs plus the round's exclusions
     opponent: CombatOpponent,
     active_participants: list[CombatParticipant],
     encounter: CombatEncounter,  # noqa: ARG001 - kept for caller signature symmetry
     *,
     allegiances: dict[int, Allegiance],
     active_opponents: list[CombatOpponent],
+    untargetable: set[int] | None = None,
 ) -> tuple[list, bool]:
     """Route an opponent's targeting by EFFECTIVE allegiance (#1584, #1590, #4091).
 
@@ -245,7 +329,11 @@ def _npc_action_target_pool(
       (stored-ENEMY, effectively ENEMY) side; never a PC, never itself.
     * **NEUTRAL** (calmed) skips the round: empty opponent pool.
     * **ENEMY** (the common case) targets the PC side as today — enemies
-      ignore charmed/turned NPCs (Decision 3).
+      ignore charmed/turned NPCs (Decision 3) — minus the participants it will not
+      pick (#4811): concealed fighters, and the source of a spares_source condition
+      it carries along with that source's wards. ``untargetable`` is that set, read
+      in batch by the planning pass; when it is None it is read here for this one
+      opponent. A pool this empties is the no-target case, as when nobody can act.
 
     ``active_participants`` is already can_act-filtered by ``select_npc_actions``.
 
@@ -261,7 +349,9 @@ def _npc_action_target_pool(
         return opponent_pool, False
     if side == Allegiance.NEUTRAL:
         return [], True
-    return list(active_participants), True
+    if untargetable is None:
+        untargetable = untargetable_participant_ids([opponent], active_participants)[opponent.pk]
+    return [p for p in active_participants if p.pk not in untargetable], True
 
 
 def _set_npc_action_targets(  # noqa: PLR0913
