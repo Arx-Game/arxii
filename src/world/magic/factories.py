@@ -4557,7 +4557,7 @@ class _BerserkConditionTemplateFactory:
                     "target within reach."
                 ),
                 "rounds_to_next": None,  # final (only) stage
-                "severity_multiplier": "1.00",
+                "severity_multiplier": Decimal("1.00"),
             },
         )
 
