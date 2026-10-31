@@ -12,7 +12,6 @@ from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CharacterVowFocusPickFactory,
     CovenantFactory,
-    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
     VowAddedEffectFactory,
@@ -22,6 +21,7 @@ from world.covenants.factories import (
     VowFocusPickReductionLimitFactory,
     VowSituationalPerkFactory,
     VowSituationalPerkSituationFactory,
+    VowStatScalingFactory,
 )
 from world.covenants.focus_picks import pick_price
 from world.covenants.models import CharacterVowFocusPick, VowFocusPickLimit
@@ -108,10 +108,8 @@ class PayloadFocusPickRoleTests(TestCase):
             perk.clean()
         self.assertIn("focus_pick", caught.exception.message_dict)
 
-    def test_an_action_scaling_with_another_roles_pick_is_refused(self) -> None:
-        scaling = CovenantRoleActionScalingFactory.build(
-            covenant_role=self.role, focus_pick=self.other_pick
-        )
+    def test_a_stat_scaling_with_another_roles_pick_is_refused(self) -> None:
+        scaling = VowStatScalingFactory.build(covenant_role=self.role, focus_pick=self.other_pick)
         with self.assertRaises(ValidationError) as caught:
             scaling.clean()
         self.assertIn("focus_pick", caught.exception.message_dict)
@@ -120,6 +118,22 @@ class PayloadFocusPickRoleTests(TestCase):
         VowAddedEffectFactory(covenant_role=self.role)
         picked = VowAddedEffectFactory(covenant_role=self.role, focus_pick=self.own_pick)
         picked.full_clean()
+
+    def test_a_stat_scaling_pick_row_may_share_a_base_rows_target(self) -> None:
+        base = VowStatScalingFactory(covenant_role=self.role)
+        picked = VowStatScalingFactory.build(
+            covenant_role=self.role,
+            modifier_target=base.modifier_target,
+            focus_pick=self.own_pick,
+        )
+        base.full_clean()
+        picked.full_clean()
+        picked.save()
+        duplicate = VowStatScalingFactory.build(
+            covenant_role=self.role, modifier_target=base.modifier_target
+        )
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
 
 
 class PropertySituationTests(TestCase):

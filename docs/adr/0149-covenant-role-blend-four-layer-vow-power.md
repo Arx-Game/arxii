@@ -1,5 +1,9 @@
 # Covenant-role combat identity is a SWORD/SHIELD/CROWN blend, not a single archetype — Layer 1 of a four-layer vow-power model
 
+*Amended by ADR-4783-A: the `CovenantRoleActionScaling` table and its `covenant_role_action_scaling_bonus`
+reader described below were removed; a vow scales a maneuver through `VowStatScaling` rows on
+maneuver-effect targets. The blend and the rest of the four layers stand.*
+
 ADR-0108 modeled a character's engaged `CovenantRole` as picking exactly one combat
 archetype (SWORD, SHIELD, or CROWN) via a single `CovenantRole.archetype` field, with
 three power pillars keyed off it. That single-value field couldn't express hybrid roles

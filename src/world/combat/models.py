@@ -35,7 +35,6 @@ from world.combat.constants import (
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
-    FLEE_COVER_BONUS,
     MAX_HOPS_PER_ROUND,
     MAX_OPPONENT_MORALE,
     NPC_DEFAULT_HOPS,
@@ -3041,10 +3040,6 @@ class FleeConfig(SharedMemoryModel):
         related_name="+",
         help_text="Pool for PARTIAL/FAILURE/BOTCH flee outcomes; null degrades to outcome-only.",
     )
-    cover_bonus = models.PositiveIntegerField(
-        default=FLEE_COVER_BONUS,
-        help_text="Flat check bonus per ally covering the fleeing PC this round.",
-    )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         ACCOUNT_DB_MODEL,
@@ -4643,9 +4638,9 @@ class DramaticSurgeRecord(SharedMemoryModel):
         default=0,
         db_default=0,
         help_text=(
-            "The intensity a rallier's 'Surges given by Rally' vow added to this surge "
-            "(#4739): the written amount minus the band's unscaled intensity; 0 when no vow "
-            "scaled it. Written by the surge service so the roll line can be reproduced."
+            "The intensity the rallier's Rally surge intensity added to this surge above "
+            "100% (#4783): the written amount minus the band's unscaled intensity; 0 at or "
+            "below 100%. Written by the surge service so the roll line can be reproduced."
         ),
     )
     cause = models.TextField(

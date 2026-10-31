@@ -1615,8 +1615,9 @@ class SurgeDegreeBandFactory(factory_django.DjangoModelFactory):
 def wire_flee_config():
     """Seed the FleeConfig singleton (pk=1) + tier modifier rows + starter pool (#878).
 
-    Idempotent — get_or_create at every layer; staff edits to base_difficulty,
-    cover_bonus, or individual tier modifiers are preserved on re-runs.
+    Idempotent — get_or_create at every layer; staff edits to base_difficulty
+    or individual tier modifiers are preserved on re-runs. (Cover's escape bonus is
+    the maneuver effect catalog's "Cover: escape bonus" row, #4783.)
 
     Starter pool has three label-only consequences (no APPLY_CONDITION effects)
     covering PARTIAL/FAILURE/BOTCH tiers.  APPLY_CONDITION effects are deferred

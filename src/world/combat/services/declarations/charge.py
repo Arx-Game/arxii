@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.constants import CHARGE_MAX_HOPS, CombatManeuver, OpponentStatus
+from world.combat.constants import CombatManeuver, OpponentStatus
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.fatigue.constants import EffortLevel
 from world.scenes.constants import RoundStatus
@@ -26,14 +26,15 @@ def declare_charge(
       (``world.companions.mount_content.MOUNTED_CONDITION_NAME``).
     - *opponent* must be ACTIVE.
     - *opponent*'s position must be at least 1 hop from the rider's current
-      position AND reachable within ``CHARGE_MAX_HOPS``. Lenient (allowed)
+      position AND reachable within the Charge reach effect
+      (``ManeuverEffectKey.CHARGE_REACH``, #4783). Lenient (allowed)
       when either combatant is unpositioned — mirrors
       ``technique_can_reach``'s leniency (``world/combat/reach.py``).
 
     Resolution (``_resolve_pc_action``) moves the rider onto *opponent*'s
     position (``force_move_to_position``), then falls through to the normal
-    weapon-attack pipeline — ``CombatTechniqueResolver`` folds
-    ``CHARGE_CHECK_BONUS``/``CHARGE_DAMAGE_BONUS`` into the check/damage
+    weapon-attack pipeline — ``CombatTechniqueResolver`` folds the Charge to-hit and
+    damage effects (maneuver effect catalog, #4783) into the check/damage
     (doubled when the equipped weapon is a LANCE). The attack always runs
     through the normal (non-bypassing) damage pipeline — defenses, guardians,
     and ramparts fire exactly as they would for any other attack.
@@ -45,6 +46,8 @@ def declare_charge(
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import has_condition  # noqa: PLC0415
     from world.magic.constants import TechniqueReach  # noqa: PLC0415
+    from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+    from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     encounter = participant.encounter
@@ -73,7 +76,10 @@ def declare_charge(
             msg = "Cannot charge: the target is already within reach."
             raise ValueError(msg)
         if not position_reachable(
-            rider_pos, target_pos, TechniqueReach.REACH_N, reach_hops=CHARGE_MAX_HOPS
+            rider_pos,
+            target_pos,
+            TechniqueReach.REACH_N,
+            reach_hops=effect_value(participant.character_sheet, ManeuverEffectKey.CHARGE_REACH),
         ):
             msg = "Cannot charge: the target is not reachable."
             raise ValueError(msg)

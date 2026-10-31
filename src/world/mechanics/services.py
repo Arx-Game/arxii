@@ -34,6 +34,7 @@ from world.mechanics.constants import (
     ASPECT_CATEGORY_NAME,
     EQUIPMENT_RELEVANT_CATEGORIES,
     FAVOR_CATEGORY_NAMES,
+    MANEUVER_EFFECT_CATEGORY_NAME,
     POWER_CATEGORY_NAME,
     POWER_MULTIPLIER_TARGET_NAME,
     RESONANCE_CATEGORY_NAME,
@@ -1143,11 +1144,19 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     Gated on engagement (the #2051 continuous enforcement ensures the engaged
     flag tracks co-presence). When the vow dims, the stat scaling drops — the
     character's stats collapse toward their base.
+
+    A row whose ``focus_pick`` is set counts only for a holder who chose that
+    pick; a row with no pick is the base vow and counts for every holder. The
+    chosen picks are read only when a fetched row carries a pick.
     """
     from world.covenants.models import (  # noqa: PLC0415
         VowStatScaling,
     )
-    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+    from world.covenants.services import (  # noqa: PLC0415
+        _anchor_role_id,
+        _covenant_role_thread_level,
+    )
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
@@ -1156,16 +1165,41 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     if not engaged_roles:
         return 0
 
-    configs = VowStatScaling.objects.filter(
-        covenant_role__in=engaged_roles,
-        modifier_target=target,
+    # Threads key on the ANCHOR (parent) role, while an engaged role is the resolved
+    # sub-role once the holder graduates (ADR-0055). A row authored on either the
+    # anchor or the sub-role applies, and both read the thread level from the anchor.
+    applicable_roles = {role.pk for role in engaged_roles}
+    applicable_roles.update(
+        role.parent_role_id for role in engaged_roles if role.parent_role_id is not None
     )
-    if not configs:
-        return 0
+
+    configs = VowStatScaling.objects.filter(
+        covenant_role__in=applicable_roles,
+        modifier_target=target,
+    ).select_related("covenant_role__parent_role")
+    configs = list(configs)
+    if any(config.focus_pick_id is not None for config in configs):
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            chosen_pick_ids_by_holder,
+            holder_has_pick,
+        )
+
+        chosen = chosen_pick_ids_by_holder({sheet.pk})
+        configs = [c for c in configs if holder_has_pick(c.focus_pick_id, sheet.pk, chosen)]
+    # Stats are stored x10 like threads, so the stored level times the per-level bonus
+    # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
+    # morale), so there the bonus counts the SHOWN level.
+    in_natural_units = target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
     total = 0
+    anchor_levels: dict[int, int] = {}
     for config in configs:
-        thread_level = _covenant_role_thread_level(sheet, config.covenant_role)
-        total += thread_level * config.bonus_per_level
+        role = config.covenant_role
+        anchor_id = _anchor_role_id(role)
+        if anchor_id not in anchor_levels:
+            anchor = role.parent_role if role.parent_role_id is not None else role
+            level = _covenant_role_thread_level(sheet, anchor)
+            anchor_levels[anchor_id] = shown_thread_level(level) if in_natural_units else level
+        total += anchor_levels[anchor_id] * config.bonus_per_level
     return total
 
 

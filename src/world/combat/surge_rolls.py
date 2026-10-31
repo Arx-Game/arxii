@@ -185,8 +185,9 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
 
     Parts are joined with " · ". Control appears only when it changed, the condition name
     last and only when it applied, and a hurt ally's intensity says it was scaled by the
-    wound. ``vow_scaling`` is the intensity a rallier's "Surges given by Rally" vow added
-    (#4739), shown right after the intensity as ``vow scaling +N`` when it is above 0.
+    wound. ``vow_scaling`` is the intensity the rallier's Rally surge intensity added above
+    100% (the maneuver effect catalog, #4783; any modifier source, not only a vow), shown
+    right after the intensity as ``surge +N`` when it is above 0.
     The surged player's character is sent it live; the round payload rebuilds it
     from the stored record for the same viewers (#4737).
     """
@@ -197,7 +198,7 @@ def roll_line(  # noqa: PLR0913 - the line is built from each part of the roll
         intensity += " (scaled by the wound)"
     parts = [f"{check_type.name} check{against}", outcome.name, intensity]
     if vow_scaling > 0:
-        parts.append(f"vow scaling +{vow_scaling}")
+        parts.append(f"surge +{vow_scaling}")
     if control_change:
         parts.append(f"control {control_change:+d}")
     if condition_name:
@@ -237,9 +238,9 @@ def apply_rolled_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     A caller that already read the ``SurgeTuning`` passes it as ``tuning`` so it is not
     looked up again for each participant; omitted, it is looked up by ``trigger_kind``.
 
-    ``vow_scaled`` says ``intensity_scale`` came from the giver's "Surges given by Rally"
-    vow (#4739): the extra over the band's unscaled intensity is stored on the record as
-    ``vow_scaling`` and the roll line says ``vow scaling +N``.
+    ``vow_scaled`` says ``intensity_scale`` is the giver's Rally surge intensity (#4783, was
+    #4739): the extra over the band's unscaled intensity (0 at or below 100%) is stored on
+    the record as ``vow_scaling`` and the roll line says ``surge +N``.
 
     ``cause`` is the line the surged player, GMs and staff read for this surge (who taunted
     or rallied, or the wound); it is stored on the record and never shown to others.

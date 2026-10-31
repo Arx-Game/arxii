@@ -47,6 +47,7 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
+| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); eight fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
 | `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE), `residence_comfort` (bool), `form_combat_profile` (FK forms.FormCombatProfile, SET_NULL) |
 | `CharacterModifier` | Materialized modifier value on a character for fast lookup (SharedMemoryModel) | `character` (FK CharacterSheet), `value` (int, can be negative), `source` (FK ModifierSource, CASCADE), `expires_at` (nullable datetime), `created_at` |
 
@@ -267,6 +268,80 @@ distinction effect on one of the targets is how a Gambler, a Renowned or a Guard
 its teeth. Priced rows carry pluses, awarded rows minuses (the purse rule).
 
 ---
+
+## Maneuver effects (#4783, ADR-4783-A)
+
+Each combat maneuver's numbers are a fixed catalog of effects that any modifier source can
+target. Maneuvers stay verbs that code fires at set moments; only their numbers moved out of
+code. `world/mechanics/maneuver_effects.py` holds the catalog's code side,
+`world/mechanics/effect_targets.py` the reader.
+
+**The catalog.** `ManeuverEffect` (`key` unique, a `ManeuverEffectKey`; `base_value`; staff-only
+`notes`) has exactly eight rows. The kind of each is derived from the key
+(`MANEUVER_EFFECT_KIND`), never stored. Code finds a row by `key`, never by name. The admin
+(`ManeuverEffectAdmin`) edits `base_value` and `notes`, with no add, no delete and a read-only key.
+Rows are written by migration `0334` in every migrated database, by `ensure_maneuver_effect_rows()`
+on the Big Button combat cluster (`world/seeds/clusters.py`), and by `get_maneuver_effect` on a
+missing key; an edited base value is kept.
+
+| Key | Kind | Base | Read by |
+|---|---|---|---|
+| `charge_to_hit` | to hit | 10 | `CombatTechniqueResolver` check modifiers for a CHARGE |
+| `charge_damage` | damage | 5 | the same resolver's damage budget for a CHARGE |
+| `charge_reach` | reach | 5 | `declare_charge` (hops a charge may cover) |
+| `cover_escape_bonus` | escape bonus | 10 | `_resolve_flee`, once per coverer |
+| `succor_partial_protection` | partial protection | 50 | `apply_succor_outcome`, combat and scene rounds |
+| `interpose_partial_protection` | partial protection | 50 | `interpose_dispatch`, a partial block |
+| `rally_morale` | morale | 15 | `_resolve_rally`, per success level of a great success |
+| `rally_surge_intensity` | surge intensity | 100 | `_surge_rallied_ally`, as a percentage |
+
+**Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
+`CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
+(`modifier_target_one_scope`) stops both being set. In the "maneuver_effect" category
+(`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0334`, and by `ensure_maneuver_effects` for a schema built
+without migrations; the seeder never writes it, since a category is content,
+and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
+scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
+recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
+one of the two; no other category may set either. A target with neither set matches nothing.
+Staff author targets after the catalog rows exist, then point a source at the target (an unsized
+distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
+crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
+reach an effect target: it needs a resonance on the target, and an effect target has none.
+
+**The reader.**
+- `effect_value(sheet, key)`: base value plus `effect_modifier_total`, floored at 0, and capped
+  at 100 for partial protection. `sheet=None` gives the base value.
+- `effect_modifier_total(sheet, key)`: the unclamped sum of `get_modifier_total` and
+  `get_condition_modifier_total` over every active target scoped to this effect or its kind.
+  For a caller that scales the base itself.
+
+**Wiring (the sheet is the acting character's).**
+- **Charge.** To hit and damage are `max(0, base x (2 with a Lance, else 1) + modifier total)`:
+  a Lance doubles the base only, so a +3 modifier stays +3 (5 x 2 + 3 = 13). Reach is
+  `effect_value(Charge: reach)` hops, checked at declaration. The roll label stays "Charge".
+- **Cover.** `_resolve_flee` adds one contribution per coverer, labelled "Covered by <persona
+  name>", worth that coverer's own Cover escape bonus. `FleeConfig.cover_bonus` and the
+  "Covering allies xN" label are gone.
+- **Succor.** `apply_succor_outcome(result, partial_protection)`: clean success 0.0, partial
+  `1 - partial_protection / 100`, failure 1.0. Combat and scene rounds both pass the
+  succorer's value.
+- **Interpose.** A partial block leaves `amount x (100 - value) // 100`; with no interposer
+  sheet the base value is used.
+- **Rally.** Morale restored is success level x the rallier's Rally morale. The surge intensity
+  scale is `value / 100`, and the ally's roll line says "surge +N" when it adds intensity.
+- **Vows.** A `VowStatScaling` row on an effect target adds the holder's SHOWN thread level
+  (stored // 10) x `bonus_per_level`; every other category keeps the stored level. Rows on an
+  engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
+  their scaling (`docs/systems/covenants.md`).
+
+**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
+modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
+target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
+the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts, sized modifiers on effects, and scopes for a technique, a
+damage type, a resonance and the opponent are not built. "Damage, any maneuver" reaches only
+Charge today, so author damage targets as "Charge: damage". The battle Rally
+(`world/battles`, `RALLY_MORALE_PER_LEVEL`) is a different action and is untouched.
 
 ## API Endpoints
 

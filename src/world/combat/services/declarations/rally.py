@@ -93,19 +93,20 @@ def _surge_rallied_ally(
     ``difficulty`` is the fixed rally difficulty the roll was made against, shown on the
     roll line; ``tuning`` is the already-read ``SurgeTuning`` (None looks it up).
 
-    A rallier whose engaged vow carries a ``SURGES_GIVEN`` scaling row surges the ally by
-    the band's intensity times ``1 + bonus`` (#4739); the band's control change and
-    condition are not scaled. The roll line notes the extra as ``vow scaling +N``.
+    The band's intensity is scaled by the rallier's Rally surge intensity (the maneuver
+    effect catalog, #4783: a percentage, base 100, plus the rallier's own modifiers such as
+    a vow stat scaling row); the band's control change and condition are not scaled. When
+    the scale is above 100% the roll line notes the extra intensity as ``surge +N``.
     """
-    from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
-    from world.covenants.services import covenant_role_action_scaling_bonus  # noqa: PLC0415
+    from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+    from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     if ally.status != ParticipantStatus.ACTIVE or is_dead(ally.character_sheet):
         return
     rallier_character = rallier.character_sheet.character
-    intensity_scale = 1 + covenant_role_action_scaling_bonus(
-        rallier_character, CovenantScaledAction.SURGES_GIVEN
+    intensity_scale = (
+        effect_value(rallier.character_sheet, ManeuverEffectKey.RALLY_SURGE_INTENSITY) / 100
     )
     apply_rolled_surge(
         encounter=rallier.encounter,
@@ -166,7 +167,8 @@ def _resolve_rally(
     tuning nothing is rolled and nothing happens; the Required content dashboard lists the
     missing tuning. On success, applies the condition ``SocialManeuverConfig``
     designates as Rally's success condition (Inspired) to the ally. On a great success
-    (SL>=3), also restores morale to ally-side summon opponents.
+    (SL>=3), also restores morale to ally-side summon opponents: success level x the
+    rallier's Rally morale (the maneuver effect catalog, #4783).
 
     Whatever the roll, the ally then gets a rolled surge (#4737): the Rally check's outcome
     picks the band, so a better rally never surges the ally less.
@@ -174,7 +176,6 @@ def _resolve_rally(
     from world.combat.constants import (  # noqa: PLC0415
         RALLY_BASE_DIFFICULTY,
         RALLY_GREAT_SUCCESS_LEVEL,
-        RALLY_MORALE_PER_LEVEL,
     )
     from world.combat.services.encounter.config import (  # noqa: PLC0415
         get_social_maneuver_config,
@@ -205,18 +206,14 @@ def _resolve_rally(
 
         # Great success: restore morale to ally-side summon opponents.
         if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
-            from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
-            from world.covenants.services import (  # noqa: PLC0415
-                covenant_role_action_scaling_bonus,
-            )
+            from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+            from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
 
-            # A rally scaling bonus increases the morale restored by the
-            # success level, matching the additive effect scaling used by
-            # other universal combat actions such as interpose.
-            bonus = covenant_role_action_scaling_bonus(
-                participant.character_sheet.character, CovenantScaledAction.RALLY
+            # Each success level restores the rallier's Rally morale (the maneuver effect
+            # catalog, #4783: base 15, plus the rallier's own modifiers).
+            restore = success_level * effect_value(
+                participant.character_sheet, ManeuverEffectKey.RALLY_MORALE
             )
-            restore = int(success_level * RALLY_MORALE_PER_LEVEL * (1 + bonus))
             ally_summons = CombatOpponent.objects.filter(
                 encounter=participant.encounter,
                 status=OpponentStatus.ACTIVE,

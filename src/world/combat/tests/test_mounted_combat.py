@@ -18,7 +18,6 @@ from world.areas.positioning.services import (
 )
 from world.checks.types import ExtraTraitTerm
 from world.combat.constants import (
-    CHARGE_DAMAGE_BONUS,
     JOUST_DECISIVE_MARGIN,
     CombatManeuver,
     EncounterType,
@@ -49,6 +48,7 @@ from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import EquippedItem
 from world.magic.factories import TechniqueDamageProfileFactory
+from world.mechanics.constants import MANEUVER_EFFECT_DEFAULTS, ManeuverEffectKey
 from world.scenes.constants import RoundStatus
 from world.skills.factories import SkillFactory
 
@@ -215,7 +215,7 @@ class ChargeDispatchSeamTests(TestCase):
 
 
 class ChargeBonusInjectionTests(TestCase):
-    """CHARGE_CHECK_BONUS/CHARGE_DAMAGE_BONUS are folded in at the shared modifier seam."""
+    """The Charge to-hit and damage effects are folded in at the shared modifier seam."""
 
     def setUp(self) -> None:
         from world.conditions.factories import DamageSuccessLevelMultiplierFactory
@@ -257,9 +257,7 @@ class ChargeBonusInjectionTests(TestCase):
         baseline = self._resolver()
         charged = self._resolver(maneuver=CombatManeuver.CHARGE)
         delta = self._extra_modifiers(charged) - self._extra_modifiers(baseline)
-        from world.combat.constants import CHARGE_CHECK_BONUS
-
-        self.assertEqual(delta, CHARGE_CHECK_BONUS)
+        self.assertEqual(delta, MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.CHARGE_TO_HIT])
 
     def test_charge_check_bonus_doubled_for_lance(self):
         charged = self._resolver(maneuver=CombatManeuver.CHARGE)
@@ -272,23 +270,27 @@ class ChargeBonusInjectionTests(TestCase):
         _mount(lance_character)
         with_lance = self._extra_modifiers(charged_lance)
 
-        from world.combat.constants import CHARGE_CHECK_BONUS
-
-        self.assertEqual(with_lance - without_lance, CHARGE_CHECK_BONUS)
+        self.assertEqual(
+            with_lance - without_lance, MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.CHARGE_TO_HIT]
+        )
 
     def test_charge_damage_bonus_applied(self):
         resolver = self._resolver(maneuver=CombatManeuver.CHARGE)
         check = MagicMock(success_level=2)
         results = resolver._apply_damage(check, eff_intensity=0)
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].damage_dealt, CHARGE_DAMAGE_BONUS)
+        self.assertEqual(
+            results[0].damage_dealt, MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.CHARGE_DAMAGE]
+        )
 
     def test_charge_damage_bonus_doubled_for_lance(self):
         resolver = self._resolver(maneuver=CombatManeuver.CHARGE)
         _equip_weapon(resolver.participant.character_sheet.character, archetype=GearArchetype.LANCE)
         check = MagicMock(success_level=2)
         results = resolver._apply_damage(check, eff_intensity=0)
-        self.assertEqual(results[0].damage_dealt, CHARGE_DAMAGE_BONUS * 2)
+        self.assertEqual(
+            results[0].damage_dealt, MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.CHARGE_DAMAGE] * 2
+        )
 
 
 class LanceUnmountedPenaltyTests(TestCase):

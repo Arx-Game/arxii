@@ -15,7 +15,6 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
-    CovenantRoleActionScaling,
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleGiftGrant,
@@ -137,13 +136,6 @@ class CovenantRoleAdmin(admin.ModelAdmin):
         VowFocusPickInline,
         VowAddedEffectInline,
     ]
-
-
-@admin.register(CovenantRoleActionScaling)
-class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
-    list_display = ("action_key", "covenant_role", "focus_pick", "thread_level_multiplier")
-    list_filter = ("action_key",)
-    autocomplete_fields = ("covenant_role", "focus_pick")
 
 
 @admin.register(CovenantRoleTechniqueSpecialty)
@@ -284,9 +276,9 @@ class GearArchetypeCompatibilityAdmin(admin.ModelAdmin):
 class VowStatScalingAdmin(admin.ModelAdmin):
     """#3831 - authored vow-driven stat scaling per (covenant_role, modifier_target)."""
 
-    list_display = ("covenant_role", "modifier_target", "bonus_per_level")
+    list_display = ("covenant_role", "modifier_target", "focus_pick", "bonus_per_level")
     search_fields = ("covenant_role__name", "modifier_target__name")
-    autocomplete_fields = ("covenant_role", "modifier_target")
+    autocomplete_fields = ("covenant_role", "modifier_target", "focus_pick")
 
 
 @admin.register(CovenantRoleGiftGrant)
@@ -475,7 +467,7 @@ class VowFocusPickLimitInline(admin.TabularInline):
 class VowFocusPickAdmin(admin.ModelAdmin):
     """One focus pick on a vow, with its limits and computed price (#4759).
 
-    Payload rows (added effects, situational perks, action scaling) join a pick
+    Payload rows (added effects, situational perks, vow stat scaling) join a pick
     through their own Focus pick field.
     """
 

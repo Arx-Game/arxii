@@ -32,7 +32,6 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
-    CovenantRoleActionScaling,
     CovenantRoleBonus,
     CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
@@ -51,6 +50,7 @@ from world.covenants.models import (
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
+    VowStatScaling,
     WeaknessPoolEntry,
 )
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
@@ -130,19 +130,6 @@ class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
 
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     gear_archetype = GearArchetype.HEAVY_ARMOR
-
-
-class CovenantRoleActionScalingFactory(factory_django.DjangoModelFactory):
-    """Factory for CovenantRoleActionScaling (#2529, replaces ArchetypeActionScalingFactory)."""
-
-    class Meta:
-        model = CovenantRoleActionScaling
-        django_get_or_create = ("covenant_role", "action_key", "focus_pick")
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    action_key = "combat_interpose"
-    thread_level_multiplier = 0
-    focus_pick = None
 
 
 class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
@@ -427,6 +414,18 @@ class CovenantRoleBonusFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     bonus_per_level = 1
+
+
+class VowStatScalingFactory(factory_django.DjangoModelFactory):
+    """Factory for VowStatScaling: a base row (no focus pick) unless one is passed."""
+
+    class Meta:
+        model = VowStatScaling
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
+    bonus_per_level = 1
+    focus_pick = None
 
 
 class CovenantRiteFactory(factory_django.DjangoModelFactory):

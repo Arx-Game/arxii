@@ -413,8 +413,8 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
 
     Row collection per engaged (resolved) role: the ANCHOR role's rows PLUS
     the resolved sub-role's own rows when it differs — sub-roles build upward
-    (add), never replace (#2443 spec §3; contrast the anchor-only rule in
-    covenant_role_action_scaling_bonus).
+    (add), never replace (#2443 spec §3; ``vow_stat_scaling_bonus`` follows the same
+    rule).
 
     **Secondary-vow potency scaling (#2641):** role ids are partitioned by
     their membership's ``is_secondary`` flag (``_partition_role_ids_by_secondary``

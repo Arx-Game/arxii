@@ -172,8 +172,8 @@ def _resolve_pc_action(
 
     # CHARGE (#1843): closes distance to the declared opponent, THEN falls
     # through to the normal weapon-attack pipeline below (no early return) —
-    # CHARGE augments a normal attack via CombatTechniqueResolver's
-    # CHARGE_CHECK_BONUS/CHARGE_DAMAGE_BONUS injection, it doesn't replace it.
+    # CHARGE augments a normal attack via CombatTechniqueResolver's injection of the
+    # Charge to-hit and damage maneuver effects, it doesn't replace it.
     if action.maneuver == CombatManeuver.CHARGE:
         _resolve_charge_movement(participant, action)
 

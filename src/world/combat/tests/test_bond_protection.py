@@ -36,7 +36,9 @@ class BondProtectionTests(TestCase):
 
         with patch("world.mechanics.reactions.dispatch_capability_reaction") as mock_dispatch:
             mock_dispatch.return_value = None
-            result = dispatch_succor(succorer, protected, approach=None, extra_modifiers=0)
+            result = dispatch_succor(
+                succorer, protected, approach=None, partial_protection=50, extra_modifiers=0
+            )
             self.assertTrue(mock_dispatch.called)
             self.assertEqual(result, 1.0)  # no challenge → 1.0 multiplier
 
