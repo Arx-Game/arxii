@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Affinity
+    from world.mechanics.models import Property
     from world.missions.models import MissionInstance
 
 
@@ -93,6 +94,7 @@ class SituationParams:
     count_threshold: int | None = None
     affinity: Affinity | None = None
     origin_side: str = ""
+    condition_property: Property | None = None
 
 
 #: Shared no-parameter instance (the default for every pre-#2623 row shape).

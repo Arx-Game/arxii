@@ -176,6 +176,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "draws_aggro",
         "forces_attack_on_source",
         "source_guards_bearer",
+        "spares_source",
         "prevents_knockout",
     ]
     search_fields = ["name", "description"]
@@ -243,6 +244,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
                     "aggro_priority",
                     "forces_attack_on_source",
                     "source_guards_bearer",
+                    "spares_source",
                     "prevents_knockout",
                     "retaliation_damage",
                     "retaliation_damage_type",

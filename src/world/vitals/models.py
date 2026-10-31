@@ -384,6 +384,25 @@ class WoundDetails(SharedMemoryModel):
             "Capped at NEVER_TO_FULL_FRACTION x damage_taken by mend_wound()."
         ),
     )
+    created_encounter = models.ForeignKey(
+        "arxii.CombatEncounter",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The fight this wound landed in, if it landed in one. A mend in the same fight "
+            "can close less of it the more rounds have passed."
+        ),
+    )
+    created_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The round of that fight the wound landed in. Blank means the wound did not "
+            "land in a fight, so its healable limit never shrinks."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

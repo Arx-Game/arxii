@@ -170,6 +170,18 @@ class Situation(models.TextChoices):
       effect scoped to "when I strike a boss"). Elite and Hero Killer tiers
       do not count. Reads ``resolution``; False outside combat or when the
       subject declared no opponent target. No params.
+    - ``TARGET_HAS_CONDITION_PROPERTY`` - the target carries an active condition
+      whose template has the row's ``condition_property`` (#4759, e.g. any
+      condition with the Indulgence property), whoever laid it. Required param
+      ``condition_property``; optional ``count_threshold`` (how many such
+      conditions). Evaluator lands in #4759 slice 3; until then it never holds.
+    - ``ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`` - enemies near the subject carry
+      an active condition with the row's ``condition_property`` (#4759). Required
+      param ``condition_property``; optional ``count_threshold`` (how many such
+      enemies). Evaluator lands in #4759 slice 3; until then it never holds.
+    - ``TARGET_LOW_HEALTH`` - the target's health is below a fraction (#4759; the
+      target-side mirror of ``ALLY_LOW_HEALTH``). Optional ``threshold_percent``.
+      Evaluator lands in #4759 slice 3; until then it never holds.
     """
 
     AT_RANGE = "at_range", "At Range"
@@ -195,6 +207,15 @@ class Situation(models.TextChoices):
     SHIELDED_BY_ALLY = "shielded_by_ally", "Shielded by Ally"
     TARGET_IS_MARKED_BY_ALLY = "target_is_marked_by_ally", "Target Is Marked by Ally"
     TARGET_IS_BOSS = "target_is_boss", "Target Is a Boss"
+    TARGET_HAS_CONDITION_PROPERTY = (
+        "target_has_condition_property",
+        "Target Has a Condition With a Property",
+    )
+    ENEMIES_WITH_CONDITION_PROPERTY_NEARBY = (
+        "enemies_with_condition_property_nearby",
+        "Enemies With a Condition Property Nearby",
+    )
+    TARGET_LOW_HEALTH = "target_low_health", "Target Low Health"
 
 
 class PerkEffectKind(models.TextChoices):
@@ -276,6 +297,15 @@ SITUATION_PARAM_SPECS: dict[str, SituationParamSpec] = {
     Situation.TARGET_FAVORABLY_DISPOSED: SituationParamSpec(allowed=frozenset({"count_threshold"})),
     Situation.AMBUSH_UNDERWAY: SituationParamSpec(allowed=frozenset({"origin_side"})),
     Situation.COMBAT_OPENED_FROM_PARLEY: SituationParamSpec(allowed=frozenset({"origin_side"})),
+    Situation.TARGET_HAS_CONDITION_PROPERTY: SituationParamSpec(
+        allowed=frozenset({"condition_property", "count_threshold"}),
+        required=frozenset({"condition_property"}),
+    ),
+    Situation.ENEMIES_WITH_CONDITION_PROPERTY_NEARBY: SituationParamSpec(
+        allowed=frozenset({"condition_property", "count_threshold"}),
+        required=frozenset({"condition_property"}),
+    ),
+    Situation.TARGET_LOW_HEALTH: SituationParamSpec(allowed=frozenset({"threshold_percent"})),
 }
 
 

@@ -4,7 +4,10 @@ from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet
 from world.covenants.added_effect_summary import summarize_vow_added_effect
+from world.covenants.focus_picks import pick_price
 from world.covenants.models import (
+    CharacterVowFocusPick,
+    CombatStyle,
     CourtGrantConfig,
     Covenant,
     CovenantLevelBonus,
@@ -26,6 +29,9 @@ from world.covenants.models import (
     VowAddedEffectDamageProfile,
     VowAddedEffectRemovedCondition,
     VowAddedEffectTreatment,
+    VowFocusPick,
+    VowFocusPickConfig,
+    VowFocusPickLimit,
     VowSituationalPerk,
     VowSituationalPerkRung,
     VowSituationalPerkSituation,
@@ -47,6 +53,33 @@ class CovenantRoleDefenseProfileInline(admin.StackedInline):
     extra = 0
 
 
+def _price_display(obj: VowFocusPick | None) -> str:
+    """A focus pick's computed price, or a note that it shows once saved (#4759)."""
+    if obj is None or obj.pk is None:
+        return "Shown once saved."
+    return str(pick_price(obj))
+
+
+class VowFocusPickInline(admin.TabularInline):
+    """A vow's focus pick catalog on the CovenantRole admin (#4759).
+
+    Each pick's price is worked out from its value and limits. Limits are edited on
+    the pick's own page (the change link), which also lists them.
+    """
+
+    model = VowFocusPick
+    formset = OneRowPerFormSet
+    fk_name = "covenant_role"
+    extra = 0
+    show_change_link = True
+    fields = ("pick_level", "name", "value", "price")
+    readonly_fields = ("price",)
+
+    @admin.display(description="Price")
+    def price(self, obj: VowFocusPick | None) -> str:
+        return _price_display(obj)
+
+
 class VowAddedEffectInline(admin.TabularInline):
     """Read-only list of a role's added effects on the CovenantRole admin (#4581).
 
@@ -65,6 +98,7 @@ class VowAddedEffectInline(admin.TabularInline):
         "cast_context",
         "frequency",
         "unlock_thread_level",
+        "focus_pick",
         "summary",
     )
     readonly_fields = fields
@@ -100,15 +134,16 @@ class CovenantRoleAdmin(admin.ModelAdmin):
     inlines = [
         CovenantRoleTechniqueSpecialtyInline,
         CovenantRoleDefenseProfileInline,
+        VowFocusPickInline,
         VowAddedEffectInline,
     ]
 
 
 @admin.register(CovenantRoleActionScaling)
 class CovenantRoleActionScalingAdmin(admin.ModelAdmin):
-    list_display = ("action_key", "covenant_role", "thread_level_multiplier")
+    list_display = ("action_key", "covenant_role", "focus_pick", "thread_level_multiplier")
     list_filter = ("action_key",)
-    autocomplete_fields = ("covenant_role",)
+    autocomplete_fields = ("covenant_role", "focus_pick")
 
 
 @admin.register(CovenantRoleTechniqueSpecialty)
@@ -186,6 +221,7 @@ class VowSituationalPerkSituationInline(admin.TabularInline):
     model = VowSituationalPerkSituation
     formset = OneRowPerFormSet
     extra = 1
+    autocomplete_fields = ("condition_property",)
 
 
 class VowSituationalPerkRungInline(admin.TabularInline):
@@ -194,6 +230,7 @@ class VowSituationalPerkRungInline(admin.TabularInline):
     model = VowSituationalPerkRung
     formset = OneRowPerFormSet
     extra = 0
+    autocomplete_fields = ("condition_property",)
 
 
 @admin.register(VowSituationalPerk)
@@ -206,10 +243,11 @@ class VowSituationalPerkAdmin(admin.ModelAdmin):
         "magnitude_tenths",
         "floor_success_level",
         "battle_action_kind",
+        "focus_pick",
     )
     list_filter = ("effect_kind", "beneficiary")
     search_fields = ("name", "covenant_role__name")
-    autocomplete_fields = ("covenant_role", "check_type")
+    autocomplete_fields = ("covenant_role", "check_type", "focus_pick")
     # mission_category/mission_template are NOT autocomplete_fields: the
     # missions app has no ModelAdmin registration (no world/missions/admin.py
     # exists) — Django's admin system check (E039) requires the related
@@ -390,13 +428,21 @@ class VowAddedEffectAdmin(admin.ModelAdmin):
         "cast_context",
         "frequency",
         "unlock_thread_level",
+        "focus_pick",
         "summary",
     )
     list_filter = ("function", "beneficiary", "cast_context", "frequency")
-    list_select_related = ("covenant_role", "gift", "technique")
+    list_select_related = ("covenant_role", "gift", "technique", "focus_pick")
     readonly_fields = ("summary",)
     search_fields = ("covenant_role__name", "technique__name", "gift__name")
-    autocomplete_fields = ("covenant_role", "gift", "technique", "upgrades")
+    autocomplete_fields = (
+        "covenant_role",
+        "gift",
+        "technique",
+        "upgrades",
+        "focus_pick",
+        "condition_property",
+    )
     inlines = [
         VowAddedEffectAppliedConditionInline,
         VowAddedEffectRemovedConditionInline,
@@ -409,3 +455,91 @@ class VowAddedEffectAdmin(admin.ModelAdmin):
         if obj is None or obj.pk is None:
             return "Saved rows read back here."
         return summarize_vow_added_effect(obj)
+
+
+# ---------------------------------------------------------------------------
+# #4759 - vow focus picks and combat styles
+# ---------------------------------------------------------------------------
+
+
+class VowFocusPickLimitInline(admin.TabularInline):
+    """The limits that lower a focus pick's price (#4759)."""
+
+    model = VowFocusPickLimit
+    formset = OneRowPerFormSet
+    extra = 0
+    fields = ("kind", "frequency_tenths", "reduction", "description")
+
+
+@admin.register(VowFocusPick)
+class VowFocusPickAdmin(admin.ModelAdmin):
+    """One focus pick on a vow, with its limits and computed price (#4759).
+
+    Payload rows (added effects, situational perks, action scaling) join a pick
+    through their own Focus pick field.
+    """
+
+    list_display = ("name", "covenant_role", "pick_level", "value", "price")
+    list_filter = ("pick_level",)
+    list_select_related = ("covenant_role",)
+    search_fields = ("name", "covenant_role__name")
+    autocomplete_fields = ("covenant_role",)
+    readonly_fields = ("price",)
+    inlines = [VowFocusPickLimitInline]
+
+    @admin.display(description="Price")
+    def price(self, obj: VowFocusPick | None) -> str:
+        return _price_display(obj)
+
+
+@admin.register(VowFocusPickConfig)
+class VowFocusPickConfigAdmin(admin.ModelAdmin):
+    """Singleton focus pick budget per pick level (#4759)."""
+
+    list_display = ("pk", "budget_per_level", "updated_at", "updated_by")
+    autocomplete_fields = ["updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not VowFocusPickConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(CharacterVowFocusPick)
+class CharacterVowFocusPickAdmin(admin.ModelAdmin):
+    """A character's chosen focus picks, set by staff until a player picker exists (#4759).
+
+    A save that breaks the level, budget, role or secondary-vow rule is refused
+    with the reason (``world.covenants.focus_picks``).
+    """
+
+    list_display = ("character_role", "pick", "chosen_at")
+    list_select_related = (
+        "character_role__character_sheet__character",
+        "character_role__covenant_role",
+        "pick__covenant_role",
+    )
+    search_fields = ("character_role__character_sheet__character__db_key", "pick__name")
+    raw_id_fields = ("character_role",)
+    autocomplete_fields = ("pick",)
+    readonly_fields = ("chosen_at",)
+
+
+@admin.register(CombatStyle)
+class CombatStyleAdmin(admin.ModelAdmin):
+    """How a character was taught to fight with magic (#4759).
+
+    Give a character a style on their character sheet. It replaces the vow's
+    defense profile.
+    """
+
+    list_display = ("name", "defense_style", "armor_share_tenths")
+    list_filter = ("defense_style",)
+    search_fields = ("name",)

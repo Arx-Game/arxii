@@ -81,8 +81,10 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   call sites in `world.mechanics.services` (`equipment_walk_total` and
   `equipment_walk_total_unblended`) are gone.
 - **`DefenseStyle`** (`TextChoices` in `world.covenants.constants`, #2533) — how a
-  covenant vow defends: `GEAR_SOAK` (armor is the defense), `EVASION` (not being
-  there is the defense), `BARRIER` (force/warding is the defense). Code-defined
+  covenant vow defends: `GEAR_SOAK` (armor is the defense; labelled "Mitigation" since
+  #4759, stored value still `gear_soak`), `EVASION` (not being there is the defense),
+  `BARRIER` (force/warding is the defense). Also read by `CombatStyle.defense_style`
+  (see "Vow focus picks and combat styles" below). Code-defined
   vocabulary (not lore-repo content) per the shared-vocabulary ruling — ADR-0149
   Layer 4's situational perks (#2536) key on these labels, and the 2026-07-20 niche
   ruling requires each style to have distinct shine-situations in that perk set
@@ -156,8 +158,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   column on a row must match (AND); an empty scope always matches — see `perk_scope_matches`
   below.
 - **`SituationRequirementMixin`** (#2623, ADR-0154) — abstract mixin shared by
-  `VowSituationalPerkSituation`/`VowSituationalPerkRung`; carries four typed, nullable/blank
-  parameter columns (Situation Parameters): `threshold_percent` (0-100, percent-shaped floors —
+  `VowSituationalPerkSituation`/`VowSituationalPerkRung`/`VowAddedEffect`; carries five typed,
+  nullable/blank parameter columns (Situation Parameters): `condition_property` (#4759, nullable
+  FK to `mechanics.Property`, read only by the two condition-property situations), `threshold_percent` (0-100, percent-shaped floors —
   aura-axis floor, ally-health fraction), `count_threshold` (count-shaped floors — surrounded
   lock count, minimum affection), `affinity` (nullable FK to `Affinity` for attacker typing),
   `origin_side` (`SituationOriginSide.OURS`/`THEIRS`, blank = side-blind). No JSON (ADR-0007) —
@@ -201,7 +204,11 @@ modules import combat/checks contexts at function level, never the reverse):
   parameterized to all three affinity rows by #2623, ADR-0154) from #2536 slice 3, plus
   `ON_CHOSEN_GROUND` (#2646 — see "Chosen Ground" below) — see each value's own docstring entry
   for its evaluator's data source, its Situation Parameters, and any v1 approximation.
-  `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the four `SituationRequirementMixin`
+  #4759 slice 1 added `TARGET_HAS_CONDITION_PROPERTY`, `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`
+  (both require `condition_property`, allow `count_threshold`) and `TARGET_LOW_HEALTH` (allows
+  `threshold_percent`); their registered evaluators return False until #4759 slice 3
+  [BUILT, NOT WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
+  `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the five `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
   threshold; `AMBUSH_UNDERWAY`/`COMBAT_OPENED_FROM_PARLEY` allow `origin_side`; every other
@@ -1161,6 +1168,62 @@ summary with a link to its own page.
   `SituationCheck` owns the per-resolution situation-evaluation cache (keyed
   `(situation, params, holder_pk)`); `_PerkResolver` now delegates to one.
 
+## Vow focus picks and combat styles (#4759 slice 1, ADR-4759) [BUILT, NOT WIRED]
+
+Slice 1 of #4759 adds the authoring schema and admin. Nothing in play reads it yet:
+slice 2 makes a picked row fire only for holders who chose it, slice 5 makes a combat
+style decide defense. Until then a `focus_pick` row still applies to every holder.
+
+### Models (`world.covenants.models`)
+
+- **`VowFocusPick`** (`NaturalKeyMixin` NK `(covenant_role, name)`, `CreditedContent`,
+  `covenants.vowfocuspick` in `CONTENT_MODELS`) - one entry in a vow's pick catalog:
+  `covenant_role` (CASCADE, `related_name="focus_picks"`), `pick_level` (1 to 3), `name`
+  (unique per role), `description`, `value` (default 4, a placeholder point score until the
+  simulator sets it). Valid on anchor roles and sub-roles.
+- **`VowFocusPickLimit`** (NK `(pick, kind)`, `CreditedContent`, in `CONTENT_MODELS`) - one
+  limit on a pick: `kind` (`FocusPickLimitKind`: `SELF`/`TARGET`/`SETTING`/`TIMING`/
+  `EXPOSURE`/`COST`), `frequency_tenths` (1 to 10, default 10), `reduction` (default 0),
+  `description`. One limit per kind per pick. `clean()` refuses a reduction on a frequency
+  kind and a frequency other than 10 on `EXPOSURE`/`COST`, so no authored number is ignored.
+- **`VowFocusPickConfig`** (singleton pk=1, like `SecondaryVowConfig`) - `budget_per_level`
+  (default 4). Lazy-created by `focus_picks.vow_focus_pick_config()`.
+- **`CharacterVowFocusPick`** (play state) - `character_role` (FK `CharacterCovenantRole`,
+  CASCADE, `related_name="focus_picks"`), `pick` (CASCADE), `chosen_at`; unique
+  `(character_role, pick)`. `clean()` runs `validate_character_focus_pick`.
+- **`focus_pick`** (nullable FK, RESTRICT) on `VowAddedEffect`, `VowSituationalPerk` and
+  `CovenantRoleActionScaling`. Null is the base vow. Each `clean()` refuses a pick from
+  another role (`focus_pick_role_error`). `focus_pick` joined the `vow_added_effect_scope_unique`
+  and `covenant_role_action_scaling_unique` keys (NULLS NOT DISTINCT) and both natural keys,
+  so a picked row may repeat a base row's scope. `CovenantRoleTechniqueSpecialty` gets no link:
+  the specialty is the vow's base identity.
+- **`CombatStyle`** (NK `name`, `CreditedContent`, in `CONTENT_MODELS`) - `name`,
+  `description`, `defense_style` (`DefenseStyle`), `armor_share_tenths` (0 to 10, default 10).
+  A character's style is `CharacterSheet.combat_style` (nullable, PROTECT); it replaces the
+  vow's `CovenantRoleDefenseProfile` once slice 5 reads it (ADR-4759).
+
+### Price and choice rules (`world.covenants.focus_picks`)
+
+- `pick_price(pick) -> int` - `max(1, floor(value x product(frequency_tenths / 10)) - sum(reduction))`.
+  The product runs over `SELF`/`TARGET`/`SETTING`/`TIMING` limits, the sum over
+  `EXPOSURE`/`COST`. Integer arithmetic; never stored. Value 4 with no limit is 4; with one
+  `TARGET` limit at 5 it is 2.
+- `shown_vow_level(membership) -> int` - the shown COVENANT_ROLE thread level, read on the
+  anchor role through `services._covenant_role_thread_level` and `shown_thread_level`.
+- `validate_character_focus_pick(choice)` - raises `ValidationError` naming the reason when
+  the membership is secondary, the pick is not in the held role's, its anchor's or its
+  resolved sub-role's catalog (`resolve_effective_role`), the pick level is above the shown
+  vow level, or the level's chosen prices exceed `budget_per_level`.
+
+### Admin
+
+CovenantRole admin carries a `VowFocusPickInline` with a read-only computed price; the
+`VowFocusPick` admin has its limits inline and the price. `focus_pick` is an autocomplete on
+the added effect, situational perk and action scaling admins, and `condition_property` on the
+situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
+and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
+admins; `combat_style` is on the CharacterSheet admin.
+
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —
@@ -1171,6 +1234,10 @@ summary with a link to its own page.
   `world.covenants.constants`, #4581) - where a vow added effect may fire (`ANY` /
   `IN_COMBAT` / `OUT_OF_COMBAT`) and how often one holder may fire it (`EVERY_CAST` /
   `ONCE_PER_ROUND` / `ONCE_PER_FIGHT`). See "Vow added effects" above.
+- **`FocusPickLimitKind`** (`TextChoices`, #4759) - `SELF` / `TARGET` / `SETTING` / `TIMING`
+  (priced by frequency) and `EXPOSURE` / `COST` (priced by a flat reduction), grouped by
+  `FOCUS_PICK_FREQUENCY_LIMIT_KINDS` / `FOCUS_PICK_REDUCTION_LIMIT_KINDS`. See "Vow focus
+  picks and combat styles" above.
 
 ## Combat Seams
 

@@ -1297,3 +1297,31 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
         ).values_list("character_sheet_id", flat=True)
     )
     return any(mark.participant.character_sheet_id in mate_sheet_ids for mark in marks)
+
+
+# --- #4759 slice 1: authorable now, evaluated in slice 3 ---------------------
+# Slice 1 of #4759 adds these three situations so staff can author perk and
+# added-effect rows against them. Their real evaluators are slice 3's work
+# (``covenants/perks/evaluators.py``); until it lands each one never holds, so
+# an authored row stays off rather than raising a KeyError at resolution.
+
+
+@register(Situation.TARGET_HAS_CONDITION_PROPERTY)
+def target_has_condition_property(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """Never holds until #4759 slice 3 reads the target's condition properties."""
+    return False
+
+
+@register(Situation.ENEMIES_WITH_CONDITION_PROPERTY_NEARBY)
+def enemies_with_condition_property_nearby(
+    ctx: SituationContext,  # noqa: ARG001
+    params: SituationParams,  # noqa: ARG001
+) -> bool:
+    """Never holds until #4759 slice 3 reads nearby enemies' condition properties."""
+    return False
+
+
+@register(Situation.TARGET_LOW_HEALTH)
+def target_low_health(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
+    """Never holds until #4759 slice 3 reads the target's health."""
+    return False

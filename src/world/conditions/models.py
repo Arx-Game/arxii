@@ -471,6 +471,14 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "resolves, so a guard holds from the round after it lands."
         ),
     )
+    spares_source = models.BooleanField(
+        default=False,
+        help_text=(
+            "While active on an NPC, it will not attack the condition's source or the "
+            "people that source protects. It never reads the NPC's mind, so it works on "
+            "beasts and the dead too."
+        ),
+    )
     prevents_knockout = models.BooleanField(
         default=False,
         help_text=(

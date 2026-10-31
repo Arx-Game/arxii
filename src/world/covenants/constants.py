@@ -102,6 +102,48 @@ MENTOR_BOND_MAX_SIDEKICKS: int | None = None
 SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
 
 
+# Vow focus picks (#4759). A pick's value is a placeholder point score until the
+# simulator sets it; each pick level's budget defaults to one full-value pick.
+VOW_FOCUS_PICK_VALUE_DEFAULT = 4
+VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT = 4
+VOW_FOCUS_PICK_MAX_LEVEL = 3
+#: A limit met every time (10 tenths) leaves the price whole.
+FOCUS_PICK_LIMIT_FREQUENCY_FULL = 10
+
+
+class FocusPickLimitKind(models.TextChoices):
+    """What kind of limit narrows a vow focus pick, and so lowers its price (#4759).
+
+    SELF, TARGET, SETTING and TIMING limits are usage conditions: the price is
+    multiplied by how often each is met (``frequency_tenths / 10``). EXPOSURE and
+    COST limits cost something on every use, so each takes a flat ``reduction``
+    off the price instead. COST is a component or a condition on yourself; it is
+    not named PRICE so it does not collide with the magic ``RestrictionKind.PRICE``.
+    """
+
+    SELF = "self", "Self"
+    TARGET = "target", "Target"
+    SETTING = "setting", "Setting"
+    TIMING = "timing", "Timing"
+    EXPOSURE = "exposure", "Exposure"
+    COST = "cost", "Cost"
+
+
+#: Limit kinds whose ``frequency_tenths`` multiplies a pick's price (#4759).
+FOCUS_PICK_FREQUENCY_LIMIT_KINDS: frozenset[str] = frozenset(
+    {
+        FocusPickLimitKind.SELF,
+        FocusPickLimitKind.TARGET,
+        FocusPickLimitKind.SETTING,
+        FocusPickLimitKind.TIMING,
+    }
+)
+#: Limit kinds whose flat ``reduction`` comes off a pick's price (#4759).
+FOCUS_PICK_REDUCTION_LIMIT_KINDS: frozenset[str] = frozenset(
+    {FocusPickLimitKind.EXPOSURE, FocusPickLimitKind.COST}
+)
+
+
 class VowEffectContext(models.TextChoices):
     """Where a cast must happen for a ``VowAddedEffect`` to fire (#4581).
 
@@ -149,7 +191,8 @@ class DefenseStyle(models.TextChoices):
     a style with none is an authoring bug, per the 2026-07-20 niche ruling).
     """
 
-    GEAR_SOAK = "gear_soak", "Gear Soak"  # armor is the defense
+    # Labelled "Mitigation" since #4759; the stored value stays gear_soak.
+    GEAR_SOAK = "gear_soak", "Mitigation"  # armor is the defense
     EVASION = "evasion", "Evasion"  # not being there is the defense
     BARRIER = "barrier", "Barrier"  # force/warding is the defense
 
