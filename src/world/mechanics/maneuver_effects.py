@@ -3,8 +3,8 @@
 ``ensure_maneuver_effect_rows`` writes the eight fixed rows from explicit values; the
 combat seed cluster calls it. ``ensure_maneuver_effects`` writes the rows and the
 modifier category their targets live in, for a database whose schema was built from the
-models without running migration 0332 (tests, a scratch schema): a migrated database gets
-both from 0332, and the seeder never writes the category, which is content.
+models without running migration 0333 (tests, a scratch schema): a migrated database gets
+both from 0333, and the seeder never writes the category, which is content.
 ``get_maneuver_effect`` is how code finds one row, always by key and never by name.
 """
 

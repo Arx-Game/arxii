@@ -7,7 +7,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0330_maneuver_effects"),
+        ("arxii", "0331_maneuver_effects"),
     ]
 
     operations = [

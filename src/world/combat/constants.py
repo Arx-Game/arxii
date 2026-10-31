@@ -135,7 +135,10 @@ class ParticipantStatus(models.TextChoices):
 
     ACTIVE = "active", "Active"
     FLED = "fled", "Fled"
+    # Left of their own accord (combat leave); they may rejoin (#4794).
     REMOVED = "removed", "Removed"
+    # Taken out by a GM; only a GM add brings them back, never a self-join (#4794).
+    REMOVED_BY_GM = "removed_by_gm", "Removed by GM"
 
 
 class CombatManeuver(models.TextChoices):

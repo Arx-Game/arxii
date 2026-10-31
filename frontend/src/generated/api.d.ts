@@ -44636,9 +44636,10 @@ export interface components {
      * @description * `active` - Active
      *     * `fled` - Fled
      *     * `removed` - Removed
+     *     * `removed_by_gm` - Removed by GM
      * @enum {string}
      */
-    ParticipantStatusEnum: 'active' | 'fled' | 'removed';
+    ParticipantStatusEnum: 'active' | 'fled' | 'removed' | 'removed_by_gm';
     /**
      * @description * `critical` - Critical
      *     * `important` - Important

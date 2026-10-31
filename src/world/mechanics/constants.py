@@ -163,7 +163,7 @@ EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
 # Maneuver effects (#4783)
 # ---------------------------------------------------------------------------
 
-# The ModifierCategory a maneuver-effect target lives in. Created by migration 0332, and
+# The ModifierCategory a maneuver-effect target lives in. Created by migration 0333, and
 # in code by name (``ensure_maneuver_effects``) for a schema built without migrations.
 MANEUVER_EFFECT_CATEGORY_NAME = "maneuver_effect"
 

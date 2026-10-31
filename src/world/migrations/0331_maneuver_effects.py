@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0329_movementconfig_defense_and_healing_tuning"),
+        ("arxii", "0330_alter_combatparticipant_status"),
     ]
 
     operations = [

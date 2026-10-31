@@ -717,7 +717,7 @@ class CombatEncounterViewSet(ModelViewSet):
             pk=participant_id,
             encounter=encounter,
         )
-        remove_participant(participant)
+        remove_participant(participant, by_gm=True)
         return self._serialize_encounter(request, encounter)
 
     @extend_schema(request=AddOpponentSerializer)

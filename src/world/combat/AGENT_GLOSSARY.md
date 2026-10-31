@@ -5,7 +5,7 @@ The top-level container for one fight — an `AbstractRound` subclass carrying i
 _Avoid_: battle, fight (as a model name), combat session
 
 **CombatParticipant**:
-A PC's enrolment in a `CombatEncounter` (one per character per encounter), tracking status (active/fled/removed), covenant role, and the character's per-round strain budget.
+A PC's enrolment in a `CombatEncounter` (one per character per encounter), tracking status (active, fled, removed for a voluntary leave, removed by GM), covenant role, and the character's per-round strain budget. A fighter who fled or left and comes back is reactivated on the same row; one a GM removed comes back only through a GM add (#4794).
 _Avoid_: combatant, fighter, player (for the PC's encounter row)
 
 **CombatOpponent**:

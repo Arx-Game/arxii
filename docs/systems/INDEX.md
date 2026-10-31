@@ -9355,7 +9355,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - **Aftermath digest (#3551):** `deliver_aftermath_digests`, the last step
     `complete_encounter` runs, sends one private Narrator OUTCOME interaction
     (`PERCEIVED_ONLY`, pushed only to that character's persona) plus a `character.msg`
-    telnet line to every ACTIVE or FLED participant; REMOVED participants get nothing,
+    telnet line to every ACTIVE or FLED participant; REMOVED and REMOVED_BY_GM get nothing,
     but an ABANDONED encounter still delivers (only the aftermath rules/pools/counters
     step is skipped for ABANDONED, not delivery). `build_aftermath_digest`
     (`world/combat/aftermath.py`) assembles the digest by reading, not writing: the
