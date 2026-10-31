@@ -8,7 +8,7 @@ defense style decides what comes off it.
 - Evasion style counting half its armor (5 tenths): 2 of the 4 soak counts. 10 - 2 = 8.
 - Mitigation style counting all of it: 4 soak. 10 - 4 = 6.
 - Mitigation against a level 12 attacker, past the default level gap of 3: half (the
-  default 5 tenths) of the 4 the armor stopped leaks back. 10 - 4 + 2 = 8.
+  default 50 percent) of the 4 the armor stopped leaks back. 10 - 4 + 2 = 8.
 - Barrier style counting half its armor, behind a 10-point force field: the ward rolls the
   attack's own defence check. A partial success (level 1) takes half the blow (5), the
   armor takes 2 of the rest, 3 lands. A clean one (level 2) takes all of it. A failure
@@ -19,7 +19,7 @@ defense style decides what comes off it.
   profile is the fallback). A style on top of that vow wins.
 
 Expected values come from the spec (#4759 Decisions 2 and 3, Verification 5) and the
-MovementConfig field defaults (gap 3, leak 5 tenths); the defence ladder is
+MovementConfig field defaults (gap 3, leak 50 percent); the defence ladder is
 ``world.combat.constants`` (2 = no damage, 1 = half).
 """
 
@@ -221,7 +221,9 @@ class AMuchStrongerAttackerLeaksThroughMitigation(_TheYard):
         self.assertEqual(self.health(gorm), HEALTH - (STRIKE - ARMOR))
 
     def test_the_gap_and_leak_are_read_from_the_config_row(self) -> None:
-        MovementConfig.objects.create(pk=1, mitigation_level_gap_cap=15, mitigation_leak_tenths=10)
+        MovementConfig.objects.create(
+            pk=1, mitigation_level_gap_cap=15, mitigation_leak_percent=100
+        )
         gorm = self.fighter("Gorm", style=self.mitigation)
         self.blade(level=12)
 

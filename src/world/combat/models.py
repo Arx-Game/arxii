@@ -3102,12 +3102,28 @@ class MovementConfig(SharedMemoryModel):
             "of what their armor stops leaks through (#4759)."
         ),
     )
-    mitigation_leak_tenths = models.PositiveSmallIntegerField(
-        default=5,
-        validators=[MaxValueValidator(10)],
+    mitigation_leak_percent = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
         help_text=(
-            "How much of what a mitigation defender's armor stops leaks through, in "
-            "tenths (0 to 10), when the attacker is past the level gap (#4759)."
+            "Percent (0 to 100) of what a mitigation defender's armor stops that leaks "
+            "through when the attacker is past the level gap (#4759)."
+        ),
+    )
+    wound_cap_shrink_per_round = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent (0 to 100) of a wound's healable cap lost for each round since the "
+            "wound landed, so a mend closes less of an old wound (#4759)."
+        ),
+    )
+    reactive_save_max_cut = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "The most of one blow, in percent (0 to 100), that a healer's reactive save "
+            "can remove (#4759)."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)

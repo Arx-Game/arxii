@@ -14,7 +14,7 @@ The three defense styles change how an NPC's blow lands on a PC
   how much of the blow it takes (``barrier_absorb_fraction``).
 - **Mitigation** (stored ``gear_soak``): armor soaks as normal, but when the attacker's
   level beats the defender's by more than ``MovementConfig.mitigation_level_gap_cap``,
-  ``mitigation_leak_tenths`` of what the armor stopped leaks through
+  ``mitigation_leak_percent`` of what the armor stopped leaks through
   (``mitigation_leak``).
 
 The damage pipeline that runs the ward and the armor takes no defense arguments, so the
@@ -180,13 +180,13 @@ def barrier_absorb_fraction(character: Character) -> Decimal | None:
 
 
 def mitigation_tuning() -> tuple[int, int]:
-    """``(level_gap_cap, leak_tenths)`` from MovementConfig, or the field defaults."""
+    """``(level_gap_cap, leak_percent)`` from MovementConfig, or the field defaults."""
     from world.combat.models import MovementConfig  # noqa: PLC0415
 
     row = MovementConfig.objects.cached_singleton()
     if row is None:
         row = MovementConfig()  # unsaved: carries every field's default
-    return row.mitigation_level_gap_cap, row.mitigation_leak_tenths
+    return row.mitigation_level_gap_cap, row.mitigation_leak_percent
 
 
 def mitigation_leak(character: Character, soaked: int) -> int:
@@ -200,7 +200,7 @@ def mitigation_leak(character: Character, soaked: int) -> int:
     defense = _active_defense(character, DefenseStyle.GEAR_SOAK)
     if defense is None:
         return 0
-    cap, leak_tenths = mitigation_tuning()
+    cap, leak_percent = mitigation_tuning()
     if defense.attacker_level - defense.defender_level <= cap:
         return 0
-    return soaked * leak_tenths // 10
+    return soaked * leak_percent // 100

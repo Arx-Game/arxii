@@ -656,7 +656,9 @@ class MovementConfigAdmin(admin.ModelAdmin):
         "dodge_fatigue_cost",
         "reaction_difficulty_step",
         "mitigation_level_gap_cap",
-        "mitigation_leak_tenths",
+        "mitigation_leak_percent",
+        "wound_cap_shrink_per_round",
+        "reactive_save_max_cut",
         "updated_at",
     ]
     autocomplete_fields = ["held_ground_challenge", "updated_by"]

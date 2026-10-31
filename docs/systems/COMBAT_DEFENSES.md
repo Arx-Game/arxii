@@ -157,6 +157,38 @@ outside both budgets (ADR-0161). A guard laid in round N holds from round N+1.
 A standing guard that is declined by either budget uses the same private decline line as a
 declared one (`_narrate_reaction_declined`, below).
 
+## Defense styles: evasion, barrier, mitigation (#4809, slice 5 of #4759) [BUILT & WIRED]
+
+`world.covenants.defense.defense_style_for(character)` returns a `DefenseResolution`
+(`style`, `armor_share_tenths`, `from_combat_style`). The character's `CombatStyle`
+(`CharacterSheet.combat_style`) wins; with no style, the engaged PRIMARY vow's
+`CovenantRoleDefenseProfile` with the highest `gear_additive_tenths` governs
+(`engaged_primary_defense_profile`, the chooser `gear_additive_fraction` also uses); with
+neither, `style` is None and all armor counts (the behavior before #4759).
+
+- **Armor share.** `apply_equipped_armor_soak` scales armor by the share once. A combat
+  style's share reaches ALL worn armor, both compatibility buckets. A vow profile's share
+  keeps its #2533 reach, the compatible bucket only.
+- **Evasion** defends through the automatic dodge below, unchanged. The dodge stays
+  capability-driven for every style (#4651 decision 2: movement reads capabilities, never
+  their source), so evasion's difference from the others is its lower armor share.
+- **Barrier.** While an NPC blow resolves against a barrier defender, `absorb_pool` rolls
+  `barrier_absorb_fraction` before it absorbs. The roll is the attack's own defence check
+  (the threat entry's `defense_check_type`, the same difficulty and gathered modifiers,
+  without the dodge bonus). On the defence ladder, 2 or more takes the whole blow, 1 takes
+  half, and anything lower takes none. The ward is paid either way. With no NPC blow, or for
+  any other style, the ward absorbs automatically as before.
+- **Mitigation** (stored `gear_soak`). Armor soaks as normal. When the attacker's level
+  beats the defender's `current_level` by more than `MovementConfig.mitigation_level_gap_cap`
+  (default 3), `mitigation_leak_percent` (default 50) of what the armor stopped leaks back
+  through (`mitigation_leak`).
+
+`resolve_npc_attack` hands the defense to the damage pipeline through the
+`npc_hit_defense` context variable (`NpcHitDefense`), entered beside `dodge_roll_active`.
+It is only set for a barrier or mitigation defender, and it applies only to that
+defender's own hit, never an interposer's. Journey:
+`src/integration_tests/test_defense_style_journeys.py`.
+
 ## Barrier (force-field absorb)
 
 A `DAMAGE_PRE_APPLY` interceptor drains a `ConditionInstance.absorb_remaining`
@@ -167,6 +199,8 @@ buffer.
 - **Content seed:** `ensure_force_field_content()` in
   `world/magic/effect_palette_content.py` (Aegis Field).
 - **Scope:** SELF — the trigger filter fires when `payload.target == bearer`.
+- **Barrier defenders roll (#4809):** against an NPC blow, a barrier-style defender's ward
+  takes all, half or none of the blow by a defence check (see "Defense styles" above).
 - **Cost:** flat `reactive_anima_cost` billed to the applier (ADR-0118 reactive-costs); an
   instance with `soulfray_consented` (#3573) pays into deficit through `deduct_anima` and
   accrues Soulfray on every fire, so a caster can hold a ward for an ally past zero anima
@@ -210,10 +244,9 @@ Flat damage reduction applied after evasion and barrier.
 - **Armor soak:** `apply_equipped_armor_soak`
   (`world/combat/services/`). Role-gated — compatible covenant-role armor
   adds on top; incompatible armor competes with a resonant pool via `max`.
-  As of #2533, the compatible bucket is scaled once by
-  `gear_additive_fraction(character)` (`world.covenants.services`) — the MAX
-  `CovenantRoleDefenseProfile.gear_additive_tenths` fraction across the
-  character's engaged roles, `1` (fully additive) with no profile. A vow whose
-  `DefenseStyle` is EVASION or BARRIER rather than GEAR_SOAK ("Mitigation") can author a lower
-  fraction so its own defense substitutes for gear instead of stacking with it.
+  Since #4809 the share comes from `defense_style_for(character)`: a `CombatStyle`'s
+  `armor_share_tenths` scales all worn armor; with no style, the vow profile's
+  `gear_additive_tenths` scales the compatible bucket only (#2533); with neither, all
+  armor counts. A mitigation defender's armor leaks part of what it stopped against an
+  attacker past the level gap (see "Defense styles" above).
   See `docs/systems/covenants.md`'s "Defense styles + gear substitution" for detail.
