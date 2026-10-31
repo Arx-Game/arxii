@@ -138,12 +138,16 @@ def fire_stage_triggers(instance: ConditionInstance) -> list[ControlLossOutcome]
 
 
 def _roller_sheet(character: ObjectDB) -> CharacterSheet | None:  # noqa: OBJECTDB_PARAM
-    """The sheet of a character who rolls; a room or an object has none."""
+    """The sheet of a character who rolls: a player character only (NPCs are targets)."""
     from typeclasses.characters import Character  # noqa: PLC0415
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
     if not isinstance(character, Character):
         return None
-    return character.character_sheet
+    sheet = character.character_sheet
+    if sheet is None or not is_player_character(sheet):
+        return None
+    return sheet
 
 
 def _fire(
@@ -175,6 +179,8 @@ def _fire(
     )
     band = _band_for(trigger, result)
     applied = _apply_band(character, sheet, band) if band is not None else None
+    if band is not None and (applied is not None or band.control_change or band.intensity):
+        _announce(character, trigger, result, applied)
     return ControlLossOutcome(trigger=trigger, check_result=result, band=band, applied=applied)
 
 
@@ -197,9 +203,13 @@ def _thread_relief(sheet: CharacterSheet, trigger: ControlLossTrigger) -> int:
 
     if trigger.relief_gift_id is None or not trigger.relief_per_thread_level:
         return 0
-    thread = Thread.objects.filter(
-        owner=sheet, target_gift_id=trigger.relief_gift_id, retired_at__isnull=True
-    ).first()
+    thread = (
+        Thread.objects.filter(
+            owner=sheet, target_gift_id=trigger.relief_gift_id, retired_at__isnull=True
+        )
+        .order_by("pk")
+        .first()
+    )
     if thread is None:
         return 0
     relief = thread.level * trigger.relief_per_thread_level
@@ -210,17 +220,28 @@ def _is_impaired(sheet: CharacterSheet, trigger: ControlLossTrigger) -> bool:
     """Condition-driven willpower at or below ``-impaired_willpower_drop`` (ruled 2026-07-31)."""
     from world.conditions.services import get_condition_modifier_total  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.traits.constants import PrimaryStat, TraitType  # noqa: PLC0415
 
     if not trigger.impaired_willpower_drop:
         return False
-    target = ModifierTarget.objects.filter(target_trait__name__iexact="willpower").first()
+    target = (
+        ModifierTarget.objects.filter(
+            target_trait__name=PrimaryStat.WILLPOWER, target_trait__trait_type=TraitType.STAT
+        )
+        .order_by("pk")
+        .first()
+    )
     if target is None:
         return False
     return get_condition_modifier_total(sheet, target) <= -trigger.impaired_willpower_drop
 
 
 def _skill_terms(trigger: ControlLossTrigger) -> tuple:
-    """Magic skills staff mapped to the moon-control activity ride the moon's roll."""
+    """Magic skills staff mapped to the moon-control activity ride the moon's roll.
+
+    Moon-only today: ``MagicActivity.MOON_CONTROL`` is the one activity slot that maps to a
+    trigger kind, so wound and stage triggers carry no skill terms.
+    """
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
 
@@ -233,7 +254,8 @@ def _band_for(trigger: ControlLossTrigger, result: CheckResult) -> ControlLossBa
     """The trigger's band for the roll's outcome, if staff authored one."""
     if result.outcome is None:
         return None
-    return trigger.bands.filter(outcome_id=result.outcome.pk).select_related("applies").first()
+    bands = trigger.bands.filter(outcome_id=result.outcome.pk)
+    return bands.select_related("applies").order_by("pk").first()
 
 
 def _apply_band(
@@ -261,18 +283,41 @@ def _apply_band(
 
 def _shift_engagement_of(character: ObjectDB, band: ControlLossBand) -> None:  # noqa: OBJECTDB_PARAM
     """Land the band's intensity and control on the character's engagement, if any."""
-    from world.magic.services.fury import _engagement_of, _shift_engagement  # noqa: PLC0415
+    from world.magic.services.fury import engagement_of, shift_engagement  # noqa: PLC0415
 
-    engagement = _engagement_of(character)
+    engagement = engagement_of(character)
     if engagement is None:
         return
-    _shift_engagement(
+    shift_engagement(
         engagement, intensity=band.intensity, control=band.control_change, surrendered=0
     )
 
 
+def _announce(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    trigger: ControlLossTrigger,
+    result: CheckResult,
+    applied: ConditionInstance | None,
+) -> None:
+    """Tell the character and the room a roll moved their control or applied a condition."""
+    outcome = result.outcome.name
+    check = trigger.check_type.name
+    lost = f" {{who}} lose control: {applied.condition.name}." if applied is not None else ""
+    base = f"{{who}} fight to keep control. {check}: {outcome}."
+    character.msg("|r" + (base + lost).format(who="You") + "|n")
+    room = character.location
+    if room is not None:
+        text = f"{character.key} fights to keep control. {check}: {outcome}." + (
+            f" {character.key} loses control: {applied.condition.name}." if applied else ""
+        )
+        room.msg_contents("|r" + text + "|n", exclude=[character])
+
+
 def _force_battle_form_shift(character: ObjectDB, sheet: CharacterSheet) -> None:  # noqa: OBJECTDB_PARAM
     """Shift into the battle form via the built involuntary seam, moon-scaled.
+
+    Moon-only today: the battle form is the lycan's, provisioned by ``moon_provisioning``,
+    and ``ControlLossBand.clean`` allows ``forces_form`` on a moon-pull trigger only.
 
     Skips silently when an alternate self is already active (a voluntary shift preempts the
     forced one: the rage takes over the shape they already wear). A missing battle form is
@@ -285,7 +330,11 @@ def _force_battle_form_shift(character: ObjectDB, sheet: CharacterSheet) -> None
 
     if ActiveAlternateSelf.objects.filter(character=sheet).exists():
         return
-    alt = AlternateSelf.objects.filter(character=sheet, combat_profile__isnull=False).first()
+    alt = (
+        AlternateSelf.objects.filter(character=sheet, combat_profile__isnull=False)
+        .order_by("pk")
+        .first()
+    )
     if alt is None:
         alt = ensure_lycan_battle_form(sheet)
     clarity = moon_clarity_instance_value(character, character.location)

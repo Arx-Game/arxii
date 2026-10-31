@@ -92,6 +92,7 @@ def moon_reconcile_tick() -> None:
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
     from world.species.moon_constants import CANI_SPECIES_NAME  # noqa: PLC0415
     from world.species.moon_sensitivity import (  # noqa: PLC0415
         reconcile_cani_unease_safely,
@@ -101,7 +102,8 @@ def moon_reconcile_tick() -> None:
     seen: set[int] = set()
     bound_sheets = CharacterSheet.objects.filter(
         pk__in=ConditionInstance.objects.filter(
-            condition__control_loss_triggers__fires_on=ControlLossFiresOn.MOON_PULL
+            _not_suppressed_q(),
+            condition__control_loss_triggers__fires_on=ControlLossFiresOn.MOON_PULL,
         ).values("target_id")
     )
     for sheet in bound_sheets:

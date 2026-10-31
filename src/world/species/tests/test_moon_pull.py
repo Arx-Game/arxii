@@ -14,6 +14,7 @@ from world.conditions.factories import (
     ControlLossTriggerFactory,
 )
 from world.game_clock.constants import TimePhase
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.species.moon_constants import MOON_FORM_CLARITY_MAX_BONUS
 from world.species.moon_pull import felt_moon_pull, moon_clarity_instance_value
 from world.species.moon_sensitivity import is_moon_bound, reconcile_moon_pull
@@ -101,6 +102,10 @@ class MoonReconcileTest(TestCase):
 
     def _bind(self):
         ConditionInstanceFactory(target=self.character, condition=self.trigger.vulnerability)
+        tenure = RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet), end_date=None
+        )
+        self.character.db_account = tenure.player_data.account
 
     def _level(self, level):
         return patch.object(

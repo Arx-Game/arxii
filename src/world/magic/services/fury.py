@@ -275,14 +275,14 @@ def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     )
 
 
-def _engagement_of(character: ObjectDB):
+def engagement_of(character: ObjectDB):
     """The character's engagement of any type, or None."""
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     return CharacterEngagement.objects.filter(character_id=character.pk).first()
 
 
-def _shift_engagement(engagement, *, intensity: int, control: int, surrendered: int) -> None:
+def shift_engagement(engagement, *, intensity: int, control: int, surrendered: int) -> None:
     """Add the deltas to the engagement's intensity, control and surrendered tally.
 
     Written on the identity-mapped instance (the one ``get_runtime_technique_stats`` reads
@@ -350,7 +350,7 @@ class FuryCast:
         No engagement, or a tier the anchor's tie clamps to nothing: nothing is rolled
         and nothing changes.
         """
-        self._engagement = _engagement_of(self.character)
+        self._engagement = engagement_of(self.character)
         if self._engagement is None:
             return False
         if clamp_tier(self.tier, provocation_cap(self.character, self.anchor)) is None:
@@ -374,7 +374,7 @@ class FuryCast:
         )
         if self.resolution.realized_tier is None:
             return False
-        _shift_engagement(
+        shift_engagement(
             self._engagement,
             intensity=self.resolution.intensity_gained,
             control=-self.resolution.control_surrendered,
@@ -387,7 +387,7 @@ class FuryCast:
         res = self.resolution
         if res is None or res.realized_tier is None or self._engagement is None:
             return
-        _shift_engagement(
+        shift_engagement(
             self._engagement,
             intensity=-res.intensity_gained,
             control=res.control_surrendered,

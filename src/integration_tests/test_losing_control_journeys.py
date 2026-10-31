@@ -97,6 +97,7 @@ class WoundTriggers(_ControlLossCase):
         apply_damage_to_participant(self.seat, damage)
 
     def test_wound_below_threshold_rolls_and_failure_applies_berserk(self) -> None:
+        self.watch(self.garrick)
         with force_check_outcome(self.failure) as capture:
             self.hit(60)
 
@@ -104,6 +105,26 @@ class WoundTriggers(_ControlLossCase):
         self.assertIsNotNone(berserk)
         self.assertEqual(berserk.severity, 3)
         self.assertEqual(capture.target_difficulty, 30)
+        self.assertTold(self.garrick, "You fight to keep control.")
+        self.assertTold(self.garrick, "You lose control: Berserk.")
+
+    def test_the_room_sees_the_loss_of_control(self) -> None:
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(witness)
+        with force_check_outcome(self.failure):
+            self.hit(60)
+
+        self.assertTold(witness, "Garrick loses control: Berserk.")
+
+    def test_a_hit_that_knocks_the_character_out_rolls_no_wound_trigger(self) -> None:
+        with (
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+            force_check_outcome(self.failure),
+        ):
+            self.hit(90)
+
+        self.assertEqual(rolled.call_count, 0)
+        self.assertIsNone(_berserk_of(self.garrick))
 
     def test_a_held_roll_applies_nothing(self) -> None:
         with force_check_outcome(self.success):
@@ -165,6 +186,7 @@ class StageTriggers(_ControlLossCase):
         )  # fmt: skip
         self.band(trigger, self.failure, applies=self.berserk)
         instance = apply_condition(maren, curse).instance
+        self.watch(maren)
 
         with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
             advance_condition_severity(instance, 5)
@@ -174,6 +196,29 @@ class StageTriggers(_ControlLossCase):
 
         self.assertEqual(capture.target_difficulty, 25)
         self.assertEqual(_berserk_of(maren).severity, 3)
+        self.assertTold(maren, "You lose control: Berserk.")
+
+    def test_an_npc_carrying_the_curse_never_rolls(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        room = self.make_room("The Crypt")
+        ghoul = CharacterFactory(db_key="Ghoul", location=room)
+        CharacterSheetFactory(character=ghoul)
+        curse = ConditionTemplateFactory(name="Crypt curse", has_progression=True)
+        ConditionStageFactory(condition=curse, stage_order=1, severity_threshold=1)
+        second = ConditionStageFactory(condition=curse, stage_order=2, severity_threshold=5)
+        trigger = ControlLossTriggerFactory(
+            vulnerability=curse, fires_on=ControlLossFiresOn.CONDITION_STAGE, stage=second
+        )
+        self.band(trigger, self.failure, applies=self.berserk)
+        instance = apply_condition(ghoul, curse).instance
+
+        with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
+            advance_condition_severity(instance, 5)
+
+        self.assertEqual(rolled.call_count, 0)
+        self.assertIsNone(_berserk_of(ghoul))
 
 
 def _night_full_moon():
@@ -218,7 +263,7 @@ class MoonTrigger(_ControlLossCase):
         # 20 + 5 x 10 - 10 x level 1 - min(30, 5 x thread level 2) = 50
         self.assertEqual(capture.target_difficulty, 50)
         self.assertEqual(_berserk_of(self.wynn).severity, 3)
-        self.assertTold(self.wynn, "the beast takes the reins")
+        self.assertTold(self.wynn, "You lose control: Berserk.")
 
     def test_a_held_roll_leaves_the_lycan_themself(self) -> None:
         with _night_full_moon(), force_check_outcome(self.success):

@@ -96,9 +96,14 @@ def _emit_post_damage_events(  # noqa: PLR0913
     # Lazy import: world.conditions.control_loss imports checks and magic services.
     from world.conditions.control_loss import fire_wound_triggers  # noqa: PLC0415
 
-    fire_wound_triggers(
-        character, health_before=health_before, health_after=health_after, max_health=max_health
-    )
+    # A hit that drops the character (incapacitated or dead) rolls nothing: they cannot act.
+    if health_after > 0 and not (knockout_eligible or death_eligible or force_death):
+        fire_wound_triggers(
+            character,
+            health_before=health_before,
+            health_after=health_after,
+            max_health=max_health,
+        )
 
     will_emit_death_gate = death_eligible or force_death
     if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:

@@ -29,8 +29,10 @@ logger = logging.getLogger(__name__)
 def is_moon_bound(sheet: CharacterSheet) -> bool:
     """Whether *sheet* carries a condition with a MOON_PULL control-loss trigger."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
 
     return ConditionInstance.objects.filter(
+        _not_suppressed_q(),
         target_id=sheet.pk,
         condition__control_loss_triggers__fires_on=ControlLossFiresOn.MOON_PULL,
     ).exists()
@@ -56,11 +58,7 @@ def reconcile_moon_pull(character) -> None:
     exposure = felt_moon_pull(character, character.location)
     if exposure.pull <= 0:
         return
-    outcomes = fire_control_loss_triggers(
-        character, ControlLossFiresOn.MOON_PULL, moon_pull=exposure.pull
-    )
-    if any(outcome.applied is not None for outcome in outcomes):
-        _announce_loss(character)
+    fire_control_loss_triggers(character, ControlLossFiresOn.MOON_PULL, moon_pull=exposure.pull)
 
 
 def reconcile_moon_pull_safely(character) -> None:
@@ -68,21 +66,6 @@ def reconcile_moon_pull_safely(character) -> None:
     from world.species.services import run_reconcile_safely  # noqa: PLC0415
 
     run_reconcile_safely(character, reconcile_moon_pull, "moon-pull")
-
-
-def _announce_loss(character) -> None:
-    """Tell the character and the room the moon took them."""
-    character.msg(
-        "|rThe moon's pull crests and something older than you answers it — "
-        "the beast takes the reins.|n"
-    )
-    location = character.location
-    if location is not None:
-        location.msg_contents(
-            f"|r{character.key} convulses under the moonlight — and what rises is "
-            "not entirely them anymore.|n",
-            exclude=[character],
-        )
 
 
 def _rampage_window(character) -> None:

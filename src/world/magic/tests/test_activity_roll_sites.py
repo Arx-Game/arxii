@@ -842,10 +842,12 @@ class CombatAndSpeciesRollSiteTests(ActivityTermTestCase):
             ConditionInstanceFactory,
             ControlLossTriggerFactory,
         )
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
         sheet = CharacterSheetFactory()
         trigger = ControlLossTriggerFactory(fires_on=ControlLossFiresOn.MOON_PULL)
         ConditionInstanceFactory(target=sheet.character, condition=trigger.vulnerability)
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
 
         self.assert_terms_reach(
             "world.checks.services.perform_check",
