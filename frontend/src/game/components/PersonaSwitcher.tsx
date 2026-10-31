@@ -67,19 +67,19 @@ export function PersonaSwitcher({ characterSheetId, activePersonaId }: PersonaSw
 
   // A single face — nothing to switch; just name the worn identity.
   if (personas.length <= 1) {
-    return <span className="text-sm font-medium">{worn.name}</span>;
+    return <span className="truncate text-sm font-medium">{worn.name}</span>;
   }
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ring-1 ring-primary/40 hover:bg-accent disabled:opacity-50"
+          className="flex min-w-0 max-w-full items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ring-1 ring-primary/40 hover:bg-accent disabled:opacity-50"
           disabled={setActive.isPending}
           title="Switch which identity you are presenting as"
         >
-          <span>{worn.name}</span>
-          <span className="text-xs text-muted-foreground" aria-hidden>
+          <span className="truncate">{worn.name}</span>
+          <span className="shrink-0 text-xs text-muted-foreground" aria-hidden>
             ▾
           </span>
         </DropdownMenuTrigger>

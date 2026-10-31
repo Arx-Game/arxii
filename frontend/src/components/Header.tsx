@@ -168,10 +168,19 @@ export function Header() {
 
   return (
     <header className="border-b">
-      <div className="container mx-auto flex items-center justify-between px-4 py-4">
-        <SiteTitle />
-        {selectedEntry && <SelectedCharacterChip entry={selectedEntry} />}
-        <NavigationMenu className="hidden md:block">
+      <div className="container mx-auto flex w-full min-w-0 flex-wrap items-center justify-between gap-y-2 px-4 py-4 md:flex-nowrap md:gap-x-4">
+        {/* Below md the chip drops to its own full-width row under the title and the menu
+            button (#4781); from md up it sits between the title and the nav and gives up
+            width (its names truncate) before the nav would wrap. */}
+        <div className="min-w-0 flex-1 md:flex-initial">
+          <SiteTitle />
+        </div>
+        {selectedEntry && (
+          <div className="order-3 w-full md:order-none md:flex md:w-auto md:min-w-0 md:flex-1 md:justify-center">
+            <SelectedCharacterChip entry={selectedEntry} />
+          </div>
+        )}
+        <NavigationMenu className="hidden shrink-0 md:block">
           <NavigationMenuList>
             <NavigationMenuItem>
               <Link to="/game" className={navigationMenuTriggerStyle()}>
@@ -270,7 +279,7 @@ export function Header() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
-        <div className="md:hidden">
+        <div className="order-2 shrink-0 md:hidden">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
