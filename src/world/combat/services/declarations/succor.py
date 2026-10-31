@@ -73,11 +73,14 @@ def dispatch_succor(
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
     *,
     approach: str | None,
+    partial_protection: int,
     extra_modifiers: int = 0,
 ) -> float:
     """Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.
 
     Thin wrapper over dispatch_capability_reaction, mirroring dispatch_interpose.
+    *partial_protection* is the percentage a partial shelter stops (the succorer's catalog
+    value, see ``apply_succor_outcome``).
     Returns 1.0 (no cover) when no active Succor challenge is bound to *protected*.
     """
     from world.combat.succor_content import SUCCOR_CHALLENGE_NAME  # noqa: PLC0415
@@ -87,7 +90,7 @@ def dispatch_succor(
     outcome = {"multiplier": 1.0}
 
     def _capture(result: ChallengeResolutionResult) -> None:
-        outcome["multiplier"] = apply_succor_outcome(result)
+        outcome["multiplier"] = apply_succor_outcome(result, partial_protection)
 
     result = dispatch_capability_reaction(
         succorer,

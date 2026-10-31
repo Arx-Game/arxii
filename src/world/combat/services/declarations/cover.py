@@ -28,8 +28,9 @@ def declare_cover(
 ) -> CombatRoundAction:
     """Declare a covering maneuver for an ally -- passives-only, auto-ready.
 
-    Cover resolves as a no-op on its own; its effect is the FleeConfig
-    cover_bonus it contributes to the ally's flee check in _resolve_flee.
+    Cover resolves as a no-op on its own; its effect is the coverer's
+    Cover escape bonus (the maneuver effect catalog), which it contributes to the ally's
+    flee check in _resolve_flee.
     Covering an ally who never declares flee simply wastes the action.
     """
     from world.vitals.services import is_dead  # noqa: PLC0415

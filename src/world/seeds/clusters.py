@@ -27,6 +27,7 @@ def _seed_combat() -> None:
         wire_elevation_advantage_modifier_target,
     )
     from world.combat.sent_flying_content import ensure_sent_flying_content  # noqa: PLC0415
+    from world.mechanics.maneuver_effects import ensure_maneuver_effect_rows  # noqa: PLC0415
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -39,6 +40,8 @@ def _seed_combat() -> None:
     seed_encounter_beat_wiring()
     seed_dramatic_surge_content()
     wire_elevation_advantage_modifier_target()
+    # #4783: the fixed maneuver effect catalog and its target category.
+    ensure_maneuver_effect_rows()
     # Sent Flying marker content (#2638). Belongs conceptually beside the
     # reactive-challenge content family (interpose/catch/redirect — #2636's
     # "reactive_challenges" cluster) but that cluster is not yet in this
@@ -115,12 +118,14 @@ def _seed_combat_checks() -> None:
 
 
 def _seed_social() -> None:
-    from world.seeds.levers import ensure_lever_targets  # noqa: PLC0415
+    from world.seeds.levers import ensure_aspect_targets, ensure_lever_targets  # noqa: PLC0415
     from world.seeds.social_checks import seed_social_check_content  # noqa: PLC0415
 
     seed_social_check_content()
     # #4394: the five IC levers live beside allure and menace.
     ensure_lever_targets()
+    # #4827: one aspect target per authored Aspect, so a card's +N on an Aspect has a row to name.
+    ensure_aspect_targets()
 
 
 def _seed_justice_laws() -> None:

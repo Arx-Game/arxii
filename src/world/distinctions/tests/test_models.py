@@ -15,12 +15,15 @@ from world.distinctions.factories import (
     DistinctionFactory,
     SheetUpdateRequestFactory,
 )
-from world.distinctions.models import DistinctionEffectRankSize
+from world.distinctions.models import MANEUVER_EFFECT_SIZE_REFUSAL, DistinctionEffectRankSize
 from world.distinctions.types import (
     DistinctionOrigin,
     SheetUpdateRequestStatus,
     SheetUpdateRequestType,
 )
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEffectKey
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
 
 
 class SheetUpdateRequestModelTests(TestCase):
@@ -137,3 +140,60 @@ class DistinctionEffectRankSizeCacheTests(TestCase):
         self.assertEqual(ModifierSize.LARGE, self.effect.size_at_rank(2))
         DistinctionEffectRankSize.objects.filter(effect=self.effect).delete()
         self.assertEqual(ModifierSize.MINOR, self.effect.size_at_rank(2))
+
+
+class ManeuverEffectTargetFlatOnlyTests(TestCase):
+    """A distinction effect on a maneuver effect target is flat, never sized (#4783)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ensure_maneuver_effects()
+        category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        cls.target = ModifierTargetFactory(
+            category=category,
+            name="Charge: damage",
+            scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.CHARGE_DAMAGE),
+        )
+
+    def test_a_sized_effect_on_a_maneuver_effect_target_is_refused(self) -> None:
+        effect = DistinctionEffectFactory.build(
+            distinction=DistinctionFactory(), target=self.target, modifier_size=ModifierSize.MINOR
+        )
+
+        with self.assertRaises(ValidationError) as caught:
+            effect.clean()
+
+        self.assertEqual(
+            caught.exception.message_dict["modifier_size"], [MANEUVER_EFFECT_SIZE_REFUSAL]
+        )
+
+    def test_a_flat_effect_on_a_maneuver_effect_target_is_accepted(self) -> None:
+        effect = DistinctionEffectFactory.build(
+            distinction=DistinctionFactory(), target=self.target, modifier_size=None
+        )
+
+        effect.clean()
+
+    def test_a_sized_effect_on_another_category_is_accepted(self) -> None:
+        effect = DistinctionEffectFactory.build(
+            distinction=DistinctionFactory(), modifier_size=ModifierSize.MINOR
+        )
+
+        effect.clean()
+
+    def test_a_rank_size_row_on_a_maneuver_effect_target_is_refused(self) -> None:
+        # The effect row is written past clean() (a script or bulk load), then a rank size
+        # is authored against it.
+        effect = DistinctionEffectFactory(
+            distinction=DistinctionFactory(max_rank=3),
+            target=self.target,
+            modifier_size=ModifierSize.MINOR,
+        )
+        row = DistinctionEffectRankSizeFactory.build(
+            effect=effect, rank=2, size=ModifierSize.MODERATE
+        )
+
+        with self.assertRaises(ValidationError) as caught:
+            row.clean()
+
+        self.assertIn(MANEUVER_EFFECT_SIZE_REFUSAL, caught.exception.messages)

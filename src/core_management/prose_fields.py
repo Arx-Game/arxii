@@ -50,6 +50,8 @@ PROSE_FIELD_NAMES = frozenset(
         "followon_message",
         # #4395: a Beginning's frame paragraph, the first thing a player reads of it.
         "frame",
+        # #4830: what a Beginning's life page shows when every stage is struck (the Sleeper's).
+        "struck_stages_text",
         "frame_narrative",
         "goal",
         "guidance_text",

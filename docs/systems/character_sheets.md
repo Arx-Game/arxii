@@ -348,7 +348,7 @@ MechanicsSection.tsx` renders both on the character sheet's Sheet tab
 section's `resonances` (claimed-resonance balances, already serialized by `_build_magic_resonances`,
 #2032) similarly had no frontend consumer; `SpellbookTab.tsx` now renders a "Resonances" card
 alongside Gifts/Motif/Aura. Per-trait development-point progress is NOT part of this payload
-(deferred to #3039's landing) — the skill entry's `at_boundary` flag is the only progress signal
+(deferred to #3039's landing) — the skill entry's `at_boundary` flag is the only progress signal (its `value` is the stored rating plus `modifier`, the number a roll uses, #4820)
 shown today.
 
 ## Related Models

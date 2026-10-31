@@ -14,6 +14,7 @@ The mechanics app centralizes all game mechanical calculations:
 ### `models.py`
 - **`ModifierCategory`**: Categories for organizing modifier targets (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
 - **`ModifierTarget`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching. Has an optional `target_trait` FK for stat-category targets.
+- **`ManeuverEffect`** (#4783): the fixed catalog of eight named maneuver numbers (`key` unique, `base_value`, staff `notes`). Staff edit a base value and cannot add or delete a row; code finds a row by `key`, never by name (`ensure_maneuver_effects`, `get_maneuver_effect` in `maneuver_effects.py`).
 - **`CharacterModifier`**: Active modifiers on a character with source tracking and direct target FK. Uses regular Model (not SharedMemoryModel) since this is per-character data.
 
 ### `types.py`
@@ -21,11 +22,15 @@ Dataclasses for service layer results and intermediate calculations.
 
 ### `services.py`
 Service functions for modifier operations:
+- **`effect_value(sheet, key)` / `effect_modifier_total(sheet, key)`** (`effect_targets.py`, #4783): a character's number for a maneuver effect. `effect_modifier_total` is the unclamped sum of every modifier on a target in the "maneuver_effect" category scoped to that effect or its kind; `effect_value` adds the catalog base, floors at 0 and caps partial protection at 100.
 - **`get_modifier_total(sheet, modifier_target)`**: Get total for a specific ModifierTarget.
 - **`get_modifier_breakdown(sheet, modifier_target)`**: Get detailed breakdown with amplification/immunity.
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
 - **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
+- **`ensure_aspect_target(aspect)`** (#4827): the aspect-category target (`target_aspect`) a card's `+N <aspect>` lands on, created if missing; `None` when another category owns the name. Called by `AspectAdmin.save_model` and the `ensure_aspect_targets` seed.
+- **`ensure_skill_target(trait)`** (#4820): the stat-category target a skill's bonuses land on, created if missing; `None` when another category owns the name. Called by `SkillAdmin.save_model` and the Distinction Builder's paste.
+- **`skill_modifiers_for_sheet(sheet, skills)`** (#4820): skill pk to the modifier a roll on it gets, for the character sheet; picks skills from card, condition and worn-equipment (crafted piece, equipment walk) sources, the last read from cached handlers.
 - **`property_damage_bonus(target, damage_type)`**: Sum `PropertyDamageModifier` values for a target's active `Property` rows (see below).
 
 ## Models
@@ -52,7 +57,10 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | target_trait | FK(Trait, null) | FK to the Trait this target modifies (stat-category targets) |
 | target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
 | target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |
+| target_aspect | OneToOne(Aspect, null) | The Aspect this target represents (#4827); the check seam's ASPECT block reads it |
 | target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
+| scope_maneuver_effect | FK(ManeuverEffect, null, CASCADE) | A "maneuver_effect" target scoped to one effect (#4783) |
+| scope_effect_kind | CharField(blank) | A "maneuver_effect" target scoped to one `EffectKind` across every maneuver; exactly one of the two scope columns is set on such a target, and neither on any other category (`clean()`, and the `modifier_target_one_scope` constraint stops both). A target with neither matches nothing |
 
 ### CharacterModifier
 Per-character modifier values with source tracking. Sources are responsible for creating/deleting their modifier records.

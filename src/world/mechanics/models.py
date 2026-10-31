@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 from world.contributors.models import CreditedContent
 from world.mechanics.constants import (
     FAVOR_CATEGORY_NAMES,
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    MANEUVER_EFFECT_KIND,
     SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_FORM,
@@ -34,6 +36,8 @@ from world.mechanics.constants import (
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
     DiscoveryType,
+    EffectKind,
+    ManeuverEffectKey,
     PropertyHolder,
     ResolutionType,
 )
@@ -52,6 +56,7 @@ OBJECTDB_MODEL = "objects.ObjectDB"
 TRAIT_MODEL = "arxii.Trait"
 CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 CHECK_TYPE_MODEL = "arxii.CheckType"
+ASPECT_MODEL = "arxii.Aspect"
 CONSEQUENCE_MODEL = "arxii.Consequence"
 
 
@@ -194,6 +199,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="modifier_target",
         help_text="The check type this target represents (check category only).",
     )
+    # #4827: a distinction's +N on an Aspect is a modifier on every check that weights
+    # that Aspect, scaled by the check's aspect weight (the modifier seam's ASPECT block).
+    # An FK, not a name match, so a renamed Aspect keeps its lever (#3676's lesson).
+    target_aspect = models.OneToOneField(
+        ASPECT_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The Aspect this target represents (aspect category only).",
+    )
     target_damage_type = models.OneToOneField(
         _DAMAGE_TYPE_MODEL_PATH,
         on_delete=models.SET_NULL,
@@ -215,6 +231,28 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "not SET_NULL: clearing it would widen a being's target to every being."
         ),
     )
+    # CASCADE, not SET_NULL, on scope_maneuver_effect: clearing it would widen the
+    # target to every effect. Maneuver effect category only (#4783); set this or the
+    # kind, not both (modifier_target_one_scope).
+    scope_maneuver_effect = models.ForeignKey(
+        "arxii.ManeuverEffect",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="modifier_targets",
+        verbose_name="Scope - one effect",
+        help_text="This effect only.",
+    )
+    scope_effect_kind = models.CharField(
+        max_length=32,
+        choices=EffectKind.choices,
+        blank=True,
+        default="",
+        verbose_name="Scope - kind of effect",
+        help_text=(
+            "This kind of effect on every maneuver. Set this or the effect above, not both."
+        ),
+    )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
@@ -227,8 +265,13 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # by a non-PK field, so it misses the SharedMemoryModel identity map and
     # re-queries each call. This cache serves it from memory after the first
     # build (#552).
+    # The target_aspect map (#4827) is built by the same query: the check seam asks
+    # for the target of every Aspect a check weights, on every roll, and a roll already
+    # builds the trait map through its stat reads, so the aspect map comes for nothing
+    # and a game with no aspect target authored yet pays no query for the walk.
     _trait_cache_built = False
     _trait_to_target_map: dict[int, "ModifierTarget"] = {}
+    _aspect_to_target_map: dict[int, "ModifierTarget"] = {}
 
     class Meta:
         unique_together = ["category", "name"]
@@ -243,11 +286,18 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 condition=models.Q(target_being__isnull=False),
                 name="unique_modifier_target_category_being",
             ),
+            # One scope at a time (#4783): a target names one effect or one kind.
+            models.CheckConstraint(
+                condition=~(
+                    models.Q(scope_maneuver_effect__isnull=False) & ~models.Q(scope_effect_kind="")
+                ),
+                name="modifier_target_one_scope",
+            ),
         ]
 
     class NaturalKeyConfig:
         fields = ["category", "name"]
-        dependencies = ["arxii.ModifierCategory"]
+        dependencies = ["arxii.ModifierCategory", "arxii.ManeuverEffect"]
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"
@@ -258,6 +308,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         super().clean()
         if not self.category_id:
             return
+        self._clean_maneuver_effect_scope()
         is_favor = self.category.name in FAVOR_CATEGORY_NAMES
         if self.target_being_id and not is_favor:
             msg = "Only a favor invocation or favor earning target names a being."
@@ -272,6 +323,23 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 msg = "This favor category already has its any-being target; name a being."
                 raise ValidationError({"target_being": msg})
 
+    def _clean_maneuver_effect_scope(self) -> None:
+        """A maneuver-effect target names exactly one scope; no other category names any."""
+        has_effect = self.scope_maneuver_effect_id is not None
+        has_kind = bool(self.scope_effect_kind)
+        if self.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
+            if has_effect or has_kind:
+                msg = "Only a maneuver effect target names an effect or a kind of effect."
+                field = "scope_maneuver_effect" if has_effect else "scope_effect_kind"
+                raise ValidationError({field: msg})
+            return
+        if has_effect and has_kind:
+            msg = "Set the effect or the kind of effect, not both."
+            raise ValidationError({"scope_effect_kind": msg})
+        if not has_effect and not has_kind:
+            msg = "A maneuver effect target needs the effect or the kind of effect it scopes to."
+            raise ValidationError({"scope_maneuver_effect": msg})
+
     @classmethod
     def get_for_trait(cls, trait: "Trait") -> "ModifierTarget | None":
         """Return the ModifierTarget whose ``target_trait`` is ``trait`` (cached).
@@ -285,27 +353,73 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @classmethod
     def _build_trait_cache(cls) -> None:
-        """Build the target_trait_id -> ModifierTarget mapping."""
-        cls._trait_to_target_map = {
-            target.target_trait_id: target
-            for target in cls.objects.filter(target_trait__isnull=False)
-        }
+        """Build the target_trait_id and target_aspect_id -> ModifierTarget maps, one query."""
+        trait_map: dict[int, ModifierTarget] = {}
+        aspect_map: dict[int, ModifierTarget] = {}
+        for target in cls.objects.filter(
+            models.Q(target_trait__isnull=False) | models.Q(target_aspect__isnull=False)
+        ):
+            if target.target_trait_id is not None:
+                trait_map[target.target_trait_id] = target
+            if target.target_aspect_id is not None:
+                aspect_map[target.target_aspect_id] = target
+        cls._trait_to_target_map = trait_map
+        cls._aspect_to_target_map = aspect_map
         cls._trait_cache_built = True
 
     @classmethod
     def clear_trait_cache(cls) -> None:
-        """Clear the target_trait cache (call when targets are modified)."""
+        """Clear the target_trait and target_aspect caches (call when targets change)."""
         cls._trait_cache_built = False
         cls._trait_to_target_map = {}
+        cls._aspect_to_target_map = {}
+
+    @classmethod
+    def get_for_aspect(cls, aspect_id: int) -> "ModifierTarget | None":
+        """The target whose ``target_aspect`` is the Aspect with ``aspect_id`` (#4827).
+
+        Served from the same map build as ``get_for_trait``; ``None`` when no target
+        points at the Aspect.
+        """
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return cls._aspect_to_target_map.get(aspect_id)
+
+    @classmethod
+    def aspect_targets_exist(cls) -> bool:
+        """Whether any target points at an Aspect (#4827), so the check seam can skip
+        the aspect walk entirely on a game that has authored none."""
+        if not cls._trait_cache_built:
+            cls._build_trait_cache()
+        return bool(cls._aspect_to_target_map)
+
+    def _touches_target_caches(self) -> bool:
+        """Whether saving or deleting this row can change the trait or aspect map: it
+        points at a trait or an Aspect now, or the built map still holds it from before.
+        A resonance, affinity or favor target saved mid-roll (#4827: the check seam reads
+        the aspect map on every roll) must not throw the maps away for nothing.
+        """
+        if self.target_trait_id is not None or self.target_aspect_id is not None:
+            return True
+        cls = type(self)
+        if not cls._trait_cache_built:
+            return False
+        return any(
+            held.pk == self.pk
+            for held in (*cls._trait_to_target_map.values(), *cls._aspect_to_target_map.values())
+        )
 
     def save(self, *args: object, **kwargs: object) -> None:
-        """Invalidate the target_trait cache on any ModifierTarget mutation."""
+        """Invalidate the target caches when a mutation can change them."""
+        touches = self._touches_target_caches()
         super().save(*args, **kwargs)
-        type(self).clear_trait_cache()
+        if touches or self.target_trait_id is not None or self.target_aspect_id is not None:
+            type(self).clear_trait_cache()
 
     def delete(self, *args: object, **kwargs: object) -> object:
-        """Invalidate the target_trait cache when a target is removed."""
-        type(self).clear_trait_cache()
+        """Invalidate the target caches when a mapped target is removed."""
+        if self._touches_target_caches():
+            type(self).clear_trait_cache()
         return super().delete(*args, **kwargs)
 
 
@@ -889,6 +1003,45 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.capability.name} + {self.target_property.name})"
+
+
+# ---------------------------------------------------------------------------
+# Maneuver effect catalog (#4783)
+# ---------------------------------------------------------------------------
+
+
+class ManeuverEffect(NaturalKeyMixin, SharedMemoryModel):
+    """One named part of a combat maneuver and the number it has with no modifier.
+
+    A fixed catalog, one row per ``ManeuverEffectKey``: maneuvers stay verbs that code
+    fires at set moments, and their numbers live here so staff can see and change them.
+    A ``ModifierTarget`` scopes to one row, or to every row of one ``EffectKind``.
+    Code finds a row by ``key``, never by name. The kind is derived from the key.
+    """
+
+    key = models.CharField(
+        max_length=40,
+        choices=ManeuverEffectKey.choices,
+        unique=True,
+        help_text="Which maneuver effect this row is. Fixed; code reads it by this key.",
+    )
+    base_value = models.IntegerField(
+        help_text="Used when no modifier applies. The unit is the effect kind's.",
+    )
+    notes = models.TextField(blank=True, help_text="Staff notes. Never shown to players.")
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
+    def __str__(self) -> str:
+        return self.get_key_display()
+
+    @property
+    def kind(self) -> str:
+        """The effect kind, derived from the key."""
+        return MANEUVER_EFFECT_KIND[self.key]
 
 
 # ---------------------------------------------------------------------------

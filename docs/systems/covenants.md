@@ -59,15 +59,17 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   as of #2533 (`NaturalKeyMixin` NK `["covenant_role", "modifier_target"]`,
   `covenants.covenantrolebonus` in `CONTENT_MODELS`).
 - **`VowStatScaling`** (#2022) — authored config: one row per
-  `(CovenantRole, ModifierTarget)` with `bonus_per_level` scaling by the
+  `(CovenantRole, ModifierTarget, focus_pick)` (the pick is null for the base vow, #4783;
+  `vow_stat_scaling_unique_role_target`, NULLS NOT DISTINCT) with `bonus_per_level` scaling by the
   **COVENANT_ROLE thread level** (not character level, which `CovenantRoleBonus`
   already handles). `vow_stat_scaling_bonus(sheet, target)` returns
-  `thread_level × bonus_per_level`; no row → 0. The mechanical heart of "solo
+  `thread_level × bonus_per_level`; no row → 0. Rows on an engaged role's anchor role count too
+  (#4783), and on a maneuver-effect target the level is the shown level (see below). The mechanical heart of "solo
   darkness" — a deepened vow is a substantially stronger character. When the vow
   dims (#2051), the scaling drops to 0. This is ADR-0149 Layer 3's stat-power pillar
   and stayed unaffected by the #2533 rework; as of #2533 it rides the lore-repo
-  content pipeline too (`NaturalKeyMixin` NK `["covenant_role", "modifier_target"]`,
-  `covenants.vowstatscaling` in `CONTENT_MODELS`) — a wiring-proof test shows
+  content pipeline too (`NaturalKeyMixin` NK `["covenant_role", "modifier_target",
+  "focus_pick"]`, `covenants.vowstatscaling` in `CONTENT_MODELS`) — a wiring-proof test shows
   thread-level scaling aggregating into `equipment_walk_total` end-to-end.
 - **`VowGearScaling`** — **REMOVED in #2533.** Formerly authored config keyed on
   the removed `CovenantRole.archetype` field (`(gear_archetype, role_archetype)`
@@ -98,26 +100,25 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   Seams" below), not a model-level restriction. Lore-repo content (`NaturalKeyMixin`
   NK `["covenant_role"]`, `covenants.covenantroledefenseprofile` in
   `CONTENT_MODELS`).
-- **`CovenantRoleActionScaling`** (#2529, ADR-0149; replaced `ArchetypeActionScaling`)
-  — authored config: one row per `(covenant_role, action_key)` with a
-  `thread_level_multiplier` (Decimal). `action_key` is a `CovenantScaledAction`
-  choice (#4739; `world/covenants/constants.py`): `combat_interpose` (Interpose),
-  `combat_rally` (Rally) and `surges_given` ("Surges given by Rally" - scales the
-  intensity a rallier's Rally surges the rallied ally by; the stored values of the
-  first two are the maneuvers' Action keys and did not change). Natural-key content
-  (`covenants.covenantroleactionscaling` in `CONTENT_MODELS`). Read by
-  `covenant_role_action_scaling_bonus(character, action: CovenantScaledAction)` at the
-  combat action resolution seam (interpose's partial-block divisor, rally's morale
-  restore, and the rallied ally's surge: `intensity x (1 + bonus)` for `surges_given`,
-  intensity only, `world/combat/services/declarations/rally.py`; the ally's roll line
-  appends `· vow scaling +N`, N stored on `DramaticSurgeRecord.vow_scaling`), which sums `thread_level × multiplier` across the character's engaged
-  roles that have a row for the action, normalizing engaged (possibly resolved
-  sub-)roles to their anchor (parent) role before lookup, since rows and COVENANT_ROLE
-  threads both key on the anchor. Rows are authored per-role now, not per-archetype:
-  seed content gives Bulwark (SHIELD) an interpose row and Luminary (CROWN) a rally
-  row; the Vanguard's old `cast_technique` row is not recreated — that scaling moved to
-  the always-on `covenant_role_blend_power_term` power term
-  (`world.magic.services.power_terms`, see `docs/systems/magic.md`).
+- **Maneuver effects through `VowStatScaling`** (#4783, ADR-4783-A; **removed**
+  `CovenantRoleActionScaling`, `CovenantScaledAction` and
+  `covenant_role_action_scaling_bonus`, which #2529 and #4739 built to scale Interpose, Rally
+  and Rally's surge intensity per vow thread level; the rows were placeholders and were
+  discarded by owner ruling 2026-10-31). A vow now makes a maneuver stronger the way it makes
+  a stat stronger: a `VowStatScaling` row whose `modifier_target` is in the "maneuver_effect"
+  category (scoped to one effect such as "Charge: damage", or to a kind such as "partial
+  protection, any maneuver"). `effect_value(sheet, key)`
+  (`world/mechanics/effect_targets.py`) adds that target's modifier total to the effect's
+  catalog base value. See `docs/systems/mechanics.md` "Maneuver effects" for the catalog and
+  the five maneuvers' wiring. Vow scaling reads the holder's engaged PRIMARY roles only. Two rules are specific to vows:
+  (1) `vow_stat_scaling_bonus` looks up rows on both an engaged role and its anchor role, so a holder who graduated to a
+  sub-role keeps rows authored on either, and they sum; the thread level is always read from
+  the anchor's thread. (2) On a maneuver-effect target the bonus multiplies the SHOWN thread
+  level (stored level // 10), because an effect is in natural units (damage, percent, hops,
+  morale) while stats are stored x10; every other category keeps the stored level. The Rally
+  roll line notes a surge intensity above 100% as "surge +N" (stored on
+  `DramaticSurgeRecord.vow_scaling`). A vow's old "Surges given" row is gone: author a row
+  on a target scoped to "Rally: surge intensity" instead.
 - **`CovenantRoleTechniqueSpecialty`** (#2443, ADR-0149's 2026-07-20 amendment; **Layer 2**
   of the vow-power model) — one row per `(covenant_role, function)`, `function` drawn
   from `magic.TechniqueFunction` (a shared fine-grained vocabulary also consumed by
@@ -1222,9 +1223,10 @@ decides defense" under Combat Seams).
   CASCADE, `related_name="focus_picks"`), `pick` (CASCADE), `chosen_at`; unique
   `(character_role, pick)`. `clean()` runs `validate_character_focus_pick`.
 - **`focus_pick`** (nullable FK, RESTRICT) on `VowAddedEffect`, `VowSituationalPerk` and
-  `CovenantRoleActionScaling`. Null is the base vow. Each `clean()` refuses a pick from
+  `VowStatScaling` (#4783 moved it here from the removed `CovenantRoleActionScaling`). Null is
+  the base vow. Each `clean()` refuses a pick from
   another role (`focus_pick_role_error`). `focus_pick` joined the `vow_added_effect_scope_unique`
-  and `covenant_role_action_scaling_unique` keys (NULLS NOT DISTINCT) and both natural keys,
+  and `vow_stat_scaling_unique_role_target` keys (NULLS NOT DISTINCT) and both natural keys,
   so a picked row may repeat a base row's scope. `CovenantRoleTechniqueSpecialty` gets no link:
   the specialty is the vow's base identity.
 - **`CombatStyle`** (NK `name`, `CreditedContent`, in `CONTENT_MODELS`) - `name`,
@@ -1253,7 +1255,7 @@ decides defense" under Combat Seams).
 
 ### Focus picks in play (#4806, slice 2)
 
-Three readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
+Four readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
 only when a row it fetched carries a pick, so a vow without picks costs no extra query:
 
 - `added_effects.vow_added_effects_for_cast` - a gate in `_live_rows`, next to the unlock
@@ -1262,8 +1264,9 @@ only when a row it fetched carries a pick, so a vow without picks costs no extra
   sheet that chose it.
 - `perks.services._resolve_candidate_perks` - skips a pick perk for a holder who did not
   choose it, so `applicable_perks` and `dormant_perk_firings` both respect picks.
-- `services.covenant_role_action_scaling_bonus` - drops a pick scaling row the character
-  did not choose before summing.
+- `mechanics.services.vow_stat_scaling_bonus` - drops a pick `VowStatScaling` row the holder
+  did not choose before summing, on a stat target and on a maneuver-effect target alike (so
+  `effect_value` honours picks too).
 
 The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not.
 
@@ -1271,7 +1274,7 @@ The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not
 
 CovenantRole admin carries a `VowFocusPickInline` with a read-only computed price; the
 `VowFocusPick` admin has its limits inline and the price. `focus_pick` is an autocomplete on
-the added effect, situational perk and action scaling admins, and `condition_property` on the
+the added effect, situational perk and vow stat scaling admins, and `condition_property` on the
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
 and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
 admins; `combat_style` is on the CharacterSheet admin.

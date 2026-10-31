@@ -1,6 +1,5 @@
 """E2E tests for social/mental combat verbs (#2015)."""
 
-from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -10,7 +9,6 @@ from world.checks.models import CheckType
 from world.combat.constants import (
     FALTER_MORALE_THRESHOLD,
     RALLY_GREAT_SUCCESS_LEVEL,
-    RALLY_MORALE_PER_LEVEL,
     CombatAllegiance,
     CombatManeuver,
     SurgeTriggerKind,
@@ -28,19 +26,27 @@ from world.combat.services import (
     declare_rally,
     declare_taunt,
 )
+from world.covenants.constants import CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
-    CovenantRoleActionScalingFactory,
     CovenantRoleFactory,
     VowSituationalPerkFactory,
     VowSituationalPerkSituationFactory,
+    engage_vow_with_thread,
 )
+from world.covenants.models import VowStatScaling
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.covenants.perks.evaluators import FAVORABLY_DISPOSED_MIN_AFFECTION
-from world.covenants.services import set_engaged_membership
-from world.magic.constants import TargetKind
 from world.magic.factories import ThreadFactory
+from world.mechanics.constants import (
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    MANEUVER_EFFECT_DEFAULTS,
+    ManeuverEffectKey,
+)
+from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
+from world.mechanics.models import ModifierCategory
 from world.npc_services.factories import NPCStandingFactory
 from world.scenes.constants import RoundStatus
 
@@ -303,31 +309,30 @@ class ResolveSocialVerbTests(TestCase):
         self.assertEqual(record.threat_value, TAUNT_THREAT_PER_LEVEL)
 
     def test_rally_scaling_increases_morale_restored(self) -> None:
-        """An engaged role's ``combat_rally`` scaling changes rally's outcome."""
+        """A vow on "Rally: morale" changes the morale a great-success rally restores (#4783)."""
         ally_summon = CombatOpponentFactory(
             encounter=self.encounter,
             allegiance=CombatAllegiance.ALLY,
             morale=0,
             max_morale=100,
         )
-        role = CovenantRoleFactory(crown_weight=1)
-        membership = CharacterCovenantRoleFactory(
-            character_sheet=self.participant.character_sheet,
-            covenant=CovenantFactory(),
-            covenant_role=role,
+        ensure_maneuver_effects()
+        target = ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name="Rally morale vow",
+            scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.RALLY_MORALE),
         )
-        set_engaged_membership(membership=membership)
-        CovenantRoleActionScalingFactory(
-            covenant_role=role,
-            action_key="combat_rally",
-            thread_level_multiplier=Decimal("0.1"),
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        engage_vow_with_thread(
+            self.participant.character_sheet,
+            role,
+            covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
+            thread_level=1,
         )
-        ThreadFactory(
-            owner=self.participant.character_sheet,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=role,
-            target_trait=None,
-            level=10,
+        # +15 at thread level 1 doubles the base 15 morale per success level.
+        base = MANEUVER_EFFECT_DEFAULTS[ManeuverEffectKey.RALLY_MORALE]
+        VowStatScaling.objects.create(
+            covenant_role=role, modifier_target=target, bonus_per_level=base
         )
         # Rally rolls the check the RALLIED surge tuning names (#4739).
         SurgeTuningFactory(
@@ -345,7 +350,7 @@ class ResolveSocialVerbTests(TestCase):
             _resolve_rally(self.participant, action)
 
         ally_summon.refresh_from_db()
-        expected_restore = int(RALLY_GREAT_SUCCESS_LEVEL * RALLY_MORALE_PER_LEVEL * 2)
+        expected_restore = RALLY_GREAT_SUCCESS_LEVEL * base * 2
         self.assertEqual(ally_summon.morale, expected_restore)
 
 

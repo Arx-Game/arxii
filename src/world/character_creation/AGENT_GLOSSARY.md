@@ -51,7 +51,13 @@ A person seated beside the parents in the Lineage step: a twin, a spouse with a 
 (`SpouseFate`), a child with a fate (`ChildFate`); finalize's `_bind_kin_rows` writes them
 into the kinship graph. _Avoid_: kin beat, family slot (that is a staff Vacancy).
 
-**Kept beat** (`Beginnings.beat_mode = ONE_KEPT`, #4124):
+**Struck-stages text** (`Beginnings.struck_stages_text`, #4830):
+What the life page shows in place of the stage rows when a beginning strikes every stage (the Sleeper's). _Avoid_: frame (that is the prose at the pick), absent-life text.
+
+**Recent History** (`draft_data["recent_history"]`, `RECENT_HISTORY_MAX_LENGTH`, #4830):
+The optional free text a life ends on, the hooks a player wants picked up; written at finalize as the lead-in paragraph of `Profile.background`, public. _Avoid_: since the Glimpse (the cut stage), hooks (those are GM-seeded, #4397).
+
+**Kept beat** (`Beginnings.beat_mode = ONE_KEPT`, #4124; retired #4830, the Sleeper strikes every stage instead):
 The one beat a blank-slate Beginning (the Sleeper) takes by itself; every other beat
 stands unknown and nothing is addable. _Avoid_: forced beat, default beat.
 

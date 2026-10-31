@@ -11,8 +11,6 @@ from world.checks.services import level_opposition
 from world.checks.types import ModifierContribution
 from world.combat import services as _svc
 from world.combat.constants import (
-    CHARGE_CHECK_BONUS,
-    CHARGE_DAMAGE_BONUS,
     LANCE_UNMOUNTED_PENALTY,
     CombatAllegiance,
     CombatManeuver,
@@ -50,10 +48,14 @@ from world.conditions.constants import Allegiance
 from world.conditions.services import spend_contributing_conditions
 from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
+from world.mechanics.constants import ManeuverEffectKey
+from world.mechanics.effect_targets import effect_modifier_total
+from world.mechanics.maneuver_effects import get_maneuver_effect
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ExtraTraitTerm
     from world.combat.types import WeaponContribution
@@ -64,6 +66,14 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
 
     PerformCheckFn = Callable[..., CheckResult]
+
+
+def _charge_effect(sheet: CharacterSheet, key: str, *, lance: bool) -> int:
+    """A charge's to-hit or damage for ``sheet`` (#4783): the catalog base, doubled by a
+    lance, plus every modifier on top, floored at 0 once. A lance doubles only the base; a
+    +3 stays +3 and a -8 stays -8."""
+    base = get_maneuver_effect(key).base_value
+    return max(0, (base * 2 if lance else base) + effect_modifier_total(sheet, key))
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +146,11 @@ class CombatTechniqueResolver:
         weapon_archetype = _equipped_weapon_archetype(character)
 
         if self.action.maneuver == CombatManeuver.CHARGE:
-            charge_bonus = CHARGE_CHECK_BONUS
-            if weapon_archetype == GearArchetype.LANCE:
-                charge_bonus *= 2
+            charge_bonus = _charge_effect(
+                self.participant.character_sheet,
+                ManeuverEffectKey.CHARGE_TO_HIT,
+                lance=weapon_archetype == GearArchetype.LANCE,
+            )
             extra_contributions.append(
                 ModifierContribution(
                     source_kind=ModifierSourceKind.CHARACTER,
@@ -466,8 +478,8 @@ class CombatTechniqueResolver:
 
         Returns ``(0, None)`` when the profile's minimum_success_level exceeds
         ``sl``; otherwise folds the equipped weapon's contribution, a CHARGE
-        maneuver's flat CHARGE_DAMAGE_BONUS (#1843, doubled for a LANCE), and
-        the target's Property-driven damage bonus (#1793) into the formula
+        maneuver's Charge damage effect (#1843, #4783; the base doubled for a LANCE),
+        and the target's Property-driven damage bonus (#1793) into the formula
         budget, then applies the success-level multiplier and the attacker's
         condition damage-dealt percent for the profile's type (#4742). Budget
         is floored at 0 after the (possibly negative) property bonus, and the
@@ -496,11 +508,12 @@ class CombatTechniqueResolver:
         if self.action.maneuver == CombatManeuver.CHARGE:
             from world.items.constants import GearArchetype  # noqa: PLC0415
 
-            charge_damage_bonus = CHARGE_DAMAGE_BONUS
             character = self.participant.character_sheet.character
-            if _equipped_weapon_archetype(character) == GearArchetype.LANCE:
-                charge_damage_bonus *= 2
-            budget += charge_damage_bonus
+            budget += _charge_effect(
+                self.participant.character_sheet,
+                ManeuverEffectKey.CHARGE_DAMAGE,
+                lance=_equipped_weapon_archetype(character) == GearArchetype.LANCE,
+            )
         # Untyped damage is Physical (#4742), for the bonus below and the attacker's
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
         profile_damage_type = resolved_damage_type(profile_damage_type)

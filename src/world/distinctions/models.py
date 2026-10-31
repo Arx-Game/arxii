@@ -34,6 +34,7 @@ from world.distinctions.types import (
     SheetUpdateRequestStatus,
     SheetUpdateRequestType,
 )
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME
 from world.secrets.constants import SecretLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -124,6 +125,9 @@ class DistinctionTag(NaturalKeyMixin, SharedMemoryModel):
 
 class DistinctionManager(NaturalKeyManager):
     """Manager for Distinction with natural key support."""
+
+
+MANEUVER_EFFECT_SIZE_REFUSAL = "Maneuver effects take flat amounts only; clear the size."
 
 
 class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -459,12 +463,22 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.distinction.name}: {self.target.name}"
 
     def clean(self) -> None:
-        """Refuse Paramount: only a vow's size step reaches it (#4551 section 5.3)."""
+        """Refuse Paramount (only a vow's size step reaches it, #4551 section 5.3) and a
+        size on a maneuver effect target (flat amounts only, #4783 decision 9)."""
         super().clean()
         if self.modifier_size == ModifierSize.PARAMOUNT:
             raise ValidationError(
                 {"modifier_size": "Paramount is reached only through a vow's size step."}
             )
+        if self.modifier_size is not None and self.targets_maneuver_effect:
+            raise ValidationError({"modifier_size": MANEUVER_EFFECT_SIZE_REFUSAL})
+
+    @property
+    def targets_maneuver_effect(self) -> bool:
+        """Whether this effect's target is in the maneuver effect category (#4783)."""
+        return self.target_id is not None and (
+            self.target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
+        )
 
     def get_value_at_rank(self, rank: int) -> int:
         """
@@ -573,7 +587,8 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
         return f"{self.effect} rank {self.rank}: {self.get_size_display()}"
 
     def clean(self) -> None:
-        """Refuse rank 1, Paramount, a rank past the maximum, and an unsized effect.
+        """Refuse rank 1, Paramount, a rank past the maximum, an unsized effect and a
+        maneuver effect target (flat amounts only, #4783).
 
         Rank 1 and Paramount are also database constraints; refusing them here gives staff
         a sentence instead of the constraint's name.
@@ -592,6 +607,8 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
                 errors[NON_FIELD_ERRORS] = (
                     "This effect has no size, so it has no rank sizes. Give it a rank-1 size first."
                 )
+            elif effect.targets_maneuver_effect:
+                errors[NON_FIELD_ERRORS] = MANEUVER_EFFECT_SIZE_REFUSAL
             max_rank = effect.distinction.max_rank
             if self.rank is not None and self.rank > max_rank:
                 errors["rank"] = f"This distinction's maximum rank is {max_rank}."

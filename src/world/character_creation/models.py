@@ -330,8 +330,8 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=BeatMode.POOL,
         db_default=BeatMode.POOL,
         help_text=(
-            "A pool the player adds beats from (the default), or one kept beat with "
-            "every other beat standing unknown (the Sleeper)."
+            "A pool the player takes beats from. The one-kept mode was retired in #4830: a "
+            "beginning that keeps no stage strikes them all and shows its struck-stages text."
         ),
     )
     #: #4395: a beginning is a frame, a station and a strike-list. ``frame`` is the prose
@@ -365,6 +365,17 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         db_default=False,
         help_text=(
             "Strike the Before the Glimpse stage out: its grids never show for this beginning."
+        ),
+    )
+    #: #4830: what the life page shows in place of the stage rows when every stage is
+    #: struck (the Sleeper's "your new life begins now without any memory"). Blank for a
+    #: beginning that keeps a stage.
+    struck_stages_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Shown in place of the life's stages when this beginning strikes every one of "
+            "them; blank otherwise."
         ),
     )
     heritage = models.ForeignKey(

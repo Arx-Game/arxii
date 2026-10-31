@@ -2,6 +2,10 @@
 
 ## Status
 
+*Amended by ADR-4783-A: `CovenantRoleActionScaling`, named below as the replacement for
+`ArchetypeActionScaling`, was itself removed; a vow scales a maneuver through `VowStatScaling` rows
+on maneuver-effect targets.*
+
 Superseded by ADR-0149 (#2529) — the single `CovenantRole.archetype` enum this ADR's
 three pillars keyed off of is replaced by a SWORD/SHIELD/CROWN weighted blend
 (`sword_weight`/`shield_weight`/`crown_weight`, `blend_weight_for(axis)`). The

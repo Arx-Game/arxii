@@ -40,7 +40,11 @@ class RouteFollowsTheBeginningTests(TestCase):
             beginning=cls.noble, allows_claim_family=True, allows_no_family=True
         )
         cls.sleeper = BeginningsFactory(
-            name="Sleeper", strikes_childhood=True, strikes_youth=True, strikes_adulthood=True
+            name="Sleeper",
+            strikes_childhood=True,
+            strikes_youth=True,
+            strikes_adulthood=True,
+            struck_stages_text="Your new life begins now without any memory of who you were.",
         )
         cls.sleeper_route = OriginTemplateFactory(
             beginning=cls.sleeper, allows_no_family=True, parentage=Parentage.UNKNOWN
@@ -95,6 +99,22 @@ class RouteFollowsTheBeginningTests(TestCase):
         self.assertEqual(by_name["Nobility"]["frame"], "Born to a house.")
         self.assertEqual(by_name["Nobility"]["station"], "Noble")
         self.assertFalse(by_name["Nobility"]["strikes_childhood"])
+        self.assertEqual(by_name["Nobility"]["struck_stages_text"], "")
+
+    def test_a_beginning_that_strikes_every_stage_carries_its_text(self):
+        """The life page shows this in place of the stage rows (#4830)."""
+        res = self.client.get(
+            f"/api/character-creation/beginnings/?starting_area={self.sleeper.starting_area.pk}"
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        rows = res.json()
+        rows = rows["results"] if isinstance(rows, dict) else rows
+        sleeper = {row["name"]: row for row in rows}["Sleeper"]
+        self.assertTrue(sleeper["strikes_adulthood"])
+        self.assertEqual(
+            sleeper["struck_stages_text"],
+            "Your new life begins now without any memory of who you were.",
+        )
 
 
 class GeneralPromptsRetiredTests(TestCase):

@@ -20,7 +20,6 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
-    BeatMode,
     BeatSelection,
     LifeStage,
     OfferArrival,
@@ -155,6 +154,10 @@ LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage
 BEATS_KEY = "beats"
 
 
+#: The optional text a life ends on, under ``draft_data`` (#4830).
+RECENT_HISTORY_KEY = "recent_history"
+
+
 def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     """Every active library beat this draft's Beginning offers, stage by stage (#4124).
 
@@ -234,16 +237,12 @@ def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
 def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
     """The beat pool as this draft meets it, with the draft's state on each (#4124).
 
-    Called by the draft's ``beats`` endpoint. Under ``BeatMode.ONE_KEPT`` the pool's
-    beats are taken by the Beginning itself (the Sleeper's one kept beat); under
-    ``POOL`` a beat is taken only when the draft says so.
+    Called by the draft's ``beats`` endpoint. A beat is taken only when the draft says
+    so (the one-kept mode, under which the Beginning took its pool itself, was retired in
+    #4830: a beginning that keeps no stage strikes them all instead).
     """
     pool = beat_pool(draft)
     states = _draft_beat_states(draft)
-    kept = (
-        draft.selected_beginnings_id is not None
-        and draft.selected_beginnings.beat_mode == BeatMode.ONE_KEPT
-    )
     picked = picked_offer_ids(draft)
     out: list[BeatPoolEntry] = []
     for beat in pool:
@@ -252,11 +251,10 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
         line = str(state.get("line") or "")
         unknown = bool(state.get("unknown"))
         # A beat is taken by a pick under it, a line, or the unknown mark (#4395: the
-        # grids never ask the player to "add" a beat first); the Beginning's kept beat
-        # and an explicit taken flag still count.
+        # grids never ask the player to "add" a beat first); an explicit taken flag
+        # still counts.
         taken = (
-            kept
-            or bool(state.get("taken"))
+            bool(state.get("taken"))
             or unknown
             or bool(line)
             or any(offer_id in picked for offer_id in answer_ids)
@@ -272,7 +270,6 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
                 unknown=unknown,
                 line=line,
                 answer_offer_ids=answer_ids,
-                kept=kept,
                 allowance=beat_allowance(beat, draft.age),
             )
         )

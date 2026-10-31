@@ -297,7 +297,6 @@ arxii.covenantriteinstance covenants
 arxii.covenantriteparticipant covenants
 arxii.covenantriterolepackage covenants
 arxii.covenantrole covenants
-arxii.covenantroleactionscaling covenants
 arxii.covenantroleblendconfig magic
 arxii.covenantrolebonus covenants
 arxii.covenantroledefenseprofile covenants

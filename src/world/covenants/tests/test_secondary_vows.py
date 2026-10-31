@@ -319,34 +319,40 @@ class SecondaryVowChassisIsolationTests(TestCase):
         with_secondary = gear_additive_fraction(self.character)
         self.assertEqual(with_secondary, baseline)
 
-    def test_covenant_role_action_scaling_bonus_unaffected_by_secondary(self) -> None:
-        from world.covenants.constants import CovenantScaledAction
-        from world.covenants.factories import CovenantRoleActionScalingFactory
-        from world.covenants.services import covenant_role_action_scaling_bonus
+    def test_vow_scaled_maneuver_effect_unaffected_by_secondary(self) -> None:
+        """A secondary vow never scales a maneuver: its ``VowStatScaling`` row on a
+        maneuver effect target adds nothing (#2641; #4783 moved maneuver scaling here)."""
+        from world.covenants.models import VowStatScaling
+        from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEffectKey
+        from world.mechanics.effect_targets import effect_value
+        from world.mechanics.factories import ModifierTargetFactory
+        from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
+        from world.mechanics.models import ModifierCategory
 
-        CovenantRoleActionScalingFactory(
-            covenant_role=self.primary_role,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("0.10"),
+        ensure_maneuver_effects()
+        key = ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION
+        target = ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name="Interpose partial protection vow",
+            scope_maneuver_effect=get_maneuver_effect(key),
         )
-        resonance = ResonanceFactory()
+        VowStatScaling.objects.create(
+            covenant_role=self.primary_role, modifier_target=target, bonus_per_level=1
+        )
         _covenant_role_thread(
-            sheet=self.sheet, role=self.primary_role, resonance=resonance, level=10
+            sheet=self.sheet, role=self.primary_role, resonance=ResonanceFactory(), level=10
         )
-        baseline = covenant_role_action_scaling_bonus(
-            self.character, CovenantScaledAction.INTERPOSE
-        )
-        self.assertEqual(baseline, 1.0)
+        baseline = effect_value(self.sheet, key)
+        self.assertEqual(baseline, 51)  # base 50 + shown level 1 x 1
 
         secondary_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        CovenantRoleActionScalingFactory(
+        VowStatScaling.objects.create(
             covenant_role=secondary_role,
-            action_key="combat_interpose",
-            thread_level_multiplier=Decimal("5.0"),  # would swamp the result if it leaked
+            modifier_target=target,
+            bonus_per_level=40,  # would swamp the result if it leaked
         )
-        secondary_resonance = ResonanceFactory()
         _covenant_role_thread(
-            sheet=self.sheet, role=secondary_role, resonance=secondary_resonance, level=10
+            sheet=self.sheet, role=secondary_role, resonance=ResonanceFactory(), level=10
         )
         CharacterCovenantRoleFactory(
             character_sheet=self.sheet,
@@ -356,10 +362,7 @@ class SecondaryVowChassisIsolationTests(TestCase):
             is_secondary=True,
         )
 
-        with_secondary = covenant_role_action_scaling_bonus(
-            self.character, CovenantScaledAction.INTERPOSE
-        )
-        self.assertEqual(with_secondary, baseline)
+        self.assertEqual(effect_value(self.sheet, key), baseline)
 
 
 class SecondaryVowConfigTests(TestCase):

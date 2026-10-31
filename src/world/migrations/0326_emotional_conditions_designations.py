@@ -68,7 +68,7 @@ class Migration(migrations.Migration):
             field=models.PositiveSmallIntegerField(
                 db_default=0,
                 default=0,
-                help_text="The intensity a rallier's 'Surges given by Rally' vow added to this surge (#4739): the written amount minus the band's unscaled intensity; 0 when no vow scaled it. Written by the surge service so the roll line can be reproduced.",
+                help_text="The intensity the rallier's Rally surge intensity added to this surge above 100% (#4783): the written amount minus the band's unscaled intensity; 0 at or below 100%. Written by the surge service so the roll line can be reproduced.",
             ),
         ),
         migrations.AddField(

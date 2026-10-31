@@ -735,7 +735,7 @@ def _try_technique_interpose(
        also broadcasts a commitment line to the encounter.
 
     Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
-    banding (including SHIELD divisor widening) the mundane path uses via
+    banding (including the guardian's Interpose partial protection) the mundane path uses via
     :func:`apply_interpose_outcome`, so a technique guardian and a mundane
     guardian resolve identically once the check lands.
 
@@ -751,7 +751,8 @@ def _try_technique_interpose(
 
     **REDIRECT flavor (#2210):** after grading, ``saved = amount_before -
     pre_payload.amount`` (whatever the block prevented — full on a clean
-    block, half on a partial, zero on a failure) is sent to the declaration's
+    block, the guardian's partial protection share on a partial, zero on a
+    failure) is sent to the declaration's
     destination (``CombatRoundAction.redirect_opponent_target`` /
     ``redirect_object_target`` — see :func:`_resolve_technique_redirect`).
     """
@@ -848,7 +849,9 @@ def _try_technique_interpose(
 
     amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
-        pre_payload, check_result.success_level, interposer=interposer
+        pre_payload,
+        check_result.success_level,
+        interposer_sheet=action.participant.character_sheet,
     )
 
     if is_clean_block and flavor == PROTECTIVE_FLAVOR_BLINK:
@@ -874,7 +877,8 @@ def _resolve_technique_redirect(
     """Resolve a REDIRECT-flavor guardian's saved damage into its destination (#2210).
 
     ``saved`` is whatever :func:`_grade_interpose_damage` prevented from landing on
-    the ward — full amount on a clean block, half on a partial, zero on a failure.
+    the ward — full amount on a clean block, the guardian's partial protection share
+    on a partial, zero on a failure.
     ``saved <= 0`` means nothing redirects (a failed block has nothing to send
     anywhere). Otherwise dispatches per the declaration
     (``CombatRoundAction.redirect_opponent_target`` / ``redirect_object_target``,
@@ -965,7 +969,9 @@ def dispatch_interpose(  # noqa: PLR0913 - select_best_check_rating extends exis
             f"No interpose approach is available to {interposer!r} "
             f"for protected target {protected!r}."
         ),
-        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload, interposer=interposer),
+        outcome_fn=functools.partial(
+            apply_interpose_outcome, pre_payload, interposer_sheet=interposer.character_sheet
+        ),
         select_best_check_rating=select_best_check_rating,
         extra_modifiers=extra_modifiers,
     )

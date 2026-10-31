@@ -31,13 +31,16 @@ from world.magic.models import (
     ThreadPullEffect,
 )
 from world.mechanics.constants import (
+    ASPECT_CATEGORY_NAME,
     EQUIPMENT_RELEVANT_CATEGORIES,
     FAVOR_CATEGORY_NAMES,
+    MANEUVER_EFFECT_CATEGORY_NAME,
     POWER_CATEGORY_NAME,
     POWER_MULTIPLIER_TARGET_NAME,
     RESONANCE_CATEGORY_NAME,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
+    STAT_CATEGORY_NAME,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -48,6 +51,7 @@ from world.mechanics.models import (
     ChallengeInstance,
     ChallengeTemplate,
     CharacterModifier,
+    ModifierCategory,
     ModifierSource,
     ModifierTarget,
     ObjectProperty,
@@ -64,16 +68,19 @@ from world.mechanics.types import (
     ModifierSourceDetail,
     PrerequisiteEvaluation,
 )
-from world.traits.models import CharacterTraitValue
+from world.traits.models import CharacterTraitValue, Trait
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.mechanics.engagement import CharacterEngagement
+    from world.skills.models import Skill
 
 
 # ---------------------------------------------------------------------------
@@ -1137,11 +1144,19 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     Gated on engagement (the #2051 continuous enforcement ensures the engaged
     flag tracks co-presence). When the vow dims, the stat scaling drops — the
     character's stats collapse toward their base.
+
+    A row whose ``focus_pick`` is set counts only for a holder who chose that
+    pick; a row with no pick is the base vow and counts for every holder. The
+    chosen picks are read only when a fetched row carries a pick.
     """
     from world.covenants.models import (  # noqa: PLC0415
         VowStatScaling,
     )
-    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+    from world.covenants.services import (  # noqa: PLC0415
+        _anchor_role_id,
+        _covenant_role_thread_level,
+    )
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
     char = sheet.character
     if not hasattr(char, "covenant_roles"):
@@ -1150,16 +1165,41 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     if not engaged_roles:
         return 0
 
-    configs = VowStatScaling.objects.filter(
-        covenant_role__in=engaged_roles,
-        modifier_target=target,
+    # Threads key on the ANCHOR (parent) role, while an engaged role is the resolved
+    # sub-role once the holder graduates (ADR-0055). A row authored on either the
+    # anchor or the sub-role applies, and both read the thread level from the anchor.
+    applicable_roles = {role.pk for role in engaged_roles}
+    applicable_roles.update(
+        role.parent_role_id for role in engaged_roles if role.parent_role_id is not None
     )
-    if not configs:
-        return 0
+
+    configs = VowStatScaling.objects.filter(
+        covenant_role__in=applicable_roles,
+        modifier_target=target,
+    ).select_related("covenant_role__parent_role")
+    configs = list(configs)
+    if any(config.focus_pick_id is not None for config in configs):
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            chosen_pick_ids_by_holder,
+            holder_has_pick,
+        )
+
+        chosen = chosen_pick_ids_by_holder({sheet.pk})
+        configs = [c for c in configs if holder_has_pick(c.focus_pick_id, sheet.pk, chosen)]
+    # Stats are stored x10 like threads, so the stored level times the per-level bonus
+    # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
+    # morale), so there the bonus counts the SHOWN level.
+    in_natural_units = target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
     total = 0
+    anchor_levels: dict[int, int] = {}
     for config in configs:
-        thread_level = _covenant_role_thread_level(sheet, config.covenant_role)
-        total += thread_level * config.bonus_per_level
+        role = config.covenant_role
+        anchor_id = _anchor_role_id(role)
+        if anchor_id not in anchor_levels:
+            anchor = role.parent_role if role.parent_role_id is not None else role
+            level = _covenant_role_thread_level(sheet, anchor)
+            anchor_levels[anchor_id] = shown_thread_level(level) if in_natural_units else level
+        total += anchor_levels[anchor_id] * config.bonus_per_level
     return total
 
 
@@ -2245,6 +2285,157 @@ def stage_property(target: ObjectDB, property_: Property, value: int = 1) -> Obj
         defaults={"value": value},
     )
     return obj_prop
+
+
+def ensure_aspect_target(aspect: Aspect) -> ModifierTarget | None:
+    """The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).
+
+    A distinction's ``+10 diplomacy`` is a modifier on every check that weights Diplomacy
+    (the modifier seam's ASPECT block), and an effect can only name a ``ModifierTarget``,
+    so each Aspect row needs one with ``target_aspect`` set. The Aspect admin's save and
+    the seed call this. Idempotent. Named the way the paste spells an effect (lowercase,
+    spaces to underscores); a target of that name in another category is left alone and
+    ``None`` is returned, since two categories sharing a name would make the paste refuse
+    it, so staff resolve that by hand.
+    """
+    try:
+        existing = aspect.modifier_target
+    except ObjectDoesNotExist:
+        existing = None
+    if existing is not None:
+        return existing
+    name = aspect.name.lower().replace(" ", "_")
+    same_name = ModifierTarget.objects.filter(name__iexact=name).first()
+    if same_name is not None:
+        if same_name.category.name != ASPECT_CATEGORY_NAME or same_name.target_aspect_id:
+            return None
+        same_name.target_aspect = aspect
+        same_name.save()
+        return same_name
+    category, _ = ModifierCategory.objects.get_or_create(
+        name=ASPECT_CATEGORY_NAME,
+        defaults={
+            "description": (
+                "An Aspect: a bonus here reaches every check that weights the Aspect, "
+                "scaled by the check's aspect weight."
+            )
+        },
+    )
+    return ModifierTarget.objects.create(
+        name=name,
+        category=category,
+        target_aspect=aspect,
+        description=f"Bonuses and penalties on every check that weights {aspect.name}.",
+    )
+
+
+def ensure_skill_target(trait: Trait) -> ModifierTarget | None:
+    """The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).
+
+    A skill rolls a bonus only through a target whose ``target_trait`` is its trait
+    (``TraitHandler.get_trait_modifier``); production had one for every stat and none
+    for any skill, so ``+10 sailing`` was refused by the paste and would have reached no
+    roll if authored by hand. The Skill admin's save and the Distinction Builder's paste
+    call this, so a new skill takes a bonus the first time a card names it. Idempotent.
+
+    The target is named the way the paste spells an effect (lowercase, spaces to
+    underscores). A target of that name in another category (the ``stealth`` roll
+    modifier that predates the Stealth skill) is left alone and ``None`` is returned:
+    two categories sharing a name would make the paste refuse the name, so staff
+    retarget that row by hand instead.
+    """
+    existing = ModifierTarget.get_for_trait(trait)
+    if existing is not None:
+        return existing
+    name = trait.name.lower().replace(" ", "_")
+    same_name = ModifierTarget.objects.filter(name__iexact=name).first()
+    if same_name is not None:
+        if same_name.category.name != STAT_CATEGORY_NAME or same_name.target_trait_id:
+            return None
+        same_name.target_trait = trait
+        same_name.save()
+        return same_name
+    category, _ = ModifierCategory.objects.get_or_create(
+        name=STAT_CATEGORY_NAME,
+        defaults={"description": "A character's stats and skills, read by rolls and the sheet."},
+    )
+    return ModifierTarget.objects.create(
+        name=name,
+        category=category,
+        target_trait=trait,
+        description=f"Bonuses and penalties to the {trait.name} skill.",
+    )
+
+
+def skill_modifiers_for_sheet(
+    character_sheet: CharacterSheet, skills: Iterable[Skill]
+) -> dict[int, int]:
+    """``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).
+
+    Picks the skills worth pricing from every source ``get_trait_modifier`` reads: the
+    sheet's ``CharacterModifier`` rows on any skill target, the active conditions'
+    effects on them (three queries whatever the skill count), and the equipment the
+    roll counts, a worn crafted piece or the equipment walk (facet, covenant-role,
+    mantle and motif passives), read per target from the character's cached
+    equipment and thread handlers. Each picked skill then reads
+    ``TraitHandler.get_trait_modifier`` (character, equipment and condition
+    contributions, tapered in the stat lane), so the sheet and the roll agree. A skill
+    with no source is left out and shows its stored value.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    by_target: dict[int, Skill] = {}
+    targets: dict[int, ModifierTarget] = {}
+    for skill in skills:
+        target = ModifierTarget.get_for_trait(skill.trait)
+        if target is not None:
+            by_target[target.pk] = skill
+            targets[target.pk] = target
+    character = character_sheet.character
+    if not by_target or character is None:
+        return {}
+    hit = set(
+        CharacterModifier.objects.filter(
+            character=character_sheet, target_id__in=by_target
+        ).values_list("target_id", flat=True)
+    )
+    active = list(get_active_conditions(character))
+    if active:
+        hit.update(
+            ConditionModifierEffect.objects.filter(
+                Q(condition__in=[row.condition_id for row in active])
+                | Q(stage__in=[row.current_stage_id for row in active if row.current_stage_id]),
+                modifier_target_id__in=by_target,
+            ).values_list("modifier_target_id", flat=True)
+        )
+    for target_id, target in targets.items():
+        if target_id in hit:
+            continue
+        if equipment_walk_parts(character_sheet, target).total or _crafted_pieces_on(
+            character_sheet, target
+        ):
+            hit.add(target_id)
+    handler = character.traits
+    return {
+        by_target[target_id].pk: handler.get_trait_modifier(by_target[target_id].trait)
+        for target_id in hit
+    }
+
+
+def _crafted_pieces_on(character_sheet: CharacterSheet, target: ModifierTarget) -> bool:
+    """Whether a worn crafted piece carries a modifier for ``target`` (#4820).
+
+    The guard mirrors ``modifier_target_contributions``: a character without the
+    equipped-items handler (a raw ObjectDB fixture) wears nothing.
+    """
+    character = character_sheet.character
+    if character is None:
+        return False
+    try:
+        return bool(character.equipped_items.crafted_modifier_by_piece(target))
+    except AttributeError:
+        return False
 
 
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:

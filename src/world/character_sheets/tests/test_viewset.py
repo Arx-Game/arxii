@@ -51,7 +51,11 @@ from world.covenants.factories import (
     MentorBondFactory,
 )
 from world.covenants.models import MentorBond
-from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.distinctions.factories import (
+    CharacterDistinctionFactory,
+    DistinctionEffectFactory,
+    DistinctionFactory,
+)
 from world.forms.factories import (
     BuildFactory,
     CharacterFormFactory,
@@ -89,6 +93,9 @@ from world.magic.factories import (
     UltimateTechniqueFactory,
 )
 from world.magic.models import CharacterAura
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.mechanics.models import ModifierTarget
+from world.mechanics.services import create_distinction_modifiers
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import (
     FamilyFactory,
@@ -752,11 +759,27 @@ class TestSkillsSection(TestCase):
         assert len(skills) == 1
 
     def test_skill_entry_structure(self) -> None:
-        """Each skill entry has {skill, value, at_boundary, specializations} (#2115)."""
+        """Each skill entry has {skill, value, modifier, at_boundary, specializations}."""
         skills = self._get_skills()
         entry = skills[0]
-        assert set(entry.keys()) == {"skill", "value", "at_boundary", "specializations"}
+        assert set(entry.keys()) == {"skill", "value", "modifier", "at_boundary", "specializations"}
         assert set(entry["skill"].keys()) == {"id", "name", "category"}
+        assert entry["modifier"] == 0
+
+    def test_a_skill_bonus_shows_the_number_a_roll_uses(self) -> None:
+        """A distinction's +10 on the skill reads 40 with a modifier of 10; the stored 30
+        still decides the XP gate (#4820)."""
+        target = ModifierTargetFactory(
+            category=ModifierCategoryFactory(name="stat"),
+            name="melee",
+            target_trait=self.melee_skill.trait,
+        )
+        sailor = DistinctionFactory(name="Old Hand", slug="old-hand", cost_per_rank=0)
+        DistinctionEffectFactory(distinction=sailor, target=target, value_per_rank=10)
+        held = CharacterDistinctionFactory(character=self.character.sheet_data, distinction=sailor)
+        create_distinction_modifiers(held)
+        (entry,) = self._get_skills()
+        assert (entry["value"], entry["modifier"], entry["at_boundary"]) == (40, 10, False)
 
     def test_skill_entry_values(self) -> None:
         """Skill entry contains correct id, name, category, and value."""
@@ -2891,6 +2914,13 @@ class TestCharacterSheetQueryCount(TestCase):
         # finds it in the one-to-one cache instead of querying once per technique.
         # +1 (#4681): the aura's affinity shares (one prefetch, select_related onto the
         # affinity) feed both the magic and the theming section.
+        # +0 (#4820): the skills section prices skill bonuses through
+        # skill_modifiers_for_sheet, which asks ModifierTarget.get_for_trait for each
+        # skill; that is a class-level cache built once per process (every stat read
+        # shares it) and cleared by any target save, so it is warmed here rather than
+        # counted. With no skill target in this fixture the pass issues no query of
+        # its own; a skill with a bonus costs two more plus one per such skill.
+        ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
         with self.assertNumQueries(58):
             response = self.client.get(url)
         assert response.status_code == 200
@@ -3086,6 +3116,9 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_skills_zero_queries(self) -> None:
         sheet = self._get_sheet()
+        # The skill targets' trait cache is per process and warmed by any stat read
+        # (#4820); with no skill target the bonus pass then issues no query of its own.
+        ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
         with self.assertNumQueries(0):
             _build_skills(sheet)
 

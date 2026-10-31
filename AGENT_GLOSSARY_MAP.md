@@ -48,7 +48,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md) - also holds the favor categories and
-  `ModifierTarget.target_being` (#4333)
+  `ModifierTarget.target_being` (#4333), and maneuver effects and effect kinds (#4783)
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md) - also holds the Almanach de Catenys
@@ -365,10 +365,18 @@ a Defense Style and an armor share that replace the vow's Defense Profile. _Avoi
 style (`TechniqueStyle`, how a Path or Gift casts).
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
-**Surges given** (#4739):
-A `CovenantRoleActionScaling` row (`CovenantScaledAction.SURGES_GIVEN`) that scales the intensity
-a rallier's Rally surges the rallied ally by, `x (1 + bonus)`; intensity only. _Avoid_: rally
-scaling (that is the `combat_rally` morale row).
+**Maneuver effect** (#4783):
+One named part of a combat maneuver with one number (Charge damage, Cover escape bonus, Succor
+partial protection and so on), a row of the fixed `ManeuverEffect` catalog. A `ModifierTarget`
+scoped to one effect, or to an **effect kind** (to hit, damage, reach, escape bonus, partial
+protection, morale, surge intensity), lets any modifier source change it. _Avoid_: maneuver stat,
+action scaling.
+Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
+
+**Vow-scaled maneuver effect** (#4783):
+A `VowStatScaling` row on a "maneuver_effect" target (such as "Rally: surge intensity"): the
+holder's shown thread level x `bonus_per_level` is added to that maneuver effect. Replaced
+`CovenantRoleActionScaling`. _Avoid_: surges given, covenant scaled action, action scaling.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 ## Combat-magic surface (#1584)

@@ -19,7 +19,7 @@ from world.combat.types import ActionOutcome
 #: Maneuvers that resolve wholly on their own, short-circuiting the technique
 #: pipeline in :func:`_resolve_pc_action`. COVER is deliberately absent — it
 #: falls through to the passives-only return, since its effect is the
-#: ``cover_bonus`` it contributes to the sheltered ally's flee check.
+#: Cover escape bonus it contributes to the sheltered ally's flee check.
 _STANDALONE_MANEUVER_RESOLVERS: dict[
     str, Callable[[CombatParticipant, CombatRoundAction], ActionOutcome]
 ] = {
