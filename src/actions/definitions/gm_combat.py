@@ -620,7 +620,7 @@ class RemoveEncounterParticipantAction(Action):
             return ActionResult(success=False, message=str(err))
 
         try:
-            remove_participant(participant)
+            remove_participant(participant, by_gm=True)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
 
