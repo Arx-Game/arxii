@@ -1138,6 +1138,10 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     Gated on engagement (the #2051 continuous enforcement ensures the engaged
     flag tracks co-presence). When the vow dims, the stat scaling drops — the
     character's stats collapse toward their base.
+
+    A row whose ``focus_pick`` is set counts only for a holder who chose that
+    pick; a row with no pick is the base vow and counts for every holder. The
+    chosen picks are read only when a fetched row carries a pick.
     """
     from world.covenants.models import (  # noqa: PLC0415
         VowStatScaling,
@@ -1167,6 +1171,15 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
         covenant_role__in=applicable_roles,
         modifier_target=target,
     ).select_related("covenant_role__parent_role")
+    configs = list(configs)
+    if any(config.focus_pick_id is not None for config in configs):
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            chosen_pick_ids_by_holder,
+            holder_has_pick,
+        )
+
+        chosen = chosen_pick_ids_by_holder({sheet.pk})
+        configs = [c for c in configs if holder_has_pick(c.focus_pick_id, sheet.pk, chosen)]
     # Stats are stored x10 like threads, so the stored level times the per-level bonus
     # lands in stat units. A maneuver effect is in natural units (damage, percent, hops,
     # morale), so there the bonus counts the SHOWN level.

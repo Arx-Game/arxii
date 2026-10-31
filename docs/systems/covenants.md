@@ -1255,7 +1255,7 @@ decides defense" under Combat Seams).
 
 ### Focus picks in play (#4806, slice 2)
 
-Three readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
+Four readers apply `holder_has_pick` per (holder, row), and each reads the chosen picks
 only when a row it fetched carries a pick, so a vow without picks costs no extra query:
 
 - `added_effects.vow_added_effects_for_cast` - a gate in `_live_rows`, next to the unlock
@@ -1264,8 +1264,9 @@ only when a row it fetched carries a pick, so a vow without picks costs no extra
   sheet that chose it.
 - `perks.services._resolve_candidate_perks` - skips a pick perk for a holder who did not
   choose it, so `applicable_perks` and `dormant_perk_firings` both respect picks.
-- `services.covenant_role_action_scaling_bonus` - drops a pick scaling row the character
-  did not choose before summing.
+- `mechanics.services.vow_stat_scaling_bonus` - drops a pick `VowStatScaling` row the holder
+  did not choose before summing, on a stat target and on a maneuver-effect target alike (so
+  `effect_value` honours picks too).
 
 The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not.
 
