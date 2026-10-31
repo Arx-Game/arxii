@@ -6979,8 +6979,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
   intensity). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
   "maneuver_effect") let any modifier source target one effect or one kind across maneuvers.
   `effect_value(sheet, key)` and `effect_modifier_total(sheet, key)` in
-  `world/mechanics/effect_targets.py`; `get_maneuver_effect(key)` and
-  `ensure_maneuver_effects()` in `world/mechanics/maneuver_effects.py`; `EffectKind`,
+  `world/mechanics/effect_targets.py`; `get_maneuver_effect(key)`,
+  `ensure_maneuver_effect_rows()` (the seeder) and `ensure_maneuver_effects()` (rows plus
+  category) in `world/mechanics/maneuver_effects.py`; `EffectKind`,
   `ManeuverEffectKey`, `MANEUVER_EFFECT_KIND`, `MANEUVER_EFFECT_DEFAULTS` in
   `world/mechanics/constants.py`. Replaced `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS`/
   `CHARGE_MAX_HOPS`, `FLEE_COVER_BONUS`, `FleeConfig.cover_bonus`, the combat

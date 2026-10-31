@@ -1,8 +1,11 @@
 """The maneuver effect catalog's code side (#4783).
 
-``ensure_maneuver_effects`` writes the eight fixed rows (and the modifier category their
-targets live in) from explicit values; ``get_maneuver_effect`` is how code finds one row,
-always by key and never by name.
+``ensure_maneuver_effect_rows`` writes the eight fixed rows from explicit values; the
+combat seed cluster calls it. ``ensure_maneuver_effects`` writes the rows and the
+modifier category their targets live in, for a database whose schema was built from the
+models without running migration 0332 (tests, a scratch schema): a migrated database gets
+both from 0332, and the seeder never writes the category, which is content.
+``get_maneuver_effect`` is how code finds one row, always by key and never by name.
 """
 
 from world.mechanics.constants import (
@@ -18,16 +21,21 @@ _CATEGORY_DESCRIPTION = (
 )
 
 
-def ensure_maneuver_effects() -> list[ManeuverEffect]:
-    """Get-or-create every catalog row with today's value, and the target category.
+def ensure_maneuver_effect_rows() -> list[ManeuverEffect]:
+    """Get-or-create every catalog row with today's value.
 
     Idempotent. An edited base value is kept: only a missing row is written.
     """
+    return [get_maneuver_effect(key) for key in ManeuverEffectKey]
+
+
+def ensure_maneuver_effects() -> list[ManeuverEffect]:
+    """Get-or-create every catalog row and the target category (see the module note)."""
     ModifierCategory.objects.get_or_create(
         name=MANEUVER_EFFECT_CATEGORY_NAME,
         defaults={"description": _CATEGORY_DESCRIPTION},
     )
-    return [get_maneuver_effect(key) for key in ManeuverEffectKey]
+    return ensure_maneuver_effect_rows()
 
 
 def get_maneuver_effect(key: str) -> ManeuverEffect:

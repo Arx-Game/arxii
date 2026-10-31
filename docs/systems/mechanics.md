@@ -252,9 +252,9 @@ code. `world/mechanics/maneuver_effects.py` holds the catalog's code side,
 `notes`) has exactly eight rows. The kind of each is derived from the key
 (`MANEUVER_EFFECT_KIND`), never stored. Code finds a row by `key`, never by name. The admin
 (`ManeuverEffectAdmin`) edits `base_value` and `notes`, with no add, no delete and a read-only key.
-Rows are written by migration `0332` in existing databases and by `ensure_maneuver_effects()`
-on the Big Button combat cluster (`world/seeds/clusters.py`) for new ones; an edited base value
-is kept.
+Rows are written by migration `0332` in every migrated database, by `ensure_maneuver_effect_rows()`
+on the Big Button combat cluster (`world/seeds/clusters.py`), and by `get_maneuver_effect` on a
+missing key; an edited base value is kept.
 
 | Key | Kind | Base | Read by |
 |---|---|---|---|
@@ -270,7 +270,8 @@ is kept.
 **Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
 `CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
 (`modifier_target_one_scope`) stops both being set. In the "maneuver_effect" category
-(`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0332` and `ensure_maneuver_effects`,
+(`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0332`, and by `ensure_maneuver_effects` for a schema built
+without migrations; the seeder never writes it, since a category is content,
 and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
 scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
 recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly

@@ -27,7 +27,7 @@ def _seed_combat() -> None:
         wire_elevation_advantage_modifier_target,
     )
     from world.combat.sent_flying_content import ensure_sent_flying_content  # noqa: PLC0415
-    from world.mechanics.maneuver_effects import ensure_maneuver_effects  # noqa: PLC0415
+    from world.mechanics.maneuver_effects import ensure_maneuver_effect_rows  # noqa: PLC0415
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
@@ -41,7 +41,7 @@ def _seed_combat() -> None:
     seed_dramatic_surge_content()
     wire_elevation_advantage_modifier_target()
     # #4783: the fixed maneuver effect catalog and its target category.
-    ensure_maneuver_effects()
+    ensure_maneuver_effect_rows()
     # Sent Flying marker content (#2638). Belongs conceptually beside the
     # reactive-challenge content family (interpose/catch/redirect — #2636's
     # "reactive_challenges" cluster) but that cluster is not yet in this
