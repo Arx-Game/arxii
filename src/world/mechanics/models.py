@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 from world.contributors.models import CreditedContent
 from world.mechanics.constants import (
     FAVOR_CATEGORY_NAMES,
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    MANEUVER_EFFECT_KIND,
     SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_FORM,
@@ -34,6 +36,8 @@ from world.mechanics.constants import (
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
     DiscoveryType,
+    EffectKind,
+    ManeuverEffectKey,
     PropertyHolder,
     ResolutionType,
 )
@@ -215,6 +219,28 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "not SET_NULL: clearing it would widen a being's target to every being."
         ),
     )
+    scope_maneuver_effect = models.ForeignKey(
+        "arxii.ManeuverEffect",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="modifier_targets",
+        help_text=(
+            "Maneuver effect category only (#4783): this one effect and no other. CASCADE, "
+            "not SET_NULL: clearing it would widen the target to every effect. Set this or "
+            "the kind below, not both."
+        ),
+    )
+    scope_effect_kind = models.CharField(
+        max_length=32,
+        choices=EffectKind.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Maneuver effect category only (#4783): this kind of effect on every "
+            "maneuver. Set this or the effect above, not both."
+        ),
+    )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
@@ -243,6 +269,13 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 condition=models.Q(target_being__isnull=False),
                 name="unique_modifier_target_category_being",
             ),
+            # One scope at a time (#4783): a target names one effect or one kind.
+            models.CheckConstraint(
+                condition=~(
+                    models.Q(scope_maneuver_effect__isnull=False) & ~models.Q(scope_effect_kind="")
+                ),
+                name="modifier_target_one_scope",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -258,6 +291,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         super().clean()
         if not self.category_id:
             return
+        self._clean_maneuver_effect_scope()
         is_favor = self.category.name in FAVOR_CATEGORY_NAMES
         if self.target_being_id and not is_favor:
             msg = "Only a favor invocation or favor earning target names a being."
@@ -271,6 +305,22 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             if others.exists():
                 msg = "This favor category already has its any-being target; name a being."
                 raise ValidationError({"target_being": msg})
+
+    def _clean_maneuver_effect_scope(self) -> None:
+        """A maneuver-effect target names exactly one scope; no other category names any."""
+        has_effect = self.scope_maneuver_effect_id is not None
+        has_kind = bool(self.scope_effect_kind)
+        if self.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
+            if has_effect or has_kind:
+                msg = "Only a maneuver effect target names an effect or a kind of effect."
+                raise ValidationError({"scope_maneuver_effect": msg})
+            return
+        if has_effect and has_kind:
+            msg = "Set the effect or the kind of effect, not both."
+            raise ValidationError({"scope_effect_kind": msg})
+        if not has_effect and not has_kind:
+            msg = "A maneuver effect target needs the effect or the kind of effect it scopes to."
+            raise ValidationError({"scope_maneuver_effect": msg})
 
     @classmethod
     def get_for_trait(cls, trait: "Trait") -> "ModifierTarget | None":
@@ -861,6 +911,45 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.capability.name} + {self.target_property.name})"
+
+
+# ---------------------------------------------------------------------------
+# Maneuver effect catalog (#4783)
+# ---------------------------------------------------------------------------
+
+
+class ManeuverEffect(NaturalKeyMixin, SharedMemoryModel):
+    """One named part of a combat maneuver and the number it has with no modifier.
+
+    A fixed catalog, one row per ``ManeuverEffectKey``: maneuvers stay verbs that code
+    fires at set moments, and their numbers live here so staff can see and change them.
+    A ``ModifierTarget`` scopes to one row, or to every row of one ``EffectKind``.
+    Code finds a row by ``key``, never by name. The kind is derived from the key.
+    """
+
+    key = models.CharField(
+        max_length=40,
+        choices=ManeuverEffectKey.choices,
+        unique=True,
+        help_text="Which maneuver effect this row is. Fixed; code reads it by this key.",
+    )
+    base_value = models.IntegerField(
+        help_text="Used when no modifier applies. The unit is the effect kind's.",
+    )
+    notes = models.TextField(blank=True, help_text="Staff notes. Never shown to players.")
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
+    def __str__(self) -> str:
+        return self.get_key_display()
+
+    @property
+    def kind(self) -> str:
+        """The effect kind, derived from the key."""
+        return MANEUVER_EFFECT_KIND[self.key]
 
 
 # ---------------------------------------------------------------------------

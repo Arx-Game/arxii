@@ -5,8 +5,10 @@ Admin configuration for game mechanics models.
 """
 
 from django.contrib import admin
+from django.http import HttpRequest
 
 from world.admin_utils import OneRowPerFormSet
+from world.mechanics.constants import EffectKind
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -20,6 +22,7 @@ from world.mechanics.models import (
     CharacterEngagement,
     CharacterModifier,
     ContextConsequencePool,
+    ManeuverEffect,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
@@ -60,6 +63,8 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "category",
         "target_trait",
         "target_being",
+        "scope_maneuver_effect",
+        "scope_effect_kind",
         "display_order",
         "is_active",
     ]
@@ -70,11 +75,19 @@ class ModifierTargetAdmin(admin.ModelAdmin):
     search_fields = ["name", "description", "target_being__name"]
     ordering = ["category__display_order", "display_order", "name"]
     list_editable = ["display_order", "is_active"]
-    list_select_related = ["category", "target_being", "target_trait"]
+    list_select_related = [
+        "category",
+        "target_being",
+        "target_trait",
+        "scope_maneuver_effect",
+    ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Correct the trait help text for language traits (model text says stat only)."""
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "scope_maneuver_effect" and formfield:  # noqa: STRING_LITERAL
+            formfield.label = "Scope - one effect"
+            formfield.help_text = "This effect only."
         if db_field.name == "target_trait" and formfield:  # noqa: STRING_LITERAL
             formfield.help_text = (
                 "The trait this target modifies. For the stat category pick the stat; "
@@ -82,6 +95,37 @@ class ModifierTargetAdmin(admin.ModelAdmin):
                 "categories whose target systems are not built yet."
             )
         return formfield
+
+
+@admin.register(ManeuverEffect)
+class ManeuverEffectAdmin(admin.ModelAdmin):
+    """#4783: the fixed catalog of maneuver effects. Staff edit a base value; the set of
+    rows is fixed, so there is no add and no delete, and the key never changes."""
+
+    list_display = ["key_label", "kind_label", "base_value"]
+    fields = ["key", "kind_label", "base_value", "notes"]
+    readonly_fields = ["kind_label"]
+
+    @admin.display(description="Key", ordering="key")
+    def key_label(self, obj: ManeuverEffect) -> str:
+        return obj.get_key_display()
+
+    @admin.display(description="Kind")
+    def kind_label(self, obj: ManeuverEffect) -> str:
+        return EffectKind(obj.kind).label
+
+    def get_readonly_fields(self, request: HttpRequest, obj: ManeuverEffect | None = None):
+        return [*super().get_readonly_fields(request, obj), "key"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(
+        self,
+        request: HttpRequest,  # noqa: ARG002
+        obj: ManeuverEffect | None = None,  # noqa: ARG002
+    ) -> bool:
+        return False
 
 
 @admin.register(ModifierSource)

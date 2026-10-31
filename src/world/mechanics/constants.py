@@ -147,6 +147,79 @@ EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
         # world.mechanics.services.equipment_walk_total).
         "favor_invocation",
         "favor_earning",
+        # #4783: maneuver-effect targets take the vow stat scaling, distinction, facet
+        # and condition parts of get_modifier_total. This set matches categories by
+        # name, the existing practice for it, accepted knowingly here.
+        "maneuver_effect",
         # Add more as PR3 lands combat stats and ItemCapabilityGrants.
     }
 )
+
+
+# ---------------------------------------------------------------------------
+# Maneuver effects (#4783)
+# ---------------------------------------------------------------------------
+
+# The ModifierCategory a maneuver-effect target lives in. Created in code by name
+# (``ensure_maneuver_effects``), the way the favor categories are.
+MANEUVER_EFFECT_CATEGORY_NAME = "maneuver_effect"
+
+
+class ManeuverEffectKey(models.TextChoices):
+    """One named part of a combat maneuver, each with one number (#4783)."""
+
+    CHARGE_TO_HIT = "charge_to_hit", "Charge: to hit"
+    CHARGE_DAMAGE = "charge_damage", "Charge: damage"
+    CHARGE_REACH = "charge_reach", "Charge: reach"
+    COVER_ESCAPE_BONUS = "cover_escape_bonus", "Cover: escape bonus"
+    SUCCOR_PARTIAL_PROTECTION = (
+        "succor_partial_protection",
+        "Succor: partial protection",
+    )
+    INTERPOSE_PARTIAL_PROTECTION = (
+        "interpose_partial_protection",
+        "Interpose: partial protection",
+    )
+    RALLY_MORALE = "rally_morale", "Rally: morale"
+    RALLY_SURGE_INTENSITY = "rally_surge_intensity", "Rally: surge intensity"
+
+
+class EffectKind(models.TextChoices):
+    """What sort of number a maneuver effect is; a broad target names a kind (#4783).
+
+    Each kind fixes the unit of every modifier that targets it.
+    """
+
+    TO_HIT = "to_hit", "To hit"
+    DAMAGE = "damage", "Damage"
+    REACH = "reach", "Reach"
+    ESCAPE_BONUS = "escape_bonus", "Escape bonus"
+    PARTIAL_PROTECTION = "partial_protection", "Partial protection"
+    MORALE = "morale", "Morale"
+    SURGE_INTENSITY = "surge_intensity", "Surge intensity"
+
+
+MANEUVER_EFFECT_KIND: dict[str, str] = {
+    ManeuverEffectKey.CHARGE_TO_HIT: EffectKind.TO_HIT,
+    ManeuverEffectKey.CHARGE_DAMAGE: EffectKind.DAMAGE,
+    ManeuverEffectKey.CHARGE_REACH: EffectKind.REACH,
+    ManeuverEffectKey.COVER_ESCAPE_BONUS: EffectKind.ESCAPE_BONUS,
+    ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION: EffectKind.PARTIAL_PROTECTION,
+    ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: EffectKind.PARTIAL_PROTECTION,
+    ManeuverEffectKey.RALLY_MORALE: EffectKind.MORALE,
+    ManeuverEffectKey.RALLY_SURGE_INTENSITY: EffectKind.SURGE_INTENSITY,
+}
+
+# Today's number for each effect: what a maneuver gives with no modifier anywhere.
+# Charge hops, Cover per coverer, partial protection and surge intensity are
+# percentages or counts as their kind says; morale is per success level.
+MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
+    ManeuverEffectKey.CHARGE_TO_HIT: 10,
+    ManeuverEffectKey.CHARGE_DAMAGE: 5,
+    ManeuverEffectKey.CHARGE_REACH: 5,
+    ManeuverEffectKey.COVER_ESCAPE_BONUS: 10,
+    ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION: 50,
+    ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: 50,
+    ManeuverEffectKey.RALLY_MORALE: 15,
+    ManeuverEffectKey.RALLY_SURGE_INTENSITY: 100,
+}
