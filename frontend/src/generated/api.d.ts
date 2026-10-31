@@ -29031,7 +29031,6 @@ export interface components {
       unknown: boolean;
       line: string;
       answer_offer_ids: number[];
-      kept: boolean;
       allowance: number | null;
     };
     /**
@@ -29295,6 +29294,8 @@ export interface components {
       strikes_youth?: boolean;
       /** @description Strike the Before the Glimpse stage out: its grids never show for this beginning. */
       strikes_adulthood?: boolean;
+      /** @description Shown in place of the life's stages when this beginning strikes every one of them; blank otherwise. */
+      struck_stages_text?: string;
       /** @description Cloudinary URL sourced from art (#2408); key name kept for frontend compat. */
       readonly art_image: string | null;
       /**
@@ -29329,6 +29330,8 @@ export interface components {
       strikes_youth?: boolean;
       /** @description Strike the Before the Glimpse stage out: its grids never show for this beginning. */
       strikes_adulthood?: boolean;
+      /** @description Shown in place of the life's stages when this beginning strikes every one of them; blank otherwise. */
+      struck_stages_text?: string;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
       /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */

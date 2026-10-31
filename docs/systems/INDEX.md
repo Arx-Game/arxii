@@ -2112,7 +2112,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   `standings_for_families` feeds `FamilySerializer.standing` for the CG family list.
 - **Backgrounds, the beats of a life (#4124, grids and strikes #4395, ADR-4395-A):**
   `LifeBeat` (content; `life_stage`, `selection` one-of / any-that-apply, prompt,
-  `picks_scale_with_age`), `LifeBeatExclusion` (beat x Beginning), `Beginnings.beat_mode`
+  `picks_scale_with_age`), `LifeBeatExclusion` (beat x Beginning), `Beginnings.beat_mode` (`POOL` only since #4830), `Beginnings.struck_stages_text` and `draft_data["recent_history"]` -> the background's lead-in paragraph (#4830),
   (pool / one kept) and `Beginnings.strikes_childhood`/`strikes_youth`/
   `strikes_adulthood` (`struck_stages()`: a struck stage leaves the pool), `Beginnings
   .frame`/`station` (read at the pick), `DistinctionOffer.beat` as the

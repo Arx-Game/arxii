@@ -82,9 +82,6 @@ class BeatPoolEntry:
     unknown: bool
     line: str
     answer_offer_ids: list[int]
-    #: The Beginning keeps this beat itself (``BeatMode.ONE_KEPT``): taken by the
-    #: Beginning, never removed by the player.
-    kept: bool = False
     #: How many answers this beat allows this draft (#4395): one for a one-of beat,
     #: ``offers.age_pick_allowance`` for a beat whose picks scale with age, None for any.
     allowance: int | None = None
