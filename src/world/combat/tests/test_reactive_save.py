@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.combat.constants import (
@@ -31,6 +33,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import _try_interpose, apply_damage_to_participant
+from world.combat.services.damage.reactive_save import try_reactive_save
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -182,3 +185,64 @@ class ReactiveSaveTests(TestCase):
 
         self.assertEqual(result.damage_dealt, 14)
         self.assertEqual(self._anima(), 10)
+
+
+class ReactiveSaveQueryCountTests(TestCase):
+    """Finding the healer costs the same number of queries however big the fight is.
+
+    The bystanders are covenant-less fighters who cannot save: before the batching
+    fix each one cost several queries (``can_act``, covenant ids, roles, specialty,
+    technique) every time a blow would drop a PC (21 queries with 3 others, 29 with
+    11). Batched, it is 18 at both sizes.
+    """
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
+        covenant = CovenantFactory()
+        role = CovenantRoleFactory()
+        CovenantRoleTechniqueSpecialtyFactory(covenant_role=role, function=TechniqueFunction.MEND)
+        self.ward_vitals = CharacterVitalsFactory(health=30, max_health=100)
+        self.ward = CombatParticipantFactory(
+            encounter=self.encounter, character_sheet=self.ward_vitals.character_sheet
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=self.ward.character_sheet, covenant=covenant, engaged=True
+        )
+        healer = CombatParticipantFactory(encounter=self.encounter)
+        CharacterCovenantRoleFactory(
+            character_sheet=healer.character_sheet,
+            covenant=covenant,
+            covenant_role=role,
+            engaged=True,
+        )
+        mend = TechniqueFunctionTagFactory(function=TechniqueFunction.MEND)
+        CharacterTechniqueFactory(character=healer.character_sheet, technique=mend.technique)
+        CharacterAnimaFactory(character=healer.character_sheet, current=10, maximum=10)
+        self.healer = healer
+
+    def _add_bystanders(self, count: int) -> None:
+        for _ in range(count):
+            bystander = CombatParticipantFactory(encounter=self.encounter)
+            CharacterAnimaFactory(character=bystander.character_sheet, current=10, maximum=10)
+
+    def _queries_for_one_save(self) -> int:
+        self.healer.reactions_used = 0
+        self.healer.save(update_fields=["reactions_used"])
+        anima = CharacterAnima.objects.get(character_id=self.healer.character_sheet_id)
+        anima.current = 10
+        anima.save(update_fields=["current"])
+        payload = _payload(14)
+        with patch(NARRATE_PATH), CaptureQueriesContext(connection) as ctx:
+            saved = try_reactive_save(self.ward, payload, self.ward_vitals)
+        self.assertTrue(saved)
+        return len(ctx.captured_queries)
+
+    def test_query_count_does_not_grow_with_the_participant_count(self) -> None:
+        self._add_bystanders(2)
+        self._queries_for_one_save()  # warm the per-character handler caches
+        small = self._queries_for_one_save()
+        self._add_bystanders(8)
+        self._queries_for_one_save()
+        large = self._queries_for_one_save()
+
+        self.assertEqual(small, large)

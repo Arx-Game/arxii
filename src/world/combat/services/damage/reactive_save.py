@@ -37,6 +37,8 @@ from world.scenes.constants import RoundStatus
 from world.vitals.constants import KNOCKOUT_HEALTH_THRESHOLD
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from flows.events.payloads import DamagePreApplyPayload
     from world.character_sheets.models import CharacterSheet
     from world.vitals.models import CharacterVitals
@@ -49,10 +51,9 @@ def reactive_save_anima_cost(healer: CombatParticipant) -> int:
     return rising_reaction_cost(reaction_tuning().dodge_anima_cost, healer.reactions_used)
 
 
-def can_make_reactive_save(sheet: CharacterSheet) -> bool:
-    """True when her engaged vow specialises in Mend and she knows a Mend technique."""
+def _vow_specialises_in_mend(sheet: CharacterSheet) -> bool:
+    """True when an engaged vow, resolved or its anchor, carries a Mend specialty."""
     from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
-    from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
 
     role_ids: set[int] = set()
     for role in sheet.character.covenant_roles.currently_engaged_roles():
@@ -61,9 +62,16 @@ def can_make_reactive_save(sheet: CharacterSheet) -> bool:
             role_ids.add(role.parent_role_id)
     if not role_ids:
         return False
-    if not CovenantRoleTechniqueSpecialty.objects.filter(
+    return CovenantRoleTechniqueSpecialty.objects.filter(
         covenant_role_id__in=role_ids, function=TechniqueFunction.MEND
-    ).exists():
+    ).exists()
+
+
+def can_make_reactive_save(sheet: CharacterSheet) -> bool:
+    """True when her engaged vow specialises in Mend and she knows a Mend technique."""
+    from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
+
+    if not _vow_specialises_in_mend(sheet):
         return False
     return CharacterTechnique.objects.filter(
         character=sheet, technique__function_tags__function=TechniqueFunction.MEND
@@ -93,32 +101,73 @@ def _softened_amount(vitals: CharacterVitals, amount: int) -> int:
     return max(leaves_her_standing, least_allowed)
 
 
-def _can_pay(sheet: CharacterSheet, cost: int) -> bool:
+def _anima_by_sheet(healers: list[CombatParticipant]) -> dict[int, int]:
+    """Current anima for each healer's sheet, in one query."""
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
 
-    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
-    return anima is not None and anima.current >= cost
+    sheet_ids = [healer.character_sheet_id for healer in healers]
+    return dict(
+        CharacterAnima.objects.filter(character_id__in=sheet_ids).values_list(
+            "character_id", "current"
+        )
+    )
+
+
+def _healer_candidates(
+    ward: CombatParticipant, ward_covenant_ids: frozenset[int]
+) -> QuerySet[CombatParticipant]:
+    """Fighters in her fight who pass the batched gates, in participant order.
+
+    Three ``Exists`` filters run in the one query: an active membership in one of
+    the ward's active covenants (exactly ``shares_covenant_with``), a known Mend
+    technique (exactly the technique half of ``can_make_reactive_save``), and an
+    engaged membership whose stored role, its parent or one of its sub-roles holds
+    a Mend specialty. That last one is a superset: which sub-role a vow resolves to
+    depends on her thread, so ``_vow_specialises_in_mend`` confirms it on the few
+    rows left.
+    """
+    from django.db.models import Exists, OuterRef, Q  # noqa: PLC0415
+
+    from world.covenants.models import (  # noqa: PLC0415
+        CharacterCovenantRole,
+        CovenantRoleTechniqueSpecialty,
+    )
+    from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
+
+    sheet = OuterRef("character_sheet_id")
+    active = CharacterCovenantRole.objects.filter(character_sheet_id=sheet, left_at__isnull=True)
+    mend_roles = CovenantRoleTechniqueSpecialty.objects.filter(
+        function=TechniqueFunction.MEND
+    ).values("covenant_role_id")
+    mend_vow = Q(covenant_role_id__in=mend_roles) | Q(covenant_role__parent_role_id__in=mend_roles)
+    mend_vow |= Q(covenant_role__sub_roles__in=mend_roles)
+    knows_mend = CharacterTechnique.objects.filter(
+        character_id=sheet, technique__function_tags__function=TechniqueFunction.MEND
+    )
+    return (
+        CombatParticipant.objects.filter(
+            encounter_id=ward.encounter_id, status=ParticipantStatus.ACTIVE
+        )
+        .exclude(pk=ward.pk)
+        .filter(Exists(active.filter(covenant_id__in=ward_covenant_ids)))
+        .filter(Exists(active.filter(engaged=True).filter(mend_vow)))
+        .filter(Exists(knows_mend))
+        .select_related("character_sheet__character")
+        .order_by("pk")
+    )
 
 
 def _healers_for(ward: CombatParticipant) -> list[CombatParticipant]:
     """Covenant-mates in her fight who can make the save, in participant order."""
     from world.vitals.services import can_act  # noqa: PLC0415
 
-    ally = ward.character_sheet.character
-    candidates = (
-        CombatParticipant.objects.filter(
-            encounter_id=ward.encounter_id, status=ParticipantStatus.ACTIVE
-        )
-        .exclude(pk=ward.pk)
-        .select_related("character_sheet__character")
-        .order_by("pk")
-    )
+    ward_covenant_ids = ward.character_sheet.character.active_covenant_ids()
+    if not ward_covenant_ids:
+        return []
     return [
         healer
-        for healer in candidates
-        if can_act(healer.character_sheet)
-        and healer.character_sheet.character.shares_covenant_with(ally)
-        and can_make_reactive_save(healer.character_sheet)
+        for healer in _healer_candidates(ward, ward_covenant_ids)
+        if can_act(healer.character_sheet) and _vow_specialises_in_mend(healer.character_sheet)
     ]
 
 
@@ -152,9 +201,11 @@ def try_reactive_save(
     from world.combat.services.reactions import record_reaction  # noqa: PLC0415
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
-    for healer in _healers_for(ward):
+    healers = _healers_for(ward)
+    anima = _anima_by_sheet(healers)
+    for healer in healers:
         cost = reactive_save_anima_cost(healer)
-        if not _can_pay(healer.character_sheet, cost):
+        if anima.get(healer.character_sheet_id, -1) < cost:
             continue
         deduct_anima(healer.character_sheet.character, cost, lethal=False)
         record_reaction(healer)
