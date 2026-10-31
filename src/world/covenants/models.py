@@ -1401,7 +1401,9 @@ class VowFocusPickLimitManager(NaturalKeyManager):
     """Manager for VowFocusPickLimit with natural key support."""
 
 
-class VowFocusPickLimit(RelatedCacheClearingMixin, NaturalKeyMixin, SharedMemoryModel):
+class VowFocusPickLimit(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
     """One limit on a vow focus pick, which lowers the pick's price (#4759).
 
     A SELF, TARGET, SETTING or TIMING limit multiplies the price by how often it
