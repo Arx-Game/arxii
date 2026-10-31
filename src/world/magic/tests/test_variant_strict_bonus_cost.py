@@ -9,8 +9,7 @@ a higher intensity with the same control normally raises the effective cost.  Th
 strict-bonus rule says the variant MUST clamp to the base-form cost — more power,
 never more anima.
 
-Test seam: ``use_technique`` (the real cast orchestrator) — mirrors the setup in
-``test_use_technique_control_penalty.py``.  Two casters are built: one whose GIFT
+Test seam: ``use_technique`` (the real cast orchestrator).  Two casters are built: one whose GIFT
 thread is at level 0 (base form) and one whose GIFT thread is at level 3 (variant
 resolved).  The variant caster's anima deduction must be ≤ the base caster's.
 """

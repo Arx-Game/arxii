@@ -22,11 +22,16 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   left as an indent (`[data-pose-avatar]`, `data-testid="pose-avatar"`), the first line
   starts beside it and later lines wrap back under it; paragraph breaks are kept
   (`whitespace-pre-line`); the time is a hover-only `<time>` at the top right; no header
-  row, role label or bubble, a hover tint instead. Left-click on the avatar is
-  `PersonaMenu` with `poseActions` (Reply, Kudos) first and `contextMenu={false}`, since
-  the right button belongs to `FeedBlockFrame`'s sorting menu; double-click on the avatar
-  is the add-target affordance the name used to carry; a companion pose keeps its
-  "(via <owner>)" tell after the line. Action chips, the parent chip, reactions, badges,
+  row, role label or bubble, a hover tint instead. Left-click on the avatar, and on the
+  name that opens the line (`[data-pose-actor]`, `data-testid="pose-actor"`, through
+  `ActorLine`'s `renderName`; #4791), is `PersonaMenu` with `poseActions` (Reply, Kudos)
+  first and `contextMenu={false}`, since the right button belongs to `FeedBlockFrame`'s
+  sorting menu, which both open at once; double-click on either is the add-target
+  affordance, which in a real browser never fires (#4793: the modal menu opens on the
+  first press and takes the second; the jsdom test does not see it); a read-only line
+  renders both plain. A companion pose's name is the
+  companion's and its menu is the owner's, as the avatar's is (a companion has no face or
+  menu of its own, #3294); it keeps its "(via <owner>)" tell after the line. Action chips, the parent chip, reactions, badges,
   nominate and endorsements keep their places after the text. The ACTION, OUTCOME and
   narration branches are unchanged.
 - **`hooks/useKudos.ts`** (#2031, #4128): the first kudos on a pose, lazily opening its
@@ -36,7 +41,9 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   actor in the sentence) through `FormattedContent`, with the leading name set semibold
   when the line opens with the card's own name (the companion's for a companion pose); a row
   without a line renders its `content`. Used by `PoseUnit` and the game's `ExplorationReader`.
-  Presentation only: the name is the one the server sent, never a second formatter.
+  Presentation only: the name is the one the server sent, never a second formatter. The
+  optional `renderName` (#4791) wraps the found name in the caller's play menu; it is never
+  called for a line that does not open with the name, which renders as sent.
 - **`ActionPanel.tsx`**: Scene action request panel. A challenge approach (`ref.backend ===
 'challenge'`, a wall's climb, a door's lock) resolves through the dispatch endpoint
   (`useDispatchPlayerAction`), never a scene action request: it has no one to ask (#4606; before

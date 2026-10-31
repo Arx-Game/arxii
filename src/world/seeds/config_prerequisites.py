@@ -42,7 +42,7 @@ def _fatigue_rows() -> None:
 
 
 def _fury_rows() -> None:
-    """The fury control-retention CheckType `resolve_fury` rolls (`fury.py:157`).
+    """The fury control-retention CheckType `FuryCast.surrender` rolls (`services/fury.py`).
 
     The trait is not a literal — it is `FuryConfig.check_trait`, a DB-configurable
     column — so the prerequisite ensures the row for whatever the config currently

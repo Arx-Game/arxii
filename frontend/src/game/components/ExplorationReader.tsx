@@ -195,7 +195,9 @@ export function ExplorationReader({
                           data-testid="ambient-line"
                         >
                           {/* The avatar is an indent (#4128): left-click is the persona
-                              menu; the right button belongs to the frame's sorting menu. */}
+                              menu, on the avatar and on the name that opens the line
+                              (#4791); the right button belongs to the frame's sorting
+                              menu. */}
                           <span
                             className="float-left mr-2 flex"
                             data-testid="pose-avatar"
@@ -235,6 +237,19 @@ export function ExplorationReader({
                               actorName={
                                 row.item.attributed_companion_name ?? row.item.persona.name
                               }
+                              renderName={(name) => (
+                                <span data-testid="pose-actor" data-pose-actor>
+                                  <PersonaMenu
+                                    personaId={row.item.persona.id}
+                                    personaName={row.item.persona.name}
+                                    thumbnailUrl={row.item.persona.thumbnail_url}
+                                    leftClick
+                                    contextMenu={false}
+                                  >
+                                    {name}
+                                  </PersonaMenu>
+                                </span>
+                              )}
                             />
                           </div>
                         </article>

@@ -423,10 +423,13 @@ because it's used by both scenes and combat).
 - **Stats** — Intensity / Control display as a chip (`I:8 / C:5`). When
   `intensity > control`, chip turns amber-warn with tooltip explaining the
   cost-spike risk. A `Strain +N` chip shows current strain commitment.
+  The numbers are the cast's runtime ones from the technique action's
+  `cast_preview` (server-computed, engagement modifiers such as Dig deep and
+  Fury included), never the technique's authored stats (#4799).
 - **Effort selector** — pills (Very Low → Very High). Selecting an effort
   recomputes the cost preview live.
-- **Cost line** — `Cost: −N anima` (or `0 anima · (Control > Intensity, low effort → comfortable cast)`
-  when the formula yields zero). Color-coded amber for non-zero cost.
+- **Cost line** — `Cost: N anima`, the `cast_preview.effective_anima_cost` the
+  server computed (#4799); amber when intensity exceeds control.
 - **`<ThreadPullPicker>`** — embedded subsection (see §5).
 - **Pose-attachment hook** — when the parent wires it, the composer's
   `ActionAttachment` widget is auto-populated with this action on submit.

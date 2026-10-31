@@ -216,6 +216,7 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
         resolves those ids and passes instances to declare_action.
         """
         from actions.definitions.cast import CastTechniqueAction
+        from world.relationships.factories import CharacterRelationshipFactory
 
         gift = GiftFactory()
         effect_type = EffectTypeFactory(name="Buff_fury", base_power=None)
@@ -224,6 +225,10 @@ class DeclareActionSoulFrayFuryFieldsTests(TestCase):
 
         ctx = CombatRoundContext(self.participant)
         action = CastTechniqueAction()
+        # A tie deep enough for the tier: a deeper one is refused at declaration (#4738).
+        CharacterRelationshipFactory(
+            source=self.participant.character_sheet, target=self.anchor_sheet, tier=2
+        )
 
         # round_declaration returns (PlayerAction, decl_kwargs) with the ids forwarded.
         result = action.round_declaration(

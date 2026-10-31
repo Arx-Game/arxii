@@ -4,11 +4,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from actions.errors import ActionDispatchError
 from world.combat.constants import ActionCategory, SustainedKind
 from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant, SustainedAction
 
 if TYPE_CHECKING:
     from world.magic.models import Technique
+
+
+class DeclarationRefusedError(ValueError):
+    """A declaration refused for a reason the player can meet and should be told (#4796).
+
+    ``code`` is an ``ActionDispatchError`` code; the web dispatch turns it into a 400
+    with that code's fixed message. It stays a ``ValueError`` so callers that already
+    catch one keep working.
+    """
+
+    def __init__(self, msg: str, *, code: str) -> None:
+        super().__init__(msg)
+        self.code = code
 
 
 def _validate_no_pending_sustained(
@@ -63,7 +77,7 @@ def _validate_no_pending_sustained(
     )
     if pending is not None:
         msg = f"Cannot declare an action: you are still holding {pending.subject_name} together."
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.STILL_SUSTAINING)
 
 
 def _validate_passive_slot(
@@ -134,11 +148,11 @@ def _validate_target_kind_alignment(
                 f"Technique target_kinds {sorted(kinds)} do not match supplied "
                 f"target kind '{target_supplied_kind}'."
             )
-            raise ValueError(msg)
+            raise DeclarationRefusedError(msg, code=ActionDispatchError.TARGET_KIND_MISMATCH)
 
     if has_base_power and not rows and focused_opponent_target is None:
         msg = "Damage technique requires focused_opponent_target."
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.TARGET_REQUIRED)
 
 
 def _validate_technique_reach(
@@ -172,8 +186,6 @@ def _validate_technique_reach(
         return
 
     if not technique_can_reach(attacker_objectdb, focused_action, target_objectdb):
-        from actions.errors import ActionDispatchError  # noqa: PLC0415
-
         raise ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH)
 
 
@@ -192,4 +204,4 @@ def _validate_strain_commitment(participant: CombatParticipant, strain_commitmen
             f"Strain commitment ({strain_commitment}) exceeds available "
             f"anima ({participant.available_strain})."
         )
-        raise ValueError(msg)
+        raise DeclarationRefusedError(msg, code=ActionDispatchError.STRAIN_OVER_BUDGET)

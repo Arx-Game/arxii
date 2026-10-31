@@ -1,11 +1,13 @@
-"""Tests for the fury resolution service (provocation cap, clamp, control-retention outcome)."""
+"""Tests for the fury resolution service (provocation cap, clamp, the bought share)."""
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import FuryConfigFactory, FuryTierFactory
+from world.combat.services.encounter.config import get_strain_config
+from world.magic.factories import FuryConfigFactory, FuryDegreeShareFactory, FuryTierFactory
 from world.magic.services.fury import (
     clamp_tier,
     provocation_cap,
@@ -16,6 +18,7 @@ from world.relationships.constants import LabelAwareness, TypeFamily
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.services import declare_label
 from world.roster.factories import grant_test_tenure
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _mutual_teaching_bond_at_tier(*, source_sheet, target_sheet, tier: int):
@@ -45,22 +48,8 @@ class ClampTierTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         FuryConfigFactory()
-        cls.t1 = FuryTierFactory(
-            name="Smouldering",
-            depth=1,
-            control_penalty=2,
-            intensity_bonus=2,
-            lucid_grade_floor=1,
-            berserk_severity=0,
-        )
-        cls.t3 = FuryTierFactory(
-            name="Berserk",
-            depth=3,
-            control_penalty=8,
-            intensity_bonus=10,
-            lucid_grade_floor=3,
-            berserk_severity=5,
-        )
+        cls.t1 = FuryTierFactory(name="Smouldering", depth=1, control_surrendered=2)
+        cls.t3 = FuryTierFactory(name="Berserk", depth=3, control_surrendered=8, berserk_severity=5)
 
     def test_clamp_drops_tier_above_cap(self):
         self.assertEqual(clamp_tier(self.t3, cap=1), self.t1)
@@ -75,55 +64,48 @@ class ResolveFuryNullAnchorTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         FuryConfigFactory()
-        cls.t1 = FuryTierFactory(
-            name="Smouldering",
-            depth=1,
-            control_penalty=2,
-            intensity_bonus=2,
-            lucid_grade_floor=1,
-            berserk_severity=0,
-        )
+        cls.t1 = FuryTierFactory(name="Smouldering", depth=1, control_surrendered=2)
         cls.character = CharacterSheetFactory()
 
     def test_null_anchor_returns_unavailable(self):
-        """anchor=None → cap=0 → clamp returns None → FuryResolution(None, 0, 0, 0)."""
+        """anchor=None → cap=0 → clamp returns None → nothing surrendered or bought."""
         res = resolve_fury(
             character=self.character.character,
             tier=self.t1,
             anchor=None,
-            check_result=_FakeCheck(success_level=5),
+            check_result=_FakeCheck(CheckOutcomeFactory(name="Success", success_level=1)),
         )
         self.assertIsNone(res.realized_tier)
-        self.assertEqual(res.control_penalty, 0)
-        self.assertEqual(res.intensity_bonus, 0)
+        self.assertEqual(res.control_surrendered, 0)
+        self.assertEqual(res.intensity_gained, 0)
         self.assertEqual(res.berserk_severity, 0)
 
 
 class ResolveFuryRealBondTests(TestCase):
-    """resolve_fury with a real bonded pair exercises provocation_cap → clamp → bonus arithmetic."""
+    """resolve_fury with a real bonded pair: cap → clamp → the share the outcome buys.
+
+    Bond tier 2 → cap 2 → x1.2 scale. 1.50 intensity per control surrendered.
+    Smouldering surrenders 10: full trade 10 x 1.5 x 1.2 = 18.
+    """
 
     @classmethod
     def setUpTestData(cls):
         FuryConfigFactory(
             provocation_cap_per_tier=1,  # 1 relationship tier = 1 fury tier cap
-            bonus_scale_per_cap_point=10,  # 10% bonus per cap point
+            bonus_scale_per_cap_point=10,  # 10% more per cap point
             cap_ease_per_point=2,
         )
-        cls.t1 = FuryTierFactory(
-            name="Smouldering",
-            depth=1,
-            control_penalty=2,
-            intensity_bonus=10,
-            lucid_grade_floor=1,
-            berserk_severity=0,
-        )
+        config = get_strain_config()
+        config.intensity_per_control_surrendered = Decimal("1.50")
+        config.save()
+        cls.partial = CheckOutcomeFactory(name="Partial", success_level=0)
+        cls.success = CheckOutcomeFactory(name="Success", success_level=1)
+        cls.unshared = CheckOutcomeFactory(name="Failure", success_level=-1)
+        FuryDegreeShareFactory(outcome_tier=cls.partial, intensity_percent=50)
+        FuryDegreeShareFactory(outcome_tier=cls.success, intensity_percent=100)
+        cls.t1 = FuryTierFactory(name="Smouldering", depth=1, control_surrendered=10)
         cls.t3 = FuryTierFactory(
-            name="Infernal",
-            depth=3,
-            control_penalty=8,
-            intensity_bonus=30,
-            lucid_grade_floor=3,
-            berserk_severity=5,
+            name="Infernal", depth=3, control_surrendered=20, berserk_severity=5
         )
         # Build a real bonded pair: mutual Mentor/Student bond at tier 2.
         cls.source_sheet = CharacterSheetFactory()
@@ -132,62 +114,50 @@ class ResolveFuryRealBondTests(TestCase):
             source_sheet=cls.source_sheet, target_sheet=cls.anchor_sheet, tier=2
         )
 
+    def _resolve(self, tier, outcome):
+        return resolve_fury(
+            character=self.source_sheet.character,
+            tier=tier,
+            anchor=self.anchor_sheet,
+            check_result=_FakeCheck(outcome),
+        )
+
     def test_cap_gate_clamps_deep_tier(self):
-        """With relationship tier 2 → cap=2 (per_tier=1); t3 depth=3 > cap → clamped to t1."""
-        res = resolve_fury(
-            character=self.source_sheet.character,
-            tier=self.t3,
-            anchor=self.anchor_sheet,
-            check_result=_FakeCheck(success_level=5),
-        )
-        # cap=2, t3.depth=3 > 2 → clamp to deepest tier with depth <= 2 = t1 (depth=1)
+        """cap=2, t3.depth=3 > 2 → clamped to the deepest tier within the cap, t1."""
+        res = self._resolve(self.t3, self.success)
         self.assertEqual(res.realized_tier, self.t1)
+        self.assertEqual(res.control_surrendered, 10)
 
-    def test_bonus_scaled_by_cap(self):
-        """With cap=2 and bonus_scale=10%, intensity_bonus=10 → 10*(100+20)//100 = 12."""
+    def test_full_share_scaled_by_cap(self):
+        """10 x 1.5 x 1.2 x 100% = 18."""
+        self.assertEqual(self._resolve(self.t1, self.success).intensity_gained, 18)
+
+    def test_better_outcome_buys_more(self):
+        """Partial buys 50%: floor(18 x 0.5) = 9."""
+        self.assertEqual(self._resolve(self.t1, self.partial).intensity_gained, 9)
+
+    def test_outcome_with_no_share_row_buys_nothing_but_still_surrenders(self):
+        res = self._resolve(self.t1, self.unshared)
+        self.assertEqual(res.intensity_gained, 0)
+        self.assertEqual(res.control_surrendered, 10)
+
+    def test_no_check_buys_nothing(self):
         res = resolve_fury(
             character=self.source_sheet.character,
             tier=self.t1,
             anchor=self.anchor_sheet,
-            check_result=_FakeCheck(success_level=5),
+            check_result=None,
         )
-        # 10 * (100 + 10*2) // 100 = 10 * 120 // 100 = 12
-        self.assertEqual(res.intensity_bonus, 12)
+        self.assertEqual(res.intensity_gained, 0)
 
-    def test_lucid_when_check_meets_floor(self):
-        """success_level >= lucid_grade_floor → berserk_severity=0."""
-        res = resolve_fury(
-            character=self.source_sheet.character,
-            tier=self.t1,
-            anchor=self.anchor_sheet,
-            check_result=_FakeCheck(success_level=3),
-        )
-        self.assertEqual(res.berserk_severity, 0)
-
-    def test_berserk_below_floor(self):
-        """success_level < lucid_grade_floor → berserk_severity > 0.
-
-        We need t3 within the cap, so patch provocation_cap to return 3.
-        """
+    def test_berserk_tier_is_chosen_not_rolled(self):
+        """A Berserk tier carries its severity even on the best outcome."""
         with patch("world.magic.services.fury.provocation_cap", return_value=3):
-            res = resolve_fury(
-                character=self.source_sheet.character,
-                tier=self.t3,
-                anchor=self.anchor_sheet,
-                check_result=_FakeCheck(success_level=1),
-            )
-        # t3.lucid_grade_floor=3, success_level=1 < 3 → berserk
+            res = self._resolve(self.t3, self.success)
         self.assertEqual(res.berserk_severity, 5)
 
-    def test_control_penalty_on_realized_tier(self):
-        """control_penalty comes from the realized (possibly clamped) tier."""
-        res = resolve_fury(
-            character=self.source_sheet.character,
-            tier=self.t1,
-            anchor=self.anchor_sheet,
-            check_result=_FakeCheck(success_level=5),
-        )
-        self.assertEqual(res.control_penalty, self.t1.control_penalty)
+    def test_non_berserk_tier_never_berserks_on_a_bad_roll(self):
+        self.assertEqual(self._resolve(self.t1, self.unshared).berserk_severity, 0)
 
 
 class ProvocationEaseTests(TestCase):
@@ -260,5 +230,38 @@ class ProvocationCapReadsOwnSideTests(TestCase):
 
 
 class _FakeCheck:
-    def __init__(self, success_level):
-        self.success_level = success_level
+    def __init__(self, outcome):
+        self.outcome = outcome
+        self.success_level = outcome.success_level
+
+
+class FullTradePreviewTests(TestCase):
+    """The picker's "up to" figure uses the highest authored share, not 100% (#4738)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        FuryConfigFactory(bonus_scale_per_cap_point=10)
+        config = get_strain_config()
+        config.intensity_per_control_surrendered = Decimal("1.50")
+        config.save()
+        cls.tier = FuryTierFactory(name="Seething", depth=1, control_surrendered=10)
+
+    def test_no_share_rows_preview_nothing(self):
+        from world.magic.services.fury import full_trade_intensities
+
+        self.assertEqual(full_trade_intensities([self.tier]), {self.tier.pk: 0})
+
+    def test_preview_uses_the_highest_authored_share(self):
+        from world.magic.services.fury import full_trade_intensities
+
+        FuryDegreeShareFactory(
+            outcome_tier=CheckOutcomeFactory(name="Partial", success_level=0),
+            intensity_percent=40,
+        )
+        FuryDegreeShareFactory(
+            outcome_tier=CheckOutcomeFactory(name="Success", success_level=1),
+            intensity_percent=80,
+        )
+        # 10 x 1.5 = 15 at no cap; x 80% = 12. Cap 2 scales by 1.2: 18 x 80% = 14.4 -> 14.
+        self.assertEqual(full_trade_intensities([self.tier]), {self.tier.pk: 12})
+        self.assertEqual(full_trade_intensities([self.tier], 2), {self.tier.pk: 14})

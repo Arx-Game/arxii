@@ -74,6 +74,7 @@ CONFIG_TABLE_MODELS = (
     # world/magic/models/fury.py
     "FuryTier",
     "FuryConfig",
+    "FuryDegreeShare",
     # world/magic/models/aura.py
     "AuraAffinityThreshold",
     # world/magic/models/technique_builder.py

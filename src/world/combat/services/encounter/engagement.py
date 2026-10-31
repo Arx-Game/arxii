@@ -28,6 +28,25 @@ def _ensure_combat_engagement(participant: CombatParticipant) -> None:
     )
 
 
+def engagement_of_any_type_for(  # noqa: OBJECTDB_PARAM - the reverse accessor lives on ObjectDB
+    character: ObjectDB,
+) -> CharacterEngagement | None:
+    """The character's live ``CharacterEngagement`` whatever its type, or None (#4738).
+
+    Fury lands its trade on whatever engagement she holds (a challenge or mission row
+    stays in place when combat starts), so the Pressure surfaces read it here rather
+    than through ``active_combat_engagement_for``. Same cached reverse accessor; a
+    pk-less engagement is a row deleted through a queryset.
+    """
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    try:
+        engagement = character.engagement
+    except (AttributeError, CharacterEngagement.DoesNotExist):
+        return None
+    return None if engagement.pk is None else engagement
+
+
 def active_combat_engagement_for(  # noqa: OBJECTDB_PARAM
     character: ObjectDB,
 ) -> CharacterEngagement | None:

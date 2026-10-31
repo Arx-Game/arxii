@@ -214,6 +214,9 @@ class CastTechniqueAction(Action):
         gate = self._combat_soulfray_gate(ctx, technique_id, kwargs)
         if gate is not None:
             return gate
+        fury_refusal = self._combat_fury_cap_refusal(ctx, kwargs)
+        if fury_refusal is not None:
+            return fury_refusal
 
         # Commit an optional thread pull at declaration time.
         # resolve_pull_from_kwargs normalises both the telnet path (pre-built
@@ -266,6 +269,38 @@ class CastTechniqueAction(Action):
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _combat_fury_cap_refusal(ctx: Any, kwargs: dict[str, Any]) -> ActionResult | None:
+        """Refuse a Fury tier deeper than the anchor's provocation cap (#4738).
+
+        Mirrors the scene serializer's ``_cap_fury_by_provocation`` with the same message,
+        so the player learns it at declaration instead of finding a shallower tier (and
+        no Berserk) at resolution. Nothing is recorded or charged.
+        """
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is None:
+            return None
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.magic.models import FuryTier  # noqa: PLC0415
+        from world.magic.services.fury import (  # noqa: PLC0415
+            fury_over_cap_message,
+            provocation_cap,
+        )
+
+        tier = FuryTier.objects.filter(pk=fury_commitment_id).first()
+        if tier is None:
+            return ActionResult(success=False, message="Unknown Fury tier.")
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        anchor = (
+            CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+            if fury_anchor_id is not None
+            else None
+        )
+        cap = provocation_cap(ctx.participant.character_sheet, anchor)
+        if cap < tier.depth:
+            return ActionResult(success=False, message=fury_over_cap_message(tier, cap))
+        return None
 
     @staticmethod
     def _combat_soulfray_gate(

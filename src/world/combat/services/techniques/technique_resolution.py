@@ -91,7 +91,7 @@ def resolve_combat_technique(
     from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services import use_technique  # noqa: PLC0415
-    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+    from world.magic.services.fury import fury_cast_for  # noqa: PLC0415
 
     encounter = participant.encounter
     pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
@@ -111,7 +111,8 @@ def resolve_combat_technique(
         action.focused_action, participant.character_sheet.character, targets
     )
 
-    fury_res = run_fury_for_action(
+    # Runs inside use_technique, after its gates, so only a cast that goes off pays (#4738).
+    fury = fury_cast_for(
         character=participant.character_sheet.character,
         fury_commitment=action.fury_commitment,
         fury_anchor=action.fury_anchor,
@@ -138,12 +139,8 @@ def resolve_combat_technique(
         targets=targets,
         lethal=encounter.is_lethal,
         cast_check=cast_check,
-        control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=(
-            (fury_res.intensity_bonus if fury_res else 0)
-            + sig_intensity_delta
-            + _vulnerability_intensity_bonus(action)
-        ),
+        fury=fury,
+        power_intensity_bonus=sig_intensity_delta + _vulnerability_intensity_bonus(action),
         # #2536 Task 4: thread the live round context so situational-perk
         # POWER_BONUS providers can read combat-positioning situations
         # (AT_RANGE/IN_MELEE/SURROUNDED/...). Cheap to build — CombatRoundContext
@@ -160,5 +157,5 @@ def resolve_combat_technique(
     )
 
     return _build_combat_result(
-        technique_use_result, resolver, fury_committed=fury_res.realized_tier if fury_res else None
+        technique_use_result, resolver, fury_committed=fury.realized_tier if fury else None
     )

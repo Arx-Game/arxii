@@ -413,6 +413,7 @@ class StrainConfigAdmin(admin.ModelAdmin):
         "diminishing_floor",
         "burn_per_intensity",
         "engagement_share_percent",
+        "intensity_per_control_surrendered",
         "strain_check_type",
         "updated_at",
     ]

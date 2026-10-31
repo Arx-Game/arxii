@@ -827,6 +827,28 @@ def _probe_strain_burn_reach_tiers() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_fury_degree_shares() -> ProbeResult:
+    """Every CheckOutcome tier must have a FuryDegreeShare row (#4738).
+
+    A Fury control roll that lands on a tier without a row buys no intensity: the
+    character still surrenders the tier's control and gets nothing for it. Tiers are
+    matched by FK (the drift correction probe's shape), never by name; names only label
+    what is missing.
+    """
+    from world.magic.models import FuryDegreeShare  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    missing = tuple(
+        CheckOutcome.objects.exclude(pk__in=FuryDegreeShare.objects.values("outcome_tier_id"))
+        .order_by("success_level", "name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"No FuryDegreeShare row for outcome tier(s): {', '.join(missing)}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_audere_condition_shape() -> ProbeResult:
     """Audere and Audere Majora must outlast their own round countdown and defer death.
 
@@ -1602,6 +1624,62 @@ def _probe_berserk_condition() -> ProbeResult:
         None if config is None else config.berserk_condition_id,
         config_label="Fury configuration",
         field_label="Berserk condition",
+    )
+
+
+def _probe_berserk_disengage_penalty() -> ProbeResult:
+    """Berserk carries a penalty against both flee and parley (#4738).
+
+    A Berserk character may flee and parley and rolls them with whatever
+    ConditionCheckModifier staff authored on the Berserk template, at template level or
+    on any of its stages. A modifier counts when its value is negative and it reaches the
+    roll: authored against the check type itself or against that check type's category
+    (`collect_check_modifiers` applies both). The two check types are read through their
+    config FKs (`FleeConfig.check_type`, `SocialManeuverConfig.parley_check_type`).
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.combat.models import FleeConfig  # noqa: PLC0415
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+
+    berserk = get_berserk_template()
+    if berserk is None:
+        return ProbeResult(
+            present=False,
+            detail="Berserk cannot be found, so it cannot carry a flee or parley penalty.",
+        )
+    flee = FleeConfig.objects.cached_singleton()
+    social = _social_maneuver_config()
+    wanted = {
+        "flee": None if flee is None else flee.check_type,
+        "parley": None if social is None else social.parley_check_type,
+    }
+    check_types = [ct for ct in wanted.values() if ct is not None]
+    penalties = list(
+        ConditionCheckModifier.objects.filter(
+            Q(condition=berserk) | Q(stage__condition=berserk),
+            Q(check_type__in=check_types)
+            | Q(check_category_id__in=[ct.category_id for ct in check_types]),
+            modifier_value__lt=0,
+        ).values_list("check_type_id", "check_category_id")
+    )
+
+    def penalised(check_type) -> bool:
+        return any(
+            type_id == check_type.pk or (type_id is None and category_id == check_type.category_id)
+            for type_id, category_id in penalties
+        )
+
+    missing = [verb for verb, ct in wanted.items() if ct is None or not penalised(ct)]
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            "The Berserk condition has no penalty (a negative check modifier) against the "
+            f"{' or '.join(missing)} check, so a raging character rolls it unpenalised."
+        ),
     )
 
 
@@ -2615,11 +2693,28 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
             ),
             consequence=(
-                "Berserk cannot be found: losing control to Fury or to moon-sensitivity "
-                "applies no Berserk condition, so the forced rampage never fires."
+                "Berserk cannot be found: choosing a Berserk Fury tier or losing control to "
+                "moon-sensitivity applies no Berserk condition, so the forced rampage never "
+                "fires."
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="berserk-disengage-penalty",
+            label="Berserk carries a check modifier against fleeing and against parley",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/combat/services/declarations/flee.py _resolve_flee(); "
+                "world/combat/services/declarations/social_check.py roll_social_check()"
+            ),
+            consequence=(
+                "A raging character flees and parleys at full strength: Berserk refuses "
+                "neither, so only an authored penalty on the Berserk condition makes the "
+                "rage cost them."
+            ),
+            probe=CustomProbe(fn=_probe_berserk_disengage_penalty),
+            admin_model="ConditionTemplate",
         ),
         ContentDependency(
             key="social-maneuver-taunt-check",
@@ -4765,6 +4860,35 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_strain_burn_reach_tiers),
             admin_model="StrainBurnReach",
+        ),
+        ContentDependency(
+            key="fury-degree-shares",
+            label="Fury degree share per outcome tier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/fury.py fury_intensity_for()",
+            consequence=(
+                "A Fury control roll that lands on a tier with no FuryDegreeShare row buys "
+                "no intensity: the character surrenders control for nothing."
+            ),
+            probe=CustomProbe(fn=_probe_fury_degree_shares),
+            admin_model="FuryDegreeShare",
+        ),
+        ContentDependency(
+            key="fury-intensity-per-control",
+            label="Intensity per control surrendered to Fury",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/fury.py fury_intensity_for()",
+            consequence=(
+                "Surrendering control to Fury buys no intensity at any roll: the trade is all cost."
+            ),
+            probe=FilteredRowProbe(
+                label="StrainConfig",
+                filters=(("intensity_per_control_surrendered__gt", 0),),
+                absent_detail=(
+                    "StrainConfig's intensity per control surrendered is 0 (or there is no "
+                    "StrainConfig row)."
+                ),
+            ),
         ),
         ContentDependency(
             key="corruption-config",

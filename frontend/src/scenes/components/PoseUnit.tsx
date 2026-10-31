@@ -20,7 +20,7 @@ import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
 import { NominateButton } from '@/components/NominateButton';
-import { PersonaMenu } from './PersonaMenu';
+import { PersonaMenu, type PersonaMenuProps } from './PersonaMenu';
 import { ActionResult } from './ActionResult';
 import { ActorLine } from './ActorLine';
 import { NarratedEventTag } from './NarratedEventTag';
@@ -479,6 +479,24 @@ export function PoseUnit({
     />
   );
   const posedAt = new Date(interaction.timestamp);
+  // The play menu (#4128): on the avatar and, since #4791, on the name that
+  // opens the line, so both carry the same Reply, Kudos and persona items. A
+  // companion pose's name is the companion's, and its menu is the owner's, as
+  // the avatar's is (#3294: a companion has no face or menu of its own).
+  const playMenu: Omit<PersonaMenuProps, 'children'> = {
+    personaId: interaction.persona.id,
+    personaName: interaction.persona.name,
+    thumbnailUrl: interaction.persona.thumbnail_url,
+    leftClick: true,
+    contextMenu: false,
+    poseActions: {
+      onReply: onReply ? () => onReply(interaction) : undefined,
+      onKudos: kudos.give,
+      kudosDisabled: !kudos.canGive,
+    },
+    onAttachAction,
+  };
+  const addTarget = onAddTarget ? () => onAddTarget(interaction.persona.name) : undefined;
   return (
     <div
       className="group relative -mx-2 rounded-md py-1 pl-2 pr-20 [display:flow-root] hover:bg-muted/40"
@@ -490,27 +508,9 @@ export function PoseUnit({
         className="float-left mr-2 flex"
         data-testid="pose-avatar"
         data-pose-avatar
-        onDoubleClick={onAddTarget ? () => onAddTarget(interaction.persona.name) : undefined}
+        onDoubleClick={addTarget}
       >
-        {readOnly ? (
-          avatar
-        ) : (
-          <PersonaMenu
-            personaId={interaction.persona.id}
-            personaName={interaction.persona.name}
-            thumbnailUrl={interaction.persona.thumbnail_url}
-            leftClick
-            contextMenu={false}
-            poseActions={{
-              onReply: onReply ? () => onReply(interaction) : undefined,
-              onKudos: kudos.give,
-              kudosDisabled: !kudos.canGive,
-            }}
-            onAttachAction={onAttachAction}
-          >
-            {avatar}
-          </PersonaMenu>
-        )}
+        {readOnly ? avatar : <PersonaMenu {...playMenu}>{avatar}</PersonaMenu>}
       </span>
       <time
         dateTime={interaction.timestamp}
@@ -544,6 +544,15 @@ export function PoseUnit({
             line={interaction.line}
             content={interaction.content}
             actorName={interaction.attributed_companion?.name ?? interaction.persona.name}
+            renderName={
+              readOnly
+                ? undefined
+                : (name) => (
+                    <span data-testid="pose-actor" data-pose-actor onDoubleClick={addTarget}>
+                      <PersonaMenu {...playMenu}>{name}</PersonaMenu>
+                    </span>
+                  )
+            }
           />
         </p>
       </div>

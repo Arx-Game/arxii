@@ -11,6 +11,11 @@ function Line({ enabled = true }: { enabled?: boolean }) {
       <span data-testid="avatar" data-pose-avatar>
         N
       </span>
+      <p>
+        <span data-testid="name" data-pose-actor>
+          Nyx
+        </span>
+      </p>
       <p>Nyx glances toward the noise.</p>
       {/* The avatar's play menu and its dialogs portal out of the line; React
           still bubbles their events through here. */}
@@ -63,6 +68,16 @@ describe('useLineGestures (#4128)', () => {
     fireEvent.pointerDown(screen.getByTestId('avatar'), { button: 2, clientX: 8, clientY: 9 });
     expect(onMenu).toHaveBeenCalledWith(8, 9);
     fireEvent.pointerUp(screen.getByTestId('avatar'), { button: 2 });
+
+    expect(onFold).not.toHaveBeenCalled();
+  });
+
+  it('a right-click on the name that opens the line is the menu at once, like the avatar (#4791)', () => {
+    render(<Line />);
+
+    fireEvent.pointerDown(screen.getByTestId('name'), { button: 2, clientX: 18, clientY: 9 });
+    expect(onMenu).toHaveBeenCalledWith(18, 9);
+    fireEvent.pointerUp(screen.getByTestId('name'), { button: 2 });
 
     expect(onFold).not.toHaveBeenCalled();
   });

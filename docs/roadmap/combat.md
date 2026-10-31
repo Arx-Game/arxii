@@ -568,7 +568,15 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `combat digdeep` rolls the staff-authored `DUG_DEEP` tuning's check and raises the player's
   own intensity by the outcome's band, once a round, for configured fatigue or a free dig deep
   an ally's successful Rally granted. Inert until staff author the `DUG_DEEP` tuning and
-  bands. Surrendering control (part B) is not built.
+  bands.
+- **Surrendering control to Fury (#4738 part B), journey-proven
+  (`test_surrendering_control_to_fury_journeys`).** A Fury tier is a preset amount of control
+  surrendered for the rest of the engagement; the control roll's outcome picks the share
+  (`FuryDegreeShare`) of the trade it buys (`StrainConfig.intensity_per_control_surrendered`,
+  scaled by the anchor's cap). The trade lands on `CharacterEngagement`, and the cast it was
+  declared with already channels it. Berserk tiers are chosen, never rolled into. Inert until
+  staff set the rate and the share rows (Required content lists both). Still to come: the
+  web/telnet surfaces in the new terms. Berserk now penalises flee/parley instead of refusing: they roll with the Berserk template's authored check modifiers (Required content `berserk-disengage-penalty`), and only leaving the encounter is refused.
 - **Rolled surges (#4737), journey-proven (`test_surge_rolls_journeys`,
   `test_taunt_targets_journeys`).** An NPC taunt entry surges a player character through a
   Composure roll with degrees (a better result surges more, the roll line reaches only that

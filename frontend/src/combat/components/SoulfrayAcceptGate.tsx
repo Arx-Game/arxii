@@ -14,7 +14,8 @@ import { cn } from '@/lib/utils';
 interface SoulfrayAcceptGateProps {
   warning: SoulfrayWarningData;
   techniqueName: string;
-  animaCost: number;
+  /** The cast's server-computed anima cost (`cast_preview`, #4799); null when unknown. */
+  animaCost: number | null;
   accepted: boolean;
   onAcceptChange: (v: boolean) => void;
   disabled?: boolean;
@@ -35,15 +36,27 @@ export function SoulfrayAcceptGate({
       data-testid="soulfray-accept-gate"
       className={cn(
         'rounded-lg border p-3',
-        isDangerous ? 'border-red-500 bg-red-950/50' : 'border-amber-500 bg-amber-950/50'
+        isDangerous
+          ? 'border-red-500 bg-red-100 dark:bg-red-950/50'
+          : 'border-amber-500 bg-amber-100 dark:bg-amber-950/50'
       )}
     >
-      <h3 className={cn('mb-1 text-sm font-bold', isDangerous ? 'text-red-400' : 'text-amber-400')}>
+      <h3
+        className={cn(
+          'mb-1 text-sm font-bold',
+          isDangerous ? 'text-red-700 dark:text-red-400' : 'text-amber-800 dark:text-amber-400'
+        )}
+      >
         {isDangerous ? 'DANGER: ' : ''}Soulfray Warning: {warning.stage_name}
       </h3>
-      <p className="mb-1 text-xs text-gray-300">{warning.stage_description}</p>
-      <p className="mb-2 text-xs text-gray-400">
-        Casting <strong>{techniqueName}</strong> will cost <strong>{animaCost} anima</strong> and
+      <p className="mb-1 text-xs text-gray-700 dark:text-gray-300">{warning.stage_description}</p>
+      <p className="mb-2 text-xs text-gray-700 dark:text-gray-400">
+        Casting <strong>{techniqueName}</strong>{' '}
+        {animaCost !== null && (
+          <>
+            will cost <strong>{animaCost} anima</strong> and{' '}
+          </>
+        )}
         may worsen your condition.
       </p>
       <label className="flex items-center gap-2 text-xs">

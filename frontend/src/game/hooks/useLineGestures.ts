@@ -11,10 +11,17 @@ export const HOLD_MS = 350;
  */
 const PRESS_CONTEXTMENU_MS = 1000;
 
+/**
+ * The parts of a line that carry the play menu on their left button: the
+ * avatar and, since #4791, the name that opens the line. A right-click on
+ * either is the sorting menu at once, never a fold.
+ */
+const PLAY_MENU_PARTS = '[data-pose-avatar], [data-pose-actor]';
+
 export interface LineGestureOptions {
   /** A quick right-click on the text: fold the line, or unfold a folded one. */
   onFold: () => void;
-  /** A held press on the text, or a right-click on the avatar: the sorting menu, at the pointer. */
+  /** A held press on the text, or a right-click on the avatar or name: the sorting menu, at the pointer. */
   onMenu: (clientX: number, clientY: number) => void;
   /** False for a view that reads history: no gesture does anything. */
   enabled?: boolean;
@@ -78,7 +85,8 @@ function releaseSelection(element: HTMLElement): void {
  * The right button and the long-press on a feed line (#4128): the information
  * flow. A quick right-click on the text folds the line (and unfolds a folded
  * one); holding it opens the sorting menu; a right-click on the avatar
- * (`[data-pose-avatar]`) opens the menu at once; a touch held for the same
+ * (`[data-pose-avatar]`) or on the name that opens the line
+ * (`[data-pose-actor]`, #4791) opens the menu at once; a touch held for the same
  * time is the menu too, and a plain tap is nothing, so scrolling on a phone
  * never folds. The browser's own context menu is suppressed for every press
  * that starts on the line; a `contextmenu` that arrives with no press (the
@@ -89,7 +97,8 @@ function releaseSelection(element: HTMLElement): void {
  * play menu, Look, Give mission) bubble back through React; none of them is a
  * gesture on the line.
  *
- * Left-click is play flow and is not read here: the avatar's own menu takes it.
+ * Left-click is play flow and is not read here: the avatar's and the name's own
+ * menu takes it.
  */
 export function useLineGestures({
   onFold,
@@ -116,10 +125,10 @@ export function useLineGestures({
       if (!right && !touch) return;
       if (right) swallowPressContextMenu();
       const target = event.target as HTMLElement;
-      const onAvatar = Boolean(target.closest('[data-pose-avatar]'));
-      if (onAvatar) {
-        // The avatar's left-click and tap belong to its own menu; only its
-        // right-click is ours.
+      const onPlayMenuPart = Boolean(target.closest(PLAY_MENU_PARTS));
+      if (onPlayMenuPart) {
+        // The avatar's and the name's left-click and tap belong to their own
+        // menu; only their right-click is ours.
         if (right) onMenu(event.clientX, event.clientY);
         return;
       }
@@ -157,8 +166,7 @@ export function useLineGestures({
       // A press in progress (a touch being held) is already handled; with none,
       // this came from the keyboard: the menu opens under the focused element.
       if (pressRef.current) return;
-      const anchor =
-        (event.target as HTMLElement).closest('[data-pose-avatar]') ?? event.currentTarget;
+      const anchor = (event.target as HTMLElement).closest(PLAY_MENU_PARTS) ?? event.currentTarget;
       const rect = anchor.getBoundingClientRect();
       onMenu(rect.left, rect.bottom);
     },
