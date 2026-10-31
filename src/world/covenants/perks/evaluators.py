@@ -44,12 +44,19 @@ from world.covenants.perks.constants import Situation, SituationOriginSide
 from world.covenants.perks.context import SituationContext, SituationParams
 
 if TYPE_CHECKING:
+    from django.db.models import Q
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
-    from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+    from world.combat.models import (
+        CombatEncounter,
+        CombatOpponent,
+        CombatParticipant,
+        CombatRoundAction,
+    )
     from world.conditions.models import ConditionInstance
     from world.magic.types.aura import ActingAura
+    from world.mechanics.models import Property
 
 SITUATION_EVALUATORS: dict[str, Callable[[SituationContext, SituationParams], bool]] = {}
 
@@ -993,26 +1000,97 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
     ).exists()
 
 
+def _holder_sheet_ids_on_opponent(
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    subject_participant: CombatParticipant,
+) -> set[int]:
+    """Sheet ids of every PC holding *opponent* by any of the three hold shapes.
+
+    The shapes (#4759 slice 3 added the last two):
+
+    - an ACTIVE ``EngagementLock`` on the opponent;
+    - an active (unresolved, unsuppressed) clash-lock condition
+      (``ConditionTemplate.is_clash_lock``) on the opponent's ObjectDB, read
+      through ``ConditionInstance.source_character``. CharacterSheet shares
+      ObjectDB's pk, so the source's id IS the sheet id; an NPC source simply
+      matches no covenant role later;
+    - an ACTIVE LOCK/SUSTAINING ``Clash`` on the opponent (the PCs hold, the NPC
+      breaks; ESCAPING is the NPC holding a PC and does not count), through its
+      ``initiator`` or any ``ClashContribution`` to it.
+
+    The subject is excluded from every shape. Four queries, fixed: one per
+    shape, the clash shape split into initiators and contributors.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        ClashFlavor,
+        ClashStatus,
+        EngagementLockStatus,
+        LockPcRole,
+    )
+    from world.combat.models import Clash, ClashContribution, EngagementLock  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    subject_sheet_id = subject_participant.character_sheet_id
+    sheet_ids: set[int] = set(
+        EngagementLock.objects.filter(
+            encounter=encounter,
+            opponent=opponent,
+            status=EngagementLockStatus.ACTIVE,
+        )
+        .exclude(participant=subject_participant)
+        .values_list("participant__character_sheet_id", flat=True)
+    )
+    if opponent.objectdb_id is not None:
+        sheet_ids.update(
+            ConditionInstance.objects.filter(
+                target_id=opponent.objectdb_id,
+                condition__is_clash_lock=True,
+                resolved_at__isnull=True,
+                is_suppressed=False,
+                source_character__isnull=False,
+            ).values_list("source_character_id", flat=True)
+        )
+    lock_clashes = Clash.objects.filter(
+        encounter=encounter,
+        npc_opponent=opponent,
+        flavor=ClashFlavor.LOCK,
+        lock_pc_role=LockPcRole.SUSTAINING,
+        status=ClashStatus.ACTIVE,
+    )
+    sheet_ids.update(
+        lock_clashes.filter(initiator__isnull=False).values_list("initiator_id", flat=True)
+    )
+    sheet_ids.update(
+        ClashContribution.objects.filter(clash_round__clash__in=lock_clashes).values_list(
+            "character_id", flat=True
+        )
+    )
+    sheet_ids.discard(subject_sheet_id)
+    return sheet_ids
+
+
 @register(Situation.ENEMY_HELD_BY_ALLY)
 def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
-    """A covenant-mate of the holder holds an active EngagementLock on the
-    opponent the subject is attacking this round.
+    """A covenant-mate of the holder holds the opponent the subject is attacking
+    this round.
 
     Reads the SUBJECT's declared ``CombatRoundAction.focused_opponent_target``
-    (the NPC the subject is attacking), then checks whether a covenant-mate
-    of the holder has an active ``EngagementLock`` on that opponent.
+    (the NPC the subject is attacking), then checks whether a covenant-mate of
+    the holder holds that opponent by an engagement lock, a clash-lock
+    condition the mate laid, or a LOCK clash the mate started or contributed to
+    (#4759 slice 3; see ``_holder_sheet_ids_on_opponent``).
 
     Mate-scoping mirrors ``ally_intercepted_for_me``: a candidate counts if
     they hold a non-departed ``CharacterCovenantRole`` in a covenant the
     holder is also actively engaged in. The subject themself is excluded.
 
-    Data source, verified: ``CombatRoundAction`` (``world/combat/models.py``)
-    filtered to the SUBJECT's encounter + current ``round_number`` +
-    ``focused_opponent_target_id`` + ``EngagementLock`` ACTIVE on that
-    opponent. Two queries: the subject's declared action + one batched
-    ``CharacterCovenantRole`` membership query. Reads ``holder`` +
-    ``resolution``; False outside combat or when the subject has no declared
-    opponent target. No params (absent from ``SITUATION_PARAM_SPECS``).
+    Data source, verified: the subject's declared action (one query), the
+    four hold-shape reads, and one batched ``CharacterCovenantRole``
+    membership query over every candidate. Six queries, fixed, plus the
+    companion bridge below. Reads ``holder`` + ``resolution``; False outside
+    combat or when the subject has no declared opponent target. No params
+    (absent from ``SITUATION_PARAM_SPECS``).
     """
     participant = _resolution_participant(ctx.resolution)
     if participant is None or ctx.holder is None:
@@ -1025,41 +1103,24 @@ def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool: 
     if not holder_covenant_ids:
         return False
 
-    from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
-    from world.combat.models import CombatRoundAction, EngagementLock  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
 
     encounter = participant.encounter
 
-    subject_action = CombatRoundAction.objects.filter(
-        participant=participant,
-        round_number=encounter.round_number,
-    ).first()
-    if subject_action is None or subject_action.focused_opponent_target_id is None:
+    target_opponent = _subject_focused_opponent(participant)
+    if target_opponent is None:
         return False
+    target_opponent_id = target_opponent.pk
 
-    target_opponent_id = subject_action.focused_opponent_target_id
-
-    locks = list(
-        EngagementLock.objects.filter(
-            encounter=encounter,
-            opponent_id=target_opponent_id,
-            status=EngagementLockStatus.ACTIVE,
-        )
-        .exclude(participant=participant)
-        .select_related("participant__character_sheet")
-    )
-    if not locks:
-        return False
-
-    mate_sheet_ids = set(
-        CharacterCovenantRole.objects.filter(
-            character_sheet_id__in=[lock.participant.character_sheet_id for lock in locks],
+    candidate_sheet_ids = _holder_sheet_ids_on_opponent(encounter, target_opponent, participant)
+    if (
+        candidate_sheet_ids
+        and CharacterCovenantRole.objects.filter(
+            character_sheet_id__in=candidate_sheet_ids,
             covenant_id__in=holder_covenant_ids,
             left_at__isnull=True,
-        ).values_list("character_sheet_id", flat=True)
-    )
-    if any(lock.participant.character_sheet_id in mate_sheet_ids for lock in locks):
+        ).exists()
+    ):
         return True
 
     # Companion-as-mate bridge: a companion ordered ATTACK_TARGET on the
@@ -1299,29 +1360,172 @@ def target_is_marked_by_ally(ctx: SituationContext, params: SituationParams) -> 
     return any(mark.participant.character_sheet_id in mate_sheet_ids for mark in marks)
 
 
-# --- #4759 slice 1: authorable now, evaluated in slice 3 ---------------------
-# Slice 1 of #4759 adds these three situations so staff can author perk and
-# added-effect rows against them. Their real evaluators are slice 3's work
-# (``covenants/perks/evaluators.py``); until it lands each one never holds, so
-# an authored row stays off rather than raising a KeyError at resolution.
+# --- #4759 slice 3: situations that read the state a target is in ----------
+
+
+def _subject_focused_opponent(participant: CombatParticipant) -> CombatOpponent | None:
+    """The opponent the SUBJECT declared as this round's focused target, or None.
+
+    Same read as ``target_is_boss``: the subject's ``CombatRoundAction`` for the
+    encounter's current ``round_number``, with the opponent ``select_related``.
+    One query.
+    """
+    from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+    subject_action = (
+        CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=participant.encounter.round_number,
+        )
+        .select_related("focused_opponent_target")
+        .first()
+    )
+    if subject_action is None:
+        return None
+    return subject_action.focused_opponent_target
+
+
+def _target_bearer_id(ctx: SituationContext) -> int | None:
+    """The ObjectDB id that bears the target's conditions, or None.
+
+    A sheet-backed ``ctx.target`` (a PC, or a sheeted NPC) wins: its character
+    is the bearer. Otherwise, in combat, the bearer is the ObjectDB of the
+    opponent the subject declared as this round's focused target (an NPC
+    ``CombatOpponent`` never populates ``ctx.target``). At most one query.
+    """
+    if ctx.target is not None:
+        return ctx.target.character_id if ctx.target.character_id else None
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return None
+    opponent = _subject_focused_opponent(participant)
+    if opponent is None:
+        return None
+    return opponent.objectdb_id
+
+
+def _carries_property_q(prop: Property) -> Q:
+    """An active condition whose template, or whose current stage, has *prop*."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    return Q(resolved_at__isnull=True, is_suppressed=False) & (
+        Q(condition__properties=prop) | Q(current_stage__properties=prop)
+    )
 
 
 @register(Situation.TARGET_HAS_CONDITION_PROPERTY)
-def target_has_condition_property(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
-    """Never holds until #4759 slice 3 reads the target's condition properties."""
-    return False
+def target_has_condition_property(ctx: SituationContext, params: SituationParams) -> bool:
+    """The target carries an active condition with the row's ``condition_property``,
+    whoever laid it (#4759: "any condition with the Indulgence property").
+
+    The property may sit on the condition's template
+    (``ConditionTemplate.properties``) or on its current stage
+    (``ConditionStage.properties``); either counts. Optional ``count_threshold``
+    is the minimum ``effective_severity`` (stage multiplier applied) the
+    condition must reach; blank means any severity.
+
+    The target is ``ctx.target``'s character when the action has a sheet-backed
+    target, otherwise the subject's declared focused opponent this round (see
+    ``_target_bearer_id``). Required param ``condition_property``: blank means
+    the situation never holds. Data source: ``ConditionInstance`` filtered on
+    the bearer, active (unresolved, unsuppressed) and the property via template
+    or stage, ``select_related("current_stage")`` for the severity read. Two
+    queries at most (the bearer lookup, the condition read). DB-state when a
+    sheet target is given; reads ``resolution`` only for an NPC target.
+    """
+    if params.condition_property is None:
+        return False
+    bearer_id = _target_bearer_id(ctx)
+    if bearer_id is None:
+        return False
+
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    instances = ConditionInstance.objects.filter(
+        _carries_property_q(params.condition_property),
+        target_id=bearer_id,
+    )
+    if params.count_threshold is None:
+        return instances.exists()
+    return any(
+        instance.effective_severity >= params.count_threshold
+        for instance in instances.select_related("current_stage").distinct()
+    )
 
 
 @register(Situation.ENEMIES_WITH_CONDITION_PROPERTY_NEARBY)
-def enemies_with_condition_property_nearby(
-    ctx: SituationContext,  # noqa: ARG001
-    params: SituationParams,  # noqa: ARG001
-) -> bool:
-    """Never holds until #4759 slice 3 reads nearby enemies' condition properties."""
-    return False
+def enemies_with_condition_property_nearby(ctx: SituationContext, params: SituationParams) -> bool:
+    """At least ``count_threshold`` (default 1) enemies near the subject carry an
+    active condition with the row's ``condition_property`` (#4759).
+
+    "Near" is ``surrounded``'s scope: an opponent holding an ACTIVE
+    ``EngagementLock`` on the subject's participant, and still ACTIVE itself.
+    The property may sit on the template or the current stage, as in
+    ``target_has_condition_property``. Required param ``condition_property``.
+
+    Data source: one query. The engaged opponents' ObjectDB ids go in as a
+    subquery, and the ``ConditionInstance`` read counts distinct bearers.
+    Caveat (inherited from ``surrounded``): ``EngagementLock`` only tracks
+    PC-vs-NPC engagement, so this is NPC-opponent-only. False outside combat.
+    """
+    if params.condition_property is None:
+        return False
+    participant = _resolution_participant(ctx.resolution)
+    if participant is None:
+        return False
+
+    from world.combat.constants import EngagementLockStatus, OpponentStatus  # noqa: PLC0415
+    from world.combat.models import EngagementLock  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    nearby_objectdb_ids = EngagementLock.objects.filter(
+        participant=participant,
+        status=EngagementLockStatus.ACTIVE,
+        opponent__status=OpponentStatus.ACTIVE,
+        opponent__objectdb__isnull=False,
+    ).values("opponent__objectdb_id")
+    carrying = (
+        ConditionInstance.objects.filter(
+            _carries_property_q(params.condition_property),
+            target_id__in=nearby_objectdb_ids,
+        )
+        .values("target_id")
+        .distinct()
+        .count()
+    )
+    threshold = params.count_threshold if params.count_threshold is not None else 1
+    return carrying >= threshold
 
 
 @register(Situation.TARGET_LOW_HEALTH)
-def target_low_health(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
-    """Never holds until #4759 slice 3 reads the target's health."""
-    return False
+def target_low_health(ctx: SituationContext, params: SituationParams) -> bool:
+    """The target's health is below the authored (or ``ALLY_LOW_HEALTH_FRACTION``
+    default) fraction (#4759; the target-side mirror of ``ally_low_health``).
+
+    ``threshold_percent`` is an authored percent (25 = "below 25% health"),
+    converted to the 0-1 scale both health reads use. The target is the
+    subject's declared focused opponent this round
+    (``CombatOpponent.health_percentage``); with no such opponent, a
+    sheet-backed ``ctx.target`` is read through its
+    ``CharacterVitals.health_percentage``. One or two queries. False when
+    neither is available.
+    """
+    fraction = (
+        params.threshold_percent / 100
+        if params.threshold_percent is not None
+        else ALLY_LOW_HEALTH_FRACTION
+    )
+    participant = _resolution_participant(ctx.resolution)
+    opponent = _subject_focused_opponent(participant) if participant is not None else None
+    if opponent is not None:
+        return opponent.health_percentage < fraction
+    if ctx.target is None:
+        return False
+
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    try:
+        vitals = ctx.target.vitals
+    except CharacterVitals.DoesNotExist:
+        return False
+    return vitals.health_percentage < fraction
