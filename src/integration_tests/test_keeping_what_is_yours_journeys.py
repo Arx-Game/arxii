@@ -19,8 +19,11 @@ from world.companions.content import ensure_companion_content
 from world.companions.models import Companion, CompanionArchetype
 from world.companions.mount_content import MOUNTED_CONDITION_NAME, ensure_mount_conditions
 from world.conditions.capability_content import AT_WILL_SHIFTING
+from world.conditions.constants import CompulsionResult
 from world.conditions.factories import (
     CapabilityTypeFactory,
+    CompulsionFactory,
+    CompulsionResistBandFactory,
     ConditionCategoryFactory,
     ConditionTemplateFactory,
 )
@@ -60,6 +63,7 @@ from world.ships.models import (
 )
 from world.societies.factories import OrganizationMembershipFactory
 from world.traits.factories import CheckOutcomeFactory
+from world.traits.services import ensure_canonical_check_outcome
 
 
 def fund(character, coppers: int) -> None:
@@ -620,13 +624,18 @@ class TakingAnotherShape(JourneyCase):
         rage = ConditionTemplateFactory(
             name="Rage", category=ConditionCategoryFactory(name="Fury", alters_behavior=True)
         )
+        failure = ensure_canonical_check_outcome("Failure")
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=rage),
+            outcome=failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
         apply_condition(self.ysmay, rage)
         self.assertIn("You assume the Owl.", self.telnet(self.ysmay, "form shift the Owl"))
         self.assertEqual(self._active().alternate_self_id, self.owl.pk)
-        self.assertIn(
-            "You can't revert while not in control of yourself.",
-            self.telnet(self.ysmay, "form revert"),
-        )
+        # The rage is a compulsion now: changing back is a roll, and a failed one holds her.
+        with force_check_outcome(failure):
+            self.assertIn("You cannot change back.", self.telnet(self.ysmay, "form revert"))
         # Wearing the Owl, the Beast's war-shape grants nothing until the Owl is put off.
         profile = FormCombatProfileFactory(form=self.beast_form)
         FormCombatProfileEffectFactory(profile=profile)

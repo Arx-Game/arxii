@@ -196,17 +196,17 @@ class RevertFormEndpointTests(TestCase):
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
 
-    def test_revert_blocked_when_not_in_control(self):
+    def test_revert_refused_when_the_compulsion_roll_fails(self):
         self._assume()
-        from world.forms.services import RevertBlockedError
+        from world.combat.types import CompulsionAttempt
 
-        with patch(
-            "world.forms.services.revert_alternate_self",
-            side_effect=RevertBlockedError,
-        ):
+        refused = CompulsionAttempt(
+            allowed=False, line="Mira tries to change back against Berserk.", check_result=None
+        )
+        with patch("world.forms.services.attempt_revert_form", return_value=refused):
             resp = self._post(puppet=self.character)
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("not in control", str(resp.data))
+        self.assertIn("You cannot change back.", str(resp.data))
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt)
 

@@ -21,6 +21,9 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.conditions.constants import CompulsionResult
+from world.conditions.factories import CompulsionFactory, CompulsionResistBandFactory
 from world.conditions.services import apply_condition, has_condition
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -33,8 +36,10 @@ from world.magic.factories import (
     BerserkConditionTemplateFactory,
     RestoreToSenseActionTemplateFactory,
 )
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.traits.services import ensure_canonical_check_outcome
 
 
 def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution:
@@ -83,7 +88,17 @@ class AltSelfRageEndToEndTests(TestCase):
         cls.alt_self = AlternateSelfFactory(character=cls.sheet, persona=cls.alt_persona)
 
         # REAL Berserk condition + Restore-to-Sense calm-down action.
+        # Only a player character rolls against a compulsion; an NPC changes back freely.
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=cls.sheet), end_date=None
+        )
         cls.berserk = BerserkConditionTemplateFactory()
+        cls.failure = ensure_canonical_check_outcome("Failure")
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=cls.berserk),
+            outcome=cls.failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
         cls.check_cat = CheckCategoryFactory(name="Social")
         cls.check_type = CheckTypeFactory(name="Willpower", category=cls.check_cat)
         RestoreToSenseActionTemplateFactory(check_type=cls.check_type)
@@ -125,7 +140,9 @@ class AltSelfRageEndToEndTests(TestCase):
         self.assertFalse(self.character.sheet_data.in_control)
 
         # 3. Revert is BLOCKED while raging (the headline invariant).
-        revert = RevertFormAction().run(self.character)
+        # The rage is a compulsion (#4802): changing back is a roll, and a failed one holds.
+        with force_check_outcome(self.failure):
+            revert = RevertFormAction().run(self.character)
         self.assertFalse(revert.success, "revert_form must be blocked while raging.")
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt_self)
