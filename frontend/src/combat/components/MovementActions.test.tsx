@@ -143,35 +143,37 @@ describe('MovementActions', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('gives multiple blocked no-location actions distinct rendered identities', () => {
-    const blockedActions = [
-      {
-        ...makeMoveAction(null, 'Step left'),
-        prerequisite_met: false,
-        prerequisite_reasons: ['No movement remaining.'],
+  it('keys each blocked crossing by the challenge on its wall (#4667)', () => {
+    // The server's shape for a gated edge: challenge backend, no place, one challenge per edge.
+    const blocked = (challengeId: number, name: string): PlayerAction => ({
+      ...makeMoveAction(null, `Move to ${name} (blocked: Iron Railing)`),
+      backend: 'challenge',
+      is_movement: true,
+      prerequisite_met: false,
+      prerequisite_reasons: ['Gated by challenge: Iron Railing'],
+      ref: {
+        backend: 'challenge',
+        challenge_instance_id: challengeId,
+        approach_id: null,
+        technique_id: null,
+        registry_key: null,
+        position_id: null,
       },
-      {
-        ...makeMoveAction(null, 'Step right'),
-        prerequisite_met: false,
-        prerequisite_reasons: ['No movement remaining.'],
-      },
-    ];
+    });
 
     render(
       <MovementActions
-        actions={blockedActions}
+        actions={[blocked(91, 'Gallery'), blocked(92, 'Stair')]}
         isLocked={false}
         dispatchAction={vi.fn(okDispatch)}
       />
     );
 
     const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(2);
     expect(buttons.map((button) => button.getAttribute('data-testid'))).toEqual([
-      'move-btn-move_to_position-here-0',
-      'move-btn-move_to_position-here-1',
+      'move-btn-move-here-91',
+      'move-btn-move-here-92',
     ]);
-    expect(new Set(buttons.map((button) => button.getAttribute('data-testid'))).size).toBe(2);
     expect(buttons.every((button) => button.hasAttribute('disabled'))).toBe(true);
   });
 
