@@ -58,9 +58,12 @@ def _pr(  # noqa: PLR0913 - one switch per piece of PR state the watcher reads
     return pr
 
 
-_CHALLENGE = "<!-- evidence-challenge round=1 verdict=open -->\nShow it."
+_CHALLENGE = (
+    "<!-- evidence-challenge round=1 verdict=open -->\nShow it.\n"
+    "To answer, post a PR comment that starts with `<!-- evidence-answer -->`."
+)
 _ANSWER = "<!-- evidence-answer -->\nHere it is."
-_RESOLVED = "<!-- evidence-challenge round=2 verdict=resolved -->\nThanks."
+_RESOLVED = "<!-- evidence-challenge round=2 verdict=satisfied -->\nThanks."
 
 
 def _run(polls: list, cap: int = 3600) -> subprocess.CompletedProcess[str]:
@@ -137,6 +140,15 @@ class WatchMergeTests(unittest.TestCase):
     def test_a_new_round_after_the_answer_needs_an_answer(self) -> None:
         result = _run([_pr(armed=True, comments=[_CHALLENGE, _ANSWER, _CHALLENGE])])
         self.assertEqual(result.returncode, 10, result.stderr)
+
+    def test_a_challenge_quoting_the_answer_marker_is_still_open(self) -> None:
+        # The challenger's own instructions quote the answer marker mid-comment.
+        result = _run([_pr(armed=True, comments=[_CHALLENGE])])
+        self.assertEqual(result.returncode, 10, result.stderr)
+
+    def test_a_newer_satisfied_round_clears_an_older_open_one(self) -> None:
+        result = _run([_pr(armed=True, comments=[_CHALLENGE, _RESOLVED])], cap=0)
+        self.assertEqual(result.returncode, 6, result.stderr)
 
     def test_a_resolved_challenge_keeps_waiting(self) -> None:
         result = _run([_pr(armed=True, comments=[_CHALLENGE, _ANSWER, _RESOLVED])], cap=0)

@@ -50,23 +50,27 @@ OWNER="${REPO%%/*}"
 NAME="${REPO##*/}"
 
 # Emit one of: MERGED, CLOSED, CONFLICTING, NEEDS_ANSWER <detail>, UNARMED, WAITING <detail>.
-# An evidence challenge is open when the newest challenge comment says verdict=open and no
-# evidence-answer comment comes after it.
+# An evidence challenge is open when the NEWEST challenge comment (any verdict) says
+# verdict=open and no evidence-answer comment comes after it. Both markers must open the
+# comment: the challenger's own text quotes the answer marker in its instructions.
 poll() {
   local json
   json=$(gh api graphql -f query="$QUERY" -f o="$OWNER" -f r="$NAME" -F p="$PR") || return 1
   jq -r '.data.repository.pullRequest
+    | [(.reviewThreads.nodes // [])[] | select(.isResolved | not)] as $open_threads
+    | ((.comments.nodes // []) | to_entries) as $comments
+    | ([$comments[] | select(.value.body | test("^\\s*<!-- evidence-challenge"))] | last)
+      as $challenge
+    | ([$comments[] | select(.value.body | test("^\\s*<!-- evidence-answer")) | .key]
+       | max // -1) as $answered_at
     | if .state == "MERGED" then "MERGED"
       elif .state == "CLOSED" then "CLOSED"
       elif .mergeStateStatus == "DIRTY" then "CONFLICTING"
-      elif ([(.reviewThreads.nodes // [])[] | select(.isResolved | not)] | length) > 0
-        then "NEEDS_ANSWER \([(.reviewThreads.nodes // [])[] | select(.isResolved | not)] | length) unresolved review thread(s)"
-      elif ([(.comments.nodes // []) | to_entries[]
-              | select(.value.body | test("<!-- evidence-challenge [^>]*verdict=open"))
-              | .key] | max // -1)
-           > ([(.comments.nodes // []) | to_entries[]
-              | select(.value.body | test("<!-- evidence-answer"))
-              | .key] | max // -1)
+      elif ($open_threads | length) > 0
+        then "NEEDS_ANSWER \($open_threads | length) unresolved review thread(s)"
+      elif $challenge != null
+           and ($challenge.value.body | test("verdict=open"))
+           and $challenge.key > $answered_at
         then "NEEDS_ANSWER evidence challenge open"
       elif .mergeQueueEntry != null then "WAITING queued \(.mergeQueueEntry.state) position \(.mergeQueueEntry.position)"
       elif .autoMergeRequest != null then "WAITING armed, review \(.reviewDecision)"
