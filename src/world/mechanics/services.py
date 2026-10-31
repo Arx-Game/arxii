@@ -1150,16 +1150,26 @@ def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
     if not engaged_roles:
         return 0
 
-    configs = VowStatScaling.objects.filter(
-        covenant_role__in=engaged_roles,
-        modifier_target=target,
+    # Threads key on the ANCHOR (parent) role, while an engaged role is the resolved
+    # sub-role once the holder graduates (ADR-0055). A row authored on either the
+    # anchor or the sub-role applies, and both read the thread level from the anchor.
+    applicable_roles = {role.pk for role in engaged_roles}
+    applicable_roles.update(
+        role.parent_role_id for role in engaged_roles if role.parent_role_id is not None
     )
-    if not configs:
-        return 0
+
+    configs = VowStatScaling.objects.filter(
+        covenant_role__in=applicable_roles,
+        modifier_target=target,
+    ).select_related("covenant_role")
     total = 0
+    anchor_levels: dict[int, int] = {}
     for config in configs:
-        thread_level = _covenant_role_thread_level(sheet, config.covenant_role)
-        total += thread_level * config.bonus_per_level
+        role = config.covenant_role
+        anchor = role.parent_role if role.parent_role_id is not None else role
+        if anchor.pk not in anchor_levels:
+            anchor_levels[anchor.pk] = _covenant_role_thread_level(sheet, anchor)
+        total += anchor_levels[anchor.pk] * config.bonus_per_level
     return total
 
 
