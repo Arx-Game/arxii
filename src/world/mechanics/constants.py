@@ -203,6 +203,8 @@ class EffectKind(models.TextChoices):
     PARTIAL_PROTECTION = "partial_protection", "Partial protection"
     MORALE = "morale", "Morale"
     SURGE_INTENSITY = "surge_intensity", "Surge intensity"
+    CONDITION_SEVERITY = "condition_severity", "Condition severity"
+    CONDITION_DURATION = "condition_duration", "Condition duration"
 
 
 MANEUVER_EFFECT_KIND: dict[str, str] = {

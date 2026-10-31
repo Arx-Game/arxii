@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
 from world.contributors.models import CreditedContent
+from world.magic.constants import TechniqueFunction
 from world.mechanics.constants import (
     FAVOR_CATEGORY_NAMES,
     MANEUVER_EFFECT_CATEGORY_NAME,
@@ -250,8 +251,57 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         verbose_name="Scope - kind of effect",
         help_text=(
-            "This kind of effect on every maneuver. Set this or the effect above, not both."
+            "This kind of effect on every maneuver and technique. Set this or the effect "
+            "above, not both."
         ),
+    )
+    # #4822: the technique-side scopes narrow a kind of effect to one technique, one gift,
+    # one technique function, one damage type or one resonance. They combine (all that are
+    # set must hold) and they need the kind (modifier_target_technique_scope_needs_kind).
+    # CASCADE on each FK: clearing one would widen the target to every technique.
+    scope_technique = models.ForeignKey(
+        "arxii.Technique",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="effect_modifier_targets",
+        verbose_name="Scope - technique",
+        help_text="This technique only.",
+    )
+    scope_gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="effect_modifier_targets",
+        verbose_name="Scope - gift",
+        help_text="Every technique of this gift.",
+    )
+    scope_technique_function = models.CharField(
+        max_length=32,
+        choices=TechniqueFunction.choices,
+        blank=True,
+        default="",
+        verbose_name="Scope - technique function",
+        help_text="Every technique that carries this function.",
+    )
+    scope_damage_type = models.ForeignKey(
+        _DAMAGE_TYPE_MODEL_PATH,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="effect_modifier_targets",
+        verbose_name="Scope - damage type",
+        help_text="Damage of this type only (damage effects only).",
+    )
+    scope_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="effect_modifier_targets",
+        verbose_name="Scope - resonance",
+        help_text="Every technique that carries this resonance.",
     )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
@@ -293,11 +343,31 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 ),
                 name="modifier_target_one_scope",
             ),
+            # A technique scope narrows a kind of effect (#4822): with no kind it would
+            # widen to every effect, and it never rides with a single maneuver effect.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(scope_technique__isnull=True)
+                    & models.Q(scope_gift__isnull=True)
+                    & models.Q(scope_technique_function="")
+                    & models.Q(scope_damage_type__isnull=True)
+                    & models.Q(scope_resonance__isnull=True)
+                )
+                | (~models.Q(scope_effect_kind="") & models.Q(scope_maneuver_effect__isnull=True)),
+                name="modifier_target_technique_scope_needs_kind",
+            ),
         ]
 
     class NaturalKeyConfig:
         fields = ["category", "name"]
-        dependencies = ["arxii.ModifierCategory", "arxii.ManeuverEffect"]
+        dependencies = [
+            "arxii.ModifierCategory",
+            "arxii.ManeuverEffect",
+            "arxii.Technique",
+            "arxii.Gift",
+            "arxii.DamageType",
+            "arxii.Resonance",
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"
@@ -323,15 +393,41 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 msg = "This favor category already has its any-being target; name a being."
                 raise ValidationError({"target_being": msg})
 
+    @property
+    def has_technique_scope(self) -> bool:
+        """Whether any of the five technique-side scopes is set (#4822)."""
+        return bool(self._set_technique_scope_fields())
+
+    def _set_technique_scope_fields(self) -> list[str]:
+        """The technique-side scope fields that are set, in the order they are reported."""
+        return [
+            field
+            for field, is_set in (
+                ("scope_technique", self.scope_technique_id is not None),
+                ("scope_gift", self.scope_gift_id is not None),
+                ("scope_technique_function", bool(self.scope_technique_function)),
+                ("scope_damage_type", self.scope_damage_type_id is not None),
+                ("scope_resonance", self.scope_resonance_id is not None),
+            )
+            if is_set
+        ]
+
     def _clean_maneuver_effect_scope(self) -> None:
         """A maneuver-effect target names exactly one scope; no other category names any."""
         has_effect = self.scope_maneuver_effect_id is not None
         has_kind = bool(self.scope_effect_kind)
+        technique_scope = self._set_technique_scope_fields()
         if self.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
+            if technique_scope:
+                msg = "Only a maneuver effect target names a technique scope."
+                raise ValidationError({technique_scope[0]: msg})
             if has_effect or has_kind:
                 msg = "Only a maneuver effect target names an effect or a kind of effect."
                 field = "scope_maneuver_effect" if has_effect else "scope_effect_kind"
                 raise ValidationError({field: msg})
+            return
+        if technique_scope:
+            self._clean_technique_scope(has_effect=has_effect, has_kind=has_kind)
             return
         if has_effect and has_kind:
             msg = "Set the effect or the kind of effect, not both."
@@ -339,6 +435,18 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         if not has_effect and not has_kind:
             msg = "A maneuver effect target needs the effect or the kind of effect it scopes to."
             raise ValidationError({"scope_maneuver_effect": msg})
+
+    def _clean_technique_scope(self, *, has_effect: bool, has_kind: bool) -> None:
+        """A technique scope narrows a kind of effect (#4822), never one maneuver's effect."""
+        if has_effect:
+            msg = "A technique scope narrows a kind of effect, not one maneuver's effect."
+            raise ValidationError({"scope_maneuver_effect": msg})
+        if not has_kind:
+            msg = "A technique scope needs the kind of effect it narrows."
+            raise ValidationError({"scope_effect_kind": msg})
+        if self.scope_damage_type_id is not None and self.scope_effect_kind != EffectKind.DAMAGE:
+            msg = "A damage type scope is for damage only."
+            raise ValidationError({"scope_damage_type": msg})
 
     @classmethod
     def get_for_trait(cls, trait: "Trait") -> "ModifierTarget | None":

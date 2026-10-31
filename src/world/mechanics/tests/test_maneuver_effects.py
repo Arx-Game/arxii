@@ -124,5 +124,6 @@ class ModifierTargetFormTests(TestCase):
         assert one.help_text == "This effect only."
         assert kind.label == "Scope - kind of effect"
         assert kind.help_text == (
-            "This kind of effect on every maneuver. Set this or the effect above, not both."
+            "This kind of effect on every maneuver and technique. Set this or the effect "
+            "above, not both."
         )
