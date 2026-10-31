@@ -3059,7 +3059,9 @@ class FleeConfig(SharedMemoryModel):
 
 
 class MovementConfig(SharedMemoryModel):
-    """Singleton (pk=1): authored movement wiring and reaction tuning (#4663, #4676).
+    """Singleton (pk=1): authored movement wiring and reaction and defense tuning.
+
+    #4663, #4676; the mitigation level gap and leak are #4759.
 
     The pass is optional content: read with cached_singleton() and treat DoesNotExist
     as "no pass offered", not an error. The dodge costs and the reaction step fall back
@@ -3091,6 +3093,21 @@ class MovementConfig(SharedMemoryModel):
         help_text=(
             "Roll penalty per reaction already made this round, for dodges, guarding and "
             "catches (#4676). No cap: many reactions in one round become very hard."
+        ),
+    )
+    mitigation_level_gap_cap = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "How many levels an attacker may be above a mitigation defender before part "
+            "of what their armor stops leaks through (#4759)."
+        ),
+    )
+    mitigation_leak_tenths = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MaxValueValidator(10)],
+        help_text=(
+            "How much of what a mitigation defender's armor stops leaks through, in "
+            "tenths (0 to 10), when the attacker is past the level gap (#4759)."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)

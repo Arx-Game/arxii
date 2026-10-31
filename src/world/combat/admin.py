@@ -655,6 +655,8 @@ class MovementConfigAdmin(admin.ModelAdmin):
         "dodge_anima_cost",
         "dodge_fatigue_cost",
         "reaction_difficulty_step",
+        "mitigation_level_gap_cap",
+        "mitigation_leak_tenths",
         "updated_at",
     ]
     autocomplete_fields = ["held_ground_challenge", "updated_by"]

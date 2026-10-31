@@ -10,6 +10,7 @@ the marker once its flow has fired. Spending goes through ``spend_condition_use`
 which leaves a lasting condition alone.
 """
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from flows.consts import FlowActionChoices
@@ -243,6 +244,9 @@ def absorb_pool(*, payload: Any) -> None:
     - Pays reactive_anima_cost (fizzles if unaffordable, narrated by
       ``_try_spend_reactive``, unless the instance is consented (#3573)).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
+      While an NPC blow resolves against a BARRIER defender (#4759), the ward first
+      rolls the attack's defense check (``world.covenants.defense.barrier_absorb_fraction``)
+      and takes only that share of the blow: all, half or none.
     - A once-only (``UNTIL_USED``) barrier soaks one blow and ends through
       ``spend_condition_use`` (#4584), whatever buffer is left, so CONDITION_REMOVED,
       the stories hook and the trigger refresh run as for every other spend.
@@ -262,7 +266,13 @@ def absorb_pool(*, payload: Any) -> None:
     )
     if instance is None or not _try_spend_reactive(instance):
         return
-    soaked = min(instance.absorb_remaining, payload.amount)
+    from world.covenants.defense import barrier_absorb_fraction  # noqa: PLC0415
+
+    # A barrier defender's ward rolls before it absorbs (#4759); otherwise it takes
+    # the whole blow, as it always has.
+    fraction = barrier_absorb_fraction(payload.target)
+    takes = payload.amount if fraction is None else int(Decimal(payload.amount) * fraction)
+    soaked = min(instance.absorb_remaining, takes)
     payload.amount -= soaked
     instance.absorb_remaining -= soaked
     if spend_condition_use(instance):
