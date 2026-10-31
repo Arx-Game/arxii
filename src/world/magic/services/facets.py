@@ -27,11 +27,15 @@ from world.magic.models import Facet, FacetAlias
 
 _NON_LETTERS = re.compile(r"[^a-z ]+")
 _SPACES = re.compile(r" +")
-#: The named relations a merge moves. Hidden relations are identified by their
-#: model and field, since Django gives all related_name="+" relations the same
-#: accessor. A new relation onto Facet must be added here.
+#: The relations a merge moves. A new relation onto Facet must be added to one of
+#: these sets (and to the test that asserts each equals the live one) before any merge
+#: will run. Named relations are keyed by the accessor ``Facet._meta.related_objects``
+#: reports; a ``related_name="+"`` FK has no accessor of its own (every one reports
+#: ``"+"``), so those are keyed by (model label, field name) instead (#4591).
 HANDLED_HIDDEN_RELATIONS: frozenset[tuple[str, str]] = frozenset(
-    {("arxii.ceremonyoffering", "facet")}
+    {
+        ("arxii.ceremonyoffering", "facet"),  # CeremonyOffering.facet: a past offering's match
+    }
 )
 HANDLED_RELATIONS: frozenset[str] = frozenset(
     {
@@ -153,6 +157,28 @@ class FacetMerge:
     dropped: int = 0
 
 
+def live_named_relations() -> set[str]:
+    """The accessor of every named relation onto Facet."""
+    return {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - the relation set is the contract
+
+
+def live_hidden_relations() -> set[tuple[str, str]]:
+    """Every ``related_name="+"`` FK onto Facet, as (model label, field name).
+
+    An M2M's auto-created through table also points at Facet with a hidden FK; that
+    row moves with its M2M, which is a named relation, so it is left out here.
+    """
+    return {
+        (rel.related_model._meta.label_lower, rel.field.name)  # noqa: SLF001 - stable identity
+        for rel in Facet._meta.get_fields(include_hidden=True)  # noqa: SLF001 - hidden ones too
+        if rel.auto_created
+        and not rel.concrete
+        and rel.hidden
+        and not rel.many_to_many
+        and not rel.related_model._meta.auto_created  # noqa: SLF001 - an M2M through table
+    }
+
+
 def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
     """Repoint every binding from each loser to ``winner``, retire the losers as aliases.
 
@@ -160,20 +186,8 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
     item that already carries the winner, a being that already favors it) is dropped
     rather than duplicated. Refuses to start when a relation onto Facet has no handler.
     """
-    live = {rel.get_accessor_name() for rel in Facet._meta.related_objects}  # noqa: SLF001 - relation set is the merge contract
-    hidden_relations = {
-        (rel.field.model._meta.label_lower, rel.field.name)  # noqa: SLF001 - stable identity
-        for rel in Facet._meta.get_fields(include_hidden=True)  # noqa: SLF001 - includes hidden reverse relations
-        if rel.auto_created
-        and not rel.concrete
-        and (rel.one_to_many or rel.one_to_one)
-        and not rel.many_to_many
-        and not rel.field.model._meta.auto_created  # noqa: SLF001 - exclude M2M intermediary relations
-        and rel.get_accessor_name() not in live
-        and rel.field.remote_field.hidden
-    }
-    missing = live - HANDLED_RELATIONS
-    missing_hidden = hidden_relations - HANDLED_HIDDEN_RELATIONS
+    missing = live_named_relations() - HANDLED_RELATIONS
+    missing_hidden = live_hidden_relations() - HANDLED_HIDDEN_RELATIONS
     if missing or missing_hidden:
         detail = (
             f"no merge handler for named relations {sorted(missing)} "
