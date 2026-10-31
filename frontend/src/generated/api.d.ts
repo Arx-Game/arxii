@@ -5892,14 +5892,11 @@ export interface paths {
     /**
      * @description Create, then re-serialize through the prefetch-primed queryset (#3067).
      *
-     *     ``EncounterDetailSerializer``'s nested fields (participants/opponents/
-     *     clashes/etc.) read ``*_cached`` attrs that only exist on instances
-     *     fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
-     *     calls. The bare instance ``perform_create`` leaves on ``serializer``
-     *     doesn't carry them, so DRF's default ``CreateModelMixin.create()``
-     *     (serializing that bare instance) raises ``AttributeError`` — this
-     *     endpoint had no caller before the web GM-start-encounter flow, so the
-     *     gap was never exercised.
+     *     ``EncounterDetailSerializer`` reads the encounter's payload lists
+     *     (``participants_cached`` and the rest). Re-fetching through
+     *     ``_base_queryset()`` fills them and the room's position graph in a few
+     *     batched queries; the bare instance ``perform_create`` leaves would load
+     *     each lazily instead.
      */
     post: operations['combat_create'];
     delete?: never;
@@ -6408,9 +6405,8 @@ export interface paths {
     /**
      * @description Resolve the current round.
      *
-     *     SharedMemoryModel identity map means all .save() calls during
-     *     resolution update the same Python objects in participants_cached
-     *     and opponents_cached — no re-fetch needed.
+     *     Each row resolution saves or deletes pops the encounter's matching list
+     *     (#4784), so the response reloads only the lists that changed.
      */
     post: operations['combat_resolve_round_create'];
     delete?: never;
@@ -33458,9 +33454,9 @@ export interface components {
       /** @description Minutes before auto-resolving in timed mode. */
       pace_timer_minutes?: number;
       is_paused?: boolean;
-      /** @description Return participant count, preferring cached list. */
+      /** @description Return participant count, from the cached payload list. */
       readonly participant_count: number;
-      /** @description Return opponent count, preferring cached list. */
+      /** @description Return opponent count, from the cached payload list. */
       readonly opponent_count: number;
     };
     /**
