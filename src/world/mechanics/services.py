@@ -31,6 +31,7 @@ from world.magic.models import (
     ThreadPullEffect,
 )
 from world.mechanics.constants import (
+    ASPECT_CATEGORY_NAME,
     EQUIPMENT_RELEVANT_CATEGORIES,
     FAVOR_CATEGORY_NAMES,
     POWER_CATEGORY_NAME,
@@ -48,6 +49,7 @@ from world.mechanics.models import (
     ChallengeInstance,
     ChallengeTemplate,
     CharacterModifier,
+    ModifierCategory,
     ModifierSource,
     ModifierTarget,
     ObjectProperty,
@@ -70,6 +72,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
@@ -2245,6 +2248,48 @@ def stage_property(target: ObjectDB, property_: Property, value: int = 1) -> Obj
         defaults={"value": value},
     )
     return obj_prop
+
+
+def ensure_aspect_target(aspect: Aspect) -> ModifierTarget | None:
+    """The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).
+
+    A distinction's ``+10 diplomacy`` is a modifier on every check that weights Diplomacy
+    (the modifier seam's ASPECT block), and an effect can only name a ``ModifierTarget``,
+    so each Aspect row needs one with ``target_aspect`` set. The Aspect admin's save and
+    the seed call this. Idempotent. Named the way the paste spells an effect (lowercase,
+    spaces to underscores); a target of that name in another category is left alone and
+    ``None`` is returned, since two categories sharing a name would make the paste refuse
+    it, so staff resolve that by hand.
+    """
+    try:
+        existing = aspect.modifier_target
+    except ObjectDoesNotExist:
+        existing = None
+    if existing is not None:
+        return existing
+    name = aspect.name.lower().replace(" ", "_")
+    same_name = ModifierTarget.objects.filter(name__iexact=name).first()
+    if same_name is not None:
+        if same_name.category.name != ASPECT_CATEGORY_NAME or same_name.target_aspect_id:
+            return None
+        same_name.target_aspect = aspect
+        same_name.save()
+        return same_name
+    category, _ = ModifierCategory.objects.get_or_create(
+        name=ASPECT_CATEGORY_NAME,
+        defaults={
+            "description": (
+                "An Aspect: a bonus here reaches every check that weights the Aspect, "
+                "scaled by the check's aspect weight."
+            )
+        },
+    )
+    return ModifierTarget.objects.create(
+        name=name,
+        category=category,
+        target_aspect=aspect,
+        description=f"Bonuses and penalties on every check that weights {aspect.name}.",
+    )
 
 
 def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:

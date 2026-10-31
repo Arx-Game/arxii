@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0330_alter_combatparticipant_status"),
-    ]
+    dependencies = [("arxii", "0331_modifiertarget_target_aspect")]
 
     operations = [
         migrations.AddField(

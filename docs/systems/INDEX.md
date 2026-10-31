@@ -6994,6 +6994,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `EQUIPMENT_RELEVANT_CATEGORIES`
   - `get_modifier_breakdown(sheet, modifier_target) -> ModifierBreakdown` — with sources, immunity, amplification
   - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
+  - `ensure_aspect_target(aspect) -> ModifierTarget | None` (#4827) — the aspect-category target
+    (`ModifierTarget.target_aspect`) a card's `+N <aspect>` lands on, created if missing; called by
+    `AspectAdmin.save_model` and `world/seeds/levers.py:ensure_aspect_targets`; read by the check
+    seam's ASPECT block (checks.md, "The aspect lever")
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`

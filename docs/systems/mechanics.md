@@ -119,6 +119,20 @@ breakdown = get_modifier_breakdown(character, modifier_target)
 # Returns ModifierBreakdown with sources, total, has_immunity, negatives_blocked
 ```
 
+### Aspect targets (#4827)
+
+```python
+from world.mechanics.services import ensure_aspect_target
+
+# The aspect-category target an Aspect's bonuses land on (target_aspect = the Aspect row),
+# created if missing; None when another category already owns the name (resolve by hand).
+target = ensure_aspect_target(aspect)   # AspectAdmin.save_model and ensure_aspect_targets() call this
+```
+
+`ModifierTarget.target_aspect` is a nullable one-to-one onto `classes.Aspect`, the sibling of
+`target_check_type`; the check seam reads it through `aspect.modifier_target`
+(`docs/systems/checks.md`, "The aspect lever").
+
 ### Amplification and Immunity
 
 ```python

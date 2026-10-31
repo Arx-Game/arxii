@@ -36,6 +36,10 @@ _Avoid_: result, degree of success, outcome tier
 A broad character archetype (Warfare, Subterfuge, Diplomacy, Scholarship) that grants bonuses to matching checks. Players see aspect names as flavor; the weights linking a CheckType to an aspect are staff-only mechanical values, scaled by the character's most recent path and level.
 _Avoid_: archetype tag, talent, domain, house aspect (a house's authored choice is a *charter question* and its answer a *facet*, #4532; "aspect" is this check-side archetype only)
 
+**Aspect lever** (#4827):
+A distinction's `+N` on an Aspect, an effect on the Aspect's own aspect-category `ModifierTarget` (`target_aspect`), added by the modifier seam to every check that weights the Aspect, times the check's aspect weight. Not the path aspect bonus (which is path weight x check weight x level); it needs no path and does not scale with level.
+_Avoid_: aspect bonus (that is the path term), aspect modifier category as a stat
+
 **Composure**:
 A seeded social CheckType — resisting social pressure through force of will (willpower-weighted) — resolved when a defender actively resists a social action. Distinct from the Composure Stat (the Social-category trait it draws on).
 _Avoid_: willpower check, resolve, resistance (for the named CheckType)

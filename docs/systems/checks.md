@@ -200,6 +200,24 @@ shows the stored, unbuffed stats (`_build_stats` in `world/character_sheets/seri
   no check" size warning (`applied_condition_size_warnings`); the warning now reads "changes no
   check or stat".
 
+### The aspect lever (#4827, slice 2 of #4813)
+
+A distinction's `+N <aspect>` is a check modifier on every check that weights that Aspect. The
+effect names an aspect-category `ModifierTarget` whose `target_aspect` is the `Aspect` row (one per
+Aspect; `mechanics.services.ensure_aspect_target`, called by the Aspect admin's save and by
+`world/seeds/levers.py:ensure_aspect_targets`). `collect_check_modifiers`'s ASPECT block
+(`_aspect_contributions`) walks the check's `CheckTypeAspect` rows and, for each Aspect with an active
+target, takes `modifier_target_contributions(sheet, target, lane=CHECK)` (distinction rows, crafted
+pieces, the equipment walk) with each value multiplied by the row's weight and truncated, labelled
+`"<source> (<Aspect>)"`, keeping its source kind so the check lane's taper treats a card's Aspect
+bonus as part of the same pile. It needs no path and does not scale with level: it is a different
+term from the path aspect bonus below (`check weight x path weight x level`), which is untouched;
+#4775's rule for that term does not apply here. The rate card prices an Aspect at a roll modifier's
+rate (1.5 per point), which is this shape. Reaches every roll through the seam (`perform_check_with_modifiers`,
+scene actions, combat, challenges); the breakdown-only paths (`compute_resist_increment`,
+`level_opposition`) see no distinction modifiers today and are unchanged. Journeys:
+`integration_tests/test_aspect_lever_journeys.py`.
+
 ### Authoring guardrail: one channel per condition/check pair (#2505)
 
 A condition can reach the same check through **two independent channels**, and

@@ -2133,6 +2133,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_type_aspects <- checks.CheckTypeAspect
+  - modifier_target <- mechanics.ModifierTarget
   - path_aspects <- classes.PathAspect
 
 ### CharacterClass
@@ -2870,7 +2871,7 @@
 - `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None, profile: 'MovementProfile | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
-- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).`
+- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' - Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' - Intercept a strike against a rampart-covered position (#2209).`
@@ -7073,6 +7074,7 @@
   - target_resonance -> magic.Resonance [OneToOne] (nullable)
   - target_capability -> conditions.CapabilityType [OneToOne] (nullable)
   - target_check_type -> checks.CheckType [OneToOne] (nullable)
+  - target_aspect -> classes.Aspect [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
   - target_being -> worship.WorshippedBeing [FK] (nullable)
 **Pointed to by:**
@@ -7214,6 +7216,7 @@
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
+- `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `equipment_walk_parts(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'EquipmentWalkParts' - ``equipment_walk_total``'s terms, split into the worn-item part and the vow part.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
