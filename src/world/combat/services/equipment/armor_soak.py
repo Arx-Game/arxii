@@ -91,39 +91,46 @@ def _split_armor_soak_by_compatibility(
 
 
 def apply_equipped_armor_soak(character: Character, damage: int) -> int:
-    """Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533).
+    """Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).
 
-    Worn armor is split by covenant-role compatibility. Compatible soak is then scaled
-    by ``gear_additive_fraction`` (#2533) — the character's engaged defense profile(s)
-    dial how much of their COMPATIBLE armor stays additive with their vow's own
-    defense; 1 (no profile, or every engaged profile at the default 10 tenths) is the
-    legacy fully-additive behavior. The resonant soak pool (covenant role base + facet
-    + mantle + motif + covenant-level, un-blended) then competes with *incompatible*
-    armor via ``max``; the (possibly scaled) compatible armor adds on top:
+    Worn armor is split by covenant-role compatibility. How much of it counts comes from
+    ``defense_style_for`` (#4759): the character's ``CombatStyle`` share scales ALL worn
+    armor (a style is how they fight, whatever they wear); with no style, an engaged vow
+    defense profile's share scales the COMPATIBLE armor only (#2533); with neither, all
+    armor counts (legacy, byte-identical). The resonant soak pool (covenant role base +
+    facet + mantle + motif + covenant-level, un-blended) then competes with
+    *incompatible* armor via ``max``; the (possibly scaled) compatible armor adds on top:
 
-        compat_soak = int(compat_soak * gear_additive_fraction(character))
-        soak = compat_soak + max(incompat_physical, resonant)
+        compat_soak = compat_soak * share / 10        (style or vow profile)
+        incompat_soak = incompat_soak * share / 10    (style only)
+        soak = compat_soak + max(incompat_soak, resonant)
 
     Because ``resonant`` scales on character level and physical armor does not, a role
     incompatible with heavy armor sees its resonant protection overtake platemail past
     low levels. Durability wears only on armor whose physical soak contributes to the
     result (all compatible pieces, regardless of the scaled soak's magnitude; incompatible
-    pieces only when they win the ``max`` — unchanged by the #2533 fraction). Returns
-    post-soak damage, floored at 0.
+    pieces only when they win the ``max``).
+
+    Mitigation's weakness (#4759): while a much higher-level NPC's blow resolves against
+    a mitigation defender (``world.covenants.defense.mitigation_leak``), part of what the
+    armor stopped leaks through. Returns post-soak damage, floored at 0.
     """
     if damage <= 0:
         return damage
 
-    from world.covenants.services import gear_additive_fraction  # noqa: PLC0415
+    from world.covenants.defense import defense_style_for, mitigation_leak  # noqa: PLC0415
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
     compat_soak, incompat_soak, compat_pieces, incompat_pieces = _split_armor_soak_by_compatibility(
         character
     )
-    compat_soak = int(compat_soak * gear_additive_fraction(character))
+    defense = defense_style_for(character)
+    compat_soak = compat_soak * defense.armor_share_tenths // 10
+    if defense.from_combat_style:
+        incompat_soak = incompat_soak * defense.armor_share_tenths // 10
     resonant = _resonant_armor_soak(character)
 
-    incompatible_wins = incompat_soak >= resonant
+    incompatible_wins = incompat_soak > 0 and incompat_soak >= resonant
     soak = compat_soak + (incompat_soak if incompatible_wins else resonant)
     if soak <= 0:
         return damage
@@ -135,4 +142,5 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
     for inst in contributors:
         decrement_item_durability(item_instance=inst)
 
-    return max(0, damage - soak)
+    soaked = min(soak, damage)
+    return damage - soaked + mitigation_leak(character, soaked)

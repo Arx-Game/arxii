@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0332_drop_action_scaling"),
+        ("arxii", "0333_drop_action_scaling"),
     ]
 
     operations = [

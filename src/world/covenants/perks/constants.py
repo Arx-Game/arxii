@@ -171,17 +171,16 @@ class Situation(models.TextChoices):
       do not count. Reads ``resolution``; False outside combat or when the
       subject declared no opponent target. No params.
     - ``TARGET_HAS_CONDITION_PROPERTY`` - the target carries an active condition
-      whose template has the row's ``condition_property`` (#4759, e.g. any
-      condition with the Indulgence property), whoever laid it. Required param
-      ``condition_property``; optional ``count_threshold`` (how many such
-      conditions). Evaluator lands in #4759 slice 3; until then it never holds.
+      whose template or current stage has the row's ``condition_property``
+      (#4759, e.g. any condition with the Indulgence property), whoever laid it.
+      Required param ``condition_property``; optional ``count_threshold`` (the
+      minimum effective severity of that condition).
     - ``ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`` - enemies near the subject carry
       an active condition with the row's ``condition_property`` (#4759). Required
       param ``condition_property``; optional ``count_threshold`` (how many such
-      enemies). Evaluator lands in #4759 slice 3; until then it never holds.
+      enemies, default 1).
     - ``TARGET_LOW_HEALTH`` - the target's health is below a fraction (#4759; the
       target-side mirror of ``ALLY_LOW_HEALTH``). Optional ``threshold_percent``.
-      Evaluator lands in #4759 slice 3; until then it never holds.
     """
 
     AT_RANGE = "at_range", "At Range"

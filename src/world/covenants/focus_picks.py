@@ -6,10 +6,17 @@ stored; a character's chosen picks at one level must fit the budget on
 ``VowFocusPickConfig``. ``CharacterVowFocusPick.clean()`` calls
 ``validate_character_focus_pick`` so the admin refuses a choice that breaks a
 rule, with the reason.
+
+In play (slice 2), a payload row (``VowAddedEffect``, ``VowSituationalPerk``,
+``CovenantRoleActionScaling``) whose ``focus_pick`` is set fires only for a
+holder who chose that pick; ``chosen_pick_ids_by_holder`` answers "which picks
+has each holder chosen" for every reader in one query, and
+``holder_has_pick`` is the gate each reader applies per row.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from math import prod
 from typing import TYPE_CHECKING
 
@@ -54,6 +61,37 @@ def pick_price(pick: VowFocusPick) -> int:
     )
     scaled = pick.value * prod(frequencies) // FOCUS_PICK_LIMIT_FREQUENCY_FULL ** len(frequencies)
     return max(MIN_PICK_PRICE, scaled - reductions)
+
+
+def chosen_pick_ids_by_holder(holder_ids: Iterable[int]) -> dict[int, set[int]]:
+    """The focus picks each holder has chosen, keyed by CharacterSheet pk (#4759 slice 2).
+
+    One query across every holder, counting only picks on a membership the
+    holder has not left. A holder with no chosen pick is absent, so callers read
+    ``.get(pk, set())``. No query when ``holder_ids`` is empty. Callers ask only
+    when a row they fetched carries a pick, so a vow with no picks costs nothing.
+    """
+    ids = set(holder_ids)
+    if not ids:
+        return {}
+    rows = CharacterVowFocusPick.objects.filter(
+        character_role__character_sheet_id__in=ids,
+        character_role__left_at__isnull=True,
+    ).values_list("character_role__character_sheet_id", "pick_id")
+    chosen: dict[int, set[int]] = {}
+    for sheet_id, pick_id in rows:
+        chosen.setdefault(sheet_id, set()).add(pick_id)
+    return chosen
+
+
+def holder_has_pick(focus_pick_id: int | None, holder_id: int, chosen: dict[int, set[int]]) -> bool:
+    """True when a payload row with ``focus_pick_id`` applies to the holder (#4759 slice 2).
+
+    A row with no pick is the base vow and applies to every holder. A row with a
+    pick applies only when the holder chose it; ``chosen`` is the map
+    ``chosen_pick_ids_by_holder`` returned.
+    """
+    return focus_pick_id is None or focus_pick_id in chosen.get(holder_id, ())
 
 
 def shown_vow_level(membership: CharacterCovenantRole) -> int:

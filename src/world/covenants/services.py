@@ -1074,39 +1074,17 @@ def gear_additive_fraction(character: object) -> Decimal:
     counts once — the most gear-friendly engaged vow governs (multi-vow
     stacking lives on the vow side, never by re-counting armor). PRIMARY-only
     (#2641, Layer 3 — chassis): a secondary vow's defense profile never
-    substitutes for gear.
+    substitutes for gear. The profile choice is
+    ``world.covenants.defense.engaged_primary_defense_profile``, which
+    ``defense_style_for`` (#4759) also falls back on when a character has no
+    combat style.
     """
-    from world.covenants.models import CovenantRoleDefenseProfile  # noqa: PLC0415
+    from world.covenants.defense import engaged_primary_defense_profile  # noqa: PLC0415
 
-    if not hasattr(character, "covenant_roles"):
+    profile = engaged_primary_defense_profile(character)
+    if profile is None:
         return Decimal(1)
-    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
-    if not engaged_roles:
-        return Decimal(1)
-
-    role_pks: set[int] = set()
-    for role in engaged_roles:
-        role_pks.add(role.pk)
-        if role.parent_role_id is not None:
-            role_pks.add(role.parent_role_id)
-
-    # One batched query (SharedMemoryModel-cached) — no per-role query loop.
-    profiles_by_role_id = {
-        profile.covenant_role_id: profile
-        for profile in CovenantRoleDefenseProfile.objects.filter(covenant_role_id__in=role_pks)
-    }
-
-    tenths_values: list[int] = []
-    for role in engaged_roles:
-        profile = profiles_by_role_id.get(role.pk)
-        if profile is None and role.parent_role_id is not None:
-            profile = profiles_by_role_id.get(role.parent_role_id)
-        if profile is not None:
-            tenths_values.append(profile.gear_additive_tenths)
-
-    if not tenths_values:
-        return Decimal(1)
-    return Decimal(max(tenths_values)) / 10
+    return Decimal(profile.gear_additive_tenths) / 10
 
 
 @transaction.atomic

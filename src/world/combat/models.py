@@ -3054,7 +3054,9 @@ class FleeConfig(SharedMemoryModel):
 
 
 class MovementConfig(SharedMemoryModel):
-    """Singleton (pk=1): authored movement wiring and reaction tuning (#4663, #4676).
+    """Singleton (pk=1): authored movement wiring and reaction and defense tuning.
+
+    #4663, #4676; the mitigation level gap and leak are #4759.
 
     The pass is optional content: read with cached_singleton() and treat DoesNotExist
     as "no pass offered", not an error. The dodge costs and the reaction step fall back
@@ -3086,6 +3088,37 @@ class MovementConfig(SharedMemoryModel):
         help_text=(
             "Roll penalty per reaction already made this round, for dodges, guarding and "
             "catches (#4676). No cap: many reactions in one round become very hard."
+        ),
+    )
+    mitigation_level_gap_cap = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "How many levels an attacker may be above a mitigation defender before part "
+            "of what their armor stops leaks through (#4759)."
+        ),
+    )
+    mitigation_leak_percent = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent (0 to 100) of what a mitigation defender's armor stops that leaks "
+            "through when the attacker is past the level gap (#4759)."
+        ),
+    )
+    wound_cap_shrink_per_round = models.PositiveSmallIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent (0 to 100) of a wound's healable cap lost for each round since the "
+            "wound landed, so a mend closes less of an old wound (#4759)."
+        ),
+    )
+    reactive_save_max_cut = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "The most of one blow, in percent (0 to 100), that a healer's reactive save "
+            "can remove (#4759)."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)
