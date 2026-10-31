@@ -1710,6 +1710,13 @@ def collect_check_modifiers(  # noqa: PLR0913 - keyword-only check params mirror
             _character_and_equipment_contributions(character_sheet, check_type, scene, skip_fashion)
         )
 
+    # --- ASPECT contributions (#4827) ---
+    # A distinction's +N on an Aspect reaches every check that weights that Aspect, scaled
+    # by the check's aspect weight. Same isinstance guard: the reverse ``aspects`` manager
+    # is real only on a model row.
+    if isinstance(check_type, _DjangoModel):
+        contributions.extend(_aspect_contributions(character_sheet, check_type))
+
     # --- CAPABILITY contributions (#2505) ---
     # Authored CheckTypeCapabilityModifier rows. Shares the _capability_point_allocation
     # helper with _calculate_capability_points (the roll path) so recorded provenance always
@@ -1930,6 +1937,50 @@ def _character_and_equipment_contributions(
                 )
             )
 
+    return contributions
+
+
+def _aspect_contributions(
+    character_sheet: "CharacterSheet",
+    check_type: "CheckType",
+) -> list[ModifierContribution]:
+    """Contributions on the targets of the Aspects this check weights (#4827).
+
+    A distinction's ``+10 diplomacy`` lands on the Diplomacy Aspect's ``ModifierTarget``
+    (``ModifierTarget.target_aspect``). Every check that lists Diplomacy in its
+    ``CheckTypeAspect`` rows takes that bonus, multiplied by the row's weight and truncated
+    toward zero, so a half-weight check gains half. The contributions keep their source
+    kind (CHARACTER for a distinction row, EQUIPMENT for a worn piece or the walk), so the
+    check lane's taper treats a card's Aspect bonus as the same pile as its other bonuses;
+    only the label names the Aspect. The path term (``_calculate_aspect_bonus``, check
+    weight x path weight x level) is a different thing and is untouched: this needs no path
+    and does not scale with level, the shape the rate card prices an Aspect at.
+    """
+    contributions: list[ModifierContribution] = []
+    for check_aspect in check_type.aspects.select_related("aspect").all():  # type: ignore[attr-defined] — reverse FK manager from CheckTypeAspect
+        try:
+            target = check_aspect.aspect.modifier_target
+        except ObjectDoesNotExist:
+            continue
+        if target is None or not target.is_active:
+            continue
+        weight = check_aspect.weight
+        for contribution in modifier_target_contributions(
+            character_sheet, target, lane=ModifierLane.CHECK
+        ):
+            value = int(contribution.value * weight)
+            if value == 0:
+                continue
+            contributions.append(
+                ModifierContribution(
+                    source_kind=contribution.source_kind,
+                    source_label=f"{contribution.source_label} ({check_aspect.aspect.name})",
+                    value=value,
+                    level=contribution.level,
+                    size=contribution.size,
+                    vow_part=int(contribution.vow_part * weight),
+                )
+            )
     return contributions
 
 

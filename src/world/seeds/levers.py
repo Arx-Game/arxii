@@ -23,6 +23,20 @@ _CATEGORY_DESCRIPTIONS = {
 }
 
 
+def ensure_aspect_targets() -> None:
+    """One aspect-category target per ``Aspect`` row (#4827), through ``ensure_aspect_target``.
+
+    Aspects are content rows too, so with sample content off this only completes what is
+    authored: a target for every Aspect that exists and has none. The category row is made
+    by the service function when the first target is.
+    """
+    from world.classes.models import Aspect  # noqa: PLC0415
+    from world.mechanics.services import ensure_aspect_target  # noqa: PLC0415
+
+    for aspect in Aspect.objects.all():
+        ensure_aspect_target(aspect)
+
+
 def ensure_lever_targets() -> None:
     """Look up (or, with sample content on, create) every lever category and target."""
     from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415

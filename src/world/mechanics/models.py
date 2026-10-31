@@ -52,6 +52,7 @@ OBJECTDB_MODEL = "objects.ObjectDB"
 TRAIT_MODEL = "arxii.Trait"
 CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 CHECK_TYPE_MODEL = "arxii.CheckType"
+ASPECT_MODEL = "arxii.Aspect"
 CONSEQUENCE_MODEL = "arxii.Consequence"
 
 
@@ -193,6 +194,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="modifier_target",
         help_text="The check type this target represents (check category only).",
+    )
+    # #4827: a distinction's +N on an Aspect is a modifier on every check that weights
+    # that Aspect, scaled by the check's aspect weight (the modifier seam's ASPECT block).
+    # An FK, not a name match, so a renamed Aspect keeps its lever (#3676's lesson).
+    target_aspect = models.OneToOneField(
+        ASPECT_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The Aspect this target represents (aspect category only).",
     )
     target_damage_type = models.OneToOneField(
         _DAMAGE_TYPE_MODEL_PATH,
