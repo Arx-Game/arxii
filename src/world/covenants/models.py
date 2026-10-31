@@ -2485,7 +2485,11 @@ class SituationRequirementMixin(models.Model):
         null=True,
         blank=True,
         validators=[MinValueValidator(1)],
-        help_text="Count-shaped floor: surrounded lock count, minimum affection.",
+        help_text=(
+            "Count floor: surrounded lock count, minimum affection; for the "
+            "condition-property situations, the minimum severity (or minimum number "
+            "of enemies nearby)."
+        ),
     )
     affinity = models.ForeignKey(
         "arxii.Affinity",

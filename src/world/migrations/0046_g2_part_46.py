@@ -44,7 +44,7 @@ class Migration(BatchedCreateModelMigration):
                     "count_threshold",
                     models.PositiveSmallIntegerField(
                         blank=True,
-                        help_text="Count-shaped floor: surrounded lock count, minimum affection.",
+                        help_text="Count floor: surrounded lock count, minimum affection; for the condition-property situations, the minimum severity (or minimum number of enemies nearby).",
                         null=True,
                         validators=[django.core.validators.MinValueValidator(1)],
                     ),
@@ -161,7 +161,7 @@ class Migration(BatchedCreateModelMigration):
                     "count_threshold",
                     models.PositiveSmallIntegerField(
                         blank=True,
-                        help_text="Count-shaped floor: surrounded lock count, minimum affection.",
+                        help_text="Count floor: surrounded lock count, minimum affection; for the condition-property situations, the minimum severity (or minimum number of enemies nearby).",
                         null=True,
                         validators=[django.core.validators.MinValueValidator(1)],
                     ),
