@@ -50,7 +50,11 @@ from world.combat.models import (
     SustainedAction,
     ThreatPool,
 )
-from world.conditions.serializers import ConditionInstanceSerializer
+from world.conditions.serializers import (
+    CompulsionSerializer,
+    ConditionInstanceSerializer,
+    serialize_compulsion_summary,
+)
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
@@ -69,7 +73,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
-    from world.combat.types import ComboSlotFill, CompulsionSummary
+    from world.combat.types import ComboSlotFill
     from world.mechanics.engagement import CharacterEngagement
     from world.scenes.models import Persona
 
@@ -497,46 +501,6 @@ class DodgePlanSerializer(serializers.Serializer):
     landing_id = serializers.IntegerField(allow_null=True)
     options = DodgeLandingSerializer(many=True)
     cost_line = serializers.CharField()
-
-
-class CompulsionActionCostSerializer(serializers.Serializer):
-    """One action's cost under a compulsion (#4802). Schema-only."""
-
-    action_key = serializers.CharField(help_text="A maneuver value, or technique_no_target.")
-    difficulty = serializers.IntegerField()
-    forbidden = serializers.BooleanField()
-    extra_difficulty = serializers.IntegerField(
-        help_text="What is added to the difficulty because the compulsion forbids the action."
-    )
-
-
-class CompulsionSerializer(serializers.Serializer):
-    """The viewer's own compulsion and what going against it costs (#4802). Schema-only."""
-
-    condition_name = serializers.CharField()
-    wants_label = serializers.CharField()
-    check_name = serializers.CharField()
-    against = CompulsionActionCostSerializer(many=True)
-
-
-def serialize_compulsion_summary(summary: CompulsionSummary | None) -> dict[str, Any] | None:
-    """The wire shape of a compulsion summary (``CompulsionSerializer``); None stays None."""
-    if summary is None:
-        return None
-    return {
-        "condition_name": summary.condition_name,
-        "wants_label": summary.wants_label,
-        "check_name": summary.check_name,
-        "against": [
-            {
-                "action_key": c.action_key,
-                "difficulty": c.difficulty,
-                "forbidden": c.forbidden,
-                "extra_difficulty": c.extra_difficulty,
-            }
-            for c in summary.against
-        ],
-    }
 
 
 class SteadyPlanSerializer(serializers.Serializer):

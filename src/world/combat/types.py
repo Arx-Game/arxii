@@ -731,26 +731,6 @@ class CompulsionCost:
 
 
 @dataclass(frozen=True)
-class CompulsionActionCost:
-    """One declarable action's cost under a compulsion, keyed for the declare panel (#4802)."""
-
-    action_key: str
-    difficulty: int
-    forbidden: bool
-    extra_difficulty: int
-
-
-@dataclass(frozen=True)
-class CompulsionSummary:
-    """The viewer's compulsion and what each declarable action costs under it (#4802)."""
-
-    condition_name: str
-    wants_label: str
-    check_name: str
-    against: list[CompulsionActionCost]
-
-
-@dataclass(frozen=True)
 class Steadier:
     """An ally who could steady a compelled fighter, with the bonus she would give (#4802)."""
 

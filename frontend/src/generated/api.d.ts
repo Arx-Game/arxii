@@ -31445,12 +31445,16 @@ export interface components {
       condition_name: string;
       wants_label: string;
       check_name: string;
+      /** @description Who the compulsion would strike as things stand; null when nobody. */
+      attack_target_name: string | null;
       against: components['schemas']['CompulsionActionCost'][];
     };
     /** @description One action's cost under a compulsion (#4802). Schema-only. */
     CompulsionActionCost: {
       /** @description A maneuver value, or technique_no_target. */
       action_key: string;
+      /** @description The action's display label; null when it has none. */
+      label: string | null;
       difficulty: number;
       forbidden: boolean;
       /** @description What is added to the difficulty because the compulsion forbids the action. */

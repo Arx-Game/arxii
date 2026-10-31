@@ -158,10 +158,21 @@ class AlternateSelfViewSet(
             active.alternate_self_id if active is not None else None
         )
         # What changing back costs under a compulsion (#4802), also one fact per request.
-        from world.combat.compulsion import compulsion_summary_for  # noqa: PLC0415
-        from world.combat.serializers import serialize_compulsion_summary  # noqa: PLC0415
+        # Only a worn self carries it, so nothing is looked up when none is worn.
+        if active is not None:
+            from world.conditions.constants import CompulsionForbidden  # noqa: PLC0415
+            from world.conditions.control_loss import compulsion_summary_for  # noqa: PLC0415
+            from world.conditions.serializers import serialize_compulsion_summary  # noqa: PLC0415
+            from world.conditions.types import CompulsionOption  # noqa: PLC0415
 
-        context["compulsion"] = serialize_compulsion_summary(compulsion_summary_for(character))
+            option = CompulsionOption(
+                str(CompulsionForbidden.REVERT_FORM),
+                str(CompulsionForbidden.REVERT_FORM.label),
+                str(CompulsionForbidden.REVERT_FORM),
+            )
+            context["compulsion"] = serialize_compulsion_summary(
+                compulsion_summary_for(character, [option])
+            )
         return context
 
     def get_queryset(self):

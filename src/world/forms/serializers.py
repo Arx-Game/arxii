@@ -3,7 +3,7 @@ from typing import Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.combat.serializers import CompulsionSerializer
+from world.conditions.serializers import CompulsionSerializer
 from world.forms.models import (
     AlternateSelf,
     Build,

@@ -582,10 +582,23 @@ describe('CombatantsList', () => {
       const compulsion = {
         condition_name: 'Berserk',
         wants_label: 'Attack an opponent',
+        attack_target_name: 'Bandit Captain',
         check_name: 'Resist compulsion',
         against: [
-          { action_key: 'parley', difficulty: 36, forbidden: true, extra_difficulty: 5 },
-          { action_key: 'taunt', difficulty: 31, forbidden: false, extra_difficulty: 0 },
+          {
+            action_key: 'parley',
+            label: 'parley',
+            difficulty: 36,
+            forbidden: true,
+            extra_difficulty: 5,
+          },
+          {
+            action_key: 'taunt',
+            label: 'taunt',
+            difficulty: 31,
+            forbidden: false,
+            extra_difficulty: 0,
+          },
         ],
       };
 

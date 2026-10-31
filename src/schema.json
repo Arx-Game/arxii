@@ -52951,12 +52951,18 @@ components:
           type: string
         check_name:
           type: string
+        attack_target_name:
+          type: string
+          nullable: true
+          description: Who the compulsion would strike as things stand; null when
+            nobody.
         against:
           type: array
           items:
             $ref: '#/components/schemas/CompulsionActionCost'
       required:
       - against
+      - attack_target_name
       - check_name
       - condition_name
       - wants_label
@@ -52967,6 +52973,10 @@ components:
         action_key:
           type: string
           description: A maneuver value, or technique_no_target.
+        label:
+          type: string
+          nullable: true
+          description: The action's display label; null when it has none.
         difficulty:
           type: integer
         forbidden:
@@ -52980,6 +52990,7 @@ components:
       - difficulty
       - extra_difficulty
       - forbidden
+      - label
     ConditionCategory:
       type: object
       description: Serializer for condition categories.

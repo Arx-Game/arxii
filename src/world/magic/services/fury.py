@@ -158,7 +158,7 @@ def _ensure_fury_check_type(trait_name: str) -> CheckType:
     trait = Trait.objects.filter(name=trait_name, trait_type=TraitType.STAT).first()
     if trait is not None:
         CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=trait, defaults={"weight": 1.0}
+            check_type=check_type, trait=trait, defaults={"weight": Decimal("1.0")}
         )
     return check_type
 

@@ -51,9 +51,16 @@ describe('FormSwitcher', () => {
         compulsion: {
           condition_name: 'Berserk',
           wants_label: 'Attack an opponent',
+          attack_target_name: 'Bandit Captain',
           check_name: 'Resist compulsion',
           against: [
-            { action_key: 'revert_form', difficulty: 41, forbidden: true, extra_difficulty: 10 },
+            {
+              action_key: 'revert_form',
+              label: 'revert_form',
+              difficulty: 41,
+              forbidden: true,
+              extra_difficulty: 10,
+            },
           ],
         },
       },

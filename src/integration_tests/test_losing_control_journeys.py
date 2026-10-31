@@ -113,7 +113,7 @@ def _berserk_of(character):
     return next((i for i in get_active_conditions(character) if i.condition_id == berserk.pk), None)
 
 
-COMPELLED_READ_QUERIES = 24
+COMPELLED_READ_QUERIES = 27
 
 
 class _ControlLossCase(JourneyCase):
@@ -1029,7 +1029,13 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         # 25 base + 2 per severity x 3; flee also carries Berserk's +5 for being forbidden.
         self.assertEqual(
             against["flee"],
-            {"action_key": "flee", "difficulty": 36, "forbidden": True, "extra_difficulty": 5},
+            {
+                "action_key": "flee",
+                "label": "Flee",
+                "difficulty": 36,
+                "forbidden": True,
+                "extra_difficulty": 5,
+            },
         )
         # Leaving and changing back roll too, though neither is declared in the round.
         self.assertIn("leave", against)
@@ -1037,6 +1043,9 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         self.assertTrue(against["revert_form"]["forbidden"])
         self.assertNotIn("engage", against)
         self.assertNotIn("yield", against)
+        self.assertEqual(own["attack_target_name"], "Bandit Captain")
+        self.assertIsNone(against["technique_no_target"]["label"])
+        self.assertEqual(against["revert_form"]["label"], "Revert form")
         self.assertEqual(against["technique_no_target"]["difficulty"], 31)
         self.assertFalse(against["technique_no_target"]["forbidden"])
         self.assertNotIn("charge", against)

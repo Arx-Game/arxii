@@ -95,11 +95,6 @@ export function CompulsionCostTag({ cost }: { cost: ActionCost }) {
   );
 }
 
-function sentenceCase(key: string): string {
-  const text = key.replace(/_/g, ' ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /** The line under the chosen action: what the check is and what makes it hard. */
 export function CompulsionChosenLine({
   compulsion,
@@ -118,10 +113,13 @@ export function CompulsionChosenLine({
     >
       <span className="font-semibold">Against {name}.</span>{' '}
       {cost.forbidden
-        ? `${name} forbids ${sentenceCase(actionKey)}: ${check} check, difficulty ${cost.difficulty} ` +
+        ? `${name} forbids ${cost.label}: ${check} check, difficulty ${cost.difficulty} ` +
           `(${cost.difficulty - cost.extra_difficulty} to resist, +${cost.extra_difficulty} ` +
           'because it is forbidden).'
-        : `${check} check, difficulty ${cost.difficulty}.`}
+        : `${check} check, difficulty ${cost.difficulty}.`}{' '}
+      {compulsion.attack_target_name
+        ? `If the check fails, you strike ${compulsion.attack_target_name} with your simplest attack, as things stand.`
+        : 'If the check fails, you do not act, as things stand.'}
     </p>
   );
 }

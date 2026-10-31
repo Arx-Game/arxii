@@ -2895,10 +2895,17 @@ describe('YourTurn — compulsion', () => {
   const compulsion = {
     condition_name: 'Berserk',
     wants_label: 'Attack an opponent',
+    attack_target_name: 'Bandit Captain',
     check_name: 'Resist compulsion',
     against: [
-      { action_key: 'flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
-      { action_key: 'use_item', difficulty: 31, forbidden: false, extra_difficulty: 0 },
+      { action_key: 'flee', label: 'Flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
+      {
+        action_key: 'use_item',
+        label: 'Use Item',
+        difficulty: 31,
+        forbidden: false,
+        extra_difficulty: 0,
+      },
     ],
   };
 
@@ -2937,6 +2944,19 @@ describe('YourTurn — compulsion', () => {
     expect(screen.getByTestId('compulsion-chosen-line')).toHaveTextContent(
       'Berserk forbids Flee: Resist compulsion check, difficulty 36 (31 to resist, +5'
     );
+  });
+
+  it('marks Use Item with its difficulty when a held item can be used', () => {
+    setupMocks({ inventory: [{ id: 9, display_name: 'Healing Potion', is_usable: true }] });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-difficulty-use_item')).toHaveTextContent('Difficulty 31');
+    expect(screen.getByTestId('use-item-section')).toBeInTheDocument();
   });
 
   it('shows neither without a compulsion', () => {

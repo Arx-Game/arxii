@@ -16,7 +16,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.conditions.constants import ControlLossFiresOn
-from world.conditions.types import ControlLossOutcome
+from world.conditions.types import (
+    CompulsionActionCost,
+    CompulsionOption,
+    CompulsionSummary,
+    ControlLossOutcome,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -27,6 +32,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.conditions.models import (
         Compulsion,
+        CompulsionForbiddenAction,
         ConditionInstance,
         ConditionStage,
         ControlLossBand,
@@ -57,6 +63,71 @@ def active_compulsion(
         if best is None or (instance.severity, -instance.pk) > (best[1].severity, -best[1].pk):
             best = (compulsion, instance)
     return best
+
+
+def forbidden_row(compulsion: Compulsion, forbidden: str) -> CompulsionForbiddenAction | None:
+    """The compulsion's row naming *forbidden*, or None when it does not forbid it."""
+    return compulsion.forbidden.filter(action=forbidden).order_by("pk").first()
+
+
+def compulsion_difficulty(
+    compulsion: Compulsion,
+    instance: ConditionInstance,
+    forbidden: str | None,
+    *,
+    row: CompulsionForbiddenAction | None = None,
+) -> int:
+    """The resist roll's difficulty: base, plus per severity, plus a forbidden extra.
+
+    ``forbidden`` is a ``CompulsionForbidden`` value; it adds that action's
+    ``extra_difficulty`` only when the compulsion names it. A caller that already
+    fetched the row passes it as ``row`` and no query is made.
+    """
+    if row is None and forbidden is not None:
+        row = forbidden_row(compulsion, forbidden)
+    extra = row.extra_difficulty if row is not None else 0
+    return (
+        compulsion.base_difficulty + compulsion.difficulty_per_severity * instance.severity + extra
+    )
+
+
+def compulsion_summary_for(
+    character: ObjectDB | None,  # noqa: OBJECTDB_PARAM - the forms and combat reads hold characters
+    options: Sequence[CompulsionOption],
+    active_instances: Sequence[ConditionInstance] | None = None,
+    attack_target_name: str | None = None,
+) -> CompulsionSummary | None:
+    """The character's compulsion and what each of *options* costs under it.
+
+    The compulsion and its forbidden rows are read once; each option's cost is derived
+    from them, so the number of options adds no queries.
+    """
+    if character is None:
+        return None
+    found = active_compulsion(character, active_instances)
+    if found is None:
+        return None
+    compulsion, instance = found
+    rows = {row.action: row for row in compulsion.forbidden.all()}
+    against = []
+    for option in options:
+        row = rows.get(option.forbidden_key) if option.forbidden_key is not None else None
+        against.append(
+            CompulsionActionCost(
+                action_key=option.action_key,
+                label=option.label,
+                difficulty=compulsion_difficulty(compulsion, instance, None, row=row),
+                forbidden=row is not None,
+                extra_difficulty=row.extra_difficulty if row is not None else 0,
+            )
+        )
+    return CompulsionSummary(
+        condition_name=compulsion.condition.name,
+        wants_label=compulsion.get_wants_display(),
+        check_name=compulsion.check_type.name,
+        attack_target_name=attack_target_name,
+        against=against,
+    )
 
 
 def has_compulsion(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM

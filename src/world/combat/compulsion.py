@@ -39,15 +39,16 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.combat.constants import CombatManeuver
-from world.combat.types import (
-    CompulsionActionCost,
-    CompulsionAttempt,
-    CompulsionCost,
-    CompulsionRoll,
-    CompulsionSummary,
-)
+from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
-from world.conditions.control_loss import active_compulsion, has_compulsion
+from world.conditions.control_loss import (
+    active_compulsion,
+    compulsion_difficulty,
+    compulsion_summary_for,
+    forbidden_row,
+    has_compulsion,
+)
+from world.conditions.types import CompulsionOption, CompulsionSummary
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,7 +65,6 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import (
         Compulsion,
-        CompulsionForbiddenAction,
         CompulsionResistBand,
         ConditionInstance,
     )
@@ -91,32 +91,6 @@ _FORBIDDEN_BY_MANEUVER: dict[str, str] = {
 
 
 # -- the resist roll ---------------------------------------------------------------
-
-
-def compulsion_difficulty(
-    compulsion: Compulsion,
-    instance: ConditionInstance,
-    forbidden: str | None,
-    *,
-    forbidden_row: CompulsionForbiddenAction | None = None,
-) -> int:
-    """The resist roll's difficulty: base, plus per severity, plus a forbidden extra.
-
-    ``forbidden`` is a ``CompulsionForbidden`` value; it adds that action's
-    ``extra_difficulty`` only when the compulsion names it. A caller that already
-    fetched the row passes it as ``forbidden_row`` and no query is made.
-    """
-    if forbidden_row is None and forbidden is not None:
-        forbidden_row = _forbidden_row(compulsion, forbidden)
-    extra = forbidden_row.extra_difficulty if forbidden_row is not None else 0
-    return (
-        compulsion.base_difficulty + compulsion.difficulty_per_severity * instance.severity + extra
-    )
-
-
-def _forbidden_row(compulsion: Compulsion, forbidden: str) -> CompulsionForbiddenAction | None:
-    """The compulsion's row naming *forbidden*, or None when it does not forbid it."""
-    return compulsion.forbidden.filter(action=forbidden).order_by("pk").first()
 
 
 def compulsion_band(
@@ -208,9 +182,9 @@ def _cost(
     if _is_compelled_attack(action):
         return None
     key = _forbidden_key(action)
-    row = _forbidden_row(compulsion, key) if key is not None else None
+    row = forbidden_row(compulsion, key) if key is not None else None
     return CompulsionCost(
-        difficulty=compulsion_difficulty(compulsion, instance, key, forbidden_row=row),
+        difficulty=compulsion_difficulty(compulsion, instance, key, row=row),
         forbidden=row is not None,
     )
 
@@ -255,54 +229,35 @@ _ROUND_MANEUVERS = (
 _OUTSIDE_ROUND = (CompulsionForbidden.LEAVE, CompulsionForbidden.REVERT_FORM)
 
 
+def _summary_options() -> list[CompulsionOption]:
+    """The actions the declare panel costs: round maneuvers, a no-target technique, and the
+    two actions resolved outside the round. Labels are the existing display labels."""
+    return [
+        *(
+            CompulsionOption(str(m), str(m.label), _FORBIDDEN_BY_MANEUVER.get(m))
+            for m in _ROUND_MANEUVERS
+        ),
+        CompulsionOption(NO_TARGET_TECHNIQUE_KEY, None, None),
+        *(CompulsionOption(str(o), str(o.label), str(o)) for o in _OUTSIDE_ROUND),
+    ]
+
+
 def compulsion_summary(
     participant: CombatParticipant,
     active_instances: Sequence[ConditionInstance] | None = None,
 ) -> CompulsionSummary | None:
-    """The participant's compulsion and every declarable action's cost, for the declare panel."""
-    return compulsion_summary_for(participant.character_sheet.character, active_instances)
+    """The participant's compulsion and every declarable action's cost, for the declare panel.
 
-
-def compulsion_summary_for(
-    character: ObjectDB | None,  # noqa: OBJECTDB_PARAM - the forms read holds a character
-    active_instances: Sequence[ConditionInstance] | None = None,
-) -> CompulsionSummary | None:
-    """The character's compulsion and what each action that goes against it costs.
-
-    The compulsion and its forbidden rows are read once; each action's cost is derived
-    from them, so the number of options adds no queries. Attacks are free and are left out.
-    Covers the round's maneuvers, a technique with no opponent, and the two actions
-    resolved outside the round (leave, change back).
+    Also names who the rage would strike as things stand (the first active opponent, when
+    there is a technique to swing), looked up once for the viewer, not once per option.
     """
-    if character is None:
+    character = participant.character_sheet.character
+    if character is None or active_compulsion(character, active_instances) is None:
         return None
-    found = active_compulsion(character, active_instances)
-    if found is None:
-        return None
-    compulsion, instance = found
-    rows = {row.action: row for row in compulsion.forbidden.all()}
-    options: list[tuple[str, str | None]] = [
-        *((m.value, _FORBIDDEN_BY_MANEUVER.get(m)) for m in _ROUND_MANEUVERS),
-        (NO_TARGET_TECHNIQUE_KEY, None),
-        *((o.value, o.value) for o in _OUTSIDE_ROUND),
-    ]
-    against: list[CompulsionActionCost] = []
-    for key, forbidden_key in options:
-        row = rows.get(forbidden_key) if forbidden_key is not None else None
-        against.append(
-            CompulsionActionCost(
-                action_key=key,
-                difficulty=compulsion_difficulty(compulsion, instance, None, forbidden_row=row),
-                forbidden=row is not None,
-                extra_difficulty=row.extra_difficulty if row is not None else 0,
-            )
-        )
-    return CompulsionSummary(
-        condition_name=compulsion.condition.name,
-        wants_label=compulsion.get_wants_display(),
-        check_name=compulsion.check_type.name,
-        against=against,
-    )
+    opponent = _first_active_opponent(participant)
+    technique = compulsion_technique_for(participant.character_sheet)
+    target = opponent.name if opponent is not None and technique is not None else None
+    return compulsion_summary_for(character, _summary_options(), active_instances, target)
 
 
 def compulsion_warning(participant: CombatParticipant, action: CombatRoundAction) -> str | None:
