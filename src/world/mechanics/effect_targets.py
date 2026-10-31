@@ -10,14 +10,16 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.conditions.services import get_condition_modifier_total
+from world.conditions.services import _active_matching_instances, get_condition_modifier_total
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
 from world.mechanics.maneuver_effects import get_maneuver_effect
-from world.mechanics.models import ManeuverEffect, ModifierTarget
+from world.mechanics.models import ManeuverEffect, ModifierTarget, ObjectProperty, Property
 from world.mechanics.services import get_modifier_total
-from world.mechanics.types import TechniqueEffectContext
+from world.mechanics.types import OpponentFacts, TechniqueEffectContext
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
 
@@ -88,6 +90,8 @@ def _matching_targets(effect: ManeuverEffect, *, kind_wide: bool = True) -> list
             scope_technique_function="",
             scope_damage_type__isnull=True,
             scope_resonance__isnull=True,
+            scope_opponent_property__isnull=True,
+            scope_opponent_condition__isnull=True,
         ).filter(scope)
     )
 
@@ -145,6 +149,55 @@ def technique_effect_total(
     return _modifier_total(sheet, [t for t in targets if _fits(t, context)])
 
 
+def opponent_targets_exist(targets: list[ModifierTarget]) -> bool:
+    """Whether any of ``targets`` is narrowed by who the effect lands on (#4823)."""
+    return any(target.has_opponent_scope for target in targets)
+
+
+def opponent_facts(
+    target: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - an opponent may be any object, or none
+) -> OpponentFacts:
+    """The properties and conditions ``target`` carries, for an opponent-scoped modifier.
+
+    Property ids are the union of the three surfaces the game's "has property" reads: the
+    target's stored ``ObjectProperty`` rows, the ``properties`` of the template and current
+    stage of each of its active conditions (``PropertyRequirement._granted_by_condition``),
+    and, when it has a character sheet, the primary persona's authored tags
+    (``CharacterSheet.has_property``). Condition ids are the templates of those active
+    conditions. "Active" is the conditions app's own: not suppressed, not past an in-game
+    expiry. A fixed handful of queries however many conditions it holds; with no object,
+    nothing.
+    """
+    if target is None:
+        return OpponentFacts()
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    instances = list(
+        _active_matching_instances([target], Q()).values_list("condition_id", "current_stage_id")
+    )
+    condition_ids = {condition_id for condition_id, _ in instances}
+    stage_ids = {stage_id for _, stage_id in instances if stage_id is not None}
+    property_ids = set(
+        ObjectProperty.objects.filter(object_id=target.pk).values_list("property_id", flat=True)
+    )
+    if condition_ids:
+        property_ids.update(
+            Property.objects.filter(
+                Q(condition_templates__in=condition_ids)
+                | Q(condition_stages_carrying__in=stage_ids)
+            ).values_list("pk", flat=True)
+        )
+    # A character's sheet shares the object's pk, so the persona is reached without
+    # fetching the sheet.
+    property_ids.update(
+        Property.objects.filter(
+            personas__character_sheet_id=target.pk,
+            personas__persona_type=PersonaType.PRIMARY,
+        ).values_list("pk", flat=True)
+    )
+    return OpponentFacts(frozenset(property_ids), frozenset(condition_ids))
+
+
 def technique_condition_bonuses(
     sheet: "CharacterSheet | None", technique: "Technique"
 ) -> tuple[int, int]:
@@ -178,6 +231,14 @@ def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
         ),
         (target.scope_damage_type_id, context.damage_type_id == target.scope_damage_type_id),
         (target.scope_resonance_id, target.scope_resonance_id in context.resonance_ids),
+        (
+            target.scope_opponent_property_id,
+            target.scope_opponent_property_id in context.opponent_property_ids,
+        ),
+        (
+            target.scope_opponent_condition_id,
+            target.scope_opponent_condition_id in context.opponent_condition_ids,
+        ),
     )
     return all(matches for scope, matches in checks if scope)
 

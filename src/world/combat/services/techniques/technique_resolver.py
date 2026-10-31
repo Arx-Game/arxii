@@ -51,15 +51,20 @@ from world.magic.constants import EffectKind
 from world.mechanics.constants import EffectKind as MechanicsEffectKind, ManeuverEffectKey
 from world.mechanics.effect_targets import (
     effect_modifier_total,
+    opponent_facts,
+    opponent_targets_exist,
     technique_condition_bonuses,
     technique_effect_context,
     technique_effect_targets,
     technique_effect_total,
 )
 from world.mechanics.maneuver_effects import get_maneuver_effect
+from world.mechanics.types import OpponentFacts
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+
+    from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
@@ -103,7 +108,8 @@ class TechniqueDamageBonus:
     sheet: CharacterSheet | None
     context: TechniqueEffectContext | None
     targets: list[ModifierTarget]
-    totals: dict[int | None, int] = field(default_factory=dict)
+    totals: dict[tuple[int | None, int | None], int] = field(default_factory=dict)
+    facts: dict[int | None, OpponentFacts] = field(default_factory=dict)
 
     @classmethod
     def none(cls) -> TechniqueDamageBonus:
@@ -118,16 +124,43 @@ class TechniqueDamageBonus:
             return cls.none()
         return cls(sheet=sheet, context=technique_effect_context(sheet, technique), targets=targets)
 
-    def for_type(self, damage_type_id: int | None) -> int:
-        """The unclamped bonus on a hit of resolved damage type ``damage_type_id``."""
+    def read_opponent(
+        self,
+        opponent: ObjectDB | None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
+    ) -> OpponentFacts:
+        """What ``opponent`` carries (#4823), read once per cast and only when a damage
+        target is narrowed by it. Call before an opponent's first profile lands, so a
+        condition one profile consumes still counts for the rest of the same hit."""
+        key = opponent.pk if opponent is not None else None
+        if key not in self.facts:
+            read = opponent_targets_exist(self.targets)
+            self.facts[key] = opponent_facts(opponent) if read else OpponentFacts()
+        return self.facts[key]
+
+    def for_type(
+        self,
+        damage_type_id: int | None,
+        opponent: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
+    ) -> int:
+        """The unclamped bonus on a hit of resolved damage type ``damage_type_id`` against
+        ``opponent``, worked out once per distinct (type, opponent) pair."""
         context = self.context
         if context is None:
             return 0
-        if damage_type_id not in self.totals:
-            self.totals[damage_type_id] = technique_effect_total(
-                self.sheet, replace(context, damage_type_id=damage_type_id), self.targets
+        key = (damage_type_id, opponent.pk if opponent is not None else None)
+        if key not in self.totals:
+            facts = self.read_opponent(opponent)
+            self.totals[key] = technique_effect_total(
+                self.sheet,
+                replace(
+                    context,
+                    damage_type_id=damage_type_id,
+                    opponent_property_ids=facts.property_ids,
+                    opponent_condition_ids=facts.condition_ids,
+                ),
+                self.targets,
             )
-        return self.totals[damage_type_id]
+        return self.totals[key]
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +435,9 @@ class CombatTechniqueResolver:
         """
         results: list[OpponentDamageResult] = []
         weapon_landed = False
+        # What the target carries is read before its first profile lands (#4823), so a
+        # condition one profile consumes does not change the next profile's bonus.
+        technique_bonus.read_opponent(target.objectdb)
         for profile, budget_bonus in profiles:
             scaled, profile_damage_type = self._profile_damage(
                 profile,
@@ -596,7 +632,8 @@ class CombatTechniqueResolver:
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
         profile_damage_type = resolved_damage_type(profile_damage_type)
         technique_total = technique_bonus.for_type(
-            profile_damage_type.pk if profile_damage_type is not None else None
+            profile_damage_type.pk if profile_damage_type is not None else None,
+            target.objectdb,
         )
         budget = max(
             0,
