@@ -13,8 +13,9 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
 - **A modifier targets a declared effect.** The eight effects are rows of `ManeuverEffect` (`key`,
   `base_value`, staff `notes`). A target in the "maneuver effect" category scopes to one effect
   (`scope_maneuver_effect`) or to one kind of effect across every maneuver (`scope_effect_kind`),
-  exactly one of the two; a target with neither matches nothing. Vows, distinctions, gear facets
-  and conditions all reach an effect through the same target, and `effect_value(sheet, key)` is
+  exactly one of the two; a target with neither matches nothing. Vows, distinctions, crafted
+  recipe modifiers, facet and mantle crossing-choice conditions and active conditions all reach an
+  effect through the same target (a facet's own flat bonus does not), and `effect_value(sheet, key)` is
   the one reader: base value plus the matching modifier totals, never below 0, and partial
   protection never above 100.
 - **Maneuver effects are a fixed catalog, with no situation table.** Maneuvers stay verbs that

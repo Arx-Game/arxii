@@ -8859,15 +8859,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `ObjectProperty` (one-shot). Any destination no longer valid at resolution time
     (opponent defeated, object moved/consumed/no Position) degrades to
     `_redirect_away`.
-  - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
-    FAILURE is a no-op
+  - `apply_interpose_outcome(pre_payload, result, *, interposer_sheet)` — SUCCESS zeroes payload,
+    PARTIAL stops the interposer's "Interpose: partial protection" share (base 50, so the amount
+    halves by default), FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows for armed INTERPOSE actions each round
   - `declare_succor(participant, ally)` — arm a SUCCOR `CombatRoundAction` sheltering a
     specific ally from a round-ticked environmental hazard (#1744); unlike Interpose, Succor
     always names a specific ally (no "any ally" path)
-  - `dispatch_succor(succorer, protected, approach)` — thin wrapper over
-    `dispatch_capability_reaction`; calls `apply_succor_outcome` to derive the tick-amount
+  - `dispatch_succor(succorer, protected, *, approach, partial_protection, extra_modifiers=0)` —
+    thin wrapper over `dispatch_capability_reaction`; calls `apply_succor_outcome` to derive the tick-amount
     multiplier
   - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round

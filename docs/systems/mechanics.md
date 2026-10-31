@@ -271,11 +271,14 @@ is kept.
 `CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
 (`modifier_target_one_scope`) stops both being set. In the "maneuver_effect" category
 (`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0330` and `ensure_maneuver_effects`,
-and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the vow, distinction and facet parts of
-`get_modifier_total` reach it), `clean()` requires exactly one of the two; no other category
-may set either. A target with neither set matches nothing. Staff author targets after the
-catalog rows exist, then point a source at the target (a distinction effect, a facet, a condition
-modifier, or a vow stat scaling row).
+and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
+scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
+recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
+one of the two; no other category may set either. A target with neither set matches nothing.
+Staff author targets after the catalog rows exist, then point a source at the target (an unsized
+distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
+crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
+reach an effect target: it needs a resonance on the target, and an effect target has none.
 
 **The reader.**
 - `effect_value(sheet, key)`: base value plus `effect_modifier_total`, floored at 0, and capped

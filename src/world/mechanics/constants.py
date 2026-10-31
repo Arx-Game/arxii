@@ -147,9 +147,12 @@ EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
         # world.mechanics.services.equipment_walk_total).
         "favor_invocation",
         "favor_earning",
-        # #4783: maneuver-effect targets take the vow stat scaling, distinction, facet
-        # and condition parts of get_modifier_total. This set matches categories by
-        # name, the existing practice for it, accepted knowingly here.
+        # #4783: listing this lets the equipment walk reach a maneuver-effect target:
+        # the vow stat scaling part and the crossing-choice conditions of worn facets and
+        # mantles. Distinctions, crafted recipe modifiers and active conditions reach it
+        # without this entry. A facet's own tier-0 FLAT_BONUS pull does not (it needs a
+        # resonance on the target). This set matches categories by name, the existing
+        # practice for it, accepted knowingly here.
         "maneuver_effect",
         # Add more as PR3 lands combat stats and ItemCapabilityGrants.
     }
