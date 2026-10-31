@@ -16,14 +16,21 @@ from world.conditions.constants import (
     BLEED_OUT_SEED_TEMPLATE_NAME,
     POISONED_CONDITION_NAME,
     UNCONSCIOUS_CONDITION_NAME,
+    CompulsionForbidden,
+    CompulsionResult,
+    CompulsionWant,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
+    ControlLossFiresOn,
     DamageTickTiming,
     DurationType,
     TreatmentTargetKind,
 )
 from world.conditions.models import (
     CapabilityType,
+    Compulsion,
+    CompulsionForbiddenAction,
+    CompulsionResistBand,
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,
@@ -35,6 +42,8 @@ from world.conditions.models import (
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
+    ControlLossBand,
+    ControlLossTrigger,
     DamageSuccessLevelMultiplier,
     DamageType,
     PenetrationOutcomeFactor,
@@ -722,3 +731,76 @@ def wire_penetration_factors() -> list[PenetrationOutcomeFactor]:
             min_success_level=3, factor=Decimal("1.50"), label="Overpenetrated"
         ),
     ]
+
+
+class CompulsionFactory(DjangoModelFactory):
+    """Factory for Compulsion; the condition's category alters behavior."""
+
+    class Meta:
+        model = Compulsion
+
+    condition = factory.SubFactory(
+        ConditionTemplateFactory,
+        category=factory.SubFactory(
+            ConditionCategoryFactory, name="Compulsion", alters_behavior=True
+        ),
+    )
+    wants = CompulsionWant.ATTACK_OPPONENT
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    base_difficulty = 10
+    difficulty_per_severity = 2
+
+
+class CompulsionForbiddenActionFactory(DjangoModelFactory):
+    class Meta:
+        model = CompulsionForbiddenAction
+
+    compulsion = factory.SubFactory(CompulsionFactory)
+    action = CompulsionForbidden.FLEE
+    extra_difficulty = 0
+
+
+class CompulsionResistBandFactory(DjangoModelFactory):
+    class Meta:
+        model = CompulsionResistBand
+
+    compulsion = factory.SubFactory(CompulsionFactory)
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    result = CompulsionResult.ACTS_FREELY
+    action_penalty = 0
+    control_change = 0
+
+
+class ControlLossTriggerFactory(DjangoModelFactory):
+    """A moon-pull trigger by default; the wound and stage kinds are traits."""
+
+    class Meta:
+        model = ControlLossTrigger
+
+    vulnerability = factory.SubFactory(ConditionTemplateFactory)
+    fires_on = ControlLossFiresOn.MOON_PULL
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    base_difficulty = 10
+    relief_per_level = 0
+
+    class Params:
+        wound = factory.Trait(fires_on=ControlLossFiresOn.WOUND_THRESHOLD, health_below_percent=50)
+        staged = factory.Trait(
+            fires_on=ControlLossFiresOn.CONDITION_STAGE,
+            vulnerability=factory.SubFactory(ConditionTemplateFactory, has_progression=True),
+            stage=factory.SubFactory(
+                ConditionStageFactory, condition=factory.SelfAttribute("..vulnerability")
+            ),
+        )
+
+
+class ControlLossBandFactory(DjangoModelFactory):
+    class Meta:
+        model = ControlLossBand
+
+    trigger = factory.SubFactory(ControlLossTriggerFactory)
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    intensity = 0
+    control_change = 0
+    severity = 1
+    duration_rounds = 1

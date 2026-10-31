@@ -659,9 +659,12 @@ class MovementConfigAdmin(admin.ModelAdmin):
         "mitigation_leak_percent",
         "wound_cap_shrink_per_round",
         "reactive_save_max_cut",
+        "steadying_capability",
+        "steady_anima_cost",
+        "steady_bonus_per_depth",
         "updated_at",
     ]
-    autocomplete_fields = ["held_ground_challenge", "updated_by"]
+    autocomplete_fields = ["held_ground_challenge", "steadying_capability", "updated_by"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""

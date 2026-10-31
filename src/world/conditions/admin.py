@@ -1,6 +1,12 @@
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
+from world.conditions.control_loss_bands import (
+    validate_compulsion_bands,
+    validate_control_loss_bands,
+)
 from world.conditions.inspection import (
     condition_template_prefetches,
     inspect_condition_template,
@@ -9,6 +15,9 @@ from world.conditions.models import (
     BreathHoldConfig,
     BreathHoldDurationAward,
     CapabilityType,
+    Compulsion,
+    CompulsionForbiddenAction,
+    CompulsionResistBand,
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,
@@ -22,6 +31,8 @@ from world.conditions.models import (
     ConditionStage,
     ConditionStageOnEntry,
     ConditionTemplate,
+    ControlLossBand,
+    ControlLossTrigger,
     DamageSuccessLevelMultiplier,
     DamageType,
     HazardResponseState,
@@ -149,6 +160,15 @@ class ConditionConditionInteractionInline(admin.TabularInline):
     fk_name = "condition"
     extra = 0
     autocomplete_fields = ["other_condition", "result_condition"]
+
+
+class CompulsionInline(admin.StackedInline):
+    """The condition's optional compulsion; its forbidden actions and bands are authored
+    on the compulsion's own page (Django admin does not nest inlines)."""
+
+    model = Compulsion
+    extra = 0
+    autocomplete_fields = ["check_type"]
 
 
 # =============================================================================
@@ -311,6 +331,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         return inspect_condition_template(obj).as_text()
 
     inlines = [
+        CompulsionInline,
         ConditionStageInline,
         ConditionModifierEffectInline,
         ConditionCapabilityEffectInline,
@@ -604,3 +625,93 @@ class SettleConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second config; there can be only one."""
         return not SettleConfig.objects.exists()
+
+
+# =============================================================================
+# Compulsion and control-loss admins (#4802)
+# =============================================================================
+
+
+class _BandForm(forms.ModelForm):
+    """Inline row form: the formset owns the cross-row rule, so skip the stored-sibling check."""
+
+    def _post_clean(self) -> None:
+        self.instance.validate_against_stored_siblings = False
+        try:
+            super()._post_clean()
+        finally:
+            del self.instance.validate_against_stored_siblings
+
+
+class _MonotonicBandFormSet(OneRowPerFormSet):
+    """Checks the in-flight set of bands is monotonic before it is saved."""
+
+    validator = staticmethod(validate_compulsion_bands)
+
+    def clean(self) -> None:
+        super().clean()
+        if any(self.errors):
+            return
+        bands = [
+            form.instance
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("outcome") is not None
+        ]
+        problems = self.validator(bands)
+        if problems:
+            raise ValidationError(problems)
+
+
+class CompulsionResistBandFormSet(_MonotonicBandFormSet):
+    validator = staticmethod(validate_compulsion_bands)
+
+
+class ControlLossBandFormSet(_MonotonicBandFormSet):
+    validator = staticmethod(validate_control_loss_bands)
+
+
+class CompulsionForbiddenActionInline(admin.TabularInline):
+    model = CompulsionForbiddenAction
+    formset = OneRowPerFormSet
+    extra = 0
+
+
+class CompulsionResistBandInline(admin.TabularInline):
+    model = CompulsionResistBand
+    form = _BandForm
+    formset = CompulsionResistBandFormSet
+    extra = 0
+    autocomplete_fields = ["outcome"]
+
+
+@admin.register(Compulsion)
+class CompulsionAdmin(admin.ModelAdmin):
+    list_display = ["condition", "wants", "check_type", "base_difficulty"]
+    autocomplete_fields = ["condition", "check_type"]
+    inlines = [CompulsionForbiddenActionInline, CompulsionResistBandInline]
+
+
+class ControlLossBandInline(admin.TabularInline):
+    model = ControlLossBand
+    form = _BandForm
+    formset = ControlLossBandFormSet
+    extra = 0
+    autocomplete_fields = ["outcome", "applies"]
+
+
+@admin.register(ControlLossTrigger)
+class ControlLossTriggerAdmin(admin.ModelAdmin):
+    list_display = ["vulnerability", "fires_on", "check_type", "base_difficulty"]
+    list_filter = ["fires_on"]
+    autocomplete_fields = ["vulnerability", "check_type", "relief_gift"]
+    inlines = [ControlLossBandInline]
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        """On change, offer only the vulnerability's own stages."""
+        form = super().get_form(request, obj, change=change, **kwargs)
+        stage_field = form.base_fields.get("stage")
+        if obj is not None and stage_field is not None:
+            stage_field.queryset = ConditionStage.objects.filter(condition_id=obj.vulnerability_id)
+        return form
