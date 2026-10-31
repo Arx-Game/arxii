@@ -1221,7 +1221,7 @@ style decide defense. Until then a `focus_pick` row still applies to every holde
 
 CovenantRole admin carries a `VowFocusPickInline` with a read-only computed price; the
 `VowFocusPick` admin has its limits inline and the price. `focus_pick` is an autocomplete on
-the added effect, situational perk and action scaling admins, and `condition_property` on the
+the added effect, situational perk and vow stat scaling admins, and `condition_property` on the
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
 and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
 admins; `combat_style` is on the CharacterSheet admin.

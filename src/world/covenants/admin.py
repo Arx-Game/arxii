@@ -467,7 +467,7 @@ class VowFocusPickLimitInline(admin.TabularInline):
 class VowFocusPickAdmin(admin.ModelAdmin):
     """One focus pick on a vow, with its limits and computed price (#4759).
 
-    Payload rows (added effects, situational perks, action scaling) join a pick
+    Payload rows (added effects, situational perks, vow stat scaling) join a pick
     through their own Focus pick field.
     """
 

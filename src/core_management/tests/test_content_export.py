@@ -1233,9 +1233,9 @@ class VowStatScalingContentExportTests(TestCase):
     """Round-trip coverage for VowStatScaling (#2533).
 
     ``covenants.vowstatscaling`` was added to ``CONTENT_MODELS`` with natural key
-    ``["covenant_role", "modifier_target"]`` — verify a row survives export -> import
-    identity-stable, including the FK-in-NK resolution of ``modifier_target`` (itself
-    keyed on ``["category", "name"]`` via ``mechanics.ModifierTarget``).
+    ``["covenant_role", "modifier_target", "focus_pick"]`` (#4783) — verify a row survives
+    export -> import identity-stable, including the FK-in-NK resolution of
+    ``modifier_target`` (itself keyed on ``["category", "name"]`` via ``mechanics.ModifierTarget``).
     """
 
     def setUp(self) -> None:
