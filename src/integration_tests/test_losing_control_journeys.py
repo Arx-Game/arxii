@@ -113,7 +113,7 @@ def _berserk_of(character):
     return next((i for i in get_active_conditions(character) if i.condition_id == berserk.pk), None)
 
 
-COMPELLED_PAYLOAD_QUERIES = 6
+COMPELLED_READ_QUERIES = 24
 
 
 class _ControlLossCase(JourneyCase):
@@ -918,9 +918,6 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
 
     def test_the_worn_self_lists_what_changing_back_costs(self) -> None:
         apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
-        # The factory leaves the stage's multiplier a string; the read needs the stored one.
-        for stage in self.berserk.stages.all():
-            stage.refresh_from_db()
         client = self.api(self.account_of(self.mira))
 
         response = client.get(f"/api/forms/alternate-selves/?character_sheet={self.sheet.pk}")
@@ -1085,12 +1082,16 @@ class TheDeclarePanelPayload(_SteadyingAllies):
 
         self.assertNotIn("Against Berserk", told)
 
-    def test_a_compelled_viewers_payload_costs_a_fixed_query_count(self) -> None:
+    def test_the_encounter_read_for_a_compelled_viewer_costs_a_fixed_query_count(self) -> None:
         """The compulsion and every option's cost come from one read, not one per option."""
-        self.payload(self.mira, self.seat)  # warm the caches
+        client = self.api(self.account_of(self.mira))
+        url = f"/api/combat/{self.encounter.pk}/"
+        client.get(url)  # warm the caches
 
-        with self.assertNumQueries(COMPELLED_PAYLOAD_QUERIES):
-            own = self.payload(self.mira, self.seat)["compulsion"]
+        with self.assertNumQueries(COMPELLED_READ_QUERIES):
+            response = client.get(url)
 
-        self.assertEqual(own["condition_name"], "Berserk")
-        self.assertGreater(len(own["against"]), 5)
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        own = next(p for p in response.data["participants"] if p["id"] == self.seat.pk)
+        self.assertEqual(own["compulsion"]["condition_name"], "Berserk")
+        self.assertGreater(len(own["compulsion"]["against"]), 5)

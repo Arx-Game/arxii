@@ -1,5 +1,7 @@
 """Seeded Berserk compulsion, Lycan blood and the moon trigger (#4802)."""
 
+from decimal import Decimal
+
 from django.test import TestCase, override_settings
 
 from world.conditions.berserk_content import ensure_berserk_content
@@ -27,6 +29,12 @@ from world.species.moon_provisioning import (
 
 
 class BerserkCompulsionSeedTests(TestCase):
+    def test_seeded_stage_multiplier_is_a_decimal_straight_after_seeding(self) -> None:
+        """A string here is multiplied into a repeated string by effective_severity."""
+        ensure_berserk_content()
+        stage = get_berserk_template().stages.get()
+        self.assertIsInstance(stage.severity_multiplier, Decimal)
+
     def test_berserk_seed_carries_compulsion_with_forbidden_actions(self) -> None:
         ensure_berserk_content()
         ensure_berserk_content()  # idempotent

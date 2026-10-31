@@ -15,6 +15,7 @@ Control category so `CharacterSheet.in_control` derives False while raging.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -80,7 +81,7 @@ def ensure_berserk_content() -> None:
                 "Consumed by uncontrolled rage, lashing out at any target within reach."
             ),
             "rounds_to_next": None,
-            "severity_multiplier": "1.00",
+            "severity_multiplier": Decimal("1.00"),
         },
     )
     _designate_unset_berserk(template)
