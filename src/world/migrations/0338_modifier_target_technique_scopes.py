@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
             name="scope_gift",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Every technique of this gift.",
+                help_text="Techniques of this gift and of its child gifts.",
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="effect_modifier_targets",
@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
             name="scope_resonance",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Every technique that carries this resonance.",
+                help_text="Techniques whose gift manifests as this resonance for the caster.",
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="effect_modifier_targets",
@@ -107,7 +107,7 @@ class Migration(migrations.Migration):
                     ("condition_duration", "Condition duration"),
                 ],
                 default="",
-                help_text="This kind of effect on every maneuver and technique. Set this or the effect above, not both.",
+                help_text="This kind of effect on every maneuver; damage and the two condition kinds also reach techniques. Set this or the effect above, not both.",
                 max_length=32,
                 verbose_name="Scope - kind of effect",
             ),

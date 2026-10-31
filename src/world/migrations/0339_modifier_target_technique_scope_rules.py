@@ -21,12 +21,26 @@ class Migration(migrations.Migration):
                         ("scope_resonance__isnull", True),
                     ),
                     models.Q(
-                        models.Q(("scope_effect_kind", ""), _negated=True),
+                        (
+                            "scope_effect_kind__in",
+                            ("damage", "condition_severity", "condition_duration"),
+                        ),
                         ("scope_maneuver_effect__isnull", True),
                     ),
                     _connector="OR",
                 ),
                 name="modifier_target_technique_scope_needs_kind",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="modifiertarget",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    ("scope_damage_type__isnull", True),
+                    ("scope_effect_kind", "damage"),
+                    _connector="OR",
+                ),
+                name="modifier_target_damage_type_scope_is_damage",
             ),
         ),
     ]

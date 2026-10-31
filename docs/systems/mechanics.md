@@ -364,11 +364,18 @@ reaches every source. Rules, held by `ModifierTarget.clean()` and the
 - A technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; a technique scope on
   any other category is refused.
 - `scope_damage_type` is for the damage kind only.
+- A technique scope works only with damage, condition severity and condition duration; the admin
+  refuses any other kind.
 - Scopes combine: every scope a target sets must match. Gift + damage type + damage kind is "fire
   damage of any Pyromancy technique". An unset scope means any.
 - A gift scope matches the technique's gift and that gift's parent, so a target scoped to an
   umbrella gift reaches the techniques of its child gifts. A target scoped to a child gift does not
   reach the parent's own techniques.
+
+**What a kind modifier reaches.** A kind-only damage modifier applies to every damage profile a
+cast deals, signature and vow-added profiles included, and a negative one lowers the whole hit
+(floored at 0). Severity and duration modifiers apply only to the technique's own condition rows,
+not signature or vow-added ones.
 
 **Kinds.** `EffectKind` gains `CONDITION_SEVERITY` and `CONDITION_DURATION` (rounds); `DAMAGE`
 already existed. Neither new kind has a catalog effect, so they are reached by a kind scope only.

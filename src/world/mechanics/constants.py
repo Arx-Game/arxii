@@ -207,6 +207,13 @@ class EffectKind(models.TextChoices):
     CONDITION_DURATION = "condition_duration", "Condition duration"
 
 
+# The kinds a technique scope can narrow: the ones a technique's cast reads (#4822).
+TECHNIQUE_SCOPE_KINDS: tuple[str, ...] = (
+    EffectKind.DAMAGE,
+    EffectKind.CONDITION_SEVERITY,
+    EffectKind.CONDITION_DURATION,
+)
+
 MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.CHARGE_TO_HIT: EffectKind.TO_HIT,
     ManeuverEffectKey.CHARGE_DAMAGE: EffectKind.DAMAGE,

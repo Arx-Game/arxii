@@ -92,6 +92,7 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "target_trait",
         "scope_maneuver_effect",
         "scope_technique",
+        "scope_technique__gift",
         "scope_gift",
         "scope_damage_type",
         "scope_resonance",

@@ -35,6 +35,7 @@ from world.mechanics.constants import (
     SOURCE_TYPE_FORM,
     SOURCE_TYPE_RESIDENCE_COMFORT,
     SOURCE_TYPE_UNKNOWN,
+    TECHNIQUE_SCOPE_KINDS,
     ChallengeType,
     DiscoveryType,
     EffectKind,
@@ -251,8 +252,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         verbose_name="Scope - kind of effect",
         help_text=(
-            "This kind of effect on every maneuver and technique. Set this or the effect "
-            "above, not both."
+            "This kind of effect on every maneuver; damage and the two condition kinds also "
+            "reach techniques. Set this or the effect above, not both."
         ),
     )
     # #4822: the technique-side scopes narrow a kind of effect to one technique, one gift,
@@ -275,7 +276,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="effect_modifier_targets",
         verbose_name="Scope - gift",
-        help_text="Every technique of this gift.",
+        help_text="Techniques of this gift and of its child gifts.",
     )
     scope_technique_function = models.CharField(
         max_length=32,
@@ -301,7 +302,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="effect_modifier_targets",
         verbose_name="Scope - resonance",
-        help_text="Every technique that carries this resonance.",
+        help_text="Techniques whose gift manifests as this resonance for the caster.",
     )
     # Future target FKs — added when their systems are built:
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
@@ -353,8 +354,17 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     & models.Q(scope_damage_type__isnull=True)
                     & models.Q(scope_resonance__isnull=True)
                 )
-                | (~models.Q(scope_effect_kind="") & models.Q(scope_maneuver_effect__isnull=True)),
+                | (
+                    models.Q(scope_effect_kind__in=TECHNIQUE_SCOPE_KINDS)
+                    & models.Q(scope_maneuver_effect__isnull=True)
+                ),
                 name="modifier_target_technique_scope_needs_kind",
+            ),
+            # A damage type narrows damage and nothing else (#4822).
+            models.CheckConstraint(
+                condition=models.Q(scope_damage_type__isnull=True)
+                | models.Q(scope_effect_kind=EffectKind.DAMAGE),
+                name="modifier_target_damage_type_scope_is_damage",
             ),
         ]
 
@@ -443,6 +453,9 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             raise ValidationError({"scope_maneuver_effect": msg})
         if not has_kind:
             msg = "A technique scope needs the kind of effect it narrows."
+            raise ValidationError({"scope_effect_kind": msg})
+        if self.scope_effect_kind not in TECHNIQUE_SCOPE_KINDS:
+            msg = "A technique scope narrows damage, condition severity or condition duration."
             raise ValidationError({"scope_effect_kind": msg})
         if self.scope_damage_type_id is not None and self.scope_effect_kind != EffectKind.DAMAGE:
             msg = "A damage type scope is for damage only."

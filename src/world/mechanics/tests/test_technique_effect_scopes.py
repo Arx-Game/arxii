@@ -116,6 +116,30 @@ class TechniqueScopeRuleTests(TestCase):
                 scope_gift=self.gift,
             )
 
+    def test_technique_scope_refuses_a_maneuver_only_kind(self):
+        target = self._build(scope_effect_kind=EffectKind.TO_HIT, scope_gift=self.gift)
+        with self.assertRaises(ValidationError) as ctx:
+            target.full_clean()
+        self.assertIn("scope_effect_kind", ctx.exception.message_dict)
+
+    def test_constraint_refuses_damage_type_on_severity(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ModifierTarget.objects.create(
+                category=self.category,
+                name="Severity by damage type",
+                scope_effect_kind=EffectKind.CONDITION_SEVERITY,
+                scope_damage_type=self.damage_type,
+            )
+
+    def test_constraint_refuses_technique_scope_on_reach(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ModifierTarget.objects.create(
+                category=self.category,
+                name="Reach by technique",
+                scope_effect_kind=EffectKind.REACH,
+                scope_technique=self.technique,
+            )
+
 
 class TechniqueEffectReaderTests(TestCase):
     @classmethod
