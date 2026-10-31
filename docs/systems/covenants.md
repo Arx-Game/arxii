@@ -206,8 +206,8 @@ modules import combat/checks contexts at function level, never the reverse):
   for its evaluator's data source, its Situation Parameters, and any v1 approximation.
   #4759 slice 1 added `TARGET_HAS_CONDITION_PROPERTY`, `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`
   (both require `condition_property`, allow `count_threshold`) and `TARGET_LOW_HEALTH` (allows
-  `threshold_percent`); their registered evaluators return False until #4759 slice 3
-  [BUILT, NOT WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
+  `threshold_percent`); slice 3 wired their evaluators, see "Target-state situations" below
+  [BUILT & WIRED]. The `situation`/`extra_situation` columns are 48 characters wide for them.
   `SITUATION_PARAM_SPECS` (#2623) names, per situation, which of the five `SituationRequirementMixin`
   columns are ALLOWED and which are REQUIRED — `ATTACKER_AFFINITY` requires `affinity`;
   `ALLY_LOW_HEALTH`/`SURROUNDED`/`TARGET_FAVORABLY_DISPOSED` allow (but don't require) their
@@ -967,6 +967,34 @@ clearing the input on a business-rule rejection.
 `CovenantTreasuryError` (base) → `NotAnActiveCovenantMemberError`,
 `NotAuthorizedToSpendCovenantTreasuryError`, `CovenantTreasuryTransferError` — see
 "Exceptions" below.
+
+## Target-state situations (#4759 slice 3) [BUILT & WIRED]
+
+Situations that read the state a target is in, so one character's condition or hold is
+another's trigger. All live in `world.covenants.perks.evaluators` and fire through
+`applicable_perks` like every other situation.
+
+- **"The target"** is `SituationContext.target`'s character when the action has a sheet-backed
+  target; otherwise, in combat, the opponent the subject declared as this round's focused
+  target (`_subject_focused_opponent`, the `TARGET_IS_BOSS` read). An NPC `CombatOpponent`
+  never fills `ctx.target`, so this fallback is what makes the situations work against mooks.
+- **"Carries a property"** means an active (unresolved, unsuppressed) `ConditionInstance` whose
+  template's `properties` OR whose current stage's `properties` include the row's
+  `condition_property`. Whoever laid the condition does not matter.
+- **`TARGET_HAS_CONDITION_PROPERTY`** - the target carries the property. `count_threshold`,
+  when set, is the minimum `effective_severity` (stage multiplier applied) of that condition.
+- **`ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`** - at least `count_threshold` (default 1)
+  distinct opponents near the subject carry the property. "Near" is `SURROUNDED`'s scope: an
+  ACTIVE opponent holding an ACTIVE `EngagementLock` on the subject. One query.
+- **`TARGET_LOW_HEALTH`** - the focused opponent's `health_percentage` (or, with none, a sheet
+  target's `CharacterVitals.health_percentage`) is below `threshold_percent`, default
+  `ALLY_LOW_HEALTH_FRACTION` (50%).
+- **`ENEMY_HELD_BY_ALLY`** now also counts two more hold shapes (`_holder_sheet_ids_on_opponent`):
+  an active clash-lock condition (`ConditionTemplate.is_clash_lock`) on the opponent whose
+  `source_character` is a covenant-mate, and an ACTIVE LOCK/SUSTAINING `Clash` on the opponent
+  that a mate started (`initiator`) or contributed to (`ClashContribution`). LOCK/ESCAPING
+  does not count: that is the enemy holding a PC. Mate scoping is unchanged (one batched
+  `CharacterCovenantRole` query over every candidate, subject excluded).
 
 ## Vow added effects (#4581, ADR-4581-A) [BUILT & WIRED]
 
