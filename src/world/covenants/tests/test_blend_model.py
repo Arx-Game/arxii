@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.covenants.constants import RoleArchetype
 from world.covenants.factories import (
@@ -122,6 +122,9 @@ class BlendWeightForTests(TestCase):
 class CovenantRoleActionScalingTests(TestCase):
     """CovenantRoleActionScaling unique constraint on (covenant_role, action_key)."""
 
+    # The constraint is NULLS NOT DISTINCT on focus_pick (#4759), which SQLite does not
+    # create (models.W047), so only the Postgres tier can see it refuse the duplicate.
+    @tag("postgres")
     def test_unique_per_covenant_role_and_action_key(self) -> None:
         role = CovenantRoleFactory()
         CovenantRoleActionScaling.objects.create(
