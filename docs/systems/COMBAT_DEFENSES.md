@@ -148,7 +148,17 @@ as one of her reactions this round (each one makes her next roll harder by
 `MovementConfig.reaction_difficulty_step`, no cap, #4676) and against
 `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue
 (physical, very low effort: she declared nothing to read an effort from). She still takes
-her own turn. A guardian who cannot act (`can_act`: knocked unconscious, though still
+her own turn.
+
+**Interpose fatigue rises per reaction [BUILT & WIRED] (#4810).** A mundane interpose
+(declared or standing) charges its first cost, `INTERPOSE_BASE_FATIGUE_COST` x the effort
+multiplier (floored at 1), times `(1 + step x reactions she already made this round)`, with
+the step `MovementConfig.reaction_difficulty_step` (`interception.rising_reaction_cost`).
+The effort scaling comes first so the floor cannot swallow the rise: a declared interpose
+and a standing guard are both very low effort, and scaling after the rise floored all three
+of 3, 9, 15 to 1. With the defaults a first, second and third interpose cost 1, 3 and 5 at
+very low effort and 3, 9 and 15 at medium. A technique interpose
+pays its anima as before. A guardian who cannot act (`can_act`: knocked unconscious, though still
 ACTIVE) is never tried. An unavailable guardian falls through to the next; an attempt, even
 a failed roll, ends the search. Standing guards cover PC wards in combat only: not an ALLY summon
 ward, and not Sudden Harm outside combat. Absorb, reflect, blink and strike-back stay
@@ -188,6 +198,23 @@ neither, `style` is None and all armor counts (the behavior before #4759).
 It is only set for a barrier or mitigation defender, and it applies only to that
 defender's own hit, never an interposer's. Journey:
 `src/integration_tests/test_defense_style_journeys.py`.
+
+## The healer's reactive save [BUILT & WIRED] (#4810)
+
+`world/combat/services/damage/reactive_save.py`, called last in
+`_run_pre_apply_interceptors` (after interposes and companion defense). When a blow's
+pre-damage amount would drop a PC from above the knockout line to it or below, the first
+ACTIVE participant of the same fight (by participant id) who can act, shares an active
+covenant with her, holds an engaged vow with a `CovenantRoleTechniqueSpecialty` for
+`TechniqueFunction.MEND` (resolved role or its anchor) and knows a technique tagged Mend,
+and can pay, softens it. The gate is that capability, never a vow name; holding it is the
+opt-in, as a dodging capability is (no per-round toggle). The blow is cut to leave the ally
+one point above the knockout line, by at most `MovementConfig.reactive_save_max_cut` percent
+(default 50) of the blow. It is a reaction: `record_reaction` counts it, it
+takes nothing from her declaration, it counts against `ABSORPTION_CAP_PER_MOMENT`, and it
+costs `MovementConfig.dodge_anima_cost x (1 + reaction_difficulty_step x reactions_used)`
+anima (non-lethal: she must hold that much). Both sides get a private line. "Would drop"
+reads the amount before thread reduction, resistance, armor and cover, which run later.
 
 ## Barrier (force-field absorb)
 

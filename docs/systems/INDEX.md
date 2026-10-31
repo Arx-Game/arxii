@@ -9125,6 +9125,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   row for slice 6, `wound_cap_shrink_per_round` / `reactive_save_max_cut` (percent).
 - **Reactions and area attacks (#4676, slice 4 of #4651, ADR-4676) [BUILT & WIRED]:** see
   `docs/systems/COMBAT_DEFENSES.md` "Dodging and area attacks".
+  - Rising reaction costs and the healer's reactive save (#4810): `interception.rising_reaction_cost`
+    (interpose fatigue); `world/combat/services/damage/reactive_save.py` (`try_reactive_save`,
+    `can_make_reactive_save`, `reactive_save_anima_cost`), see COMBAT_DEFENSES.md "The healer's
+    reactive save".
   - Models: `CapabilityType.reaction_reach`/`reaction_cost_kind` (`ReactionReach`,
     `ReactionCostKind` in `world/areas/positioning/constants.py`); `CombatParticipant.dodge_enabled`/
     `dodge_landing`; `MovementConfig.dodge_anima_cost`/`dodge_fatigue_cost`/`reaction_difficulty_step`;
@@ -10267,7 +10271,7 @@ combat, poison, spells, exhaustion, and any damage source.
   `mend_wound()` call has ever mended on this wound, across every healer; stamped by
   `_record_wound_details` the moment the wound tier applies a wound condition; #4759:
   `created_encounter` (nullable FK `CombatEncounter`, SET_NULL) and `created_round` (nullable
-  PositiveInt), the fight and round a wound landed in, stamped and read by #4759 slice 6)
+  PositiveInt), the fight and round a wound landed in: `_record_wound_details` stamps them through `world.combat.services.damage.damage.stamp_combat_wound_origin` when the wounded character is an ACTIVE participant of an unfinished fight, #4810)
 - **Old-age decline (#2756, ADR-0172):** the Frailty condition (severity counts accumulated
   decline; its `ConditionModifierEffect` −1 × severity vs the `max_health` ModifierTarget is
   that target's first writer, folded in by `recompute_max_health`). `world/vitals/aging.py`
@@ -10291,7 +10295,11 @@ combat, poison, spells, exhaustion, and any damage source.
     `int(min(cap_fraction or NEVER_TO_FULL_FRACTION, NEVER_TO_FULL_FRACTION) x
     wound_details.damage_taken) - health_mended_total`, so a wound's total never passes the
     highest fraction any mend on it used; clamps to `max_health`, returns the amount actually
-    mended (0 is legal, not an error). A technique cast passes its treatment row's
+    mended (0 is legal, not an error). The healing clock (#4810): a mend in the fight the
+    wound landed in (the target's live encounter is `created_encounter`) first loses
+    `MovementConfig.wound_cap_shrink_per_round` percent (default 5) of its fraction per
+    round since `created_round`; another fight, a finished fight, or a null round never
+    shrinks. A technique cast passes its treatment row's
     `mend_cap_fraction`; the scene `treat` path passes `FIRST_AID_MEND_FRACTION` for a mundane
     treatment (`conditions.services.is_magical_treatment` False) and nothing for a magical one. Raises
     `world.vitals.exceptions.NotAWoundError` when the instance has no `WoundDetails`. Never

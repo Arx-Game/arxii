@@ -23,7 +23,8 @@ not something read back from the code under test:
   Her interpose roll is fixed at success level 2, a clean block, and a standing guard pays the
   interpose base fatigue 3 at very low effort (x 0.1), floored at 1: 1 physical fatigue. Her
   guard has no cap (#4676): against a brute with 2 actions she guards twice, pays twice, and her
-  second roll is 2 harder (the default reaction step).
+  second roll is 2 harder (the default reaction step). The second guard also costs more: 1 x
+  (1 + step 2 x 1) = 3, so 4 in all (#4810).
 - "Steadying Word" (once only) and "Steady Hand" (3 rounds) each add 3 to Brenna's technique
   check. A look at the roll (``collect_check_modifiers``, which the consider check and the
   standoff grade view call; other previews use their own paths) counts the +3 and spends
@@ -131,6 +132,7 @@ BLESSING = 3
 GRACE_HEALTH = 15
 GRACE_SWING = 2
 GUARD_FATIGUE = 1  # interpose base 3 x very low effort 0.1, floored at 1
+SECOND_GUARD_FATIGUE = 3  # the first guard's 1, x (1 + reaction step 2 x 1) (#4810)
 
 CHALLENGE_PERFORM_CHECK = "world.mechanics.challenge_resolution.perform_check"
 
@@ -550,6 +552,6 @@ class BrennaStandsGuard(_TheYard):
         self._guarded_round()
 
         self.assertEqual(self._health(self.cassian), PC_HEALTH)
-        self.assertEqual(self._physical_fatigue(self.brenna), 2 * GUARD_FATIGUE)
+        self.assertEqual(self._physical_fatigue(self.brenna), GUARD_FATIGUE + SECOND_GUARD_FATIGUE)
         self.brenna_seat.refresh_from_db()
         self.assertEqual(self.brenna_seat.reactions_used, 2)

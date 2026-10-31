@@ -539,15 +539,49 @@ def _dispatch_interpose_action(
     return _attempt_guardian_interpose(action.participant, protected, pre_payload, action=action)
 
 
+def rising_reaction_cost(base_cost: int, reactions_before: int) -> int:
+    """A reaction's cost after ``reactions_before`` reactions this round (#4810).
+
+    ``base x (1 + step x reactions_before)``, where the step is
+    ``MovementConfig.reaction_difficulty_step``, the same per-reaction step that
+    makes each reaction's roll harder. The first reaction in a round pays the base;
+    each later one pays more than the last (ratified decision 12 in #4759). Shared
+    by interpose fatigue and the reactive save's anima (``reactive_save``).
+    """
+    from world.combat.services.reactions import reaction_tuning  # noqa: PLC0415
+
+    step = reaction_tuning().reaction_difficulty_step
+    return base_cost * (1 + step * max(0, reactions_before))
+
+
 def _charge_interpose_fatigue(
-    guardian: CombatParticipant, action: CombatRoundAction | None
+    guardian: CombatParticipant,
+    action: CombatRoundAction | None,
+    *,
+    reactions_before: int,
 ) -> None:
-    """Charge only a fired, non-technique interpose."""
+    """Charge only a fired, non-technique interpose, rising with reactions this round.
+
+    The effort multiplier and its floor apply to the first interpose's cost, and the
+    rise multiplies that: a declared interpose and a standing guard are both VERY_LOW
+    (x0.1), so rising the base first (3, 9, 15) would floor every one of them to 1.
+    Effort-scaled first, VERY_LOW pays 1, 3, 5 and MEDIUM 3, 9, 15. The scaled cost
+    goes to ``apply_fatigue`` at MEDIUM (x1.0) so the multiplier is not applied twice.
+    """
+    from world.fatigue.constants import (  # noqa: PLC0415
+        EFFORT_COST_MULTIPLIER,
+        MIN_FATIGUE_COST,
+    )
+
     category = (
         action.focused_category or ActionCategory.PHYSICAL if action else ActionCategory.PHYSICAL
     )
     effort = action.effort_level if action is not None else EffortLevel.VERY_LOW
-    apply_fatigue(guardian.character_sheet, category, INTERPOSE_BASE_FATIGUE_COST, effort)
+    first_cost = max(
+        MIN_FATIGUE_COST, int(INTERPOSE_BASE_FATIGUE_COST * EFFORT_COST_MULTIPLIER[effort])
+    )
+    cost = rising_reaction_cost(first_cost, reactions_before)
+    apply_fatigue(guardian.character_sheet, category, cost, EffortLevel.MEDIUM)
 
 
 def _attempt_guardian_interpose(
@@ -619,12 +653,13 @@ def _attempt_guardian_interpose(
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
     # failed rolls as real attempts.
+    reactions_before = guardian.reactions_used
     guardian.reactions_used += 1
     guardian.save(update_fields=["reactions_used"])
     pre_payload.answers_consumed += 1
 
     if technique_action is None:
-        _charge_interpose_fatigue(guardian, action)
+        _charge_interpose_fatigue(guardian, action, reactions_before=reactions_before)
     return True
 
 
