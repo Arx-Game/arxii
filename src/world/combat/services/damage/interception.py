@@ -584,6 +584,28 @@ def _charge_interpose_fatigue(
     apply_fatigue(guardian.character_sheet, category, cost, EffortLevel.MEDIUM)
 
 
+def _interpose_modifiers(
+    guardian: CombatParticipant,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    action: CombatRoundAction | None,
+) -> int:
+    """The flat modifier on *guardian*'s interpose roll.
+
+    Bond combat bonus (#2021): relationship-scaled protection. No cap on guarding
+    (#4676): each reaction already made this round makes this roll harder by
+    MovementConfig.reaction_difficulty_step. A strained compulsion resist (#4802)
+    lands its penalty on a declared guard.
+    """
+    from world.combat.services.reactions import reaction_penalty  # noqa: PLC0415
+    from world.relationships.services import bond_bonus  # noqa: PLC0415
+
+    modifiers = bond_bonus(interposer, protected) - reaction_penalty(guardian)
+    if action is not None:
+        modifiers -= action.compulsion_penalty
+    return modifiers
+
+
 def _attempt_guardian_interpose(
     guardian: CombatParticipant,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -609,13 +631,7 @@ def _attempt_guardian_interpose(
         _narrate_reaction_declined(interposer, protected)
         return False
 
-    from world.combat.services.reactions import reaction_penalty  # noqa: PLC0415
-    from world.relationships.services import bond_bonus  # noqa: PLC0415
-
-    # Bond combat bonus (#2021): relationship-scaled protection. No cap on guarding
-    # (#4676): each reaction already made this round makes this roll harder by
-    # MovementConfig.reaction_difficulty_step.
-    modifiers = bond_bonus(interposer, protected) - reaction_penalty(guardian)
+    modifiers = _interpose_modifiers(guardian, interposer, protected, action)
 
     technique_action = (
         action if action is not None and action.focused_action_id is not None else None

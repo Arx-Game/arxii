@@ -7,6 +7,8 @@ content-authoring work, not framework work.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from world.items.models import ItemTemplate
 from world.magic.models import ResonanceTier, Ritual
 
@@ -75,7 +77,7 @@ def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]
             name=TOUCHSTONE_TEMPLATE_NAME,
             defaults={
                 "description": "A dried predatory animal's paw, warm to the touch.",
-                "weight": 0.2,
+                "weight": Decimal("0.2"),
                 "size": 1,
                 "value": 0,
                 "tied_resonance": tied,
@@ -86,7 +88,8 @@ def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]
     reagents = []
     for name, description in _REAGENT_SPECS:
         template, _ = ItemTemplate.objects.get_or_create(
-            name=name, defaults={"description": description, "weight": 0.1, "size": 1, "value": 0}
+            name=name,
+            defaults={"description": description, "weight": Decimal("0.1"), "size": 1, "value": 0},
         )
         reagents.append(template)
 
@@ -134,7 +137,7 @@ def ensure_sanctification_requirements(ritual: Ritual) -> None:
     for name, description in _REAGENT_SPECS:
         reagent = authored_or_sample(
             ItemTemplate,
-            {"description": description, "weight": 0.1, "size": 1, "value": 0},
+            {"description": description, "weight": Decimal("0.1"), "size": 1, "value": 0},
             name=name,
         )
         if reagent is None:

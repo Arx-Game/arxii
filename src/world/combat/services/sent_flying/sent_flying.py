@@ -187,6 +187,7 @@ def _resolve_one_sent_flying_landing(
         damage_dealt=dmg_result.damage_dealt,
         damage_type=damage_type,
     )
+    _svc.settle_wound_triggers(participant, dmg_result)
 
 
 def _resolve_sent_flying_markers(encounter: CombatEncounter) -> None:

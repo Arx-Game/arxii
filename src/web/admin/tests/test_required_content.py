@@ -2049,6 +2049,63 @@ class TestDesignationProbes(TestCase):
         config.save()
         self.assertTrue(self._present("berserk-condition"))
 
+    def test_berserk_compulsion(self) -> None:
+        from world.conditions.factories import CompulsionFactory
+        from world.magic.factories import FuryConfigFactory
+
+        berserk = ConditionTemplateFactory()
+        FuryConfigFactory(berserk_condition=berserk)
+        self.assertFalse(self._present("berserk-compulsion"))
+        CompulsionFactory(condition=berserk)
+        self.assertTrue(self._present("berserk-compulsion"))
+
+    def test_moon_control_loss_trigger(self) -> None:
+        from world.conditions.constants import ControlLossFiresOn
+        from world.conditions.factories import ControlLossTriggerFactory
+
+        self.assertFalse(self._present("moon-control-loss-trigger"))
+        ControlLossTriggerFactory(fires_on=ControlLossFiresOn.MOON_PULL)
+        self.assertTrue(self._present("moon-control-loss-trigger"))
+
+    def test_moon_trigger_lists_a_lycan_without_its_condition(self) -> None:
+        """Ruling 23: a holder of the grant's drawback distinction with no instance of the
+        condition the moon trigger hangs on is listed; giving her the condition clears it."""
+        from evennia_extensions.factories import CharacterFactory
+        from world.conditions.constants import ControlLossFiresOn
+        from world.conditions.factories import ControlLossTriggerFactory
+        from world.conditions.services import apply_condition
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionFactory,
+        )
+        from world.species.factories import SpeciesGiftGrantFactory
+
+        blood = ConditionTemplateFactory(name="Lycan blood")
+        ControlLossTriggerFactory(vulnerability=blood, fires_on=ControlLossFiresOn.MOON_PULL)
+        moon_bound = DistinctionFactory(name="Moon-Bound")
+        SpeciesGiftGrantFactory(drawback_condition=blood, drawback_distinction=moon_bound)
+        ysolde = CharacterFactory(db_key="Ysolde")
+        sheet = CharacterSheetFactory(character=ysolde)
+        CharacterDistinctionFactory(character=sheet, distinction=moon_bound)
+
+        result = _probe_for("moon-control-loss-trigger").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Ysolde",))
+
+        instance = apply_condition(ysolde, blood).instance
+        self.assertTrue(self._present("moon-control-loss-trigger"))
+
+        # N5: only a live carrier counts. A resolved or suppressed instance lists her again.
+        from django.utils import timezone
+
+        instance.resolved_at = timezone.now()
+        instance.save(update_fields=["resolved_at"])
+        self.assertFalse(self._present("moon-control-loss-trigger"))
+        instance.resolved_at = None
+        instance.is_suppressed = True
+        instance.save(update_fields=["resolved_at", "is_suppressed"])
+        self.assertFalse(self._present("moon-control-loss-trigger"))
+
     def test_berserk_disengage_penalty(self) -> None:
         from world.combat.factories import SocialManeuverConfigFactory
         from world.combat.models import FleeConfig

@@ -30,11 +30,14 @@ from world.areas.positioning.services import (
 )
 from world.combat.constants import DEFENSE_REDUCED_THRESHOLD, ActionCategory
 from world.combat.models import MovementConfig
+from world.combat.types import Steadier, SteadyResult
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatOpponentAction, CombatParticipant
-    from world.conditions.models import CapabilityType, ConditionInstance
+    from world.conditions.models import CapabilityType, Compulsion, ConditionInstance
 
 #: True while an NPC attack is resolving through the automatic dodge, so the Phase
 #: Step interceptor (``blink_dodge``) leaves the hit to the roll (#4676).
@@ -305,3 +308,137 @@ def dodge_cost_line(source: DodgeSource) -> str:
     else:
         cost = f"{tuning.dodge_anima_cost} anima"
     return f"Each dodge costs {cost}. Each dodge after the first this round is harder."
+
+
+def steady_capability_value(participant: CombatParticipant) -> int:
+    """How far above its baseline she holds the steadying capability; 0 when she holds none.
+
+    0 as well when staff have set no steadying capability, so nobody steadies.
+    """
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    config = MovementConfig.objects.cached_singleton()
+    capability = config.steadying_capability if config is not None else None
+    if capability is None:
+        return 0
+    above = get_effective_capability_value(participant.character_sheet, capability)
+    return max(0, above - capability.innate_baseline)
+
+
+def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
+    """The allies who could steady a compelled *participant* now, best first (#4802).
+
+    An ally steadies when she is active in the same encounter, is not the steadied
+    fighter, has the steady plan on, can act (``can_act``: a knocked-out ally stays ACTIVE
+    but steadies nobody), carries no compulsion of her own, holds the steadying
+    capability above its baseline, and has the anima to pay. Her bonus is that capability
+    plus the steady bonus per point of her bond depth to the steadied fighter (0 with no
+    qualifying bond), less her reaction penalty. The biggest bonus comes first; ties go to
+    the lowest participant pk.
+    """
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.escalation import qualifying_bond_depths  # noqa: PLC0415
+    from world.combat.models import CombatParticipant as _Participant  # noqa: PLC0415
+    from world.conditions.control_loss import active_compulsions_for  # noqa: PLC0415
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    config = MovementConfig.objects.cached_singleton()
+    if config is None or config.steadying_capability_id is None:
+        return []
+    allies = list(
+        _Participant.objects.filter(
+            encounter_id=participant.encounter_id,
+            status=ParticipantStatus.ACTIVE,
+            steady_enabled=True,
+        )
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet__character")
+        .order_by("pk")
+    )
+    # The capability and can_act are per-character oracles with no batch form; the
+    # compulsion rows are read once for every ally.
+    allies = [ally for ally in allies if can_act(ally.character_sheet)]
+    capability_by_pk = {ally.pk: steady_capability_value(ally) for ally in allies}
+    compelled = active_compulsions_for(
+        [ally.character_sheet.character for ally in allies if capability_by_pk[ally.pk] > 0]
+    )
+    allies = [
+        ally
+        for ally in allies
+        if capability_by_pk[ally.pk] > 0 and ally.character_sheet.character.pk not in compelled
+    ]
+    if not allies:
+        return []
+    anima_by_character = dict(
+        CharacterAnima.objects.filter(
+            character_id__in=[ally.character_sheet_id for ally in allies]
+        ).values_list("character_id", "current")
+    )
+    depth_by_sheet = qualifying_bond_depths(
+        [ally.character_sheet for ally in allies],
+        participant.character_sheet,
+        participant.encounter,
+    )
+    steadiers = [
+        Steadier(
+            participant=ally,
+            bonus=capability_by_pk[ally.pk]
+            + config.steady_bonus_per_depth * depth_by_sheet.get(ally.character_sheet_id, 0)
+            - reaction_penalty(ally),
+        )
+        for ally in allies
+        if anima_by_character.get(ally.character_sheet_id, 0) >= config.steady_anima_cost
+    ]
+    steadiers.sort(key=lambda found: (-found.bonus, found.participant.pk))
+    return steadiers
+
+
+def try_steady(
+    participant: CombatParticipant,
+    compulsion: Compulsion,
+    difficulty: int,
+) -> SteadyResult | None:
+    """An ally's steadying: a second resist roll for a compelled *participant* (#4802).
+
+    Called by compulsion resolution when the first resist roll lets the compulsion act.
+    The best steadier pays the steady anima cost, spends a reaction, and the steadied
+    fighter rolls the compulsion's check again with her bonus. None when nobody steadies.
+    """
+    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+
+    steadiers = steadiers_for(participant)
+    if not steadiers:
+        return None
+    best = steadiers[0]
+    config = MovementConfig.objects.cached_singleton()
+    cost = config.steady_anima_cost if config is not None else 0
+    paid = 0
+    if cost:
+        steadier = best.participant.character_sheet.character
+        before = _anima_held(steadier)
+        deduct_anima(steadier, cost, lethal=False)
+        paid = before - _anima_held(steadier)
+    record_reaction(best.participant)
+    result = perform_check_with_modifiers(
+        participant.character_sheet.character,
+        compulsion.check_type,
+        target_difficulty=difficulty,
+        extra_modifiers=best.bonus,
+    )
+    return SteadyResult(
+        steadier=best.participant, check_result=result, bonus=best.bonus, anima_paid=paid
+    )
+
+
+def _anima_held(character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM
+    """The anima *character*'s pool holds now, glut included, read from the table."""
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    row = (
+        CharacterAnima.objects.filter(character_id=character.pk)
+        .values_list("current", "glut")
+        .first()
+    )
+    return sum(row) if row is not None else 0

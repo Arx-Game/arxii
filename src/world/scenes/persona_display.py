@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
+import inflect
 
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona, PersonaDiscovery
@@ -42,10 +43,14 @@ if TYPE_CHECKING:
 # gender; non-binary / unset render as "person". (A slice-3 disguise that conceals gender will
 # force "person" regardless — e.g. a feature-concealing robe.)
 _GENDER_NOUN = {"male": "man", "female": "woman"}
+_INFLECT = inflect.engine()
 
 
 def compose_sdesc(persona: Persona) -> str:
     """An anonymous face's short description: ``"a man/woman/person wearing a <mask name>"``.
+
+    The mask's article is the right one for its name ("an owl mask"), and one the player
+    typed is never doubled.
 
     This is the *mask* case — the mask label is the player-authored persona name. Slice 3
     (disguises) will let other concealment types supply their own phrasing and conceal traits
@@ -71,7 +76,17 @@ def compose_sdesc(persona: Persona) -> str:
     if not is_full_concealment:
         gender_key = sheet.gender.key if sheet.gender_id is not None else None
         noun = _GENDER_NOUN.get(gender_key, "person")
-    return f"a {noun} wearing a {persona.name}"
+    return f"a {noun} wearing {_with_indefinite_article(persona.name)}"
+
+
+def _with_indefinite_article(name: str) -> str:
+    """*name* with the indefinite article English wants, typed by the player or not.
+
+    ``inflect`` (Evennia's own dependency) drops a leading "a"/"an" the player typed and
+    picks the right one, so "a scarred sellsword" and "scarred sellsword" both read
+    "a scarred sellsword", and "owl mask" reads "an owl mask" (#4802).
+    """
+    return _INFLECT.a(name)
 
 
 def _build_revealed_map(

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { Compulsion } from '@/combat/components/CompulsionBanner';
 
 /** An alternate self the player can shift into (#1111). */
 export interface SwitchableAlternateSelf {
@@ -11,6 +12,8 @@ export interface SwitchableAlternateSelf {
   has_combat_profile: boolean;
   has_techniques: boolean;
   is_active: boolean;
+  /** What changing back costs under a compulsion; sent on the worn self only (#4802). */
+  compulsion: Compulsion | null;
 }
 
 const alternateSelfKeys = {
@@ -34,6 +37,7 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
       has_combat_profile?: boolean;
       has_techniques?: boolean;
       is_active?: boolean;
+      compulsion?: Compulsion | null;
     }>;
   };
   return (data.results ?? []).map((alt) => ({
@@ -44,6 +48,7 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
     has_combat_profile: alt.has_combat_profile ?? false,
     has_techniques: alt.has_techniques ?? false,
     is_active: alt.is_active ?? false,
+    compulsion: alt.compulsion ?? null,
   }));
 }
 

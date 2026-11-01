@@ -29,7 +29,8 @@ def resolve_thumbnail(
     2. Active condition's template thumbnail
     3. Active alternate self's thumbnail
     4. Persona's Media thumbnail FK
-    5. ObjectDisplayData.thumbnail fallback
+    5. ObjectDisplayData.thumbnail fallback, skipped when ``persona`` is a face other
+       than the PRIMARY one: the object's own image is the true face a mask hides (#4802)
     6. ``fallback_media`` (e.g. CombatOpponent.portrait for persona-less NPCs)
 
     Args:
@@ -68,7 +69,10 @@ def resolve_thumbnail(
             return persona.thumbnail.cloudinary_url
 
     # 5. ObjectDisplayData fallback
-    display_url = _resolve_display_data_thumbnail(obj)
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    hides_true_face = persona is not None and persona.persona_type != PersonaType.PRIMARY
+    display_url = None if hides_true_face else _resolve_display_data_thumbnail(obj)
     if display_url is not None:
         return display_url
 

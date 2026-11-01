@@ -36,6 +36,7 @@ function makeParticipant(id: number, name: string): Participant {
   return {
     id,
     character_sheet_id: id + 1000,
+    persona_id: null,
     character_name: name,
     status: 'active',
     health: 10,
@@ -56,6 +57,8 @@ function makeParticipant(id: number, name: string): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
   };
 }

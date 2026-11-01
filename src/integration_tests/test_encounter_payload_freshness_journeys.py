@@ -14,6 +14,9 @@ room, sheet or bestiary row the first read loaded.
 - Hobb flees a fight that then ends: while it runs he is not listed; once it is over the
   aftermath lists him again, so he can reach his own digest.
 - Hobb takes a new face: his account payload lists it on the next read.
+- Hobb masks himself mid-fight: Ada's next read names him by the mask, never "Hobb", in
+  the roster and in the clash he contributes to, and shows the mask's portrait, never his
+  own face; the clash row names his seat, never his sheet id (#4802).
 - Staff add a phase to a bestiary entry: the bestiary list says it has phases.
 - A wolf with one round left on its broken wall: once the round resolves Ada's read says
   the wall is no longer broken, the row holds 0, and the wolf's next save keeps 0.
@@ -31,14 +34,18 @@ from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions
 from world.combat.constants import ClashStatus, EngagementLockStatus, ParticipantStatus
 from world.combat.factories import (
+    ClashContributionFactory,
     ClashFactory,
+    ClashRoundFactory,
     CreaturePhaseTemplateFactory,
     CreatureTemplateFactory,
     EngagementLockFactory,
 )
 from world.combat.models import CombatOpponent
 from world.combat.services import add_participant
+from world.roster.factories import MediaFactory
 from world.scenes.constants import PersonaType, RoundStatus
+from world.scenes.models import Persona
 from world.scenes.services import create_persona
 
 
@@ -151,6 +158,78 @@ class ANewFaceOnTheAccount(_AdaWatchesTheCauseway):
         )
 
         self.assertIn("The Grey Hood", self.faces())
+
+
+class AMaskedFighterIsListedUnderTheMask(_AdaWatchesTheCauseway):
+    def test_ada_reads_the_mask_hobb_wears_never_his_name(self) -> None:
+        """Ruling 39: the roster and ally pickers name the face the room lines use."""
+        self.assertEqual(self.fighters(self.ada_reads()), ["Ada", "Hobb"])
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        body = self.ada_reads()
+        self.assertEqual(self.fighters(body), ["Ada", "a hooded man"], told)
+        self.assertNotIn("Hobb", str(body["participants"]))
+
+    def hobbs_row(self, body: dict[str, object]) -> dict[str, object]:
+        return next(
+            row for row in body["participants"] if row["id"] == self.participant(self.hobb).pk
+        )
+
+    def test_ada_reads_the_mask_in_the_clash_hobb_pushes(self) -> None:
+        wolf = self.creature("Grey Wolf", at=self.tower)
+        clash_round = ClashRoundFactory(
+            clash=ClashFactory(encounter=self.encounter, npc_opponent=wolf)
+        )
+        ClashContributionFactory(clash_round=clash_round, character=self.hobb.sheet_data)
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        (clash,) = self.ada_reads()["clashes"]
+        self.assertEqual(
+            [row["character_name"] for row in clash["contributors"]], ["a hooded man"], told
+        )
+
+    def test_the_clash_never_hands_ada_hobbs_sheet_id(self) -> None:
+        """Ruling 49: the contributor row names Hobb's seat, never the sheet behind the mask."""
+        wolf = self.creature("Grey Wolf", at=self.tower)
+        clash_round = ClashRoundFactory(
+            clash=ClashFactory(encounter=self.encounter, npc_opponent=wolf)
+        )
+        ClashContributionFactory(clash_round=clash_round, character=self.hobb.sheet_data)
+        seat = self.participant(self.hobb)
+        sheet_id = self.hobb.sheet_data.pk
+        self.assertNotEqual(seat.pk, sheet_id, "the check below needs the two ids apart")
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        (clash,) = self.ada_reads()["clashes"]
+        (row,) = clash["contributors"]
+        self.assertEqual(row["participant_id"], seat.pk, told)
+        self.assertNotIn(sheet_id, row.values(), row)
+
+    def test_ada_sees_the_mask_portrait_never_hobbs_face(self) -> None:
+        face = MediaFactory()
+        primary = self.hobb.sheet_data.primary_persona
+        primary.thumbnail = face
+        primary.save(update_fields=["thumbnail"])
+        self.assertEqual(
+            self.hobbs_row(self.ada_reads())["thumbnail_media_url"], face.cloudinary_url
+        )
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        # A bare mask shows no portrait: never the true face behind it.
+        self.assertIsNone(self.hobbs_row(self.ada_reads())["thumbnail_media_url"], told)
+        hood = MediaFactory()
+        mask = Persona.objects.get(
+            character_sheet=self.hobb.sheet_data, persona_type=PersonaType.TEMPORARY
+        )
+        mask.thumbnail = hood
+        mask.save(update_fields=["thumbnail"])
+        self.assertEqual(
+            self.hobbs_row(self.ada_reads())["thumbnail_media_url"], hood.cloudinary_url
+        )
 
 
 class ABrokenWallClosesOnTime(_AdaWatchesTheCauseway):

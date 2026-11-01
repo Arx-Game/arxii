@@ -133,14 +133,28 @@ function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
 
 /**
  * Non-combatant scene personas at their persona position (#3557): everyone in
- * `scene.personas` whose character is neither a participant (by
- * `character_sheet_id`) nor an opponent (by `objectdb_id`). A persona with no
- * character or no position is skipped.
+ * `scene.personas` whose character is neither a participant nor an opponent (by
+ * `objectdb_id`). A persona with no character or no position is skipped.
+ *
+ * Another fighter's row carries no sheet id (a mask must not be tied to its
+ * character, #4802 Ruling 50), so a participant is matched by the persona it
+ * presents (`persona_id`); any other scene persona of that same character is
+ * then skipped too, so a masked fighter's own face never stands beside the mask.
  */
-function combatantCharacterIds(encounter: EncounterDetail): Set<number> {
+function combatantCharacterIds(
+  encounter: EncounterDetail,
+  scenePersonas: SceneDetail['personas']
+): Set<number> {
   const ids = new Set<number>();
+  const presented = new Set<number>();
   for (const participant of encounter.participants ?? []) {
     if (participant.character_sheet_id != null) ids.add(participant.character_sheet_id);
+    if (participant.persona_id != null) presented.add(participant.persona_id);
+  }
+  for (const persona of scenePersonas ?? []) {
+    if (presented.has(persona.id) && persona.character_sheet != null) {
+      ids.add(persona.character_sheet);
+    }
   }
   for (const opponent of encounter.opponents ?? []) {
     if (opponent.objectdb_id != null) ids.add(opponent.objectdb_id);
@@ -155,7 +169,7 @@ function buildBystanders(
 ): Map<number, BattleOccupant[]> {
   const map = new Map<number, BattleOccupant[]>();
   if (!scene) return map;
-  const combatantIds = combatantCharacterIds(encounter);
+  const combatantIds = combatantCharacterIds(encounter, scene.personas);
   const personaById = new Map((scene.personas ?? []).map((p) => [p.id, p]));
   for (const pp of scene.persona_positions ?? []) {
     if (pp.position === null) continue;
@@ -311,11 +325,12 @@ export function CombatTacticalMap({
 
   // GM-place target picker (#3385): value = the co-located object's ObjectDB
   // pk — participant.character_sheet_id (CharacterSheet/ObjectDB share a pk,
-  // see root CLAUDE.md) or opponent.objectdb_id (already serialized).
+  // see root CLAUDE.md) or opponent.objectdb_id (already serialized). The sheet
+  // id reaches only the GM and staff (#4802 Ruling 50), who are the ones placing.
   const placeTargets = [
     ...(encounter.participants ?? [])
       .filter((p) => p.character_sheet_id != null)
-      .map((p) => ({ id: p.character_sheet_id, name: p.character_name })),
+      .map((p) => ({ id: p.character_sheet_id as number, name: p.character_name })),
     ...(encounter.opponents ?? [])
       .filter((o) => o.objectdb_id != null)
       .map((o) => ({ id: o.objectdb_id as number, name: o.name })),
