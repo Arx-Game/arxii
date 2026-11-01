@@ -97,7 +97,7 @@ ALLOWED_MIGRATIONS: set[str] = {
     # damage, bare-hands damage, miss intensity, intensity to hit): prose-free mechanical
     # catalog rows the code reads by key, the same 2026-10-22 ruling as 0334. An existing
     # row keeps its value; a fresh database gets the same rows from ensure_maneuver_effects().
-    "world/migrations/0346_strike_maneuver_effects.py",
+    "world/migrations/0347_strike_maneuver_effects.py",
 }
 
 # Patterns that suggest seed data in migrations

@@ -11,6 +11,7 @@ from rest_framework import serializers
 
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
+    ALTER_EGO_KEY,
     BEAT_LINE_MAX_LENGTH,
     CRIME_KEY,
     CRIME_KIND_ID,
@@ -19,6 +20,7 @@ from world.character_creation.constants import (
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
+    OFFICIALLY_DEAD_KEY,
     ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
     PRESTIGE_STORIES_KEY,
@@ -27,10 +29,14 @@ from world.character_creation.constants import (
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
+    TIE_KIND,
+    TIE_ORGANIZATION_ID,
+    TIES_KEY,
     AnchorSource,
     FinalTouchesPrompt,
     OfferChapter,
     QuestionKind,
+    TieKind,
     schooling_max_rank,
 )
 from world.character_creation.models import (
@@ -162,21 +168,23 @@ class CrimeKindSerializer(serializers.Serializer):
     description = serializers.CharField()
 
 
+class OrganizationChoiceSerializer(serializers.Serializer):
+    """One organization an ask may seat the character in or tie them to (#4852, #4856)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    is_covert = serializers.BooleanField()
+
+
 class FinalTouchesCardSerializer(serializers.Serializer):
-    """One ask a held card raises at Final Touches (#4852, slice 6 of #4813)."""
+    """One ask a held card raises at Final Touches (#4852, slice 6 of #4813); ``choices`` are
+    the organizations an ``organization`` or ``tie`` ask picks from (#4856), else empty."""
 
     distinction_id = serializers.IntegerField()
     name = serializers.CharField()
     prompt = serializers.ChoiceField(choices=FinalTouchesPrompt.choices)
     detail = serializers.CharField(allow_blank=True)
-
-
-class OrganizationChoiceSerializer(serializers.Serializer):
-    """One organization a card with an open organization grant may seat the character in."""
-
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    is_covert = serializers.BooleanField()
+    choices = OrganizationChoiceSerializer(many=True)
 
 
 class EnemyReasonSerializer(serializers.Serializer):
@@ -1728,6 +1736,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 "name": ask.name,
                 "prompt": ask.prompt,
                 "detail": ask.detail,
+                "choices": [
+                    {"id": c.id, "name": c.name, "is_covert": c.is_covert} for c in ask.choices
+                ],
             }
             for ask in final_touches_cards(obj)
         ]
@@ -2085,14 +2096,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_enemy_pick(data["enemy"])
         if data.get("introductions") is not None:
             self._validate_introductions(data["introductions"])
-        if data.get("officially_dead") is not None:
-            self._validate_officially_dead(data["officially_dead"])
-        if data.get(CRIME_KEY) is not None:
-            self._validate_crime(data[CRIME_KEY])
-        if data.get(PRESTIGE_STORIES_KEY) is not None:
-            self._validate_prestige_stories(data[PRESTIGE_STORIES_KEY])
-        if data.get(ORGANIZATIONS_KEY) is not None:
-            self._validate_organizations(data[ORGANIZATIONS_KEY])
+        self._validate_card_answers(data)
+
+    def _validate_card_answers(self, data: dict) -> None:
+        """The answers the held cards ask for at Final Touches (#4396, #4846, #4852, #4856): a
+        face behind the door or beside it, the crime, the stories, the picks, the ties. Each
+        key is checked when present and null clears it; none is gated on the card being held,
+        finalize writes an answer only while a held card still asks."""
+        checks = (
+            (OFFICIALLY_DEAD_KEY, lambda v: self._validate_face(v, OFFICIALLY_DEAD_KEY)),
+            (ALTER_EGO_KEY, lambda v: self._validate_face(v, ALTER_EGO_KEY)),
+            (TIES_KEY, self._validate_ties),
+            (CRIME_KEY, self._validate_crime),
+            (PRESTIGE_STORIES_KEY, self._validate_prestige_stories),
+            (ORGANIZATIONS_KEY, self._validate_organizations),
+        )
+        for key, check in checks:
+            if data.get(key) is not None:
+                check(data[key])
 
     @staticmethod
     def _card_keyed(answers: object, key: str) -> dict:
@@ -2199,23 +2220,49 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"introductions": "whispers must be text."})
 
     @staticmethod
-    def _validate_officially_dead(face: object) -> None:
-        """Officially dead (#4396): a face name and the guise texts, every one text."""
+    def _validate_face(face: object, key: str) -> None:
+        """A face (#4396, #4856): a face name and the guise texts, every one text. The same
+        shape under ``officially_dead`` (the door) and ``alter_ego`` (the hidden face); neither
+        is gated on the card being held, finalize writes a face only while a held card asks."""
         from world.character_creation.constants import (  # noqa: PLC0415
             OFFICIALLY_DEAD_FACE_NAME,
-            OFFICIALLY_DEAD_KEY,
             OFFICIALLY_DEAD_TEXT_FIELDS,
         )
 
         if not isinstance(face, dict):
-            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Must be an object."})
+            raise serializers.ValidationError({key: "Must be an object."})
         allowed = {OFFICIALLY_DEAD_FACE_NAME, *OFFICIALLY_DEAD_TEXT_FIELDS}
         if set(face) - allowed:
-            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Unknown field."})
+            raise serializers.ValidationError({key: "Unknown field."})
         if not all(isinstance(value, str) for value in face.values()):
-            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "Every field must be text."})
+            raise serializers.ValidationError({key: "Every field must be text."})
         if len(face.get(OFFICIALLY_DEAD_FACE_NAME, "").strip()) > 255:  # noqa: PLR2004 - Persona.name
-            raise serializers.ValidationError({OFFICIALLY_DEAD_KEY: "The face's name is too long."})
+            raise serializers.ValidationError({key: "The face's name is too long."})
+
+    def _validate_ties(self, ties: object) -> None:
+        """A card's organization tie (#4856): one of that card's choices and a ``TieKind``, or
+        null to take none. Checked against the live asks, since the choices differ per card."""
+        from world.character_creation.offers import final_touches_cards  # noqa: PLC0415
+
+        ties = self._card_keyed(ties, TIES_KEY)
+        picks = {k: v for k, v in ties.items() if v is not None}
+        if not picks:
+            return
+        choices_by_card = {
+            str(ask.distinction_id): {c.id for c in ask.choices}
+            for ask in final_touches_cards(self.instance)
+            if ask.prompt == FinalTouchesPrompt.TIE
+        }
+        for card_id, tie in picks.items():
+            if not isinstance(tie, dict) or set(tie) - {TIE_ORGANIZATION_ID, TIE_KIND}:
+                msg = "A tie names an organization and a kind."
+                raise serializers.ValidationError({TIES_KEY: msg})
+            if tie.get(TIE_KIND) not in TieKind.values:
+                raise serializers.ValidationError({TIES_KEY: "Pick what the tie is."})
+            org_id = tie.get(TIE_ORGANIZATION_ID)
+            allowed = choices_by_card.get(str(card_id), set())
+            if not isinstance(org_id, int) or org_id not in allowed:
+                raise serializers.ValidationError({TIES_KEY: "Pick an organization from the list."})
 
     def _validate_origin_choices(self, data: dict) -> None:
         """``origin_choices`` maps a str slot id to a picked choice id, or null (#3617)."""

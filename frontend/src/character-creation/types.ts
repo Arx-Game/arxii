@@ -522,14 +522,34 @@ export interface CharacterDraft {
  * organization grant with no fixed organization), `path_aspect` (a path aspect grant; nothing
  * to answer, a line naming the Aspect).
  */
-export type FinalTouchesPrompt = 'crime' | 'prestige_story' | 'organization' | 'path_aspect';
+export type FinalTouchesPrompt =
+  | 'crime'
+  | 'prestige_story'
+  | 'organization'
+  | 'path_aspect'
+  | 'officially_dead'
+  | 'alter_ego'
+  | 'tie';
 
-/** One ask a held card raises at Final Touches (#4852). */
+/**
+ * One ask a held card raises at Final Touches (#4852); `choices` are the organizations an
+ * `organization` or `tie` ask picks from (#4856), empty for every other prompt.
+ */
 export interface FinalTouchesCard {
   distinction_id: number;
   name: string;
   prompt: FinalTouchesPrompt;
   detail: string;
+  choices: OrganizationChoice[];
+}
+
+/** What a card's organization tie takes (#4856): a seat on the bottom rung, or renown. */
+export type TieKind = 'membership' | 'renown';
+
+/** A card's organization tie as the draft stores it (#4856): one of the ask's choices and a kind. */
+export interface DraftTie {
+  organization_id: number;
+  kind: TieKind;
 }
 
 /** One organization a card with an open organization grant may seat the character in (#4852). */
@@ -1039,6 +1059,10 @@ export interface DraftData {
   prestige_stories?: Record<string, string>;
   /** The organization a card seats the character in (#4852), keyed by the card's id as text. */
   organizations?: Record<string, number | null>;
+  /** A second face the character is not wearing (#4856), the door's shape; null when skipped. */
+  alter_ego?: DraftOfficiallyDead | null;
+  /** The tie a card opens (#4856), keyed by the card's id as text; null takes none. */
+  ties?: Record<string, DraftTie | null>;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)

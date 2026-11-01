@@ -3,6 +3,35 @@
 
 {% block content %}
 <div id="content-main">
+    {% if combat_roles_links %}
+        {% comment %}
+            Every page staff use to author a vow's combat kit, one click from the
+            front page (#4857, slice 1 of #4843). Built by web.admin.combat_roles.
+        {% endcomment %}
+        <div class="app-group" data-group="combat-roles">
+            <h2 class="app-group-heading">
+                <button type="button"
+                        class="app-group-header collapsible"
+                        aria-expanded="true"
+                        aria-controls="group-combat-roles">
+                    <span class="toggle-icon" aria-hidden="true">▼</span>
+                    Combat roles
+                </button>
+            </h2>
+            <div class="app-group-content" id="group-combat-roles">
+                <div class="module" id="combat-roles-module">
+                    <table>
+                        {% for link in combat_roles_links %}
+                            <tr>
+                                <th scope="row"><a href="{{ link.url }}">{{ link.label }}</a></th>
+                                <td>{{ link.note }}</td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% endif %}
     {% if app_list %}
         {% regroup app_list by app_group_name as grouped_apps %}
         {% for group in grouped_apps %}

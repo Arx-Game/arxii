@@ -436,15 +436,22 @@ realm-reach group whose
 `PersonaHeat` there (`ENEMY_HEAT_SEED` from ruined upward, pinned `ENEMY_HEAT_PIN_DAYS` at
 destroy).
 
-**Officially dead (#4396).** `draft_data.officially_dead` is null or `{face_name, concept,
+**Officially dead (#4396; gated by a card since #4856).** `draft_data.officially_dead` is null or `{face_name, concept,
 quote, never_do, protect, fear, background}` (`OFFICIALLY_DEAD_KEY`, every value text,
-validated by `_validate_officially_dead`); the heading and frame are CG copy keys
-`officially_dead_heading` / `officially_dead_intro`. A blank face name takes nothing.
+validated by `_validate_face`, the same check `alter_ego` gets); the heading and frame are CG copy keys
+`officially_dead_heading` / `officially_dead_intro`. A blank face name takes nothing. The
+door opens only to a draft holding a card with a worn `scenes.DistinctionPersonaGrant`
+(Presumed Dead, 5 points: the maintainer's ruling of 2026-11-01 made the card the door's
+price), which raises the `officially_dead` ask in `final_touches_prompts`; a face saved by a
+draft with no such card is ignored at finalize.
 Finalize (`_write_officially_dead`, after the kinship bind on the player path, after the
-Actor's Sheet on the GM path) mints the face as an ESTABLISHED persona through
+Actor's Sheet on the GM path, only while the ask is open) mints the face as an ESTABLISHED persona through
 `create_persona`, writes its guise through `set_persona_profile`, wears it through
 `set_active_persona`, and marks the PRIMARY persona and the bound kin node
-`believed_deceased` (`record_public_belief`). See
+`believed_deceased` (`record_public_belief`). **A second face (#4856).** A hidden persona
+grant (Shady Alter Ego, 5) raises `alter_ego`; `draft_data.alter_ego` has the door's shape
+and `_write_alter_ego` mints the face the same way but never wears it and marks nothing
+dead. The cards are not exclusive (decision 7): both held, three faces. See
 [appearance_and_identity.md](appearance_and_identity.md) §"Layer 1".
 
 **The Introductions.** `draft_data.introductions` is `{first_journal: [a1, a2, a3],
@@ -524,8 +531,28 @@ reads "Distinction: Capable Mentor" and losing the card cascades it. All three r
 plain admin. The card's `effects_summary` prices each in words ("Starts with -300
 prestige", "Opens a membership in ...", "+5 to your Path's stronger Aspect"). The parent's
 "starting prestige event" is not built: no prestige ledger exists and the pick's notes
-already hold what the player says about a card. The leaf's three blocks are the frontend
-half.
+already hold what the player says about a card. On the leaf (#4854, the frontend half)
+each entry of `final_touches_cards` gets a block under the card's name in the chapter
+section: the story as a 500-character input (`draft_data.prestige_stories`, a blank one
+dropped on save), the organization as a select over `organization_choices` with "None"
+first (`draft_data.organizations`, null for None), the mentor line with the Aspect from
+`detail` or a generic phrase before a Path is picked; all saved in the stage's one PATCH
+on leave. Copy keys `finaltouches_prestige_prompt` / `_help`,
+`finaltouches_organization_prompt` / `_help` / `_none`, `finaltouches_aspect_prompt` /
+`_help` / `_unknown` (seeded, PLACEHOLDER for the maintainer's voice).
+
+*The organization tie (#4856)*: `societies.DistinctionOrganizationTie` (`org_type` nullable:
+The Catspaw's gang, Cloistered's temple) raises `tie`; the ask's `choices` are
+`organization_choices(draft, org_type=...)`, the realm's admitting organizations of that
+kind, and `detail` the type's name. `draft_data.ties` is `{"<card id>": {"organization_id",
+"kind"}}` (`TIES_KEY`; the organization one of that card's choices, the kind a `TieKind`:
+`membership` or `renown`; null takes none), checked by `_validate_ties` against the live
+asks. `_write_card_ties` seats `membership` through `join_organization` at the entry rank
+(an `OrganizationMembershipError` logged and skipped) and writes `renown` through
+`bump_organization_reputation` at `societies.types.FAVORED_FLOOR` (the Favored tier's
+floor, `TIER_UNKNOWN_MAX + 1`; ruled 2026-11-01) with the `character_creation` cause,
+unscaled. "A tie" beyond those two has no ruled row and is not built. Every ask's
+`choices` list also fills for the `organization` ask, so the leaf has one shape to read.
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,

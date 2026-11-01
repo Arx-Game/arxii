@@ -59316,8 +59316,9 @@ components:
         * `glimpse` - Glimpse
     FinalTouchesCard:
       type: object
-      description: 'One ask a held card raises at Final Touches (#4852, slice 6 of
-        #4813).'
+      description: |-
+        One ask a held card raises at Final Touches (#4852, slice 6 of #4813); ``choices`` are
+        the organizations an ``organization`` or ``tie`` ask picks from (#4856), else empty.
       properties:
         distinction_id:
           type: integer
@@ -59327,7 +59328,12 @@ components:
           $ref: '#/components/schemas/PromptEnum'
         detail:
           type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationChoice'
       required:
+      - choices
       - detail
       - distinction_id
       - name
@@ -71786,8 +71792,8 @@ components:
       - society_name
     OrganizationChoice:
       type: object
-      description: One organization a card with an open organization grant may seat
-        the character in.
+      description: 'One organization an ask may seat the character in or tie them
+        to (#4852, #4856).'
       properties:
         id:
           type: integer
@@ -85261,12 +85267,18 @@ components:
       - prestige_story
       - organization
       - path_aspect
+      - officially_dead
+      - alter_ego
+      - tie
       type: string
       description: |-
         * `crime` - Name the crime (Jailbird)
         * `prestige_story` - What people say happened (a prestige grant)
         * `organization` - The organization that takes you in (an organization grant)
         * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
+        * `officially_dead` - The face the world meets (a worn persona grant)
+        * `alter_ego` - A second face (a hidden persona grant)
+        * `tie` - A tie with an organization (an organization tie)
     Pronouns:
       type: object
       description: Serializer for pronoun sets.

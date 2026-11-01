@@ -33,6 +33,7 @@ from world.societies.models import (
     CrownBid,
     CrownVote,
     DistinctionOrganizationGrant,
+    DistinctionOrganizationTie,
     DistinctionPrestigeGrant,
     GangTurfDetails,
     GangTurfReputationAward,
@@ -644,6 +645,17 @@ class DistinctionOrganizationGrantAdmin(admin.ModelAdmin):
     search_fields = ("distinction__name", "organization__name")
     raw_id_fields = ("distinction", "rank")
     autocomplete_fields = ("organization",)
+
+
+@admin.register(DistinctionOrganizationTie)
+class DistinctionOrganizationTieAdmin(admin.ModelAdmin):
+    """The tie a card opens (#4856): a membership or renown with one of the realm's admitting
+    organizations of the given kind, the player's pick at Final Touches."""
+
+    list_display = ("distinction", "org_type")
+    list_filter = ("org_type",)
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)
 
 
 @admin.register(OrganizationObligation)
