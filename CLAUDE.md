@@ -144,9 +144,11 @@ back from the creating command's own stdout.
 - **`gh` discipline** (see the `github-operations` skill): take new issue/PR
   numbers from the URL the create command returns — never compute `N+1` (issues and
   PRs share one counter); verify number↔title before any mutation; keep issue/PR
-  writes one-per-message. Never put close/fix/resolve before a `#N` in a commit or PR
-  body unless `#N` is the PR's own issue: GitHub closes it on merge (#4903 closed an open
-  PR that way; a `commit-msg` hook and the PR-body CI step now reject it). Read-only
+  writes one-per-message. Never put close/fix/resolve before a `#N` inside a sentence
+  in a commit or PR body: GitHub closes `#N` on merge, even after "do not". Five issues
+  and PRs were closed that way (#4903). Close deliberately, on a line of its own
+  (`Closes #N`, `- Fixes #N: what`). A `commit-msg` hook and the PR-body CI step reject
+  the prose form. Read-only
   `gh api` calls are fine. Branch protection on
   `main` plus the maintainer PAT scope are the safety rails.
 - **End-to-end issue → merged-PR work:** use the `issue-to-merged-pr` skill (branch

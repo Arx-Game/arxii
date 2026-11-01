@@ -76,11 +76,13 @@ gh issue view 651 --json number,title         # ← verify 651, NOT 652
 - You're commenting on / closing an issue without viewing its title this turn.
 - You assumed issues and PRs have independent numbering.
 - You're firing several `gh` mutations in one message, or a `sleep N && gh` chain.
-- You wrote close/fix/resolve (any tense) right before a `#N` in a commit message or PR
-  body, and `#N` is not the issue this PR closes. GitHub closes `#N` when the text lands
-  on main: on 2026-11-01, "the bot fixed #4866" in a commit body closed an open PR
-  unmerged (#4903). Write "renumbered #N" or "on #N" instead. The `commit-msg` hook and
-  the `review-evidence` CI step reject it, and the fix there is a reword, not a rebase.
+- You wrote close/fix/resolve (any tense) right before a `#N` inside a sentence, in a
+  commit message or PR body. GitHub closes `#N` when the text lands on main, and it
+  ignores "not": five PRs closed what their own prose named, including an open PR (via
+  commit-body prose about #4866) and three issues whose lines said not to close them
+  (#4903 has the list). Close only on a line of its own, `Closes #N` or
+  `- Fixes #N: what`, and otherwise write "on #N" or "renumbered #N". The `commit-msg`
+  hook and the `review-evidence` CI step reject the prose form, and the fix is a reword.
 
 | Rationalization | Reality |
 |---|---|
