@@ -71,6 +71,21 @@ fine-grained UI; that is the classic-PAT scope name). Without it the endpoint
 returns `Resource not accessible by personal access token` - which is a distinct
 signal from `[]`, so never report "clean" without checking which you got.
 
+### SonarCloud issues (#4850)
+
+SonarCloud's comment on a PR can say "Quality Gate passed" while listing "1 New
+issue", and its finding fails no check. Every one is fixed before merge.
+`enqueue-pr.sh` and `watch-merge.sh` read it themselves (`_sonar-helpers.sh`); by hand:
+
+```bash
+curl -s "https://sonarcloud.io/api/issues/search?componentKeys=Arx-Game_arxii&pullRequest=<pr>&issueStatuses=OPEN,CONFIRMED&sinceLeakPeriod=true"
+curl -s "https://sonarcloud.io/api/project_pull_requests/list?project=Arx-Game_arxii"
+```
+
+The second shows which commit SonarCloud last analyzed (`commit.sha`). Issues read
+before it reaches the PR's head belong to an older commit, and a clean answer then
+proves nothing about the fix.
+
 ## 4. Comments: whose block, and whose are just data
 
 **Comments never gate** - that is CLAUDE.md's rule for issues and it holds here,

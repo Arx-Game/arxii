@@ -34,6 +34,7 @@ def _pr(  # noqa: PLR0913 - one switch per piece of PR state the watcher reads
     armed: bool = False,
     threads: list[bool] | None = None,
     comments: list[str] | None = None,
+    head: str | None = None,
 ):
     pr = {
         "data": {
@@ -55,7 +56,29 @@ def _pr(  # noqa: PLR0913 - one switch per piece of PR state the watcher reads
         node["reviewThreads"] = {"nodes": [{"isResolved": done} for done in threads]}
     if comments is not None:
         node["comments"] = {"nodes": [{"body": body} for body in comments]}
+    if head is not None:
+        node["headRefOid"] = head
     return pr
+
+
+def _sonar_pulls(analyzed: str | None) -> dict:
+    """SonarCloud's PR list, with PR 5's newest analysis at ``analyzed`` (none: unlisted)."""
+    pulls = [] if analyzed is None else [{"key": "5", "commit": {"sha": analyzed}}]
+    return {"pullRequests": pulls}
+
+
+def _sonar_issues(count: int) -> dict:
+    return {
+        "issues": [
+            {
+                "rule": "python:S3776",
+                "component": "Arx-Game_arxii:src/a.py",
+                "line": n + 1,
+                "message": "Too complex",
+            }
+            for n in range(count)
+        ]
+    }
 
 
 _CHALLENGE = (
@@ -66,7 +89,12 @@ _ANSWER = "<!-- evidence-answer -->\nHere it is."
 _RESOLVED = "<!-- evidence-challenge round=2 verdict=satisfied -->\nThanks."
 
 
-def _run(polls: list, cap: int = 3600) -> subprocess.CompletedProcess[str]:
+def _run(
+    polls: list,
+    cap: int = 3600,
+    sonar_pulls: dict | None = None,
+    sonar_issues: dict | None = None,
+) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as tmp:
         bindir = Path(tmp, "bin")
         bindir.mkdir()
@@ -76,8 +104,14 @@ def _run(polls: list, cap: int = 3600) -> subprocess.CompletedProcess[str]:
         Path(tmp, "polls.jsonl").write_text(
             "\n".join(p if isinstance(p, str) else json.dumps(p) for p in polls) + "\n"
         )
+        pulls = Path(tmp, "sonar_pulls.json")
+        pulls.write_text(json.dumps(sonar_pulls or _sonar_pulls(None)))
+        issues = Path(tmp, "sonar_issues.json")
+        issues.write_text(json.dumps(sonar_issues or _sonar_issues(0)))
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
         env.update(
+            SONAR_PR_JSON_FILE=str(pulls),
+            SONAR_ISSUES_JSON_FILE=str(issues),
             PATH=f"{bindir}:{env['PATH']}",
             STUB_DIR=tmp,
             WATCH_MERGE_INTERVAL="0",
@@ -152,6 +186,37 @@ class WatchMergeTests(unittest.TestCase):
 
     def test_a_resolved_challenge_keeps_waiting(self) -> None:
         result = _run([_pr(armed=True, comments=[_CHALLENGE, _ANSWER, _RESOLVED])], cap=0)
+        self.assertEqual(result.returncode, 6, result.stderr)
+
+    def test_an_open_sonarcloud_issue_on_the_analyzed_head_needs_an_answer(self) -> None:
+        result = _run(
+            [_pr(armed=True, head="abc")],
+            sonar_pulls=_sonar_pulls("abc"),
+            sonar_issues=_sonar_issues(2),
+        )
+        self.assertEqual(result.returncode, 10, result.stderr)
+        self.assertIn("NEEDS_ANSWER #5: 2 open SonarCloud issue(s)", result.stdout)
+
+    def test_a_queued_pr_with_a_sonarcloud_issue_needs_an_answer(self) -> None:
+        result = _run(
+            [_pr(queue=True, head="abc")],
+            sonar_pulls=_sonar_pulls("abc"),
+            sonar_issues=_sonar_issues(1),
+        )
+        self.assertEqual(result.returncode, 10, result.stderr)
+
+    def test_a_sonarcloud_analysis_of_an_older_commit_keeps_waiting(self) -> None:
+        # The issues belong to the commit before the fix; the new head is not analyzed yet.
+        result = _run(
+            [_pr(armed=True, head="abc")],
+            cap=0,
+            sonar_pulls=_sonar_pulls("old"),
+            sonar_issues=_sonar_issues(1),
+        )
+        self.assertEqual(result.returncode, 6, result.stderr)
+
+    def test_a_clean_sonarcloud_analysis_keeps_waiting(self) -> None:
+        result = _run([_pr(armed=True, head="abc")], cap=0, sonar_pulls=_sonar_pulls("abc"))
         self.assertEqual(result.returncode, 6, result.stderr)
 
 
