@@ -1282,6 +1282,7 @@ class FacetEffectBonusInline(admin.TabularInline):
     """The maneuver effects this facet boosts while worn on a threaded facet (#4815)."""
 
     model = FacetEffectBonus
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["target", "amount"]
     autocomplete_fields = ["target"]

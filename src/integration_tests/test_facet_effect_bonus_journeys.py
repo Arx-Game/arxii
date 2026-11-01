@@ -188,6 +188,28 @@ class StaffAuthorTheBonusOnTheFacetPage(_WolfFangField):
         self.assertContains(response, "Select a valid choice")
         self.assertFalse(FacetEffectBonus.objects.exists())
 
+    def test_the_facet_page_refuses_the_same_effect_twice(self) -> None:
+        response = self.client.post(
+            reverse("admin:arxii_facet_change", args=[self.wolf.pk]),
+            {
+                "name": "Wolf",
+                "description": "",
+                "aliases-TOTAL_FORMS": "0",
+                "aliases-INITIAL_FORMS": "0",
+                "effect_bonuses-TOTAL_FORMS": "2",
+                "effect_bonuses-INITIAL_FORMS": "0",
+                "effect_bonuses-0-target": str(self.charge_damage.pk),
+                "effect_bonuses-0-amount": "2",
+                "effect_bonuses-1-target": str(self.charge_damage.pk),
+                "effect_bonuses-1-amount": "3",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "is already on another row.")
+        self.assertNotContains(response, "Please correct the duplicate data")
+        self.assertFalse(FacetEffectBonus.objects.exists())
+
     def test_the_facet_page_refuses_a_bonus_of_nothing(self) -> None:
         response = self.post_wolf(self.charge_damage.pk, "0")
 
