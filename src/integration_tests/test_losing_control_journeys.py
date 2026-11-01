@@ -389,6 +389,26 @@ class WoundTriggers(_ControlLossCase):
         swing = next(i for i, row in enumerate(rows) if "Haymaker strikes a hooded man" in row)
         self.assertEqual(control + 1, swing, rows)
 
+    def test_a_disguised_fighter_who_declares_nothing_holds_back_under_the_disguise(
+        self,
+    ) -> None:
+        """R2: the held-back round line names the face Garrick wears, never his key."""
+        hood = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.TEMPORARY, name="a hooded man"
+        )
+        self.sheet.active_persona = hood
+        self.sheet.save(update_fields=["active_persona"])
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(witness)
+
+        self.brute_swings(10, self.success)
+
+        self.assertShownRow(witness, "a hooded man holds back.")
+        self.assertFalse(
+            any("Garrick" in row for row in self.mailbox(witness).rows),
+            self.mailbox(witness).rows,
+        )
+
     def test_nothing_is_told_until_the_hit_commits(self) -> None:
         witness = self.make_player("Witness", room=self.field)
         self.watch(witness)
