@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 
 from world.character_creation.constants import (
+    ALTER_EGO_HEADING,
+    ALTER_EGO_INTRO,
     APPLICATION_FRAME,
     APPLICATION_QUESTIONS,
     APPLICATION_TITLE,
@@ -47,6 +49,11 @@ from world.character_creation.constants import (
     FINAL_TOUCHES_ORGANIZATION_PROMPT,
     FINAL_TOUCHES_PRESTIGE_HELP,
     FINAL_TOUCHES_PRESTIGE_PROMPT,
+    FINAL_TOUCHES_TIE_HELP,
+    FINAL_TOUCHES_TIE_MEMBERSHIP,
+    FINAL_TOUCHES_TIE_NONE,
+    FINAL_TOUCHES_TIE_PROMPT,
+    FINAL_TOUCHES_TIE_RENOWN,
     FIRST_JOURNAL_FRAME,
     FIRST_JOURNAL_INSTITUTION,
     FIRST_JOURNAL_QUESTIONS,
@@ -475,6 +482,14 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "finaltouches_aspect_prompt": FINAL_TOUCHES_ASPECT_PROMPT,  # PLACEHOLDER: Apostate rewrite
     "finaltouches_aspect_help": FINAL_TOUCHES_ASPECT_HELP,  # PLACEHOLDER: Apostate rewrite
     "finaltouches_aspect_unknown": FINAL_TOUCHES_ASPECT_UNKNOWN,  # PLACEHOLDER
+    # The second face and the tie (#4856).
+    "alter_ego_heading": ALTER_EGO_HEADING,  # PLACEHOLDER: Apostate rewrite
+    "alter_ego_intro": ALTER_EGO_INTRO,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_tie_prompt": FINAL_TOUCHES_TIE_PROMPT,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_tie_help": FINAL_TOUCHES_TIE_HELP,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_tie_none": FINAL_TOUCHES_TIE_NONE,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_tie_membership": FINAL_TOUCHES_TIE_MEMBERSHIP,  # PLACEHOLDER
+    "finaltouches_tie_renown": FINAL_TOUCHES_TIE_RENOWN,  # PLACEHOLDER: Apostate rewrite
     "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
     "first_journal_frame": FIRST_JOURNAL_FRAME,
     "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],

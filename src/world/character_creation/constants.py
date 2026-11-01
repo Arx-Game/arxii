@@ -593,6 +593,19 @@ FINAL_TOUCHES_ASPECT_PROMPT = (
 )
 FINAL_TOUCHES_ASPECT_HELP = "Applied for you."  # PLACEHOLDER: Apostate rewrite
 FINAL_TOUCHES_ASPECT_UNKNOWN = "your Path's stronger Aspect"  # PLACEHOLDER: Apostate rewrite
+# The second face and the tie (#4856, slice 6 of #4813). Twins of the leaf's ``SECOND_FACE`` and
+# ``TIE`` fallbacks.
+ALTER_EGO_HEADING = "A second face"  # PLACEHOLDER: Apostate rewrite
+ALTER_EGO_INTRO = (
+    "Your best work goes by another name. Name the face some circles know, with a concept, "
+    "a quote and a story of its own; the rest of the world meets you."
+)  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_TIE_PROMPT = "The ones who remember you."  # PLACEHOLDER: Apostate rewrite
+# PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_TIE_HELP = "A place at the bottom rung, or a name they already know. Or neither."
+FINAL_TOUCHES_TIE_NONE = "None"  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_TIE_MEMBERSHIP = "A place at the bottom rung"  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_TIE_RENOWN = "A name they already know"  # PLACEHOLDER: Apostate rewrite
 
 OFFICIALLY_DEAD_HEADING = "Officially dead"
 OFFICIALLY_DEAD_INTRO = (

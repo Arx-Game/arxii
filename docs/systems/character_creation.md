@@ -553,6 +553,13 @@ asks. `_write_card_ties` seats `membership` through `join_organization` at the e
 floor, `TIER_UNKNOWN_MAX + 1`; ruled 2026-11-01) with the `character_creation` cause,
 unscaled. "A tie" beyond those two has no ruled row and is not built. Every ask's
 `choices` list also fills for the `organization` ask, so the leaf has one shape to read.
+On the leaf (#4861, the frontend half) the Officially dead door renders only while the
+prompts include `officially_dead`; a second `IntroductionBlock`, "A second face", renders
+for `alter_ego` with the same face form (`FaceForm`) and saves `draft_data.alter_ego`, null
+when skipped; a `tie` ask gets a block in the chapter section, a select over the ask's
+`choices` with "None" first and, once one is picked, a `ChoiceRow` over the two kinds, saved
+as `draft_data.ties`. Copy keys `alter_ego_heading` / `_intro`, `finaltouches_tie_prompt` /
+`_help` / `_none` / `_membership` / `_renown` (seeded, PLACEHOLDER).
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
