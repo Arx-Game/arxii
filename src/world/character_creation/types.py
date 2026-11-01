@@ -166,15 +166,26 @@ class MagicTrainingPool:
 
 
 @dataclass(frozen=True)
+class OrganizationChoice:
+    """One organization an ask may seat the character in (#4852, #4856)."""
+
+    id: int
+    name: str
+    is_covert: bool
+
+
+@dataclass(frozen=True)
 class FinalTouchesCard:
     """One ask a held card raises at Final Touches (#4852, slice 6 of #4813).
 
     ``prompt`` is a ``FinalTouchesPrompt`` value; ``detail`` carries what the leaf prints
     beside it when the prompt has nothing to answer (the Path's stronger Aspect's name for
-    ``path_aspect``), else blank. Built by ``offers.final_touches_cards``.
+    ``path_aspect``), else blank; ``choices`` the organizations an ``organization`` or ``tie``
+    ask picks from (#4856), empty for every other prompt. Built by ``offers.final_touches_cards``.
     """
 
     distinction_id: int
     name: str
     prompt: str
     detail: str
+    choices: tuple[OrganizationChoice, ...] = ()

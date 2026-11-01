@@ -10,6 +10,9 @@ TIER_DISLIKED_MAX = -250
 TIER_DISFAVORED_MAX = -100
 TIER_UNKNOWN_MAX = 99
 TIER_FAVORED_MAX = 249
+#: The Favored tier's floor: the starting renown a card's organization tie grants at character
+#: creation (#4856, slice 6 of #4813; ruled 2026-11-01, "floor of favored tier is fine").
+FAVORED_FLOOR = TIER_UNKNOWN_MAX + 1
 TIER_LIKED_MAX = 499
 TIER_HONORED_MAX = 749
 # REVERED is anything above TIER_HONORED_MAX

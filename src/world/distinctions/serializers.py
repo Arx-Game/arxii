@@ -180,6 +180,17 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         path_aspect = obj.path_aspect_grant_or_none
         if path_aspect is not None:
             result.append({"text": f"{path_aspect.value:+d} to your Path's stronger Aspect"})
+        # And the second face and the organization tie (#4856).
+        persona = obj.persona_grant_or_none
+        if persona is not None:
+            door = "Opens the Officially dead door" if persona.worn else "Opens a second face"
+            result.append({"text": door})
+        tie = obj.organization_tie_or_none
+        if tie is not None:
+            kind = "an organization"
+            if tie.org_type_id:
+                kind = f"a {tie.org_type.name.replace('_', ' ')}"
+            result.append({"text": f"Opens a tie with {kind} of your realm"})
         return result
 
     def get_codex_entry_ids(self, obj: Distinction) -> list[int]:

@@ -24,6 +24,7 @@ from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
     DistinctionOrganizationGrant,
+    DistinctionOrganizationTie,
     DistinctionPrestigeGrant,
     LegendDeedStory,
     LegendEntry,
@@ -494,3 +495,12 @@ class DistinctionOrganizationGrantFactory(factory_django.DjangoModelFactory):
 
     organization = None
     rank = None
+
+
+class DistinctionOrganizationTieFactory(factory_django.DjangoModelFactory):
+    """The tie a card opens (#4856); pass ``distinction`` and, for a kind, ``org_type``."""
+
+    class Meta:
+        model = DistinctionOrganizationTie
+
+    org_type = None

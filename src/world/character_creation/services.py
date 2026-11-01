@@ -36,6 +36,7 @@ from world.character_creation.constants import (
     ChildFate,
     CommentType,
     FamilyPath,
+    FinalTouchesPrompt,
     KinRowKind,
     OriginStoryState,
     Parentage,
@@ -50,7 +51,11 @@ from world.character_creation.models import (
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
 )
-from world.character_creation.offers import opened_feature_traits, reconcile_offer_picks
+from world.character_creation.offers import (
+    final_touches_prompts,
+    opened_feature_traits,
+    reconcile_offer_picks,
+)
 from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
@@ -531,9 +536,14 @@ def _write_final_touches_doors(
     story behind a starting prestige, the membership a card opens, the bonus on the Path's
     stronger Aspect). Called by both finalize paths, after the vacancy bind, so a
     membership a vacancy already seated is kept, not doubled."""
-    _write_officially_dead(draft, sheet, primary)
+    asked = final_touches_prompts(draft)
+    if FinalTouchesPrompt.OFFICIALLY_DEAD in asked:
+        _write_officially_dead(draft, sheet, primary)
+    if FinalTouchesPrompt.ALTER_EGO in asked:
+        _write_alter_ego(draft, sheet)
     _write_crime_note(draft, sheet)
     _apply_card_grants(draft, sheet, primary)
+    _write_card_ties(draft, sheet, primary)
 
 
 def _apply_card_grants(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
@@ -649,7 +659,8 @@ def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary
     hidden) with the guise bio the player wrote (``set_persona_profile``), worn from the
     first day (``set_active_persona``). The true face is marked ``believed_deceased``, and so
     is the character's kin node when the kinship bind made one, so the almanach reads the
-    same belief. A blank face name writes nothing.
+    same belief. A blank face name writes nothing. Since #4856 the door opens only to a draft
+    holding a card with a worn persona grant (Presumed Dead); the caller checks the ask.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -683,6 +694,82 @@ def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary
         node = None
     if node is not None:
         record_public_belief(node, believed_deceased=True)
+
+
+def _write_alter_ego(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """A second face the character is not wearing (#4856, Shady Alter Ego): an established
+    persona with the guise the player wrote, never worn here and never believed dead; the
+    primary stays as it is. The caller checks that a held card asks for it. A blank face name
+    writes nothing."""
+    from world.character_creation.constants import (  # noqa: PLC0415
+        ALTER_EGO_KEY,
+        OFFICIALLY_DEAD_FACE_NAME,
+        OFFICIALLY_DEAD_TEXT_FIELDS,
+    )
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.services import create_persona, set_persona_profile  # noqa: PLC0415
+
+    face = draft.draft_data.get(ALTER_EGO_KEY) or {}
+    name = (face.get(OFFICIALLY_DEAD_FACE_NAME) or "").strip()
+    if not name:
+        return
+    hidden = create_persona(sheet, name=name, persona_type=PersonaType.ESTABLISHED)
+    texts = {field: face.get(field, "").strip() for field in OFFICIALLY_DEAD_TEXT_FIELDS}
+    if any(texts.values()):
+        set_persona_profile(hidden, **{field: text for field, text in texts.items() if text})
+
+
+def _write_card_ties(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
+    """The ties the held cards open (#4856): for each card with an organization tie whose
+    answer names one of the card's choices, a membership at the entry rank through
+    ``join_organization`` (an ``OrganizationMembershipError`` logged and skipped) or starting
+    renown at the Favored tier's floor through ``bump_organization_reputation``, unscaled
+    (where the character begins, not regard gained in play). Nothing for a card left
+    unanswered or an answer naming an organization no longer among the choices."""
+    from world.character_creation.constants import (  # noqa: PLC0415
+        TIE_KIND,
+        TIE_ORGANIZATION_ID,
+        TIES_KEY,
+        FinalTouchesPrompt,
+        TieKind,
+    )
+    from world.character_creation.offers import final_touches_cards  # noqa: PLC0415
+    from world.societies.constants import OrganizationReputationCause  # noqa: PLC0415
+    from world.societies.exceptions import OrganizationMembershipError  # noqa: PLC0415
+    from world.societies.membership_services import join_organization  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
+    from world.societies.types import FAVORED_FLOOR  # noqa: PLC0415
+
+    answers = draft.draft_data.get(TIES_KEY) or {}
+    if not answers:
+        return
+    asks = [a for a in final_touches_cards(draft) if a.prompt == FinalTouchesPrompt.TIE]
+    for ask in asks:
+        answer = answers.get(str(ask.distinction_id)) or {}
+        org_id = answer.get(TIE_ORGANIZATION_ID)
+        if org_id is None or org_id not in {c.id for c in ask.choices}:
+            continue
+        organization = Organization.objects.get(pk=org_id)
+        if answer.get(TIE_KIND) == TieKind.MEMBERSHIP:
+            try:
+                join_organization(organization, primary)
+            except OrganizationMembershipError as exc:
+                logger.info(
+                    "tie %s did not seat %s in %s: %s",
+                    ask.name,
+                    sheet.pk,
+                    organization.name,
+                    type(exc).__name__,
+                )
+        elif answer.get(TIE_KIND) == TieKind.RENOWN:
+            bump_organization_reputation(
+                primary,
+                organization,
+                FAVORED_FLOOR,
+                cause=OrganizationReputationCause.CHARACTER_CREATION,
+                scale_gain=False,
+            )
 
 
 def _write_crime_note(draft: CharacterDraft, sheet: CharacterSheet) -> None:

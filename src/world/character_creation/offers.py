@@ -45,6 +45,7 @@ from world.character_creation.types import (
     BeatPoolEntry,
     ClosedDistinction,
     FinalTouchesCard,
+    OrganizationChoice,
     VisibleOffer,
 )
 from world.character_sheets.types import EnemyDegree
@@ -55,7 +56,7 @@ from world.distinctions.types import (
     build_distinction_entry,
     feature_of,
 )
-from world.societies.models import Organization
+from world.societies.models import Organization, OrganizationType
 
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
@@ -472,7 +473,13 @@ def held_cards(draft: CharacterDraft) -> list[Distinction]:
         return []
     return list(
         Distinction.objects.filter(pk__in=held)
-        .select_related("prestige_grant", "organization_grant", "path_aspect_grant")
+        .select_related(
+            "prestige_grant",
+            "organization_grant",
+            "path_aspect_grant",
+            "persona_grant",
+            "organization_tie__org_type",
+        )
         .order_by("name")
     )
 
@@ -504,20 +511,40 @@ def final_touches_cards(draft: CharacterDraft) -> list[FinalTouchesCard]:
     aspect = strongest_path_aspect(draft.selected_path)
     asks: list[FinalTouchesCard] = []
     for card in cards:
-        if card.final_touches_prompt:
-            asks.append(FinalTouchesCard(card.pk, card.name, card.final_touches_prompt, ""))
-        if card.prestige_grant_or_none is not None:
-            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PRESTIGE_STORY, ""))
-        org_grant = card.organization_grant_or_none
-        if org_grant is not None and org_grant.organization_id is None:
-            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.ORGANIZATION, ""))
-        if card.path_aspect_grant_or_none is not None:
-            detail = aspect.name if aspect is not None else ""
-            asks.append(
-                FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PATH_ASPECT, detail)
-            )
+        asks.extend(_asks_of(card, draft, aspect))
     order = {prompt.value: index for index, prompt in enumerate(FinalTouchesPrompt)}
     asks.sort(key=lambda ask: (order[ask.prompt], ask.name))
+    return asks
+
+
+def _asks_of(
+    card: Distinction, draft: CharacterDraft, aspect: Aspect | None
+) -> list[FinalTouchesCard]:
+    """One card's asks: its staff-set prompt and the ones its sidecars raise (#4852, #4856)."""
+
+    def ask(prompt: str, detail: str = "", choices: tuple = ()) -> FinalTouchesCard:
+        return FinalTouchesCard(card.pk, card.name, prompt, detail, choices)
+
+    asks: list[FinalTouchesCard] = []
+    if card.final_touches_prompt:
+        asks.append(ask(card.final_touches_prompt))
+    if card.prestige_grant_or_none is not None:
+        asks.append(ask(FinalTouchesPrompt.PRESTIGE_STORY))
+    org_grant = card.organization_grant_or_none
+    if org_grant is not None and org_grant.organization_id is None:
+        choices = _organization_choice_rows(organization_choices(draft))
+        asks.append(ask(FinalTouchesPrompt.ORGANIZATION, choices=choices))
+    if card.path_aspect_grant_or_none is not None:
+        asks.append(ask(FinalTouchesPrompt.PATH_ASPECT, aspect.name if aspect is not None else ""))
+    persona_grant = card.persona_grant_or_none
+    if persona_grant is not None:
+        worn = FinalTouchesPrompt.OFFICIALLY_DEAD
+        asks.append(ask(worn if persona_grant.worn else FinalTouchesPrompt.ALTER_EGO))
+    tie = card.organization_tie_or_none
+    if tie is not None:
+        choices = _organization_choice_rows(organization_choices(draft, org_type=tie.org_type))
+        detail = tie.org_type.name if tie.org_type_id else ""
+        asks.append(ask(FinalTouchesPrompt.TIE, detail, choices))
     return asks
 
 
@@ -536,24 +563,32 @@ def final_touches_prompts(draft: CharacterDraft) -> list[str]:
     return prompts
 
 
-def organization_choices(draft: CharacterDraft) -> list[Organization]:
-    """The organizations a card with an open organization grant may seat the character in.
+def organization_choices(
+    draft: CharacterDraft, *, org_type: OrganizationType | None = None
+) -> list[Organization]:
+    """The organizations a card may seat the character in, or tie them to.
 
     The organizations of the draft's realm (the realm page's own reading, #3725: the
     society's realm is the starting area's) that ``admits_player_characters``, covenants
-    excluded, by name. A covert organization is listed too: the parent's leak table has the
-    list shown to its own player only. Called by ``CharacterDraftSerializer`` and by the
-    draft's answer validation (#4852).
+    excluded, by name; with ``org_type``, those of that kind only (a tie's gang or temple,
+    #4856). A covert organization is listed too: the parent's leak table has the list shown
+    to its own player only. Called by ``final_touches_cards``, ``CharacterDraftSerializer``
+    and the draft's answer validation (#4852).
     """
     if draft.selected_area_id is None or draft.selected_area.realm_id is None:
         return []
-    return list(
-        Organization.objects.filter(
-            society__realm_id=draft.selected_area.realm_id,
-            admits_player_characters=True,
-            covenant__isnull=True,
-        ).order_by("name")
+    rows = Organization.objects.filter(
+        society__realm_id=draft.selected_area.realm_id,
+        admits_player_characters=True,
+        covenant__isnull=True,
     )
+    if org_type is not None:
+        rows = rows.filter(org_type=org_type)
+    return list(rows.order_by("name"))
+
+
+def _organization_choice_rows(orgs: Iterable[Organization]) -> tuple[OrganizationChoice, ...]:
+    return tuple(OrganizationChoice(org.pk, org.name, org.is_covert) for org in orgs)
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:

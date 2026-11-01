@@ -17,9 +17,13 @@ The one character doing the looking, as a `CharacterSheet`: the puppet or actor'
 The fabricated bio a non-primary (cover/established) persona presents as its own — its `Persona.profile` (a `character_sheets.Profile`: concept/quote/personality/background), so the *absence* of a bio doesn't out the cover as fake. Distinct from the sheet's `true_profile` (the real face's bio, presented by PRIMARY). Authored via `set_persona_profile`; lineage stays display-only (mechanical reads pin to `true_profile`).
 _Avoid_: fake sheet, alt bio, cover profile (the model is `Profile`; the surface is the Guise Sheet).
 
-**Officially dead** (#4396):
-A character the world believes dead from creation: the PRIMARY persona carries `believed_deceased` (so does the kin node), and an ESTABLISHED face with its own Guise Sheet is the active persona from the first day. The face is a named alt (its link to the true face is discovered, never seen through). Written once by `character_creation.services._write_officially_dead` from `draft_data.officially_dead`.
+**Officially dead** (#4396, gated by a card since #4856):
+A character the world believes dead from creation: the PRIMARY persona carries `believed_deceased` (so does the kin node), and an ESTABLISHED face with its own Guise Sheet is the active persona from the first day. The face is a named alt (its link to the true face is discovered, never seen through). Written once by `character_creation.services._write_officially_dead` from `draft_data.officially_dead`, only for a draft holding a card with a worn **persona grant** (Presumed Dead).
 _Avoid_: dead start, faked death (the world's belief, not an event), undercover.
+
+**Persona grant** (`DistinctionPersonaGrant`, #4856, slice 6 of #4813):
+A card that prices a second face at character creation (the maintainer's ruling of 2026-11-01: Presumed Dead and Shady Alter Ego are the cost of starting with another persona). `worn` on: the face is worn and the true one believed dead, the Officially dead door. `worn` off: a second ESTABLISHED face the character is not wearing (`draft_data.alter_ego`, `_write_alter_ego`). Not exclusive: both cards make three faces.
+_Avoid_: alt grant, disguise card (a disguise is a TEMPORARY mask), secret identity (that is what the hidden link between faces is, not the grant).
 
 **Gemit**:
 Root term — a staff/GM broadcast pushed to a public-reaction surface. Not redefined here.

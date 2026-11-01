@@ -80,14 +80,17 @@ artist changes persona with an *identical* body; a curse changes the body and
   *presented* face's profile cover-aware (slices 1–3), so a guise authored anywhere shows
   correctly. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
   another's cover there; the `<cover> (<real>)` reveal is a web-profile concern.)
-- **Officially dead (#4396).** A character may start as someone the world believes dead:
-  the Final Touches door writes `draft_data.officially_dead` (`face_name` plus the guise
+- **Officially dead (#4396; a card's door since #4856).** A character may start as someone the world believes dead:
+  the Final Touches door, shown only to a draft holding a card with a worn
+  `scenes.DistinctionPersonaGrant` (Presumed Dead), writes `draft_data.officially_dead` (`face_name` plus the guise
   texts), and finalize (`character_creation.services._write_officially_dead`) mints an
   ESTABLISHED face through `create_persona`, gives it the guise through
   `set_persona_profile`, wears it (`set_active_persona`) and sets `believed_deceased` on the
   PRIMARY and on the kin node the kinship bind made (`record_public_belief`). The face is a
   named alt: its link to the true face is discovered, never seen through.
-  `PersonaSerializer` reads `believed_deceased` back.
+  `PersonaSerializer` reads `believed_deceased` back. A hidden persona grant (Shady Alter
+  Ego) mints a second ESTABLISHED face the same way from `draft_data.alter_ego`, unworn, no
+  one believed dead (`_write_alter_ego`).
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a

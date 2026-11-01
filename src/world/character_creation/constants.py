@@ -179,15 +179,38 @@ class FinalTouchesPrompt(models.TextChoices):
     #: Nothing to answer: the line naming the Path's stronger Aspect the bonus lands on.
     #: Raised by ``classes.DistinctionPathAspectGrant``.
     PATH_ASPECT = "path_aspect", "Your Path's stronger Aspect (a path aspect grant)"
+    #: The Officially dead door (#4396): the face the world meets while the true one is
+    #: believed dead. Raised by a worn ``scenes.DistinctionPersonaGrant`` (Presumed Dead, #4856);
+    #: the door shows to no other draft.
+    OFFICIALLY_DEAD = "officially_dead", "The face the world meets (a worn persona grant)"
+    #: A second face the character is not wearing. Raised by a hidden persona grant (Shady
+    #: Alter Ego, #4856); answered in ``draft_data.alter_ego`` with the door's shape.
+    ALTER_EGO = "alter_ego", "A second face (a hidden persona grant)"
+    #: A membership at the entry rank or starting renown with one of the realm's admitting
+    #: organizations of the card's kind. Raised by ``societies.DistinctionOrganizationTie``.
+    TIE = "tie", "A tie with an organization (an organization tie)"
 
 
-#: The prompts a grant sidecar raises on its own (#4852); the rest come from
+#: The prompts a grant sidecar raises on its own (#4852, #4856); the rest come from
 #: ``Distinction.final_touches_prompt``.
 GRANT_RAISED_PROMPTS: tuple[str, ...] = (
     FinalTouchesPrompt.PRESTIGE_STORY,
     FinalTouchesPrompt.ORGANIZATION,
     FinalTouchesPrompt.PATH_ASPECT,
+    FinalTouchesPrompt.OFFICIALLY_DEAD,
+    FinalTouchesPrompt.ALTER_EGO,
+    FinalTouchesPrompt.TIE,
 )
+
+
+class TieKind(models.TextChoices):
+    """What a card's organization tie takes at finalize (#4856, slice 6 of #4813): a seat on
+    the bottom rung through ``join_organization``, or renown at the Favored tier's floor
+    through ``bump_organization_reputation``. The player's choice, free. A third shape ("a
+    tie" in the plan's copy table) has no row ruled for it yet and is not here."""
+
+    MEMBERSHIP = "membership", "A place at the bottom rung"
+    RENOWN = "renown", "A name they already know"
 
 
 class ActorSheetPrompt(models.TextChoices):
@@ -526,6 +549,14 @@ CRIME_LINE_MAX_LENGTH = 500
 PRESTIGE_STORIES_KEY = "prestige_stories"
 PRESTIGE_STORY_MAX_LENGTH = 500
 ORGANIZATIONS_KEY = "organizations"
+# The second face a hidden persona grant asks for (#4856): the Officially dead door's shape
+# (``OFFICIALLY_DEAD_FACE_NAME`` plus ``OFFICIALLY_DEAD_TEXT_FIELDS``) under its own key, since a
+# draft may hold both persona cards. ``TIES_KEY`` maps the card's id to ``{"organization_id",
+# "kind"}``, the organization one of the card's choices and the kind a ``TieKind``.
+ALTER_EGO_KEY = "alter_ego"
+TIES_KEY = "ties"
+TIE_ORGANIZATION_ID = "organization_id"
+TIE_KIND = "kind"
 
 # The Final Touches chapter (#4846, slice 5 of #4813): the card-unlocked section's copy keys.
 # Every line below is PLACEHOLDER for the maintainer's voice (the authoring plan's Final
