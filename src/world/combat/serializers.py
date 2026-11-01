@@ -183,6 +183,11 @@ def _square_payload(
     return {"x": square[0], "y": square[1]} if square is not None else None
 
 
+# Surges written with no room line (``narrate=False``): their beats render no narration
+# and never reach a bystander (#4739 emotional-condition feed, #4858 missed attack).
+_UNANNOUNCED_SURGE_KINDS = frozenset({SurgeTriggerKind.CONDITION_FED, SurgeTriggerKind.MISSED})
+
+
 class OpponentSerializer(serializers.ModelSerializer):
     """Read serializer for combat opponents.
 
@@ -1975,11 +1980,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
             if not sees_detail and (
-                not beat["narration"] or record.trigger_kind == SurgeTriggerKind.CONDITION_FED
+                not beat["narration"] or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS
             ):
                 # Nothing was announced to the room (a control-only or condition-only
-                # surge, or an emotional condition's feed, #4739, which is never
-                # announced), so a bystander has no beat to show.
+                # surge, an emotional condition's feed, #4739, or a missed attack's
+                # intensity, #4858, neither ever announced), so a bystander has no beat.
                 continue
             if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind
@@ -2005,7 +2010,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         curve = record.encounter.escalation_curve
         character_name = record.participant.character_sheet.character.db_key
-        if curve is None or record.amount == 0:
+        if curve is None or record.amount == 0 or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS:
             return ""
         return _render_surge_narration(curve, character_name)
 

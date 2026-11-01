@@ -188,6 +188,7 @@ class StrikeWithAWeapon(_StrikeField):
                     },
                 ],
                 "result": "Hit, fair",
+                "result_note": "then the damage roll",
             },
         )
         self.assertEqual(
@@ -203,6 +204,7 @@ class StrikeWithAWeapon(_StrikeField):
                     {"label": "Melee Combat", "value": "25", "detail": "strike skill"},
                 ],
                 "result": f"{SWORD_DAMAGE} damage",
+                "result_note": "",
             },
         )
 
@@ -369,7 +371,9 @@ class MissesBuildIntensity(_StrikeField):
             {"label": "Intensity", "value": "+1", "detail": "misses add to hit"},
             latest_hit["roll_breakdown"]["lines"],
         )
-        self.assertEqual(self.shown_rolls()[0]["roll_breakdown"]["result"], "Miss")
+        first_hit = self.shown_rolls()[0]["roll_breakdown"]
+        self.assertEqual(first_hit["result"], "Miss")
+        self.assertEqual(first_hit["result_note"], "")
 
 
 class StrikeThroughTelnet(_StrikeField):
@@ -403,6 +407,34 @@ class StrikeThroughTelnet(_StrikeField):
         self.assertNotTold(self.hobb, "Hobb strikes Bandit")
         self.assertTold(wren, f"Hobb strikes Bandit with an {name}. A good hit: 6 damage.")
 
+    def test_a_roomless_fight_tells_the_striker_nothing_like_the_room(self) -> None:
+        # A technique outcome in an encounter with no room reaches no one; a Strike's
+        # own second-person line follows the same rule.
+        sword = self.equip_sword()
+        self.encounter.room = None
+        self.encounter.save(update_fields=["room"])
+        self.connect_telnet(self.hobb)
+
+        self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+
+        self.assertNotTold(self.hobb, "You strike Bandit")
+        self.assertNotTold(self.hobb, "Hobb strikes Bandit")
+
+    def test_the_strikers_line_comes_before_the_aftermath(self) -> None:
+        sword = self.equip_sword()
+        self.bandit.health = 3
+        self.bandit.save(update_fields=["health"])
+        self.connect_telnet(self.hobb)
+        self.telnet(self.hobb, f"strike bandit with {sword.display_name}")
+
+        with self.captureOnCommitCallbacks(execute=True), self.forced_rolls("Success", "Success"):
+            resolve_round(self.encounter)
+
+        told = self.said(self.hobb)
+        self.assertIn("You strike Bandit", told)
+        self.assertIn("Aftermath:", told)
+        self.assertLess(told.index("You strike Bandit"), told.index("Aftermath:"))
+
     def test_combat_strike_with_no_weapon_is_bare_handed(self) -> None:
         told = self.telnet(self.hobb, "combat strike bandit")
 
@@ -418,3 +450,83 @@ class StrikeThroughTelnet(_StrikeField):
         told = self.telnet(self.hobb, "strike bandit with halberd")
 
         self.assertIn("You have no such weapon equipped.", told)
+
+
+class StrikeRecordsWhatWasRolled(_StrikeField):
+    def test_a_renamed_weapon_does_not_rewrite_the_damage_row(self) -> None:
+        sword = self.equip_sword()
+        shown = sword.display_name
+        self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+
+        sword.custom_name = "Rusty Shard"
+        sword.save()
+
+        _hit, damage_row = self.shown_rolls()
+        self.assertEqual(damage_row["roll_breakdown"]["lines"][0]["label"], shown)
+
+    def test_another_player_in_the_scene_sees_no_breakdown(self) -> None:
+        from world.scenes.factories import SceneParticipationFactory
+
+        sword = self.equip_sword()
+        self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+        wren = self.make_player("Wren", room=self.steading)
+        SceneParticipationFactory(scene=self.encounter.scene, account=self.account_of(wren))
+
+        response = self.api(self.account_of(wren)).get(
+            "/api/checks/consequence-outcomes/",
+            {"character": self.sheet.pk, "encounter": self.encounter.pk},
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = response.json()["results"]
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["roll_breakdown"] is None for row in rows))
+        # Hobb's own account still sees his rows laid out.
+        self.assertTrue(all(row["roll_breakdown"] for row in self.shown_rolls()))
+
+
+class StrikeWithUnarmedGear(_StrikeField):
+    def test_equipped_wraps_are_offered_and_their_damage_is_used(self) -> None:
+        wraps = _equip_weapon(self.hobb, archetype=GearArchetype.UNARMED, damage=4)
+
+        response = self.api(self.account_of(self.hobb)).get(f"/api/combat/{self.encounter.pk}/")
+        own = next(
+            p for p in response.json()["participants"] if p["character_sheet_id"] == self.sheet.pk
+        )
+        self.assertEqual([w["item_instance_id"] for w in own["strike_weapons"]], [wraps.pk, None])
+
+        damage, rolled = self.strike_and_resolve("Success", "Success", weapon_id=wraps.pk)
+
+        self.assertEqual(damage, 4)
+        self.assertEqual(rolled[0]["check_type"], self.unarmed)
+
+    def test_bare_hands_still_deal_the_catalog_value_beside_wraps(self) -> None:
+        _equip_weapon(self.hobb, archetype=GearArchetype.UNARMED, damage=4)
+
+        damage, _rolled = self.strike_and_resolve("Success", "Success")
+
+        self.assertEqual(damage, BARE_HANDS_DAMAGE)
+
+
+class MissSurgesStayQuiet(_StrikeField):
+    def beats_for(self, character) -> list[dict]:
+        response = self.api(self.account_of(character)).get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["surge_beats"]
+
+    def test_a_miss_surge_shows_to_its_owner_only_and_says_nothing(self) -> None:
+        from world.combat.factories import EscalationCurveFactory
+        from world.scenes.factories import SceneParticipationFactory
+
+        self.encounter.escalation_curve = EscalationCurveFactory()
+        self.encounter.save(update_fields=["escalation_curve"])
+        sword = self.equip_sword()
+        wren = self.make_player("Wren", room=self.steading)
+        SceneParticipationFactory(scene=self.encounter.scene, account=self.account_of(wren))
+
+        self.strike_and_resolve("Failure", weapon_id=sword.pk)
+
+        own = [b for b in self.beats_for(self.hobb) if b.get("trigger_kind") == "missed"]
+        self.assertEqual(len(own), 1)
+        self.assertEqual(own[0]["narration"], "")
+        self.assertEqual(self.beats_for(wren), [])

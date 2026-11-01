@@ -263,7 +263,7 @@ class CombatTechniqueResolver:
             intensity_to_hit_contribution,
         )
 
-        intensity_contribution = intensity_to_hit_contribution(self.participant)
+        intensity_contribution = intensity_to_hit_contribution(self.participant, self.action)
         if intensity_contribution is not None:
             extra_contributions.append(intensity_contribution)
 

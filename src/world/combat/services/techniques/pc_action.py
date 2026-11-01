@@ -155,7 +155,10 @@ def _maybe_record_miss(
     target: CombatOpponent | None,
     combat_result: CombatTechniqueResult | CombatTechniqueResolution,
 ) -> None:
-    """An attack on an opponent that missed builds the attacker's intensity (#4858)."""
+    """An attack on an opponent that missed builds the attacker's intensity (#4858).
+
+    ``target`` is the action's opponent: no opponent, no attack, no miss.
+    """
     if target is None or not isinstance(combat_result, CombatTechniqueResult):
         return
     use = combat_result.technique_use_result

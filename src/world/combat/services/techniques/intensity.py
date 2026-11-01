@@ -59,26 +59,40 @@ def compute_intensity_for_clash(
 # ---------------------------------------------------------------------------
 
 
-def intensity_to_hit_contribution(participant: CombatParticipant) -> ModifierContribution | None:
+def is_attack_on_opponent(action: CombatRoundAction) -> bool:
+    """Whether ``action``'s roll is an attack aimed at an opponent (#4858).
+
+    Intensity helps attacks only: the to-hit bonus and the miss surge both ask this. A
+    Strike, a technique or charge at an opponent, and a joust pass are attacks; a heal, a
+    ward, a buff, or a cast at oneself or an ally is not.
+    """
+    from world.combat.constants import CombatManeuver  # noqa: PLC0415
+
+    return action.focused_opponent_target_id is not None or action.maneuver == CombatManeuver.JOUST
+
+
+def intensity_to_hit_contribution(
+    participant: CombatParticipant, action: CombatRoundAction
+) -> ModifierContribution | None:
     """What the attacker's engagement intensity adds to an attack roll, or None.
 
-    Each point of ``intensity_modifier`` on her engagement (whatever its type, the one the
-    Pressure card shows) adds "Intensity: to hit per point" (the maneuver effect catalog:
-    its base plus modifiers scoped to that effect alone; a broad to-hit modifier is a flat
-    bonus, not a rate). Nothing at 0 or below. Read on every attack roll, technique or
-    Strike.
+    Only an attack aimed at an opponent (``is_attack_on_opponent``) gains it. Each point
+    of ``intensity_modifier`` on her COMBAT engagement for this encounter (the one a miss
+    raises, ``combat_engagement_of``) adds "Intensity: to hit per point" (the maneuver
+    effect catalog: its base plus modifiers scoped to that effect alone; a broad to-hit
+    modifier is a flat bonus, not a rate). Nothing at 0 or below.
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.types import ModifierContribution  # noqa: PLC0415
     from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
-    from world.combat.services.encounter.engagement import (  # noqa: PLC0415
-        engagement_of_any_type_for,
-    )
+    from world.combat.dig_deep import combat_engagement_of  # noqa: PLC0415
     from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
     from world.mechanics.effect_targets import effect_modifier_total  # noqa: PLC0415
     from world.mechanics.maneuver_effects import get_maneuver_effect  # noqa: PLC0415
 
-    engagement = engagement_of_any_type_for(participant.character_sheet.character)
+    if not is_attack_on_opponent(action):
+        return None
+    engagement = combat_engagement_of(participant)
     intensity = engagement.intensity_modifier if engagement is not None else 0
     if intensity <= 0:
         return None
@@ -98,10 +112,12 @@ def intensity_to_hit_contribution(participant: CombatParticipant) -> ModifierCon
 
 
 def is_miss(success_level: int | None) -> bool:
-    """Whether an attack roll at ``success_level`` missed: it would deal no damage."""
-    from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
+    """Whether an attack's hit roll missed: it failed (success level below 1).
 
-    return get_damage_multiplier(success_level or 0) <= 0
+    Read off the roll alone, never the damage table, so an empty damage-multiplier table
+    does not turn every roll into a miss.
+    """
+    return (success_level or 0) < 1
 
 
 def record_miss_intensity(participant: CombatParticipant) -> None:

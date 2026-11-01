@@ -337,3 +337,14 @@ class RollBreakdown:
     heading: str
     lines: list[RollLine] = field(default_factory=list)
     result: str = ""
+    # A note beside the result line ("then the damage roll" on a hit that went on).
+    result_note: str = ""
+
+
+@dataclass(frozen=True)
+class RollSnapshot:
+    """What a recorded roll's breakdown names, captured when the roll is made (#4858)."""
+
+    weapon_label: str
+    weapon_kind: str
+    stat_label: str

@@ -45,12 +45,18 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.checks.models import CheckType
     from world.checks.outcome_models import ConsequenceOutcome
-    from world.checks.types import CheckResult, ModifierBreakdown, RollBreakdown, RollLine
+    from world.checks.types import (
+        CheckResult,
+        ModifierBreakdown,
+        RollBreakdown,
+        RollLine,
+        RollSnapshot,
+    )
     from world.combat.types import OpponentDamageResult
     from world.conditions.models import DamageType
     from world.items.models import ItemInstance
 
-    StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None]
+    StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None, RollSnapshot]
 
 BARE_HANDS_NAME = "bare hands"
 _RANGED_ARCHETYPES = frozenset({GearArchetype.RANGED, GearArchetype.THROWN})
@@ -427,7 +433,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
         push_interaction(interaction)
-        for check_type, breakdown, summary, skill_rating in rolls:
+        for check_type, breakdown, summary, skill_rating, snapshot in rolls:
             record_consequence_outcome(
                 sheet,
                 check_type,
@@ -437,6 +443,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
                 combat_interaction=interaction,
                 summary=summary[:255],
                 skill_rating=skill_rating,
+                snapshot=snapshot,
             )
 
     narrate = partial(
@@ -453,14 +460,14 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         narration=narrate(),
         telnet_exclude=(character,),
     )
-    own_line = narrate(second_person=True)
-
-    def _tell_striker() -> None:
-        sessions = non_web_sessions(character)
-        if sessions:
-            character.msg(own_line, session=sessions)
-
-    transaction.on_commit(_tell_striker)
+    # The striker's own line goes out right after the room's, synchronously, so it lands
+    # in the round's order (before the aftermath digest). A room-less encounter tells
+    # nobody, as a technique outcome there does, so the striker hears nothing either.
+    if participant.encounter.room is None:
+        return
+    sessions = non_web_sessions(character)
+    if sessions:
+        character.msg(narrate(second_person=True), session=sessions)
 
 
 def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -> ActionOutcome:
@@ -508,10 +515,17 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
         return outcome
 
     rating = _skill_rating(participant, check_type)
+    snapshot = _roll_snapshot(weapon, check_type)
     hit, hit_breakdown = _roll_hit(participant, action, check_type)
     missed = is_miss(hit.success_level)
     rolls: list[StrikeRoll] = [
-        (check_type, hit_breakdown, hit_result_line(hit.success_level, missed=missed), rating)
+        (
+            check_type,
+            hit_breakdown,
+            hit_result_line(hit.success_level, missed=missed),
+            rating,
+            snapshot,
+        )
     ]
     damage: OpponentDamageResult | None = None
     if missed:
@@ -534,7 +548,7 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
             )
 
             decrement_item_durability(item_instance=weapon.item_instance)
-        rolls.append((check_type, _Breakdown(), f"{damage.damage_dealt} damage", rating))
+        rolls.append((check_type, _Breakdown(), f"{damage.damage_dealt} damage", rating, snapshot))
 
     _attempt_allegiance_breaks_for_action(participant, outcome)
     apply_fatigue(participant.character_sheet, ActionCategory.PHYSICAL, 0, action.effort_level)
@@ -555,14 +569,31 @@ def _gear_kind_words(weapon: StrikeWeapon) -> str:
     return GearArchetype(weapon.gear_archetype).label.lower()
 
 
-def _weapon_line(weapon: StrikeWeapon) -> RollLine:
-    from world.checks.types import RollLine  # noqa: PLC0415
-
+def _weapon_label(weapon: StrikeWeapon) -> str:
+    """ "Rapier, fine quality", "Bare hands": the weapon as the damage row names it."""
     if weapon.item_instance is None:
-        return RollLine(label="Bare hands", value="", detail="the weakest Unarmed weapon")
+        return "Bare hands"
     tier = weapon.item_instance.quality_tier
-    label = f"{weapon.name}, {tier.name.lower()} quality" if tier is not None else weapon.name
-    return RollLine(label=label, value="", detail="weapon damage and quality")
+    return f"{weapon.name}, {tier.name.lower()} quality" if tier is not None else weapon.name
+
+
+def _roll_snapshot(weapon: StrikeWeapon, check_type: CheckType) -> RollSnapshot:
+    """What the Strike's breakdown names, captured at roll time (#4858)."""
+    from world.checks.types import RollSnapshot  # noqa: PLC0415
+    from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
+
+    override = weapon_stat_for(weapon.item_instance)
+    if override is not None:
+        stats = [_stat_label(check_type, override)]
+    else:
+        stats = [
+            stat.capitalize() for stat in strike_check_traits({check_type.pk})[check_type.pk][1]
+        ]
+    return RollSnapshot(
+        weapon_label=_weapon_label(weapon),
+        weapon_kind=_gear_kind_words(weapon),
+        stat_label=", ".join(stats),
+    )
 
 
 def strike_check_traits(check_type_ids: set[int]) -> dict[int, tuple[str | None, list[str]]]:
@@ -603,19 +634,19 @@ def strike_skill_names(check_type_names: set[str]) -> dict[str, str]:
 def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, RollBreakdown]:
     """The rows of each Strike roll among ``outcomes``, keyed by outcome pk.
 
-    A Strike records its hit roll and then its damage roll on its interaction; the first
-    is the hit roll. The rows name the strike skill the check type weights (with the
-    rating stored with the roll; no skill row when it weights none), the stat or stats the
-    roll used, the weapon and its quality, and the result line the roll was recorded
-    with. The roll's modifiers are the caller's to add (it knows which a viewer may see).
-    Outcomes from anything but a Strike are left out. A fixed number of queries however
-    many outcomes.
+    A Strike records its hit roll and then (if it landed) its damage roll on its
+    interaction; the first is the hit roll. Every row reads what the roll stored when it
+    was made (the skill rating, the weapon and its kind, the stat), so a later change to
+    the character or the weapon never rewrites the record. The skill row names the skill
+    the check type weights, and is left out when it weights none. A hit that went on to a
+    damage roll notes "then the damage roll". The roll's modifiers are the caller's to add
+    (it knows which a viewer may see). Outcomes from anything but a Strike are left out.
+    A fixed number of queries however many outcomes.
     """
-    from django.db.models import Min  # noqa: PLC0415
+    from django.db.models import Count, Min  # noqa: PLC0415
 
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
-    from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
 
     interaction_ids = {o.combat_interaction_id for o in outcomes if o.combat_interaction_id}
     if not interaction_ids:
@@ -624,52 +655,52 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
         action.interaction_id: action
         for action in CombatRoundAction.objects.filter(
             interaction_id__in=interaction_ids, maneuver=CombatManeuver.STRIKE
-        ).select_related(
-            "item_instance__template", "item_instance__quality_tier", "focused_opponent_target"
-        )
+        ).select_related("focused_opponent_target")
     }
     if not actions:
         return {}
-    hit_pks = set(
-        ConsequenceOutcome.objects.filter(combat_interaction_id__in=actions)
+    rolls_per_strike = {
+        row["combat_interaction_id"]: (row["first"], row["rolls"])
+        for row in ConsequenceOutcome.objects.filter(combat_interaction_id__in=actions)
         .values("combat_interaction_id")
-        .annotate(first=Min("pk"))
-        .values_list("first", flat=True)
-    )
+        .annotate(first=Min("pk"), rolls=Count("pk"))
+    }
     strike_outcomes = [o for o in outcomes if o.combat_interaction_id in actions]
     traits = strike_check_traits({o.check_type_id for o in strike_outcomes})
 
     breakdowns: dict[int, RollBreakdown] = {}
     for o in strike_outcomes:
         action = actions[o.combat_interaction_id]
-        weapon = _weapon_of(action)
-        skill, stats = traits[o.check_type_id]
-        skill_lines: list[RollLine] = []
-        # The rating stored with the roll: what was rolled, not today's rating.
+        first_pk, roll_count = rolls_per_strike[o.combat_interaction_id]
+        skill, _stats = traits[o.check_type_id]
+        kind = o.weapon_kind or ""
         skill_value = str(o.skill_rating) if o.skill_rating is not None else ""
-        if o.pk in hit_pks:
+        if o.pk == first_pk:
+            lines: list[RollLine] = []
             if skill is not None:
-                skill_lines.append(
-                    RollLine(skill, skill_value, f"strike skill for {_gear_kind_words(weapon)}")
-                )
-            override = weapon_stat_for(weapon.item_instance)
-            stat_names = (
-                [_stat_label(o.check_type, override)]
-                if override is not None
-                else [stat.capitalize() for stat in stats]
+                lines.append(RollLine(skill, skill_value, f"strike skill for {kind}".strip()))
+            lines.extend(
+                RollLine(stat, "", f"stat for {kind}".strip())
+                for stat in (o.stat_label or "").split(", ")
+                if stat
             )
-            stat_lines = [
-                RollLine(stat, "", f"stat for {_gear_kind_words(weapon)}") for stat in stat_names
-            ]
             target = action.focused_opponent_target
             heading = (
                 f"Hit roll against {target.name}'s defense" if target is not None else "Hit roll"
             )
-            lines = [*skill_lines, *stat_lines]
+            note = "then the damage roll" if roll_count > 1 else ""
         else:
             heading = "Damage roll"
+            detail = (
+                "the weakest Unarmed weapon"
+                if kind == "bare hands"
+                else "weapon damage and quality"
+            )
+            lines = [RollLine(o.weapon_label or "", "", detail)]
             if skill is not None:
-                skill_lines.append(RollLine(skill, skill_value, "strike skill"))
-            lines = [_weapon_line(weapon), *skill_lines]
-        breakdowns[o.pk] = RollBreakdown(heading=heading, lines=lines, result=o.summary)
+                lines.append(RollLine(skill, skill_value, "strike skill"))
+            note = ""
+        breakdowns[o.pk] = RollBreakdown(
+            heading=heading, lines=lines, result=o.summary, result_note=note
+        )
     return breakdowns

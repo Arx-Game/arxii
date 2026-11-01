@@ -102,6 +102,7 @@ class RollBreakdownSerializer(serializers.Serializer):
     heading = serializers.CharField()
     lines = RollLineSerializer(many=True)
     result = serializers.CharField(allow_blank=True)
+    result_note = serializers.CharField(allow_blank=True)
 
 
 class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
@@ -193,6 +194,10 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         The roll's modifiers a viewer may see follow the system's own rows, before the
         result line.
         """
+        if not self._sees_roll_detail(obj):
+            # A roll's sources (the skill rating above all) are the roller's own; others
+            # learn hidden numbers only through checks of their own.
+            return None
         breakdowns = self.context.get("roll_breakdowns")
         if breakdowns is None:
             from world.combat.services.declarations.strike import (  # noqa: PLC0415
@@ -214,7 +219,26 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
                 else modifier.get_source_kind_display()
             )
             lines.append({"label": modifier.source_label, "value": signed, "detail": detail})
-        return {"heading": breakdown.heading, "lines": lines, "result": breakdown.result}
+        return {
+            "heading": breakdown.heading,
+            "lines": lines,
+            "result": breakdown.result,
+            "result_note": breakdown.result_note,
+        }
+
+    def _sees_roll_detail(self, obj: ConsequenceOutcome) -> bool:
+        """Staff, or the account playing the roll's own character."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        user = request.user
+        if user.is_staff:
+            return True
+        try:
+            own = user.played_character_sheet_ids
+        except AttributeError:
+            return False
+        return obj.character_id in own
 
     @extend_schema_field(OutcomeDisplayRowSerializer(many=True))
     def get_outcome_display(self, obj: ConsequenceOutcome) -> list[dict]:

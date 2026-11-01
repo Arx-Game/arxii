@@ -85,6 +85,26 @@ class ConsequenceOutcome(SharedMemoryModel):
             "writer records none or the check weights no skill."
         ),
     )
+    # What a Strike roll was made with, as its breakdown names it, kept at roll time so a
+    # weapon renamed, re-qualified or destroyed later does not rewrite the record (#4858).
+    weapon_label = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text="The weapon and its quality as the roll's breakdown names it, at roll time.",
+    )
+    weapon_kind = models.CharField(
+        max_length=60,
+        null=True,
+        blank=True,
+        help_text="The weapon's kind as the breakdown names it ('one-handed melee'), at roll time.",
+    )
+    stat_label = models.CharField(
+        max_length=60,
+        null=True,
+        blank=True,
+        help_text="The stat or stats the roll used, as the breakdown names them, at roll time.",
+    )
 
     # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite

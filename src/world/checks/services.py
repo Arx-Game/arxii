@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType, CheckTypeCapabilityModifier, Consequence
-    from world.checks.types import ExtraTraitTerm
+    from world.checks.types import ExtraTraitTerm, RollSnapshot
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
     from world.items.models import ItemCheckModifier
@@ -1487,6 +1487,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     action_interaction: "Interaction | None" = None,
     summary: str = "",
     skill_rating: int | None = None,
+    snapshot: "RollSnapshot | None" = None,
 ) -> ConsequenceOutcome:
     """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
 
@@ -1518,6 +1519,8 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         summary: Optional human-readable summary string.
         skill_rating: The character's rating in the check's skill at roll time (#4858),
             kept so a breakdown shows what was rolled; None records none.
+        snapshot: What a breakdown names, kept at roll time (#4858): the weapon, its kind
+            and the stat. None records none.
 
     Returns:
         The newly created ConsequenceOutcome instance.
@@ -1546,6 +1549,9 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         modifier_total=breakdown.total,
         summary=summary,
         skill_rating=skill_rating,
+        weapon_label=snapshot.weapon_label if snapshot is not None else None,
+        weapon_kind=snapshot.weapon_kind if snapshot is not None else None,
+        stat_label=snapshot.stat_label if snapshot is not None else None,
         combat_interaction=combat_interaction,
         combat_interaction_timestamp=(
             combat_interaction.timestamp if combat_interaction is not None else None
