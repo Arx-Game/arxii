@@ -39,7 +39,7 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
-from world.combat.constants import CombatManeuver
+from world.combat.constants import COMPULSION_PENALISED_MANEUVERS, CombatManeuver
 from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll, SteadyResult
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import (
@@ -507,9 +507,11 @@ def _apply_band(
     if band is None:
         return
     if band.result == CompulsionResult.ACTS_STRAINED:
-        action.compulsion_penalty = band.action_penalty
-        action.save(update_fields=["compulsion_penalty"])
-        strain = _strain_line(compulsion, band, name=name)
+        penalty = band.action_penalty if takes_compulsion_penalty(action) else 0
+        if penalty:
+            action.compulsion_penalty = penalty
+            action.save(update_fields=["compulsion_penalty"])
+        strain = _strain_line(compulsion, band, penalty=penalty, name=name)
         if strain:
             _tell_room(participant, strain)
     elif band.result == CompulsionResult.COMPULSION_ACTS:
@@ -518,15 +520,29 @@ def _apply_band(
         _shift_control(participant, band.control_change)
 
 
-def _strain_line(compulsion: Compulsion, band: CompulsionResistBand, *, name: str) -> str:
-    """What a strained result costs, from the band: "Berserk drags at Mira: -4 to this
-    action, Control -2." A zero part is left out; empty when the band costs nothing.
+def takes_compulsion_penalty(action: CombatRoundAction) -> bool:
+    """Whether the declaration's own roll takes a strained resist's action penalty.
+
+    A declared technique does, on its offense roll, and so does each maneuver in
+    ``COMPULSION_PENALISED_MANEUVERS``. Cover and Use Item roll nothing it can land on.
+    """
+    if action.maneuver:
+        return action.maneuver in COMPULSION_PENALISED_MANEUVERS
+    return action.focused_action_id is not None
+
+
+def _strain_line(
+    compulsion: Compulsion, band: CompulsionResistBand, *, penalty: int, name: str
+) -> str:
+    """What a strained result costs: "Berserk drags at Mira: -4 to this action,
+    Control -2." ``penalty`` is the part the declared action takes (0 when its roll
+    cannot take one). A zero part is left out; empty when the result costs nothing.
 
     The room reads the line, so it names the persona, never "you".
     """
     costs = []
-    if band.action_penalty:
-        costs.append(f"-{band.action_penalty} to this action")
+    if penalty:
+        costs.append(f"-{penalty} to this action")
     if band.control_change:
         costs.append(f"Control {band.control_change:+d}")
     if not costs:

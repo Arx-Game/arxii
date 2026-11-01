@@ -1133,6 +1133,30 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         self.assertIsNone(self.declared())
 
 
+class ACompelledFighterWhoCovers(_CompelledMira):
+    def test_a_strained_cover_names_only_the_control_cost(self) -> None:
+        """Ruling 48: Cover rolls nothing, so the strain line names no action penalty."""
+        wynn = self.make_player("Wynn", room=self.road)
+        CharacterVitals.objects.create(
+            character_sheet=wynn.sheet_data, health=100, max_health=100, base_max_health=100
+        )
+        wynn_seat = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=wynn.sheet_data,
+            status=ParticipantStatus.ACTIVE,
+        )
+        result = self.web(self.mira, "combat_cover", ally_participant_id=wynn_seat.pk)
+        self.assertTrue(result.detail.success, result.detail.message)
+
+        with force_check_outcome(self.partial):
+            self.resolve()
+
+        self.assertRoomRow("Mira tries to cover against Berserk.")
+        self.assertRoomRow("Berserk drags at Mira: Control -2.")
+        self.assertNoRoomRow("to this action")
+        self.assertEqual(self.declared().compulsion_penalty, 0)
+
+
 class ACompelledFighterWhoHeals(_CompelledMira):
     def test_compelled_heal_rolls_at_base_difficulty(self) -> None:
         told = self.telnet(self.mira, "cast Mend")
