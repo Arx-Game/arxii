@@ -1141,7 +1141,8 @@ The other seams in the module:
   between a row and the techniques it rides: the row's `function` among the technique's
   function tags, then the gift or technique narrowing when set. The cast path's
   `_live_rows` and the static view call the predicate; the vow page's "Techniques this vow
-  rides" rail counts the queryset. `payload_prefetches()` is the four payload prefetches
+  rides" rail reads `techniques_by_function(functions)` (one query, every catalog technique
+  per function tag) and narrows it with the predicate. `payload_prefetches()` is the four payload prefetches
   shared by the cast path and the vow page's summary lines.
 
 ### Where it runs
