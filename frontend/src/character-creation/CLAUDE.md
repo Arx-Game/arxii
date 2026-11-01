@@ -138,11 +138,16 @@ character-creation/
     │                            #   distinction prints once, under its own tag (fix
     │                            #   round 2).
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
-        ├── KinRows.tsx           # The people seated beside the parents (#4395): a twin, a
-        │                         #   spouse (alive, dead, divorced, fled), children (raised,
-        │                         #   fostered away, lost), the whole list at
+        ├── KinRows.tsx           # The people seated beside the parents (#4395, #4870): a
+        │                         #   twin (alive, dead), a spouse (alive, dead, divorced,
+        │                         #   separated, missing), a betrothed (promised, dead,
+        │                         #   missing, broken off), children (raised, fostered away,
+        │                         #   lost), each with a fate ChoiceRow, the whole list at
         │                         #   draft_data.kin_rows; finalize seats them in the
-        │                         #   kinship graph
+        │                         #   kinship graph. The named parents' fates (#4870) are a
+        │                         #   select under each parent's gender in LineageStage
+        │                         #   (ParentFateRow; draft_data.line_parent_fate /
+        │                         #   other_parent_fate)
         ├── LifeGrids.tsx         # The life as grids by stage (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
         │                         #   stage is absent), each beat a `ChapterOffers`

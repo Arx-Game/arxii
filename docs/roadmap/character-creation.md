@@ -87,6 +87,14 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4870: kin-row states; slice 8 of #4813)
+
+A fate on each named parent (alive, dead, missing; `ParentFate` on the invented parents),
+a betrothed row (a union of the kind marked `UnionKind.is_betrothal`, through
+`kinship.betrothal_union_kind`), a separated spouse (`Union.separated_at` through
+`kinship.separate_union`, the marriage standing), a dead twin, and "fled" reading "Missing".
+Backend and leaf in one slice. A Betrothal union kind is production authoring.
+
 ## Built (2026-11-01, #4865: default lives, backend; slice 7 of #4813)
 
 Every beginning can carry a suggested life: its starred first-look pins

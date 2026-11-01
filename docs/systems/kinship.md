@@ -35,8 +35,10 @@ facts from #1884.
 - **`FamilyMembership`** — claim rows (basis: born/married-in/adopted/
   legitimized/granted/founding; end reasons incl. disowned) — the history +
   law input.
-- **`UnionKind`** (authorable vocabulary, `confers_wedlock`) + **`Union`**
-  (M2M members, 2+, any composition) — in-laws and step-parents derive from
+- **`UnionKind`** (authorable vocabulary, `confers_wedlock`; `is_betrothal` marks the
+  kind a promise of marriage is recorded under, #4870) + **`Union`**
+  (M2M members, 2+, any composition; `separated_at` dates a marriage whose members
+  live apart while it stands in law, #4870) — in-laws and step-parents derive from
   these; births stamp `born_within_union` for legitimacy law. **A `Union` is
   the only record of a marriage (#4232, ADR-4232):** the wedding rite writes
   it for any consenting pair, staff write and end it from the Kinsperson
@@ -119,7 +121,12 @@ by death or dissolution before either party marries again, ruled on
 binds while they live and staff end such a marriage on the record when a
 plot wants the widow free; a real death ends nothing on the record; ended
 unions stay, the prior marriages are the record; a non-wedlock union may
-still hold a polycule), `end_union`,
+still hold a polycule), `end_union`, `separate_union` (#4870: dates
+`Union.separated_at`, the union standing; idempotent; the Spouses inline's
+"separated at" column and character creation's separated spouse write it),
+`betrothal_union_kind` (#4870: the universal `is_betrothal` kind, else any,
+refusing with "No custom of betrothal exists to promise under." when none;
+character creation's betrothed row records under it and skips when it refuses),
 `record_incarnation`, `add_membership`/`end_membership` (denorm
 maintenance), `mint_from_pool`, `claim_appable_node` (CG bind,
 constraint-checked), `ensure_node_for_sheet`, `define_deferred`

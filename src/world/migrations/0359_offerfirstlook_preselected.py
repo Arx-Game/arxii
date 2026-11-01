@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0357_strike_and_defense_roll_snapshot"),
-    ]
+    dependencies = [("arxii", "0358_kin_row_states")]
 
     operations = [
         migrations.AddField(
