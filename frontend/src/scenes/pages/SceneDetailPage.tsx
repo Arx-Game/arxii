@@ -447,7 +447,7 @@ export function SceneDetailPage() {
             className={cn(
               'min-h-0 flex-1',
               showCombatRail || showStoryRail
-                ? 'grid grid-cols-1 gap-4 px-4 pb-4 min-[860px]:grid-cols-[1fr_360px]'
+                ? 'min-[860px]:grid-cols-[1fr_360px] grid grid-cols-1 gap-4 px-4 pb-4'
                 : 'flex flex-col'
             )}
           >
