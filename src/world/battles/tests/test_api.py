@@ -424,10 +424,9 @@ class BattleApiJourneyTest(TestCase):
     def test_participant_persona_query_count_does_not_scale_with_participant_count(
         self,
     ) -> None:
-        """Regression guard for the N+1 the review on #2009 caught: the detail
-        view's participants Prefetch must nest a ``character_sheet__personas``
-        Prefetch (to_attr ``cached_payload_personas``) so
-        ``BattleParticipantSerializer._primary_persona`` never issues a
+        """Regression guard for the N+1 the review on #2009 caught: the roster's
+        presented personas are read in one batch (``_BattleParticipantListSerializer``,
+        #4802), so ``BattleParticipantSerializer._presented_persona`` never issues a
         per-participant query. Query count must stay flat as participants grow.
         """
         client = APIClient()

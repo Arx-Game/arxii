@@ -217,6 +217,23 @@ STRIKE_HIT_QUALITY: tuple[tuple[int, str], ...] = (
 )
 
 
+#: The declared maneuvers whose own roll takes a strained compulsion resist's action
+#: penalty (#4802, Ruling 22): the flee, social, rally, interpose and succor rolls read
+#: ``CombatRoundAction.compulsion_penalty``. A declared technique (no maneuver) takes it
+#: too, on its offense roll. Cover and Use Item make no roll for it to land on.
+COMPULSION_PENALISED_MANEUVERS: frozenset[str] = frozenset(
+    {
+        CombatManeuver.FLEE,
+        CombatManeuver.PARLEY,
+        CombatManeuver.TAUNT,
+        CombatManeuver.DEMORALIZE,
+        CombatManeuver.RALLY,
+        CombatManeuver.INTERPOSE,
+        CombatManeuver.SUCCOR,
+    }
+)
+
+
 # ---------------------------------------------------------------------------
 # Mounted combat (#1843) — the unmounted-lance penalty + JOUST margin bands.
 # A CHARGE's to-hit, damage and reach are maneuver effects (the catalog in

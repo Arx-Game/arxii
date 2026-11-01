@@ -1200,6 +1200,53 @@ class DodgePlanAction(Action):
         return ActionResult(success=True, message=_DODGE_TO_MSG.format(place=landing.name))
 
 
+_STEADY_KWARG = "steady"
+_NO_STEADY_MSG = "Nothing you have lets you steady an ally."
+_STEADY_OFF_MSG = "You won't steady an ally."
+_STEADY_ON_MSG = "If an ally loses their nerve, you'll steady them."
+
+
+@dataclass
+class SteadyPlanAction(Action):
+    """Say whether to steady a compelled ally this fight (#4802).
+
+    The steadying itself happens at the round lock, when a compelled ally's resist roll
+    fails (``world.combat.services.reactions``); this only turns the plan on or off.
+    Kwarg ``steady`` (false turns it off); with it absent the plan turns on, provided
+    the actor holds the steadying capability above its baseline.
+    """
+
+    key: str = "combat_steady"
+    name: str = "Steady plan"
+    icon: str = "shield"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
+        from world.combat.services.reactions import steady_capability_value  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        if _STEADY_KWARG in kwargs and not truthy_kwarg(kwargs[_STEADY_KWARG]):
+            participant.steady_enabled = False
+            participant.save(update_fields=["steady_enabled"])
+            return ActionResult(success=True, message=_STEADY_OFF_MSG)
+        if steady_capability_value(participant) <= 0:
+            return ActionResult(success=False, message=_NO_STEADY_MSG)
+        participant.steady_enabled = True
+        participant.save(update_fields=["steady_enabled"])
+        return ActionResult(success=True, message=_STEADY_ON_MSG)
+
+
 def _dodge_landing_from(options: list, kwargs: dict[str, Any]) -> Any:
     """The planned landing among ``options``; None for in place; a refusal line as a str."""
     from world.areas.positioning.models import Position  # noqa: PLC0415

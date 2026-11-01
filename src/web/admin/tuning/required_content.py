@@ -1627,6 +1627,80 @@ def _probe_berserk_condition() -> ProbeResult:
     )
 
 
+def _probe_berserk_compulsion() -> ProbeResult:
+    """The designated Berserk template carries a Compulsion (#4802)."""
+    from world.conditions.models import Compulsion  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+
+    berserk = get_berserk_template()
+    if berserk is None:
+        return ProbeResult(
+            present=False,
+            detail="Berserk cannot be found, so it cannot carry a compulsion.",
+        )
+    return ProbeResult(present=Compulsion.objects.filter(condition=berserk).exists())
+
+
+def _probe_moon_control_loss_trigger() -> ProbeResult:
+    """A control-loss trigger fires on the moon's pull, and every lycan carries it (#4802).
+
+    The trigger hangs on a vulnerability condition. A species grant that carries both
+    that condition (``drawback_condition``) and a drawback distinction stamps both at CG,
+    so a character holding the distinction without an instance of the condition is a
+    lycan the moon never takes (a character made before the condition existed, or an
+    authored condition the content migration put no instances on). Those characters are
+    listed; the probe reports, it changes nothing. A suppressed or resolved instance does
+    not count as carrying the condition.
+    """
+    from django.db.models import Exists, OuterRef, Q  # noqa: PLC0415
+
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ControlLossTrigger  # noqa: PLC0415
+    from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+
+    vulnerabilities = set(
+        ControlLossTrigger.objects.filter(fires_on=ControlLossFiresOn.MOON_PULL).values_list(
+            "vulnerability_id", flat=True
+        )
+    )
+    if not vulnerabilities:
+        return ProbeResult(present=False)
+    grants = SpeciesGiftGrant.objects.filter(
+        drawback_condition_id__in=vulnerabilities, drawback_distinction__isnull=False
+    ).values_list("drawback_distinction_id", "drawback_condition_id")
+    uncarried = Q(pk__in=[])
+    for distinction_id, condition_id in grants:
+        # Only a live carrier counts: not suppressed (the active-condition filter the
+        # trigger engine reads) and not resolved. ``CharacterDistinction.character`` is a
+        # CharacterSheet, and a sheet's pk IS its character's ObjectDB pk (the sheet is a
+        # primary-key one-to-one onto ObjectDB), so the sheet id matches the instance's
+        # ``target_id`` with no join.
+        carries = ConditionInstance.objects.filter(
+            _not_suppressed_q(),
+            condition_id=condition_id,
+            target_id=OuterRef("character_id"),
+            resolved_at__isnull=True,
+        )
+        uncarried |= Q(distinction_id=distinction_id) & ~Exists(carries)
+    missing = set(
+        CharacterDistinction.objects.filter(uncarried).values_list(
+            "character__character__db_key", flat=True
+        )
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        missing=tuple(sorted(missing)),
+        detail=(
+            "These characters hold the moon drawback distinction but not the condition the "
+            "moon trigger hangs on, so the moon never takes them. Give each the condition."
+        ),
+    )
+
+
 def _probe_berserk_disengage_penalty() -> ProbeResult:
     """Berserk carries a penalty against both flee and parley (#4738).
 
@@ -2691,7 +2765,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/fury.py get_berserk_template(); "
-                "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
+                "world/species/moon_sensitivity.py; world/combat/compulsion.py"
             ),
             consequence=(
                 "Berserk cannot be found: choosing a Berserk Fury tier or losing control to "
@@ -2700,6 +2774,34 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="berserk-compulsion",
+            label="Berserk has a compulsion",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/compulsion.py; world/conditions/models.py Compulsion",
+            consequence=(
+                "A raging character is not compelled to attack: Berserk takes no action "
+                "from them and refuses nothing."
+            ),
+            probe=CustomProbe(fn=_probe_berserk_compulsion),
+            admin_model="Compulsion",
+        ),
+        ContentDependency(
+            key="moon-control-loss-trigger",
+            label="A moon's-pull control-loss trigger exists and every lycan carries it",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/species/moon_sensitivity.py; world/conditions/models.py ControlLossTrigger"
+            ),
+            consequence=(
+                "The moon never takes anyone (no trigger), or never takes the lycans listed "
+                "(they hold the drawback distinction but not the condition the trigger "
+                "hangs on): under a full moon they roll no control check and are never "
+                "forced into the battle form."
+            ),
+            probe=CustomProbe(fn=_probe_moon_control_loss_trigger),
+            admin_model="ControlLossTrigger",
         ),
         ContentDependency(
             key="berserk-disengage-penalty",

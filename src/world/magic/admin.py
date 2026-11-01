@@ -63,6 +63,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     FacetAlias,
+    FacetEffectBonus,
     FuryConfig,
     FuryDegreeShare,
     FuryTier,
@@ -1277,6 +1278,16 @@ class FacetAliasInline(admin.TabularInline):
     fields = ["name"]
 
 
+class FacetEffectBonusInline(admin.TabularInline):
+    """The maneuver effects this facet boosts while worn on a threaded facet (#4815)."""
+
+    model = FacetEffectBonus
+    formset = OneRowPerFormSet
+    extra = 0
+    fields = ["target", "amount"]
+    autocomplete_fields = ["target"]
+
+
 @admin.register(Facet)
 class FacetAdmin(admin.ModelAdmin):
     """Admin for the flat Facet vocabulary.
@@ -1290,7 +1301,7 @@ class FacetAdmin(admin.ModelAdmin):
     search_fields = ["name", "description", "aliases__name"]
     ordering = ["name"]
     readonly_fields = ["get_connections"]
-    inlines = [FacetAliasInline]
+    inlines = [FacetAliasInline, FacetEffectBonusInline]
     actions = ["merge_into"]
 
     @admin.display(description="Connections")

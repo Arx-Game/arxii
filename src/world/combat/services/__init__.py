@@ -106,6 +106,7 @@ from world.combat.services.damage.damage import (
     _emit_post_damage_events,
     _run_pre_apply_interceptors,
     apply_damage_to_participant,
+    settle_wound_triggers,
 )
 from world.combat.services.damage.damage_totals import (
     _opponent_damage_totals,
@@ -854,6 +855,7 @@ __all__ = [
     "roll_sustained_absorption_budget",
     "scan_round_combos",
     "select_npc_actions",
+    "settle_wound_triggers",
     "spawn_from_creature_template",
     "strike_weapon_options",
     "swarm_attack_count",

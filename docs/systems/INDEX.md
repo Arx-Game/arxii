@@ -104,7 +104,8 @@
   losers as `FacetAlias` rows, refuses with `UnmergedFacetRelation` when a relation has no
   handler). API: `GET /api/magic/facets/near/?name=`; `POST /api/magic/facets/` is staff-only
   and answers an existing facet with `matched: true` for a spelling that already resolves.
-  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` inline.
+  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` and
+  `FacetEffectBonus` (#4815, a facet's bonus to a maneuver effect) inlines.
   Frontend: `FacetPicker` (`frontend/src/magic/components/`), used by the deity page and item
   crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
@@ -1415,17 +1416,18 @@ ADR-0214), and species-gift provisioning.
   `tasks.sun_reconcile_tick` (`species.sun_reconcile` cron), factories
   `ensure_sunlight_exposure_content` (staged template) + `ensure_sunlight_distinctions`
   (Bane/Allergy: Sunlight anchor rows); PLACEHOLDER constants in `sun_constants.py`.
-  Moon control (#2845, ADR-0183): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
-  `moon_sensitivity.reconcile_moon_pull` (control window: `moon_control` check →
-  forced shift + shared Berserk) + `reconcile_cani_unease` (umbrella flavor state),
+  Moon control (#2845, #4802, ADR-4802): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
+  `moon_sensitivity.reconcile_moon_pull` (the sweep: fires the character's moon
+  `ControlLossTrigger` through `world.conditions.control_loss`; band applies Berserk and forced
+  shift) + `reconcile_cani_unease` (umbrella flavor state),
   `moon_provisioning.ensure_lycan_battle_form` (lazy battle-form provisioning),
   `tasks.moon_reconcile_tick` (`species.moon_reconcile` cron), factories
   `ensure_moon_bound_distinction`/`ensure_moonlit_unease_condition`; seeded content in
   `_seed_moon_content` ("The Wolf's Fury" grant); Berserk production seed + Restore-to-Sense
-  removal effect in `world/conditions/berserk_content.py`; compulsion in
-  `world/combat/berserk_compulsion.py` (auto-attack fallback, leave refusal
-  `reject_leave_if_berserk`; flee/parley roll with Berserk's authored check modifiers,
-  out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
+  removal effect and compulsion rows in `world/conditions/berserk_content.py`; compulsion
+  resolution in `world/combat/compulsion.py` (see the Losing control entry below);
+  `moon_constants.py` keeps only the pull's own magnitudes.
+  Losing control (#4802, ADR-4802): see `docs/systems/conditions.md`.
   Language mechanics (#2993, ADR-0214): `language_constants.py` (`Fluency` bands
   broken/conversational/fluent, `BAND_KEEP_RATIO`, `FLUENT_GRANT_VALUE=70`),
   `language_services.py` (`garble_text`, `speech_seed`, `fluency_value`, `effective_band`,
@@ -7060,7 +7062,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
     equipment (crafted pieces, the equipment walk) all count
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
-    `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
+    `ThreadPullEffect` contributions per worn item, plus the worn facets' own
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled by the shown thread
+    level); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
@@ -8564,17 +8568,17 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `is_attack_on_opponent(action)` (an opponent target, or a joust pass). A missed attack (the hit
   roll failed, success level below 1: a Strike, a technique at an opponent, a lost joust pass)
   runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED `apply_dramatic_surge` once
-  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0348; never
+  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0351; never
   narrated, and left out of a bystander's `surge_beats`); an attack roll adds an "Intensity"
   contribution of the COMBAT engagement's intensity x "Intensity: to hit per point"
   (`intensity_to_hit_contribution`). Each Strike roll stores what its breakdown shows at roll
-  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0349 and
-  0350), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
+  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0352 and
+  0353), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
   reaches only the roll's own account and staff. The striker's second-person telnet line is
   sent right after the room line (none in a room-less encounter, as for technique outcomes);
   the live `combat_encounter_state` frame refetches the Last Outcome card.
   `GearArchetype.UNARMED` joins `WEAPON_ARCHETYPES` and the
-  `items_weapon_damage_requires_weapon_archetype` constraint (0350).
+  `items_weapon_damage_requires_weapon_archetype` constraint (0353).
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
@@ -8779,6 +8783,48 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `acute_peril_hand_off_condition_ids()` replace the `*_names()` lists. Unset = the mechanic
   does nothing. `ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null) drives
   the web client's Audere strip. See `docs/systems/conditions.md` "Designated conditions".
+- **Losing control in combat (#4802, ADR-4802) [BUILT & WIRED]:** `world/combat/compulsion.py`.
+  At the DECLARING to RESOLVING boundary `resolve_compulsions` has every compelled player
+  character whose declared action is not an attack on an opponent roll the compulsion's resist
+  check (difficulty = base + per-severity x severity + the forbidden action's extra; a charge,
+  joust or waiting strike counts as attacking and rolls nothing). The `CompulsionResistBand` for
+  the outcome sets `ACTS_FREELY`, `ACTS_STRAINED` (the action rolls with
+  `CombatRoundAction.compulsion_penalty`; rally and interpose too; cover and use-item have no
+  roll, so a strained one costs nothing) or `COMPULSION_ACTS` (the
+  declaration is replaced by the compulsion attack, `declared_by_compulsion`, with no Soulfray
+  consent given for the player). `select_compelled_actions` auto-declares for an idle compelled
+  participant. NPCs never roll. Leave and revert-form roll at once through
+  `resist_compulsion_now` (no declaration to replace, no steadier); a failed roll waits for the
+  next round in a fight (`CombatParticipant.compulsion_attempt_round`) or
+  `Compulsion.retry_wait_minutes` outside one (`ConditionInstance.compulsion_retry_after`).
+  Several compulsions: the most severe governs. The compulsion, forbidden and band rows are
+  read once per round (`active_compulsions_for`, `forbidden_rows_for`, `bands_by_outcome`). **Steadying:** on a failed first roll, `reactions.steadiers_for` lists
+  active allies in the encounter with `CombatParticipant.steady_enabled` (the plan holds for
+  the fight until turned off) who can act (`can_act`), no compulsion of their own, the `MovementConfig.steadying_capability` above its baseline and the anima; the biggest
+  bonus (capability + `steady_bonus_per_depth` x bond depth via `qualifying_bond_depths`, less
+  the reaction penalty) wins, ties to the lowest participant pk. `try_steady` pays
+  `steady_anima_cost`, records a reaction and rerolls, returning `SteadyResult` (with the
+  `bonus` the reroll carried and the `anima_paid` the pool actually lost, which the steady
+  round line names: "Tomas steadies Mira (+6). <check> vs 36: Success. Tomas spends 4
+  anima; their next reaction this round is harder."). A strained result tells its cost from
+  the band after the roll line ("Berserk drags at Mira: -4 to this action, Control -2."); the
+  action penalty is named and applied only for declarations whose roll takes it
+  (`COMPULSION_PENALISED_MANEUVERS` plus a declared technique; Cover and Use Item say only
+  "Control -2", and no line when control does not move). The plan is
+  `SteadyPlanAction` (key `combat_steady`; telnet `combat steady [on|off]`; web "Steady allies"
+  toggle). The encounter payload carries `compulsion` (what it wants, each action's difficulty)
+  and `steady_plan` for the viewer's own participant only; `YourTurn` shows
+  `CompulsionBanner`, an amber `CompulsionChosenLine` under the chosen action (the focused
+  card, or the declared maneuver's badge), and telnet declares print an
+  `Against <condition>: ...` line. `ParticipantSerializer.character_name` is the persona
+  name the room lines use (batched per roster by `_ParticipantListSerializer` through
+  `scenes.services.personas_for_sheets`), never the key, so a disguise holds in the roster
+  and the ally pickers; the participant portrait, the surge line and surge beats, and the
+  clash contributor rollup use the same presented persona. `resolve_thumbnail` never falls
+  back to the character's own display image for a non-PRIMARY persona, so a bare mask
+  shows no portrait rather than the face behind it. Out of combat
+  the NPC rampage (`berserk_rampage_window`) is unchanged. Models and trigger engine:
+  `docs/systems/conditions.md`. Journeys: `integration_tests/test_losing_control_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the

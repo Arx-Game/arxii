@@ -35,6 +35,7 @@ from world.combat.services.rounds.maneuvers import _STANDALONE_MANEUVER_RESOLVER
 from world.combat.services.rounds.waiting_strikes import fire_waiting_strikes
 from world.combat.services.techniques.pc_action import _resolve_pc_action
 from world.combat.types import ActionOutcome
+from world.conditions.control_loss import trigger_lines_after_action
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -218,25 +219,25 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     npc_moves = npc_moves or {}
     outcomes: list[ActionOutcome] = []
     for entity_type, entity in resolution_order:
-        if entity_type == ENTITY_TYPE_PC and isinstance(entity, CombatParticipant):
-            if entity.pk in sustaining_participant_ids:
-                continue
-            action = pc_actions.get(entity.pk)
-            if action is not None:
+        # A wound trigger a slot sets off is told after the slot's own lines (#4802).
+        with trigger_lines_after_action():
+            if entity_type == ENTITY_TYPE_PC and isinstance(entity, CombatParticipant):
+                action = pc_actions.get(entity.pk)
+                if action is not None and entity.pk not in sustaining_participant_ids:
+                    outcomes.extend(
+                        _resolve_pc_slot(
+                            entity, action, offense_check_fn, defense_check_type, defense_check_fn
+                        )
+                    )
+            elif entity_type == ENTITY_TYPE_NPC and isinstance(entity, CombatOpponent):
                 outcomes.extend(
-                    _resolve_pc_slot(
-                        entity, action, offense_check_fn, defense_check_type, defense_check_fn
+                    _resolve_npc_slot(
+                        entity,
+                        npc_moves.get(entity.pk),
+                        npc_actions.get(entity.pk, []),
+                        offense_check_fn,
+                        defense_check_type,
+                        defense_check_fn,
                     )
                 )
-        elif entity_type == ENTITY_TYPE_NPC and isinstance(entity, CombatOpponent):
-            outcomes.extend(
-                _resolve_npc_slot(
-                    entity,
-                    npc_moves.get(entity.pk),
-                    npc_actions.get(entity.pk, []),
-                    offense_check_fn,
-                    defense_check_type,
-                    defense_check_fn,
-                )
-            )
     return outcomes

@@ -168,11 +168,12 @@ class ASecondPersonaAndATie(FinalizationTestMixin, JourneyCase):
             ask["choices"], [{"id": self.gang.pk, "name": "The Ashfingers", "is_covert": False}]
         )
         key = str(self.catspaw.pk)
-        # The guild is of the realm and admits, but is not a gang.
+        # The guild is of the realm and admits, but is not a gang: the save takes the shape
+        # (a stale tie must never refuse the stage), finalize writes nothing for it (below).
         response = self._patch(
             {"ties": {key: {"organization_id": self.guild.pk, "kind": "renown"}}}
         )
-        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.status_code, 200, response.content)
         friend_tie = {"organization_id": self.gang.pk, "kind": "friend"}
         response = self._patch({"ties": {key: friend_tie}})
         self.assertEqual(response.status_code, 400, response.content)
@@ -187,6 +188,20 @@ class ASecondPersonaAndATie(FinalizationTestMixin, JourneyCase):
         membership = active_membership_for_persona(self.gang, primary)
         self.assertIsNotNone(membership)
         self.assertEqual(membership.rank.tier, 5)
+        self.assertFalse(OrganizationReputation.objects.filter(persona=primary).exists())
+
+    def test_a_tie_outside_the_cards_choices_saves_but_writes_nothing(self) -> None:
+        """A stale or wrong tie (the card unpicked, the organization gone from the list) is
+        kept on the draft and ignored at finalize (review on #4863)."""
+        self._sync(self.catspaw)
+        key = str(self.catspaw.pk)
+        response = self._patch(
+            {"ties": {key: {"organization_id": self.guild.pk, "kind": "renown"}}}
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        sheet = self._finalize()
+        primary = sheet.primary_persona
+        self.assertFalse(OrganizationMembership.objects.filter(persona=primary).exists())
         self.assertFalse(OrganizationReputation.objects.filter(persona=primary).exists())
 
     def test_the_renown_kind_starts_at_the_favored_floor(self) -> None:

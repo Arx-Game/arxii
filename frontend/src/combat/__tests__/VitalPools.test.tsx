@@ -53,6 +53,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
     character_sheet_id: 1001,
+    persona_id: null,
     character_name: 'TestChar',
     status: 'active',
     health: 8,
@@ -77,6 +78,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
     strike_weapons: null,
     ...overrides,

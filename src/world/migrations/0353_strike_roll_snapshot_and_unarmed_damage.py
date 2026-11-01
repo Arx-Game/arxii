@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0349_consequence_outcome_skill_rating"),
+        ("arxii", "0352_consequence_outcome_skill_rating"),
     ]
 
     operations = [

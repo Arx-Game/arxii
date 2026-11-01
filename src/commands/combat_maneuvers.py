@@ -44,6 +44,7 @@ _SUBVERBS: dict[str, str] = {
     "parley": "combat_parley",
     "mark": "combat_mark",
     "dodge": "combat_dodge",
+    "steady": "combat_steady",
     "charge": "combat_charge",
     "strike": "combat_strike",
     "await": "combat_await_opening",
@@ -52,6 +53,25 @@ _SUBVERBS: dict[str, str] = {
     "disengage": "combat_disengage",
 }
 
+# subverbs that set a reaction plan for the round.
+_PLAN_SUBVERBS = {"dodge", "steady"}
+# subverbs that declare the round's focused action (#4802), so a compulsion may warn.
+_DECLARING_SUBVERBS = frozenset(
+    {
+        "flee",
+        "cover",
+        "interpose",
+        "succor",
+        "use",
+        "rally",
+        "demoralize",
+        "taunt",
+        "parley",
+        "charge",
+        "await",
+        "joust",
+    }
+)
 # subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
@@ -124,6 +144,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat dodge [<place>|here|off] - where you land if you dodge this round
+        combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat strike <opp> [with <weapon>] - attack with an equipped weapon, or bare
                                      hands when no weapon is named (also: strike)
@@ -165,6 +186,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
 
+    def _declares_a_round_action(self) -> bool:
+        """Only the subverbs that declare a round action can go against a compulsion."""
+        return self._subverb in _DECLARING_SUBVERBS
+
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for the parsed subverb."""
         from actions.types import ActionRef  # noqa: PLC0415
@@ -189,9 +214,19 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
-        if self._subverb == "dodge":  # noqa: STRING_LITERAL
-            return self._resolve_dodge_args(self._rest)
+        if self._subverb in _PLAN_SUBVERBS:
+            return self._resolve_plan_args()
         return self._resolve_technique_subverb_args()
+
+    def _resolve_plan_args(self) -> dict[str, Any]:
+        """The reaction plans: ``dodge ...`` (#4676) and ``steady [on|off]`` (#4802)."""
+        if self._subverb == "steady":  # noqa: STRING_LITERAL
+            word = self._rest.strip().lower()
+            if word not in ("", "on", "off"):  # noqa: STRING_LITERAL
+                msg = "Usage: combat steady [on|off]."
+                raise CommandError(msg)
+            return {"steady": word != "off"}  # noqa: STRING_LITERAL
+        return self._resolve_dodge_args(self._rest)
 
     @staticmethod
     def _resolve_dodge_args(text: str) -> dict[str, Any]:

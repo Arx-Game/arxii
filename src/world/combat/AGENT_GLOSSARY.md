@@ -519,3 +519,19 @@ _Avoid_: siege, breach (a breach is a challenge approach)
 **Encounter state ping** (`combat_encounter_state`, #4644):
 The slim WS message `{encounter_id, round_number}` (`CombatEncounterStatePayload`) sent after a combat change commits: once per resolved round, and after any move in a room with an open encounter. It carries no encounter data; the client refetches the REST encounter, so the battle map shows where everyone stands. The combat counterpart of the battles' BATTLE_STATE ping (ADR-0095).
 _Avoid_: combat push, encounter sync, live map update
+
+**Steadying** (#4802):
+A combat reaction, like a dodge, by which an ally gives a compelled character a second resist
+roll after a failed one. The ally needs the steadying capability above its baseline
+(`MovementConfig.steadying_capability`), the steady plan on (`CombatParticipant.steady_enabled`,
+telnet `combat steady [on|off]`) and the anima; she pays `steady_anima_cost` and spends a reaction.
+The bonus is her capability plus `steady_bonus_per_depth` per point of bond depth. With several
+eligible allies the biggest bonus steadies, ties to the earliest joined participant. _Avoid_:
+rescue, rally (Rally is a different maneuver that surges an ally), calm down.
+
+**Compulsion resist** (#4802):
+The round-lock roll a compelled player character makes when the declared action is not an attack
+on an opponent. See Compulsion in the conditions glossary. The result either lets the action go
+ahead freely, lets it go ahead at a penalty, or replaces it with the compulsion attack. Leaving
+the encounter and changing form back roll the same check at once. _Avoid_: willpower check,
+berserk roll.

@@ -23,6 +23,7 @@ function alternate(id: number, name: string): SwitchableAlternateSelf {
     has_combat_profile: false,
     has_techniques: false,
     is_active: false,
+    compulsion: null,
   };
 }
 
@@ -40,5 +41,33 @@ describe('FormSwitcher', () => {
     state.alternates = [alternate(2, 'Wolf')];
     render(<FormSwitcher characterSheetId={1} />);
     expect(screen.getByTitle('Shift into an alternate self')).toHaveTextContent('True self');
+  });
+
+  it('marks Revert with its difficulty while a compulsion judges changing back', () => {
+    state.alternates = [
+      {
+        ...alternate(2, 'Wolf'),
+        is_active: true,
+        compulsion: {
+          condition_name: 'Berserk',
+          wants_label: 'Attack an opponent',
+          attack_target_name: 'Bandit Captain',
+          check_name: 'Resist compulsion',
+          against: [
+            {
+              action_key: 'revert_form',
+              label: 'revert_form',
+              difficulty: 41,
+              forbidden: true,
+              extra_difficulty: 10,
+            },
+          ],
+        },
+      },
+    ];
+    render(<FormSwitcher characterSheetId={1} />);
+    expect(screen.getByTestId('compulsion-difficulty-revert_form')).toHaveTextContent(
+      'Forbidden, difficulty 41'
+    );
   });
 });

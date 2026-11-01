@@ -178,7 +178,8 @@ def _resolve_flee(
         config.check_type,
         difficulty,
         consequences,
-        extra_modifiers=breakdown.extra_modifiers_total,
+        # A strained compulsion resist (#4802) lands its penalty on the flee roll.
+        extra_modifiers=breakdown.extra_modifiers_total - action.compulsion_penalty,
     )
     spend_contributing_conditions(breakdown)
 

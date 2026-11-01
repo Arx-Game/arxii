@@ -1551,6 +1551,24 @@ class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
             "Reset to True each round."
         ),
     )
+    steady_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Steady an ally who fails a compulsion resist, when she can act and has the "
+            "steadying capability and the anima (#4802). The plan holds for the rest of "
+            "the fight until she turns it off. The player sets it with the reaction plan; "
+            "combat resolution reads it."
+        ),
+    )
+    compulsion_attempt_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The round in which she last failed to leave or change back against a "
+            "compulsion (#4802). She may try again from the next round. Written by the "
+            "leave and revert roll; nobody edits it."
+        ),
+    )
     dodge_landing = models.ForeignKey(
         "arxii.Position",
         on_delete=models.SET_NULL,
@@ -1730,6 +1748,21 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         max_length=20,
         choices=EffortLevel.choices,
         default=EffortLevel.MEDIUM,
+    )
+    declared_by_compulsion = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when compulsion resolution declared this strike in place of the player's "
+            "own declaration (#4802). Set once at the round lock; the cast-stopped line reads "
+            "it so a compelled strike is not told to accept a risk it never chose."
+        ),
+    )
+    compulsion_penalty = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Penalty on this action's roll from an ACTS_STRAINED compulsion resist (#4802). "
+            "Set by compulsion resolution when the round locks; the action roll reads it."
+        ),
     )
     focused_action = models.ForeignKey(
         TECHNIQUE_MODEL,
@@ -3122,6 +3155,31 @@ class MovementConfig(SharedMemoryModel):
         help_text=(
             "The most of one blow, in percent (0 to 100), that a healer's reactive save "
             "can remove (#4759)."
+        ),
+    )
+    steadying_capability = models.ForeignKey(
+        "arxii.CapabilityType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The capability that lets a character steady an ally against a compulsion "
+            "(#4802). Staff pick it; compulsion resolution reads it. Unset: nobody steadies."
+        ),
+    )
+    steady_anima_cost = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Anima the steadier pays each time she steadies an ally (#4802). Staff set it; "
+            "compulsion resolution reads it."
+        ),
+    )
+    steady_bonus_per_depth = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Bonus to the steadied ally's reroll per point of bond depth with the steadier "
+            "(#4802). Staff set it; compulsion resolution reads it."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)

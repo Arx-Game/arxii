@@ -146,4 +146,37 @@ describe('CommitmentPanel reactions', () => {
     expect(screen.getByText('Ondrelle: 3 reactions this round')).toBeInTheDocument();
     expect(screen.queryByText(/Bram/)).not.toBeInTheDocument();
   });
+
+  it('turns the steady plan on and off through combat_steady', async () => {
+    const dispatch = ok();
+    render(
+      <DodgePlanPanel
+        plan={null}
+        steadyPlan={{
+          enabled: false,
+          cost_line: '4 anima each',
+          bonus_hint: '+6',
+          capability_name: 'Calming presence',
+        }}
+        currentPositionId={13}
+        isLocked={false}
+        dispatchAction={dispatch}
+      />
+    );
+    expect(screen.queryByTestId('dodge-plan')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reactions' })).toBeInTheDocument();
+    expect(screen.getByTestId('steady-cost')).toHaveTextContent(
+      '(Calming presence) · 4 anima each · +6'
+    );
+    expect(screen.getByTestId('reaction-shared-note')).toHaveTextContent(
+      'Each reaction this round makes the next one harder, steadying and dodging alike.'
+    );
+    const toggle = screen.getByRole('switch', { name: 'Steady allies who lose to a compulsion' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(toggle);
+    expect(dispatch).toHaveBeenLastCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_steady' },
+      kwargs: { steady: true },
+    });
+  });
 });

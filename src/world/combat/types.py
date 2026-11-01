@@ -29,7 +29,7 @@ if TYPE_CHECKING:
         NpcTacticsConfig,
         ThreatPoolEntry,
     )
-    from world.conditions.models import ConditionInstance, DamageType
+    from world.conditions.models import CompulsionResistBand, ConditionInstance, DamageType
     from world.conditions.types import (
         AppliedConditionResult,
         DamageInteractionResult,
@@ -66,6 +66,19 @@ class OpponentDamageResult:
 
 
 @dataclass(frozen=True)
+class WoundCrossing:
+    """A hit's health before and after, held until its knockout check lands (#4802).
+
+    A hit into the knockout band rolls its wound control-loss triggers only once the
+    knockout consequence is decided, so a character it knocks out rolls nothing.
+    """
+
+    health_before: int
+    health_after: int
+    max_health: int
+
+
+@dataclass(frozen=True)
 class ParticipantDamageResult:
     """Result of applying damage to a PC."""
 
@@ -77,6 +90,8 @@ class ParticipantDamageResult:
     damage_interaction: DamageInteractionResult | None = (
         None  # condition-damage interaction result (#2018)
     )
+    # A knockout-band hit's wound triggers, waiting for ``settle_wound_triggers`` (#4802).
+    pending_wound_crossing: WoundCrossing | None = None
 
 
 @dataclass(frozen=True)
@@ -735,3 +750,71 @@ class SlotMoveResult:
     @property
     def progressed(self) -> bool:
         return self.moved or self.bashed or self.fled or self.waited
+
+
+@dataclass(frozen=True)
+class CompulsionCost:
+    """What declaring one action costs a compelled character this round (#4802).
+
+    ``difficulty`` is the resist roll the action needs; ``forbidden`` says the compulsion
+    names the action as forbidden, so its extra difficulty is included.
+    """
+
+    difficulty: int
+    forbidden: bool
+
+
+@dataclass(frozen=True)
+class Steadier:
+    """An ally who could steady a compelled fighter, with the bonus she would give (#4802)."""
+
+    participant: CombatParticipant
+    bonus: int
+
+
+@dataclass(frozen=True)
+class SteadyResult:
+    """A steadying that happened: who steadied, and the second resist roll she gave (#4802).
+
+    ``bonus`` is the steady bonus the second roll carried; ``anima_paid`` is the anima the
+    steadier's pool actually lost (a short pool pays less than the configured cost).
+    """
+
+    steadier: CombatParticipant
+    check_result: CheckResult
+    bonus: int
+    anima_paid: int
+
+
+@dataclass(frozen=True)
+class CompulsionAttempt:
+    """A compelled character's resist roll for something outside the round (#4802).
+
+    Leaving an encounter and changing back roll at once, with no declaration to replace.
+    ``allowed`` is whether the action goes ahead; ``line`` is the roll as the player is
+    told it (empty when nothing was rolled); ``check_result`` is None when nothing rolled.
+    ``waiting`` is set when a failed roll's wait has not run out: nothing rolled, and
+    ``line`` tells the player when they can try again.
+    """
+
+    allowed: bool
+    line: str
+    check_result: CheckResult | None
+    waiting: bool = False
+
+
+@dataclass(frozen=True)
+class CompulsionRoll:
+    """One resist roll a compelled participant made at the round lock (#4802).
+
+    ``action`` is the declaration the roll was made for; when ``final_band`` let the
+    compulsion act, that row was deleted and the compulsion attack declared instead.
+    ``steadied_by`` is the ally whose steadying gave the second roll, if any.
+    """
+
+    participant: CombatParticipant
+    action: CombatRoundAction
+    difficulty: int
+    first_result: CheckResult
+    steadied_by: CombatParticipant | None
+    final_band: CompulsionResistBand | None

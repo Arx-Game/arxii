@@ -155,7 +155,12 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # computes it, so it does not scale with the participant count.
         # The viewer's own Strike weapons (#4858) add one: the strike skills the attack
         # check types weight, read once for her own row only.
-        with self.assertNumQueries(18):
+        # The viewer's own compulsion (#4802) adds one: the movement config the steady
+        # plan reads (her active conditions come from the preloaded context). Own row
+        # only, so it does not scale with the participant count.
+        # The roster's persona names (#4802) add two: the sheets' worn personas and the
+        # persona rows, read once for every participant.
+        with self.assertNumQueries(21):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

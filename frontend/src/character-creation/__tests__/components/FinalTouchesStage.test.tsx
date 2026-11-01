@@ -374,7 +374,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     let leave: (() => Promise<boolean>) | null = null;
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
-        draft={createMockDraft()}
+        draft={createMockDraft({ final_touches_prompts: ['officially_dead'] })}
         onRegisterBeforeLeave={(check) => {
           leave = check;
         }}
@@ -412,6 +412,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
         draft={createMockDraft({
+          final_touches_prompts: ['officially_dead'],
           draft_data: { officially_dead: { ...EMPTY_FACE_FOR_TEST, face_name: 'Cambria' } },
         })}
         onRegisterBeforeLeave={(check) => {
@@ -743,6 +744,169 @@ describe('FinalTouchesStage (the grants the cards reconcile, #4852)', () => {
             final_touches_prompts: ['prestige_story', 'organization', 'path_aspect'],
             final_touches_cards: [drama, honors, mentor],
             organization_choices: [lodge],
+          })}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      </div>
+    );
+    const styledElsewhere = new Set(['leaf-body', 'chosen', 'entry', 'note-group']);
+    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
+  });
+});
+
+describe('FinalTouchesStage (the second face and the tie, #4856)', () => {
+  const catspaw = {
+    distinction_id: 71,
+    name: 'The Catspaw',
+    prompt: 'tie' as const,
+    detail: 'gang',
+    choices: [{ id: 9, name: 'The Ashfingers', is_covert: false }],
+  };
+
+  beforeEach(() => {
+    offersResponse = { offers: [], closed: [] };
+  });
+  afterEach(() => mutateAsync.mockClear());
+
+  it('shows neither door when no held card asks for a face (#4856)', () => {
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByRole('heading', { name: 'Officially dead' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'A second face' })).toBeNull();
+  });
+
+  it('names a second face behind its own door and saves it', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ final_touches_prompts: ['alter_ego'] })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.queryByRole('heading', { name: 'Officially dead' })).toBeNull();
+    const section = screen.getByRole('heading', { name: 'A second face' }).closest('section')!;
+    await user.click(within(section).getByRole('button', { name: 'Write it' }));
+    await user.type(screen.getByLabelText('The name the other circles know'), 'The Lamplighter');
+    await user.type(within(section).getByLabelText('Concept'), 'Known in three cellars');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({
+            alter_ego: expect.objectContaining({
+              face_name: 'The Lamplighter',
+              concept: 'Known in three cellars',
+            }),
+            officially_dead: null,
+          }),
+        }),
+      })
+    );
+  });
+
+  it('skipping a saved second face takes it back and saves null', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['alter_ego'],
+          draft_data: { alter_ego: { ...EMPTY_FACE_FOR_TEST, face_name: 'The Lamplighter' } },
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByLabelText('The name the other circles know')).toHaveValue('The Lamplighter');
+    const section = screen.getByRole('heading', { name: 'A second face' }).closest('section')!;
+    await user.click(within(section).getByRole('button', { name: 'Skip' }));
+    expect(screen.queryByLabelText('The name the other circles know')).toBeNull();
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ draft_data: expect.objectContaining({ alter_ego: null }) }),
+      })
+    );
+  });
+
+  it('offers the tie: the organizations with None first, then the kind, and saves the pick', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ final_touches_prompts: ['tie'], final_touches_cards: [catspaw] })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByText('The Catspaw')).toBeInTheDocument();
+    const pick = screen.getByLabelText('The ones who remember you.');
+    expect(
+      within(pick)
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['None', 'The Ashfingers']);
+    expect(screen.queryByRole('button', { name: 'A name they already know' })).toBeNull();
+    await user.selectOptions(pick, '9');
+    await user.click(screen.getByRole('button', { name: 'A name they already know' }));
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({
+            ties: { '71': { organization_id: 9, kind: 'renown' } },
+          }),
+        }),
+      })
+    );
+  });
+
+  it('opens on a saved tie and None saves null', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['tie'],
+          final_touches_cards: [catspaw],
+          draft_data: { ties: { '71': { organization_id: 9, kind: 'membership' } } },
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    const pick = screen.getByLabelText('The ones who remember you.');
+    expect(pick).toHaveValue('9');
+    expect(screen.getByRole('button', { name: 'A place at the bottom rung' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.selectOptions(pick, '');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({ ties: { '71': null } }),
+        }),
+      })
+    );
+  });
+
+  it('emits no class hook that cg.css has no rule for in the new blocks (#3667 shape)', () => {
+    const { container } = renderWithCharacterCreationProviders(
+      <div className="interview">
+        <FinalTouchesStage
+          draft={createMockDraft({
+            final_touches_prompts: ['officially_dead', 'alter_ego', 'tie'],
+            final_touches_cards: [catspaw],
+            draft_data: { ties: { '71': { organization_id: 9, kind: 'membership' } } },
           })}
           onRegisterBeforeLeave={vi.fn()}
         />

@@ -1,6 +1,6 @@
 # ADR-0183: Moon control rides one shared Berserk, and Berserk finally compels
 
-**Status:** Accepted (built #2845; extends ADR-0179)
+**Status:** Superseded by ADR-4802 (built #2845; extends ADR-0179). The moon is now one authored trigger row, and a compulsion rolls to resist instead of refusing flee, parley, leave and revert.
 
 **Decision.** The moon is a *control* pressure, not an exposure damage ladder: a
 moon-bound character (tag-anchored `Moon-Bound` distinction, ADR-0179 — Lycans

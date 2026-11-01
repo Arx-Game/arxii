@@ -49,9 +49,11 @@ import type {
   DraftGoal,
   DraftIntroductions,
   DraftOfficiallyDead,
+  DraftTie,
   EnemyOffer,
   FinalTouchesCard,
   GoalHorizon,
+  TieKind,
 } from '../types';
 import { CRIME_LINE_MAX_LENGTH, PRESTIGE_STORY_MAX_LENGTH, Stage } from '../types';
 
@@ -282,6 +284,22 @@ const GRANTS = {
   aspectUnknown: "your Path's stronger Aspect",
 };
 
+/** The second face and the tie (#4856); every line PLACEHOLDER for ApostateCD's rewrite,
+ * twins of the `alter_ego_*` and `finaltouches_tie_*` copy rows. */
+const SECOND_FACE = {
+  heading: 'A second face',
+  intro:
+    'Your best work goes by another name. Name the face some circles know, with a concept, ' +
+    'a quote and a story of its own; the rest of the world meets you.',
+};
+const TIE = {
+  prompt: 'The ones who remember you.',
+  help: 'A place at the bottom rung, or a name they already know. Or neither.',
+  none: 'None',
+  membership: 'A place at the bottom rung',
+  renown: 'A name they already know',
+};
+
 /** The stories as the draft stores them: a blank one is no story, so its key is dropped. */
 function storiesToSave(stories: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(stories).filter(([, text]) => text.trim() !== ''));
@@ -378,6 +396,17 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const [openFace, setOpenFace] = useState(
     (draftData.officially_dead?.face_name ?? '').trim() !== ''
   );
+  // The second face (#4856): the door's shape under its own key.
+  const [alterEgo, setAlterEgo] = useState<DraftOfficiallyDead>({
+    ...EMPTY_FACE,
+    ...(draftData.alter_ego ?? {}),
+  });
+  const [openAlterEgo, setOpenAlterEgo] = useState(
+    (draftData.alter_ego?.face_name ?? '').trim() !== ''
+  );
+  const [ties, setTies] = useState<Record<string, DraftTie | null>>(() => ({
+    ...(draftData.ties ?? {}),
+  }));
   const [crime, setCrime] = useState<CrimeDraft>(() => crimeFromDraft(draftData.crime));
   // The grants' answers (#4852), each keyed by the card's id as the draft stores them.
   const [stories, setStories] = useState<Record<string, string>>(() => ({
@@ -410,8 +439,30 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const remaining = BASE_GOAL_POINTS - usedPoints;
 
   // --- save on leave -------------------------------------------------------------
-  const payloadRef = useRef({ answers, goals, enemy, intros, face, crime, stories, orgPicks });
-  payloadRef.current = { answers, goals, enemy, intros, face, crime, stories, orgPicks };
+  const payloadRef = useRef({
+    answers,
+    goals,
+    enemy,
+    intros,
+    face,
+    crime,
+    stories,
+    orgPicks,
+    alterEgo,
+    ties,
+  });
+  payloadRef.current = {
+    answers,
+    goals,
+    enemy,
+    intros,
+    face,
+    crime,
+    stories,
+    orgPicks,
+    alterEgo,
+    ties,
+  };
   const hasChangesRef = useRef(false);
   useEffect(() => {
     const current = JSON.stringify({
@@ -431,9 +482,11 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       crime: crimeFromDraft(draftData.crime),
       stories: storiesToSave(draftData.prestige_stories ?? {}),
       orgPicks: draftData.organizations ?? {},
+      alterEgo: { ...EMPTY_FACE, ...(draftData.alter_ego ?? {}) },
+      ties: draftData.ties ?? {},
     });
     hasChangesRef.current = current !== server;
-  }, [answers, goals, enemy, intros, face, crime, stories, orgPicks, draftData]);
+  }, [answers, goals, enemy, intros, face, crime, stories, orgPicks, alterEgo, ties, draftData]);
 
   const save = useCallback(async () => {
     if (!hasChangesRef.current) return true;
@@ -446,6 +499,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       crime: c,
       stories: s,
       orgPicks: o,
+      alterEgo: ae,
+      ties: t,
     } = payloadRef.current;
     try {
       await updateDraft.mutateAsync({
@@ -460,6 +515,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             crime: crimeToSave(c),
             prestige_stories: storiesToSave(s),
             organizations: o,
+            alter_ego: faceToSave(ae),
+            ties: t,
           },
         },
       });
@@ -563,6 +620,10 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const toggleFace = () => {
     if (openFace) setFace(EMPTY_FACE);
     setOpenFace((prev) => !prev);
+  };
+  const toggleAlterEgo = () => {
+    if (openAlterEgo) setAlterEgo(EMPTY_FACE);
+    setOpenAlterEgo((prev) => !prev);
   };
 
   if (domainsLoading) {
@@ -760,6 +821,58 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
                       ))}
                     </select>
                   </Field>
+                </div>
+              );
+            }
+            if (card.prompt === 'tie') {
+              const tie = ties[key] ?? null;
+              const kinds: Array<{ value: TieKind; label: string }> = [
+                { value: 'membership', label: copy?.finaltouches_tie_membership ?? TIE.membership },
+                { value: 'renown', label: copy?.finaltouches_tie_renown ?? TIE.renown },
+              ];
+              return (
+                <div key={`${key}-tie`} className="conditional">
+                  <p>
+                    <b>{card.name}</b>
+                  </p>
+                  <Field
+                    id={`tie-${key}`}
+                    label={copy?.finaltouches_tie_prompt ?? TIE.prompt}
+                    hint={copy?.finaltouches_tie_help ?? TIE.help}
+                  >
+                    <select
+                      id={`tie-${key}`}
+                      value={tie?.organization_id ?? ''}
+                      onChange={(e) =>
+                        setTies((prev) => ({
+                          ...prev,
+                          [key]: e.target.value
+                            ? {
+                                organization_id: Number(e.target.value),
+                                kind: tie?.kind ?? 'membership',
+                              }
+                            : null,
+                        }))
+                      }
+                    >
+                      <option value="">{copy?.finaltouches_tie_none ?? TIE.none}</option>
+                      {card.choices.map((org) => (
+                        <option key={org.id} value={org.id}>
+                          {org.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {tie && (
+                    <ChoiceRow<TieKind>
+                      label={card.name}
+                      options={kinds}
+                      value={tie.kind}
+                      onChange={(value) => {
+                        if (value) setTies((prev) => ({ ...prev, [key]: { ...tie, kind: value } }));
+                      }}
+                    />
+                  )}
                 </div>
               );
             }
@@ -1057,33 +1170,38 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         </>
       )}
 
-      <IntroductionBlock
-        id="officially_dead"
-        title={copy?.officially_dead_heading ?? OFFICIALLY_DEAD.heading}
-        frame={copy?.officially_dead_intro ?? OFFICIALLY_DEAD.intro}
-        open={openFace}
-        onToggle={toggleFace}
-      >
-        <Field id="face-name" label="The face the world meets">
-          <input
-            id="face-name"
-            type="text"
-            maxLength={255}
-            value={face.face_name}
-            onChange={(e) => setFace((prev) => ({ ...prev, face_name: e.target.value }))}
+      {prompts.includes('officially_dead') && (
+        <IntroductionBlock
+          id="officially_dead"
+          title={copy?.officially_dead_heading ?? OFFICIALLY_DEAD.heading}
+          frame={copy?.officially_dead_intro ?? OFFICIALLY_DEAD.intro}
+          open={openFace}
+          onToggle={toggleFace}
+        >
+          <FaceForm
+            idPrefix="face"
+            nameLabel="The face the world meets"
+            face={face}
+            onChange={setFace}
           />
-        </Field>
-        {FACE_TEXTS.map(({ key, label, rows }) => (
-          <Field key={key} id={`face-${key}`} label={label}>
-            <textarea
-              id={`face-${key}`}
-              rows={rows}
-              value={face[key]}
-              onChange={(e) => setFace((prev) => ({ ...prev, [key]: e.target.value }))}
-            />
-          </Field>
-        ))}
-      </IntroductionBlock>
+        </IntroductionBlock>
+      )}
+      {prompts.includes('alter_ego') && (
+        <IntroductionBlock
+          id="alter_ego"
+          title={copy?.alter_ego_heading ?? SECOND_FACE.heading}
+          frame={copy?.alter_ego_intro ?? SECOND_FACE.intro}
+          open={openAlterEgo}
+          onToggle={toggleAlterEgo}
+        >
+          <FaceForm
+            idPrefix="alter-ego"
+            nameLabel="The name the other circles know"
+            face={alterEgo}
+            onChange={setAlterEgo}
+          />
+        </IntroductionBlock>
+      )}
 
       <h2 className="section-h">{copy?.introductions_heading ?? 'The Introductions'}</h2>
       <p>{copy?.introductions_intro ?? INTRODUCTIONS_INTRO}</p>
@@ -1154,6 +1272,40 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         </Field>
       </IntroductionBlock>
     </ChapterLeaf>
+  );
+}
+
+interface FaceFormProps {
+  idPrefix: string;
+  nameLabel: string;
+  face: DraftOfficiallyDead;
+  onChange: React.Dispatch<React.SetStateAction<DraftOfficiallyDead>>;
+}
+
+/** A face's name and its guise texts (#4396, #4856): the door and the second face share it. */
+function FaceForm({ idPrefix, nameLabel, face, onChange }: FaceFormProps) {
+  return (
+    <>
+      <Field id={`${idPrefix}-name`} label={nameLabel}>
+        <input
+          id={`${idPrefix}-name`}
+          type="text"
+          maxLength={255}
+          value={face.face_name}
+          onChange={(e) => onChange((prev) => ({ ...prev, face_name: e.target.value }))}
+        />
+      </Field>
+      {FACE_TEXTS.map(({ key, label, rows }) => (
+        <Field key={key} id={`${idPrefix}-${key}`} label={label}>
+          <textarea
+            id={`${idPrefix}-${key}`}
+            rows={rows}
+            value={face[key]}
+            onChange={(e) => onChange((prev) => ({ ...prev, [key]: e.target.value }))}
+          />
+        </Field>
+      ))}
+    </>
   );
 }
 

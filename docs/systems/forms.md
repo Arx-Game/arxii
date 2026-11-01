@@ -160,8 +160,10 @@ active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveErr
                                                  # a different alt-self is active;
                                                  # FormOwnershipError / ActivePersonaError
                                                  # on a cross-sheet form/persona FK.
-revert_alternate_self(sheet)                     # Raises RevertBlockedError while not
+revert_alternate_self(sheet)                     # System path: RevertBlockedError while not
                                                  # in_control; ValueError if none active.
+attempt_revert_form(sheet)                       # Player path (#4802): rolls a compulsion,
+                                                 # else free (talked-down self stays blocked).
 ```
 
 ### Alternate-self services
@@ -176,10 +178,19 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
   if the alt-self's `form` or `persona` FK points at another sheet (bad seed/admin
   edit — neither FK has a cross-sheet DB guard).
 - `revert_alternate_self(sheet)` — restore return anchors and delete the granted
-  modifier / technique rows. Blocked while `not sheet.in_control`; raises
-  `RevertBlockedError`. The canonical blocker is the fury `Berserk` condition,
-  whose `Control` category has `alters_behavior=True`; it is cleared by the existing
-  `RestoreSenseAction` (`restore_sense`) calm-down action.
+  modifier / technique rows. This is the system entry point (Audere end, talked-down
+  reverts): it stays blocked while `not sheet.in_control` and raises `RevertBlockedError`.
+  A player's own revert goes through `attempt_revert_form(sheet)` (#4802), in order:
+  (1) a character carrying a compulsion rolls its resist check for `REVERT_FORM` and
+  changes back only when the roll lets them (an NPC changes back with no roll); a failed
+  roll waits before the next try (the next round in a fight, the compulsion's
+  `retry_wait_minutes` outside one), and a try inside the wait rolls nothing and says
+  when to try again;
+  (2) otherwise a `TALKED_DOWN` self whose emergence condition is still active stays
+  blocked with `RevertBlockedError`, the ratified "must be talked down" rule, which is
+  not a compulsion refusal; (3) anything else (Charmed, Calm, any other
+  `alters_behavior` condition) changes back freely. A compulsion is cleared by the
+  existing `RestoreSenseAction` (`restore_sense`) calm-down action.
 - `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (in
   `world/forms/services/transformation.py`) — the single seam both non-command
   cause-paths call. Wraps `assume_alternate_self(sheet, alt, instance_value=...)`;
@@ -192,8 +203,8 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
   regression guard so existing grants are unchanged. This is how two characters
   sharing a form-template get differently-tuned stat-suites (#1604), and how a
   strong cast / violent onset scales a single assumption.
-- `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
-  blocked.
+- `RevertBlockedError(user_message=...)`, the exception surfaced when the system
+  revert is blocked, or a talked-down self is held by its emergence condition.
 - `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
   already active (strictly-one-active).
 - `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
@@ -257,9 +268,10 @@ command routes through it too (`cause="command"`, default `instance_value=1.0`):
    and calls `trigger_transformation(..., cause="trigger")`. A resist-check branch
    (`flow_perform_check` → `EVALUATE_EQUALS` on the failure outcome) authors the
    "fail a check to *not* change" journey: the shift is forced only when the
-   resist fails. While the rage is active `sheet.in_control` is `False`, so
-   `revert_alternate_self` raises `RevertBlockedError`; clearing the condition
-   re-derives `in_control=True` and unblocks a later self-revert.
+   resist fails. While the rage is active `sheet.in_control` is `False`. The system
+   revert (`revert_alternate_self`) still raises `RevertBlockedError`, but the player's
+   own revert rolls against the rage's compulsion (see `attempt_revert_form`), so a
+   raging character can try to change back and is never simply refused.
 3. **At-will command (niche).** `ShiftFormAction` above — only for characters with
    the `at_will_shifting` capability.
 
@@ -276,7 +288,8 @@ holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
 ### Telnet surface
 
 - `form` / `form list` — status hub: shows current alternate self (or true self),
-  available alternate selves, and whether revert is blocked while not in control.
+  available alternate selves, and, for a player character carrying a compulsion, the
+  line "You are compelled; changing back takes a roll against it."
 - `form shift <name or id>` — assume a named alternate self (the usage spells
   "name or id": `<name|id>` reached telnet as `<named>`, #3657 tranche 17).
 - `form revert` — revert to the true self.
@@ -322,8 +335,9 @@ The decoupling of control from the shift and the stacking guard are documented i
   with a uniform safe message (no repertoire leak).
 - `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
   Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
-  Returns 400 with `RevertBlockedError.user_message` while `not in_control` (rage,
-  possession, charm, mind-control).
+  Returns the compulsion roll line when a compulsion makes it a roll (400 with the
+  line when the roll fails), and 400 with `RevertBlockedError.user_message` only for a
+  talked-down self its emergence condition still holds.
 
 All endpoints require `IsAuthenticated`.
 
