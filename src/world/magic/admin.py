@@ -1015,6 +1015,20 @@ class CharacterGiftAdmin(admin.ModelAdmin):
     search_fields = ["character__character__db_key", "gift__name"]
     date_hierarchy = "acquired_at"
 
+    # Removing a gift takes its natural weapon with it (#4898), from either delete button.
+    def delete_model(self, request, obj: CharacterGift) -> None:
+        from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
+
+        deprovision_natural_weapon(obj.character, obj.gift)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset) -> None:
+        from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
+
+        for row in queryset.select_related("character", "gift"):
+            deprovision_natural_weapon(row.character, row.gift)
+        super().delete_queryset(request, queryset)
+
 
 class TraditionCodexGrantInline(admin.TabularInline):
     model = TraditionCodexGrant

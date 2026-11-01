@@ -198,14 +198,11 @@ def apply_confiscation(case: JusticeCase) -> None:
         end_captivity(case)
         return
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.items.services.natural_weapons import natural_weapon_template_ids  # noqa: PLC0415
 
     # A natural weapon (#4898) is part of the body: it is never seized.
     kept_object_ids = set(
         ItemInstance.objects.filter(
-            game_object__db_location=character,
-            holder_character_sheet=sheet,
-            template_id__in=natural_weapon_template_ids(sheet),
+            game_object__db_location=character, natural_weapon_gift__isnull=False
         ).values_list("game_object_id", flat=True)
     )
     for obj in list(character.contents):

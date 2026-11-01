@@ -80,17 +80,12 @@ def undress(character: CharacterState) -> None:
     a naked character. A natural weapon (#4898) stays on: it is part of the body,
     so undressing leaves it rather than refusing.
     """
-    from world.items.services.natural_weapons import natural_weapon_template_ids  # noqa: PLC0415
-
     item_ids = list(
         EquippedItem.objects.filter(character_id=character.obj.pk)
         .values_list("item_instance_id", flat=True)
         .distinct()
     )
-    kept_templates = natural_weapon_template_ids(character.obj.sheet_data)
-    worn = ItemInstance.objects.filter(id__in=item_ids).exclude(
-        holder_character_sheet_id=character.obj.pk, template_id__in=kept_templates
-    )
+    worn = ItemInstance.objects.filter(id__in=item_ids, natural_weapon_gift__isnull=True)
     for item in worn:
         unequip(character, ItemState(item, context=character.context))
 

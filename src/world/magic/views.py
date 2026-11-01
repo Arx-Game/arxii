@@ -849,6 +849,16 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
         return queryset.filter(character_id__in=character_ids)
 
+    def perform_destroy(self, instance: CharacterGift) -> None:
+        """A removed gift takes its natural weapon with it (#4898)."""
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
+
+        with transaction.atomic():
+            deprovision_natural_weapon(instance.character, instance.gift)
+            instance.delete()
+
 
 class CharacterAnimaViewSet(viewsets.ModelViewSet):
     """

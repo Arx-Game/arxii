@@ -5,10 +5,10 @@ makes one instance of it, held by the character and equipped at every slot its t
 declares (staff author those at the skin layer), and the character Strikes with it on the
 Unarmed strike skill like any other Unarmed weapon.
 
-Nothing on the item marks it. An item is a natural weapon when its template is some gift's
-natural weapon template and its holder holds that gift (``is_natural_weapon``). That one
-predicate is the gate every removal path checks: unequip, drop, give, steal, a trade stake,
-consuming it and any change of holder all refuse it.
+The made item carries ``natural_weapon_gift``, the marker ``is_natural_weapon`` reads with no
+query. That one predicate is the gate every removal path checks: unequip, drop, give, steal,
+a trade stake, consuming it and any change of holder all refuse it. Losing the gift removes
+it (``deprovision_natural_weapon``), the one path allowed around that gate.
 """
 
 from __future__ import annotations
@@ -27,23 +27,16 @@ logger = logging.getLogger(__name__)
 
 
 def is_natural_weapon(item: ItemInstance) -> bool:
-    """Whether ``item`` is its holder's natural weapon, and so can never be removed.
+    """Whether ``item`` is a natural weapon, and so can never be removed. No query.
 
-    True when the item's holder holds a gift whose natural weapon template is the item's
-    template. An item nobody holds is never a natural weapon.
+    True when the item carries the marker ``provision_natural_weapon`` writes
+    (``natural_weapon_gift``). Another copy of the same template is ordinary gear.
     """
-    if item.holder_character_sheet_id is None:
-        return False
-    from world.magic.models import CharacterGift  # noqa: PLC0415
-
-    return CharacterGift.objects.filter(
-        character_id=item.holder_character_sheet_id,
-        gift__natural_weapon_template_id=item.template_id,
-    ).exists()
+    return item.natural_weapon_gift_id is not None
 
 
 def require_removable(item: ItemInstance) -> None:
-    """Raise ``NaturalWeaponNotRemovable`` when ``item`` is its holder's natural weapon.
+    """Raise ``NaturalWeaponNotRemovable`` when ``item`` is a natural weapon.
 
     The front-door check every path that takes an item off its holder runs before it
     changes anything, so the player sees the plain refusal.
@@ -54,30 +47,16 @@ def require_removable(item: ItemInstance) -> None:
         raise NaturalWeaponNotRemovable
 
 
-def natural_weapon_template_ids(sheet: CharacterSheet) -> set[int]:
-    """The item template pks that are natural weapons for ``sheet``, in one query.
-
-    For a path that walks many of a character's items at once (an estate's sweep), so it
-    can leave the natural weapons out without a query per item.
-    """
-    from world.magic.models import CharacterGift  # noqa: PLC0415
-
-    return set(
-        CharacterGift.objects.filter(
-            character=sheet, gift__natural_weapon_template__isnull=False
-        ).values_list("gift__natural_weapon_template_id", flat=True)
-    )
-
-
 @transaction.atomic
 def provision_natural_weapon(sheet: CharacterSheet, gift: Gift) -> ItemInstance | None:
     """Make and equip ``gift``'s natural weapon on ``sheet``, once. Idempotent.
 
     Returns None when the gift names no natural weapon or its template is retired. When the
-    character already holds an in-play instance of the template, that one is kept (a gift
-    gained twice, or two gifts naming the same claws, never makes a second) and only its
-    missing slots are filled. Otherwise a new instance is made, placed on the character
-    (which needs no room, so a GM character with no location gets one too) and equipped.
+    character already holds this gift's natural weapon, that one is kept and only its
+    missing slots are filled. Otherwise a new instance is made with the marker
+    (``natural_weapon_gift``), placed on the character (which needs no room, so a GM
+    character with no location gets one too) and equipped. An ordinary copy of the
+    template the character owns is never adopted: it stays gear they may drop or give.
     """
     template = gift.natural_weapon_template
     if template is None or not template.is_active:
@@ -87,15 +66,42 @@ def provision_natural_weapon(sheet: CharacterSheet, gift: Gift) -> ItemInstance 
 
     instance = (
         ItemInstance.objects.in_play()
-        .filter(template=template, holder_character_sheet=sheet)
+        .filter(natural_weapon_gift=gift, holder_character_sheet=sheet)
         .order_by("pk")
         .first()
     )
     if instance is None:
-        instance = ItemInstance.objects.create(template=template, holder_character_sheet=sheet)
+        instance = ItemInstance.objects.create(
+            template=template, holder_character_sheet=sheet, natural_weapon_gift=gift
+        )
         materialize_item_game_object(instance, sheet)
     _equip_at_every_slot(sheet, instance)
     return instance
+
+
+@transaction.atomic
+def deprovision_natural_weapon(sheet: CharacterSheet, gift: Gift) -> int:
+    """Take away ``gift``'s natural weapon from ``sheet`` when they lose the gift. Returns
+    how many were removed.
+
+    The one path that removes a natural weapon, so it deliberately goes around the removal
+    gate: it clears the marker first, then hands the item to the canonical destroy helper
+    (``destroy_consumed_item_instance``), which unequips it and removes its game object
+    with it. Call it before the ``CharacterGift`` row goes. A character who never got the
+    weapon, or a gift with none, is a no-op.
+    """
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
+
+    removed = 0
+    for item in ItemInstance.objects.in_play().filter(
+        natural_weapon_gift=gift, holder_character_sheet=sheet
+    ):
+        item.natural_weapon_gift = None
+        item.save(update_fields=["natural_weapon_gift"])
+        destroy_consumed_item_instance(item, note=f"Lost with the gift {gift.name}.")
+        removed += 1
+    return removed
 
 
 def _equip_at_every_slot(sheet: CharacterSheet, instance: ItemInstance) -> None:

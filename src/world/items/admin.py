@@ -500,6 +500,7 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "holder_character_sheet",
         "held_since",
         "holding_event",
+        "natural_weapon_gift",
         "crafter_character_sheet",
         "crafter_persona_display",
         "designer_character_sheet",

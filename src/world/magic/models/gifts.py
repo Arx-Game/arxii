@@ -131,20 +131,20 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             f"Gift adds no skill. {MAGIC_SKILL_HELP}"
         ),
     )
-    # The gift points at the item primitive (ADR-0010), so world.items never imports
-    # world.magic for this. A natural weapon is not marked on the item: it is an
-    # instance of this template held by a character who holds this gift (#4898).
+    # The gift points at the item primitive (ADR-0010). The weapon made from it carries
+    # ItemInstance.natural_weapon_gift back to this gift, so a plain copy of the same
+    # template stays ordinary gear (#4898).
     natural_weapon_template = models.ForeignKey(
         "arxii.ItemTemplate",
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="natural_weapon_gifts",
         limit_choices_to={"gear_archetype": GearArchetype.UNARMED},
         help_text=(
             "Claws, a bite or horns this gift gives its holder: an Unarmed item template "
-            "worn at the skin layer. Made and equipped once when the gift is gained, and "
-            "it can never be removed. Blank = no natural weapon."
+            "worn at the skin layer. Made and equipped once when the gift is gained; it "
+            "comes off only if the gift is lost. Blank = no natural weapon."
         ),
     )
     ultimate_techniques = models.ManyToManyField(

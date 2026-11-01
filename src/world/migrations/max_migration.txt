@@ -1,1 +1,1 @@
-0359_gift_natural_weapon_template
+0359_natural_weapons

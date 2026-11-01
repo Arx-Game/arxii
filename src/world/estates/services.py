@@ -399,14 +399,12 @@ def _persona_can_receive_item(persona: Any, item_instance: Any) -> bool:
 def _estate_has_assets(sheet: CharacterSheet) -> bool:
     from world.currency.models import Business, CharacterPurse  # noqa: PLC0415
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.items.services.natural_weapons import natural_weapon_template_ids  # noqa: PLC0415
     from world.locations.models import LocationOwnership  # noqa: PLC0415
 
     # A natural weapon stays with the body (#4898), so it is no asset of the estate.
     if (
         ItemInstance.objects.in_play()
-        .filter(holder_character_sheet=sheet)
-        .exclude(template_id__in=natural_weapon_template_ids(sheet))
+        .filter(holder_character_sheet=sheet, natural_weapon_gift__isnull=True)
         .exists()
     ):
         return True
@@ -768,7 +766,6 @@ def _sweep_residuary_items(
 ) -> None:
     """Flip or clear each undelivered item in the estate."""
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.items.services.natural_weapons import natural_weapon_template_ids  # noqa: PLC0415
 
     # #4099: a soft-deleted item keeps its holder; never hand one to an heir. A natural
     # weapon stays with the body (#4898): it is neither inherited nor left as loot.
@@ -776,7 +773,7 @@ def _sweep_residuary_items(
         ItemInstance.objects.in_play()
         .filter(holder_character_sheet=sheet)
         .exclude(pk__in=delivered_item_ids)
-        .exclude(template_id__in=natural_weapon_template_ids(sheet))
+        .filter(natural_weapon_gift__isnull=True)
     )
     for item in items:
         if heir_persona is not None and _persona_can_receive_item(heir_persona, item):
