@@ -134,10 +134,13 @@ evidence_required() {
   grep -qx "review:evidence-required" <<< "$labels"
 }
 
-already_commented() {
+# A refusal is deduplicated on the head SHA AND the status. The head is often the
+# bot's own fix commit, whose resolved comment names that same SHA, and matching on
+# the SHA alone silently swallowed the refusal that followed it (#4897).
+already_refused() {
   local bodies
   bodies="$(gh api "repos/$REPO/issues/$1/comments" --paginate --jq '.[].body')" || return 1
-  grep -qF "$MARKER sha=$2 " <<< "$bodies"
+  grep -qF "$MARKER sha=$2 status=refused " <<< "$bodies"
 }
 
 push_resolved() {
@@ -207,7 +210,7 @@ push_resolved() {
 comment_refused() {
   local pr="$1" json="$2" head_sha
   head_sha="$(jq -r .head_sha "$json")"
-  if already_commented "$pr" "$head_sha"; then
+  if already_refused "$pr" "$head_sha"; then
     echo "#$pr: refused again at $head_sha; already commented"
     return 0
   fi
