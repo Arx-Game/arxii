@@ -3,7 +3,11 @@
 Staff find every combat role authoring page from the front page; each link opens.
 """
 
+from pathlib import Path
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
 
@@ -67,3 +71,46 @@ class CombatRolesPanelTests(TestCase):
         VowFocusPickConfig.objects.all().delete()
         budget = next(link for link in self._links() if link.label == "Focus pick budget")
         self.assertTrue(budget.note.endswith("points per level (default)"))
+
+
+class CombatRolesPanelPermissionTests(TestCase):
+    """A staff account sees only the rows whose pages would open for it."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = get_user_model().objects.create_user(
+            username="combat-roles-limited", password="x", is_staff=True
+        )
+        cls.staff.user_permissions.add(
+            Permission.objects.get(codename="view_combatstyle"),
+            Permission.objects.get(codename="change_conditiontemplate"),
+        )
+
+    def test_limited_staff_see_only_rows_they_can_open(self) -> None:
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertEqual(resp.status_code, 200)
+        links = resp.context["combat_roles_links"]
+        self.assertEqual([link.label for link in links], ["Combat styles", "Conditions"])
+        for link in links:
+            with self.subTest(link=link.label):
+                self.assertEqual(self.client.get(link.url).status_code, 200)
+
+
+class CombatRolesPanelStylingTest(TestCase):
+    """The panel's group and module rules reach the front page, not just its class names."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = get_user_model().objects.create_superuser(
+            username="combat-roles-style", email="combat-roles-style@example.com", password="x"
+        )
+
+    def test_arx_admin_stylesheet_with_the_group_rules_is_linked(self) -> None:
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "admin/css/arx_admin.css")
+        css = Path(finders.find("admin/css/arx_admin.css")).read_text()
+        for selector in (".app-group-header", ".app-group-content"):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, css)

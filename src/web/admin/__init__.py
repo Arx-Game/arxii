@@ -40,7 +40,7 @@ class ArxAdminSite(admin.AdminSite):
         """The front page, with the Combat roles panel above the app groups (#4857)."""
         from web.admin.combat_roles import combat_roles_links  # noqa: PLC0415
 
-        context = {"combat_roles_links": combat_roles_links(), **(extra_context or {})}
+        context = {"combat_roles_links": combat_roles_links(request.user), **(extra_context or {})}
         return super().index(request, context)
 
     def admin_view(self, view, cacheable=False):

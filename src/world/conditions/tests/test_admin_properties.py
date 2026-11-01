@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from world.conditions.admin import PROPERTIES_HELP
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.mechanics.factories import PropertyFactory
 
@@ -31,7 +32,8 @@ class ConditionPropertiesAdminTests(TestCase):
         url = reverse("admin:arxii_conditiontemplate_add") + "?_to_field=id&_popup=1"
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("properties", resp.context["adminform"].form.fields)
+        field = resp.context["adminform"].form.fields["properties"]
+        self.assertEqual(field.help_text, PROPERTIES_HELP)
 
     def test_change_form_shows_the_property_a_condition_carries(self) -> None:
         resp = self.client.get(

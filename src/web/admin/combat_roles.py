@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
 from django.db.models import Model
 from django.urls import reverse
 
@@ -57,30 +58,49 @@ def _budget_link() -> CombatRolesLink:
     )
 
 
-def combat_roles_links() -> list[CombatRolesLink]:
-    """The panel's rows, in the order an author works through a vow."""
+def _can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
+    return user.has_perm(f"arxii.view_{model.__name__.lower()}") or user.has_perm(
+        f"arxii.change_{model.__name__.lower()}"
+    )
+
+
+def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRolesLink]:
+    """The panel's rows a user can open, in the order an author works through a vow.
+
+    A row whose page would refuse the user is left out: a model they cannot view,
+    and Required content (the Game Ops dashboard) for anyone but a superuser.
+    """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.covenants.models import (  # noqa: PLC0415
         CombatStyle,
         CovenantRole,
         VowAddedEffect,
         VowFocusPick,
+        VowFocusPickConfig,
         VowSituationalPerk,
     )
     from world.mechanics.models import Property  # noqa: PLC0415
 
-    return [
-        _counted(CovenantRole, "Covenant roles", "role"),
-        _counted(VowFocusPick, "Vow focus picks", "pick"),
-        _counted(VowAddedEffect, "Vow added effects", "effect"),
-        _counted(VowSituationalPerk, "Vow situational perks", "perk"),
-        _counted(CombatStyle, "Combat styles", "style"),
-        _counted(ConditionTemplate, "Conditions", "condition"),
-        _counted(Property, "Properties", "property"),
-        _budget_link(),
-        CombatRolesLink(
-            label="Required content",
-            url=reverse("admin_ops"),
-            note="missing-content flags",
-        ),
+    counted = [
+        (CovenantRole, "Covenant roles", "role"),
+        (VowFocusPick, "Vow focus picks", "pick"),
+        (VowAddedEffect, "Vow added effects", "effect"),
+        (VowSituationalPerk, "Vow situational perks", "perk"),
+        (CombatStyle, "Combat styles", "style"),
+        (ConditionTemplate, "Conditions", "condition"),
+        (Property, "Properties", "property"),
     ]
+    links = [
+        _counted(model, label, noun) for model, label, noun in counted if _can_view(user, model)
+    ]
+    if _can_view(user, VowFocusPickConfig):
+        links.append(_budget_link())
+    if user.is_superuser:
+        links.append(
+            CombatRolesLink(
+                label="Required content",
+                url=reverse("admin_ops"),
+                note="missing-content flags",
+            )
+        )
+    return links

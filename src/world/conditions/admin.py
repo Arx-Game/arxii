@@ -156,6 +156,11 @@ class ConditionConditionInteractionInline(admin.TabularInline):
 # =============================================================================
 
 
+#: The help line under a condition's Properties field (#4857, the #4843 demo's wording).
+PROPERTIES_FIELD = "properties"
+PROPERTIES_HELP = "What perk situations and filters can read on whoever carries it."
+
+
 @admin.register(ConditionTemplate)
 class ConditionTemplateAdmin(admin.ModelAdmin):
     list_display = [
@@ -192,22 +197,18 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ["get_mechanics_diagnostic"]
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """The Properties help line reads as the authoring tools mean it (#4857)."""
+        if db_field.name == PROPERTIES_FIELD:
+            kwargs["help_text"] = PROPERTIES_HELP
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     fieldsets = [
         (
             None,
             {"fields": ["name", "category", "description", "get_mechanics_diagnostic"]},
         ),
-        (
-            "Properties",
-            {
-                "fields": ["properties"],
-                "description": (
-                    "Properties the bearer carries while this condition is active. A vow "
-                    "situation or prerequisite that names a property matches any condition "
-                    "carrying it."
-                ),
-            },
-        ),
+        ("Properties", {"fields": ["properties"]}),
         (
             "Player Descriptions",
             {
