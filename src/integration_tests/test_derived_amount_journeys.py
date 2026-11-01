@@ -45,12 +45,15 @@ from world.distinctions.factories import DistinctionEffectFactory, DistinctionFa
 from world.distinctions.models import DERIVED_AMOUNT_SIZE_REFUSAL, DistinctionEffect
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
+from world.magic.factories import FacetFactory
 from world.magic.models import Thread
+from world.magic.services.facets import merge_facets
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
     AmountInput,
     ManeuverEffectKey,
 )
+from world.mechanics.effect_targets import effect_modifier_total
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.mechanics.models import ModifierCategory
@@ -171,6 +174,32 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
         _to_hit, damage = self.charge_and_resolve()
 
         self.assertEqual(damage, DAMAGE)
+
+    def test_after_a_facet_merge_the_row_reads_the_winners_thread(self) -> None:
+        # The row names "Wolves"; staff merge Wolves into Wolf, where Hobb's thread is.
+        # Before the merge Wolves has no thread of his: 5. After it, the row names Wolf
+        # and reads his level 3 thread: 8.
+        wolves = FacetFactory(name="Wolves")
+        distinction = DistinctionFactory(name="Packsworn", slug="packsworn")
+        effect = DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.charge_damage,
+            value_per_rank=1,
+            amount_input=AmountInput.THREAD_LEVEL,
+            amount_thread_facet=wolves,
+        )
+        grant_distinction(self.sheet, distinction, origin=DistinctionOrigin.GM_AWARD)
+        self.thread_on(self.wolf, shown_level=3)
+        # Charge's own damage term reads this (``kind_wide=False``); nothing yet.
+        before = effect_modifier_total(self.sheet, ManeuverEffectKey.CHARGE_DAMAGE, kind_wide=False)
+        self.assertEqual(before, 0)
+
+        merge_facets(self.wolf, [wolves])
+
+        effect.refresh_from_db()
+        self.assertEqual(effect.amount_thread_facet_id, self.wolf.pk)
+        _to_hit, damage = self.charge_and_resolve()
+        self.assertEqual(damage, DAMAGE + 3)
 
     def test_a_retired_wolf_thread_adds_nothing(self) -> None:
         self.grant_wolf_damage()
