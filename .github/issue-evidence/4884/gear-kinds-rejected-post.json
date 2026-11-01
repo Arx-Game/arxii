@@ -1,0 +1,16 @@
+{
+ "reviewed_commit": "d0ddfae4f13310a1a75966c6b25b1f5b9703ace9",
+ "posted_kind": "jewelry",
+ "status": 200,
+ "errornote_read_from_response_html": [
+  "Please correct the error below."
+ ],
+ "field_errors_read_from_response_html": [
+  {
+   "field": "gear-1-gear_archetype",
+   "error": "Select a valid choice. jewelry is not one of the available choices."
+  }
+ ],
+ "rows_before": 1,
+ "rows_after": 1
+}

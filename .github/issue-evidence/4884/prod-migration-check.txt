@@ -1,0 +1,68 @@
+== prod-migration-check report
+head: c1a2a87308d3a946eabd3d4bbcd707f241a02daa (feature-4884-styles-complete-a-combat-style-s-skill-h)
+dump: arxii-20261101T033001Z.sql.gz
+scratch database: scratch_pmc_20261101T183831Z_53324 (django connected to: scratch_pmc_20261101T183831Z_53324)
+production tip: 0313_set_physical_damage_type | branch head: 0356_strike_and_defense_roll_snapshot | main tip: 0354_strike_roll_snapshot_and_unarmed_damage | step back to: 0354_strike_roll_snapshot_and_unarmed_damage
+== rows before (dump as restored)
+  arxii_combatstyle=(table absent)
+  arxii_combatstylegear=(table absent)
+  arxii_consequenceoutcome=0
+  arxii_tradition=18
+== forward to branch head
+  Applying arxii.0314_surgedegreeband_surgetuning_and_more... OK
+  Applying arxii.0315_dramaticsurgerecord_surge_repeat_round_is_round_number_and_more... OK
+  Applying arxii.0316_driftconversioncap_driftconversionoffer_and_more... OK
+  Applying arxii.0317_ritual_requirement_item_meaning_mode... OK
+  Applying arxii.0318_audere_control_and_soulfray_anima_zero... OK
+  Applying arxii.0319_affinityinteraction_conflict_weight_and_more... OK
+  Applying arxii.0320_affinity_burn_value_combatpull_resonance_burned_and_more... OK
+  Applying arxii.0321_sceneactionpulldeclaration_burn... OK
+  Applying arxii.0322_held_breath... OK
+  Applying arxii.0323_remove_thread_uniq_thread_trait_and_more... OK
+  Applying arxii.0324_characterengagement_dig_deep_and_more... OK
+  Applying arxii.0325_alternate_self_corruption_leak... OK
+  Applying arxii.0326_emotional_conditions_designations... OK
+  Applying arxii.0327_fury_surrenders_control... OK
+  Applying arxii.0328_vow_focus_picks_and_combat_styles... OK
+  Applying arxii.0329_movementconfig_defense_and_healing_tuning... OK
+  Applying arxii.0330_alter_combatparticipant_status... OK
+  Applying arxii.0331_modifiertarget_target_aspect... OK
+  Applying arxii.0332_maneuver_effects... OK
+  Applying arxii.0333_modifier_target_one_scope... OK
+  Applying arxii.0334_cover_escape_bonus_carry... OK
+  Applying arxii.0335_drop_action_scaling... OK
+  Applying arxii.0336_vow_stat_scaling_focus_pick... OK
+  Applying arxii.0337_beginnings_struck_stages_text_and_beat_mode... OK
+  Applying arxii.0338_modifier_target_technique_scopes... OK
+  Applying arxii.0339_modifier_target_technique_scope_rules... OK
+  Applying arxii.0340_final_touches_chapter_and_crime_notes... OK
+  Applying arxii.0341_distinctionoffer_opener_constraint_names_unlocked_by... OK
+  Applying arxii.0342_modifier_target_opponent_scopes... OK
+  Applying arxii.0343_modifier_target_opponent_scope_rules... OK
+  Applying arxii.0344_card_grants_at_finalize... OK
+  Applying arxii.0345_persona_grants_and_organization_ties... OK
+  Applying arxii.0346_facet_effect_bonus... OK
+  Applying arxii.0347_control_loss_compulsion... OK
+  Applying arxii.0348_control_loss_content... OK
+  Applying arxii.0349_modifier_effect_lanes... OK
+  Applying arxii.0350_strike_choices... OK
+  Applying arxii.0351_strike_maneuver_effects... OK
+  Applying arxii.0352_missed_surge_recurs... OK
+  Applying arxii.0353_consequence_outcome_skill_rating... OK
+  Applying arxii.0354_strike_roll_snapshot_and_unarmed_damage... OK
+  Applying arxii.0355_combat_style_skill_gear_and_vows... OK
+  Applying arxii.0356_strike_and_defense_roll_snapshot... OK
+== back to 0354_strike_roll_snapshot_and_unarmed_damage
+  Unapplying arxii.0356_strike_and_defense_roll_snapshot... OK
+  Unapplying arxii.0355_combat_style_skill_gear_and_vows... OK
+== forward again
+  Applying arxii.0355_combat_style_skill_gear_and_vows... OK
+  Applying arxii.0356_strike_and_defense_roll_snapshot... OK
+== rows after
+  arxii_combatstyle=0
+  arxii_combatstylegear=0
+  arxii_consequenceoutcome=0
+  arxii_tradition=18
+== pending migrations
+  none
+== done

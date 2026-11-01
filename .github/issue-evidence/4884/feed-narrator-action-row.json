@@ -1,0 +1,151 @@
+{
+ "reviewed_commit": "d0ddfae4f13310a1a75966c6b25b1f5b9703ace9",
+ "readback_from": "GET /api/interactions/?scene=SCENE_ID as Mira, the Narrator ACTION row",
+ "readback_row": {
+  "id": 1,
+  "thread_id": null,
+  "root_thread_id": null,
+  "reply_to": null,
+  "conversation": {
+   "kind": "room",
+   "key": "scene:1"
+  },
+  "availability": "retained",
+  "is_unread": true,
+  "persona": {
+   "id": 3,
+   "name": "Narrator",
+   "thumbnail_url": ""
+  },
+  "scene": 1,
+  "place": null,
+  "content": "Blade strike at Mira",
+  "line": "Blade strike at Mira",
+  "mode": "action",
+  "visibility": "default",
+  "timestamp": "2026-11-01T19:01:38.930931Z",
+  "pose_kind": "standard",
+  "is_muted": false,
+  "language_id": null,
+  "language_name": null,
+  "attributed_companion": null,
+  "endorsee_sheet_id": 5,
+  "is_favorited": false,
+  "reactions": [],
+  "reaction_windows": [],
+  "receiver_persona_ids": [],
+  "place_name": null,
+  "target_persona_ids": [
+   1
+  ],
+  "action_links": [],
+  "dramatic_moment_tags": [],
+  "narrates": null,
+  "endorsable_resonances": [],
+  "pose_endorsers": [],
+  "my_pose_endorsement": null,
+  "entry_endorsers": [],
+  "entry_endorsed_by_me": false
+ },
+ "live_frame_captured_at": "the send seam (interaction_services._send_to_objects, spied while resolve_round ran); the payload handed to each room object's msg(), not a browser websocket capture",
+ "live_frame_recipients": [
+  "Mira",
+  "Blade",
+  "Wren"
+ ],
+ "live_frame_payload": {
+  "id": 1,
+  "persona": {
+   "id": 3,
+   "name": "Narrator",
+   "thumbnail_url": ""
+  },
+  "content": "Blade strike at Mira",
+  "line": "Blade strike at Mira",
+  "mode": "action",
+  "timestamp": "2026-11-01T19:01:38.930931+00:00",
+  "thread_id": null,
+  "root_thread_id": null,
+  "scene_id": 1,
+  "place_id": null,
+  "place_name": null,
+  "receiver_persona_ids": [],
+  "target_persona_ids": [
+   1
+  ],
+  "language_id": null,
+  "language_name": null,
+  "attributed_companion_id": null,
+  "attributed_companion_name": null,
+  "reply_to": null,
+  "narrates": null,
+  "action_links": [],
+  "visibility": "default",
+  "pose_kind": "standard",
+  "endorsee_sheet_id": 5,
+  "endorsable_resonances": [],
+  "conversation": {
+   "kind": "room",
+   "key": "scene:1"
+  },
+  "availability": "retained",
+  "pose_endorsers": [],
+  "entry_endorsers": [],
+  "reactions": [],
+  "reaction_windows": [],
+  "dramatic_moment_tags": []
+ },
+ "same_row": true,
+ "feed_readback_newest_first": [
+  [
+   4,
+   "Narrator",
+   "outcome",
+   "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage."
+  ],
+  [
+   3,
+   "Mira",
+   "action",
+   "Strike at Blade"
+  ],
+  [
+   2,
+   "Narrator",
+   "outcome",
+   "Blade\u2019s Blade strike strikes Mira for 8 damage."
+  ],
+  [
+   1,
+   "Narrator",
+   "action",
+   "Blade strike at Mira"
+  ]
+ ],
+ "live_frames_in_send_order": [
+  [
+   1,
+   "Narrator",
+   "action",
+   "Blade strike at Mira"
+  ],
+  [
+   2,
+   "Narrator",
+   "outcome",
+   "Blade\u2019s Blade strike strikes Mira for 8 damage."
+  ],
+  [
+   3,
+   "Mira",
+   "action",
+   "Strike at Blade"
+  ],
+  [
+   4,
+   "Narrator",
+   "outcome",
+   "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage."
+  ]
+ ]
+}

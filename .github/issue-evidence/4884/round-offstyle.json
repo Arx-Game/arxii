@@ -1,0 +1,767 @@
+{
+ "reviewed_commit": "d0ddfae4f13310a1a75966c6b25b1f5b9703ace9",
+ "tag": "offstyle",
+ "encounter_id": 3,
+ "sheet_id": 12,
+ "style": "The Daring Dance",
+ "style_lists": [
+  "two-handed melee",
+  "heavy armor"
+ ],
+ "style_compatible_vows": [
+  "Quicksilver"
+ ],
+ "vow_sworn": null,
+ "mira_gear": [
+  "one-handed melee (Steading longsword)",
+  "light armor"
+ ],
+ "mira_health_before": 100,
+ "mira_health_after": 92,
+ "strike_roll_kwargs_seen_by_perform_check": [
+  {
+   "check_type": "Melee Attack",
+   "extra_traits": [],
+   "stat_override": "strength"
+  },
+  {
+   "check_type": "Melee Attack",
+   "extra_traits": [],
+   "stat_override": "agility"
+  }
+ ],
+ "after": {
+  "id": 3,
+  "scene": 3,
+  "room": 11,
+  "encounter_type": "party_combat",
+  "status": "between_rounds",
+  "outcome": "",
+  "completed_at": null,
+  "round_number": 1,
+  "risk_level": "moderate",
+  "stakes_level": "local",
+  "pace_mode": "timed",
+  "pace_timer_minutes": 10,
+  "is_paused": false,
+  "round_started_at": null,
+  "created_at": "2026-11-01T19:01:41.193386Z",
+  "participants": [
+   {
+    "id": 3,
+    "character_sheet_id": 12,
+    "character_name": "Mira",
+    "persona_id": 7,
+    "status": "active",
+    "health": 92,
+    "max_health": 100,
+    "character_status": "alive",
+    "available_strain": 20,
+    "fatigue": {
+     "physical": {
+      "current": 1,
+      "capacity": 0
+     },
+     "social": {
+      "current": 0,
+      "capacity": 0
+     },
+     "mental": {
+      "current": 0,
+      "capacity": 0
+     }
+    },
+    "active_conditions": [],
+    "audere_state": null,
+    "thumbnail_url": "",
+    "thumbnail_media_url": null,
+    "escalation_level": null,
+    "intensity_modifier": 0,
+    "control_modifier": 0,
+    "fury_control_surrendered": 0,
+    "current_position": null,
+    "current_square": null,
+    "aftermath": null,
+    "reactions_used": 0,
+    "dodge_plan": null,
+    "compulsion": null,
+    "steady_plan": null,
+    "dig_deep": {
+     "free_dig_deeps": 0,
+     "fatigue_category": "mental",
+     "fatigue_cost": 3,
+     "dug_deep_this_round": false,
+     "given_by": null
+    },
+    "strike_weapons": [
+     {
+      "item_instance_id": 6,
+      "name": "Steading longsword",
+      "gear_kind": "One-Handed Melee",
+      "strike_skill": "Melee Combat"
+     },
+     {
+      "item_instance_id": null,
+      "name": "bare hands",
+      "gear_kind": "Unarmed",
+      "strike_skill": "Unarmed Attack"
+     }
+    ]
+   }
+  ],
+  "opponents": [
+   {
+    "id": 3,
+    "objectdb_id": 13,
+    "name": "Blade",
+    "description": "",
+    "tier": "mook",
+    "level": 1,
+    "health": 194,
+    "max_health": 200,
+    "soak_value": null,
+    "probing_current": 6,
+    "probing_threshold": null,
+    "current_phase": 1,
+    "phase_count": null,
+    "damage_multiplier": null,
+    "break_bar_current": null,
+    "break_bar_threshold": null,
+    "vulnerability_rounds_remaining": null,
+    "morale": null,
+    "max_morale": null,
+    "morale_state": "steady",
+    "is_enraged": false,
+    "is_wall_broken": false,
+    "status": "active",
+    "allegiance": "enemy",
+    "active_conditions": [],
+    "thumbnail_url": null,
+    "thumbnail_media_url": null,
+    "current_position": null,
+    "current_square": null,
+    "mirrors_participant_id": null
+   }
+  ],
+  "current_round_actions": [
+   {
+    "id": 3,
+    "participant": 3,
+    "participant_name": "Mira",
+    "round_number": 1,
+    "focused_category": "physical",
+    "effort_level": "medium",
+    "focused_action": null,
+    "focused_opponent_target": 3,
+    "focused_ally_target": null,
+    "physical_passive": null,
+    "social_passive": null,
+    "mental_passive": null,
+    "combo_upgrade": null,
+    "is_ready": false,
+    "maneuver": "strike",
+    "item_instance": 6,
+    "cast_destination": null,
+    "cast_position_a": null,
+    "cast_position_b": null
+   }
+  ],
+  "surge_beats": [],
+  "is_participant": true,
+  "is_gm": false,
+  "clashes": [],
+  "engagement_locks": [],
+  "marks": [],
+  "pending_attacks": [],
+  "companion_orders": [],
+  "resolution_order": [
+   3
+  ],
+  "escalation_curve": null,
+  "escalation_curve_name": null,
+  "escalation_start_round": null,
+  "escalation_tick_narration": null,
+  "forced_escape": false,
+  "position_adjacency": [],
+  "position_nodes": [],
+  "position_edges": [],
+  "held_positions": [],
+  "volatile_objects": [],
+  "objective": null,
+  "pending_selections": [],
+  "sustained_actions": [],
+  "protection_commitments": [],
+  "standoff": null,
+  "gm_standoff": null,
+  "standoff_summary": null,
+  "is_lethal": false,
+  "duel_winner": null
+ },
+ "outcomes": {
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "page_size": 20,
+  "num_pages": 1,
+  "current_page": 1,
+  "results": [
+   {
+    "id": 9,
+    "character": 12,
+    "check_type": 9,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "6 damage",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 11,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Damage roll",
+     "lines": [
+      {
+       "label": "Steading longsword",
+       "value": "",
+       "detail": "weapon damage and quality",
+       "lapsed": false
+      },
+      {
+       "label": "Melee Combat",
+       "value": "25",
+       "detail": "strike skill",
+       "lapsed": false
+      }
+     ],
+     "result": "6 damage",
+     "result_note": ""
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.880030Z"
+   },
+   {
+    "id": 8,
+    "character": 12,
+    "check_type": 9,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "Hit, fair",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 11,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Hit roll against Blade's defense",
+     "lines": [
+      {
+       "label": "Melee Combat",
+       "value": "25",
+       "detail": "strike skill for one-handed melee",
+       "lapsed": false
+      },
+      {
+       "label": "Strength",
+       "value": "",
+       "detail": "the style's hit stat",
+       "lapsed": false
+      },
+      {
+       "label": "The Daring Dance",
+       "value": "",
+       "detail": "one-handed weapons are not this style's",
+       "lapsed": true
+      }
+     ],
+     "result": "Hit, fair",
+     "result_note": "then the damage roll"
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.878917Z"
+   },
+   {
+    "id": 7,
+    "character": 12,
+    "check_type": 8,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "Partial Success, 8 damage",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 9,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Defense against Blade",
+     "lines": [
+      {
+       "label": "Dodge",
+       "value": "15",
+       "detail": "defense skill",
+       "lapsed": false
+      },
+      {
+       "label": "The Daring Dance",
+       "value": "",
+       "detail": "light armor is not this style's",
+       "lapsed": true
+      },
+      {
+       "label": "Armor, 5 of 10",
+       "value": "",
+       "detail": "the style's armor share",
+       "lapsed": false
+      }
+     ],
+     "result": "Partial Success, 8 damage",
+     "result_note": ""
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.764708Z"
+   }
+  ]
+ },
+ "bystander_outcomes": {
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "page_size": 20,
+  "num_pages": 1,
+  "current_page": 1,
+  "results": [
+   {
+    "id": 9,
+    "character": 12,
+    "check_type": 9,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "6 damage",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 11,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": null,
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.880030Z"
+   },
+   {
+    "id": 8,
+    "character": 12,
+    "check_type": 9,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "Hit, fair",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 11,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": null,
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.878917Z"
+   },
+   {
+    "id": 7,
+    "character": 12,
+    "check_type": 8,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 9,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": null,
+    "combat_round": 1,
+    "created_at": "2026-11-01T19:01:41.764708Z"
+   }
+  ]
+ },
+ "feed_status": 200,
+ "feed_readback": {
+  "next": null,
+  "previous": null,
+  "results": [
+   {
+    "id": 12,
+    "thread_id": null,
+    "root_thread_id": null,
+    "reply_to": null,
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "is_unread": true,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "scene": 3,
+    "place": null,
+    "content": "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage.",
+    "line": "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage.",
+    "mode": "outcome",
+    "visibility": "default",
+    "timestamp": "2026-11-01T19:01:41.883604Z",
+    "pose_kind": "standard",
+    "is_muted": false,
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion": null,
+    "endorsee_sheet_id": 15,
+    "is_favorited": false,
+    "reactions": [],
+    "reaction_windows": [],
+    "receiver_persona_ids": [],
+    "place_name": null,
+    "target_persona_ids": [],
+    "action_links": [],
+    "dramatic_moment_tags": [],
+    "narrates": null,
+    "endorsable_resonances": [],
+    "pose_endorsers": [],
+    "my_pose_endorsement": null,
+    "entry_endorsers": [],
+    "entry_endorsed_by_me": false
+   },
+   {
+    "id": 11,
+    "thread_id": null,
+    "root_thread_id": null,
+    "reply_to": null,
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "is_unread": true,
+    "persona": {
+     "id": 7,
+     "name": "Mira",
+     "thumbnail_url": ""
+    },
+    "scene": 3,
+    "place": null,
+    "content": "Strike at Blade",
+    "line": "Strike at Blade",
+    "mode": "action",
+    "visibility": "default",
+    "timestamp": "2026-11-01T19:01:41.868639Z",
+    "pose_kind": "standard",
+    "is_muted": false,
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion": null,
+    "endorsee_sheet_id": 12,
+    "is_favorited": false,
+    "reactions": [],
+    "reaction_windows": [],
+    "receiver_persona_ids": [],
+    "place_name": null,
+    "target_persona_ids": [],
+    "action_links": [],
+    "dramatic_moment_tags": [],
+    "narrates": null,
+    "endorsable_resonances": [],
+    "pose_endorsers": [],
+    "my_pose_endorsement": null,
+    "entry_endorsers": [],
+    "entry_endorsed_by_me": false
+   },
+   {
+    "id": 10,
+    "thread_id": null,
+    "root_thread_id": null,
+    "reply_to": null,
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "is_unread": true,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "scene": 3,
+    "place": null,
+    "content": "Blade\u2019s Blade strike strikes Mira for 8 damage.",
+    "line": "Blade\u2019s Blade strike strikes Mira for 8 damage.",
+    "mode": "outcome",
+    "visibility": "default",
+    "timestamp": "2026-11-01T19:01:41.770163Z",
+    "pose_kind": "standard",
+    "is_muted": false,
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion": null,
+    "endorsee_sheet_id": 15,
+    "is_favorited": false,
+    "reactions": [],
+    "reaction_windows": [],
+    "receiver_persona_ids": [],
+    "place_name": null,
+    "target_persona_ids": [
+     7
+    ],
+    "action_links": [],
+    "dramatic_moment_tags": [],
+    "narrates": null,
+    "endorsable_resonances": [],
+    "pose_endorsers": [],
+    "my_pose_endorsement": null,
+    "entry_endorsers": [],
+    "entry_endorsed_by_me": false
+   },
+   {
+    "id": 9,
+    "thread_id": null,
+    "root_thread_id": null,
+    "reply_to": null,
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "is_unread": true,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "scene": 3,
+    "place": null,
+    "content": "Blade strike at Mira",
+    "line": "Blade strike at Mira",
+    "mode": "action",
+    "visibility": "default",
+    "timestamp": "2026-11-01T19:01:41.752984Z",
+    "pose_kind": "standard",
+    "is_muted": false,
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion": null,
+    "endorsee_sheet_id": 15,
+    "is_favorited": false,
+    "reactions": [],
+    "reaction_windows": [],
+    "receiver_persona_ids": [],
+    "place_name": null,
+    "target_persona_ids": [
+     7
+    ],
+    "action_links": [],
+    "dramatic_moment_tags": [],
+    "narrates": null,
+    "endorsable_resonances": [],
+    "pose_endorsers": [],
+    "my_pose_endorsement": null,
+    "entry_endorsers": [],
+    "entry_endorsed_by_me": false
+   }
+  ]
+ },
+ "live_frames_captured_at_the_send_seam": [
+  {
+   "recipients": [
+    "Mira",
+    "Blade",
+    "Wren"
+   ],
+   "payload": {
+    "id": 9,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "content": "Blade strike at Mira",
+    "line": "Blade strike at Mira",
+    "mode": "action",
+    "timestamp": "2026-11-01T19:01:41.752984+00:00",
+    "thread_id": null,
+    "root_thread_id": null,
+    "scene_id": 3,
+    "place_id": null,
+    "place_name": null,
+    "receiver_persona_ids": [],
+    "target_persona_ids": [
+     7
+    ],
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion_id": null,
+    "attributed_companion_name": null,
+    "reply_to": null,
+    "narrates": null,
+    "action_links": [],
+    "visibility": "default",
+    "pose_kind": "standard",
+    "endorsee_sheet_id": 15,
+    "endorsable_resonances": [],
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "pose_endorsers": [],
+    "entry_endorsers": [],
+    "reactions": [],
+    "reaction_windows": [],
+    "dramatic_moment_tags": []
+   }
+  },
+  {
+   "recipients": [
+    "Mira",
+    "Blade",
+    "Wren"
+   ],
+   "payload": {
+    "id": 10,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "content": "Blade\u2019s Blade strike strikes Mira for 8 damage.",
+    "line": "Blade\u2019s Blade strike strikes Mira for 8 damage.",
+    "mode": "outcome",
+    "timestamp": "2026-11-01T19:01:41.770163+00:00",
+    "thread_id": null,
+    "root_thread_id": null,
+    "scene_id": 3,
+    "place_id": null,
+    "place_name": null,
+    "receiver_persona_ids": [],
+    "target_persona_ids": [],
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion_id": null,
+    "attributed_companion_name": null,
+    "reply_to": null,
+    "narrates": null,
+    "action_links": [],
+    "visibility": "default",
+    "pose_kind": "standard",
+    "endorsee_sheet_id": 15,
+    "endorsable_resonances": [],
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "pose_endorsers": [],
+    "entry_endorsers": [],
+    "reactions": [],
+    "reaction_windows": [],
+    "dramatic_moment_tags": []
+   }
+  },
+  {
+   "recipients": [
+    "Mira",
+    "Blade",
+    "Wren"
+   ],
+   "payload": {
+    "id": 11,
+    "persona": {
+     "id": 7,
+     "name": "Mira",
+     "thumbnail_url": ""
+    },
+    "content": "Strike at Blade",
+    "line": "Strike at Blade",
+    "mode": "action",
+    "timestamp": "2026-11-01T19:01:41.868639+00:00",
+    "thread_id": null,
+    "root_thread_id": null,
+    "scene_id": 3,
+    "place_id": null,
+    "place_name": null,
+    "receiver_persona_ids": [],
+    "target_persona_ids": [],
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion_id": null,
+    "attributed_companion_name": null,
+    "reply_to": null,
+    "narrates": null,
+    "action_links": [],
+    "visibility": "default",
+    "pose_kind": "standard",
+    "endorsee_sheet_id": 12,
+    "endorsable_resonances": [],
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "pose_endorsers": [],
+    "entry_endorsers": [],
+    "reactions": [],
+    "reaction_windows": [],
+    "dramatic_moment_tags": []
+   }
+  },
+  {
+   "recipients": [
+    "Mira",
+    "Blade",
+    "Wren"
+   ],
+   "payload": {
+    "id": 12,
+    "persona": {
+     "id": 9,
+     "name": "Narrator",
+     "thumbnail_url": ""
+    },
+    "content": "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage.",
+    "line": "Mira strikes Blade with a Steading longsword. A fair hit: 6 damage.",
+    "mode": "outcome",
+    "timestamp": "2026-11-01T19:01:41.883604+00:00",
+    "thread_id": null,
+    "root_thread_id": null,
+    "scene_id": 3,
+    "place_id": null,
+    "place_name": null,
+    "receiver_persona_ids": [],
+    "target_persona_ids": [],
+    "language_id": null,
+    "language_name": null,
+    "attributed_companion_id": null,
+    "attributed_companion_name": null,
+    "reply_to": null,
+    "narrates": null,
+    "action_links": [],
+    "visibility": "default",
+    "pose_kind": "standard",
+    "endorsee_sheet_id": 15,
+    "endorsable_resonances": [],
+    "conversation": {
+     "kind": "room",
+     "key": "scene:3"
+    },
+    "availability": "retained",
+    "pose_endorsers": [],
+    "entry_endorsers": [],
+    "reactions": [],
+    "reaction_windows": [],
+    "dramatic_moment_tags": []
+   }
+  }
+ ]
+}

@@ -1,0 +1,105 @@
+{
+ "reviewed_commit": "d0ddfae4f13310a1a75966c6b25b1f5b9703ace9",
+ "selects_on_the_page": {
+  "gear-0-gear_archetype": [
+   [
+    "",
+    "---------"
+   ],
+   [
+    "light_armor",
+    "Light Armor"
+   ],
+   [
+    "medium_armor",
+    "Medium Armor"
+   ],
+   [
+    "heavy_armor",
+    "Heavy Armor"
+   ],
+   [
+    "robe",
+    "Robe"
+   ],
+   [
+    "melee_one_hand",
+    "One-Handed Melee"
+   ],
+   [
+    "melee_two_hand",
+    "Two-Handed Melee"
+   ],
+   [
+    "ranged",
+    "Ranged"
+   ],
+   [
+    "thrown",
+    "Thrown"
+   ],
+   [
+    "shield",
+    "Shield"
+   ],
+   [
+    "lance",
+    "Lance"
+   ],
+   [
+    "unarmed",
+    "Unarmed"
+   ]
+  ],
+  "gear-__prefix__-gear_archetype": [
+   [
+    "",
+    "---------"
+   ],
+   [
+    "light_armor",
+    "Light Armor"
+   ],
+   [
+    "medium_armor",
+    "Medium Armor"
+   ],
+   [
+    "heavy_armor",
+    "Heavy Armor"
+   ],
+   [
+    "robe",
+    "Robe"
+   ],
+   [
+    "melee_one_hand",
+    "One-Handed Melee"
+   ],
+   [
+    "melee_two_hand",
+    "Two-Handed Melee"
+   ],
+   [
+    "ranged",
+    "Ranged"
+   ],
+   [
+    "thrown",
+    "Thrown"
+   ],
+   [
+    "shield",
+    "Shield"
+   ],
+   [
+    "lance",
+    "Lance"
+   ],
+   [
+    "unarmed",
+    "Unarmed"
+   ]
+  ]
+ }
+}
