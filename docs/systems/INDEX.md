@@ -7901,7 +7901,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
-    `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
+    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
     `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),
@@ -8090,7 +8090,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary). Runs
+  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
   `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck`

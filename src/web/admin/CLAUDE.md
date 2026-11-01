@@ -128,13 +128,15 @@ only admins left without it are plain-model ones (Django's `Group`, allauth's, `
 ### Combat roles panel on the front page (#4857, slice 1 of #4843)
 
 `ArxAdminSite.index` adds `combat_roles_links` (`web/admin/combat_roles.py`), and
-`templates/admin/index.html` draws it as the first app group, above Recent: Covenant roles,
+`templates/admin/index.html` draws it as the first app group, above Recent: Vow pages (a
+`RowPicker` select of every vow and an Open button, GET to `admin_vow_builder_pick`,
+superusers only, #4880), Covenant roles,
 Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
 Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
 singleton's change page, or its list with the default before the row exists; a GET never
 creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. Every combat role authoring page belongs
 here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
-vow page, combo map, kit view and missing combat content rows. Tests:
+combo map, kit view and missing combat content rows. Tests:
 `tests/test_combat_roles_panel.py` follows every link.
 
 ### Save as new on every change form (#4094)
@@ -1161,6 +1163,82 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   row that links a distinction to one of those.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660/#3675 set above.
+
+## Vow page (#4880, slice 2 of #4843)
+
+**Purpose:** author one vow (a `CovenantRole`) on one page in one save: its own fields, its
+`CovenantRoleTechniqueSpecialty` rows, its `VowFocusPick` catalog grouped by pick level, and
+each pick's `VowFocusPickLimit` rows. Pattern mirrors the Distinction Builder:
+`superuser_required`, the contributor gate, plain Django forms, `base_site.html`, a
+page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 and 7 of the
+#4843 spec; the style module, power preview and flags are later slices (7, 6, 4).
+
+- **Files** - `web/admin/vow_builder/`: `views.py` (`vow_builder`, `vow_builder_pick`,
+  `vow_builder_review`), `forms.py` (`VowForm`, `SpecialtyFormSet`, `PickFormSet`,
+  `LimitFormSet` and `limit_formset_for`, the per-pick `l<pick.pk>`-prefixed formset, like
+  the Upbringing Builder's answers), `live.py` (pure reads: `picks_by_level`,
+  `budget_rows`, `holders_by_pick`, `rides_summary`, `payload_summaries`, `stored_picks`,
+  `holder_impact`, `focus_pick_budget`; dataclasses only). Templates in
+  `web/templates/admin/vow_builder/`: `page.html`, `_pick.html` (one pick as a `<details>`),
+  `_rail.html`, `_css.html`.
+- **Payload rows are not edited here.** `VowAddedEffect`, `VowSituationalPerk` and
+  `VowStatScaling` rows show as one plain line each (an added effect through
+  `summarize_vow_added_effect`; a perk from its beneficiary, kind, situations, magnitude and
+  rung count; a stat scaling from its target and bonus) with an "edit" link to the stock
+  change form, and "+ Add" links to the stock add form prefilled
+  `?covenant_role=<pk>[&focus_pick=<pick pk>]&_popup=1` (Django prefills FK fields from the
+  query string; the autocompletes render the preselected option). Their child rows are
+  edited there, following the 2026-11-01 ruling to reuse the stock forms through the popup.
+  The page defines `dismissAddRelatedObjectPopup`, `dismissChangeRelatedObjectPopup` and
+  `dismissDeleteRelatedObjectPopup`, which admin's `popup_response.js` calls on the opener
+  after a popup save or delete: the popup closes and the page reloads, asking first with
+  `confirm()` when the page holds unsaved edits.
+- **Live price** - the server shows `pick_price` on a GET; `page.html`'s inline script
+  recomputes each pick's price on every value or limit edit with the same formula as
+  `world.covenants.focus_picks.price_for`, reading the limit kind groupings and constants
+  from a `json_script` (`views._price_rules`) built off `world.covenants.constants`, so the
+  two cannot drift. New picks are cloned from the formset's empty form with
+  `builder_formsets.js` ("+ Add pick at level N"); a pick has no limits or payload until it
+  is saved.
+- **Held-pick warning** - a POST reads `live.stored_picks(role)` before any form binds
+  (validation writes the posted values onto the identity-mapped picks and limits), then,
+  once every form is valid, works out each saved pick's new price from the bound forms
+  (`views._new_prices`, unsaved `VowFocusPickLimit` rows through `price_for`; a deleted pick
+  is `None`). `live.holder_impact` lists every live membership (`left_at` null) holding a
+  changed pick: its holder (the character's key), the level, the old and new total of
+  everything chosen at that level (a sub-role holder's anchor picks too) and the budget. A
+  non-empty list without `confirm_holders=1` re-renders the "Before you save" block with a
+  "Save anyway" button that re-posts the same form with `confirm_holders=1`; nothing is
+  written. Nobody's picks are changed by the save: a deleted pick's `CharacterVowFocusPick`
+  rows CASCADE with it and the budget is derived on read.
+- **Refused and warned saves** - both re-render the posted values and then
+  `flush_refused_instances` every bound form, formset and limit formset, even when the
+  render raises; a save that raises inside its transaction flushes the same rows as the
+  error propagates. A pick marked for delete that still has payload rows is refused by the
+  pick formset (their `focus_pick` is RESTRICT), naming the pick.
+- **Credit** - one `transaction.atomic()` saves `VowForm`, the specialties, the picks and
+  every surviving pick's limits, then `stamp_written` credits the vow, every created or
+  changed pick (a pick whose limits changed counts) and every saved limit, and writes one
+  admin `LogEntry` (CHANGE) for the vow. "Mark reviewed" stamps the vow, its picks and their
+  limits in a separate POST.
+- **Rail** - "Budget by level" (each level's offered prices against `budget_per_level`, read
+  from the `VowFocusPickConfig` singleton without creating it) and "Techniques this vow
+  rides" (the vow's added effects grouped by function and narrowing, a count and three
+  names, from `world.covenants.added_effects.techniques_ridden_by`, the same match the cast
+  path uses), then Credit.
+- **URLs** (superuser-only): `_vow_builder/pick/` -> `admin_vow_builder_pick` (`?pk=`, GET
+  redirect, 400 on a missing or unknown pk), `_vow_builder/<pk>/` -> `admin_vow_builder`,
+  `_vow_builder/<pk>/review/` -> `admin_vow_builder_review` (POST).
+- **Ways in** - the Combat roles panel's "Vow pages" picker, a "Vow page" column on the
+  `CovenantRole` changelist, and the change form's object tool (`links.builder_url` /
+  `builder_label`, "Open the vow page").
+- **Not done here** - a pick's level change is not warned for (only price changes and
+  deletes are), and a new vow is made on the stock add form.
+- Tests: `web/admin/tests/test_vow_builder.py` (journeys through the test client, the
+  refused and warned saves leaving the cached pick as stored, `VowBuilderStylingTest`) and
+  `test_vow_builder_live.py` (budget rows, holder impact). Deliberate no-ADR: the page
+  layout and the warn-then-confirm save follow the approved #4843 spec and its 2026-11-01
+  rulings.
 
 ## Standoff Profile Builder (#4354)
 
