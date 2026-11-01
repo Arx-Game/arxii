@@ -79,7 +79,17 @@
     display: inline-flex;
     gap: 0.4rem;
     align-items: center;
-    margin-left: 0.6rem;
+    margin: -4px 0 -4px 0.6rem;
+    vertical-align: middle;
+}
+
+/* Sized to the row's text, so the picker never makes its row taller than the others. */
+.combat-roles-picker select,
+.combat-roles-picker .button {
+    height: auto;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    line-height: 1.4;
 }
 
 /* Pin button */
