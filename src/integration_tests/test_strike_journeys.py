@@ -40,7 +40,9 @@ from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
 from world.covenants.models import VowStatScaling
-from world.items.constants import GearArchetype
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.models import EquippedItem, ItemInstance
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEffectKey
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.factories import ModifierTargetFactory
@@ -275,6 +277,39 @@ class StrikeWithAWeapon(_StrikeField):
                 },
             ],
         )
+
+    def test_the_weapon_choices_keep_their_order_after_a_strike_wears_one(self) -> None:
+        sword = self.equip_sword()
+        knives = ItemInstanceFactory(
+            template=ItemTemplateFactory(
+                weapon=True, gear_archetype=GearArchetype.THROWN, base_weapon_damage=3
+            ),
+            durability=10,
+        )
+        EquippedItem.objects.create(
+            character=self.sheet,
+            item_instance=knives,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.hobb.equipped_items.invalidate()
+
+        def offered() -> list[int | None]:
+            response = self.api(self.account_of(self.hobb)).get(f"/api/combat/{self.encounter.pk}/")
+            own = next(
+                p
+                for p in response.json()["participants"]
+                if p["character_sheet_id"] == self.sheet.pk
+            )
+            return [w["item_instance_id"] for w in own["strike_weapons"]]
+
+        self.assertEqual(offered(), [sword.pk, knives.pk, None])
+
+        self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+        self.hobb.equipped_items.invalidate()
+
+        self.assertLess(ItemInstance.objects.get(pk=sword.pk).durability, 10)
+        self.assertEqual(offered(), [sword.pk, knives.pk, None])
 
     def test_a_weapon_not_equipped_is_refused(self) -> None:
         result = self.strike(weapon_id=999_999)
