@@ -191,6 +191,20 @@ class ManeuverEffectKey(models.TextChoices):
     RALLY_SURGE_INTENSITY = "rally_surge_intensity", "Rally: surge intensity"
 
 
+class AmountInput(models.TextChoices):
+    """What a modifier row's amount is derived from (#4878, the owner's shared menu on #4824).
+
+    The row's own amount is the amount per step; the total is that amount times the input
+    divided by the row's "per N" step, held at its cap. Blank means no input: the row keeps
+    its own fixed scaling (rank, severity, size). The target's soak joins in a later slice.
+    """
+
+    NONE = "", "No input"
+    CHARACTER_LEVEL = "character_level", "Character level"
+    THREAD_LEVEL = "thread_level", "Thread level"
+    CHECK_RANK = "check_rank", "Check rank"
+
+
 class EffectKind(models.TextChoices):
     """What sort of number a maneuver effect is; a broad target names a kind (#4783).
 

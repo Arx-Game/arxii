@@ -45,6 +45,7 @@ from world.mechanics.constants import (
     CapabilitySourceType,
     DifficultyIndicator,
 )
+from world.mechanics.derived_amounts import derived_amount
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -196,7 +197,7 @@ def _distinction_contributions(
     *,
     has_immunity: bool,
     value_table: ValueTable | None = None,
-    level: int | None = None,
+    sheet=None,
 ) -> tuple[list[ModifierSourceDetail], int, int]:
     """Each distinction source's detail row, the running total, and the blocked count.
 
@@ -204,16 +205,23 @@ def _distinction_contributions(
     blocks a source whose amplified value ends up negative — it is still reported,
     with `blocked_by_immunity` set, but contributes nothing to the total. With a
     ``value_table`` (#4638), a sized effect's base value is the table's number at the
-    holder's ``level`` (``_sized_distinction_value``); amplification and immunity then
-    apply to it as they do to a flat value.
+    holder's level (``sheet.current_level``, ``_sized_distinction_value``); amplification
+    and immunity then apply to it as they do to a flat value. An effect with a
+    derived-amount input (#4878) takes its base value from ``derived_amount`` on ``sheet``,
+    the stored value being the amount per step; it is never sized.
     """
     sources: list[ModifierSourceDetail] = []
     total = 0
     negatives_blocked = 0
+    level = (sheet.current_level or None) if value_table is not None else None
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
-        sized = _sized_distinction_value(mod, value_table, level)
-        base_value = mod.value if sized is None else sized[0]
+        if effect.has_amount_input:
+            sized = None
+            base_value = derived_amount(sheet, effect, mod.value)
+        else:
+            sized = _sized_distinction_value(mod, value_table, level)
+            base_value = mod.value if sized is None else sized[0]
         amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
         final_value = base_value + amplification
         blocked = has_immunity and final_value < 0
@@ -301,18 +309,16 @@ def get_modifier_breakdown(
 
     amplifiers, has_immunity = _amplifiers_and_immunity(distinction_mods)
     value_table = None
-    level = None
     if value_lane is not None and any(
         mod.source.distinction_effect.modifier_size is not None for mod in distinction_mods
     ):
         value_table = load_value_table(value_lane)
-        level = character.current_level or None
     sources, total, negatives_blocked = _distinction_contributions(
         distinction_mods,
         amplifiers,
         has_immunity=has_immunity,
         value_table=value_table,
-        level=level,
+        sheet=character,
     )
 
     # Non-distinction sources are flat addends (outside the amplification graph).

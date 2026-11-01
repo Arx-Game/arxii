@@ -171,6 +171,7 @@ class SizesOnTheEffectAdminPage(_ChargeField):
                 "value_per_rank": "1",
                 "amplifies_sources_by": "",
                 "modifier_size": str(size),
+                "amount_per": "1",  # the form's pre-filled step (#4878)
                 "description": "",
                 "rank_sizes-TOTAL_FORMS": "0",
                 "rank_sizes-INITIAL_FORMS": "0",

@@ -96,6 +96,7 @@ from world.conditions.types import (
     TreatmentOutcome,
 )
 from world.game_clock.services import get_ic_now
+from world.mechanics.derived_amounts import derived_amount
 from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
@@ -2352,13 +2353,27 @@ def scaled_condition_effect_value(
 
     The single scaling rule every condition-modifier read shares: ``scales_with_severity``
     multiplies by the instance's effective severity; otherwise a staged instance scales
-    by its current stage's ``severity_multiplier``.
+    by its current stage's ``severity_multiplier``. An effect with a derived-amount input
+    (#4878) is ``value`` per step of that input on the condition's bearer instead, and
+    neither severity nor stage scales it.
     """
+    if effect.has_amount_input:
+        return derived_amount(_bearer_sheet(instance), effect, effect.value)
     if effect.scales_with_severity:
         return int(effect.value * instance.effective_severity)
     if instance.current_stage:
         return int(effect.value * instance.current_stage.severity_multiplier)
     return effect.value
+
+
+def _bearer_sheet(instance: ConditionInstance) -> "CharacterSheet | None":
+    """The character sheet of the object a condition is on, or None for one with no sheet."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return instance.target.sheet_data
+    except (AttributeError, CharacterSheet.DoesNotExist):
+        return None
 
 
 def scaled_resistance_value(
@@ -2509,7 +2524,11 @@ def condition_target_contributions(
 
     contributions: list[ModifierContribution] = []
     for instance, effect in matched:
-        priced = _priced_sized_modifier(instance, effect.value, value_table)
+        priced = (
+            None
+            if effect.has_amount_input
+            else _priced_sized_modifier(instance, effect.value, value_table)
+        )
         label = instance.condition.name
         if instance.current_stage is not None:
             label = f"{label} ({instance.current_stage.name})"

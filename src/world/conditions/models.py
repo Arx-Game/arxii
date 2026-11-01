@@ -39,6 +39,7 @@ from world.conditions.constants import (
 )
 from world.conditions.types import AdvancementResistFailureKind
 from world.contributors.models import CreditedContent
+from world.mechanics.derived_amount_models import DerivedAmountMixin
 
 if TYPE_CHECKING:
     from world.conditions.handlers import ConditionTemplateReactiveHandler
@@ -1061,13 +1062,17 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
         return f"{self.condition.name}: {self.capability.name}"
 
 
-class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
+class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect, DerivedAmountMixin):
     """Defines how a condition sets a mechanics ModifierTarget value.
 
     Additive integer model, mirroring ConditionCapabilityEffect. Lets a condition
     feed the modifier system (e.g. a 'power' or 'power_multiplier' target) without
     materializing CharacterModifier rows — read at evaluation time. For
     'power_multiplier' the value is a percent-delta (35 = +35%); see _derive_power.
+
+    With a derived-amount input (#4878, ``DerivedAmountMixin``) ``value`` is the amount per
+    step of the input, read on the condition's bearer, and the severity and stage scaling no
+    longer apply.
     """
 
     modifier_target = models.ForeignKey("arxii.ModifierTarget", on_delete=models.CASCADE)
@@ -1084,6 +1089,9 @@ class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
             "arxii.ModifierTarget",
+            "arxii.CheckType",
+            "arxii.Trait",
+            "arxii.Facet",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -1105,6 +1113,19 @@ class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
         if self.stage:
             return f"{self.stage.condition.name} ({self.stage.name}): {self.modifier_target.name}"
         return f"{self.condition.name}: {self.modifier_target.name}"
+
+    def clean(self) -> None:
+        """Check the derived-amount menu (#4878); an input replaces severity scaling."""
+        super().clean()
+        errors = self.clean_derived_amount(
+            self.modifier_target if self.modifier_target_id else None
+        )
+        if self.has_amount_input and self.scales_with_severity:
+            errors["scales_with_severity"] = (
+                "An effect derives its amount or scales with severity, not both; clear one."
+            )
+        if errors:
+            raise ValidationError(errors)
 
 
 class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
