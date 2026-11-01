@@ -178,6 +178,9 @@ class KinRowsValidationTests(TestCase):
             {"kind": "twin", "name": "Wen", "gender_id": None, "fate": ""},
             {"kind": "spouse", "name": "Ser Aldo", "gender_id": None, "fate": "dead"},
             {"kind": "child", "name": "Pip", "gender_id": None, "fate": "fostered_away"},
+            # #4870: a dead twin, a separated spouse, a betrothed.
+            {"kind": "spouse", "name": "Mab", "gender_id": None, "fate": "separated"},
+            {"kind": "betrothed", "name": "Rue", "gender_id": None, "fate": "broken"},
         ]
         res = self._patch(rows)
         self.assertEqual(res.status_code, 200, res.content)
@@ -188,7 +191,8 @@ class KinRowsValidationTests(TestCase):
             [{"kind": "cousin", "name": "x", "fate": ""}],
             [{"kind": "spouse", "name": "x", "fate": "lost"}],
             [{"kind": "child", "name": "x", "fate": "fled"}],
-            [{"kind": "twin", "name": "x", "fate": "dead"}],
+            [{"kind": "twin", "name": "x", "fate": "missing"}],
+            [{"kind": "betrothed", "name": "x", "fate": "alive"}],
             [{"kind": "twin", "name": "a", "fate": ""}, {"kind": "twin", "name": "b", "fate": ""}],
             [{"kind": "child", "name": "x", "fate": "raised"}] * 9,
         ):

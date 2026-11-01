@@ -425,6 +425,14 @@ class UnionKind(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether births within this union count as in-wedlock for law.",
     )
+    is_betrothal = models.BooleanField(
+        default=False,
+        help_text=(
+            "A promise of marriage, not yet one (#4870, slice 8 of #4813): the kind a "
+            "betrothed seated at character creation is recorded under "
+            "(kinship.betrothal_union_kind). Confers no wedlock."
+        ),
+    )
     # --- Stature weight vocabulary (#3091). Marriage: 100, both ways, no
     # gate. Consort (a legal position the realm officially recognizes): 50,
     # senior's house only, gated on the senior holding a landed Title. A
@@ -488,6 +496,15 @@ class Union(SharedMemoryModel):
     )
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    separated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The union stands in law while the members live apart (#4870): set by "
+            "kinship.separate_union, blank while they share a life. Not an end; a divorce "
+            "or a death sets ended_at."
+        ),
+    )
     is_public_record = models.BooleanField(
         default=True,
         help_text="Whether the world knows this union exists.",
