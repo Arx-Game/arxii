@@ -2138,7 +2138,16 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   .frame`/`station` (read at the pick), `DistinctionOffer.beat` as the
   `OfferChapter.BACKGROUNDS` opener (every answer a priced `CHOICE`; a beat grants
   nothing free; open while the beat is pooled and not unknown, `open_beat_ids`),
-  `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat),
+  `CharacterOriginSlot.beat` + `unknown` + `life_stage` (a row names a slot, a beat or a
+  stage; #4872: a stage row holds the paragraph the player wrote for that stage,
+  `draft_data["stage_descriptions"]`, `STAGE_DESCRIPTION_MAX_LENGTH`), the life page's marks
+  on a beat (#4872: `secret_offer_ids`, `cover_offer_id`, `figures` under
+  `draft_data["beats"]`, `offers.beat_marks -> BeatMarks`; a secret pick is minted a Secret
+  and its cover a `CharacterDistinction.is_cover` row at finalize, `_write_cover_stories`;
+  a figure's name lands in the pick's notes on a `Distinction.asks_figure_name` card),
+  `DistinctionOffer.group` (the heading a beat's answer sits under), `VisibleOffer.effects`
+  + `OffersResponse.terms` (`offers.effect_terms`, `offers.terms_for`: the magnitudes and
+  the definitions from `Trait`/`Aspect`/`ModifierTarget.description`),
   `draft_data["beats"]`, `GET drafts/<id>/beats/` (`offers.beats_for`,
   `BeatPoolEntry` with `allowance` and `allowance_is_points`: `beat_allowance`,
   `age_pick_allowance` (#4829: career points, 19 / every 5 years / cap 59,
@@ -3400,7 +3409,7 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815; `believed_deceased` — the public record's
   belief about a death, independent of `is_deceased` the private truth,
-  #3983; `is_missing` and `obituary`, the record's two further facts, #4239), `FamilyMembership`, `UnionKind`/`Union`,
+  #3983; `is_missing` and `obituary`, the record's two further facts, #4239), `FamilyMembership`, `UnionKind`/`Union` (`is_betrothal` on the kind and `separated_at` on the union, #4870, with `kinship.betrothal_union_kind` and `separate_union`),
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
   colors), `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta

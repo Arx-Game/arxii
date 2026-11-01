@@ -1127,6 +1127,9 @@ export interface DraftData {
   other_parent_name?: string;
   line_parent_gender_id?: number | null;
   other_parent_gender_id?: number | null;
+  /** The named parents' fates (#4870); blank or alive is alive. */
+  line_parent_fate?: ParentFate | '';
+  other_parent_fate?: ParentFate | '';
   // Goals for Final Touches stage
   goals?: DraftGoal[];
   // The Family Template picked on the name path, when the Upbringing offers
@@ -1681,27 +1684,48 @@ export const LIFE_GRID_LABELS: Record<string, string> = {
   since_the_glimpse: 'What you carry',
 };
 
-/** A person seated beside the parents in the Lineage step (#4395). */
-export type KinRowKind = 'twin' | 'spouse' | 'child';
-export type SpouseFate = 'alive' | 'dead' | 'divorced' | 'fled';
+/** A person seated beside the parents in the Lineage step (#4395; the betrothed, #4870). */
+export type KinRowKind = 'twin' | 'spouse' | 'child' | 'betrothed';
+/** `fled` keeps its value and reads "Missing" (#4870); `separated` stands in law apart. */
+export type SpouseFate = 'alive' | 'dead' | 'divorced' | 'separated' | 'fled';
 export type ChildFate = 'raised' | 'fostered_away' | 'lost';
+export type TwinFate = 'alive' | 'dead';
+export type BetrothedFate = 'promised' | 'dead' | 'missing' | 'broken';
+/** A named parent's fate (#4870): `draft_data.line_parent_fate` / `other_parent_fate`. */
+export type ParentFate = 'alive' | 'dead' | 'missing';
 export interface KinRow {
   kind: KinRowKind;
   name: string;
   gender_id: number | null;
-  /** A spouse's or a child's fate; `''` for a twin. */
-  fate: SpouseFate | ChildFate | '';
+  /** The row's fate for its kind; `''` for a twin left unsaid. */
+  fate: SpouseFate | ChildFate | TwinFate | BetrothedFate | '';
 }
 export const SPOUSE_FATES: { value: SpouseFate; label: string }[] = [
   { value: 'alive', label: 'Alive' },
   { value: 'dead', label: 'Dead' },
   { value: 'divorced', label: 'Divorced' },
-  { value: 'fled', label: 'Fled' },
+  { value: 'separated', label: 'Separated' },
+  { value: 'fled', label: 'Missing' },
 ];
 export const CHILD_FATES: { value: ChildFate; label: string }[] = [
   { value: 'raised', label: 'Raised' },
   { value: 'fostered_away', label: 'Fostered away' },
   { value: 'lost', label: 'Lost' },
+];
+export const TWIN_FATES: { value: TwinFate; label: string }[] = [
+  { value: 'alive', label: 'Alive' },
+  { value: 'dead', label: 'Dead' },
+];
+export const BETROTHED_FATES: { value: BetrothedFate; label: string }[] = [
+  { value: 'promised', label: 'Promised' },
+  { value: 'dead', label: 'Dead' },
+  { value: 'missing', label: 'Missing' },
+  { value: 'broken', label: 'Broken off' },
+];
+export const PARENT_FATES: { value: ParentFate; label: string }[] = [
+  { value: 'alive', label: 'Alive' },
+  { value: 'dead', label: 'Dead' },
+  { value: 'missing', label: 'Missing' },
 ];
 
 /** A distinction offer visible to the draft in the requested chapter (#3675). */

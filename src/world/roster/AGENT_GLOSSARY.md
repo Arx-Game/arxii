@@ -553,3 +553,12 @@ closes by field on `OriginTemplate`, never by matching a distinction's name.
   (the holder is whoever has the tenure, which may be the owner), creator.
 - **Template** - a Story NPC with `StoryNPCSettings.is_template`: held by nobody, counted
   against no cap, copied for a borrower instead of lent. _Avoid:_ blueprint.
+- **Betrothal kind** - the `UnionKind` marked `is_betrothal` (#4870): a promise of marriage,
+  no wedlock conferred. `kinship.betrothal_union_kind()` finds it the way
+  `wedlock_union_kind()` finds marriage and refuses when none is authored; character
+  creation's betrothed row records under it. Distinct from the house `Betrothal` pact
+  (#2999), which is two houses' negotiated terms. _Avoid:_ engagement kind, promised union.
+- **Separated** - a marriage whose members live apart while it stands in law:
+  `Union.separated_at`, set through `kinship.separate_union` (#4870), never an end;
+  marital status still reads married. _Avoid:_ estranged (a feeling, not the record),
+  divorced (that ends the union).

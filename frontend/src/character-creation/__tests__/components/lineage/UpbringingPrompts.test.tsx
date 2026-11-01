@@ -151,6 +151,9 @@ const somehowAlwaysBroke: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 /** Its `offer_id` (14) is in the chosen choice's own `offers`, but its
@@ -177,6 +180,9 @@ const waryOfDebts: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 /** Its `opener_label` matches the chosen choice's own name, but its
@@ -203,6 +209,9 @@ const decoyMatchingLabel: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 let offersResponse: OffersResponse;
@@ -228,6 +237,7 @@ beforeEach(() => {
       },
       { distinction_id: 92, name: 'Spoiled', reason: '', opener_labels: [], opener_ids: [] },
     ],
+    terms: [],
   };
 });
 

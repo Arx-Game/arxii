@@ -138,11 +138,16 @@ character-creation/
     │                            #   distinction prints once, under its own tag (fix
     │                            #   round 2).
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
-        ├── KinRows.tsx           # The people seated beside the parents (#4395): a twin, a
-        │                         #   spouse (alive, dead, divorced, fled), children (raised,
-        │                         #   fostered away, lost), the whole list at
+        ├── KinRows.tsx           # The people seated beside the parents (#4395, #4870): a
+        │                         #   twin (alive, dead), a spouse (alive, dead, divorced,
+        │                         #   separated, missing), a betrothed (promised, dead,
+        │                         #   missing, broken off), children (raised, fostered away,
+        │                         #   lost), each with a fate ChoiceRow, the whole list at
         │                         #   draft_data.kin_rows; finalize seats them in the
-        │                         #   kinship graph
+        │                         #   kinship graph. The named parents' fates (#4870) are a
+        │                         #   select under each parent's gender in LineageStage
+        │                         #   (ParentFateRow; draft_data.line_parent_fate /
+        │                         #   other_parent_fate)
         ├── LifeGrids.tsx         # The life as grids by stage (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
         │                         #   stage is absent), each beat a `ChapterOffers`
@@ -254,7 +259,9 @@ character-creation/
   table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
 - `GET /api/character-creation/drafts/{id}/beats/` - The life's beats as this draft meets
   them (#4124, #4395: each with its `allowance`); the `backgrounds` offers come through
-  `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds`
+  `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds` (#4872: each offer
+  carries its `group`, `asks_figure_name` and `effects` with magnitudes; the response's
+  `terms` give each lever's definition for the term popovers)
 - `GET /api/character-creation/beginnings/{id}/perspectives/` - A beginning's shop-window
   perspective entries, ungated by codex knowledge (ADR-0224, #3281)
 - `GET /api/character-creation/traditions/{id}/perspectives/` - Same, for a tradition

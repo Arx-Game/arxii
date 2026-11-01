@@ -19,7 +19,7 @@ const syncMutate = vi.fn();
 const loadMutate = vi.fn();
 const clearMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
-let offersResponse: OffersResponse = { offers: [], closed: [] };
+let offersResponse: OffersResponse = { offers: [], closed: [], terms: [] };
 let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals: string[] }[] = [];
 
 vi.mock('../../../queries', async (importOriginal) => ({
@@ -73,6 +73,9 @@ function offer(over: Partial<VisibleOffer>): VisibleOffer {
     opens_feature: false,
     requires_feature_opened: false,
     cg_max_rank: 0,
+    group: '',
+    asks_figure_name: false,
+    effects: [],
     ...over,
   };
 }
@@ -121,6 +124,7 @@ describe('LifeGrids', () => {
         offer({ offer_id: 32, distinction_id: 302, name: 'Kept a shop', opener_key: 'beat:3' }),
       ],
       closed: [],
+      terms: [],
     };
   });
 
@@ -286,7 +290,7 @@ describe('LifeGrids (the suggested life, #4865)', () => {
     loadMutate.mockClear();
     clearMutate.mockClear();
     pool = [beat({ beat_id: 1, name: 'The household' })];
-    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], closed: [] };
+    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], closed: [], terms: [] };
     draftDistinctions = [];
   });
 

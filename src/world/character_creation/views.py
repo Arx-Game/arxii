@@ -60,6 +60,7 @@ from world.character_creation.offers import (
     load_default_life,
     offers_for,
     reconcile_offer_picks,
+    terms_for,
 )
 from world.character_creation.serializers import (
     BeatPoolEntrySerializer,
@@ -1178,7 +1179,14 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             chapter = OfferChapter(raw)
         except ValueError as exc:
             raise ValidationError({"chapter": "Unknown chapter."}) from exc
-        payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft, chapter)}
+        offers = offers_for(draft, chapter)
+        # The terms on the cards' mechanics lines with their definitions (#4872), read
+        # once per response from the rows that own them.
+        payload = {
+            "offers": offers,
+            "closed": closed_for(draft, chapter),
+            "terms": terms_for(offers),
+        }
         return Response(OffersResponseSerializer(payload).data)
 
     @extend_schema(responses=BeatPoolEntrySerializer(many=True))

@@ -50,16 +50,43 @@ the age floor (`youngest_age_for_points`) keeps the age at or above the points h
 `beat_allowance` reads it, one-of or any otherwise. _Avoid_: age allowance (the old name),
 age slots, experience picks, career slots.
 
-**Kin row** (`draft_data["kin_rows"]`, `KinRowKind`, #4395):
-A person seated beside the parents in the Lineage step: a twin, a spouse with a fate
-(`SpouseFate`), a child with a fate (`ChildFate`); finalize's `_bind_kin_rows` writes them
-into the kinship graph. _Avoid_: kin beat, family slot (that is a staff Vacancy).
+**Kin row** (`draft_data["kin_rows"]`, `KinRowKind`, #4395, #4870):
+A person seated beside the parents in the Lineage step: a twin (`TwinFate`, alive or dead),
+a spouse (`SpouseFate`; separated stands in law apart, fled reads missing), a betrothed
+(`BetrothedFate`: promised, dead, missing, broken off; a union of the **betrothal kind**), a
+child (`ChildFate`); finalize's `_bind_kin_rows` writes them into the kinship graph. The
+named parents carry a **parent fate** of their own (`ParentFate`, `line_parent_fate` /
+`other_parent_fate`), where every "a parent died or vanished" story lives instead of a
+card. _Avoid_: kin beat, family slot (that is a staff Vacancy), parent card.
 
 **Struck-stages text** (`Beginnings.struck_stages_text`, #4830):
 What the life page shows in place of the stage rows when a beginning strikes every stage (the Sleeper's). _Avoid_: frame (that is the prose at the pick), absent-life text.
 
 **Recent History** (`draft_data["recent_history"]`, `RECENT_HISTORY_MAX_LENGTH`, #4830):
 The optional free text a life ends on, the hooks a player wants picked up; written at finalize as the lead-in paragraph of `Profile.background`, public. _Avoid_: since the Glimpse (the cut stage), hooks (those are GM-seeded, #4397).
+
+**Stage description** (`draft_data["stage_descriptions"]`, `CharacterOriginSlot.life_stage`, #4872):
+The one paragraph a player writes for a whole stage of the life, printed under the stage's
+name in the told background before its beats. A row with a stage and no slot or beat.
+_Avoid_: beat line (the per-beat sentence), stage note.
+
+**Cover story** (`draft_data.beats[<id>].cover_offer_id`, `CharacterDistinction.is_cover`, #4872):
+The answer on the same row a secret pick hides behind; held at finalize as a card that grants
+nothing, listed on a stranger's sheet where the secret is absent. Null means Unremarkable,
+the row's no-cost card. _Avoid_: fake answer, alias (a second face is a persona).
+
+**Secret mark** (`draft_data.beats[<id>].secret_offer_ids`, #4872):
+A pick on a beat the player marks secret at creation; minted a Secret at finalize the way a
+`secret_by_default` card is. _Avoid_: hidden pick, private distinction.
+
+**Figure's name** (`draft_data.beats[<id>].figures`, `Distinction.asks_figure_name`, #4872):
+The name a player gives the person a person card is about (Rival, Capable Mentor); in the
+pick's notes and on a granted NPC asset. _Avoid_: NPC name field, companion.
+
+**Term** (`OffersResponse.terms`, `VisibleOffer.effects`, #4872):
+A lever named on a card's mechanics line, with its definition read from the row that owns
+it: `Trait.description`, `Aspect.description` or `ModifierTarget.description`.
+_Avoid_: tooltip text (a copy key), glossary entry.
 
 **Kept beat** (`Beginnings.beat_mode = ONE_KEPT`, #4124; retired #4830, the Sleeper strikes every stage instead):
 The one beat a blank-slate Beginning (the Sleeper) takes by itself; every other beat

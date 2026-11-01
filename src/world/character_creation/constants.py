@@ -353,15 +353,22 @@ class KinRowKind(models.TextChoices):
     TWIN = "twin", "A twin"
     SPOUSE = "spouse", "A spouse"
     CHILD = "child", "A child"
+    #: A promise of marriage, not yet one (#4870, slice 8 of #4813): a union of the
+    #: betrothal kind (``UnionKind.is_betrothal``).
+    BETROTHED = "betrothed", "A betrothed"
 
 
 class SpouseFate(models.TextChoices):
-    """What became of a spouse seated at creation (#4395)."""
+    """What became of a spouse seated at creation (#4395; separated and the missing
+    relabel, #4870)."""
 
     ALIVE = "alive", "Alive"
     DEAD = "dead", "Dead"
     DIVORCED = "divorced", "Divorced"
-    FLED = "fled", "Fled"
+    #: Living apart, the union standing in law (``Union.separated_at``).
+    SEPARATED = "separated", "Separated"
+    #: Gone without a word; the value keeps its first name, the word is "missing".
+    FLED = "fled", "Missing"
 
 
 class ChildFate(models.TextChoices):
@@ -370,6 +377,39 @@ class ChildFate(models.TextChoices):
     RAISED = "raised", "Raised"
     FOSTERED_AWAY = "fostered_away", "Fostered away"
     LOST = "lost", "Lost"
+
+
+class TwinFate(models.TextChoices):
+    """What became of a twin seated at creation (#4870)."""
+
+    ALIVE = "alive", "Alive"
+    DEAD = "dead", "Dead"
+
+
+class BetrothedFate(models.TextChoices):
+    """What became of a betrothed seated at creation (#4870): the promise stands, the person
+    is dead or missing, or the match was called off (the union ended)."""
+
+    PROMISED = "promised", "Promised"
+    DEAD = "dead", "Dead"
+    MISSING = "missing", "Missing"
+    BROKEN = "broken", "Broken off"
+
+
+class ParentFate(models.TextChoices):
+    """What became of a parent the player names (#4870): where every "a parent died or
+    vanished" story lives instead of a card. On the named parents only; a claimed family's
+    staff-authored parents are not touched."""
+
+    ALIVE = "alive", "Alive"
+    DEAD = "dead", "Dead"
+    MISSING = "missing", "Missing"
+
+
+#: ``draft_data`` keys for the named parents' fates (#4870), beside ``line_parent_name`` and
+#: ``other_parent_name``; blank or alive is alive.
+LINE_PARENT_FATE_KEY = "line_parent_fate"
+OTHER_PARENT_FATE_KEY = "other_parent_fate"
 
 
 #: ``draft_data`` key for the seated kin rows (#4395), and the most a draft may seat.
@@ -395,6 +435,20 @@ class LifeStage(models.TextChoices):
 
 #: The one optional line a player may write under a taken beat (#4124).
 BEAT_LINE_MAX_LENGTH = 200
+
+#: The life page (#4872, slice 9 of #4813). ``draft_data.stage_descriptions`` maps a
+#: ``LifeStage`` value to the one paragraph the player writes for that stage, written at
+#: finalize as a stage row on ``CharacterOriginSlot`` and read into the told background.
+STAGE_DESCRIPTIONS_KEY = "stage_descriptions"
+STAGE_DESCRIPTION_MAX_LENGTH = 1000
+#: A figure's name on a person card (``Distinction.asks_figure_name``), kept under the
+#: beat's state as ``figures`` (offer id to name) and written to the pick's notes.
+FIGURE_NAME_MAX_LENGTH = 60
+#: The keys a beat's state carries besides ``taken``, ``unknown`` and ``line``: the picks
+#: on the beat marked secret, the cover shown in a secret's place, the figures named.
+BEAT_SECRET_OFFER_IDS = "secret_offer_ids"  # noqa: S105  # a draft_data key, no credential
+BEAT_COVER_OFFER_ID = "cover_offer_id"
+BEAT_FIGURES = "figures"
 #: The optional Recent History a life ends on (#4830, ruled 2026-10-30 and 2026-10-31): free
 #: text the player writes for the hooks GMs and other players may pick up, public on the sheet,
 #: written at finalize as the lead-in paragraph of ``Profile.background``.

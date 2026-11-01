@@ -7,6 +7,7 @@ draft management and character finalization.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -30,19 +31,25 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     KIN_ROWS_KEY,
+    LINE_PARENT_FATE_KEY,
+    OTHER_PARENT_FATE_KEY,
     STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
+    BetrothedFate,
     ChildFate,
     CommentType,
     FamilyPath,
     FinalTouchesPrompt,
     KinRowKind,
+    LifeStage,
     OriginStoryState,
     Parentage,
+    ParentFate,
     QuestionKind,
     SpouseFate,
     StartingAreaAccessLevel,
+    TwinFate,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -52,9 +59,13 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.offers import (
+    BeatMarks,
+    beat_marks,
     final_touches_prompts,
     opened_feature_traits,
+    picked_offer_ids,
     reconcile_offer_picks,
+    stage_descriptions,
 )
 from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.services import create_character_with_sheet
@@ -1090,10 +1101,12 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Seat the draft's kin rows in the kinship graph (#4395).
 
-    A twin is a node sharing every parent edge the new PC has (and its family); a
-    spouse is a wedlock union, ended by death or divorce, the spouse marked missing
-    when fled; a child is a parentage edge from the PC, raised in the PC's family,
-    fostered away into none, lost when dead. Called after ``_bind_kinship_node`` so
+    A twin is a node sharing every parent edge the new PC has (and its family), dead
+    when its fate says so (#4870); a spouse is a wedlock union, ended by death or
+    divorce, separated with the union standing, the spouse marked missing when fled; a
+    betrothed is a union of the betrothal kind (#4870), ended when broken off; a child
+    is a parentage edge from the PC, raised in the PC's family, fostered away into none,
+    lost when dead. Called after ``_bind_kinship_node`` so
     the PC's node and parents exist. Best-effort like the bind: a kinship refusal
     (no law of marriage seeded) logs and skips that row.
     """
@@ -1110,6 +1123,7 @@ def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         KinRowKind.TWIN: _seat_twin,
         KinRowKind.SPOUSE: _seat_spouse,
         KinRowKind.CHILD: _seat_child,
+        KinRowKind.BETROTHED: _seat_betrothed,
     }
     for row in rows:
         seat_row = seat.get(row.get("kind"))
@@ -1130,6 +1144,7 @@ def _seat_twin(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
         family=node.family,
         gender=_resolve_draft_gender(row.get("gender_id")),
         age=draft.age,
+        is_deceased=row.get("fate") == TwinFate.DEAD,
         created_by=draft.account,
     )
     for edge in ParentageEdge.objects.filter(child=node):
@@ -1142,6 +1157,7 @@ def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
         create_person,
         end_union,
         record_union,
+        separate_union,
         wedlock_union_kind,
     )
 
@@ -1155,9 +1171,34 @@ def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
     union = record_union(kind=wedlock_union_kind(), members=[node, spouse])
     if fate in (SpouseFate.DEAD, SpouseFate.DIVORCED):
         end_union(union)
-    elif fate == SpouseFate.FLED:
-        spouse.is_missing = True
-        spouse.save(update_fields=["is_missing"])
+    elif fate == SpouseFate.SEPARATED:
+        separate_union(union)
+    _mark_missing(spouse, fate == SpouseFate.FLED)
+
+
+def _seat_betrothed(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
+    """A betrothed is a union of the betrothal kind (#4870): the promise stands, the person
+    is dead or missing, or the match was broken off (the union ended). Without a betrothal
+    kind authored, ``betrothal_union_kind`` refuses and the caller logs and skips."""
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        betrothal_union_kind,
+        create_person,
+        end_union,
+        record_union,
+    )
+
+    fate = row.get("fate", "")
+    kind = betrothal_union_kind()
+    betrothed = create_person(
+        name=str(row.get("name", "")).strip(),
+        gender=_resolve_draft_gender(row.get("gender_id")),
+        is_deceased=fate == BetrothedFate.DEAD,
+        created_by=draft.account,
+    )
+    union = record_union(kind=kind, members=[node, betrothed])
+    if fate in (BetrothedFate.BROKEN, BetrothedFate.DEAD):
+        end_union(union)
+    _mark_missing(betrothed, fate == BetrothedFate.MISSING)
 
 
 def _seat_child(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
@@ -1237,14 +1278,19 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
     same_gender = line_gender is not None and line_gender == other_gender
     kind = ParentageKind.TREE_OF_SOULS if same_gender else ParentageKind.BIOLOGICAL
 
+    # A fate on each named parent (#4870): dead or missing, else alive.
+    line_fate = draft.draft_data.get(LINE_PARENT_FATE_KEY) or ParentFate.ALIVE
+    other_fate = draft.draft_data.get(OTHER_PARENT_FATE_KEY) or ParentFate.ALIVE
     line_parent = None
     if line_name:
         line_parent = create_person(
             name=line_name,
             family=draft.family,
             gender=line_gender,
+            is_deceased=line_fate == ParentFate.DEAD,
             created_by=draft.account,
         )
+        _mark_missing(line_parent, line_fate == ParentFate.MISSING)
         line_edge = record_parentage(child=child_node, parent=line_parent, kind=kind)
         if same_gender:
             line_edge.is_ritual_invoker = True
@@ -1253,12 +1299,21 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
         other_parent = create_person(
             name=other_name,
             gender=other_gender,
+            is_deceased=other_fate == ParentFate.DEAD,
             created_by=draft.account,
         )
+        _mark_missing(other_parent, other_fate == ParentFate.MISSING)
         if draft.second_parent_species is not None:
             other_parent.species = draft.second_parent_species
             other_parent.save(update_fields=["species"])
         record_parentage(child=child_node, parent=other_parent, kind=kind)
+
+
+def _mark_missing(person: Kinsperson, missing: bool) -> None:
+    """Set ``is_missing`` on a freshly made node when its fate says so (#4870)."""
+    if missing:
+        person.is_missing = True
+        person.save(update_fields=["is_missing"])
 
 
 def _pin_heredity_back_inference(draft: CharacterDraft, child_node: Kinsperson) -> None:
@@ -1483,12 +1538,15 @@ def _finalize_origin_slots(
 
 
 def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
-    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124).
+    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124), and one
+    stage row per stage the player described (#4872).
 
     Called from ``_apply_sheet_demographics``. A taken beat becomes a beat row
     carrying its unknown state and the optional line; its answers are ordinary
     distinctions, written by ``_create_distinctions`` with the beat as their
-    source. Returns how many rows were written.
+    source. A stage's paragraph becomes a row with no slot and no beat, read by
+    ``assemble_origin_prose`` as that stage's own paragraph. Returns how many rows
+    were written.
     """
     from world.character_creation.offers import beats_for  # noqa: PLC0415
 
@@ -1500,6 +1558,13 @@ def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
             sheet=sheet,
             beat_id=entry.beat_id,
             defaults={"slot": None, "unknown": entry.unknown, "value": entry.line},
+        )
+        written += 1
+    for stage, text in stage_descriptions(draft).items():
+        CharacterOriginSlot.objects.update_or_create(
+            sheet=sheet,
+            life_stage=stage,
+            defaults={"slot": None, "beat": None, "value": text},
         )
         written += 1
     return written
@@ -2147,13 +2212,101 @@ def _create_distinctions(
     if not char_distinctions:
         return
 
+    marks = beat_marks(draft)
+    _name_figures(char_distinctions, entries_by_key, marks)
     asset_names = _connection_asset_names(draft, entries_by_key.values())
+    for char_dist in char_distinctions:
+        if char_dist.notes and char_dist.distinction.asks_figure_name:
+            asset_names.setdefault(char_dist.distinction_id, char_dist.notes)
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
     _create_distinction_modifiers_bulk(
         character.sheet_data, created_distinctions, asset_names=asset_names
     )
 
-    _mint_default_distinction_secrets(created_distinctions)
+    _mint_distinction_secrets(created_distinctions, _secret_distinction_ids(entries_by_key, marks))
+    _write_cover_stories(character.sheet_data, draft, marks, created_distinctions)
+
+
+def _name_figures(char_distinctions: list, entries_by_key: dict, marks: BeatMarks) -> None:
+    """Put the figure's name on a person card's pick (#4872), as its notes.
+
+    Called by ``_create_distinctions`` before the bulk write. A name is kept under the
+    beat's state by offer id; it reaches the pick whose entry names that offer, and
+    only on a card that asks for one. A note the entry already carries stands.
+    """
+    if not marks.figures:
+        return
+    figure_by_distinction: dict[int, str] = {}
+    for (distinction_id, _trait, _marking), entry in entries_by_key.items():
+        for offer_id in entry.get("offer_ids", []):
+            if isinstance(offer_id, int) and offer_id in marks.figures:
+                figure_by_distinction.setdefault(distinction_id, marks.figures[offer_id])
+    for char_dist in char_distinctions:
+        name = figure_by_distinction.get(char_dist.distinction_id)
+        if name and char_dist.distinction.asks_figure_name and not char_dist.notes:
+            char_dist.notes = name
+
+
+def _secret_distinction_ids(entries_by_key: dict, marks: BeatMarks) -> set[int]:
+    """The distinctions whose pick the player marked secret on a beat (#4872)."""
+    secret_offers = set().union(*marks.secret.values()) if marks.secret else set()
+    if not secret_offers:
+        return set()
+    return {
+        distinction_id
+        for (distinction_id, _trait, _marking), entry in entries_by_key.items()
+        if any(offer_id in secret_offers for offer_id in entry.get("offer_ids", []))
+    }
+
+
+def _write_cover_stories(
+    sheet: CharacterSheet, draft: CharacterDraft, marks: BeatMarks, created: list
+) -> None:
+    """Hold the cover story a secret answer hides behind (#4872).
+
+    Called by ``_create_distinctions`` after the real picks are written. A cover is a
+    ``CharacterDistinction`` with ``is_cover`` on: rank one, no modifiers, no price, no
+    sidecar grant, so it never goes through ``_create_distinction_modifiers_bulk``. It
+    is written only when the beat has a secret pick the draft still holds, the cover
+    offer is one of that beat's own answers, is not itself picked, and the card is not
+    already held; anything else is logged and skipped.
+    """
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    picked = picked_offer_ids(draft)
+    wanted = {
+        beat_id: cover_id
+        for beat_id, cover_id in marks.cover.items()
+        if marks.secret.get(beat_id, set()) & picked
+    }
+    if not wanted:
+        return
+    offers = DistinctionOffer.objects.filter(
+        pk__in=set(wanted.values()), beat_id__in=set(wanted), is_active=True
+    ).select_related("beat", "distinction")
+    by_id = {offer.pk: offer for offer in offers}
+    held = {cd.distinction_id for cd in created}
+    for beat_id, cover_id in wanted.items():
+        offer = by_id.get(cover_id)
+        if (
+            offer is None
+            or offer.beat_id != beat_id
+            or cover_id in picked
+            or offer.distinction_id in held
+        ):
+            logger.info("Cover %s on beat %s not written for %s", cover_id, beat_id, sheet.pk)
+            continue
+        CharacterDistinction.objects.create(
+            character=sheet,
+            distinction=offer.distinction,
+            rank=1,
+            is_cover=True,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+            source_description=f"cover on {offer.beat.name}",
+        )
+        held.add(offer.distinction_id)
 
 
 def _build_character_distinctions(  # noqa: PLR0913
@@ -2198,12 +2351,13 @@ def _build_character_distinctions(  # noqa: PLR0913
     return result
 
 
-def _mint_default_distinction_secrets(created_distinctions: list) -> None:
-    """Move secret-by-default distinctions into their Secret records."""
+def _mint_distinction_secrets(created_distinctions: list, marked: set[int]) -> None:
+    """Move secret-by-default distinctions, and the picks the player marked secret on a
+    beat (#4872), into their Secret records."""
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
 
     for distinction in created_distinctions:
-        if distinction.distinction.secret_by_default:
+        if distinction.distinction.secret_by_default or distinction.distinction_id in marked:
             mint_distinction_secret(distinction)
 
 
@@ -3505,8 +3659,9 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
         )
     )
     slots = [row for row in rows if row.slot_id is not None]
-    beats = [row for row in rows if row.beat_id is not None and not row.unknown]
-    if not slots and not beats:
+    beats = [row for row in rows if row.beat_id is not None]
+    stages = {row.life_stage: row.value for row in rows if row.life_stage}
+    if not slots and not beats and not stages:
         return ""
 
     lines: list[str] = []
@@ -3514,7 +3669,7 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     if template is not None:
         lines += [template.frame_narrative, ""]
     lines.extend(_origin_slot_lines(slots))
-    lines.extend(_origin_beat_lines(beats))
+    lines.extend(_origin_beat_lines(beats, stages))
     return "\n".join(lines).strip()
 
 
@@ -3530,19 +3685,39 @@ def _origin_slot_lines(slots: list[CharacterOriginSlot]) -> list[str]:
     return lines
 
 
-def _origin_beat_lines(beats: list[CharacterOriginSlot]) -> list[str]:
-    """Render non-unknown life beats in chronological order."""
-    # The beats, in the order of a life (#4124): the stage, the beat, the line the
-    # player wrote under it. An unknown beat says nothing here.
+def _origin_beat_lines(
+    beats: list[CharacterOriginSlot], stages: dict[str, str] | None = None
+) -> list[str]:
+    """Render the life by stage, in chronological order.
+
+    The beats in the order of a life (#4124): the stage, the beat, the line the player
+    wrote under it. The life page (#4872) adds the stage's own paragraph before its
+    beats, and a stage every one of whose beats is unknown reads "<Stage>: unknown"
+    and nothing more; an unknown beat under a stage otherwise told says nothing.
+    """
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 
+    stages = stages or {}
     beats.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
-    lines: list[str] = []
+    by_stage: dict[str, list[CharacterOriginSlot]] = defaultdict(list)
     for row in beats:
-        lines.append(f"{row.beat.get_life_stage_display()}: {row.beat.name}")
-        if row.value:
-            lines.append(row.value)
-        lines.append("")
+        by_stage[row.beat.life_stage].append(row)
+    lines: list[str] = []
+    for stage in sorted(set(by_stage) | set(stages), key=lambda v: LIFE_STAGE_ORDER.get(v, 99)):
+        rows = by_stage.get(stage, [])
+        label = LifeStage(stage).label if stage in LifeStage.values else stage
+        if rows and all(row.unknown for row in rows):
+            lines.extend((f"{label}: unknown", ""))
+            continue
+        if stages.get(stage):
+            lines.extend((label, stages[stage], ""))
+        for row in rows:
+            if row.unknown:
+                continue
+            lines.append(f"{label}: {row.beat.name}")
+            if row.value:
+                lines.append(row.value)
+            lines.append("")
     return lines
 
 

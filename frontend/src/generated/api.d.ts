@@ -40029,6 +40029,13 @@ export interface components {
        */
       available_at: string;
     };
+    /** @description A ``world.character_creation.types.OfferEffectTerm`` (#4872). */
+    OfferEffectTerm: {
+      target: string;
+      label: string;
+      value: number | null;
+      immune: boolean;
+    };
     /** @description What accepting an Academy offer costs (#4457); ``display`` is the menu line. */
     OfferPrice: {
       ap: number;
@@ -40117,10 +40124,17 @@ export interface components {
      * @enum {string}
      */
     OfferSummonsStatusEnum: 'pending' | 'accepted' | 'declined' | 'expired';
+    /** @description A ``world.character_creation.types.OfferTerm`` (#4872). */
+    OfferTerm: {
+      name: string;
+      label: string;
+      definition: string;
+    };
     /** @description The ``offers``/``closed`` payload the offers action returns (#3675). */
     OffersResponse: {
       offers: components['schemas']['VisibleOffer'][];
       closed: components['schemas']['ClosedDistinction'][];
+      terms: components['schemas']['OfferTerm'][];
     };
     /**
      * @description * `starting` - Starting GM
@@ -54766,6 +54780,9 @@ export interface components {
       opens_feature: boolean;
       requires_feature_opened: boolean;
       cg_max_rank: number;
+      group: string;
+      asks_figure_name: boolean;
+      effects: components['schemas']['OfferEffectTerm'][];
     };
     /** @description A vision as its recipient reads it (#3779): the being only when revealed or to staff. */
     Vision: {
