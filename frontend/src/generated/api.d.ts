@@ -3344,6 +3344,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/clear-life/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Start blank (#4865): drop the draft's Backgrounds picks and beat states, keep
+     *     every other chapter's pick and the loaded stamp. Answers with the draft.
+     */
+    post: operations['character_creation_drafts_clear_life_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/finalize-gm/': {
     parameters: {
       query?: never;
@@ -3384,6 +3404,30 @@ export interface paths {
     put?: never;
     /** @description GET the draft's house claim; POST to submit one (#1884 Phase D, #3983 Plan B). */
     post: operations['character_creation_drafts_house_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/drafts/{id}/load-default-life/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Load the beginning's suggested life into the draft (#4865, slice 7 of #4813).
+     *
+     *     The leaf calls it when the life first opens for a beginning the draft's
+     *     ``life_loaded_for`` stamp does not name; the same beginning never loads again
+     *     over a life the player has edited or cleared, and a draft with no beginning is
+     *     left as it is. Answers with the draft.
+     */
+    post: operations['character_creation_drafts_load_default_life_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -59679,6 +59723,31 @@ export interface operations {
       };
     };
   };
+  character_creation_drafts_clear_life_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
   character_creation_drafts_finalize_gm_create: {
     parameters: {
       query?: never;
@@ -59746,6 +59815,31 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['HouseClaimStatus'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_load_default_life_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
         };
       };
     };

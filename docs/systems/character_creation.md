@@ -69,7 +69,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`, `backgrounds` and `final_touches`, #4846), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section)/`beat` (#4124)/`unlocked_by` (#4846, Final Touches: the card a draft must hold for the line to show; never the line's own distinction); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
 | `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
-| `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709) | `offer`, `beginning` (unique together) |
+| `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709); `preselected` (#4865) makes the pin part of the beginning's suggested life | `offer`, `beginning` (unique together), `preselected` |
 
 ### Draft State (models.Model - per-player)
 
@@ -850,7 +850,24 @@ The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unkn
 #4395 `allowance`). A beat's answers are open while it is in the pool and not unknown
 (`open_beat_ids`, `_opener_satisfied`); a pick under it, a line, or the unknown mark is
 what takes it (the grids never ask the player to add a beat first), and marking it
-unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395, career points since #4829):**
+unknown drops its picks through `reconcile_offer_picks`. **The suggested life (#4865,
+slice 7 of #4813; ruled 2026-10-19, net zero 2026-10-25):** a beginning's starred
+first-look pins (`OfferFirstLook.preselected`, authored on the Beginning admin's
+"Suggested life" inline, the pin's own admin, or the paste's leading star, `*Reavers`) are
+the cards a newcomer starts with. `offers.load_default_life(draft)` takes the draft's
+visible Backgrounds offers whose pin for its beginning is starred, in the grid's order
+(`offers_for`, so the route's closed list and the strikes apply), one per one-of beat, as
+many on an age-scaled beat as `age_pick_allowance(draft.age)` points buy, a card excluded
+by one already taken left out; the draft's Backgrounds picks are replaced by those entries
+(`build_distinction_entry` with the offer, the sync's shape), every other chapter's pick
+kept, `reconcile_offer_picks` run, and `draft_data.life_loaded_for` stamped with the
+beginning's id. `POST drafts/<id>/load-default-life/` runs it once per beginning (the stamp
+guards a life the player edited or cleared; a changed beginning loads again);
+`POST drafts/<id>/clear-life/` ("Start blank") drops the Backgrounds picks and
+`draft_data.beats`, keeps the stamp and the other chapters' picks. The Distinction Builder's
+pin save is a diff (a kept pin keeps its flag; it used to `set()` the through rows). The leaf
+calls the load when the life first opens for a beginning the stamp does not name (the
+frontend half). **Allowance (#4395, career points since #4829):**
 `beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
 beat whose `picks_scale_with_age` is on `age_pick_allowance(age)` career points: one at or
 under `AGE_PICKS_FROM_AGE` (19), one more per `AGE_PICKS_YEARS_PER_PICK` (5) full years

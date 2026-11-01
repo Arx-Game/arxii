@@ -3117,7 +3117,9 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
 - **Offers hang off the question and the reason (#3709, ADR-0282):** every chapter's offer line
   names its opener (`ActorSheetPrompt` on the Actor's Sheet; an `EnemyReason` row or a marking
   degree on the enemy chapter; an `AppearanceSection` row on Appearance), the Beginning pins a
-  first look (`OfferFirstLook`), `offers_for` returns `opener_key`/`first_look`/`held`/
+  first look (`OfferFirstLook`; its `preselected` flag is the beginning's suggested life, #4865:
+  `offers.load_default_life` / `clear_life` behind the draft's `load-default-life` and
+  `clear-life` actions), `offers_for` returns `opener_key`/`first_look`/`held`/
   `effect_line`, `degree_marks` replaces the retired `ENEMY_DEGREE_DISTINCTION_NAMES`, and the
   Distinction Builder's "Add from a table" (`web/admin/distinction_builder/paste.py`) lands new
   rows in bulk, additions only (an effect on a skill with no modifier target yet is not an

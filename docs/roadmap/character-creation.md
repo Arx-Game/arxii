@@ -87,6 +87,16 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4865: default lives, backend; slice 7 of #4813)
+
+Every beginning can carry a suggested life: its starred first-look pins
+(`OfferFirstLook.preselected`, a "Suggested life" inline on the Beginning admin, a leading
+star in the paste's last column). `load_default_life` loads them as priced picks in the grid's
+order, one per one-of beat, as many careers as the age's points buy, once per beginning
+(`draft_data.life_loaded_for`); `clear_life` is Start blank. The fifteen lives of the plan are
+authored by the paste on production once the cards are there. The leaf's load on first opening
+and its Start blank button are the frontend half.
+
 ## Built (2026-11-01, #4856: a second persona and an organization tie from a card, backend; slice 6 of #4813)
 
 The maintainer ruled the two forks (2026-11-01): the Officially dead door of #4396 is Presumed
