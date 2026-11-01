@@ -426,7 +426,20 @@ def _fetch_effects(role_ids: set[int], functions: set[str]) -> dict[int, list[Vo
     """
     effects = VowAddedEffect.objects.filter(
         covenant_role_id__in=role_ids, function__in=functions
-    ).prefetch_related(
+    ).prefetch_related(*payload_prefetches())
+    by_role: dict[int, list[VowAddedEffect]] = {}
+    for effect in effects:
+        by_role.setdefault(effect.covenant_role_id, []).append(effect)
+    return by_role
+
+
+def payload_prefetches() -> tuple[Prefetch, ...]:
+    """The four payload prefetches every reader of whole ``VowAddedEffect`` rows uses.
+
+    They fill the rows' ``cached_*`` lists (applied and removed conditions,
+    treatments, damage profiles), which the payload seams and the summary line read.
+    """
+    return (
         Prefetch(
             "applied_conditions",
             queryset=VowAddedEffectAppliedCondition.objects.select_related("condition__category"),
@@ -452,10 +465,6 @@ def _fetch_effects(role_ids: set[int], functions: set[str]) -> dict[int, list[Vo
             to_attr="cached_damage_profiles",
         ),
     )
-    by_role: dict[int, list[VowAddedEffect]] = {}
-    for effect in effects:
-        by_role.setdefault(effect.covenant_role_id, []).append(effect)
-    return by_role
 
 
 def _chosen_picks_for(
