@@ -55,6 +55,7 @@ tier.range_description                       # "+250 to +499"
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
 | `DistinctionPrestigeGrant` (#4852, slice 6 of #4813) | A card's starting prestige, paid once at finalize through `renown.apply_starting_prestige` (the `award_deed_prestige` seam; negative valid, no Legend row); the Final Touches story becomes the pick's `CharacterDistinction.notes` | `distinction` (O2O `Distinction`, `related_name="prestige_grant"`), `amount` (non-zero) |
 | `DistinctionOrganizationGrant` (#4852) | The membership a card opens, seated once at finalize through `join_organization`: the grant's organization, or the player's pick from the realm's admitting organizations at Final Touches | `distinction` (O2O, `related_name="organization_grant"`), `organization` (nullable FK, PROTECT; null = the player picks), `rank` (nullable FK `OrganizationRank`, PROTECT, that organization's; null = the entry rank) |
+| `DistinctionOrganizationTie` (#4856) | The tie a card opens at Final Touches, free: a membership at the entry rank or starting renown at `types.FAVORED_FLOOR` with one of the realm's admitting organizations of `org_type`, the player's pick (`character_creation.offers.organization_choices(draft, org_type=...)`) | `distinction` (O2O, `related_name="organization_tie"`), `org_type` (nullable FK `OrganizationType`, PROTECT; null = any) |
 | `StandingDeclaration` (#3290) | A leader's audited favor/disfavor declaration | `organization`, `target_persona`, `declared_by_persona`, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` (FK, rate-limit key), `created_at`; unique per (organization, target_persona, game_week) |
 
 ### Legend System (models.Model)
@@ -624,8 +625,8 @@ All models registered with Django admin:
 - `OrganizationMembershipAdmin` - With effective title display; a membership created here
   (not edited) applies the organization's codex grants to the new member (#3788)
 - `SocietyReputationAdmin` / `OrganizationReputationAdmin` - With tier display
-- `DistinctionPrestigeGrantAdmin` / `DistinctionOrganizationGrantAdmin` (#4852) - The two
-  finalize grant sidecars, raw id to the distinction (the paste's `+150 prestige` token makes a
+- `DistinctionPrestigeGrantAdmin` / `DistinctionOrganizationGrantAdmin` (#4852) /
+  `DistinctionOrganizationTieAdmin` (#4856) - The finalize grant sidecars, raw id to the distinction (the paste's `+150 prestige` token makes a
   prestige grant too); `OrganizationAdmin` shows and filters `admits_player_characters`
 - `StandingDeclarationAdmin` (#3290) - `delta_applied` visible for staff dispute resolution (the player-facing API omits it)
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`

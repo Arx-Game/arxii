@@ -87,6 +87,17 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4856: a second persona and an organization tie from a card, backend; slice 6 of #4813)
+
+The maintainer ruled the two forks (2026-11-01): the Officially dead door of #4396 is Presumed
+Dead's, at 5, and Shady Alter Ego is a second face the character is not wearing, at 5; a tie's
+renown starts at the Favored tier's floor. `scenes.DistinctionPersonaGrant` (`worn`) gates the
+door on a held card and mints the unworn face from `draft_data.alter_ego`;
+`societies.DistinctionOrganizationTie` (`org_type`) asks at Final Touches for one of the
+realm's admitting organizations of its kind and a kind of tie, a membership at the entry rank
+through `join_organization` or renown at `FAVORED_FLOOR` through `bump_organization_reputation`.
+The leaf's gate on the door and its two new blocks are the frontend half.
+
 ## Built (2026-11-01, #4852: the grants reconciled at finalize, backend; slice 6 of #4813)
 
 Three of the parent's slice 6 grants, each a sidecar in the `DistinctionStartingGrant` shape

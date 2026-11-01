@@ -417,6 +417,15 @@ viewset, and `effects_summary` prices each in words.
   sourced to the pick with no effect template (`ModifierSource.character_distinction` alone;
   `source_display` names the card). Summary: "+5 to your Path's stronger Aspect".
 
+- **A second face** (#4856): `scenes.DistinctionPersonaGrant` (`worn`). Worn is Presumed Dead,
+  the price of the Officially dead door (#4396), which now opens only to a draft holding such a
+  card; not worn is Shady Alter Ego, a second established face minted unworn. Summary: "Opens
+  the Officially dead door" / "Opens a second face".
+- **An organization tie** (#4856): `societies.DistinctionOrganizationTie` (`org_type` nullable).
+  The Catspaw's gang, Cloistered's temple: at Final Touches a membership at the entry rank or
+  renown at the Favored tier's floor with one of the realm's admitting organizations of that
+  kind, free. Summary: "Opens a tie with a gang of your realm".
+
 Full mechanics in [character_creation.md](character_creation.md)'s "The grants reconciled at
 finalize" passage.
 
