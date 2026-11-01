@@ -267,6 +267,7 @@ function makeParticipant(
   return {
     id,
     character_sheet_id: characterSheetId,
+    persona_id: null,
     character_name: name,
     status: status as Participant['status'],
     health: null,
@@ -287,7 +288,10 @@ function makeParticipant(
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
+    strike_weapons: null,
   };
 }
 
@@ -2886,5 +2890,259 @@ describe('YourTurn — mounted maneuvers panel (#3381)', () => {
     await userEvent.click(screen.getByTestId('charge-confirm-btn'));
 
     expect(await screen.findByTestId('charge-error')).toHaveTextContent('Not mounted.');
+  });
+});
+
+describe('YourTurn — compulsion', () => {
+  const compulsion = {
+    condition_name: 'Berserk',
+    wants_label: 'Attack an opponent',
+    attack_target_name: 'Bandit Captain',
+    check_name: 'Resist compulsion',
+    against: [
+      { action_key: 'flee', label: 'Flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
+      {
+        action_key: 'use_item',
+        label: 'Use Item',
+        difficulty: 31,
+        forbidden: false,
+        extra_difficulty: 0,
+      },
+    ],
+  };
+
+  it('shows the banner and marks flee with its difficulty', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-banner')).toHaveTextContent('Berserk compels');
+    expect(screen.getByTestId('compulsion-declare-note')).toHaveTextContent(
+      'If you declare nothing, you attack, as today.'
+    );
+    expect(screen.getByTestId('compulsion-difficulty-flee')).toHaveTextContent('difficulty 36');
+    expect(screen.queryByTestId('compulsion-mark-cover')).not.toBeInTheDocument();
+  });
+
+  it('says what a declared forbidden maneuver adds, under that maneuver', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    const box = screen.getByTestId('compulsion-chosen-line');
+    expect(box).toHaveTextContent(
+      'Berserk forbids Flee: Resist compulsion check, difficulty 36 (31 to resist, +5'
+    );
+    // Ruling 37: the box sits under the chosen action (the declared flee), not the banner.
+    expect(screen.getByTestId('flee-declared-badge').nextElementSibling).toBe(box);
+    expect(screen.getByTestId('compulsion-banner').nextElementSibling).not.toBe(box);
+    expect(screen.getAllByTestId('compulsion-chosen-line')).toHaveLength(1);
+  });
+
+  it('puts a declared parley box with the declared maneuver', () => {
+    setupMocks();
+    const parley = {
+      ...compulsion,
+      against: [
+        {
+          action_key: 'parley',
+          label: 'Parley',
+          difficulty: 36,
+          forbidden: true,
+          extra_difficulty: 5,
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion: parley }],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'parley',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    const box = screen.getByTestId('compulsion-chosen-line');
+    expect(box).toHaveTextContent('Berserk forbids Parley: Resist compulsion check, difficulty 36');
+    expect(screen.getByTestId('maneuver-declaration-section')).toContainElement(box);
+  });
+
+  it('marks Use Item with its difficulty when a held item can be used', () => {
+    setupMocks({ inventory: [{ id: 9, display_name: 'Healing Potion', is_usable: true }] });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-difficulty-use_item')).toHaveTextContent('Difficulty 31');
+    expect(screen.getByTestId('use-item-section')).toBeInTheDocument();
+  });
+
+  it('shows neither without a compulsion', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('compulsion-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('compulsion-declare-note')).not.toBeInTheDocument();
+  });
+});
+
+describe('YourTurn: Strike as the first focused pick (#4858)', () => {
+  afterEach(() => {
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  type LeadingPickProps = CardProps & {
+    leadingPick?: { label: string; selected: boolean; onSelect: () => void; panel: ReactNode };
+  };
+
+  it('offers Strike in the focused card and strikes the focused target', async () => {
+    setupMocks();
+    mockActionDeclarationCard.mockImplementation((props: LeadingPickProps) => (
+      <div data-testid={`action-card-${props.actionContext.slot}`}>
+        {props.leadingPick && (
+          <>
+            <button type="button" data-testid="pick-strike" onClick={props.leadingPick.onSelect}>
+              {props.leadingPick.label}
+            </button>
+            {props.leadingPick.selected && props.leadingPick.panel}
+          </>
+        )}
+        <button
+          type="button"
+          data-testid={`pick-target-${props.actionContext.slot}`}
+          onClick={() =>
+            props.onContextChange({
+              ...props.actionContext,
+              effort: 'MEDIUM',
+              targetKind: 'opponent',
+              targetId: 20,
+            } as Parameters<CardProps['onContextChange']>[0])
+          }
+        >
+          target
+        </button>
+      </div>
+    ));
+    const self = {
+      ...makeSelfParticipant(5),
+      strike_weapons: [
+        {
+          item_instance_id: 9,
+          name: 'Rapier',
+          gear_kind: 'One-Handed Melee',
+          strike_skill: 'Melee Combat',
+        },
+        {
+          item_instance_id: null,
+          name: 'bare hands',
+          gear_kind: 'Unarmed',
+          strike_skill: 'Unarmed Combat',
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [self],
+      opponents: [makeOpponentFixture({ id: 20, name: 'Bandit' })],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('strike-control')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('pick-strike'));
+    expect(screen.getByTestId('strike-control')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('pick-target-focused'));
+    await userEvent.click(screen.getByTestId('strike-confirm-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_strike',
+      kwargs: { opponent_id: 20, weapon_id: 9 },
+    });
+  });
+
+  it('restores a Strike declared before a reload: the pick, its target and its weapon', () => {
+    setupMocks();
+    mockActionDeclarationCard.mockImplementation((props: LeadingPickProps) => (
+      <div data-testid={`action-card-${props.actionContext.slot}`}>
+        {props.leadingPick?.selected && props.leadingPick.panel}
+        <span data-testid={`card-target-${props.actionContext.slot}`}>
+          {props.actionContext.targetKind ?? ''}:{props.actionContext.targetId ?? ''}
+        </span>
+      </div>
+    ));
+    const self = {
+      ...makeSelfParticipant(5),
+      strike_weapons: [
+        {
+          item_instance_id: 9,
+          name: 'Rapier',
+          gear_kind: 'One-Handed Melee',
+          strike_skill: 'Melee Combat',
+        },
+        {
+          item_instance_id: null,
+          name: 'bare hands',
+          gear_kind: 'Unarmed',
+          strike_skill: 'Unarmed Combat',
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [self],
+      opponents: [makeOpponentFixture({ id: 20, name: 'Bandit' })],
+      current_round_actions: [
+        {
+          id: 77,
+          participant: 5,
+          participant_name: 'Hero',
+          is_ready: false,
+          maneuver: 'strike',
+          focused_ally_target: null,
+          focused_opponent_target: 20,
+          item_instance: null,
+          combo_upgrade: null,
+        } as unknown as NonNullable<EncounterDetail['current_round_actions']>[number],
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('strike-control')).toBeInTheDocument();
+    expect(screen.getByTestId('card-target-focused')).toHaveTextContent('opponent:20');
+    expect(screen.getByTestId('strike-weapon-bare')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('strike-declared-badge')).toHaveTextContent('Striking Bandit');
   });
 });

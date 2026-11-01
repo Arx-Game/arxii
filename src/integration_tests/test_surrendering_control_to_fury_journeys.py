@@ -172,6 +172,8 @@ class _AtTheFord(JourneyCase):
 
         with (
             patch("world.checks.services.perform_check", return_value=rolled),
+            # The attack roll goes through combat's own reference to perform_check.
+            patch("world.combat.services.perform_check", return_value=rolled),
             patch("world.magic.services.use_technique", side_effect=spy),
             stop_the_cast or nullcontext(),
             self.captureOnCommitCallbacks(execute=True),
@@ -201,8 +203,10 @@ class SurrenderingControl(_AtTheFord):
         self.resolve_with("Partial Success")
         partial = self.engagement_now().intensity_modifier
 
-        self.assertEqual(partial, 5)
-        self.assertGreater(8, partial)
+        # Partial Success buys floor(5.4) = 5; the attack roll was a Partial Success too,
+        # which misses, and a miss adds 1 intensity (#4858).
+        self.assertEqual(partial, 5 + 1)
+        self.assertGreater(8 + 1, partial)
 
     def test_a_tier_deeper_than_the_anchor_cap_is_refused_at_declaration(self) -> None:
         told = self.declare_fury(self.unbound)
@@ -245,7 +249,8 @@ class SurrenderingControl(_AtTheFord):
         self.resolve_with("Critical Failure")
 
         engagement = self.engagement_now()
-        self.assertEqual(engagement.intensity_modifier, 0)
+        # Fury bought nothing; the botched attack roll missed, and a miss adds 1 (#4858).
+        self.assertEqual(engagement.intensity_modifier, 0 + 1)
         self.assertEqual(engagement.control_modifier, -SEETHING_SURRENDERS)
 
 

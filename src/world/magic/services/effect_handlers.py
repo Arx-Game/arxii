@@ -357,6 +357,7 @@ def _bounce_to_attacker(payload: Any, amount: int) -> None:
     from world.combat.services import (  # noqa: PLC0415
         apply_damage_to_opponent,
         apply_damage_to_participant,
+        settle_wound_triggers,
     )
 
     if isinstance(ref, CombatOpponent):
@@ -378,9 +379,11 @@ def _bounce_to_attacker(payload: Any, amount: int) -> None:
             character_sheet__character=ref, status=ParticipantStatus.ACTIVE
         ).first()
         if participant is not None:
-            apply_damage_to_participant(
+            bounced = apply_damage_to_participant(
                 participant, amount, bypass_pre_apply=True, damage_type=payload.damage_type
             )
+            # No knockout check follows a bounced hit, so its wound triggers roll now.
+            settle_wound_triggers(participant, bounced)
     # else: ref is None / Technique / unknown → payload already zeroed, no bounce
 
 

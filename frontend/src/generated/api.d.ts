@@ -10202,7 +10202,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description #1111 — revert the active alternate self (blocked while not in control). */
+    /** @description #1111 — revert the active alternate self (rolls against a compulsion). */
     post: operations['forms_alternate_selves_revert_create'];
     delete?: never;
     options?: never;
@@ -28268,6 +28268,7 @@ export interface components {
       readonly resonance_name: string | null;
       /** @description Whether this is the alternate self the character is currently wearing. */
       readonly is_active: boolean;
+      readonly compulsion: components['schemas']['Compulsion'] | null;
     };
     /**
      * @description Read shape for the alternate-self switcher (#1111 slice 4).
@@ -28678,10 +28679,9 @@ export interface components {
        * @description Public persona identity only — id/name/thumbnail(s), never account/username.
        *
        *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
-       *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
-       *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
-       *     kept alongside for callers still on it.
+       *     ``get_thumbnail_media_url``: the presented persona's uploaded-portrait ``Media``
+       *     FK, joined by ``personas_for_sheets``, so this never issues a query.
+       *     ``thumbnail_url`` is the legacy URLField, kept alongside for callers still on it.
        */
       readonly persona: {
         [key: string]: unknown;
@@ -31135,7 +31135,7 @@ export interface components {
      *     the frontend ``ClashContributor`` interface (combat/types.ts).
      */
     ClashContributor: {
-      character_id: number | null;
+      participant_id: number | null;
       character_name: string;
       action_slot: string;
       progress_delta: number;
@@ -31491,6 +31491,26 @@ export interface components {
       when: string | null;
       entry_id: number | null;
     };
+    /** @description The viewer's own compulsion and what going against it costs (#4802). Schema-only. */
+    Compulsion: {
+      condition_name: string;
+      wants_label: string;
+      check_name: string;
+      /** @description Who the compulsion would strike as things stand; null when nobody. */
+      attack_target_name: string | null;
+      against: components['schemas']['CompulsionActionCost'][];
+    };
+    /** @description One action's cost under a compulsion (#4802). Schema-only. */
+    CompulsionActionCost: {
+      /** @description A maneuver value, or technique_no_target. */
+      action_key: string;
+      /** @description The action's display label; null when it has none. */
+      label: string | null;
+      difficulty: number;
+      forbidden: boolean;
+      /** @description What is added to the difficulty because the compulsion forbids the action. */
+      extra_difficulty: number;
+    };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
       readonly id: number;
@@ -31754,6 +31774,9 @@ export interface components {
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
       readonly action_interaction_id: number | null;
+      readonly roll_breakdown: components['schemas']['RollBreakdown'] | null;
+      /** @description The encounter round a combat roll was made in, so the turn panel can show every roll of the last round. Null outside combat. */
+      readonly combat_round: number | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -35417,6 +35440,7 @@ export interface components {
      *     * `thrown` - Thrown
      *     * `shield` - Shield
      *     * `lance` - Lance
+     *     * `unarmed` - Unarmed
      *     * `jewelry` - Jewelry
      *     * `clothing` - Clothing
      *     * `other` - Other
@@ -35433,6 +35457,7 @@ export interface components {
       | 'thrown'
       | 'shield'
       | 'lance'
+      | 'unarmed'
       | 'jewelry'
       | 'clothing'
       | 'other';
@@ -44613,9 +44638,12 @@ export interface components {
      */
     Participant: {
       readonly id: number;
-      /** @description The character this sheet belongs to */
-      readonly character_sheet_id: number;
+      /** @description The fighter's character sheet, on the viewer's own row and for staff or the encounter's GM; null on every other row, so a mask is never tied to a sheet. */
+      readonly character_sheet_id: number | null;
+      /** @description The persona name the room lines use, never the character key. */
       readonly character_name: string;
+      /** @description The persona the fighter presents now (a mask when disguised), or null. */
+      readonly persona_id: number | null;
       status?: components['schemas']['ParticipantStatusEnum'];
       /** @description Return current health — only if viewer has permission. */
       readonly health: number | null;
@@ -44669,17 +44697,18 @@ export interface components {
         | (components['schemas']['AudereStateEnum'] | components['schemas']['NullEnum'])
         | null;
       /**
-       * @description Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+       * @description Direct portrait URL via the presented persona (mirrors OpponentSerializer).
        *
-       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
-       *     when the character has no primary persona.
+       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
+       *     character has no persona. A mask shows its own portrait, never the true face
+       *     (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
        */
       readonly thumbnail_url: string | null;
       /**
        * @description Media portrait URL, dynamically resolved (#2196).
        *
-       *     Uses ``resolve_thumbnail()`` via the primary persona's character.
-       *     ``None`` when there is no primary persona.
+       *     Uses ``resolve_thumbnail()`` with the presented persona (#4802).
+       *     ``None`` when there is no persona.
        */
       readonly thumbnail_media_url: string | null;
       /** @description Escalation pressure on this combatant — public dramatic state. */
@@ -44696,7 +44725,10 @@ export interface components {
       /** @description Return spent reactions only to the owner, GM, or staff. */
       readonly reactions_used: number | null;
       readonly dodge_plan: components['schemas']['DodgePlan'] | null;
+      readonly compulsion: components['schemas']['Compulsion'] | null;
+      readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
+      readonly strike_weapons: components['schemas']['StrikeWeaponOption'][] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -49392,6 +49424,20 @@ export interface components {
      * @enum {string}
      */
     RoleEnum: 'attacker' | 'defender';
+    /** @description A roll laid out as a heading, source rows and a result line (#4858); read-only. */
+    RollBreakdown: {
+      heading: string;
+      lines: components['schemas']['RollLine'][];
+      result: string;
+      result_note: string;
+    };
+    /** @description One source row in a roll breakdown (#4858); read-only, schema shape. */
+    RollLine: {
+      label: string;
+      value: string;
+      detail: string;
+      lapsed: boolean;
+    };
     RoomAlarmDetails: {
       /** @description The room this alarm watches. */
       room_profile: number;
@@ -51791,6 +51837,13 @@ export interface components {
      * @enum {string}
      */
     StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    /** @description The viewer's own steady plan (#4802). Schema-only. */
+    SteadyPlan: {
+      enabled: boolean;
+      cost_line: string;
+      bonus_hint: string;
+      capability_name: string;
+    };
     /** @description What the panel's send or dismiss reports back. */
     StewardActionResult: {
       detail: string;
@@ -52357,6 +52410,17 @@ export interface components {
      * @enum {integer}
      */
     StrengthEnum: 1 | 2 | 3;
+    /** @description One thing the viewer's own character can Strike with (#4858); read-only. */
+    StrikeWeaponOption: {
+      /** @description The equipped weapon's item id; null for bare hands. */
+      item_instance_id: number | null;
+      /** @description The weapon's name, or 'bare hands'. */
+      name: string;
+      /** @description The weapon's gear kind, as players read it. */
+      gear_kind: string;
+      /** @description The strike skill its hit roll weights, or the check's name when it has none. */
+      strike_skill: string;
+    };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {
       readonly id: number;
@@ -65434,6 +65498,7 @@ export interface operations {
          *     * `thrown` - Thrown
          *     * `shield` - Shield
          *     * `lance` - Lance
+         *     * `unarmed` - Unarmed
          *     * `jewelry` - Jewelry
          *     * `clothing` - Clothing
          *     * `other` - Other
@@ -65451,7 +65516,8 @@ export interface operations {
           | 'ranged'
           | 'robe'
           | 'shield'
-          | 'thrown';
+          | 'thrown'
+          | 'unarmed';
       };
       header?: never;
       path?: never;

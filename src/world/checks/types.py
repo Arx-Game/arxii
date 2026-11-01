@@ -317,3 +317,48 @@ class PendingResolution:
 
     check_result: CheckResult
     selected_consequence: Consequence
+
+
+@dataclass(frozen=True)
+class RollLine:
+    """One source in a roll's breakdown as a player reads it (#4858): what it is, its
+    number when it has one, and why it counts."""
+
+    label: str
+    value: str
+    detail: str
+    # The source would have counted and did not (#4884): a lapsed style skill, drawn
+    # struck through.
+    lapsed: bool = False
+
+
+@dataclass(frozen=True)
+class RollBreakdown:
+    """A recorded roll laid out as rows (#4858): a heading, one line per source, and the
+    result line. Built at read time for a roll whose system knows its sources (a Strike)."""
+
+    heading: str
+    lines: list[RollLine] = field(default_factory=list)
+    result: str = ""
+    # A note beside the result line ("then the damage roll" on a hit that went on).
+    result_note: str = ""
+
+
+@dataclass(frozen=True)
+class RollSnapshot:
+    """What a recorded roll's breakdown names, captured when the roll is made (#4858)."""
+
+    weapon_label: str
+    weapon_kind: str
+    stat_label: str
+    # The attacker's combat style on the roll (#4884): its name, the style skill rating
+    # when it counted, why it lapsed when it did not, and whether the stat is the style's
+    # hit stat. Empty name: no style term.
+    style_name: str = ""
+    style_skill_rating: int | None = None
+    style_lapse_note: str = ""
+    stat_from_style: bool = False
+    # A defense roll (#4884): who it was against, and the style's armor share (None: no
+    # style).
+    against_label: str = ""
+    armor_share_tenths: int | None = None

@@ -38,6 +38,7 @@ from integration_tests.test_surge_rolls_journeys import (
     SUCCESS_INTENSITY,
     _SurgeField,
 )
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import EncounterType, SurgeTriggerKind, TargetingMode, TargetSelection
 from world.combat.factories import (
     CombatOpponentActionFactory,
@@ -45,6 +46,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     wire_escalation_content,
 )
+from world.conditions.berserk_content import ensure_berserk_compulsion
 from world.conditions.constants import (
     UNCONSCIOUS_CONDITION_NAME,
     DurationType,
@@ -74,6 +76,7 @@ from world.relationships.factories import (
 from world.scenes.constants import RoundStatus
 from world.scenes.round_services import ensure_round_for_acute_condition
 from world.traits.models import CheckOutcome
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.constants import DERIVED_STATUS_DYING
 from world.vitals.models import CharacterVitals
 from world.vitals.peril_designations import designate_unset_peril_conditions
@@ -145,6 +148,7 @@ class RenamingBerserkChangesNothing(_StaffRenameRows, _SurgeField):
         super().setUp()
         self.sign_in_staff()
         self.berserk = BerserkConditionTemplateFactory()
+        ensure_berserk_compulsion(self.berserk)
 
     def leave(self, character):
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
@@ -152,14 +156,15 @@ class RenamingBerserkChangesNothing(_StaffRenameRows, _SurgeField):
         self.encounter.save()
         return self.web(character, "combat_leave").detail
 
-    def test_a_renamed_rage_still_refuses_to_walk_away(self) -> None:
+    def test_a_renamed_rage_still_holds_her_when_the_roll_fails(self) -> None:
         self.rename("conditiontemplate", self.berserk.pk, "Red Haze")
         ConditionInstanceFactory(target=self.mira, condition=self.berserk)
 
-        detail = self.leave(self.mira)
+        with force_check_outcome(ensure_canonical_check_outcome("Failure")):
+            detail = self.leave(self.mira)
 
         self.assertFalse(detail.success)
-        self.assertIn("rage will not walk away", detail.message)
+        self.assertIn("You cannot break away.", detail.message)
 
     def test_tomas_without_the_rage_may_leave(self) -> None:
         self.rename("conditiontemplate", self.berserk.pk, "Red Haze")

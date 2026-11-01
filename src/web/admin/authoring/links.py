@@ -17,6 +17,7 @@ from core.app_domains import resolve_model_by_name
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage
+from world.covenants.models import CovenantRole
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
 from world.missions.constants import OptionKind
@@ -36,6 +37,7 @@ _BUILDER_ROUTES: tuple[tuple[type[Model], str], ...] = (
     (MissionOptionOpponentLine, "admin_placement_mission"),
     (WorshippedBeing, "admin_being_service"),
     (MissionOption, "admin_trial_builder"),
+    (CovenantRole, "admin_vow_builder"),
 )
 
 
@@ -52,7 +54,8 @@ def builder_url(obj: object) -> str:
     ``CreatureTemplate`` opens on the Standoff Profile Builder (#4354). An ``Organization``
     or ``Society`` opens on its Faction Rules page, and a mission option opponent line on
     its Placement page (#4361). A ``WorshippedBeing`` opens on the Being Service
-    builder (#4333). A CHECK ``MissionOption`` opens on the Trial builder (#4513).
+    builder (#4333). A CHECK ``MissionOption`` opens on the Trial builder (#4513). A
+    ``CovenantRole`` opens on its vow page (#4880).
     """
     if isinstance(obj, ConditionStage):
         if obj.pk and is_soulfray_stage(obj):
@@ -66,26 +69,28 @@ def builder_url(obj: object) -> str:
     return ""
 
 
+#: Model -> the object-tool text for its builder page; checked in order, so the
+#: ``MissionOption`` entry stays after ``MissionOptionOpponentLine``.
+_BUILDER_LABELS: tuple[tuple[type[Model] | tuple[type[Model], ...], str], ...] = (
+    (OriginTemplate, "Open in Upbringing Builder"),
+    (Beginnings, "Open the tradition slate"),
+    (Distinction, "Open in Distinction Builder"),
+    (CreatureTemplate, "Open the Standoff Profile Builder"),
+    (WorshippedBeing, "Open the Being Service builder"),
+    ((Organization, Society), "Edit its faction rules"),
+    (MissionOptionOpponentLine, "Open the Placement page"),
+    (MissionOption, "Open in Trial builder"),
+    (CovenantRole, "Open the vow page"),
+)
+
+
 def builder_label(obj: object) -> str:
     """The object-tool link text for ``builder_url(obj)``; "" when it has no builder page."""
-    if isinstance(obj, OriginTemplate):
-        return "Open in Upbringing Builder"
-    if isinstance(obj, Beginnings):
-        return "Open the tradition slate"
-    if isinstance(obj, Distinction):
-        return "Open in Distinction Builder"
-    if isinstance(obj, ConditionStage) and is_soulfray_stage(obj):
-        return "Open in Soulfray Stage Builder"
-    if isinstance(obj, CreatureTemplate):
-        return "Open the Standoff Profile Builder"
-    if isinstance(obj, WorshippedBeing):
-        return "Open the Being Service builder"
-    if isinstance(obj, (Organization, Society)):
-        return "Edit its faction rules"
-    if isinstance(obj, MissionOptionOpponentLine):
-        return "Open the Placement page"
-    if isinstance(obj, MissionOption):
-        return "Open in Trial builder"
+    if isinstance(obj, ConditionStage):
+        return "Open in Soulfray Stage Builder" if is_soulfray_stage(obj) else ""
+    for model, label in _BUILDER_LABELS:
+        if isinstance(obj, model):
+            return label
     return ""
 
 

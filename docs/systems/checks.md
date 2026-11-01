@@ -69,8 +69,10 @@ practice, even though the schema doesn't enforce it (#2501 content-pipeline audi
 
 ### Modifier value table, level baselines and the taper (#4594, ADR-4594-A)
 
-Staff-tuned rows, all keyed by a `ModifierLane` column (`check`, and `stat` since #4726) so later
-lanes add rows, not models. Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
+Staff-tuned rows, all keyed by a `ModifierLane` column (`check`, `stat` since #4726, and the
+maneuver effect lanes `damage`, `to_hit` and `partial_protection` since #4876, read by the effect
+readers in `world/mechanics/effect_targets.py`) so later lanes add rows, not models. The seed's
+to-hit rows copy the check lane's (a to-hit bonus is check points on the attack check). Models live in `modifier_models.py`, readers in `modifier_values.py`, admin
 pages in `admin.py`. Example values are in `world/seeds/modifier_values.py` (cluster
 `modifier_values`); an empty table leaves behavior unchanged.
 

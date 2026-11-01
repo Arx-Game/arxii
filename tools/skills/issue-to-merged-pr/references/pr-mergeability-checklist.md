@@ -171,9 +171,12 @@ Any two migration-bearing PRs collide, on one number sequence and one
 git show origin/main:src/world/migrations/max_migration.txt
 ```
 
-If it has moved past your branch's base, fix it with `rebase_migration` per
-`ci-merge-queue-gotchas.md` - and read that file first, because the tool needs
-the conflict markers left in and renames whichever side sits after `=======`.
+If it has moved past your branch's base, CI's `migration-conflict-rebase`
+workflow fixes it within minutes of the merge that moved it (#4879); look for its
+`<!-- migration-auto-rebase` comment and `git pull --ff-only`. Fix it yourself only
+when that comment says `status=refused`, with `rebase_migration` per
+`ci-merge-queue-gotchas.md`. Read that file first, because the tool needs the
+conflict markers left in and renames whichever side sits after `=======`.
 
 ## 7. Human approval
 

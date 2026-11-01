@@ -103,6 +103,16 @@ def persona_names_for_sheets(sheet_ids: Iterable[int]) -> dict[int, str]:
     persona (a broken invariant, or a nonexistent id) are simply absent from the
     returned map rather than raising.
     """
+    return {sheet_id: persona.name for sheet_id, persona in personas_for_sheets(sheet_ids).items()}
+
+
+def personas_for_sheets(sheet_ids: Iterable[int]) -> dict[int, Persona]:
+    """Batched ``active_persona_for_sheet``: the face each sheet presents, two queries.
+
+    The persona rows behind ``persona_names_for_sheets``, with their thumbnail joined,
+    for a caller that shows a portrait as well as a name (the combat roster, #4802).
+    A sheet with neither an active nor a PRIMARY persona is absent from the map.
+    """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
@@ -120,16 +130,18 @@ def persona_names_for_sheets(sheet_ids: Iterable[int]) -> dict[int, str]:
     personas = Persona.objects.filter(
         Q(pk__in=active_persona_id_by_sheet.values())
         | Q(character_sheet_id__in=primary_needed, persona_type=PersonaType.PRIMARY)
-    )
-    name_by_persona_id = {p.pk: p.name for p in personas}
-    names: dict[int, str] = {
-        p.character_sheet_id: p.name for p in personas if p.character_sheet_id in primary_needed
+    ).select_related("thumbnail")
+    by_persona_id = {p.pk: p for p in personas}
+    found: dict[int, Persona] = {
+        p.character_sheet_id: p
+        for p in by_persona_id.values()
+        if p.character_sheet_id in primary_needed
     }
     for sheet_id, persona_id in active_persona_id_by_sheet.items():
-        name = name_by_persona_id.get(persona_id)
-        if name is not None:
-            names[sheet_id] = name
-    return names
+        persona = by_persona_id.get(persona_id)
+        if persona is not None:
+            found[sheet_id] = persona
+    return found
 
 
 def set_active_persona(sheet: CharacterSheet, persona: Persona) -> None:

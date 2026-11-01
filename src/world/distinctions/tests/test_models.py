@@ -21,7 +21,11 @@ from world.distinctions.types import (
     SheetUpdateRequestStatus,
     SheetUpdateRequestType,
 )
-from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, ManeuverEffectKey
+from world.mechanics.constants import (
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    EffectKind,
+    ManeuverEffectKey,
+)
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
 
@@ -143,7 +147,8 @@ class DistinctionEffectRankSizeCacheTests(TestCase):
 
 
 class ManeuverEffectTargetFlatOnlyTests(TestCase):
-    """A distinction effect on a maneuver effect target is flat, never sized (#4783)."""
+    """A distinction effect on a maneuver effect target with no value lane is flat, never
+    sized (#4783); damage, to-hit and partial protection take a size (#4876)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -151,8 +156,46 @@ class ManeuverEffectTargetFlatOnlyTests(TestCase):
         category = ModifierCategoryFactory(name=MANEUVER_EFFECT_CATEGORY_NAME)
         cls.target = ModifierTargetFactory(
             category=category,
+            name="Charge: reach",
+            scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.CHARGE_REACH),
+        )
+        cls.damage_target = ModifierTargetFactory(
+            category=category,
             name="Charge: damage",
             scope_maneuver_effect=get_maneuver_effect(ManeuverEffectKey.CHARGE_DAMAGE),
+        )
+        cls.morale_target = ModifierTargetFactory(
+            category=category, name="Morale, any maneuver", scope_effect_kind=EffectKind.MORALE
+        )
+        cls.protection_target = ModifierTargetFactory(
+            category=category,
+            name="Partial protection, any maneuver",
+            scope_effect_kind=EffectKind.PARTIAL_PROTECTION,
+        )
+
+    def test_a_size_on_a_laned_kind_is_accepted(self) -> None:
+        for target in (self.damage_target, self.protection_target):
+            with self.subTest(target=target.name):
+                effect = DistinctionEffectFactory.build(
+                    distinction=DistinctionFactory(),
+                    target=target,
+                    modifier_size=ModifierSize.LARGE,
+                )
+
+                effect.clean()
+
+    def test_a_size_on_a_kind_scoped_unlaned_target_is_refused(self) -> None:
+        effect = DistinctionEffectFactory.build(
+            distinction=DistinctionFactory(),
+            target=self.morale_target,
+            modifier_size=ModifierSize.MINOR,
+        )
+
+        with self.assertRaises(ValidationError) as caught:
+            effect.clean()
+
+        self.assertEqual(
+            caught.exception.message_dict["modifier_size"], [MANEUVER_EFFECT_SIZE_REFUSAL]
         )
 
     def test_a_sized_effect_on_a_maneuver_effect_target_is_refused(self) -> None:

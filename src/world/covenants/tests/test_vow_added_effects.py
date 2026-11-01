@@ -433,6 +433,18 @@ class QueryDisciplineTests(VowAddedEffectsTestBase):
             self.assertEqual(self._cast_and_read_payloads(), 3)
         self.assertEqual(len(one.captured_queries), len(three.captured_queries))
 
+    def test_a_cast_with_one_payload_carrying_effect_costs_a_fixed_count(self) -> None:
+        """Pinned at today's count, so a change to the match or the fetch shows here (#4880).
+
+        Warm: the handler, the technique's tags and the row's payload lists are already
+        cached (a prefetch skips a ``to_attr`` that is set), so the count is the per-cast
+        reads alone.
+        """
+        VowAddedEffectAppliedConditionFactory(effect=VowAddedEffectFactory(covenant_role=self.role))
+        self._cast(self.ysmay)  # warm the handler, the technique's tags and the thread levels
+        with self.assertNumQueries(2):
+            self.assertEqual(self._cast_and_read_payloads(), 1)
+
     def test_a_payload_row_added_after_a_read_is_seen_next_cast(self) -> None:
         effect = VowAddedEffectFactory(covenant_role=self.role)
         VowAddedEffectAppliedConditionFactory(effect=effect)
@@ -681,3 +693,17 @@ class StaticViewTests(VowAddedEffectsTestBase):
     def test_an_unsworn_sheet_has_none(self) -> None:
         VowAddedEffectFactory(covenant_role=self.role)
         self.assertEqual(vow_added_effects_on_technique(self.unsworn, self.hold), [])
+
+    def test_gift_and_technique_narrowing_through_the_shared_matcher(self) -> None:
+        by_gift = VowAddedEffectFactory(covenant_role=self.role, gift=self.hold.gift)
+        by_technique = VowAddedEffectFactory(
+            covenant_role=self.role, technique=self.hold, unlock_thread_level=1
+        )
+        VowAddedEffectFactory(
+            covenant_role=self.role,
+            technique=_technique_tagged(TechniqueFunction.HOLD),
+            unlock_thread_level=2,
+        )
+        self.assertEqual(
+            set(vow_added_effects_on_technique(self.ysmay, self.hold)), {by_gift, by_technique}
+        )

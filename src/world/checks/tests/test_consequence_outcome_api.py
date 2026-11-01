@@ -531,3 +531,33 @@ class ConsequenceOutcomeEncounterFilterTest(ConsequenceOutcomeAPISetupMixin, Tes
         response = self.client.get("/api/checks/consequence-outcomes/?encounter=999999")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 0)
+
+
+class ConsequenceOutcomeNoRouletteTest(ConsequenceOutcomeAPISetupMixin, TestCase):
+    """A roll with no pool and no challenge (a Strike roll, #4858) shows no roulette."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.bare_roll = ConsequenceOutcome.objects.create(
+            character=cls.sheet,
+            check_type=cls.check_type,
+            pool=None,
+            selected_consequence=None,
+            summary="Hit, good",
+            combat_interaction=cls.interaction,
+            combat_interaction_timestamp=cls.interaction.timestamp,
+        )
+
+    def test_outcome_display_is_empty_not_the_unknown_placeholder(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.owner_account)
+
+        response = client.get(f"/api/checks/consequence-outcomes/{self.bare_roll.pk}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["outcome_display"], [])
+
+    def test_a_pooled_outcome_still_shows_its_roulette(self) -> None:
+        display = ConsequenceOutcomeSerializer(self.outcome).data["outcome_display"]
+        self.assertEqual({row["label"] for row in display}, {"Minor Wound", "Knockback"})

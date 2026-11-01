@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
     from typeclasses.characters import Character
     from world.checks.models import CheckType
+    from world.checks.types import ExtraTraitTerm
     from world.covenants.models import CovenantRoleDefenseProfile
 
 #: All armor counts: the share with no style and no vow profile (legacy behavior).
@@ -119,6 +120,8 @@ class NpcHitDefense:
     target_difficulty: int
     extra_modifiers: int
     perform_check_fn: Callable[..., Any]
+    # The defender's style skill while it fits (#4884): the ward's re-roll counts it too.
+    extra_traits: tuple[ExtraTraitTerm, ...] = ()
 
 
 #: Set while an NPC blow resolves against a barrier or mitigation defender.
@@ -171,6 +174,7 @@ def barrier_absorb_fraction(character: Character) -> Decimal | None:
         target_difficulty=defense.target_difficulty,
         extra_modifiers=defense.extra_modifiers,
         stat_override=DEFENSE_STAT,
+        extra_traits=defense.extra_traits,
     )
     if result.success_level >= DEFENSE_NO_DAMAGE_THRESHOLD:
         return Decimal(1)

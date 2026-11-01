@@ -46,27 +46,19 @@ if TYPE_CHECKING:
 
 
 def personas_for_participants(participants: Iterable[CombatParticipant]) -> list[Persona]:
-    """Batch-resolve the PRIMARY personas for these participants' character sheets (#3787).
+    """Batch-resolve the personas these participants present (#3787, #4802).
 
-    One query total regardless of how many participants are passed (no queries
-    in a loop) -- used when a single NPC action's hit can land on several PC
-    participants at once, so the shared ACTION/OUTCOME rows for that action can
-    record every one of them as a target. A participant whose sheet has no
-    PRIMARY persona (legacy fixture content) is silently skipped, same as
-    ``create_action_interaction``'s own single-participant resolution.
+    One ``personas_for_sheets`` read for every participant passed, never one per
+    target (no queries in a loop). Used when a single NPC action's hit can land on
+    several PC participants at once, so the shared ACTION/OUTCOME rows for that action
+    can record every one of them as a target. The face each presents is recorded (the
+    active persona, else PRIMARY), so a masked fighter is tagged as the mask, never by
+    the face behind it. A participant whose sheet has neither (legacy fixture content)
+    is silently skipped, same as ``create_action_interaction``'s own resolution.
     """
-    from world.scenes.constants import PersonaType  # noqa: PLC0415
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    sheet_ids = [p.character_sheet_id for p in participants]
-    if not sheet_ids:
-        return []
-    return list(
-        Persona.objects.filter(
-            character_sheet_id__in=sheet_ids,
-            persona_type=PersonaType.PRIMARY,
-        )
-    )
+    return list(personas_for_sheets([p.character_sheet_id for p in participants]).values())
 
 
 def target_persona_for_round_action(action: CombatRoundAction) -> Persona | None:
@@ -74,20 +66,18 @@ def target_persona_for_round_action(action: CombatRoundAction) -> Persona | None
 
     Exactly one of ``focused_opponent_target``/``focused_ally_target`` is ever
     populated. An opponent target is an NPC with no Persona -- that records no
-    target, which is correct (there is no player behind an NPC), not a gap. An
-    ally target's Persona.DoesNotExist (legacy fixture content missing the
-    PRIMARY-persona invariant) is swallowed the same way
-    ``create_action_interaction`` already treats it for the actor's own persona.
+    target, which is correct (there is no player behind an NPC), not a gap. An ally
+    target is the face that ally presents (#4802), one read for the action's one
+    target; an ally sheet with no persona at all (legacy fixture content) records
+    no target, the same way ``create_action_interaction`` treats the actor.
     """
     if action.focused_ally_target_id is None:
         return None
 
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    try:
-        return action.focused_ally_target.character_sheet.primary_persona
-    except Persona.DoesNotExist:
-        return None
+    sheet_id = action.focused_ally_target.character_sheet_id
+    return personas_for_sheets([sheet_id]).get(sheet_id)
 
 
 def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action field recorded
@@ -120,17 +110,20 @@ def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action fi
             target at all, e.g. a flee or a clash contribution) passes None.
 
     Returns:
-        The newly-created Interaction row, or ``None`` if the participant's
-        character sheet has no PRIMARY persona (legacy fixture content predating
+        The newly-created Interaction row, signed by the persona the participant
+        presents (active persona, else PRIMARY), or ``None`` if the sheet has
+        neither (legacy fixture content predating
         the create_character_with_sheet invariant — skipped silently to allow
         the resolve loop to continue without writing a pose-log link).
     """
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    sheet = participant.character_sheet
-    try:
-        persona = sheet.primary_persona
-    except Persona.DoesNotExist:
+    # Signed with the face the fighter presents (#4802), the same answer the combat
+    # roster and the room lines use, so a masked fighter's card never names him.
+    persona = personas_for_sheets([participant.character_sheet_id]).get(
+        participant.character_sheet_id
+    )
+    if persona is None:
         # Legacy fixture content; skip Interaction creation. The action still
         # resolves; it just won't have a pose-log link.
         return None
@@ -196,10 +189,20 @@ def create_npc_action_interaction(
     )
     if target_personas:
         write_target_personas(interaction, target_personas)
+    # Delivered live like a PC's action row (#4884): since the defender's roll is
+    # recorded on it, every defended blow mints this row, and a row only the refetch
+    # showed would appear in the log after the fact. Its content is the action's label
+    # ("Blade strike at Mira"), the counterpart of a PC's "Strike at Bandit"; the round's
+    # narration of what happened is a separate OUTCOME row.
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
+
+    push_interaction(interaction, location=opponent_action.opponent.encounter.room)
     return interaction
 
 
-def render_action_declaration_label(action: CombatRoundAction) -> str:
+def render_action_declaration_label(
+    action: CombatRoundAction, *, ally_persona: Persona | None = None
+) -> str:
     """Render a one-line declaration label for an ACTION Interaction's content.
 
     Format: ``<TechniqueName> at <TargetName>`` for targeted attacks;
@@ -211,9 +214,19 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
     round 1) — the same ``technique_display_name`` resolution the outcome
     narration uses, so the declaration and the outcome agree on what to call it
     within the same round.
+
+    An ally target is named by the face that ally presents (#4802), never the
+    character's key: ``ally_persona`` is the persona the caller already resolved
+    for the card's target tag (``target_persona_for_round_action``), so the label
+    and the tag agree and cost one read between them. Left out, it is resolved here.
     """
     technique = action.focused_action
     if technique is None:
+        from world.combat.constants import CombatManeuver  # noqa: PLC0415
+
+        if action.maneuver == CombatManeuver.STRIKE and action.focused_opponent_target_id:
+            # A basic Strike (#4858) carries no technique.
+            return f"Strike at {action.focused_opponent_target.name}"
         return "passives only"
 
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
@@ -227,8 +240,8 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
         target_name = action.focused_opponent_target.name
         return f"{display_name} at {target_name}"
     if action.focused_ally_target_id is not None:
-        ally = action.focused_ally_target
-        target_name = ally.character_sheet.character.db_key
+        persona = ally_persona or target_persona_for_round_action(action)
+        target_name = persona.name if persona is not None else "an ally"
         return f"{display_name} at {target_name}"
     return display_name
 
@@ -765,15 +778,20 @@ def _victory_outcome_clauses(
     return clauses
 
 
-def broadcast_action_outcome(
+def broadcast_action_outcome(  # noqa: PLR0913 - keyword-only delivery options
     *,
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
     target_personas: list[Persona] | None = None,
+    telnet_exclude: Iterable[ObjectDB] = (),  # noqa: OBJECTDB_PARAM - room characters
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
+
+    ``telnet_exclude`` (#4858) names characters whose telnet sessions skip this line
+    because the caller tells them the same event in their own words; the web row and the
+    scene log are unchanged.
 
     Returns the created Interaction, or None when there is no narration
     text (empty string -> nothing to say). The OUTCOME is persisted in
@@ -878,7 +896,7 @@ def broadcast_action_outcome(
         # complete_encounter pushes immediately. _broadcast_to_location only
         # reaches webclient sessions with the structured payload, so this adds
         # the plain-text line for non-web sessions only -- nothing twice.
-        send_outcome_text_to_non_web(interaction, location=room)
+        send_outcome_text_to_non_web(interaction, location=room, exclude=telnet_exclude)
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match

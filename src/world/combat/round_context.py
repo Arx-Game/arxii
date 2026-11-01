@@ -699,7 +699,8 @@ class CombatRoundContext(RoundContext):
             partial_protection=effect_value(
                 action.participant.character_sheet, ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION
             ),
-            extra_modifiers=bond_bonus(succorer, protected),
+            # A strained compulsion resist (#4802) lands its penalty on the succor roll.
+            extra_modifiers=bond_bonus(succorer, protected) - action.compulsion_penalty,
         )
 
         action.succor_resolution = multiplier

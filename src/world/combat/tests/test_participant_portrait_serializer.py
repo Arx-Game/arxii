@@ -66,8 +66,9 @@ class ParticipantPortraitQueryCountTests(TestCase):
         # character (#872 escalation fields). The descriptor caches the result
         # (even the no-row case) on the identity-mapped ObjectDB, so the warm
         # API path pays zero — see EncounterRetrieveQueryCountTests. Portraits
-        # themselves remain query-free from the prefetch.
-        with self.assertNumQueries(3):
+        # themselves remain query-free from the prefetch. Plus 2 for the roster's
+        # persona names (#4802), read once for the whole list, not per row.
+        with self.assertNumQueries(5):
             data = serializer.data
 
         self.assertTrue(

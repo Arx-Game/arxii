@@ -647,6 +647,21 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
+  `strike <opp> [with <weapon>]` (#4858) declares a basic Strike (`combat_strike`), bare-handed
+  with no `with` clause; `CmdStrike` (key `strike`) is the same subverb as a top-level verb,
+  the one exception to the namespacing above, because the Strike is every character's basic
+  attack (the demo's telnet screen types `strike bandit with rapier`).
+  `steady [on|off]` (#4802) sets the caller's steady plan beside `dodge`: it dispatches
+  `SteadyPlanAction` (key `combat_steady`). Turning it on needs the steadying capability
+  above its baseline and otherwise answers "Nothing you have lets you steady an ally.";
+  turning it off needs nothing. The plan holds for the rest of the fight until turned off. A stray word prints "Usage: combat steady [on|off]." and
+  changes nothing. **Compulsion warning (#4802):** when a declare command (`_CombatCommandMixin`
+  in `commands/combat.py`) lands a round action that goes against the caller's compulsion, it
+  prints one line before the usual confirmation: `Against <condition>: <check> check,
+  difficulty <n>. If it fails, you attack instead.` (`world.combat.compulsion.compulsion_warning`).
+  An attack, a plan, a mark, a secondary passive cast or a clash contribution prints nothing
+  (`_declares_a_round_action`), and the resist and steadying roll lines arrive with the round
+  output. Nothing is refused: the warning is information, and the roll happens at the round lock.
 - **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010/#2007) — the
   large-scale-battle namespace. One `ArxCommand` routes a leading subverb (`battle declare
   strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment/move/reposition

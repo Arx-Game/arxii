@@ -18,6 +18,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 # transition backfills (deriving/re-keying existing rows during a field
 # rename/split), not authored seed content.
 ALLOWED_MIGRATIONS: set[str] = {
+    # #4802: carries existing code-held moon-control tuning and Berserk behaviour into
+    # the new Compulsion / ControlLossTrigger rows on a populated database, plus a
+    # nameplate "Lycan blood" condition with no prose. Every number mirrors one the code
+    # already used; skips anything that already exists. No-op on empty databases.
+    "world/migrations/0348_control_loss_content.py",
     # #4681: row-keyed affinity backfill. Re-keys existing CharacterAura percent
     # columns into CharacterAuraShare rows (empty in production) and copies enum
     # values into _ref FKs; no authored content is invented.
@@ -93,6 +98,11 @@ ALLOWED_MIGRATIONS: set[str] = {
     # the owner's 2026-10-22 ruling allows by data migration. An existing row keeps its
     # value; a fresh database gets the same rows from ensure_maneuver_effects().
     "world/migrations/0334_cover_escape_bonus_carry.py",
+    # #4858: get_or_creates the four ManeuverEffect rows the basic Strike adds (Strike base
+    # damage, bare-hands damage, miss intensity, intensity to hit): prose-free mechanical
+    # catalog rows the code reads by key, the same 2026-10-22 ruling as 0334. An existing
+    # row keeps its value; a fresh database gets the same rows from ensure_maneuver_effects().
+    "world/migrations/0351_strike_maneuver_effects.py",
 }
 
 # Patterns that suggest seed data in migrations

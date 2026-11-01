@@ -115,8 +115,13 @@ scenes, encounters) need none of this.
 
 Since #2906 there is exactly one sentinel repo-wide
 (`src/world/migrations/max_migration.txt`), so **any two migration-bearing PRs
-collide**. Compare against main's tip before enqueueing; fix a collision with
-`arx manage rebase_migration arxii` (resolve the sentinel to main's tip first),
+collide**. **CI fixes the common case itself** (#4879, ADR-4879): when main moves
+`max_migration.txt`, the `migration-conflict-rebase` workflow merges main into each
+PR whose only conflict is that file and whose migrations are one linear chain. It
+renumbers them after main's tip, proves the result, pushes, and re-arms the queue.
+Its PR comment starts `<!-- migration-auto-rebase`. Pull (`git pull --ff-only`)
+before your next push. When it refuses (the comment says why), fix the collision by
+hand with the recipe in `issue-to-merged-pr/references/ci-merge-queue-gotchas.md`,
 push, re-enqueue. **Never hand-renumber.**
 
 A chain-regeneration PR (ADR-0276, `just regenerate-migrations`) has one more

@@ -66,12 +66,14 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult, ExtraTraitTerm
-    from world.combat.types import WeaponContribution
+    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierBreakdown
+    from world.combat.types import StrikeWeapon, WeaponContribution
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.covenants.style_fit import StyleFit
     from world.covenants.types import FiredVowEffect
     from world.magic.models import Technique
     from world.magic.models.techniques import AbstractDamageProfile
@@ -183,9 +185,53 @@ class CombatTechniqueResolver:
     offense_check_fn: PerformCheckFn | None
     # Skill terms the cast adds to the offense roll (the technique skill, #4450).
     offense_extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    # A basic Strike's chosen weapon (#4858). Set, the roll reads this weapon (bare hands
+    # when its item is None) instead of the strongest one equipped.
+    strike_weapon: StrikeWeapon | None = None
+    # The attacker's combat style on this roll (#4884). None: worked out from the weapon
+    # the roll is made with; a Strike passes the fit it already read for its record.
+    style_fit: StyleFit | None = None
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
+        return self.roll_check_with_breakdown()[0]
+
+    def _weapon_archetype(self, character: Character) -> str | None:
+        """The gear kind this roll is made with: the Strike's chosen weapon, else the
+        strongest equipped weapon's."""
+        if self.strike_weapon is not None:
+            return self.strike_weapon.gear_archetype
+        return _equipped_weapon_archetype(character)
+
+    def _attack_style_fit(self, character: Character) -> StyleFit:
+        """The attacker's style on this roll: the one passed in, else read for the weapon."""
+        if self.style_fit is not None:
+            return self.style_fit
+        from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
+
+        return style_fit_for_attack(character, self._weapon_archetype(character))
+
+    def _stat_override(self, character: Character, fit: StyleFit) -> str | int | None:
+        """The stat the roll uses in place of the check's default.
+
+        A Strike hits with its style's hit stat, lapsed or not (#4884), else its weapon's
+        stat. A technique keeps its weapon stat: the style adds its skill only (owner
+        ruling, 2026-11-01).
+        """
+        from world.combat.stat_mapping import (  # noqa: PLC0415
+            weapon_stat_for,
+            weapon_stat_override,
+        )
+
+        if self.strike_weapon is not None:
+            hit_stat = fit.hit_stat_name
+            if hit_stat is not None:
+                return hit_stat
+            return weapon_stat_for(self.strike_weapon.item_instance)
+        return weapon_stat_override(character)
+
+    def roll_check_with_breakdown(self) -> tuple[CheckResult, ModifierBreakdown]:
+        """Roll the offense check; return it and the modifiers it was rolled with."""
         check_fn = self.offense_check_fn or _svc.perform_check
         penalty = get_fatigue_penalty(
             self.participant.character_sheet,
@@ -230,7 +276,16 @@ class CombatTechniqueResolver:
         from world.items.constants import GearArchetype  # noqa: PLC0415
 
         character = self.participant.character_sheet.character
-        weapon_archetype = _equipped_weapon_archetype(character)
+        weapon_archetype = self._weapon_archetype(character)
+
+        # Intensity adds to hit (#4858): misses build it, and it counts on every attack.
+        from world.combat.services.techniques.intensity import (  # noqa: PLC0415
+            intensity_to_hit_contribution,
+        )
+
+        intensity_contribution = intensity_to_hit_contribution(self.participant, self.action)
+        if intensity_contribution is not None:
+            extra_contributions.append(intensity_contribution)
 
         if self.action.maneuver == CombatManeuver.CHARGE:
             charge_bonus = _charge_effect(
@@ -283,14 +338,22 @@ class CombatTechniqueResolver:
                     )
                 )
 
+        # The style skill (#4884) joins the cast's own skill terms while the character
+        # fights the style's way: the weapon and every held vow on the style.
+        style_fit = self._attack_style_fit(character)
+        offense_traits = (
+            *self.offense_extra_traits,
+            *style_fit.extra_traits(self.offense_check_type, counted=self.offense_extra_traits),
+        )
         breakdown = _svc.collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
             scene=self.participant.encounter.scene,
             extra_contributions=extra_contributions,
-            extra_traits=self.offense_extra_traits,
+            extra_traits=offense_traits,
         )
-        extra_modifiers = breakdown.extra_modifiers_total
+        # A strained compulsion resist (#4802) lands its penalty on this roll.
+        extra_modifiers = breakdown.extra_modifiers_total - self.action.compulsion_penalty
 
         # #2536 Task 5: thread the live round context so CHECK_BONUS situational
         # perks can fire on the technique's own offense check — the check-side
@@ -324,9 +387,7 @@ class CombatTechniqueResolver:
             if focused is not None
             else 0
         )
-        from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
-
-        stat_override = weapon_stat_override(character)
+        stat_override = self._stat_override(character, style_fit)
         result = check_fn(
             character,
             self.offense_check_type,
@@ -336,12 +397,12 @@ class CombatTechniqueResolver:
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
             stat_override=stat_override,
-            extra_traits=self.offense_extra_traits,
+            extra_traits=offense_traits,
         )
         spend_contributing_conditions(breakdown)
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
 
-        return floor_ultimate_check(result, self.action.focused_action)
+        return floor_ultimate_check(result, self.action.focused_action), breakdown
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""

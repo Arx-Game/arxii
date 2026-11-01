@@ -79,6 +79,7 @@ and the 5-axis Thread model no longer exist.
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
+| `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, shown thread level)` per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
@@ -1225,7 +1226,7 @@ offer, `world.magic.offer_handlers.SoulfrayPendingHandler`, must never block a w
 passed `soulfray_consented` at all, so EVERY web-cast ward was silently stamped consented. The
 view now reads `soulfray_consented` from the serializer (`default=False`) and always passes it
 explicitly, bypassing the derivation on the web path only - every other caller (telnet's
-`CastTechniqueAction`, `offer_handlers.py`'s accept-soulfray re-dispatch, `berserk_compulsion.py`,
+`CastTechniqueAction`, `offer_handlers.py`'s accept-soulfray re-dispatch, `compulsion.py` (formerly `berserk_compulsion.py`),
 `clash.py`, `battles/resolution.py`) still omits it and keeps the old derived behavior unchanged.
 
 **Telnet** (`commands/combat.py`'s `CmdDeclareTechnique`) - a trailing `soulfray` keyword on
@@ -2161,8 +2162,8 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   flee and parley; both roll through `collect_check_modifiers`, so any
   `ConditionCheckModifier` staff author on the Berserk template (template or stage level)
   against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
-  roll. Only `leave_encounter` is refused (`reject_leave_if_berserk`: "The rage will not
-  walk away. You can still try to flee."). Required content `berserk-disengage-penalty`
+  roll. Leaving the encounter and changing form back roll the compulsion's resist check as
+  well (#4802, ADR-4802); nothing is refused any more. Required content `berserk-disengage-penalty`
   lists a Berserk with no penalty against either check: a negative modifier authored on the
   check type or on its category, at template or stage level. Journeys:
   `src/integration_tests/test_berserk_disengage_journeys.py`.

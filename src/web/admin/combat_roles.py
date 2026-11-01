@@ -2,13 +2,13 @@
 
 Every page staff use to author a vow's combat kit, one click from the front page
 ("I wouldn't want to hunt around for things", owner ruling 2026-11-01). Later
-slices of #4843 add the vow page, combo map, kit view and missing combat content
+slices of #4843 add the combo map, kit view and missing combat content
 rows here as they land.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
 from django.db.models import Model
@@ -16,12 +16,21 @@ from django.urls import reverse
 
 
 @dataclass(frozen=True)
+class RowPicker:
+    """A select of rows and an Open button, sent as a GET ``?pk=`` to ``action``."""
+
+    action: str
+    choices: list[tuple[int, str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class CombatRolesLink:
-    """One row of the panel: where it goes, and what is there now."""
+    """One row of the panel: where it goes, what is there now, and an optional picker."""
 
     label: str
     url: str
     note: str
+    picker: RowPicker | None = None
 
 
 def _changelist(model_name: str) -> str:
@@ -58,6 +67,20 @@ def _budget_link() -> CombatRolesLink:
     )
 
 
+def _vow_pages_link() -> CombatRolesLink:
+    """The vow page row: a picker over every vow, opening its vow page (#4880)."""
+    from world.covenants.models import CovenantRole  # noqa: PLC0415
+
+    choices = list(CovenantRole.objects.order_by("name").values_list("pk", "name"))
+    count = len(choices)
+    return CombatRolesLink(
+        label="Vow pages",
+        url=_changelist("covenantrole"),
+        note=f"{count} vow{'' if count == 1 else 's'}",
+        picker=RowPicker(action=reverse("admin_vow_builder_pick"), choices=choices),
+    )
+
+
 def _can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
     return user.has_perm(f"arxii.view_{model.__name__.lower()}") or user.has_perm(
         f"arxii.change_{model.__name__.lower()}"
@@ -67,8 +90,9 @@ def _can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> boo
 def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRolesLink]:
     """The panel's rows a user can open, in the order an author works through a vow.
 
-    A row whose page would refuse the user is left out: a model they cannot view,
-    and Required content (the Game Ops dashboard) for anyone but a superuser.
+    A row whose page would refuse the user is left out: a model they cannot view, and
+    the vow pages and Required content (the Game Ops dashboard) for anyone but a
+    superuser.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.covenants.models import (  # noqa: PLC0415
@@ -90,9 +114,13 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
         (ConditionTemplate, "Conditions", "condition"),
         (Property, "Properties", "property"),
     ]
-    links = [
+    links: list[CombatRolesLink] = []
+    if user.is_superuser:
+        # The vow page is superuser-only, like every builder page.
+        links.append(_vow_pages_link())
+    links.extend(
         _counted(model, label, noun) for model, label, noun in counted if _can_view(user, model)
-    ]
+    )
     if _can_view(user, VowFocusPickConfig):
         links.append(_budget_link())
     if user.is_superuser:

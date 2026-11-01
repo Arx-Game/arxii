@@ -403,7 +403,7 @@ def ensure_moon_bound_distinction() -> "Distinction":
         DistinctionCategory,
         DistinctionTag,
     )
-    from world.species.moon_constants import MOON_BOUND_SLUG, MOON_BOUND_TAG
+    from world.species.moon_provisioning import SEED_MOON_BOUND_SLUG, SEED_MOON_BOUND_TAG
 
     category, _created = DistinctionCategory.objects.get_or_create(
         slug="drawbacks",
@@ -413,10 +413,10 @@ def ensure_moon_bound_distinction() -> "Distinction":
         },
     )
     tag, _created = DistinctionTag.objects.get_or_create(
-        slug=MOON_BOUND_TAG, defaults={"name": "Moon-Bound"}
+        slug=SEED_MOON_BOUND_TAG, defaults={"name": "Moon-Bound"}
     )
     distinction, _created = Distinction.objects.get_or_create(
-        slug=MOON_BOUND_SLUG,
+        slug=SEED_MOON_BOUND_SLUG,
         defaults={
             "name": "Moon-Bound",
             "description": (
