@@ -26,6 +26,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
+from world.character_creation.constants import FinalTouchesPrompt
 from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.distinctions.types import (
@@ -270,6 +271,18 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         choices=SecretLevel.choices,
         default=SecretLevel.UNCOMMON_KNOWLEDGE,
         help_text="Level for the auto-minted Secret when secret_by_default.",
+    )
+
+    # The Final Touches chapter (#4846, slice 5 of #4813): a card may ask one optional
+    # question at Final Touches, answered or skipped there. Set by staff on the
+    # Distinction Builder; read by ``character_creation.offers.final_touches_prompts``
+    # for the cards a draft holds, and by finalize to decide what the answer writes.
+    final_touches_prompt = models.CharField(
+        max_length=20,
+        choices=FinalTouchesPrompt.choices,
+        blank=True,
+        default="",
+        help_text="The optional question this card asks at Final Touches, if any.",
     )
 
     objects = DistinctionManager()

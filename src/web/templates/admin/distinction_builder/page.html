@@ -201,6 +201,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   <span class="db-opener" data-opener="appearance_section">{{ f.appearance_section }}</span>
                   <span class="db-opener" data-opener="feature_rows">{{ f.feature_rows }}</span>
                   <span class="db-opener" data-opener="beat">{{ f.beat }}</span>
+                  <span class="db-opener" data-opener="unlocked_by">{{ f.unlocked_by }}</span>
                   {% with url=f.instance|opener_link:default_slate_url %}
                   {% if url %}<a class="db-opener-link" href="{{ url }}">open</a>{% endif %}
                   {% endwith %}
@@ -242,6 +243,10 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   {{ offers.empty_form.appearance_section }}</span>
                 <span class="db-opener" data-opener="feature_rows">
                   {{ offers.empty_form.feature_rows }}</span>
+                <span class="db-opener" data-opener="beat">
+                  {{ offers.empty_form.beat }}</span>
+                <span class="db-opener" data-opener="unlocked_by">
+                  {{ offers.empty_form.unlocked_by }}</span>
               </td>
               <td>{{ offers.empty_form.arrives_as }}</td>
               <td>

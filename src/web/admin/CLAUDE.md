@@ -980,7 +980,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 - **Openers per chapter and the first look (#3709)** - the "Where it is
   offered" row renders every opener widget (`schooling_line`, `glimpse_tag`,
   `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
-  `appearance_section`) and `page.html`'s cascade shows the one(s) the row's
+  `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
+  Final Touches chapter's card) and `page.html`'s cascade shows the one(s) the row's
   chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
   chapter lists two). `OfferForm.__init__` limits `enemy_degree` to the two
   marking degrees. A "First look for" column (`OfferForm.first_look`, a
@@ -999,9 +1000,11 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   rank, max rank, player line, description, effects as `+Target; -Target;
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
   degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
-  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>`, first look for
+  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>`, first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
-  life stage and name and creates the Backgrounds answer on it, never the beat),
+  life stage and name and creates the Backgrounds answer on it, never the beat; an
+  `unlocked:` token (#4846) names the existing card that unlocks a Final Touches line,
+  so a card made earlier in the same table is not found yet),
   resolves every name against existing rows (`_one`: unknown or ambiguous is
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview

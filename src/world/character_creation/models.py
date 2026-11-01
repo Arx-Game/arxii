@@ -2750,6 +2750,17 @@ class DistinctionOffer(
         related_name="distinction_offers",
         help_text="Backgrounds only: the beat this offer is an answer on (#4124).",
     )
+    unlocked_by = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="unlocked_offers",
+        help_text=(
+            "Final Touches only: the card a draft must hold for this line to show "
+            "(#4846, slice 5 of #4813)."
+        ),
+    )
     first_look = models.ManyToManyField(
         Beginnings,
         through="OfferFirstLook",
@@ -2776,6 +2787,7 @@ class DistinctionOffer(
         "appearance_section",
         "feature_rows",
         "beat",
+        "unlocked_by",
     )
 
     class Meta:
@@ -2793,6 +2805,7 @@ class DistinctionOffer(
                         "enemy_reason": None,
                         "appearance_section": None,
                         "beat": None,
+                        "unlocked_by": None,
                         "prompt": "",
                         "enemy_degree": "",
                         # A boolean opener is unset when False (#3739): a feature-rows
@@ -2816,6 +2829,7 @@ class DistinctionOffer(
             "enemy_degree",
             "appearance_section",
             "beat",
+            "unlocked_by",
         ]
         dependencies = ["arxii.Distinction"]
 
@@ -2827,6 +2841,7 @@ class DistinctionOffer(
         OfferChapter.ACTORS_SHEET: ("prompt",),
         OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
         OfferChapter.BACKGROUNDS: ("beat",),
+        OfferChapter.FINAL_TOUCHES: ("unlocked_by",),
     }
 
     def __str__(self) -> str:
@@ -2874,15 +2889,20 @@ class DistinctionOffer(
             return f"section:{self.appearance_section_id}"
         if self.feature_rows:
             return self.FEATURE_OPENER_KEY
-        if self.glimpse_tag_id is not None:
-            return f"tag:{self.glimpse_tag_id}"
-        if self.origin_choice_id is not None:
-            return f"choice:{self.origin_choice_id}"
-        if self.schooling_line_id is not None:
-            return f"schooling:{self.schooling_line_id}"
-        if self.beat_id is not None:
-            return f"beat:{self.beat_id}"
+        for field, word in self._ROW_OPENER_KEY_WORDS.items():
+            row_id = getattr(self, f"{field}_id")
+            if row_id is not None:
+                return f"{word}:{row_id}"
         return ""
+
+    #: The row openers and the word their ``opener_key`` starts with (#3709, #4124, #4846).
+    _ROW_OPENER_KEY_WORDS: ClassVar[dict[str, str]] = {
+        "glimpse_tag": "tag",
+        "origin_choice": "choice",
+        "schooling_line": "schooling",
+        "beat": "beat",
+        "unlocked_by": "unlocked",
+    }
 
     def clean(self) -> None:
         super().clean()
@@ -2899,6 +2919,8 @@ class DistinctionOffer(
             raise ValidationError({wanted[0]: "This chapter's offers need an opener."})
         if self.enemy_degree and self.enemy_degree not in ENEMY_MARKING_DEGREES:
             raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
+        if self.unlocked_by_id is not None and self.unlocked_by_id == self.distinction_id:
+            raise ValidationError({"unlocked_by": "A card does not unlock itself."})
 
 
 class OfferFirstLook(SharedMemoryModel):

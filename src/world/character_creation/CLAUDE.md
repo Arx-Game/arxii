@@ -35,8 +35,13 @@ Character creation is a multi-stage process that guides players through creating
 10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
-    reason and degree open offers, The Introductions; all optional (see
-    `docs/systems/character_creation.md`'s "The Actor's Sheet", ADR-0279, ADR-0282)
+    reason and degree open offers, the Officially dead door (#4396), the card-unlocked
+    chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the
+    prompt a held card asks, `Distinction.final_touches_prompt`; Jailbird's crime in
+    `draft_data.crime` becomes a staff-only `justice.CharacterCrimeNote` at finalize, no
+    heat, no deed), The Introductions; all optional (see
+    `docs/systems/character_creation.md`'s "The Actor's Sheet" and "The Final Touches
+    chapter", ADR-0279, ADR-0282)
 11. **Review** - Final review and submission
 
 ## Key Models

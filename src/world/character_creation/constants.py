@@ -150,6 +150,23 @@ class OfferChapter(models.TextChoices):
     #: #4124: the beats of a life. Every answer on a beat is one of these lines,
     #: opened by the beat and priced at the distinction's own cost.
     BACKGROUNDS = "backgrounds", "Backgrounds, a beat"
+    #: #4846 (slice 5 of #4813): a line a held card unlocks at Final Touches, opened by
+    #: ``DistinctionOffer.unlocked_by``; the chapter shows nothing to a draft that holds
+    #: no unlocking card.
+    FINAL_TOUCHES = "final_touches", "Final Touches, a card"
+
+
+class FinalTouchesPrompt(models.TextChoices):
+    """The optional question a card asks at Final Touches (#4846, slice 5 of #4813).
+
+    Staff set it per card (``Distinction.final_touches_prompt``) on the Distinction Builder;
+    ``offers.final_touches_prompts`` collects the prompts of the cards a draft holds, and
+    the leaf asks each one. A prompt is answerable or skippable, never required (the
+    chapter rule of 2026-10-29). The prestige blurb arrives with the starting prestige
+    event (slice 6), not here.
+    """
+
+    CRIME = "crime", "Name the crime (Jailbird)"
 
 
 class ActorSheetPrompt(models.TextChoices):
@@ -471,6 +488,15 @@ OFFICIALLY_DEAD_TEXT_FIELDS: tuple[str, ...] = (
     "fear",
     "background",
 )
+# Jailbird's crime (#4846, slice 5 of #4813): the answer to ``FinalTouchesPrompt.CRIME``. The
+# draft_data entry under ``CRIME_KEY`` is null, or ``{"kind_id": <CrimeKind id>, "line": <text>}``;
+# finalize writes it as a staff-only ``justice.CharacterCrimeNote`` when the draft still holds a
+# card that asks it. No heat row and no deed tag come of it (decision 6 of #4813).
+CRIME_KEY = "crime"
+CRIME_KIND_ID = "kind_id"
+CRIME_LINE = "line"
+CRIME_LINE_MAX_LENGTH = 500
+
 OFFICIALLY_DEAD_HEADING = "Officially dead"
 OFFICIALLY_DEAD_INTRO = (
     "The world believes you dead. Name the face it meets instead: an established identity "

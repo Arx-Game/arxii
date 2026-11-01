@@ -235,4 +235,7 @@ def opener_link(offer: DistinctionOffer, *, default_slate_url: str) -> str:
             )
         except NoReverseMatch:
             return ""
+    if offer.unlocked_by_id:
+        # The Final Touches chapter (#4846): the unlocking card's own Builder page.
+        return builder_url(offer.unlocked_by)
     return ""

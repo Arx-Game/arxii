@@ -101,6 +101,29 @@ class OfferModelTests(TestCase):
         with self.assertRaises(ValidationError):
             offer.full_clean()
 
+    def test_a_final_touches_offer_is_opened_by_a_card_and_never_by_itself(self):
+        """#4846: the chapter's one opener is ``unlocked_by``; a card does not unlock itself."""
+        escape = DistinctionFactory(name="Escape Artist")
+        jailbird = DistinctionFactory(name="Jailbird")
+        offer = DistinctionOffer(
+            distinction=escape,
+            chapter=OfferChapter.FINAL_TOUCHES,
+            arrives_as=OfferArrival.CHOICE,
+            glimpse_tag=GlimpseTagFactory(),
+        )
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.glimpse_tag = None
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.unlocked_by = escape
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.unlocked_by = jailbird
+        offer.full_clean()
+        assert offer.opener_key == f"unlocked:{jailbird.pk}"
+        assert offer.chapter_opener_fields == ("unlocked_by",)
+
     def test_offer_name_defaults_to_distinction_name(self):
         offer = DistinctionOfferFactory(distinction=DistinctionFactory(name="Impoverished"))
         assert offer.name == "Impoverished"

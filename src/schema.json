@@ -51294,6 +51294,16 @@ components:
           allOf:
           - $ref: '#/components/schemas/IntroductionsOffered'
           readOnly: true
+        final_touches_prompts:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        crime_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/CrimeKind'
+          readOnly: true
       required:
       - age_max
       - age_min
@@ -51303,12 +51313,14 @@ components:
       - cg_points_spent
       - claimed_kin_pool
       - claimed_kin_slot
+      - crime_kinds
       - derived_anchors
       - enemy_degree_grants
       - enemy_offers
       - enemy_price_tables
       - enemy_reasons
       - family
+      - final_touches_prompts
       - has_existing_characters
       - height_band
       - ic_month_names
@@ -54471,6 +54483,23 @@ components:
       - name
       - threat_pool_name
       - tier
+    CrimeKind:
+      type: object
+      description: One crime kind the Final Touches crime prompt picks from (#4846).
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
+      - slug
     Crop:
       type: object
       description: A look's 4:5 frame in the file's own pixels; height is width x
