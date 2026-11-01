@@ -22,6 +22,7 @@ from world.character_creation.constants import (
     Parentage,
 )
 from world.character_creation.factories import (
+    BeginningsFactory,
     DistinctionOfferFactory,
     LifeBeatFactory,
     OriginTemplateFactory,
@@ -170,6 +171,61 @@ class TheSuggestedLife(FinalizationTestMixin, JourneyCase):
             set(self._picks(response.json())),
             {"Spoiled", "Extensively Tutored", "Socialite", "Sailor"},
         )
+
+    def test_a_card_held_elsewhere_and_an_excluded_partner_stay_out(self) -> None:
+        """Review on #4866: a starred card the draft already holds from another chapter is
+        not entered twice, and a starred card excluded by a held or taken one is left out."""
+        # Jailbird is also a youth card, starred; and a youth card excluded by Spoiled.
+        jailbird_beat = DistinctionOfferFactory(
+            chapter=OfferChapter.BACKGROUNDS,
+            beat=self.youth,
+            appearance_section=None,
+            prompt="",
+            distinction=self.jailbird,
+        )
+        pampered = _answer(self.youth, "Pampered", -10, sort_order=9)
+        pampered.distinction.mutually_exclusive_with.add(self.spoiled.distinction)
+        for offer in (jailbird_beat, pampered):
+            OfferFirstLook.objects.create(offer=offer, beginning=self.beginnings, preselected=True)
+        draft = self._create_base_draft(first_name="Maud")
+        draft.age = 19
+        draft.save(update_fields=["age"])
+        response = self.client.put(
+            f"/api/distinctions/drafts/{draft.pk}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.jailbird.pk, "rank": 1, "offer_id": self.jailbird_offer.pk}
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        response = self.client.post(self._url(draft, "load-default-life/"))
+        self.assertEqual(response.status_code, 200, response.content)
+        entries = response.json()["draft_data"]["distinctions"]
+        names = sorted(e["distinction_name"] for e in entries)
+        self.assertEqual(names, ["Extensively Tutored", "Jailbird", "Socialite", "Spoiled"])
+        (jailbird_entry,) = [e for e in entries if e["distinction_name"] == "Jailbird"]
+        self.assertEqual(jailbird_entry["offer_ids"], [self.jailbird_offer.pk])
+
+    def test_a_changed_beginning_loads_its_own_life(self) -> None:
+        other = BeginningsFactory(name="Another Beginning", starting_area=self.area, is_active=True)
+        other.allowed_species.add(self.species)
+        OfferFirstLook.objects.create(offer=self.hard, beginning=other, preselected=True)
+        draft = self._create_base_draft(first_name="Maud")
+        draft.age = 19
+        draft.save(update_fields=["age"])
+        response = self.client.post(self._url(draft, "load-default-life/"))
+        self.assertIn("Spoiled", self._picks(response.json()))
+        response = self.client.patch(
+            self._url(draft), {"selected_beginnings_id": other.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        response = self.client.post(self._url(draft, "load-default-life/"))
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(self._picks(payload), {"Hard scrabble": -10})
+        self.assertEqual(payload["draft_data"]["life_loaded_for"], other.pk)
 
     def test_a_draft_with_no_beginning_loads_nothing(self) -> None:
         draft = self._create_base_draft(first_name="Maud")

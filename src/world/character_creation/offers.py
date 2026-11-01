@@ -618,9 +618,10 @@ def load_default_life(draft: CharacterDraft) -> list[DraftDistinctionEntry]:
     in the grid's own order (``offers_for``, so the route's closed list and the
     beginning's strikes already apply): a one-of beat takes the first of its starred
     cards, an age-scaled beat as many as ``age_pick_allowance(draft.age)`` points buy, an
-    any beat all of them; a card excluded by one already taken is left out. The draft's
-    Backgrounds picks are replaced by those entries (the sync's own shape), every other
-    chapter's pick kept, the carried and bundled picks reconciled after, and
+    any beat all of them; a card the draft already holds from another chapter, or one
+    excluded by a card held or taken, is left out. The draft's Backgrounds picks are
+    replaced by those entries (the sync's own shape), every other chapter's pick kept,
+    the carried and bundled picks reconciled after, and
     ``draft_data[LIFE_LOADED_FOR_KEY]`` stamped with the beginning's id. Called by the
     draft's ``load-default-life`` action; nothing without a beginning. Returns what it
     loaded.
@@ -639,9 +640,12 @@ def load_default_life(draft: CharacterDraft) -> list[DraftDistinctionEntry]:
             beginning_id=beginning_id, preselected=True, offer_id__in=[o.pk for o in grid]
         ).values_list("offer_id", flat=True)
     )
-    exclusions = _mutual_exclusions({o.distinction_id for o in grid if o.pk in starred})
+    # The picks the load leaves alone count as held (review on #4866): a card already
+    # picked in another chapter is not entered twice, and its exclusion partners stay out.
+    kept = _entries_outside_the_life(draft)
+    held: set[int] = {e["distinction_id"] for e in kept if feature_of(e) == ("", 0)}
+    exclusions = _mutual_exclusions({o.distinction_id for o in grid if o.pk in starred} | held)
     taken_per_beat: dict[int, int] = defaultdict(int)
-    held: set[int] = set()
     entries: list[DraftDistinctionEntry] = []
     for offer in grid:
         if offer.pk not in starred or offer.distinction_id in held:
@@ -658,7 +662,6 @@ def load_default_life(draft: CharacterDraft) -> list[DraftDistinctionEntry]:
                 offer.distinction, 1, "", offer=offer, source=opener_label(offer, draft=draft)
             )
         )
-    kept = _entries_outside_the_life(draft)
     draft.draft_data["distinctions"] = [*kept, *entries]
     draft.draft_data[LIFE_LOADED_FOR_KEY] = beginning_id
     draft.save(update_fields=["draft_data", "updated_at"])
