@@ -74,6 +74,14 @@
     margin: 0;
 }
 
+/* The Combat roles panel's vow picker (#4880): a select and Open beside the row's count. */
+.combat-roles-picker {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    margin-left: 0.6rem;
+}
+
 /* Pin button */
 .pin-button {
     display: inline-flex;

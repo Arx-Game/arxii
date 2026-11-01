@@ -200,6 +200,20 @@ class VowPageGetTests(VowPageCase):
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
 
+class VowPageWaysInTests(VowPageCase):
+    def test_the_covenant_role_list_links_each_vow_page(self) -> None:
+        self.client.force_login(self.author)
+        body = self.client.get(reverse("admin:arxii_covenantrole_changelist")).content.decode()
+        self.assertIn(f'<a href="{self.url}">Vow page</a>', body)
+
+    def test_the_covenant_role_change_form_has_the_object_tool(self) -> None:
+        self.client.force_login(self.author)
+        change = reverse("admin:arxii_covenantrole_change", args=[self.role.pk])
+        body = self.client.get(change).content.decode()
+        self.assertIn(self.url, body)
+        self.assertIn("Open the vow page", body)
+
+
 class VowPageSaveTests(VowPageCase):
     def test_raising_an_unheld_pick_saves_and_credits(self) -> None:
         self.client.force_login(self.author)

@@ -24,7 +24,18 @@
                         {% for link in combat_roles_links %}
                             <tr>
                                 <th scope="row"><a href="{{ link.url }}">{{ link.label }}</a></th>
-                                <td>{{ link.note }}</td>
+                                <td>{{ link.note }}
+                                    {% if link.picker %}
+                                    <form method="get" action="{{ link.picker.action }}" class="combat-roles-picker">
+                                        <select name="pk" aria-label="{{ link.label }}">
+                                            {% for pk, name in link.picker.choices %}
+                                            <option value="{{ pk }}">{{ name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="button">Open</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% endfor %}
                     </table>

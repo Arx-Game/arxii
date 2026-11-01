@@ -1,6 +1,8 @@
 """Django admin configuration for the covenants system."""
 
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from world.admin_utils import OneRowPerFormSet
 from world.covenants.added_effect_summary import summarize_vow_added_effect
@@ -126,6 +128,7 @@ class CovenantRoleAdmin(admin.ModelAdmin):
         "shield_weight",
         "crown_weight",
         "speed_rank",
+        "vow_page",
     ]
     list_filter = ["covenant_type"]
     search_fields = ["name", "slug"]
@@ -136,6 +139,11 @@ class CovenantRoleAdmin(admin.ModelAdmin):
         VowFocusPickInline,
         VowAddedEffectInline,
     ]
+
+    @admin.display(description="Vow page")
+    def vow_page(self, obj: CovenantRole) -> str:
+        """The row's vow page, where its picks, limits and payload are authored (#4880)."""
+        return format_html('<a href="{}">Vow page</a>', reverse("admin_vow_builder", args=[obj.pk]))
 
 
 @admin.register(CovenantRoleTechniqueSpecialty)
