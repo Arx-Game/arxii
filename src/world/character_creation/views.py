@@ -25,6 +25,7 @@ from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
 from world.character_creation.constants import (
+    LIFE_LOADED_FOR_KEY,
     ApplicationStatus,
     OfferChapter,
 )
@@ -54,7 +55,9 @@ from world.character_creation.models import (
 )
 from world.character_creation.offers import (
     beats_for,
+    clear_life,
     closed_for,
+    load_default_life,
     offers_for,
     reconcile_offer_picks,
 )
@@ -1138,6 +1141,29 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="load-default-life")
+    def load_default_life(self, request: Request, pk: int | None = None) -> Response:
+        """Load the beginning's suggested life into the draft (#4865, slice 7 of #4813).
+
+        The leaf calls it when the life first opens for a beginning the draft's
+        ``life_loaded_for`` stamp does not name; the same beginning never loads again
+        over a life the player has edited or cleared, and a draft with no beginning is
+        left as it is. Answers with the draft.
+        """
+        draft = self.get_object()
+        beginning_id = draft.selected_beginnings_id
+        if beginning_id is not None and draft.draft_data.get(LIFE_LOADED_FOR_KEY) != beginning_id:
+            load_default_life(draft)
+        return Response(self.get_serializer(draft).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="clear-life")
+    def clear_life(self, request: Request, pk: int | None = None) -> Response:
+        """Start blank (#4865): drop the draft's Backgrounds picks and beat states, keep
+        every other chapter's pick and the loaded stamp. Answers with the draft."""
+        draft = self.get_object()
+        clear_life(draft)
+        return Response(self.get_serializer(draft).data)
 
     @extend_schema(
         parameters=[OpenApiParameter("chapter", str, required=True)],

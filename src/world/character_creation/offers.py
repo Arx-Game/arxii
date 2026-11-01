@@ -19,6 +19,7 @@ from world.character_creation.constants import (
     AGE_PICKS_FROM_AGE,
     AGE_PICKS_YEARS_PER_PICK,
     CG_MODIFIER_CATEGORY,
+    LIFE_LOADED_FOR_KEY,
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
     BeatSelection,
@@ -608,6 +609,85 @@ def organization_choices(
 
 def _organization_choice_rows(orgs: Iterable[Organization]) -> tuple[OrganizationChoice, ...]:
     return tuple(OrganizationChoice(org.pk, org.name, org.is_covert) for org in orgs)
+
+
+def load_default_life(draft: CharacterDraft) -> list[DraftDistinctionEntry]:
+    """Load the beginning's suggested life into the draft (#4865, slice 7 of #4813).
+
+    The draft's visible Backgrounds offers whose pin for its beginning is ``preselected``,
+    in the grid's own order (``offers_for``, so the route's closed list and the
+    beginning's strikes already apply): a one-of beat takes the first of its starred
+    cards, an age-scaled beat as many as ``age_pick_allowance(draft.age)`` points buy, an
+    any beat all of them; a card excluded by one already taken is left out. The draft's
+    Backgrounds picks are replaced by those entries (the sync's own shape), every other
+    chapter's pick kept, the carried and bundled picks reconciled after, and
+    ``draft_data[LIFE_LOADED_FOR_KEY]`` stamped with the beginning's id. Called by the
+    draft's ``load-default-life`` action; nothing without a beginning. Returns what it
+    loaded.
+    """
+    beginning_id = draft.selected_beginnings_id
+    if beginning_id is None:
+        return []
+    visible = visible_offers(draft)
+    grid = [
+        visible[row.offer_id]
+        for row in offers_for(draft, OfferChapter.BACKGROUNDS)
+        if row.offer_id in visible
+    ]
+    starred = set(
+        OfferFirstLook.objects.filter(
+            beginning_id=beginning_id, preselected=True, offer_id__in=[o.pk for o in grid]
+        ).values_list("offer_id", flat=True)
+    )
+    exclusions = _mutual_exclusions({o.distinction_id for o in grid if o.pk in starred})
+    taken_per_beat: dict[int, int] = defaultdict(int)
+    held: set[int] = set()
+    entries: list[DraftDistinctionEntry] = []
+    for offer in grid:
+        if offer.pk not in starred or offer.distinction_id in held:
+            continue
+        if exclusions.get(offer.distinction_id, set()) & held:
+            continue
+        allowance = beat_allowance(offer.beat, draft.age) if offer.beat_id else None
+        if allowance is not None and taken_per_beat[offer.beat_id] >= allowance:
+            continue
+        taken_per_beat[offer.beat_id] += 1
+        held.add(offer.distinction_id)
+        entries.append(
+            build_distinction_entry(
+                offer.distinction, 1, "", offer=offer, source=opener_label(offer, draft=draft)
+            )
+        )
+    kept = _entries_outside_the_life(draft)
+    draft.draft_data["distinctions"] = [*kept, *entries]
+    draft.draft_data[LIFE_LOADED_FOR_KEY] = beginning_id
+    draft.save(update_fields=["draft_data", "updated_at"])
+    reconcile_offer_picks(draft)
+    return entries
+
+
+def clear_life(draft: CharacterDraft) -> None:
+    """Start blank (#4865): drop the draft's Backgrounds picks and its beat states, keep
+    every other chapter's pick and the ``LIFE_LOADED_FOR_KEY`` stamp (so the suggested
+    life does not come back over an emptied one), and reconcile. Called by the draft's
+    ``clear-life`` action."""
+    draft.draft_data["distinctions"] = _entries_outside_the_life(draft)
+    draft.draft_data[BEATS_KEY] = {}
+    draft.save(update_fields=["draft_data", "updated_at"])
+    reconcile_offer_picks(draft)
+
+
+def _entries_outside_the_life(draft: CharacterDraft) -> list[DraftDistinctionEntry]:
+    """The draft's entries that name no Backgrounds offer (#4865): what a load or a clear
+    of the life leaves alone. A legacy entry with no offer list is kept too."""
+    entries = draft.draft_data.get("distinctions", [])
+    offer_ids = {oid for e in entries for oid in e.get("offer_ids", []) if isinstance(oid, int)}
+    life_offer_ids = set(
+        DistinctionOffer.objects.filter(
+            pk__in=offer_ids, chapter=OfferChapter.BACKGROUNDS
+        ).values_list("pk", flat=True)
+    )
+    return [e for e in entries if not (set(e.get("offer_ids", [])) & life_offer_ids)]
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:

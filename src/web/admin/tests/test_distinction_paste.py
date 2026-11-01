@@ -133,6 +133,29 @@ class ParseTableTest(PasteTestCase):
         assert twice.status == "error"
         assert "one starting prestige" in " ".join(twice.notes)
 
+    def test_a_leading_star_marks_a_pin_as_the_suggested_life(self):
+        """#4865: ``*Reavers, Underworld`` pins both and suggests the card for Reavers."""
+        underworld = BeginningsFactory(name="Underworld")
+        (row,) = parse_table(
+            "Urchin | Personality | -10 | 1 | The street raised you. | | | rules | "
+            "*Born to a Household, Underworld"
+        )
+        assert row.status == "create", row.notes
+        assert row.first_look_ids == [self.beginning.pk, underworld.pk]
+        assert row.preselected_ids == [self.beginning.pk]
+        assert "suggested for Born to a Household" in row.will_create
+        self.client.force_login(self.author)
+        text = (
+            "Urchin | Personality | -10 | 1 | The street raised you. | | | rules | "
+            "*Born to a Household, Underworld"
+        )
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        (offer,) = DistinctionOffer.objects.filter(distinction__slug="urchin")
+        flags = dict(offer.pins.values_list("beginning_id", "preselected"))
+        assert flags == {self.beginning.pk: True, underworld.pk: False}
+
     def test_a_degree_opener_must_mark_and_arrives_bundled(self):
         (bad,) = parse_table("Marked | Personality | 0 | 1 | | | | degree:thwarted |")
         assert bad.status == "error"

@@ -555,6 +555,10 @@ ORGANIZATIONS_KEY = "organizations"
 # "kind"}``, the organization one of the card's choices and the kind a ``TieKind``.
 ALTER_EGO_KEY = "alter_ego"
 TIES_KEY = "ties"
+# The suggested life (#4865, slice 7 of #4813): ``draft_data[LIFE_LOADED_FOR_KEY]`` is the id of
+# the beginning whose default life was last loaded into the draft, so the leaf loads it once per
+# beginning and never over a life the player has edited or cleared.
+LIFE_LOADED_FOR_KEY = "life_loaded_for"
 TIE_ORGANIZATION_ID = "organization_id"
 TIE_KIND = "kind"
 

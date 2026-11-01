@@ -2924,10 +2924,24 @@ class DistinctionOffer(
 
 
 class OfferFirstLook(SharedMemoryModel):
-    """One Beginning pinning one offer line into its chapter's first look (#3709)."""
+    """One Beginning pinning one offer line into its chapter's first look (#3709).
+
+    ``preselected`` (#4865, slice 7 of #4813) marks the pin as part of the beginning's
+    suggested life: the cards a newcomer starts with when the life first opens for that
+    beginning (``offers.load_default_life``), every one changeable, costs counted. Authored
+    on the Beginning admin's "Suggested life" inline, the pin's own admin, or a leading star
+    on the beginning's name in the paste's last column (``*Reavers``).
+    """
 
     offer = models.ForeignKey(DistinctionOffer, on_delete=models.CASCADE, related_name="pins")
     beginning = models.ForeignKey(Beginnings, on_delete=models.CASCADE, related_name="offer_pins")
+    preselected = models.BooleanField(
+        default=False,
+        help_text=(
+            "Part of this beginning's suggested life: loaded as a pick when the life first "
+            "opens for it (#4865). One per one-of beat; the first by the grid's order stands."
+        ),
+    )
 
     class Meta:
         verbose_name = "Offer first look"
