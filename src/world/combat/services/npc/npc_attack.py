@@ -153,6 +153,30 @@ def _npc_hit_defense(  # noqa: PLR0913
     )
 
 
+def _missile_wind_contribution(
+    opponent_action: CombatOpponentAction, participant: CombatParticipant
+) -> ModifierContribution | None:
+    """The wind's penalty on a PC's defense against an NPC's missile, or None (#1555).
+
+    Only MISSILE-delivered threat entries with a defense roll are affected; flat
+    base_damage entries (no defense_check_type) never reach the defense roll.
+    """
+    room = participant.encounter.room
+    if opponent_action.threat_entry.delivery != StrikeDelivery.MISSILE or room is None:
+        return None
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import felt_exposure  # noqa: PLC0415
+
+    wind_mod = wind_penalty(felt_exposure(room, stat_key=StatKey.WIND))
+    if not wind_mod:
+        return None
+    return ModifierContribution(
+        source_kind=ModifierSourceKind.SCENE,
+        source_label="Wind",
+        value=-wind_mod,
+    )
+
+
 def resolve_npc_attack(
     opponent_action: CombatOpponentAction,
     participant: CombatParticipant,
@@ -234,32 +258,16 @@ def resolve_npc_attack(
         participant.encounter,
     )
 
-    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's
-    # missile shot ruins an NPC's. Only MISSILE-delivered threat entries with
-    # a defense roll are affected — flat base_damage entries (no defense_check_type,
-    # never reaching this function) stay untouched.
-    if (
-        opponent_action.threat_entry.delivery == StrikeDelivery.MISSILE
-        and participant.encounter.room is not None
-    ):
-        from world.locations.constants import StatKey  # noqa: PLC0415
-        from world.locations.services import felt_exposure  # noqa: PLC0415
-
-        wind_mod = wind_penalty(felt_exposure(participant.encounter.room, stat_key=StatKey.WIND))
-        if wind_mod:
-            bond_contributions = [
-                *bond_contributions,
-                ModifierContribution(
-                    source_kind=ModifierSourceKind.SCENE,
-                    source_label="Wind",
-                    value=-wind_mod,
-                ),
-            ]
+    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's missile shot
+    # ruins an NPC's.
+    wind = _missile_wind_contribution(opponent_action, participant)
+    if wind is not None:
+        bond_contributions = [*bond_contributions, wind]
 
     # The defender's style skill (#4884) counts while every worn armor kind and every
     # held vow is on their combat style. The defense type applies either way.
     style_fit = style_fit_for_defense(character)
-    style_traits = style_fit.extra_traits(check_type)
+    style_traits = tuple(style_fit.extra_traits(check_type))
     breakdown = _svc.collect_check_modifiers(
         participant.character_sheet,
         check_type,

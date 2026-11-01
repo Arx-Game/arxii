@@ -75,23 +75,23 @@ class StyleFit:
 
     def extra_traits(
         self, check_type: CheckType | None = None, counted: Sequence[ExtraTraitTerm] = ()
-    ) -> tuple[ExtraTraitTerm, ...]:
-        """The style skill as a roll term while it counts, else nothing.
+    ) -> list[ExtraTraitTerm]:
+        """The style skill as a roll term while it counts, else an empty list.
 
         Never a second time: when the roll already counts the style skill's trait, through
         ``check_type``'s own trait rows or one of the ``counted`` terms (a Path, Gift or
         technique skill that is also a style's skill), the style adds nothing more.
         """
         if not self.counts:
-            return ()
+            return []
         from world.checks.types import ExtraTraitTerm  # noqa: PLC0415
 
         trait = self.style.skill.trait
         if any(term.trait.pk == trait.pk for term in counted):
-            return ()
+            return []
         if check_type is not None and check_type.traits.filter(trait_id=trait.pk).exists():
-            return ()
-        return (ExtraTraitTerm(trait=trait, weight=STYLE_SKILL_WEIGHT),)
+            return []
+        return [ExtraTraitTerm(trait=trait, weight=STYLE_SKILL_WEIGHT)]
 
 
 def _style_of(character: Character) -> CombatStyle | None:
