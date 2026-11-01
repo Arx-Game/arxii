@@ -73,14 +73,15 @@ def validate_compulsion_bands(bands: Sequence["CompulsionResistBand"]) -> list[s
 def validate_control_loss_bands(bands: Sequence["ControlLossBand"]) -> list[str]:
     """Problem lines for control-loss bands where a better outcome is worse.
 
-    A better outcome may not have a lower ``control_change`` or ``intensity``, or a
-    higher ``severity`` or ``duration_rounds``.
+    A better outcome may not have a lower ``control_change``, or a higher ``severity`` or
+    ``duration_rounds``. ``intensity`` is left out on purpose: losing control trades
+    control for power, so a worse roll may well raise intensity (the approved #4802
+    demo's wound trigger gives +4 on a Failure and +5 on a Critical Failure).
     """
     return _check(
         bands,
         lower_is_better=[
             ("control change", lambda band: -band.control_change),
-            ("intensity", lambda band: -band.intensity),
             ("severity", lambda band: band.severity),
             ("duration", lambda band: band.duration_rounds),
         ],

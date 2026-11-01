@@ -800,8 +800,10 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
 - **`ControlLossBand`** (FK trigger and `CheckOutcome`, unique together): what a roll outcome
   does: `intensity` and `control_change` on the engagement, `applies` (a condition, usually
   Berserk) at `severity` for `duration_rounds`, and `forces_form` (moon triggers only). A
-  better outcome may never be worse for the character (`control_loss_bands.py`, the same
-  monotonic rule `validate_surge_bands` uses; model `clean()` and the admin formsets both call it).
+  better outcome may never give a lower `control_change` or a higher `severity` or
+  `duration_rounds` (`control_loss_bands.py`, the same monotonic rule `validate_surge_bands`
+  uses; model `clean()` and the admin formsets both call it). `intensity` is exempt: losing
+  control trades control for power, so a worse roll may raise it.
 - **Engine** (`world/conditions/control_loss.py`): `fire_control_loss_triggers(character,
   fires_on, *, moon_pull=0, stage=None)` rolls `perform_check_with_modifiers` (so authored
   condition and equipment modifiers count) and applies the band. Callers: the moon sweep

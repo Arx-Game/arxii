@@ -101,6 +101,20 @@ class BandValidatorTests(TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("severity", problems[0])
 
+    def test_validate_control_loss_bands_lets_a_worse_roll_raise_intensity(self) -> None:
+        trigger = ControlLossTriggerFactory()
+        worse = ControlLossBandFactory.build(
+            trigger=trigger,
+            outcome=CheckOutcomeFactory(name="Fail", success_level=-1),
+            intensity=4,
+        )
+        better = ControlLossBandFactory.build(
+            trigger=trigger,
+            outcome=CheckOutcomeFactory(name="Win", success_level=1),
+            intensity=0,
+        )
+        self.assertEqual(validate_control_loss_bands([worse, better]), [])
+
 
 class ControlLossBandFormSetTests(TestCase):
     """The admin inline formset on an unsaved trigger (the add page); no journey posts it."""
