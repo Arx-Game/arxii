@@ -181,6 +181,33 @@ class StrikeWithAWeapon(_StrikeField):
 
         self.assertShownRow(self.hobb, "strikes Bandit with a")
 
+    def test_the_turn_panel_offers_each_equipped_weapon_and_bare_hands(self) -> None:
+        sword = self.equip_sword()
+
+        response = self.api(self.account_of(self.hobb)).get(f"/api/combat/{self.encounter.pk}/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        own = next(
+            p for p in response.json()["participants"] if p["character_sheet_id"] == self.sheet.pk
+        )
+        self.assertEqual(
+            own["strike_weapons"],
+            [
+                {
+                    "item_instance_id": sword.pk,
+                    "name": sword.display_name,
+                    "gear_kind": "One-Handed Melee",
+                    "strike_skill": "Melee Combat",
+                },
+                {
+                    "item_instance_id": None,
+                    "name": "bare hands",
+                    "gear_kind": "Unarmed",
+                    "strike_skill": "Unarmed Combat",
+                },
+            ],
+        )
+
     def test_a_weapon_not_equipped_is_refused(self) -> None:
         result = self.strike(weapon_id=999_999)
 

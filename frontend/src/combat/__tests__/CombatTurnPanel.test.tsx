@@ -224,6 +224,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     reactions_used: null,
     dodge_plan: null,
     dig_deep: null,
+    strike_weapons: null,
     ...overrides,
   };
 }
@@ -790,6 +791,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         }),
       ],
     });
@@ -936,5 +938,69 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
       wrapper: createWrapper(),
     });
     expect(screen.queryByTestId('open-encounter-join-btn')).not.toBeInTheDocument();
+  });
+});
+
+describe('CombatTurnPanel — a Strike shows its hit roll, then its damage roll (#4858)', () => {
+  it('lists both rolls of the latest action, oldest first, and no earlier roll', () => {
+    mockEncounter({ is_participant: true });
+    const row = (id: number, interaction: number, summary: string) => ({
+      id,
+      combat_interaction_id: interaction,
+      summary,
+      outcome_display: [],
+      modifiers: [],
+      modifier_total: 0,
+    });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [
+        row(3, 40, 'Damage roll: Rapier 6, Melee Combat with Agility. Success: 6 damage.'),
+        row(2, 40, 'Hit roll against Bandit: Melee Combat with Agility. Success.'),
+      ],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    const summaries = screen.getAllByTestId('outcome-summary').map((el) => el.textContent);
+    expect(summaries).toEqual([
+      'Hit roll against Bandit: Melee Combat with Agility. Success.',
+      'Damage roll: Rapier 6, Melee Combat with Agility. Success: 6 damage.',
+    ]);
+  });
+
+  it('shows only the latest roll when the one before it came from another action', () => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [
+        {
+          id: 3,
+          combat_interaction_id: 41,
+          summary: 'Fled.',
+          outcome_display: [],
+          modifiers: [],
+          modifier_total: 0,
+        },
+        {
+          id: 2,
+          combat_interaction_id: 40,
+          summary: 'Older.',
+          outcome_display: [],
+          modifiers: [],
+          modifier_total: 0,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getAllByTestId('outcome-summary').map((el) => el.textContent)).toEqual(['Fled.']);
   });
 });

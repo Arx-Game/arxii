@@ -33,6 +33,7 @@ import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
+import { StrikeControl } from '../components/StrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -1956,6 +1957,7 @@ export function YourTurn({
   // NOT part of RoundScopedState — stays lifted/controlled exactly as before.
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
   const [awaitError, setAwaitError] = useState<string | null>(null);
+  const [strikeError, setStrikeError] = useState<string | null>(null);
   const castPosition = castPositionProp ?? localCastPosition;
   const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
 
@@ -2567,6 +2569,20 @@ export function YourTurn({
     }
   }
 
+  async function handleStrike(opponentId: number, itemInstanceId: number | null) {
+    setStrikeError(null);
+    const kwargs: Record<string, number> = { opponent_id: opponentId };
+    if (itemInstanceId !== null) kwargs.weapon_id = itemInstanceId;
+    try {
+      const result = await dispatchManeuver({ registryKey: 'combat_strike', kwargs });
+      if (isDispatchFailure(result)) {
+        setStrikeError(result.message ?? 'Failed to strike.');
+      }
+    } catch (err) {
+      setStrikeError(err instanceof Error ? err.message : 'Failed to strike.');
+    }
+  }
+
   async function handleAwaitOpening(techniqueId: number, confirmSoulfrayRisk: boolean) {
     setAwaitError(null);
     try {
@@ -2908,6 +2924,24 @@ export function YourTurn({
           }}
         />
       )}
+
+      <StrikeControl
+        weapons={myParticipantSelf?.strike_weapons ?? []}
+        opponents={activeOpponents}
+        declaredTargetName={
+          declaredManeuver === 'strike'
+            ? (activeOpponents.find((o) => o.id === ownRoundAction?.focused_opponent_target)
+                ?.name ?? null)
+            : null
+        }
+        error={strikeError}
+        disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        inactive={isLocked || !isDeclaringPhase}
+        pending={maneuverDispatchPending}
+        onStrike={(opponentId, itemInstanceId) => {
+          handleStrike(opponentId, itemInstanceId).catch(() => {});
+        }}
+      />
 
       <WaitingStrikeControl
         techniques={meleeTechniques}

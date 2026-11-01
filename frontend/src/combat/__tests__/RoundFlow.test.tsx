@@ -57,6 +57,7 @@ function makeParticipant(id: number, name: string): Participant {
     reactions_used: null,
     dodge_plan: null,
     dig_deep: null,
+    strike_weapons: null,
   };
 }
 

@@ -273,6 +273,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -404,6 +405,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -562,6 +564,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -700,6 +703,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
         {
           id: 7,
@@ -725,6 +729,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -810,6 +815,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           reactions_used: null,
           dodge_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
     });

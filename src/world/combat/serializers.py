@@ -499,6 +499,17 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class StrikeWeaponOptionSerializer(serializers.Serializer):
+    """One thing the viewer's own character can Strike with (#4858); read-only."""
+
+    item_instance_id = serializers.IntegerField(
+        allow_null=True, help_text="The equipped weapon's item id; null for bare hands."
+    )
+    name = serializers.CharField(help_text="The weapon's name, or 'bare hands'.")
+    gear_kind = serializers.CharField(help_text="The weapon's gear kind, as players read it.")
+    strike_skill = serializers.CharField(help_text="The strike skill its hit roll uses.")
+
+
 class DigDeepOfferSerializer(serializers.Serializer):
     """What digging deep costs the viewer's own character right now (#4738); read-only."""
 
@@ -547,6 +558,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     reactions_used = serializers.SerializerMethodField(required=False)
     dodge_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
+    strike_weapons = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -574,6 +586,27 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "reactions_used",
             "dodge_plan",
             "dig_deep",
+            "strike_weapons",
+        ]
+
+    @extend_schema_field(StrikeWeaponOptionSerializer(many=True, allow_null=True))
+    def get_strike_weapons(self, obj: CombatParticipant) -> list[dict[str, Any]] | None:
+        """What the viewer's own character can Strike with (#4858); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.services import strike_weapon_options  # noqa: PLC0415
+        from world.items.constants import GearArchetype  # noqa: PLC0415
+
+        return [
+            {
+                "item_instance_id": (
+                    weapon.item_instance.pk if weapon.item_instance is not None else None
+                ),
+                "name": weapon.name,
+                "gear_kind": GearArchetype(weapon.gear_archetype).label,
+                "strike_skill": weapon.check_type_name,
+            }
+            for weapon in strike_weapon_options(obj.character_sheet.character)
         ]
 
     @extend_schema_field(DigDeepOfferSerializer(allow_null=True))
