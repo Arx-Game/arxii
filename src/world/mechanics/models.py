@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from world.contributors.models import CreditedContent
 from world.magic.constants import TechniqueFunction
 from world.mechanics.constants import (
+    EFFECT_KIND_LANE,
     FAVOR_CATEGORY_NAMES,
     MANEUVER_EFFECT_CATEGORY_NAME,
     MANEUVER_EFFECT_KIND,
@@ -442,6 +443,22 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.scope_opponent_property_id is not None or (
             self.scope_opponent_condition_id is not None
         )
+
+    @property
+    def effect_kind(self) -> str:
+        """The ``EffectKind`` a maneuver-effect target names: its kind scope, else its one
+        effect's kind; blank for a target that names neither (every other category)."""
+        if self.scope_effect_kind:
+            return self.scope_effect_kind
+        if self.scope_maneuver_effect_id is not None:
+            return self.scope_maneuver_effect.kind
+        return ""
+
+    @property
+    def value_lane(self) -> str | None:
+        """The ``ModifierLane`` a sized modifier on this target is valued in (#4876), or
+        None when its kind takes flat amounts only (``EFFECT_KIND_LANE``)."""
+        return EFFECT_KIND_LANE.get(self.effect_kind)
 
     def _set_technique_scope_fields(self) -> list[str]:
         """The narrowing scope fields that are set (technique side, then opponent side), in

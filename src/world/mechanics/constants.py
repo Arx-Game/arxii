@@ -3,7 +3,7 @@
 from django.db import models
 
 # Re-export from checks app for backwards compatibility
-from world.checks.constants import EffectTarget, EffectType  # noqa: F401
+from world.checks.constants import EffectTarget, EffectType, ModifierLane  # noqa: F401
 
 # ModifierCategory name constants (must match fixture data)
 STAT_CATEGORY_NAME = "stat"
@@ -213,6 +213,14 @@ TECHNIQUE_SCOPE_KINDS: tuple[str, ...] = (
     EffectKind.CONDITION_SEVERITY,
     EffectKind.CONDITION_DURATION,
 )
+
+# The kinds a sized modifier can target, and the lane each is valued in (#4876, the owner's
+# "likely grants only" ruling on #4824). A kind missing here takes flat amounts only.
+EFFECT_KIND_LANE: dict[str, str] = {
+    EffectKind.DAMAGE: ModifierLane.DAMAGE,
+    EffectKind.TO_HIT: ModifierLane.TO_HIT,
+    EffectKind.PARTIAL_PROTECTION: ModifierLane.PARTIAL_PROTECTION,
+}
 
 MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.CHARGE_TO_HIT: EffectKind.TO_HIT,
