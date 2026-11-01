@@ -375,7 +375,10 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     engagement.save(update_fields=updated_fields)
 
     curve = encounter.escalation_curve
-    character_name = participant.character_sheet.character.db_key
+    from world.combat.surge_rolls import persona_name_of  # noqa: PLC0415
+
+    # The room hears the face the fighter wears, never the key (#4802).
+    character_name = persona_name_of(participant)
     narration = (
         _render_surge_narration(curve, character_name) if curve is not None and narrate else ""
     )

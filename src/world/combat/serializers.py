@@ -59,7 +59,7 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
-from world.scenes.constants import PersonaType, RoundStatus
+from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
     GMStandoffViewSerializer,
     StandoffSummarySerializer,
@@ -530,19 +530,19 @@ class DigDeepOfferSerializer(serializers.Serializer):
 
 
 class _ParticipantListSerializer(serializers.ListSerializer):
-    """Reads every listed participant's persona name in one batch (#4802).
+    """Reads the face every listed participant presents in one batch (#4802).
 
-    The names go to ``context["participant_names"]`` for ``get_character_name``, so a
-    roster of any size costs the same two queries.
+    The personas go to ``context["participant_personas"]`` for the name and the portrait,
+    so a roster of any size costs the same two queries.
     """
 
     def to_representation(self, data: Any) -> list[Any]:
         from django.db.models.manager import BaseManager  # noqa: PLC0415
 
-        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+        from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
         participants = list(data.all() if isinstance(data, BaseManager) else data)
-        self.context["participant_names"] = persona_names_for_sheets(
+        self.context["participant_personas"] = personas_for_sheets(
             [participant.character_sheet_id for participant in participants]
         )
         return super().to_representation(participants)
@@ -613,18 +613,23 @@ class ParticipantSerializer(serializers.ModelSerializer):
         ]
 
     def get_character_name(self, obj: CombatParticipant) -> str:
-        """The persona name others know the fighter by: a disguise shows, the key never does.
+        """The persona name others know the fighter by: a disguise shows, the key never does."""
+        persona = self._presented_persona(obj)
+        return persona.name if persona is not None else obj.character_sheet.character.db_key
 
-        A list of participants reads every name in one batch into
-        ``context["participant_names"]`` (``_ParticipantListSerializer``); alone, this
+    def _presented_persona(self, obj: CombatParticipant) -> Persona | None:
+        """The face the participant presents now (``active_persona_for_sheet``), or None.
+
+        A list of participants reads every face in one batch into
+        ``context["participant_personas"]`` (``_ParticipantListSerializer``); alone, this
         reads the one sheet.
         """
-        names = self.context.get("participant_names")
-        if names is None:
-            from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+        personas = self.context.get("participant_personas")
+        if personas is None:
+            from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-            names = persona_names_for_sheets([obj.character_sheet_id])
-        return names.get(obj.character_sheet_id, obj.character_sheet.character.db_key)
+            personas = personas_for_sheets([obj.character_sheet_id])
+        return personas.get(obj.character_sheet_id)
 
     @extend_schema_field(DigDeepOfferSerializer(allow_null=True))
     def get_dig_deep(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -939,50 +944,28 @@ class ParticipantSerializer(serializers.ModelSerializer):
         engagement = self._any_engagement(obj)
         return engagement.fury_control_surrendered if engagement else None
 
-    def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
-        """Resolve the participant's PRIMARY persona through the cached accessor.
-
-        Reads ``CharacterSheet.cached_payload_personas`` — a ``@cached_property``
-        the encounter queryset pre-fills (with ``select_related("thumbnail")``)
-        so serialization issues no per-row query; PRIMARY is found explicitly
-        rather than positionally. Portrait is public identity, so this is not
-        gated by ``_can_view_vitals`` (mirrors the opponent portrait, #554).
-        """
-        try:
-            character_sheet = obj.character_sheet
-        except ObjectDoesNotExist:
-            return None
-        if character_sheet is None:
-            return None
-        for persona in character_sheet.cached_payload_personas:
-            if persona.persona_type == PersonaType.PRIMARY:
-                return persona
-        return None
-
     def get_thumbnail_url(self, obj: CombatParticipant) -> str | None:
-        """Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+        """Direct portrait URL via the persona she presents (mirrors OpponentSerializer).
 
-        The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
-        when the character has no primary persona.
+        The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
+        character has no persona. A mask shows its own portrait, never the true face
+        (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
         """
-        persona = self._primary_persona(obj)
+        persona = self._presented_persona(obj)
         return None if persona is None else persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
         """Media portrait URL, dynamically resolved (#2196).
 
-        Uses ``resolve_thumbnail()`` via the primary persona's character.
-        ``None`` when there is no primary persona.
+        Uses ``resolve_thumbnail()`` with the persona she presents (#4802).
+        ``None`` when there is no persona.
         """
         from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
 
-        persona = self._primary_persona(obj)
+        persona = self._presented_persona(obj)
         if persona is None:
             return None
-        try:
-            character = persona.character_sheet.character
-        except AttributeError:
-            return None
+        character = obj.character_sheet.character
         # #2196: use the view's per-request conditions dict to avoid N+1 when
         # serializing multiple participants; None outside the viewset.
         cached_conditions = _context_active_conditions(character, self.context)
@@ -1178,15 +1161,30 @@ class ClashStateSerializer(serializers.ModelSerializer):
                     ),
                 )
             )
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        contributions = []
         for clash_round in rounds:
             if hasattr(clash_round, "cached_contributions"):
-                contribs = clash_round.cached_contributions
+                contributions.append(clash_round.cached_contributions)
             else:
-                contribs = list(clash_round.contributions.select_related("character"))
+                contributions.append(list(clash_round.contributions.select_related("character")))
+        # The face each contributor wears, never the key (#4802): the encounter hands the
+        # roster's names over in context; alone, they are read once for the clash.
+        names = self.context.get("participant_names")
+        if names is None:
+            names = persona_names_for_sheets(
+                {c.character_id for contribs in contributions for c in contribs if c.character_id}
+            )
+        for contribs in contributions:
             for c in contribs:
                 bucket = totals[c.character_id]
                 bucket["character_id"] = c.character_id
-                bucket["character_name"] = c.character.character.db_key if c.character_id else ""
+                bucket["character_name"] = (
+                    names.get(c.character_id, c.character.character.db_key)
+                    if c.character_id
+                    else ""
+                )
                 # Most-recent action_slot wins (each round may use a different slot).
                 bucket["action_slot"] = c.action_slot
                 bucket["progress_delta"] = int(bucket["progress_delta"]) + c.progress_delta
@@ -2006,11 +2004,18 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         viewer_character_ids = self.context.get("viewer_character_ids", set())
 
         rolls = _surge_roll_fields(records)
+        personas = self._participant_personas(obj)
         beats: list[dict[str, Any]] = []
         for record in records:
+            persona = personas.get(record.participant.character_sheet_id)
+            name = (
+                persona.name
+                if persona is not None
+                else record.participant.character_sheet.character.db_key
+            )
             beat: dict[str, Any] = {
                 "id": record.pk,
-                "narration": self._render_surge_beat_narration(record),
+                "narration": self._render_surge_beat_narration(record, name),
             }
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
@@ -2032,19 +2037,19 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         return beats
 
     @staticmethod
-    def _render_surge_beat_narration(record: DramaticSurgeRecord) -> str:
+    def _render_surge_beat_narration(record: DramaticSurgeRecord, character_name: str) -> str:
         """Re-render the generic narration line from the curve template.
 
         The record itself stores only trigger_kind/amount/subject (audit
         data) — narration is derived at read time from the encounter's
         current curve, same as the live broadcast at write time. A record that
         added no intensity (a control-only or condition-only surge) was never
-        announced, so it renders nothing.
+        announced, so it renders nothing. ``character_name`` is the face the fighter
+        wears now, never the key (#4802).
         """
         from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
 
         curve = record.encounter.escalation_curve
-        character_name = record.participant.character_sheet.character.db_key
         if curve is None or record.amount == 0:
             return ""
         return _render_surge_narration(curve, character_name)
@@ -2060,7 +2065,26 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Reads ``CombatEncounter.clashes_cached``, which the viewset's
         ``_base_queryset`` pre-fills so no extra query fires here.
         """
-        return ClashStateSerializer(obj.clashes_cached, many=True).data  # type: ignore[return-value]
+        names = {sheet_id: p.name for sheet_id, p in self._participant_personas(obj).items()}
+        return ClashStateSerializer(  # type: ignore[return-value]
+            obj.clashes_cached, many=True, context={"participant_names": names}
+        ).data
+
+    def _participant_personas(self, obj: CombatEncounter) -> dict[int, Persona]:
+        """The face every participant presents, read once per payload (#4802).
+
+        The participant list fills ``context["participant_personas"]``; a field that
+        runs before it reads them here and leaves them for the rest.
+        """
+        personas = self.context.get("participant_personas")
+        if personas is None:
+            from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+            personas = personas_for_sheets(
+                [participant.character_sheet_id for participant in obj.participants_cached]
+            )
+            self.context["participant_personas"] = personas
+        return personas
 
     @extend_schema_field(EngagementLockSerializer(many=True))
     def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
