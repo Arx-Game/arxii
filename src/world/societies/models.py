@@ -18,7 +18,7 @@ Note: Realm model is in the `realms` app, not here.
 """
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -375,6 +375,15 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             "joining mints a subject-anchored Secret, and the organization is left out "
             "of non-member listings. A fact about this organization, not its type: a "
             "'tradition' type holds an open academy and a secret lodge alike."
+        ),
+    )
+    admits_player_characters = models.BooleanField(
+        default=False,
+        help_text=(
+            "A player character may join from character creation (#4852, slice 6 of "
+            "#4813): the organization is listed at Final Touches for a card that opens a "
+            "membership (With Honors). A covert organization may admit too; the list is "
+            "shown to its own player only."
         ),
     )
     patron_nickname = models.ForeignKey(
@@ -3879,6 +3888,106 @@ class OrganizationObligation(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.debtor_id} owes {self.creditor.name} ({self.get_state_display()})"
+
+
+class DistinctionPrestigeGrant(SharedMemoryModel):
+    """Config: a distinction that starts its holder with a flat prestige (#4852, slice 6 of #4813).
+
+    Renowned and Miraculous Survival at +150, Infamous and Explosive Drama at -300: what
+    people already say about the character the day they arrive. The same sidecar pattern
+    as ``currency.DistinctionStartingGrant`` (ADR-0010: the consumer holds the FK pointing
+    at the primitive). Applied once, by character creation's finalize, through
+    ``renown.apply_starting_prestige`` and the public bump seam ``award_deed_prestige``;
+    no Legend row and no deed come of it (decision 6 of #4813), and a negative amount is
+    valid (decision 3). The player's own words about it, written at Final Touches, are
+    the pick's ``CharacterDistinction.notes``.
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="prestige_grant",
+        help_text="The distinction whose new holders start with this prestige.",
+    )
+    amount = models.IntegerField(
+        help_text=(
+            "Deed prestige added to the primary persona when the character is finalized. "
+            "Negative is allowed; zero is not a grant."
+        ),
+    )
+
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class Meta:
+        verbose_name = "Distinction Prestige Grant"
+        verbose_name_plural = "Distinction Prestige Grants"
+
+    def __str__(self) -> str:
+        return f"PrestigeGrant({self.distinction_id}: {self.amount:+d})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.amount == 0:
+            raise ValidationError({"amount": "A prestige grant is never zero."})
+
+
+class DistinctionOrganizationGrant(SharedMemoryModel):
+    """Config: a distinction that opens a membership at finalize (#4852, slice 6 of #4813).
+
+    With Honors: the body that marked the character's coming of age takes them in. With
+    ``organization`` set, the card seats that organization. Left blank, the player picks
+    one of the realm's organizations that ``admits_player_characters`` at Final Touches
+    (``character_creation.offers.organization_choices``), or none. ``rank`` names the
+    rung; blank seats the entry rank. Seated once, by finalize, through
+    ``join_organization`` (the membership choke point, where a covert organization mints
+    its Secret); a character a vacancy already seated in the same organization keeps that
+    membership. Same sidecar pattern as ``currency.DistinctionStartingGrant``.
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="organization_grant",
+        help_text="The distinction whose new holders may join an organization.",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="distinction_grants",
+        help_text=(
+            "The organization the card seats. Blank: the player picks one of the realm's "
+            "admitting organizations at Final Touches."
+        ),
+    )
+    rank = models.ForeignKey(
+        OrganizationRank,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="distinction_grants",
+        help_text="The rung the membership starts at. Blank: the organization's entry rank.",
+    )
+
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class Meta:
+        verbose_name = "Distinction Organization Grant"
+        verbose_name_plural = "Distinction Organization Grants"
+
+    def __str__(self) -> str:
+        where = self.organization.name if self.organization_id else "the player's pick"
+        return f"OrganizationGrant({self.distinction_id}: {where})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.rank_id is None:
+            return
+        if self.organization_id is None:
+            raise ValidationError({"rank": "A rank needs the organization it belongs to."})
+        if self.rank.organization_id != self.organization_id:
+            raise ValidationError({"rank": "That rank belongs to another organization."})
 
 
 # ---------------------------------------------------------------------------

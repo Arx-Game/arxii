@@ -159,14 +159,35 @@ class OfferChapter(models.TextChoices):
 class FinalTouchesPrompt(models.TextChoices):
     """The optional question a card asks at Final Touches (#4846, slice 5 of #4813).
 
-    Staff set it per card (``Distinction.final_touches_prompt``) on the Distinction Builder;
-    ``offers.final_touches_prompts`` collects the prompts of the cards a draft holds, and
-    the leaf asks each one. A prompt is answerable or skippable, never required (the
-    chapter rule of 2026-10-29). The prestige blurb arrives with the starting prestige
-    event (slice 6), not here.
+    Staff set it per card (``Distinction.final_touches_prompt``) on the Distinction Builder
+    for a prompt with no sidecar behind it; a grant sidecar raises its own prompt
+    (#4852, slice 6 of #4813: a prestige grant asks ``PRESTIGE_STORY``, an organization
+    grant with no fixed organization asks ``ORGANIZATION``, a path aspect grant shows
+    ``PATH_ASPECT``). ``offers.final_touches_prompts`` collects both for the cards a draft
+    holds, ``offers.final_touches_cards`` names the card behind each, and the leaf asks
+    each one. A prompt is answerable or skippable, never required (the chapter rule of
+    2026-10-29).
     """
 
     CRIME = "crime", "Name the crime (Jailbird)"
+    #: What people say happened: the story behind a starting prestige, kept as the pick's
+    #: notes. Raised by ``societies.DistinctionPrestigeGrant``, never set by staff.
+    PRESTIGE_STORY = "prestige_story", "What people say happened (a prestige grant)"
+    #: Which of the realm's admitting organizations the card seats the character in.
+    #: Raised by ``societies.DistinctionOrganizationGrant`` with no fixed organization.
+    ORGANIZATION = "organization", "The organization that takes you in (an organization grant)"
+    #: Nothing to answer: the line naming the Path's stronger Aspect the bonus lands on.
+    #: Raised by ``classes.DistinctionPathAspectGrant``.
+    PATH_ASPECT = "path_aspect", "Your Path's stronger Aspect (a path aspect grant)"
+
+
+#: The prompts a grant sidecar raises on its own (#4852); the rest come from
+#: ``Distinction.final_touches_prompt``.
+GRANT_RAISED_PROMPTS: tuple[str, ...] = (
+    FinalTouchesPrompt.PRESTIGE_STORY,
+    FinalTouchesPrompt.ORGANIZATION,
+    FinalTouchesPrompt.PATH_ASPECT,
+)
 
 
 class ActorSheetPrompt(models.TextChoices):
@@ -496,6 +517,15 @@ CRIME_KEY = "crime"
 CRIME_KIND_ID = "kind_id"
 CRIME_LINE = "line"
 CRIME_LINE_MAX_LENGTH = 500
+# The grants' answers (#4852, slice 6 of #4813), each keyed by the card's id as a string, since
+# two cards can ask the same thing (Miraculous Survival and Renowned both carry a prestige
+# grant). ``PRESTIGE_STORIES_KEY`` maps to the story's text, written at finalize as the pick's
+# ``CharacterDistinction.notes``; ``ORGANIZATIONS_KEY`` maps to the chosen organization's id,
+# one of ``offers.organization_choices``, seated at finalize through ``join_organization``.
+# Neither is gated on the card being held while the draft lives (the slice 5 rule).
+PRESTIGE_STORIES_KEY = "prestige_stories"
+PRESTIGE_STORY_MAX_LENGTH = 500
+ORGANIZATIONS_KEY = "organizations"
 
 # The Final Touches chapter (#4846, slice 5 of #4813): the card-unlocked section's copy keys.
 # Every line below is PLACEHOLDER for the maintainer's voice (the authoring plan's Final

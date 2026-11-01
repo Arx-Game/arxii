@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 import logging
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 
@@ -55,6 +56,9 @@ from world.societies.constants import (
 from world.societies.models import REPUTATION_MAX, REPUTATION_MIN, Organization
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from world.distinctions.models import CharacterDistinction
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +266,24 @@ def award_deed_prestige(persona: Persona, amount: int) -> None:
     """
     if amount:
         _bump_prestige_from_deeds(persona, amount)
+
+
+def apply_starting_prestige(char_dist: CharacterDistinction) -> int:
+    """Start a new character with a card's flat prestige (#4852, slice 6 of #4813).
+
+    Called once per picked distinction by character creation's finalize
+    (``_create_distinction_modifiers_bulk``), beside the inheritance. Deliberately not a
+    ``reconcile_*``: a starting prestige is paid exactly once, so this never runs from a
+    path that can repeat. Goes through ``award_deed_prestige``, the public bump seam, so no
+    Legend row and no deed come of it (decision 6 of #4813); a negative amount is valid
+    (decision 3). Returns the amount applied, 0 when the distinction carries no
+    ``DistinctionPrestigeGrant``.
+    """
+    grant = char_dist.distinction.prestige_grant_or_none
+    if grant is None:
+        return 0
+    award_deed_prestige(char_dist.character.primary_persona, grant.amount)
+    return grant.amount
 
 
 def _resolve_home_realm(origin_area):

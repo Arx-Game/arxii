@@ -1,7 +1,14 @@
 from django.contrib import admin, messages
 
 from world.admin_utils import OneRowPerFormSet
-from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
+from world.classes.models import (
+    Aspect,
+    CharacterClass,
+    ClassStageHealthRate,
+    DistinctionPathAspectGrant,
+    Path,
+    PathAspect,
+)
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
@@ -201,3 +208,12 @@ class ClassStageHealthRateAdmin(admin.ModelAdmin):
     search_fields = ["character_class__name"]
     list_select_related = ["character_class"]
     autocomplete_fields = ["character_class"]
+
+
+@admin.register(DistinctionPathAspectGrant)
+class DistinctionPathAspectGrantAdmin(admin.ModelAdmin):
+    """A card's bonus on the holder's Path's stronger Aspect (#4852, slice 6 of #4813)."""
+
+    list_display = ("distinction", "value")
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)

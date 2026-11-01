@@ -306,6 +306,14 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # The ``currency.DistinctionStartingGrant`` sidecar (#4062), or ``None``: read
     # by the serializers' effects summary without importing ``world.currency``.
     starting_grant_or_none = ReverseOneToOneOrNone("starting_grant")
+    # The finalize-time grants of #4852 (slice 6 of #4813), each ``None`` when the card
+    # carries none: a starting prestige (``societies.DistinctionPrestigeGrant``), a
+    # membership (``societies.DistinctionOrganizationGrant``), a bonus on the Path's
+    # stronger Aspect (``classes.DistinctionPathAspectGrant``). Read by the effects summary
+    # and by ``character_creation.offers`` without importing either app.
+    prestige_grant_or_none = ReverseOneToOneOrNone("prestige_grant")
+    organization_grant_or_none = ReverseOneToOneOrNone("organization_grant")
+    path_aspect_grant_or_none = ReverseOneToOneOrNone("path_aspect_grant")
 
     @PrunedCachedProperty
     def cached_item_grants(self) -> list:

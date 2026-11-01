@@ -526,10 +526,119 @@ def _write_final_touches_doors(
     draft: CharacterDraft, sheet: CharacterSheet, primary: Persona
 ) -> None:
     """The optional doors of Final Touches a draft may have walked through: the face the
-    world meets while the true one is believed dead (#4396), and the crime a held card
-    asked the player to name (#4846). Called by both finalize paths."""
+    world meets while the true one is believed dead (#4396), the crime a held card asked
+    the player to name (#4846), and the grants the held cards reconcile here (#4852: the
+    story behind a starting prestige, the membership a card opens, the bonus on the Path's
+    stronger Aspect). Called by both finalize paths, after the vacancy bind, so a
+    membership a vacancy already seated is kept, not doubled."""
     _write_officially_dead(draft, sheet, primary)
     _write_crime_note(draft, sheet)
+    _apply_card_grants(draft, sheet, primary)
+
+
+def _apply_card_grants(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
+    """The grants the held cards reconcile at finalize (#4852, slice 6 of #4813): the story
+    behind a starting prestige, the membership a card opens, the bonus on the Path's
+    stronger Aspect. The prestige itself is paid beside the inheritance in
+    ``_create_distinction_modifiers_bulk``. Called by ``_write_final_touches_doors``."""
+    _write_prestige_stories(draft, sheet)
+    _join_card_organizations(draft, sheet, primary)
+    _grant_path_aspect_bonuses(draft, sheet)
+
+
+def _write_prestige_stories(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """What people say happened (#4852): the Final Touches answer to a prestige card becomes
+    the pick's ``CharacterDistinction.notes``, the player's own words about the card, when
+    the pick's notes are still blank. A story left behind by an unpicked card has no pick
+    to land on and is ignored here."""
+    from world.character_creation.constants import PRESTIGE_STORIES_KEY  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+
+    stories = draft.draft_data.get(PRESTIGE_STORIES_KEY) or {}
+    if not stories:
+        return
+    picks = CharacterDistinction.objects.filter(
+        character=sheet, distinction__prestige_grant__isnull=False, notes=""
+    )
+    for pick in picks:
+        text = (stories.get(str(pick.distinction_id)) or "").strip()
+        if text:
+            pick.notes = text
+            pick.save(update_fields=["notes"])
+
+
+def _join_card_organizations(
+    draft: CharacterDraft, sheet: CharacterSheet, primary: Persona
+) -> None:
+    """Seat the memberships the held cards open (#4852): the grant's own organization, or
+    the one the player picked at Final Touches from the realm's admitting list, at the
+    grant's rank or the entry rank, through ``join_organization``. A card whose open grant
+    was left unanswered seats nothing; a membership a vacancy already made in the same
+    organization, or one the organization's rules refuse, is logged and skipped rather
+    than failing the finalize."""
+    from world.character_creation.constants import ORGANIZATIONS_KEY  # noqa: PLC0415
+    from world.character_creation.offers import held_cards, organization_choices  # noqa: PLC0415
+    from world.societies.exceptions import OrganizationMembershipError  # noqa: PLC0415
+    from world.societies.membership_services import join_organization  # noqa: PLC0415
+
+    grants = [
+        (card, card.organization_grant_or_none)
+        for card in held_cards(draft)
+        if card.organization_grant_or_none is not None
+    ]
+    if not grants:
+        return
+    picked = draft.draft_data.get(ORGANIZATIONS_KEY) or {}
+    choices = {org.pk: org for org in organization_choices(draft)}
+    for card, grant in grants:
+        organization = (
+            grant.organization if grant.organization_id else choices.get(picked.get(str(card.pk)))
+        )
+        if organization is None:
+            continue
+        try:
+            join_organization(organization, primary, rank=grant.rank)
+        except OrganizationMembershipError as exc:
+            logger.info(
+                "card %s did not seat %s in %s at finalize: %s",
+                card.name,
+                sheet.pk,
+                organization.name,
+                type(exc).__name__,
+            )
+
+
+def _grant_path_aspect_bonuses(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Capable Mentor's bonus (#4852): one ``CharacterModifier`` on the aspect target of
+    the Path's stronger Aspect, sourced to the pick with no effect template (the Path is
+    not known when the card is authored). Nothing without a Path."""
+    from world.character_creation.offers import strongest_path_aspect  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
+    from world.mechanics.services import ensure_aspect_target  # noqa: PLC0415
+
+    picks = list(
+        CharacterDistinction.objects.filter(
+            character=sheet, distinction__path_aspect_grant__isnull=False
+        ).select_related("distinction__path_aspect_grant")
+    )
+    if not picks:
+        return
+    aspect = strongest_path_aspect(draft.selected_path)
+    if aspect is None:
+        return
+    target = ensure_aspect_target(aspect)
+    if target is None:
+        logger.warning("no aspect target for %s; path aspect grants skipped", aspect.name)
+        return
+    for pick in picks:
+        source = ModifierSource.objects.create(character_distinction=pick)
+        CharacterModifier.objects.create(
+            character=sheet,
+            target=target,
+            value=pick.distinction.path_aspect_grant.value,
+            source=source,
+        )
 
 
 def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
@@ -2084,6 +2193,7 @@ def _create_distinction_modifiers_bulk(
     from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
     from world.npc_services.regard import reconcile_distinction_regard_seeds  # noqa: PLC0415
+    from world.societies.renown import apply_starting_prestige  # noqa: PLC0415
 
     # Build ModifierSource instances for all effects across all distinctions
     sources = []
@@ -2126,6 +2236,8 @@ def _create_distinction_modifiers_bulk(
         apply_starting_grant(char_dist)
         # A keepsake (#4398) is minted here for the same reason.
         apply_item_grants(char_dist)
+        # A starting prestige (#4852) too: Renowned's +150, Infamous's -300.
+        apply_starting_prestige(char_dist)
 
 
 def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:

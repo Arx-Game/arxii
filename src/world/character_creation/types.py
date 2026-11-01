@@ -163,3 +163,18 @@ class MagicTrainingPool:
     required_spend: int
     fit: "TeachingFit"
     sources: list[DistinctionBonusSource]
+
+
+@dataclass(frozen=True)
+class FinalTouchesCard:
+    """One ask a held card raises at Final Touches (#4852, slice 6 of #4813).
+
+    ``prompt`` is a ``FinalTouchesPrompt`` value; ``detail`` carries what the leaf prints
+    beside it when the prompt has nothing to answer (the Path's stronger Aspect's name for
+    ``path_aspect``), else blank. Built by ``offers.final_touches_cards``.
+    """
+
+    distinction_id: int
+    name: str
+    prompt: str
+    detail: str
