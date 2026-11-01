@@ -13,6 +13,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.models.affinity import Resonance
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME
 
 
 class FacetManager(NaturalKeyManager):
@@ -88,6 +89,67 @@ class FacetAlias(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} -> {self.facet.name}"
+
+
+class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
+    """A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783).
+
+    The facet itself names the effect it boosts, whatever the thread's resonance
+    (owner ruling 2026-11-01): a wolf-fang facet adds Charge damage, a shell facet
+    adds partial protection. Counted by ``passive_facet_bonuses`` while the character
+    wears an item carrying the facet and has a FACET thread on it, scaled like the
+    facet's resonance passive (item quality, attachment quality, thread level).
+
+    Its own row, not a column on ``Facet``: the vocabulary is shared with worship
+    (``BeingFacet``), and one facet may boost several effects.
+    """
+
+    facet = models.ForeignKey(Facet, on_delete=models.CASCADE, related_name="effect_bonuses")
+    target = models.ForeignKey(
+        "arxii.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="facet_effect_bonuses",
+        limit_choices_to={"category__name": MANEUVER_EFFECT_CATEGORY_NAME},
+        help_text="The maneuver effect this facet boosts.",
+    )
+    amount = models.IntegerField(
+        help_text=(
+            "Added per thread level, times the item's and the attachment's quality "
+            "multipliers. Negative for a facet that hinders the effect."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["facet__name", "target__name"]
+        verbose_name = "Facet effect bonus"
+        verbose_name_plural = "Facet effect bonuses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["facet", "target"], name="facet_effect_bonus_one_per_target"
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["facet", "target"]
+        dependencies = ["arxii.Facet", "arxii.ModifierTarget"]
+
+    def __str__(self) -> str:
+        return f"{self.facet.name}: {self.amount:+d} {self.target.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.amount == 0:
+            errors["amount"] = "A bonus of 0 adds nothing."
+        if (
+            self.target_id is not None
+            and self.target.category.name != MANEUVER_EFFECT_CATEGORY_NAME
+        ):
+            errors["target"] = "A facet effect bonus names a maneuver effect target."
+        if errors:
+            raise ValidationError(errors)
 
 
 class Motif(SharedMemoryModel):

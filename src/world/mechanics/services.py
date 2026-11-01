@@ -23,6 +23,7 @@ from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import (
+    FacetEffectBonus,
     Motif,
     MotifResonance,
     Resonance,
@@ -529,7 +530,9 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
     carry the thread's anchor facet. For each matching (item, item_facet) pair,
     compute the contribution from every tier-0 FLAT_BONUS ThreadPullEffect that
     maps this thread's resonance to ``target`` via the ModifierTarget.target_resonance
-    OneToOne. Sum all contributions and return the integer total.
+    OneToOne. Sum all contributions and return the integer total. A maneuver-effect
+    target has no resonance; it is reached by the facet's own ``FacetEffectBonus`` rows
+    instead, which scale the same way (#4815).
 
     This composes with the existing ``passive_vital_bonuses`` pattern — same shape,
     keyed by ModifierTarget instead of vital_target. See CharacterThreadHandler in
@@ -548,21 +551,59 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
     if not isinstance(char, Character):  # threads/equipped_items are Character-only
         return 0
     total = 0
+    worn: list[tuple[object, list[object]]] = []
     for thread in char.threads.threads_of_kind(TargetKind.FACET):
         matching = char.equipped_items.item_facets_for(thread.target_facet)
         if not matching:
             continue
+        worn.append((thread, matching))
         effects = _thread_pull_effects_for(
             thread.resonance, target, target_kind=TargetKind.FACET, tier=0
         )
         for effect in effects:
             for item_facet in matching:
                 total += _facet_effect_contribution(
-                    effect=effect,
-                    thread=thread,
+                    base=effect.flat_bonus_amount or 0,
+                    level=thread.level,
                     item=item_facet.item_instance,
                     item_facet=item_facet,
                 )
+    return total + _facet_effect_bonus_total(worn, target)
+
+
+def _facet_effect_bonus_total(
+    worn: list[tuple[object, list[object]]], target: ModifierTarget
+) -> int:
+    """The ``FacetEffectBonus`` rows of worn, threaded facets naming ``target`` (#4815).
+
+    The facet names the maneuver effect, whatever its thread's resonance; each (worn item
+    facet, row) pair scales like a resonance passive, except by the shown thread level:
+    maneuver numbers are plain (a charge's 5 damage), so "+1 a level" at shown level 3
+    is +3, as a vow's stat scaling on a maneuver effect reads it. One query for every
+    thread's facet, and none for a target outside the maneuver-effect category, which no
+    row can name.
+    """
+    from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
+
+    if not worn or target.category.name != MANEUVER_EFFECT_CATEGORY_NAME:
+        return 0
+    amounts = dict(
+        FacetEffectBonus.objects.filter(
+            facet_id__in={thread.target_facet_id for thread, _ in worn}, target=target
+        ).values_list("facet_id", "amount")
+    )
+    total = 0
+    for thread, matching in worn:
+        amount = amounts.get(thread.target_facet_id)
+        if amount is None:
+            continue
+        for item_facet in matching:
+            total += _facet_effect_contribution(
+                base=amount,
+                level=shown_thread_level(thread.level),
+                item=item_facet.item_instance,
+                item_facet=item_facet,
+            )
     return total
 
 
@@ -887,12 +928,15 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
 
 def _facet_effect_contribution(
     *,
-    effect: ThreadPullEffect,
-    thread: object,
+    base: int,
+    level: int,
     item: object,
     item_facet: object,
 ) -> int:
-    """Compute one (item, facet) contribution to a tier-0 FLAT_BONUS effect.
+    """Compute one (item, facet) contribution of a facet bonus worth ``base``.
+
+    ``base`` is a tier-0 FLAT_BONUS pull effect's amount or a ``FacetEffectBonus``
+    amount (#4815); both scale the same way.
 
     Formula: base × item_quality_multiplier × attachment_quality_multiplier × max(1, level).
 
@@ -901,15 +945,15 @@ def _facet_effect_contribution(
     this is belt-and-suspenders consistent with the resonance.py FACET branch.
 
     Args:
-        effect: The ThreadPullEffect row (FLAT_BONUS, tier 0).
-        thread: The Thread instance (supplies ``level``).
+        base: The authored amount before scaling.
+        level: The thread level the bonus scales by (stored for a pull effect, shown
+            for a ``FacetEffectBonus``).
         item: The ItemInstance (supplies ``quality_tier.stat_multiplier``).
         item_facet: The ItemFacet (supplies ``attachment_quality_tier.stat_multiplier``).
 
     Returns:
         Integer contribution (truncated via int()).
     """
-    base = effect.flat_bonus_amount or 0
     item_mult = (
         Decimal(str(item.quality_tier.stat_multiplier))
         if item.quality_tier is not None
@@ -917,7 +961,7 @@ def _facet_effect_contribution(
     )
     # Non-nullable FK — always present
     attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
-    level_mult = max(1, thread.level)
+    level_mult = max(1, level)
     return int(base * item_mult * attach_mult * level_mult)
 
 

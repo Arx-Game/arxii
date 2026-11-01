@@ -63,6 +63,7 @@ from world.magic.models import (
     CharacterTradition,
     EffectType,
     Facet,
+    FacetEffectBonus,
     Gift,
     GiftUnlock,
     GlimpseTag,
@@ -122,9 +123,12 @@ from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.manifestation import CharacterManifestation, TechniqueManifestOption
 from world.magic.types.ritual import SoulfrayContent
+from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind as ManeuverKind
 from world.mechanics.factories import (
     DeathDeferredPropertyFactory,
     FatigueCollapseImmunePropertyFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
     PowerMultiplierTargetFactory,
 )
 from world.roster.factories import RosterEntryFactory
@@ -1108,6 +1112,21 @@ class FacetFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Facet{n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} facet.")
+
+
+class FacetEffectBonusFactory(factory.django.DjangoModelFactory):
+    """A facet's bonus to a maneuver effect (#4815); the default target is kind-wide damage."""
+
+    class Meta:
+        model = FacetEffectBonus
+
+    facet = factory.SubFactory(FacetFactory)
+    target = factory.SubFactory(
+        ModifierTargetFactory,
+        category=factory.SubFactory(ModifierCategoryFactory, name=MANEUVER_EFFECT_CATEGORY_NAME),
+        scope_effect_kind=ManeuverKind.DAMAGE,
+    )
+    amount = 1
 
 
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
