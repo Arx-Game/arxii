@@ -2122,7 +2122,7 @@
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
 - `mirrored_outcome(outcome: 'CheckOutcome') -> 'CheckOutcome | None' - The outcome on the other side of a resisted roll (#4418).`
-- `modifier_target_contributions(character_sheet: 'CharacterSheet', target: 'ModifierTarget', *, lane: str) -> list[world.checks.types.ModifierContribution] - A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.`
+- `modifier_target_contributions(character_sheet: 'CharacterSheet', target: 'ModifierTarget', *, lane: str, inputs: 'DerivedInputs | None' = None) -> list[world.checks.types.ModifierContribution] - A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
@@ -3384,11 +3384,11 @@
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
-- `condition_target_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget', *, lane: str) -> list[world.checks.types.ModifierContribution] - One CONDITION contribution per active ConditionModifierEffect on a target (#4726).`
+- `condition_target_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget', *, lane: str, inputs: world.mechanics.derived_amounts.DerivedInputs | None = None) -> list[world.checks.types.ModifierContribution] - One CONDITION contribution per active ConditionModifierEffect on a target (#4726).`
 - `contributing_condition_ids(breakdown: world.checks.types.ModifierBreakdown) -> tuple[int, ...] - The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
-- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int') -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
+- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
@@ -3446,7 +3446,7 @@
 - `resolved_damage_type(damage_type: 'DamageType | None') -> 'DamageType | None' - The damage type a hit really is: untyped damage is Physical (#4742).`
 - `retaliating_instances(target: 'ObjectDB') -> list[world.conditions.models.ConditionInstance] - The bearer's active strike-back instances, oldest first, in one query (#4584).`
 - `round_half_up(value: 'Decimal') -> 'int' - ``value`` to a whole number, halves away from zero (so -1.5 is -2, signed alike).`
-- `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
+- `scaled_condition_effect_value(effect: world.conditions.models.ConditionModifierEffect, instance: world.conditions.models.ConditionInstance, inputs: world.mechanics.derived_amounts.DerivedInputs | None = None) -> int - One ConditionModifierEffect's contribution on one active instance (#4090).`
 - `scaled_damage_dealt_percent(modifier: 'ConditionDamageDealtModifier', instance: world.conditions.models.ConditionInstance) -> int - One ConditionDamageDealtModifier's percent on one active instance (#4742).`
 - `scaled_outgoing_damage(attacker: 'ObjectDB | None', amount: int, damage_type: 'DamageType | None') -> int - *amount* after the attacker's own ConditionDamageDealtModifier rows (#4742).`
 - `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
@@ -7302,7 +7302,7 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' - Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
-- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int') -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
+- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
@@ -7315,7 +7315,7 @@
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' - Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' - Collect all Capability sources for a character (per-source, not aggregated).`
-- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
+- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None, inputs: 'DerivedInputs | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s ``ModifierValue`` rows in one query.`
