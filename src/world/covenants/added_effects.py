@@ -17,6 +17,10 @@ out-of-combat cast) call into this module:
   in the ``VowAddedEffectFiring`` ledger. The caller writes it only after a
   cast lands, so a failed cast never spends a limited effect.
 - ``vow_added_effects_on_technique`` is the static view for display (#4565).
+- ``effect_rides_technique`` and ``techniques_ridden_by`` are the one catalog
+  match between a row and the techniques it rides (function tag, then the gift
+  or technique narrowing), shared by the cast path, the static view and the
+  vow page's rail (#4880).
 
 ## Who holds a row
 
@@ -88,7 +92,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, QuerySet
 
 from world.combat.models import CombatParticipant, VowAddedEffectFiring
 from world.covenants.constants import VowEffectContext, VowEffectFrequency
@@ -109,7 +113,7 @@ from world.covenants.perks.services import (
     vow_holder_thread_levels,
 )
 from world.covenants.types import FiredVowEffect
-from world.magic.models.techniques import ConditionTargetKind
+from world.magic.models.techniques import ConditionTargetKind, Technique
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -117,7 +121,6 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
-    from world.magic.models import Technique
     from world.scenes.models import Scene
 
 logger = logging.getLogger(__name__)
@@ -135,6 +138,37 @@ class _LiveRow:
     candidate: VowHolderCandidate
     effect: VowAddedEffect
     thread_level: int  # shown level (stored // 10, #4585)
+
+
+def effect_rides_technique(
+    effect: VowAddedEffect, technique: Technique, technique_functions: set[str]
+) -> bool:
+    """True when ``effect`` rides casts of ``technique``, by the catalog match alone (#4880).
+
+    ``technique_functions`` is the technique's function tags (the caller reads them
+    once). The row's ``function`` must be one of them, and its gift and technique
+    narrowing, when set, must name the technique's gift or the technique itself.
+    Nothing that depends on a cast or a holder is read here.
+    """
+    return (
+        effect.function in technique_functions
+        and effect.gift_id in (None, technique.gift_id)
+        and effect.technique_id in (None, technique.pk)
+    )
+
+
+def techniques_ridden_by(effect: VowAddedEffect) -> QuerySet[Technique]:
+    """Every catalog technique ``effect`` rides: the queryset form of the match (#4880).
+
+    Techniques carrying a function tag equal to the row's ``function``, narrowed to
+    the row's gift or its one technique when set. Ordered by name.
+    """
+    techniques = Technique.objects.filter(function_tags__function=effect.function)
+    if effect.technique_id is not None:
+        techniques = techniques.filter(pk=effect.technique_id)
+    elif effect.gift_id is not None:
+        techniques = techniques.filter(gift_id=effect.gift_id)
+    return techniques.distinct().order_by("name")
 
 
 def vow_added_effects_for_cast(
@@ -213,14 +247,13 @@ def vow_added_effects_on_technique(
     candidates = _self_candidates(sheet)
     if not candidates:
         return []
-    effects = list(
-        VowAddedEffect.objects.filter(
-            Q(gift__isnull=True) | Q(gift_id=technique.gift_id),
-            Q(technique__isnull=True) | Q(technique_id=technique.pk),
-            covenant_role_id__in={c.role_id for c in candidates},
-            function__in=functions,
+    effects = [
+        effect
+        for effect in VowAddedEffect.objects.filter(
+            covenant_role_id__in={c.role_id for c in candidates}, function__in=functions
         )
-    )
+        if effect_rides_technique(effect, technique, functions)
+    ]
     if not any(effect.focus_pick_id is not None for effect in effects):
         return effects
     chosen = chosen_pick_ids_by_holder({sheet.pk})
@@ -453,6 +486,7 @@ def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
     """Rows that pass every per-holder gate; the situation is checked last (it may query)."""
     from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
+    functions = {tag.function for tag in technique.cached_function_tags}
     live: list[_LiveRow] = []
     for candidate in candidates:
         # unlock_thread_level and the per-level bonuses are on the shown scale (#4585).
@@ -462,8 +496,7 @@ def _live_rows(  # noqa: PLR0913 - the cast's gates, computed once by the caller
             for effect in effects_by_role.get(candidate.role_id, ())
             if (
                 effect.beneficiary in candidate.beneficiaries
-                and effect.gift_id in (None, technique.gift_id)
-                and effect.technique_id in (None, technique.pk)
+                and effect_rides_technique(effect, technique, functions)
                 and _context_allows(effect.cast_context, in_combat=in_combat)
                 and level >= effect.unlock_thread_level
                 and holder_has_pick(effect.focus_pick_id, candidate.holder.pk, chosen_picks)
