@@ -1001,6 +1001,37 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
         self.assertFalse(action.confirm_soulfray_risk)
 
 
+class AMaskedFighterWhoseRageAttacks(_CompelledMira):
+    """Ruling 43: the action card a masked fighter's attack writes is signed with the mask.
+
+    Mira masks herself ("persona mask scarred sellsword") and declares nothing; Berserk
+    attacks for her. Wynn, in the same room, reads the scene feed over REST. Expected
+    from the ruling: the card names the face Mira presents (the mask command names it
+    "a person wearing a <what she typed>"), never her own name.
+    """
+
+    def test_wynn_reads_the_card_signed_with_the_mask(self) -> None:
+        wynn = self.make_player("Wynn", room=self.road)
+        told = self.telnet(self.mira, "persona mask scarred sellsword")
+
+        self.resolve()
+
+        response = self.api(self.account_of(wynn)).get(
+            f"/api/interactions/?scene={self.encounter.scene_id}"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = response.json()
+        rows = rows["results"] if isinstance(rows, dict) else rows
+        cards = [row for row in rows if row["mode"] == "action"]
+        self.assertEqual(len(cards), 1, (rows, told))
+        mask = self.sheet.personas.get(persona_type=PersonaType.TEMPORARY)
+        self.assertEqual(
+            (cards[0]["persona"]["id"], cards[0]["persona"]["name"]),
+            (mask.pk, "a person wearing a scarred sellsword"),
+        )
+        self.assertNotIn("Mira", str(cards[0]))
+
+
 class ACompelledFighterWhoFlees(_CompelledMira):
     def test_compelled_flee_partial_success_flees_at_penalty(self) -> None:
         result = self.web(self.mira, "combat_flee")

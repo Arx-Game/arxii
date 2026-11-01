@@ -120,17 +120,20 @@ def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action fi
             target at all, e.g. a flee or a clash contribution) passes None.
 
     Returns:
-        The newly-created Interaction row, or ``None`` if the participant's
-        character sheet has no PRIMARY persona (legacy fixture content predating
+        The newly-created Interaction row, signed by the persona the participant
+        presents (active persona, else PRIMARY), or ``None`` if the sheet has
+        neither (legacy fixture content predating
         the create_character_with_sheet invariant — skipped silently to allow
         the resolve loop to continue without writing a pose-log link).
     """
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    sheet = participant.character_sheet
-    try:
-        persona = sheet.primary_persona
-    except Persona.DoesNotExist:
+    # Signed with the face the fighter presents (#4802), the same answer the combat
+    # roster and the room lines use, so a masked fighter's card never names him.
+    persona = personas_for_sheets([participant.character_sheet_id]).get(
+        participant.character_sheet_id
+    )
+    if persona is None:
         # Legacy fixture content; skip Interaction creation. The action still
         # resolves; it just won't have a pose-log link.
         return None
