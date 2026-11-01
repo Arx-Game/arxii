@@ -4,6 +4,7 @@ Staff find every combat role authoring page from the front page; each link opens
 """
 
 from pathlib import Path
+import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -11,8 +12,10 @@ from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
 
+from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.factories import CombatStyleFactory, CovenantRoleFactory
 from world.covenants.models import VowFocusPickConfig
+from world.mechanics.factories import PropertyFactory
 
 
 class CombatRolesPanelTests(TestCase):
@@ -46,22 +49,45 @@ class CombatRolesPanelTests(TestCase):
                 "Combat styles",
                 "Conditions",
                 "Properties",
+                "Combo map",
                 "Focus pick budget",
                 "Required content",
             ],
         )
         for link in links:
             with self.subTest(link=link.label):
-                self.assertEqual(self.client.get(link.url).status_code, 200)
+                if link.url:
+                    self.assertEqual(self.client.get(link.url).status_code, 200)
+                else:
+                    self.assertTrue(link.pickers, "a row with no page of its own needs a picker")
 
     def test_the_vow_picker_lists_every_vow_and_opens_its_vow_page(self) -> None:
         role = CovenantRoleFactory(name="Fulmination")
         vows = next(link for link in self._links() if link.label == "Vow pages")
         self.assertEqual(vows.note, "1 vow")
-        self.assertEqual(vows.picker.choices, [(role.pk, "Fulmination")])
-        response = self.client.get(vows.picker.action, {"pk": role.pk})
+        (picker,) = vows.pickers
+        self.assertEqual(picker.choices, [(role.pk, "Fulmination")])
+        response = self.client.get(picker.action, {"pk": role.pk})
         self.assertRedirects(response, reverse("admin_vow_builder", args=[role.pk]))
         self.assertContains(self.client.get(reverse("admin:index")), 'class="combat-roles-picker"')
+
+    def test_the_combo_map_row_opens_a_property_or_a_condition(self) -> None:
+        prop = PropertyFactory(name="Indulgence")
+        condition = ConditionTemplateFactory(name="Tipsy")
+        combo = next(link for link in self._links() if link.label == "Combo map")
+        by_label = {picker.label: picker for picker in combo.pickers}
+        self.assertEqual(list(by_label), ["property", "condition"])
+        self.assertIn((prop.pk, "Indulgence"), by_label["property"].choices)
+        self.assertIn((condition.pk, "Tipsy"), by_label["condition"].choices)
+        response = self.client.get(by_label["property"].action, {"pk": prop.pk})
+        self.assertRedirects(response, reverse("admin_combo_map_property", args=[prop.pk]))
+        response = self.client.get(by_label["condition"].action, {"pk": condition.pk})
+        self.assertRedirects(response, reverse("admin_combo_map_condition", args=[condition.pk]))
+        body = self.client.get(reverse("admin:index")).content.decode()
+        # Each select is named by visible text: the row's label and its own button.
+        row = re.search(r'id="(combat-roles-link-\d+)">Combo map</th>', body).group(1)
+        self.assertIn(f'aria-labelledby="{row} combat-roles-open-', body)
+        self.assertRegex(body, r'id="combat-roles-open-\d+-2">Open condition</button>')
 
     def test_counts_read_the_rows(self) -> None:
         styles = next(link for link in self._links() if link.label == "Combat styles")
@@ -101,8 +127,12 @@ class CombatRolesPanelPermissionTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertEqual(resp.status_code, 200)
         links = resp.context["combat_roles_links"]
-        self.assertEqual([link.label for link in links], ["Combat styles", "Conditions"])
-        for link in links:
+        self.assertEqual(
+            [link.label for link in links], ["Combat styles", "Conditions", "Combo map"]
+        )
+        combo = links[-1]
+        self.assertEqual([picker.label for picker in combo.pickers], ["condition"])
+        for link in links[:-1]:
             with self.subTest(link=link.label):
                 self.assertEqual(self.client.get(link.url).status_code, 200)
 
