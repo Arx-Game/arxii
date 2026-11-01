@@ -8560,12 +8560,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
   <opp> [with <weapon>]` and `combat strike`, web: Strike is the first pick in the focused
   `ActionDeclarationCard` row (`leadingPick`), its `StrikeControl` "With" row fed by the own
-  participant's `strike_weapons`, the target the card's own. **Misses build intensity:** a missed attack (Strike or technique, at an
-  opponent) runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED
-  `apply_dramatic_surge` once a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no
-  outcome since 0347); every attack roll adds an "Intensity" contribution of engagement intensity
-  x "Intensity: to hit per point" (`intensity_to_hit_contribution`). `GearArchetype.UNARMED`
-  joins `WEAPON_ARCHETYPES`.
+  participant's `strike_weapons`, the target the card's own. **Misses build intensity:** intensity helps attacks only, gated by
+  `is_attack_on_opponent(action)` (an opponent target, or a joust pass). A missed attack (the hit
+  roll failed, success level below 1: a Strike, a technique at an opponent, a lost joust pass)
+  runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED `apply_dramatic_surge` once
+  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0348; never
+  narrated, and left out of a bystander's `surge_beats`); an attack roll adds an "Intensity"
+  contribution of the COMBAT engagement's intensity x "Intensity: to hit per point"
+  (`intensity_to_hit_contribution`). Each Strike roll stores what its breakdown shows at roll
+  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0349 and
+  0350), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
+  reaches only the roll's own account and staff. The striker's second-person telnet line is
+  sent right after the room line (none in a room-less encounter, as for technique outcomes);
+  the live `combat_encounter_state` frame refetches the Last Outcome card.
+  `GearArchetype.UNARMED` joins `WEAPON_ARCHETYPES` and the
+  `items_weapon_damage_requires_weapon_archetype` constraint (0350).
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →

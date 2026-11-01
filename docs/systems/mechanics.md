@@ -296,8 +296,8 @@ missing key; an edited base value is kept.
 | `rally_surge_intensity` | surge intensity | 100 | `_surge_rallied_ally`, as a percentage |
 | `strike_base_damage` | damage | 3 | `_resolve_strike` (#4858): a landed Strike's floor; its modifiers (kind-wide too) add to every landed Strike |
 | `strike_bare_hands_damage` | damage | 2 | `_resolve_strike`: bare hands' damage and floor; only modifiers scoped to it alone |
-| `miss_intensity` | intensity | 1 | `record_miss_intensity`: what a missed attack (Strike or technique) adds to the engagement |
-| `intensity_to_hit` | to hit | 1 | `intensity_to_hit_contribution`: to hit per point of engagement intensity, on every attack roll; only modifiers scoped to it alone |
+| `miss_intensity` | intensity | 1 | `record_miss_intensity`: what a missed attack at an opponent (Strike, technique, lost joust pass) adds to the combat engagement |
+| `intensity_to_hit` | to hit | 1 | `intensity_to_hit_contribution`: to hit per point of the combat engagement's intensity, on an attack at an opponent only; only modifiers scoped to it alone |
 
 **Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
 `CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
