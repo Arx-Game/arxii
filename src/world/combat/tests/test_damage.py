@@ -626,3 +626,6 @@ class NpcActionInteractionLazyCreationTests(TestCase):
             npc_action_interaction.pk,
             "ConsequenceOutcome must reference the narrator ACTION Interaction",
         )
+        # The survivability writer passes no round: it reads the encounter's, which only
+        # begin_declaration_phase advances, so the row keeps the round it ran in (#4884).
+        self.assertEqual(outcomes[0].combat_round, 1)

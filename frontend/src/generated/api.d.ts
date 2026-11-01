@@ -31731,6 +31731,8 @@ export interface components {
       readonly challenge_record_id: number;
       readonly action_interaction_id: number | null;
       readonly roll_breakdown: components['schemas']['RollBreakdown'] | null;
+      /** @description The encounter round a combat roll was made in, so the turn panel can show every roll of the last round. Null outside combat. */
+      readonly combat_round: number | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -49390,6 +49392,7 @@ export interface components {
       label: string;
       value: string;
       detail: string;
+      lapsed: boolean;
     };
     RoomAlarmDetails: {
       /** @description The room this alarm watches. */

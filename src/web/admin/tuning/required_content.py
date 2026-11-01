@@ -1058,6 +1058,91 @@ def _probe_path_technique_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_combat_style_skills() -> ProbeResult:
+    """Every `CombatStyle` names its own skill (#4884).
+
+    Consumer: `world/covenants/style_fit.py` `style_fit_for_attack()` and
+    `style_fit_for_defense()`. A style with no skill, or an inactive one, adds nothing
+    to a Strike, a technique's hit roll or the defense roll.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.filter(Q(skill__isnull=True) | Q(skill__is_active=False))
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} combat style(s) have no skill: their rolls add none."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_combat_style_hit_stats() -> ProbeResult:
+    """Every `CombatStyle` names the stat a Strike hits with (#4884).
+
+    Consumer: `world/combat/services/strike.py` `_roll_hit()`. A style with no hit stat
+    leaves its Strikes on the weapon's own stat.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.filter(hit_stat__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} combat style(s) have no hit stat: a Strike uses the weapon's."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_combat_style_weapon_kinds() -> ProbeResult:
+    """Every `CombatStyle` lists at least one weapon kind (#4884).
+
+    Consumer: `world/covenants/style_fit.py` `style_fit_for_attack()`. A style with no
+    weapon kind lapses on every attack, so its skill never counts on a Strike or a
+    technique's hit roll.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+    from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.exclude(gear__gear_archetype__in=WEAPON_ARCHETYPES)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} combat style(s) list no weapon kind: their skill never counts on "
+        "an attack."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_traditions_teach_a_style() -> ProbeResult:
+    """Every active `Tradition` teaches at least one `CombatStyle` (#4884).
+
+    Consumer: `CombatStyle.taught_by`, read by the creation style step (#4844 slice 5).
+    A Tradition that teaches no style gives its students no style to learn.
+    """
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    missing = tuple(
+        Tradition.objects.filter(is_active=True, combat_styles__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} active Tradition(s) teach no combat style."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_minor_gift_technique_skills() -> ProbeResult:
     """Every Minor `Gift` names the skill its techniques add (#4450).
 
@@ -4754,6 +4839,48 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "would tune has no authored row behind it."
             ),
             probe=AnyRowProbe(label="DreamPerilConfig"),
+        ),
+        ContentDependency(
+            key="combat-style-skills",
+            label="Skill on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/style_fit.py style_fit_for_attack()",
+            consequence=(
+                "A character with that style adds no style skill to a Strike, a technique's "
+                "hit roll or their defense roll."
+            ),
+            probe=CustomProbe(fn=_probe_combat_style_skills),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="combat-style-hit-stats",
+            label="Hit stat on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/services/strike.py _roll_hit()",
+            consequence="A Strike by a character with that style hits with the weapon's stat.",
+            probe=CustomProbe(fn=_probe_combat_style_hit_stats),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="combat-style-weapon-kinds",
+            label="Weapon kinds on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/style_fit.py style_fit_for_attack()",
+            consequence=(
+                "Every attack by a character with that style lapses the style, so its skill "
+                "never counts on a Strike or a technique's hit roll."
+            ),
+            probe=CustomProbe(fn=_probe_combat_style_weapon_kinds),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="traditions-teach-a-combat-style",
+            label="Each Tradition teaches a combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/models.py CombatStyle.taught_by",
+            consequence="A student of that Tradition has no combat style to learn.",
+            probe=CustomProbe(fn=_probe_traditions_teach_a_style),
+            admin_model="Tradition",
         ),
         ContentDependency(
             key="gear-archetype-compatibility",

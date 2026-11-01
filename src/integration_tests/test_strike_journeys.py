@@ -183,11 +183,13 @@ class StrikeWithAWeapon(_StrikeField):
                         "label": "Melee Combat",
                         "value": "25",
                         "detail": "strike skill for one-handed melee",
+                        "lapsed": False,
                     },
                     {
                         "label": "Agility",
                         "value": "",
                         "detail": "stat for one-handed melee",
+                        "lapsed": False,
                     },
                 ],
                 "result": "Hit, fair",
@@ -203,8 +205,14 @@ class StrikeWithAWeapon(_StrikeField):
                         "label": sword.display_name,
                         "value": "",
                         "detail": "weapon damage and quality",
+                        "lapsed": False,
                     },
-                    {"label": "Melee Combat", "value": "25", "detail": "strike skill"},
+                    {
+                        "label": "Melee Combat",
+                        "value": "25",
+                        "detail": "strike skill",
+                        "lapsed": False,
+                    },
                 ],
                 "result": f"{SWORD_DAMAGE} damage",
                 "result_note": "",
@@ -404,7 +412,12 @@ class MissesBuildIntensity(_StrikeField):
             latest_hit["modifiers"],
         )
         self.assertIn(
-            {"label": "Intensity", "value": "+1", "detail": "misses add to hit"},
+            {
+                "label": "Intensity",
+                "value": "+1",
+                "detail": "misses add to hit",
+                "lapsed": False,
+            },
             latest_hit["roll_breakdown"]["lines"],
         )
         first_hit = self.shown_rolls()[0]["roll_breakdown"]
@@ -541,6 +554,11 @@ class StrikeRecordsWhatWasRolled(_StrikeField):
         rows = response.json()["results"]
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["roll_breakdown"] is None for row in rows))
+        # Nor the numbers behind his rolls (#4884); the result line stays, as the room
+        # heard it.
+        self.assertTrue(all(row["modifiers"] == [] for row in rows))
+        self.assertTrue(all(row["modifier_total"] == 0 for row in rows))
+        self.assertEqual([row["summary"] for row in rows], ["6 damage", "Hit, fair"])
         # Hobb's own account still sees his rows laid out.
         self.assertTrue(all(row["roll_breakdown"] for row in self.shown_rolls()))
 

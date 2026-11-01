@@ -7898,7 +7898,12 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `VowFocusPickLimit` (NK `(pick, kind)`, `FocusPickLimitKind`, `frequency_tenths`,
     `reduction`), `VowFocusPickConfig` (singleton, `budget_per_level`),
     `CharacterVowFocusPick` (`character_role` x `pick`, play state) and `CombatStyle`
-    (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`).
+    (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`;
+    since #4884 `skill`, `hit_stat`, `taught_by`, `compatible_roles` and
+    `CombatStyleGear` (NK `(style, gear_archetype)`)). `world.covenants.style_fit`
+    (`style_fit_for_attack`, `style_fit_for_defense`, `StyleFit`, `StyleLapse`) puts the
+    style skill on Strike, technique hit and PC defense rolls while the weapon, armor and
+    vow are on the style [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
     `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,

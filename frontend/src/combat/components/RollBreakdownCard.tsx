@@ -3,7 +3,8 @@
  *
  * A heading ("Hit roll against Bandit's defense", "Damage roll"), one row per source
  * (the strike skill and its rating, the stat, misses adding to hit, the weapon and its
- * quality) with why it counts, then the result line ("Hit, good", "11 damage").
+ * quality) with why it counts, then the result line ("Hit, good", "11 damage"). A source
+ * that lapsed (a combat style skill off its style, #4884) is struck through beside why.
  */
 
 import type { components } from '@/generated/api';
@@ -22,8 +23,12 @@ export function RollBreakdownCard({ breakdown }: { breakdown: RollBreakdown }) {
             key={`${line.label}-${line.detail}`}
             className="flex items-baseline justify-between gap-3 py-1 text-xs"
             data-testid="roll-line"
+            data-lapsed={line.lapsed ? 'true' : undefined}
           >
-            <span className="text-foreground">
+            <span
+              className={line.lapsed ? 'text-muted-foreground line-through' : 'text-foreground'}
+              data-testid="roll-line-label"
+            >
               {line.label}
               {line.value !== '' && (
                 <span className="ml-1.5 font-mono text-muted-foreground">{line.value}</span>

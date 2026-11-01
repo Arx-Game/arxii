@@ -5,11 +5,13 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from world.admin_utils import OneRowPerFormSet
+from world.contributors.admin import CREDIT_FIELDSET
 from world.covenants.added_effect_summary import summarize_vow_added_effect
 from world.covenants.focus_picks import pick_price
 from world.covenants.models import (
     CharacterVowFocusPick,
     CombatStyle,
+    CombatStyleGear,
     CourtGrantConfig,
     Covenant,
     CovenantLevelBonus,
@@ -532,14 +534,39 @@ class CharacterVowFocusPickAdmin(admin.ModelAdmin):
     readonly_fields = ("chosen_at",)
 
 
+class CombatStyleGearInline(admin.TabularInline):
+    """The weapon and armor kinds a style fights with (#4884)."""
+
+    model = CombatStyleGear
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name = "gear kind"
+    verbose_name_plural = "Gear kinds"
+    # The demo's help line, shown under the inline rather than only as a tooltip.
+    template = "admin/covenants/combat_style_gear_inline.html"
+
+
 @admin.register(CombatStyle)
 class CombatStyleAdmin(admin.ModelAdmin):
-    """How a character was taught to fight with magic (#4759).
+    """How a character was taught to fight with magic (#4759, #4884).
 
     Give a character a style on their character sheet. It replaces the vow's
-    defense profile.
+    defense profile. The style's skill and hit stat count on the Strike, technique
+    hit and defense rolls while the character's weapon, armor and vow are the
+    style's; otherwise the skill lapses.
     """
 
-    list_display = ("name", "defense_style", "armor_share_tenths")
+    list_display = ("name", "skill", "hit_stat", "defense_style", "armor_share_tenths")
     list_filter = ("defense_style",)
+    list_select_related = ("skill__trait", "hit_stat")
     search_fields = ("name",)
+    autocomplete_fields = ("skill", "hit_stat")
+    filter_horizontal = ("taught_by", "compatible_roles")
+    inlines = (CombatStyleGearInline,)
+    fieldsets = (
+        (None, {"fields": ("name", "description")}),
+        ("Attack", {"fields": ("skill", "hit_stat")}),
+        ("Defense", {"fields": ("defense_style", "armor_share_tenths")}),
+        ("Who learns it", {"fields": ("taught_by", "compatible_roles")}),
+        CREDIT_FIELDSET,
+    )
