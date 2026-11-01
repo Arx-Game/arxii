@@ -112,6 +112,32 @@ class ACheckRankDrivesAHaggle(JourneyCase):
     def test_rank_one_is_no_whole_step(self) -> None:
         self.assertEqual(self.gain(strength=10, level=1), 0)
 
+    def test_a_rank_row_on_the_stat_its_check_reads_does_not_loop(self) -> None:
+        # Written past clean() (a fixture or a script): "+1 strength per 2 Athletics
+        # ranks", where Athletics reads strength. The inner read of strength, inside the
+        # Athletics rating, counts the row as 0, so the rating is 100 + 5 x 11 = 155, rank
+        # 6, and the outer read adds 3: 103, not a RecursionError.
+        strength_target = ModifierTargetFactory(
+            name="strength",
+            category=ModifierCategoryFactory(name="stat"),
+            target_trait=self.strength,
+        )
+        looping = DistinctionFactory(name="Self-Made", slug="self-made")
+        DistinctionEffectFactory(
+            distinction=looping,
+            target=strength_target,
+            value_per_rank=1,
+            amount_input=AmountInput.CHECK_RANK,
+            amount_check_type=self.athletics,
+            amount_per=2,
+        )
+        corvin = self.make_player("Corvin", room=self.room)
+        corvin.traits.set_trait_value(self.strength.name, 100)
+        _at_level(corvin, 11)
+        grant_distinction(corvin.sheet_data, looping, origin=DistinctionOrigin.GM_AWARD)
+
+        self.assertEqual(corvin.traits.get_trait_value(self.strength.name), 103)
+
 
 class AThreadAndALevelDriveTheCharge(_WolfFangField):
     """Hobb's Charge with a thread-driven distinction and a level-driven condition."""

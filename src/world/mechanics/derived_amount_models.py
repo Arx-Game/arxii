@@ -82,8 +82,9 @@ class DerivedAmountMixin(models.Model):
         """The field errors for this row's menu, given the row's ``ModifierTarget``.
 
         The chosen input's anchor is set (one of the two for a thread), every other anchor
-        is blank, and a check rank never feeds a stat target: a check's rating reads stats,
-        which would read this row again.
+        is blank, and a check rank never feeds a stat or skill target (the stat category, or
+        any target linked to a trait, which is how a stat read finds it): a check's rating reads
+        stats, which would read this row again. ``derived_amounts`` also guards the read.
         """
         errors: dict[str, str] = {}
         allowed = AMOUNT_INPUT_ANCHOR_FIELDS.get(self.amount_input, ())
@@ -99,7 +100,7 @@ class DerivedAmountMixin(models.Model):
         if (
             self.amount_input == AmountInput.CHECK_RANK
             and target is not None
-            and target.category.name == STAT_CATEGORY_NAME
+            and (target.category.name == STAT_CATEGORY_NAME or target.target_trait_id is not None)
         ):
             errors["amount_input"] = (
                 "A stat or skill cannot take a check rank input: the check reads the stat."

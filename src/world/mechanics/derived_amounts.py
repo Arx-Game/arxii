@@ -7,6 +7,7 @@ the row's step, held at its cap. Read at evaluation time, never stored.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from world.mechanics.constants import AmountInput
@@ -61,13 +62,28 @@ def _thread_level(sheet: CharacterSheet, row: DerivedAmountMixin) -> int:
     return shown_thread_level(stored) if stored else 0
 
 
+# The (sheet, check type) ratings being read right now. A check-rank row that the rating it
+# reads would count again (a stat target authored past ``clean()``, by fixture or a later
+# recategorisation) reads 0 the second time instead of recursing.
+_RATINGS_IN_PROGRESS: ContextVar[frozenset[tuple[int, int]]] = ContextVar(
+    "derived_amount_ratings_in_progress", default=frozenset()
+)
+
+
 def _check_rank(sheet: CharacterSheet, row: DerivedAmountMixin) -> int:
     """The holder's rank on the row's check, from its rating with no roll; at least 0."""
     from world.checks.services import compute_check_rating  # noqa: PLC0415
     from world.traits.models import CheckRank  # noqa: PLC0415
 
     character = sheet.character
-    if character is None:
+    key = (sheet.pk, row.amount_check_type_id)
+    in_progress = _RATINGS_IN_PROGRESS.get()
+    if character is None or key in in_progress:
         return 0
-    rank = CheckRank.get_rank_for_points(compute_check_rating(character, row.amount_check_type))
+    token = _RATINGS_IN_PROGRESS.set(in_progress | {key})
+    try:
+        points = compute_check_rating(character, row.amount_check_type)
+    finally:
+        _RATINGS_IN_PROGRESS.reset(token)
+    rank = CheckRank.get_rank_for_points(points)
     return max(0, rank.rank) if rank is not None else 0
