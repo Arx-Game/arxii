@@ -8755,7 +8755,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `bonus` the reroll carried and the `anima_paid` the pool actually lost, which the steady
   round line names: "Tomas steadies Mira (+6). <check> vs 36: Success. Tomas spends 4
   anima; their next reaction this round is harder."). A strained result tells its cost from
-  the band after the roll line ("Berserk drags at Mira: -4 to this action, Control -2."). The plan is
+  the band after the roll line ("Berserk drags at Mira: -4 to this action, Control -2."); the
+  action penalty is named and applied only for declarations whose roll takes it
+  (`COMPULSION_PENALISED_MANEUVERS` plus a declared technique; Cover and Use Item say only
+  "Control -2", and no line when control does not move). The plan is
   `SteadyPlanAction` (key `combat_steady`; telnet `combat steady [on|off]`; web "Steady allies"
   toggle). The encounter payload carries `compulsion` (what it wants, each action's difficulty)
   and `steady_plan` for the viewer's own participant only; `YourTurn` shows
