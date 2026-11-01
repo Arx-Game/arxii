@@ -607,8 +607,14 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   calls (no model cost) and exits when the PR stops waiting, which wakes the session:
   - `MERGED` (exit 0): run Step 9's post-merge cleanup and report. Nobody should have
     to tell you it merged.
-  - `CONFLICTING` (exit 8): merge main in (never rebase once evidence URLs are
-    published), run `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
+  - `CONFLICTING` (exit 8): if the branch changes `max_migration.txt`, first give
+    CI's `migration-conflict-rebase` workflow its few minutes (#4879): it fixes a
+    PR whose only conflict is that file, pushes a merge commit, re-arms the queue and
+    comments `<!-- migration-auto-rebase sha=... status=resolved -->`. Then
+    `git pull --ff-only`, run `sync-evidence-revision.sh` if the PR carries evidence,
+    and re-arm the watcher. On `status=refused`, or for any other conflict: merge main
+    in (never rebase once evidence URLs are published), run
+    `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
   - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
