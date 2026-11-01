@@ -183,6 +183,49 @@ class BuilderSaveTest(BuilderTestCase):
         assert offer.player_line == "Drilled by the arms-master"
         assert offer.written_by == self.writer
 
+    def test_a_final_touches_line_cannot_be_unlocked_by_its_own_card(self):
+        """#4846: the page refuses the self-unlock with the model's own message, writes no
+        offer row, and a line unlocked by another card saves."""
+        from world.distinctions.factories import DistinctionFactory
+
+        self.client.force_login(self.author)
+        url = reverse("admin_distinction_builder", args=[self.distinction.pk])
+        row = {
+            "offers-0-chapter": OfferChapter.FINAL_TOUCHES,
+            "offers-0-origin_choice": "",
+            "offers-0-player_line": "Locks open for you.",
+        }
+        resp = self.client.post(
+            url, self._post_data(**row, **{"offers-0-unlocked_by": str(self.distinction.pk)})
+        )
+        assert resp.status_code == 200
+        assert "A card does not unlock itself." in resp.content.decode()
+        assert not DistinctionOffer.objects.filter(distinction=self.distinction).exists()
+        jailbird = DistinctionFactory(name="Jailbird")
+        resp = self.client.post(
+            url, self._post_data(**row, **{"offers-0-unlocked_by": str(jailbird.pk)})
+        )
+        assert resp.status_code == 302, resp.content.decode()[:500]
+        offer = DistinctionOffer.objects.get(distinction=self.distinction)
+        assert offer.chapter == OfferChapter.FINAL_TOUCHES
+        assert offer.unlocked_by == jailbird
+
+    def test_the_empty_offer_row_and_the_saved_rows_carry_the_beat_and_card_openers(self):
+        """#4846: both opener cells render ``beat`` and ``unlocked_by`` (the empty row had no
+        beat cell before), and the cascade map knows the Final Touches chapter."""
+        self.client.force_login(self.author)
+        body = self.client.get(
+            reverse("admin_distinction_builder", args=[self.distinction.pk])
+        ).content.decode()
+        for opener in ("beat", "unlocked_by"):
+            assert body.count(f'data-opener="{opener}"') >= 2, opener
+        assert 'name="offers-__prefix__-unlocked_by"' in body
+        assert 'name="offers-__prefix__-beat"' in body
+        opener_map = re.search(r'id="opener-field-map"[^>]*>(.*?)</script>', body, re.DOTALL).group(
+            1
+        )
+        assert '"final_touches": ["unlocked_by"]' in opener_map
+
     def test_offer_row_renders_every_opener_widget_and_the_first_look_column(self):
         """#3709: the prompt, reason, degree and section openers, and the pins column."""
         self.client.force_login(self.author)

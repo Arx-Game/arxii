@@ -204,6 +204,24 @@ class PasteViewTest(PasteTestCase):
         assert self.existing.cost_per_rank != 25
         assert not DistinctionOffer.objects.filter(distinction=self.existing).exists()
 
+    def test_an_unlocked_token_creates_a_final_touches_line_through_the_page(self):
+        """#4846: the paste view previews and creates a line the named card unlocks."""
+        jailbird = DistinctionFactory(name="Jailbird", slug="jailbird", category=self.category)
+        text = "Escape Artist | Personality | 5 | 1 | Locks open. | | | unlocked:Jailbird |"
+        self.client.force_login(self.author)
+        resp = self._check(text)
+        assert resp.status_code == 200
+        assert "1 to create" in resp.content.decode()
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302, resp.content
+        created = Distinction.objects.get(slug="escape-artist")
+        (offer,) = DistinctionOffer.objects.filter(distinction=created)
+        assert offer.chapter == OfferChapter.FINAL_TOUCHES
+        assert offer.unlocked_by == jailbird
+        assert offer.opener_key == f"unlocked:{jailbird.pk}"
+        assert offer.written_by == self.writer
+
     def test_create_makes_the_skill_target_and_the_effect_lands_on_it(self):
         """The create step makes the stat-category target for the skill's trait inside the
         batch, so the pasted +10 sailing reaches the Sailing roll (#4820)."""

@@ -24,7 +24,7 @@ class CharacterCrimeNoteAdmin(admin.ModelAdmin):
     list_display = ("sheet", "crime_kind", "created_at")
     list_filter = ("crime_kind",)
     search_fields = ("sheet__character__db_key", "note")
-    raw_id_fields = ("sheet",)
+    autocomplete_fields = ("sheet",)
     readonly_fields = ("created_at",)
 
 

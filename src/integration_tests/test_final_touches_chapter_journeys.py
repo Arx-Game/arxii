@@ -135,6 +135,46 @@ class TheFinalTouchesChapter(FinalizationTestMixin, JourneyCase):
         self.assertNotIn(SENTENCE, text)
         self.assertNotIn("Theft", text)
 
+    def test_unpicking_the_card_drops_its_line_and_keeps_the_crime_text(self) -> None:
+        """The line cannot outlive its card: a sync that keeps the line and drops the card
+        ends with neither, and the chapter is empty. The crime text stays on the draft for
+        the card's return (the validator is not gated on the card)."""
+        # The line is earned only once the card is held, so it is picked on a later sync
+        # than the card (the leaf shows it only then).
+        response = self._sync(self.jailbird_offer)
+        self.assertEqual(response.status_code, 200, response.content)
+        response = self._sync(self.jailbird_offer, self.escape_offer)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            sorted(e["distinction_name"] for e in response.json()["distinctions"]),
+            ["Escape Artist", "Jailbird"],
+        )
+        response = self.client.patch(
+            self._draft_url(),
+            {"draft_data": {"crime": {"kind_id": self.theft.pk, "line": SENTENCE}}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+        # Jailbird unpicked with Escape Artist still sent: the sync takes the list, then the
+        # reconcile drops the line whose card just left, and answers with nothing held.
+        response = self._sync(self.escape_offer)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["distinctions"], [])
+        payload = self.client.get(self._draft_url()).json()
+        self.assertEqual(payload["draft_data"]["distinctions"], [])
+        self.assertEqual(payload["final_touches_prompts"], [])
+        self.assertEqual(payload["draft_data"]["crime"]["line"], SENTENCE)
+        response = self.client.get(CHAPTER_URL.format(pk=self.draft.pk))
+        self.assertEqual(response.json()["offers"], [])
+
+        # Jailbird picked back: the prompt returns and the text is still there.
+        response = self._sync(self.jailbird_offer)
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = self.client.get(self._draft_url()).json()
+        self.assertEqual(payload["final_touches_prompts"], [FinalTouchesPrompt.CRIME.value])
+        self.assertEqual(payload["draft_data"]["crime"]["line"], SENTENCE)
+
     def test_a_card_without_the_prompt_writes_no_note(self) -> None:
         self.jailbird.final_touches_prompt = ""
         self.jailbird.save(update_fields=["final_touches_prompt"])
