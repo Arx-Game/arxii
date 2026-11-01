@@ -1136,6 +1136,14 @@ The other seams in the module:
   no cast-dependent filter (not unlock level, context, situation or frequency), and it does
   NOT filter by `beneficiary`, so a display tells a row riding the sheet's own casts from one
   riding its allies' by reading `beneficiary`. **[BUILT, NOT WIRED]** pending #4565.
+- `effect_rides_technique(effect, technique, technique_functions) -> bool` and
+  `techniques_ridden_by(effect) -> QuerySet[Technique]` (#4880) are the one catalog match
+  between a row and the techniques it rides: the row's `function` among the technique's
+  function tags, then the gift or technique narrowing when set. The cast path's
+  `_live_rows` and the static view call the predicate; the vow page's "Techniques this vow
+  rides" rail reads `techniques_by_function(functions)` (one query, every catalog technique
+  per function tag) and narrows it with the predicate. `payload_prefetches()` is the four payload prefetches
+  shared by the cast path and the vow page's summary lines.
 
 ### Where it runs
 
@@ -1239,7 +1247,9 @@ decides defense" under Combat Seams).
 - `pick_price(pick) -> int` - `max(1, floor(value x product(frequency_tenths / 10)) - sum(reduction))`.
   The product runs over `SELF`/`TARGET`/`SETTING`/`TIMING` limits, the sum over
   `EXPOSURE`/`COST`. Integer arithmetic; never stored. Value 4 with no limit is 4; with one
-  `TARGET` limit at 5 it is 2.
+  `TARGET` limit at 5 it is 2. The formula itself is `price_for(value, limits)`, which the
+  vow page (#4880) calls with the value and limits an unsaved edit would leave, to warn
+  holders before the save.
 - `shown_vow_level(membership) -> int` - the shown COVENANT_ROLE thread level, read on the
   anchor role through `services._covenant_role_thread_level` and `shown_thread_level`.
 - `validate_character_focus_pick(choice)` - raises `ValidationError` naming the reason when
@@ -1278,6 +1288,13 @@ the added effect, situational perk and vow stat scaling admins, and `condition_p
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
 and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
 admins; `combat_style` is on the CharacterSheet admin.
+
+The vow page (`_vow_builder/<pk>/`, #4880, slice 2 of #4843) authors one vow's own fields,
+technique specialties, focus picks by level and each pick's limits in one save, shows every
+payload row as one line with its stock admin form in the popup, the budget per level and
+the techniques the vow rides, and warns before a save that changes what live holders spend.
+It is opened from a "Vow page" column and object tool on `CovenantRole` and the Combat
+roles panel's vow picker. See `src/web/admin/CLAUDE.md` "Vow page".
 
 ## Enums / Constants
 

@@ -11,7 +11,7 @@ from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
 
-from world.covenants.factories import CombatStyleFactory
+from world.covenants.factories import CombatStyleFactory, CovenantRoleFactory
 from world.covenants.models import VowFocusPickConfig
 
 
@@ -38,6 +38,7 @@ class CombatRolesPanelTests(TestCase):
         self.assertEqual(
             labels,
             [
+                "Vow pages",
                 "Covenant roles",
                 "Vow focus picks",
                 "Vow added effects",
@@ -52,6 +53,15 @@ class CombatRolesPanelTests(TestCase):
         for link in links:
             with self.subTest(link=link.label):
                 self.assertEqual(self.client.get(link.url).status_code, 200)
+
+    def test_the_vow_picker_lists_every_vow_and_opens_its_vow_page(self) -> None:
+        role = CovenantRoleFactory(name="Fulmination")
+        vows = next(link for link in self._links() if link.label == "Vow pages")
+        self.assertEqual(vows.note, "1 vow")
+        self.assertEqual(vows.picker.choices, [(role.pk, "Fulmination")])
+        response = self.client.get(vows.picker.action, {"pk": role.pk})
+        self.assertRedirects(response, reverse("admin_vow_builder", args=[role.pk]))
+        self.assertContains(self.client.get(reverse("admin:index")), 'class="combat-roles-picker"')
 
     def test_counts_read_the_rows(self) -> None:
         styles = next(link for link in self._links() if link.label == "Combat styles")

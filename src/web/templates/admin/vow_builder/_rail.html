@@ -1,0 +1,45 @@
+{% comment %}
+The vow page's rail (#4880): offered prices per level against the budget, the
+techniques the vow's added effects ride, and credit. Outside the main form, since
+"Mark reviewed" is its own POST.
+{% endcomment %}
+<div class="module" id="budget-module">
+  <h2>Budget by level</h2>
+  {% for row in budget_rows %}
+  <div class="vb-stat"><span>Level {{ row.level }}</span>
+    <b>{{ row.offered }} offered &middot; budget {{ row.budget }}</b></div>
+  {% endfor %}
+  <p>Offered picks above a level's budget are fine: holders choose among them.</p>
+</div>
+
+<div class="module" id="rides-module">
+  <h2>Techniques this vow rides</h2>
+  {% for row in rides %}
+  <div class="vb-stat"><span>{{ row.label }}</span><b>{{ row.count }}</b></div>
+  {% if row.techniques %}
+  <p>{% for technique in row.techniques %}<a href="{{ technique.url }}">{{ technique.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}{% if row.more %} · {{ row.more }} more{% endif %}</p>
+  {% endif %}
+  {% empty %}
+  <p>No specialties or added effects yet.</p>
+  {% endfor %}
+</div>
+
+<div class="module" id="credit-module">
+  <h2>Credit</h2>
+  <div class="vb-stat">
+    <span>Written by</span>
+    <b>{% if role.written_by %}{{ role.written_by.name }} on {{ role.written_on }}
+      {% else %}Not yet written{% endif %}</b>
+  </div>
+  <div class="vb-stat">
+    <span>Reviewed by</span>
+    <b>{% if role.reviewed_by %}{{ role.reviewed_by.name }} on {{ role.reviewed_on }}
+      {% else %}Not yet reviewed{% endif %}</b>
+  </div>
+  <form method="post" action="{% url 'admin_vow_builder_review' role.pk %}">
+    {% csrf_token %}
+    <div class="submit-row">
+      <input type="submit" value="Mark reviewed">
+    </div>
+  </form>
+</div>

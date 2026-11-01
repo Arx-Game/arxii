@@ -30,7 +30,7 @@ from world.covenants.constants import (
 from world.covenants.models import CharacterVowFocusPick, VowFocusPickConfig
 
 if TYPE_CHECKING:
-    from world.covenants.models import CharacterCovenantRole, VowFocusPick
+    from world.covenants.models import CharacterCovenantRole, VowFocusPick, VowFocusPickLimit
 
 #: The lowest price any pick can cost, however many limits it carries.
 MIN_PICK_PRICE = 1
@@ -52,14 +52,24 @@ def pick_price(pick: VowFocusPick) -> int:
     reductions over EXPOSURE and COST limits. Integer arithmetic throughout, so
     value 4 with one limit at frequency 5 is exactly 2.
     """
-    limits = pick.cached_limits
+    return price_for(pick.value, pick.cached_limits)
+
+
+def price_for(value: int, limits: Iterable[VowFocusPickLimit]) -> int:
+    """The price formula itself, for a value and limits that need not be saved yet.
+
+    ``pick_price`` calls it with a saved pick's own rows; the vow page (#4880) calls it
+    with the value and limits an unsaved edit would leave, to warn holders before the
+    save.
+    """
+    limits = list(limits)
     frequencies = [
         limit.frequency_tenths for limit in limits if limit.kind in FOCUS_PICK_FREQUENCY_LIMIT_KINDS
     ]
     reductions = sum(
         limit.reduction for limit in limits if limit.kind in FOCUS_PICK_REDUCTION_LIMIT_KINDS
     )
-    scaled = pick.value * prod(frequencies) // FOCUS_PICK_LIMIT_FREQUENCY_FULL ** len(frequencies)
+    scaled = value * prod(frequencies) // FOCUS_PICK_LIMIT_FREQUENCY_FULL ** len(frequencies)
     return max(MIN_PICK_PRICE, scaled - reductions)
 
 
