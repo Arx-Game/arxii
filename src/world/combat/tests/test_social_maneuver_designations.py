@@ -3,7 +3,8 @@
 Rally rolls the check the ``RALLIED`` ``SurgeTuning`` names and applies the condition
 ``SocialManeuverConfig.rally_success_condition`` designates; Taunt, Demoralize and Parley
 roll the check types designated on the same config. A row's name never matters. A
-rallier whose vow carries a ``SURGES_GIVEN`` scaling row surges the rallied ally more.
+rallier whose vow scales "Rally: surge intensity" (a ``VowStatScaling`` row on a maneuver
+effect target, #4783) surges the rallied ally more.
 
 The journeys ``BeingRallied`` / ``BeingTauntedByAnotherPlayer``
 (``integration_tests.test_surge_rolls_journeys``) and ``AVowedRallySurgesMore``
@@ -11,8 +12,6 @@ The journeys ``BeingRallied`` / ``BeingTauntedByAnotherPlayer``
 stays here is the per-verb designation edges no journey reaches (unset designations, the
 name-independence of each verb, the seed's designation pass).
 """
-
-from decimal import Decimal
 
 from django.test import TestCase, override_settings
 
@@ -52,18 +51,18 @@ from world.combat.social_combat_content import (
 )
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
-from world.covenants.constants import CovenantScaledAction
-from world.covenants.factories import (
-    CharacterCovenantRoleFactory,
-    CovenantFactory,
-    CovenantRoleActionScalingFactory,
-    CovenantRoleFactory,
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory, engage_vow_with_thread
+from world.covenants.models import VowStatScaling
+from world.mechanics.constants import (
+    MANEUVER_EFFECT_CATEGORY_NAME,
+    EngagementType,
+    ManeuverEffectKey,
 )
-from world.covenants.services import set_engaged_membership
-from world.magic.constants import TargetKind
-from world.magic.factories import ThreadFactory
-from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
+from world.mechanics.models import ModifierCategory
 from world.mechanics.services import begin_engagement
 from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
@@ -159,14 +158,15 @@ class RallyByDesignationTests(_SocialField):
 
 
 class VowScaledRallySurgeTests(_SocialField):
-    """A rallier's ``SURGES_GIVEN`` vow row scales the surge's intensity only."""
+    """A rallier's vow on "Rally: surge intensity" scales the surge's intensity only (#4783)."""
 
     THREAD_LEVEL = 2
-    MULTIPLIER = Decimal("0.5")
+    BONUS_PER_LEVEL = 50  # 100 + 2 x 50 = 200%
 
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        ensure_maneuver_effects()
         cls.tuning = SurgeTuningFactory(
             trigger_kind=SurgeTriggerKind.RALLIED, check_type=CheckTypeFactory(name="Encourage")
         )
@@ -174,23 +174,22 @@ class VowScaledRallySurgeTests(_SocialField):
             tuning=cls.tuning, outcome=cls.success, intensity=SUCCESS_INTENSITY, control_change=1
         )
 
-    def _vow(self, action: str) -> None:
-        role = CovenantRoleFactory(crown_weight=1)
-        membership = CharacterCovenantRoleFactory(
-            character_sheet=self.actor.character_sheet,
-            covenant=CovenantFactory(),
-            covenant_role=role,
+    def _vow(self, key: str) -> None:
+        """The rallier's engaged vow adds ``BONUS_PER_LEVEL`` per thread level to ``key``."""
+        target = ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name=f"{key} vow",
+            scope_maneuver_effect=get_maneuver_effect(key),
         )
-        set_engaged_membership(membership=membership)
-        CovenantRoleActionScalingFactory(
-            covenant_role=role, action_key=action, thread_level_multiplier=self.MULTIPLIER
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        engage_vow_with_thread(
+            self.actor.character_sheet,
+            role,
+            covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
+            thread_level=self.THREAD_LEVEL,
         )
-        ThreadFactory(
-            owner=self.actor.character_sheet,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=role,
-            target_trait=None,
-            level=self.THREAD_LEVEL,
+        VowStatScaling.objects.create(
+            covenant_role=role, modifier_target=target, bonus_per_level=self.BONUS_PER_LEVEL
         )
 
     def _rally(self) -> None:
@@ -202,15 +201,15 @@ class VowScaledRallySurgeTests(_SocialField):
         return CharacterEngagement.objects.get(character=self.ally.character_sheet).control_modifier
 
     def test_a_vowed_rallier_surges_the_ally_more(self) -> None:
-        self._vow(CovenantScaledAction.SURGES_GIVEN)
+        self._vow(ManeuverEffectKey.RALLY_SURGE_INTENSITY)
 
         self._rally()
 
-        # 1 + 2 x 0.5 = scale 2.0, so the Success band's 3 becomes 6.
+        # 200% surge intensity, so the Success band's 3 becomes 6.
         self.assertEqual(self._ally_intensity(), SUCCESS_INTENSITY * 2)
         # The control change is not scaled.
         self.assertEqual(self._ally_control(), 1)
-        # The record keeps what the vow added, for the roll line.
+        # The record keeps what the scaling added, for the roll line.
         self.assertEqual(DramaticSurgeRecord.objects.get().vow_scaling, SUCCESS_INTENSITY)
 
     def test_a_rallier_without_the_vow_row_surges_the_band_amount(self) -> None:
@@ -220,7 +219,7 @@ class VowScaledRallySurgeTests(_SocialField):
         self.assertEqual(DramaticSurgeRecord.objects.get().vow_scaling, 0)
 
     def test_a_rally_morale_row_does_not_scale_surges(self) -> None:
-        self._vow(CovenantScaledAction.RALLY)
+        self._vow(ManeuverEffectKey.RALLY_MORALE)
 
         self._rally()
 

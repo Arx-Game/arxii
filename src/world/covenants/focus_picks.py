@@ -8,7 +8,7 @@ stored; a character's chosen picks at one level must fit the budget on
 rule, with the reason.
 
 In play (slice 2), a payload row (``VowAddedEffect``, ``VowSituationalPerk``,
-``CovenantRoleActionScaling``) whose ``focus_pick`` is set fires only for a
+``VowStatScaling``) whose ``focus_pick`` is set fires only for a
 holder who chose that pick; ``chosen_pick_ids_by_holder`` answers "which picks
 has each holder chosen" for every reader in one query, and
 ``holder_has_pick`` is the gate each reader applies per row.

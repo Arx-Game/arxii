@@ -210,3 +210,7 @@ All models registered with appropriate admin interfaces:
   The table and taper rows load only when needed, so a read with nothing sized and no pile of
   one kind adds no query (the #552 fatigue hot path). See `docs/systems/checks.md`, "The stat
   lane".
+- **Skills join the lane (#4820)**: `get_trait_value` folds the same breakdown for a
+  `TraitType.SKILL` trait whose target exists (`MODIFIABLE_TRAIT_TYPES`), in the skill's own
+  units; `get_trait_modifier(trait)` returns the bonus alone for the sheet. Advancement reads the
+  stored value, never this one. See `docs/systems/skills.md`, "A card's bonus on a skill".

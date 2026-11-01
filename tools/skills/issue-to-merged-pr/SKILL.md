@@ -280,6 +280,29 @@ write design-open items as `needs-design` questions rather than asserted work.
 Deferrals filed unverified from a spec's deferred list are the exact thing that
 later gets closed as should-not-do (#1357/#1358).
 
+**Sort every deferral into one of three kinds, and say which in the spec**
+(owner ruling 2026-10-31, after #4783's two follow-ups sat waiting on him with
+nothing to decide):
+
+- **Decided extension.** The spec or the maintainer's recorded rulings already
+  say what it is, it reuses a pattern the spec builds or the code has, and it adds
+  no player- or staff-facing surface the spec hasn't shown. A missing tuning
+  number does not make it undecided (config values never gate). These are
+  **slices**, numbered in the spec's Scope section, and they are built one after
+  another without a new spec approval (Step 9, "Next slice"). Never park one as
+  a follow-up for the maintainer to pick up.
+- **Design question.** A real fork only the maintainer can call. It becomes a
+  `needs-design` issue and a **checkpoint**: the slice sequence stops there and
+  the agent interviews the maintainer (Step 9).
+- **New capability.** Something nothing in the game promises yet: ask first,
+  as below.
+
+The parent issue stays open while slices remain, because a slice skips the spec
+gate only while its parent is open and carries `spec:approved`. Each slice gets
+its own child issue (`Slice N of #M`, filed with `file-followup.sh` when
+implementation starts, slice 1 included) and its PR closes that child, never the
+parent. #4813 → #4827 (slice 2) → #4828 is the shape.
+
 Then hand off for **spec review** and exit:
 
 1. Run `tools/skills/issue-to-merged-pr/scripts/transition-issue-phase.sh <N> status:spec-draft status:spec-review`.
@@ -483,6 +506,9 @@ and address (or consciously drop) these findings directly.
 Only file a follow-up for something that genuinely needs its own PR — a
 separable system, scope well beyond this issue, or an open design question
 needing a human call — and say what the blocker is in the issue body.
+**A decided extension of the approved spec is not a follow-up**: it is the next
+slice (Step 2's three kinds). File it as `Slice N of #M` and build it next
+(Step 9); it does not wait on anyone.
 For each such follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
 opening the PR) and collect the issue numbers.
@@ -579,12 +605,20 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
     published), run `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
+  - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
+    unresolved review thread or an open evidence challenge, so it will never merge on
+    its own. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
+    flags, push, reply on the thread, and resolve it (`gh api graphql` with
+    `resolveReviewThread`). For an evidence challenge with `verdict=open`, answer it
+    with an `<!-- evidence-answer -->` comment: what was run, expected, seen, and the
+    commit (quote the CI run rather than re-running locally). Then re-run
+    `enqueue-pr.sh` (a push can disarm auto-merge) and re-arm the watcher.
   - `CLOSED` (exit 7): tell the user; exit.
   - `TIMEOUT` (exit 6, after 110 minutes by default), exit 1 (`gh` kept failing), or
     the background run ending with no word at all (the harness killed it): re-arm it.
     The cap sits under the harness's two-hour limit on a background command, so
     normally the script says TIMEOUT first; any other ending also means re-arm.
-  While it waits, answer an open evidence challenge round (Step 6a) as usual.
+  Run the watcher after every `enqueue-pr.sh`, for every PR, never only the first.
 
   **Before judging any PR "ready", read
   [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
@@ -756,6 +790,24 @@ Run `scripts/post-merge-cleanup.sh <branch> <pr-N>`. Read the JSON:
   already happened, so "fix it now" means a fast-follow commit if trivial;
   file with `scripts/file-followup.sh` only for a genuine, stated blocker
   (CLAUDE.md "Fold In, Don't File" — the same default as Step 5).
+
+#### Next slice
+
+If the merged PR closed a `Slice N of #M` issue, read #M's Scope section and
+its open slice children. Then, without asking:
+
+- **The next slice is a decided extension:** run `scripts/start-work.sh` on it
+  and carry it through this same lifecycle (no spec gate: the validator passes it
+  while #M is open with `spec:approved`). Tell the maintainer in one line what
+  you are starting; they can stop it, but nothing waits for a reply.
+- **The next item is a checkpoint (a design question):** interview the
+  maintainer. Show the concrete choice first (a demo, a trace, or two options
+  and how each plays), ask in a later turn with `AskUserQuestion`, record the
+  ruling on the `needs-design` issue and in #M, and carry on: the ruling turns
+  it into a decided slice. If the maintainer is not in the session, post the
+  choice on the issue and exit; that is the only stop.
+- **Nothing remains:** close #M with a comment listing the slices and their
+  PRs.
 
 #### Takeaway evaluation (post-merge)
 

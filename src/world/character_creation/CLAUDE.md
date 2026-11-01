@@ -20,7 +20,9 @@ Character creation is a multi-stage process that guides players through creating
    creates the nodes and pins back-inference). Then the kin rows (a twin, spouses,
    children: `draft_data.kin_rows`, seated by `_bind_kin_rows`) and the life as grids by
    stage (#4124 beats, #4395 grids: a beginning strikes stages out, an age-scaled beat
-   allows one more pick per decade, a general write-in prompt never shows)
+   allows career points, one at 19 and one more every five years to 59, spent by rank
+   (#4829: pips on the card, the age cannot drop under the points held), a general
+   write-in prompt never shows)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check

@@ -170,7 +170,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantrole",
         "covenants.covenantrite",
         "covenants.covenantriterolepackage",
-        "covenants.covenantroleactionscaling",
         "covenants.covenantrolebonus",
         "covenants.covenantroledefenseprofile",
         "covenants.covenantrolegiftgrant",

@@ -325,7 +325,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     ``narrate=False`` skips the room line (a surge whose intensity scaled to 0 would
     announce a power surge that added none). ``cause`` is stored on the record for the
     surged player, GMs and staff to read (#4737); it is never broadcast. ``vow_scaling``
-    is the part of ``amount`` a giver's vow added (#4739), written with the record.
+    is the part of ``amount`` the giver's Rally surge intensity added above 100% (#4783),
+    written with the record.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,

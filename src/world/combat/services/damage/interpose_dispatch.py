@@ -14,6 +14,7 @@ from world.mechanics.types import ChallengeResolutionResult
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.magic.models import Technique
     from world.magic.models.anima import CharacterAnima
@@ -110,7 +111,7 @@ def _grade_interpose_damage(
     pre_payload: DamagePreApplyPayload,
     success_level: int,
     *,
-    interposer: object | None = None,
+    interposer_sheet: CharacterSheet | None = None,
     force_clean: bool = False,
 ) -> bool:
     """Shared clean/partial/fail damage banding for BOTH interpose paths (#2207).
@@ -118,15 +119,16 @@ def _grade_interpose_damage(
     Extracted from :func:`apply_interpose_outcome` (the mundane
     capability-reaction path) so :func:`_try_technique_interpose` (a technique
     guardian's own cast-check resolution) grades identically without
-    duplicating the covenant-role-scaling partial-block math:
+    duplicating the partial-block math:
 
     - **clean block** (``force_clean`` or ``success_level > 0``): the blow is
       fully turned aside — ``pre_payload.amount = 0``.
     - **partial** (``success_level == 0``, not forced-clean): the interposer
-      softens but does not stop the blow — ``pre_payload.amount //= 2``. An
-      interposer engaged in a role with a ``combat_interpose`` scaling row
-      scales this reduction by their COVENANT_ROLE thread level (#2022,
-      #2529): the deeper the vow, the more damage the partial block absorbs.
+      softens but does not stop the blow. The share stopped is the interposer's
+      Interpose partial protection (the maneuver effect catalog, #4783: base 50,
+      plus the interposer's own modifiers, 0 to 100), so
+      ``amount * (100 - protection) // 100`` lands. With no interposer sheet the
+      catalog's base value is used.
     - **failure** (``success_level < 0``): the interpose fails — no change.
 
     ``force_clean`` lets a caller fold in a resolution-type override (the
@@ -143,22 +145,11 @@ def _grade_interpose_damage(
         return True
 
     if success_level == 0:
-        # #2022/#2529: covenant-role scaling — a deeper vow blocks more damage
-        # on a partial block. The bonus reduces the remaining damage further.
-        divisor = 2
-        if interposer is not None:
-            from world.covenants.constants import CovenantScaledAction  # noqa: PLC0415
-            from world.covenants.services import (  # noqa: PLC0415
-                covenant_role_action_scaling_bonus,
-            )
+        from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+        from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
 
-            bonus = covenant_role_action_scaling_bonus(interposer, CovenantScaledAction.INTERPOSE)
-            if bonus > 0:
-                # Scale: partial block reduces to amount / (2 + bonus).
-                # A bonus of 1.0 (a deep SHIELD vow) makes the divisor 3,
-                # blocking 67% instead of 50%.
-                divisor = int(2 + bonus)
-        pre_payload.amount //= divisor
+        protection = effect_value(interposer_sheet, ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION)
+        pre_payload.amount = pre_payload.amount * (100 - protection) // 100
         return False
 
     # Failure (success_level < 0) — the blow continues at full damage.
@@ -169,7 +160,7 @@ def apply_interpose_outcome(
     pre_payload: DamagePreApplyPayload,
     result: ChallengeResolutionResult,
     *,
-    interposer: object | None = None,
+    interposer_sheet: CharacterSheet | None = None,
 ) -> None:
     """Map a graded interpose resolution onto *pre_payload*.
 
@@ -189,5 +180,5 @@ def apply_interpose_outcome(
     force_clean = result.resolution_type == ResolutionType.DESTROY
 
     _grade_interpose_damage(
-        pre_payload, success_level, interposer=interposer, force_clean=force_clean
+        pre_payload, success_level, interposer_sheet=interposer_sheet, force_clean=force_clean
     )

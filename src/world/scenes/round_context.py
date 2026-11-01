@@ -151,6 +151,8 @@ class SceneRoundContext(RoundContext):
 
         Mirrors CombatRoundContext.get_cover_for's caching contract.
         """
+        from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+        from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
         from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
         from world.mechanics.succor_shared import (  # noqa: PLC0415
             SUCCOR_CHALLENGE_NAME,
@@ -179,10 +181,13 @@ class SceneRoundContext(RoundContext):
         succorer = declaration.participant.character_sheet.character
         protected = target_participant.character_sheet.character
 
+        partial_protection = effect_value(
+            declaration.participant.character_sheet, ManeuverEffectKey.SUCCOR_PARTIAL_PROTECTION
+        )
         outcome = {"multiplier": 1.0}
 
         def _capture(result: ChallengeResolutionResult) -> None:
-            outcome["multiplier"] = apply_succor_outcome(result)
+            outcome["multiplier"] = apply_succor_outcome(result, partial_protection)
 
         result = dispatch_capability_reaction(
             succorer,

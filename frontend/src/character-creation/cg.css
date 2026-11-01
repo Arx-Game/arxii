@@ -1249,6 +1249,16 @@
   align-items: center;
   margin-top: 0.6rem;
 }
+/* Every stage struck (#4830): the beginning's text where the stage rows would be. */
+.interview .life .absent {
+  margin: 1.2rem 0 0;
+  color: var(--cg-muted);
+  font-style: italic;
+}
+/* The Recent History box (#4830) sits under the last stage, before the footer. */
+.interview .life .recent-history {
+  margin-top: 1.6rem;
+}
 .interview .life-foot {
   display: flex;
   justify-content: space-between;
@@ -1283,6 +1293,40 @@
   grid-column: 2;
   text-align: left;
   margin-top: 0.3rem;
+}
+/* Career-point pips (#4829): a ranked card's ranks, top right, where the card is picked.
+   On = held; off = past the points left in the block. */
+.interview .stances.grid > li .stance {
+  position: relative;
+}
+.interview .stance .pips {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.85rem;
+  display: flex;
+  gap: 0.32rem;
+  align-items: center;
+}
+.interview .stance .pip {
+  width: 0.62rem;
+  height: 0.62rem;
+  padding: 0;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.interview .stance .pip.on {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .stance .pip.off {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.interview .stances.grid .stance.ranked > span:nth-child(2) > b {
+  display: block;
+  padding-right: 3.6rem;
 }
 @media (max-width: 40rem) {
   .interview .stances.grid {

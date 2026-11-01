@@ -9,18 +9,18 @@ offers and removes picks whose offer has gone.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.db.models import Q
 
 from world.character_creation.constants import (
+    AGE_PICKS_CAP_AGE,
     AGE_PICKS_FROM_AGE,
     AGE_PICKS_YEARS_PER_PICK,
     CG_MODIFIER_CATEGORY,
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
-    BeatMode,
     BeatSelection,
     LifeStage,
     OfferArrival,
@@ -155,6 +155,10 @@ LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage
 BEATS_KEY = "beats"
 
 
+#: The optional text a life ends on, under ``draft_data`` (#4830).
+RECENT_HISTORY_KEY = "recent_history"
+
+
 def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     """Every active library beat this draft's Beginning offers, stage by stage (#4124).
 
@@ -183,15 +187,30 @@ def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
 
 
 def age_pick_allowance(age: int | None) -> int:
-    """How many answers an age-scaled beat allows (#4395).
+    """How many career points an age-scaled beat allows (#4395, re-ruled #4829).
 
-    One pick at or under ``AGE_PICKS_FROM_AGE``, one more for every
-    ``AGE_PICKS_YEARS_PER_PICK`` years lived past it: nineteen is one "known for"
-    pick, fifty is four. No age yet reads as the floor.
+    One point at or under ``AGE_PICKS_FROM_AGE``, one more for every
+    ``AGE_PICKS_YEARS_PER_PICK`` full years lived past it, and no more past
+    ``AGE_PICKS_CAP_AGE``: nineteen is one, twenty-four two, fifty seven, fifty-nine and
+    older nine. A point buys a card on the beat or a rank on one, so the beat counts
+    ranks (``beat_pick_conflicts``). No age yet reads as the floor.
     """
     if age is None or age <= AGE_PICKS_FROM_AGE:
         return 1
-    return 1 + (age - AGE_PICKS_FROM_AGE) // AGE_PICKS_YEARS_PER_PICK
+    counted = min(age, AGE_PICKS_CAP_AGE)
+    return 1 + (counted - AGE_PICKS_FROM_AGE) // AGE_PICKS_YEARS_PER_PICK
+
+
+def youngest_age_for_points(points: int) -> int:
+    """The youngest age whose allowance is at least ``points`` (#4829), for the age floor.
+
+    The inverse of ``age_pick_allowance``: one point at nineteen, each further point
+    five years later. ``AGE_PICKS_CAP_AGE`` bounds it: no age holds more than the cap's
+    allowance, so a count past that reads as the cap.
+    """
+    if points <= 1:
+        return AGE_PICKS_FROM_AGE
+    return min(AGE_PICKS_FROM_AGE + (points - 1) * AGE_PICKS_YEARS_PER_PICK, AGE_PICKS_CAP_AGE)
 
 
 def beat_allowance(beat: LifeBeat, age: int | None) -> int | None:
@@ -234,16 +253,12 @@ def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
 def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
     """The beat pool as this draft meets it, with the draft's state on each (#4124).
 
-    Called by the draft's ``beats`` endpoint. Under ``BeatMode.ONE_KEPT`` the pool's
-    beats are taken by the Beginning itself (the Sleeper's one kept beat); under
-    ``POOL`` a beat is taken only when the draft says so.
+    Called by the draft's ``beats`` endpoint. A beat is taken only when the draft says
+    so (the one-kept mode, under which the Beginning took its pool itself, was retired in
+    #4830: a beginning that keeps no stage strikes them all instead).
     """
     pool = beat_pool(draft)
     states = _draft_beat_states(draft)
-    kept = (
-        draft.selected_beginnings_id is not None
-        and draft.selected_beginnings.beat_mode == BeatMode.ONE_KEPT
-    )
     picked = picked_offer_ids(draft)
     out: list[BeatPoolEntry] = []
     for beat in pool:
@@ -252,11 +267,10 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
         line = str(state.get("line") or "")
         unknown = bool(state.get("unknown"))
         # A beat is taken by a pick under it, a line, or the unknown mark (#4395: the
-        # grids never ask the player to "add" a beat first); the Beginning's kept beat
-        # and an explicit taken flag still count.
+        # grids never ask the player to "add" a beat first); an explicit taken flag
+        # still counts.
         taken = (
-            kept
-            or bool(state.get("taken"))
+            bool(state.get("taken"))
             or unknown
             or bool(line)
             or any(offer_id in picked for offer_id in answer_ids)
@@ -272,8 +286,8 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
                 unknown=unknown,
                 line=line,
                 answer_offer_ids=answer_ids,
-                kept=kept,
                 allowance=beat_allowance(beat, draft.age),
+                allowance_is_points=bool(beat.picks_scale_with_age),
             )
         )
     return out
@@ -290,14 +304,28 @@ def open_beat_ids(draft: CharacterDraft) -> set[int]:
     return {e.beat_id for e in beats_for(draft) if not e.unknown}
 
 
+class BeatConflict(NamedTuple):
+    """One beat answered past its allowance (``beat_pick_conflicts``)."""
+
+    name: str
+    allowance: int
+    #: True when the beat spends career points, so ``allowance`` counts ranks (#4829).
+    points: bool
+
+
 def beat_pick_conflicts(
-    offers: Iterable[DistinctionOffer], *, age: int | None
-) -> list[tuple[str, int]]:
-    """``(beat name, allowance)`` for each beat ``offers`` would answer past its allowance.
+    offers: Iterable[DistinctionOffer],
+    *,
+    age: int | None,
+    ranks: Mapping[int, int] | None = None,
+) -> list[BeatConflict]:
+    """Each beat ``offers`` would answer past its allowance.
 
     Called by the distinctions sync view before it saves (#4124, #4395): a one-of beat
-    takes one answer and an age-scaled beat ``age_pick_allowance(age)``, so more of its
-    offers in one payload is a refused pick, not a reconcile. Offers on an unbounded
+    takes one answer, so two distinct cards on it conflict; an age-scaled beat allows
+    ``age_pick_allowance(age)`` career points, and a point buys a card or a rank
+    (#4829), so the ranks of its cards are summed (``ranks`` maps a distinction id to the
+    rank the payload asks for; a missing entry is rank one). Offers on an unbounded
     any-that-apply beat never conflict.
     """
     by_beat: dict[int, set[int]] = defaultdict(set)
@@ -307,12 +335,51 @@ def beat_pick_conflicts(
             continue
         by_beat[offer.beat_id].add(offer.distinction_id)
         beats[offer.beat_id] = offer.beat
-    out: list[tuple[str, int]] = []
+    out: list[BeatConflict] = []
     for beat_id, dists in by_beat.items():
-        allowance = beat_allowance(beats[beat_id], age)
-        if allowance is not None and len(dists) > allowance:
-            out.append((beats[beat_id].name, allowance))
+        beat = beats[beat_id]
+        allowance = beat_allowance(beat, age)
+        if allowance is None:
+            continue
+        if beat.picks_scale_with_age:
+            spent = sum(max(1, (ranks or {}).get(dist_id, 1)) for dist_id in dists)
+        else:
+            spent = len(dists)
+        if spent > allowance:
+            out.append(BeatConflict(beat.name, allowance, bool(beat.picks_scale_with_age)))
     return out
+
+
+def age_scaled_points_spent(draft: CharacterDraft) -> list[tuple[str, int]]:
+    """``(card name, rank)`` for each pick the draft holds on a beat that spends career
+    points (#4829), read the way the leaf and finalize read a pick: its entry's rank.
+
+    Called by the draft serializer's age validation, so lowering the age under the points
+    already spent is refused and names what to unpick.
+    """
+    entries = [
+        e
+        for e in draft.draft_data.get("distinctions", [])
+        if isinstance(e, dict) and isinstance(e.get("rank"), int)
+    ]
+    offer_ids = {
+        offer_id
+        for entry in entries
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
+    if not offer_ids:
+        return []
+    scaled = set(
+        DistinctionOffer.objects.filter(
+            pk__in=offer_ids, beat__picks_scale_with_age=True
+        ).values_list("pk", flat=True)
+    )
+    return [
+        (str(entry.get("distinction_name") or entry.get("distinction_id")), int(entry["rank"]))
+        for entry in entries
+        if any(offer_id in scaled for offer_id in entry.get("offer_ids", []))
+    ]
 
 
 def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:

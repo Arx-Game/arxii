@@ -47733,16 +47733,16 @@ components:
           type: array
           items:
             type: integer
-        kept:
-          type: boolean
         allowance:
           type: integer
           nullable: true
+        allowance_is_points:
+          type: boolean
       required:
       - allowance
+      - allowance_is_points
       - answer_offer_ids
       - beat_id
-      - kept
       - life_stage
       - line
       - name
@@ -48256,6 +48256,10 @@ components:
           type: boolean
           description: 'Strike the Before the Glimpse stage out: its grids never show
             for this beginning.'
+        struck_stages_text:
+          type: string
+          description: Shown in place of the life's stages when this beginning strikes
+            every one of them; blank otherwise.
         art_image:
           type: string
           nullable: true
@@ -48335,6 +48339,10 @@ components:
           type: boolean
           description: 'Strike the Before the Glimpse stage out: its grids never show
             for this beginning.'
+        struck_stages_text:
+          type: string
+          description: Shown in place of the life's stages when this beginning strikes
+            every one of them; blank otherwise.
         grants_species_languages:
           type: boolean
           description: If False, characters don't get species' racial language (Misbegotten)

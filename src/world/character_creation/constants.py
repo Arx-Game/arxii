@@ -334,14 +334,21 @@ class LifeStage(models.TextChoices):
 
 #: The one optional line a player may write under a taken beat (#4124).
 BEAT_LINE_MAX_LENGTH = 200
+#: The optional Recent History a life ends on (#4830, ruled 2026-10-30 and 2026-10-31): free
+#: text the player writes for the hooks GMs and other players may pick up, public on the sheet,
+#: written at finalize as the lead-in paragraph of ``Profile.background``.
+RECENT_HISTORY_MAX_LENGTH = 2000
 
 
-#: The age rule for a beat whose picks scale with age (#4395): one pick at or under
-#: ``AGE_PICKS_FROM_AGE``, one more for every ``AGE_PICKS_YEARS_PER_PICK`` years lived past
-#: it. Nineteen is one "known for" pick; fifty is four. The rule is
-#: ``offers.age_pick_allowance``; these two numbers are the whole of it.
-AGE_PICKS_FROM_AGE = 20
-AGE_PICKS_YEARS_PER_PICK = 10
+#: The age rule for a beat whose picks scale with age (#4395, re-ruled #4829): one career
+#: point at or under ``AGE_PICKS_FROM_AGE``, one more for every ``AGE_PICKS_YEARS_PER_PICK``
+#: full years lived past it, and no more past ``AGE_PICKS_CAP_AGE``. Nineteen is one point,
+#: twenty-four two, fifty seven, fifty-nine and older nine. A point buys a Past Career or a
+#: rank on one (the beat counts ranks, not cards). The rule is ``offers.age_pick_allowance``;
+#: these three numbers are the whole of it.
+AGE_PICKS_FROM_AGE = 19
+AGE_PICKS_YEARS_PER_PICK = 5
+AGE_PICKS_CAP_AGE = 59
 
 
 class BeatSelection(models.TextChoices):
@@ -359,13 +366,14 @@ class BeatSelection(models.TextChoices):
 class BeatMode(models.TextChoices):
     """How a Beginning offers the beat library (#4124).
 
-    ``POOL``: every library beat not excluded for this Beginning, added by the
-    player as the life had them. ``ONE_KEPT``: the one beat left unexcluded is
-    the whole stage and every other beat stands unknown (the Sleeper).
+    ``POOL``: every library beat not excluded for this Beginning, taken by the player as
+    the life had them. ``ONE_KEPT`` (the one unexcluded beat was the whole stage, the
+    Sleeper's) was retired in #4830: the Sleeper strikes every stage instead and shows
+    its ``struck_stages_text``, so no beginning kept a beat. The field stays for the
+    next mode a beginning may need.
     """
 
     POOL = "pool", "A pool to add from"
-    ONE_KEPT = "one_kept", "One beat kept, the rest unknown"
 
 
 class AnchorSource(models.TextChoices):

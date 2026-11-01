@@ -4794,10 +4794,10 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="vow-stat-scaling",
             label="Vow stat scaling",
             tier=DependencyTier.TUNING,
-            consumer="world/mechanics/services.py:1021 vow_stat_scaling_bonus()",
+            consumer="world/mechanics/services.py:1128 vow_stat_scaling_bonus()",
             consequence=(
-                "A vow's thread level grants zero stat scaling bonus - the scaling term of the "
-                "formula is silently disabled."
+                "A vow's thread level grants zero stat scaling bonus and never scales a "
+                "maneuver effect - the scaling term of the formula is silently disabled."
             ),
             probe=AnyRowProbe(label="VowStatScaling"),
         ),

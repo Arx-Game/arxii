@@ -539,15 +539,49 @@ def _dispatch_interpose_action(
     return _attempt_guardian_interpose(action.participant, protected, pre_payload, action=action)
 
 
+def rising_reaction_cost(base_cost: int, reactions_before: int) -> int:
+    """A reaction's cost after ``reactions_before`` reactions this round (#4810).
+
+    ``base x (1 + step x reactions_before)``, where the step is
+    ``MovementConfig.reaction_difficulty_step``, the same per-reaction step that
+    makes each reaction's roll harder. The first reaction in a round pays the base;
+    each later one pays more than the last (ratified decision 12 in #4759). Shared
+    by interpose fatigue and the reactive save's anima (``reactive_save``).
+    """
+    from world.combat.services.reactions import reaction_tuning  # noqa: PLC0415
+
+    step = reaction_tuning().reaction_difficulty_step
+    return base_cost * (1 + step * max(0, reactions_before))
+
+
 def _charge_interpose_fatigue(
-    guardian: CombatParticipant, action: CombatRoundAction | None
+    guardian: CombatParticipant,
+    action: CombatRoundAction | None,
+    *,
+    reactions_before: int,
 ) -> None:
-    """Charge only a fired, non-technique interpose."""
+    """Charge only a fired, non-technique interpose, rising with reactions this round.
+
+    The effort multiplier and its floor apply to the first interpose's cost, and the
+    rise multiplies that: a declared interpose and a standing guard are both VERY_LOW
+    (x0.1), so rising the base first (3, 9, 15) would floor every one of them to 1.
+    Effort-scaled first, VERY_LOW pays 1, 3, 5 and MEDIUM 3, 9, 15. The scaled cost
+    goes to ``apply_fatigue`` at MEDIUM (x1.0) so the multiplier is not applied twice.
+    """
+    from world.fatigue.constants import (  # noqa: PLC0415
+        EFFORT_COST_MULTIPLIER,
+        MIN_FATIGUE_COST,
+    )
+
     category = (
         action.focused_category or ActionCategory.PHYSICAL if action else ActionCategory.PHYSICAL
     )
     effort = action.effort_level if action is not None else EffortLevel.VERY_LOW
-    apply_fatigue(guardian.character_sheet, category, INTERPOSE_BASE_FATIGUE_COST, effort)
+    first_cost = max(
+        MIN_FATIGUE_COST, int(INTERPOSE_BASE_FATIGUE_COST * EFFORT_COST_MULTIPLIER[effort])
+    )
+    cost = rising_reaction_cost(first_cost, reactions_before)
+    apply_fatigue(guardian.character_sheet, category, cost, EffortLevel.MEDIUM)
 
 
 def _attempt_guardian_interpose(
@@ -622,12 +656,13 @@ def _attempt_guardian_interpose(
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
     # failed rolls as real attempts.
+    reactions_before = guardian.reactions_used
     guardian.reactions_used += 1
     guardian.save(update_fields=["reactions_used"])
     pre_payload.answers_consumed += 1
 
     if technique_action is None:
-        _charge_interpose_fatigue(guardian, action)
+        _charge_interpose_fatigue(guardian, action, reactions_before=reactions_before)
     return True
 
 
@@ -703,7 +738,7 @@ def _try_technique_interpose(
        also broadcasts a commitment line to the encounter.
 
     Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
-    banding (including SHIELD divisor widening) the mundane path uses via
+    banding (including the guardian's Interpose partial protection) the mundane path uses via
     :func:`apply_interpose_outcome`, so a technique guardian and a mundane
     guardian resolve identically once the check lands.
 
@@ -719,7 +754,8 @@ def _try_technique_interpose(
 
     **REDIRECT flavor (#2210):** after grading, ``saved = amount_before -
     pre_payload.amount`` (whatever the block prevented — full on a clean
-    block, half on a partial, zero on a failure) is sent to the declaration's
+    block, the guardian's partial protection share on a partial, zero on a
+    failure) is sent to the declaration's
     destination (``CombatRoundAction.redirect_opponent_target`` /
     ``redirect_object_target`` — see :func:`_resolve_technique_redirect`).
     """
@@ -816,7 +852,9 @@ def _try_technique_interpose(
 
     amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
-        pre_payload, check_result.success_level, interposer=interposer
+        pre_payload,
+        check_result.success_level,
+        interposer_sheet=action.participant.character_sheet,
     )
 
     if is_clean_block and flavor == PROTECTIVE_FLAVOR_BLINK:
@@ -842,7 +880,8 @@ def _resolve_technique_redirect(
     """Resolve a REDIRECT-flavor guardian's saved damage into its destination (#2210).
 
     ``saved`` is whatever :func:`_grade_interpose_damage` prevented from landing on
-    the ward — full amount on a clean block, half on a partial, zero on a failure.
+    the ward — full amount on a clean block, the guardian's partial protection share
+    on a partial, zero on a failure.
     ``saved <= 0`` means nothing redirects (a failed block has nothing to send
     anywhere). Otherwise dispatches per the declaration
     (``CombatRoundAction.redirect_opponent_target`` / ``redirect_object_target``,
@@ -933,7 +972,9 @@ def dispatch_interpose(  # noqa: PLR0913 - select_best_check_rating extends exis
             f"No interpose approach is available to {interposer!r} "
             f"for protected target {protected!r}."
         ),
-        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload, interposer=interposer),
+        outcome_fn=functools.partial(
+            apply_interpose_outcome, pre_payload, interposer_sheet=interposer.character_sheet
+        ),
         select_best_check_rating=select_best_check_rating,
         extra_modifiers=extra_modifiers,
     )

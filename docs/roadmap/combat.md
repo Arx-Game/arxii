@@ -910,7 +910,7 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   are unaffected. **Layer 2** (#2443, shipped): per-vow technique specialty —
   `CovenantRoleTechniqueSpecialty` rewards casts matching a role's specialized
   `TechniqueFunction`s (a shared, code-defined vocabulary also consumed by Layer 4) via the
-  always-on `covenant_role_specialty_power_term`; unlike the blend/action-scaling anchor-only
+  always-on `covenant_role_specialty_power_term`; unlike the blend anchor-only
   rule, sub-role rows ADD to the parent's. **Layer 3** (#2533, shipped): each engaged vow
   authors a `DefenseStyle` (GEAR_SOAK/EVASION/BARRIER) plus a
   `CovenantRoleDefenseProfile.gear_additive_tenths` fraction — `gear_additive_fraction(character)`

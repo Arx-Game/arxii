@@ -2,6 +2,10 @@
 
 **Status:** Accepted (2026-07-12) · **Issue:** #1843
 
+*Amended by ADR-4783-A: the flat `CHARGE_CHECK_BONUS`/`CHARGE_DAMAGE_BONUS` and the
+`CHARGE_MAX_HOPS` reach named below are now the Charge maneuver effects (to hit 10, damage 5,
+reach 5), catalog rows a modifier can target. The mount decision itself stands.*
+
 A mount is a `Companion` whose archetype has `is_mount=True` — no new typeclass, no
 parallel "vehicle" model. Riding state is `Companion.ridden_by` (a nullable **unique**
 FK → `CharacterSheet`, enforcing one rider per mount at the DB level) plus a seeded

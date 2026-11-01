@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.constants import CommandTier, CovenantScaledAction, MembershipStanding
+from world.covenants.constants import CommandTier, MembershipStanding
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
@@ -700,8 +700,7 @@ def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kic
 def _anchor_role_id(role: CovenantRole) -> int:
     """The role's ANCHOR pk — itself for a primary role, ``parent_role_id`` for a
     sub-role. Shared by every anchor-normalization call site in this module
-    (mirrors the inline idiom ``covenant_role_action_scaling_bonus`` and
-    ``gear_additive_fraction`` already use)."""
+    (mirrors the inline idiom ``gear_additive_fraction`` already uses)."""
     return role.parent_role_id if role.parent_role_id is not None else role.pk
 
 
@@ -1086,63 +1085,6 @@ def gear_additive_fraction(character: object) -> Decimal:
     if profile is None:
         return Decimal(1)
     return Decimal(profile.gear_additive_tenths) / 10
-
-
-def covenant_role_action_scaling_bonus(character: object, action: CovenantScaledAction) -> float:
-    """Return the per-role scaling bonus for a scaled action (#2529, was #2022; #4739).
-
-    Sums ``thread_level × multiplier`` across the character's engaged PRIMARY
-    roles that have a ``CovenantRoleActionScaling`` row whose ``action_key`` is
-    ``action`` (a ``CovenantScaledAction``; its stored values are unchanged).
-    Rows and COVENANT_ROLE threads key on the ANCHOR (parent) role — engaged
-    roles are resolved sub-roles (ADR-0055), so normalize before lookup.
-    Returns 0.0 when no engaged role has a row. PRIMARY-only (#2641, Layer 1
-    — chassis): a secondary vow never scales a combat action. A row whose
-    ``focus_pick`` is set counts only when the character chose that pick
-    (#4759 slice 2); the chosen picks are read only when a fetched row has one.
-
-    The returned float is a multiplier bonus — callers add it to the action's
-    base effect (e.g. interpose partial-block divisor = ``2 + bonus``).
-    """
-    from world.covenants.models import CovenantRoleActionScaling  # noqa: PLC0415
-
-    if not hasattr(character, "covenant_roles"):
-        return 0.0
-    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
-    if not engaged_roles:
-        return 0.0
-    try:
-        sheet = character.sheet_data
-    except AttributeError:
-        return 0.0
-    if sheet is None:
-        return 0.0
-
-    anchors = []
-    for role in engaged_roles:
-        anchor = role.parent_role if role.parent_role_id is not None else role
-        if anchor not in anchors:
-            anchors.append(anchor)
-
-    scalings = list(
-        CovenantRoleActionScaling.objects.filter(
-            action_key=action,
-            covenant_role__in=anchors,
-        )
-    )
-    if any(scaling.focus_pick_id is not None for scaling in scalings):
-        from world.covenants.focus_picks import (  # noqa: PLC0415
-            chosen_pick_ids_by_holder,
-            holder_has_pick,
-        )
-
-        chosen = chosen_pick_ids_by_holder({sheet.pk})
-        scalings = [s for s in scalings if holder_has_pick(s.focus_pick_id, sheet.pk, chosen)]
-    total = Decimal(0)
-    for scaling in scalings:
-        thread_level = _covenant_role_thread_level(sheet, scaling.covenant_role)
-        total += Decimal(thread_level) * scaling.thread_level_multiplier
-    return float(total)
 
 
 @transaction.atomic

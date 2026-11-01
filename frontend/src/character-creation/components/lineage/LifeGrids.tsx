@@ -12,6 +12,13 @@
  * sent on every change (the server merges `draft_data` by top-level key), and the
  * `backgrounds` offers are refetched after, since an unknown mark is what closes a
  * beat's answers.
+ *
+ * Every life ends on the Recent History box (#4830): the optional text a player writes
+ * for what a GM or another player may pick up, saved on blur to
+ * `draft_data.recent_history` and written at finalize as the background's lead-in
+ * paragraph. A beginning that strikes every stage (the Sleeper) has an empty pool; its
+ * `struck_stages_text` stands where the stage rows would be, over that box, with no pick
+ * lines and no footer.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +28,7 @@ import { characterCreationKeys, useDraftBeats, useUpdateDraft } from '../../quer
 import {
   LIFE_GRID_LABELS,
   LIFE_STAGE_ORDER,
+  RECENT_HISTORY_MAX_LENGTH,
   type BeatPoolEntry,
   type CGExplanations,
   type CharacterDraft,
@@ -36,6 +44,13 @@ interface Props {
 /** The pick line beside a beat's name: one, any, or the allowance the years lived give. */
 function pickLine(beat: BeatPoolEntry, copy: CGExplanations | undefined): string {
   if (beat.allowance === null) return copy?.beats_pick_any ?? 'pick any';
+  if (beat.allowance_is_points) {
+    // Career points (#4829): one at nineteen, one more every five years to fifty-nine;
+    // a point buys a card or a rank on one.
+    return (
+      copy?.beats_pick_points ?? '{n} career points: one at 19 and one more every five years, to 59'
+    ).replace('{n}', String(beat.allowance));
+  }
   if (beat.allowance === 1) return copy?.beats_pick_one ?? 'pick one';
   return (copy?.beats_pick_up_to ?? 'pick up to {n}; an older character takes more').replace(
     '{n}',
@@ -68,9 +83,60 @@ export function LifeGrids({ draft, copy }: Props) {
     return ids;
   }, [draftDistinctions]);
 
-  if (isLoading || !beats || beats.length === 0) return null;
+  if (isLoading || !beats) return null;
 
   const states = draft.draft_data.beats ?? {};
+  const beginning = draft.selected_beginnings;
+  // Every stage struck (#4830, the Sleeper): the pool is empty and the beginning's own
+  // text stands where the stage rows would be; until that text is authored, the mockup's
+  // fallback line stands there instead. An empty pool for any other reason puts nothing
+  // in their place.
+  const struckAll =
+    beats.length === 0 &&
+    beginning !== null &&
+    beginning.strikes_childhood &&
+    beginning.strikes_youth &&
+    beginning.strikes_adulthood;
+  const struck = struckAll
+    ? beginning.struck_stages_text.trim() ||
+      (copy?.life_struck_fallback ??
+        'Every stage of this life is struck. What there is to say begins below.')
+    : '';
+  const recentHistory = draft.draft_data.recent_history ?? '';
+  const saveRecentHistory = (value: string) => {
+    if (value === recentHistory) return;
+    void updateDraft.mutateAsync({
+      draftId: draft.id,
+      data: { draft_data: { recent_history: value } },
+    });
+  };
+  const recentHistoryBox = (
+    <div className="field recent-history">
+      <label htmlFor="recent-history">
+        {copy?.life_recent_history_label ?? 'Recent History (Optional)'}
+      </label>
+      <textarea
+        id="recent-history"
+        rows={3}
+        maxLength={RECENT_HISTORY_MAX_LENGTH}
+        defaultValue={recentHistory}
+        aria-describedby="recent-history-help"
+        onBlur={(e) => saveRecentHistory(e.target.value)}
+      />
+      <span id="recent-history-help" className="hint">
+        {copy?.life_recent_history_help ?? 'What you want a GM or another player to pick up.'}
+      </span>
+    </div>
+  );
+
+  if (beats.length === 0) {
+    return (
+      <div className="life">
+        {struck && <p className="absent">{struck}</p>}
+        {recentHistoryBox}
+      </div>
+    );
+  }
 
   const save = async (next: Record<string, DraftBeatState>) => {
     await updateDraft.mutateAsync({ draftId: draft.id, data: { draft_data: { beats: next } } });
@@ -124,8 +190,9 @@ export function LifeGrids({ draft, copy }: Props) {
                       showClosed={false}
                       firstLook={false}
                       layout="grid"
-                      exclusive={beat.allowance === 1}
+                      exclusive={beat.allowance === 1 && !beat.allowance_is_points}
                       maxPicks={beat.allowance}
+                      pointsPicks={beat.allowance_is_points}
                       syncErrorHint={copy?.offers_sync_error}
                       wordPerRank={copy?.offers_word_per_rank}
                       wordSpent={copy?.offers_word_spent}
@@ -166,6 +233,7 @@ export function LifeGrids({ draft, copy }: Props) {
           </section>
         );
       })}
+      {recentHistoryBox}
       <div className="life-foot">
         <span>{foot}</span>
       </div>

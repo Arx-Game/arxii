@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import (
-    BeatMode,
+    RECENT_HISTORY_MAX_LENGTH,
     BeatSelection,
     LifeStage,
     OfferArrival,
@@ -27,6 +27,7 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import CharacterOriginSlot
 from world.character_creation.offers import (
+    BeatConflict,
     age_pick_allowance,
     beat_pick_conflicts,
     beat_pool,
@@ -34,6 +35,7 @@ from world.character_creation.offers import (
     offers_for,
     reconcile_offer_picks,
     visible_offers,
+    youngest_age_for_points,
 )
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
@@ -131,10 +133,15 @@ class BeatPoolTests(TestCase):
         self.assertTrue(by_name["The household"].taken)
         self.assertFalse(by_name["The court"].taken)
 
-    def test_an_age_scaled_beat_allows_one_more_per_decade(self):
-        """Nineteen is one "known for" pick, fifty is four (#4395)."""
+    def test_an_age_scaled_beat_allows_one_career_point_every_five_years(self):
+        """One point at nineteen, one more every five years, no more past fifty-nine
+        (#4395, re-ruled #4829): fifty is seven, sixty-five is nine like fifty-nine."""
         self.assertEqual(
-            [age_pick_allowance(a) for a in (None, 19, 20, 29, 30, 50)], [1, 1, 1, 1, 2, 4]
+            [age_pick_allowance(a) for a in (None, 18, 19, 23, 24, 29, 50, 59, 65)],
+            [1, 1, 1, 1, 2, 3, 7, 9, 9],
+        )
+        self.assertEqual(
+            [youngest_age_for_points(p) for p in (0, 1, 2, 7, 9, 12)], [19, 19, 24, 49, 59, 59]
         )
         known_for = LifeBeatFactory(
             name="Known for",
@@ -145,21 +152,38 @@ class BeatPoolTests(TestCase):
         young = CharacterDraftFactory(selected_beginnings=self.beginning, age=19)
         old = CharacterDraftFactory(selected_beginnings=self.beginning, age=50)
         self.assertEqual({e.name: e.allowance for e in beats_for(young)}["Known for"], 1)
-        self.assertEqual({e.name: e.allowance for e in beats_for(old)}["Known for"], 4)
+        self.assertEqual({e.name: e.allowance for e in beats_for(old)}["Known for"], 7)
+        self.assertTrue({e.name: e.allowance_is_points for e in beats_for(old)}["Known for"])
         spied = _answer(known_for, "Spied for a house", 3)
         killed = _answer(known_for, "Killed for coin", 3)
-        self.assertEqual(beat_pick_conflicts([spied, killed], age=19), [("Known for", 1)])
+        self.assertEqual(
+            beat_pick_conflicts([spied, killed], age=19), [BeatConflict("Known for", 1, True)]
+        )
         self.assertEqual(beat_pick_conflicts([spied, killed], age=50), [])
 
-    def test_one_kept_beginning_takes_its_pool_by_itself(self):
-        sleeper = BeginningsFactory(name="Sleeper", beat_mode=BeatMode.ONE_KEPT)
-        for beat in (self.household, self.court):
-            LifeBeatExclusionFactory(beat=beat, beginning=sleeper)
-        draft = CharacterDraftFactory(selected_beginnings=sleeper)
-        entries = beats_for(draft)
-        self.assertEqual([e.name for e in entries], ["The work"])
-        self.assertTrue(entries[0].taken)
-        self.assertTrue(entries[0].kept)
+    def test_a_career_point_beat_counts_ranks_not_cards(self):
+        """A rank-four Sailor and a rank-three Soldier spend seven points: fine at fifty
+        (seven), one too many at forty-four (six); a one-of beat still counts cards (#4829)."""
+        careers = LifeBeatFactory(
+            name="Past Careers",
+            life_stage=LifeStage.ADULTHOOD,
+            selection=BeatSelection.ANY,
+            picks_scale_with_age=True,
+        )
+        sailor = _answer(careers, "Sailor", 0)
+        soldier = _answer(careers, "Soldier", 0)
+        ranks = {sailor.distinction_id: 4, soldier.distinction_id: 3}
+        self.assertEqual(beat_pick_conflicts([sailor, soldier], age=50, ranks=ranks), [])
+        self.assertEqual(
+            beat_pick_conflicts([sailor, soldier], age=44, ranks=ranks),
+            [BeatConflict("Past Careers", 6, True)],
+        )
+        patient = _answer(self.household, "Patient (points)", 10)
+        spoiled = _answer(self.household, "Spoiled (points)", -10)
+        self.assertEqual(
+            beat_pick_conflicts([patient, spoiled], age=50, ranks={patient.distinction_id: 3}),
+            [BeatConflict("The household", 1, False)],
+        )
 
 
 class BeatAnswerTests(TestCase):
@@ -241,7 +265,8 @@ class BeatAnswerTests(TestCase):
 
     def test_one_of_conflicts_name_the_beat_and_its_allowance(self):
         self.assertEqual(
-            beat_pick_conflicts([self.spoiled, self.patient], age=None), [("The household", 1)]
+            beat_pick_conflicts([self.spoiled, self.patient], age=None),
+            [BeatConflict("The household", 1, False)],
         )
         self.assertEqual(beat_pick_conflicts([self.efficient, self.secretive], age=None), [])
         self.assertEqual(beat_pick_conflicts([self.spoiled, self.efficient], age=None), [])
@@ -277,8 +302,8 @@ class BeatsEndpointTests(TestCase):
                     "unknown": False,
                     "line": "",
                     "answer_offer_ids": [self.patient.pk, self.spoiled.pk],
-                    "kept": False,
                     "allowance": 1,
+                    "allowance_is_points": False,
                 }
             ],
         )
@@ -336,12 +361,91 @@ class BeatsEndpointTests(TestCase):
         self.draft.save(update_fields=["age"])
         resp = self.client.put(url, both, format="json")
         self.assertEqual(resp.status_code, 400, resp.content)
-        self.assertIn("one answer on Known for", resp.json()["detail"])
+        self.assertIn("1 career point on Known for", resp.json()["detail"])
         self.draft.age = 50
         self.draft.save(update_fields=["age"])
         resp = self.client.put(url, both, format="json")
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(len(resp.json()["distinctions"]), 2)
+
+    def test_recent_history_is_text_of_a_bounded_length(self):
+        """The optional text a life ends on (#4830): up to the limit saves, over it is
+        refused naming the limit, and null clears it."""
+        url = f"/api/character-creation/drafts/{self.draft.id}/"
+        resp = self.client.patch(
+            url,
+            {"draft_data": {"recent_history": "A ship went down with my name on it."}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            resp.json()["draft_data"]["recent_history"], "A ship went down with my name on it."
+        )
+        resp = self.client.patch(
+            url,
+            {"draft_data": {"recent_history": "x" * (RECENT_HISTORY_MAX_LENGTH + 1)}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn(str(RECENT_HISTORY_MAX_LENGTH), str(resp.json()))
+        resp = self.client.patch(url, {"draft_data": {"recent_history": None}}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["draft_data"]["recent_history"], "")
+
+    def test_ranks_spend_career_points_and_the_age_cannot_drop_under_them(self):
+        """At fifty (seven points) Sailor at four and Soldier at three fit and a fourth
+        rank on Soldier is refused by the beat's points; the age then refuses to drop to
+        thirty-three and names forty-nine, the youngest age with seven points (#4829)."""
+        careers = LifeBeatFactory(
+            name="Past Careers",
+            life_stage=LifeStage.ADULTHOOD,
+            selection=BeatSelection.ANY,
+            picks_scale_with_age=True,
+        )
+        sailor = DistinctionOfferFactory(
+            chapter=OfferChapter.BACKGROUNDS,
+            beat=careers,
+            appearance_section=None,
+            prompt="",
+            distinction=DistinctionFactory(name="Sailor", cost_per_rank=0, max_rank=4),
+        )
+        soldier = DistinctionOfferFactory(
+            chapter=OfferChapter.BACKGROUNDS,
+            beat=careers,
+            appearance_section=None,
+            prompt="",
+            distinction=DistinctionFactory(name="Soldier", cost_per_rank=0, max_rank=4),
+        )
+        self.draft.age = 50
+        self.draft.save(update_fields=["age"])
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+        seven = {
+            "distinctions": [
+                {"id": sailor.distinction_id, "rank": 4, "offer_id": sailor.pk},
+                {"id": soldier.distinction_id, "rank": 3, "offer_id": soldier.pk},
+            ]
+        }
+        resp = self.client.put(url, seven, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            sorted((e["distinction_name"], e["rank"]) for e in resp.json()["distinctions"]),
+            [("Sailor", 4), ("Soldier", 3)],
+        )
+        eight = {
+            "distinctions": [seven["distinctions"][0], {**seven["distinctions"][1], "rank": 4}]
+        }
+        resp = self.client.put(url, eight, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("7 career points on Past Careers", resp.json()["detail"])
+
+        draft_url = f"/api/character-creation/drafts/{self.draft.id}/"
+        resp = self.client.patch(draft_url, {"age": 33}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("the youngest age with 7 is 49", str(resp.json()))
+        self.assertIn("Sailor at rank 4 and Soldier at rank 3", str(resp.json()))
+        resp = self.client.patch(draft_url, {"age": 49}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["age"], 49)
 
     def test_a_malformed_beats_map_is_refused(self):
         resp = self.client.patch(
@@ -405,6 +509,25 @@ class FinalizeBeatsTest(FinalizationTestMixin, TestCase):
         # Age is experience through beats, not banked points (#4124).
         self.assertEqual(sheet.maturation_floor, 25)
         self.assertEqual(available_points(sheet), 0)
+
+    def test_recent_history_opens_the_told_background(self) -> None:
+        """Recent History is the lead-in paragraph of the background (#4830, ruled
+        2026-10-31), before the told stages; alone, it is the whole background."""
+        draft = self._create_base_draft()
+        draft.draft_data["beats"] = {str(self.household.pk): {"taken": True, "line": "A line."}}
+        draft.draft_data["recent_history"] = "Last winter I came back from the dead."
+        draft.save()
+        character = finalize_character(draft, add_to_roster=True)
+        background = character.sheet_data.true_profile.background
+        self.assertTrue(background.startswith("Last winter I came back from the dead.\n\n"))
+        self.assertIn("Childhood: The household", background)
+
+        alone = self._create_base_draft(first_name="Alone")
+        alone.account = AccountDB.objects.create(username="beats_finalize_alone")
+        alone.draft_data["recent_history"] = "Only this."
+        alone.save()
+        lonely = finalize_character(alone, add_to_roster=True)
+        self.assertEqual(lonely.sheet_data.true_profile.background, "Only this.")
 
     def test_an_untaken_pool_writes_nothing(self) -> None:
         draft = self._create_base_draft()

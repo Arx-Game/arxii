@@ -2875,7 +2875,7 @@
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
 - `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).`
-- `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer: 'object | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
+- `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer_sheet: 'CharacterSheet | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' - Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' - Intercept a strike against a rampart-covered position (#2209).`
 - `assess_break_bar(encounter: 'CombatEncounter', action_outcomes: 'list[ActionOutcome]') -> 'None' - Assess break-bar depletion for all boss opponents with a break bar (#2642).`
@@ -2904,7 +2904,7 @@
 - `delete_ephemeral_npc(opponent: 'CombatOpponent') -> 'bool' - Guarded delete of one ephemeral combat NPC's ``ObjectDB``.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
-- `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
+- `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', partial_protection: 'int', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
 - `drain_reactive_upkeep(encounter: 'CombatEncounter') -> 'None' - Debit per-round upkeep from each active participant's sustained conditions.`
 - `effective_soak_from_armor(character: 'Character') -> 'int' - Sum effective armor soak across the character's equipped armor pieces.`
 - `effective_weapon_profile(character: 'Character') -> 'WeaponContribution | None' - The character's strongest equipped weapon as a combat contribution.`
@@ -3301,6 +3301,7 @@
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - weather_shelters <- weather.WeatherTypeShelter
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
@@ -3637,7 +3638,6 @@
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
-  - action_scalings <- covenants.CovenantRoleActionScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
   - focus_picks <- covenants.VowFocusPick
@@ -3648,11 +3648,6 @@
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - combat_participations <- combat.CombatParticipant
-
-### CovenantRoleActionScaling
-**Foreign Keys:**
-  - covenant_role -> covenants.CovenantRole [FK]
-  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 
 ### CovenantRoleBonus
 **Foreign Keys:**
@@ -3739,7 +3734,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
 **Pointed to by:**
-  - action_scalings <- covenants.CovenantRoleActionScaling
+  - stat_scalings <- covenants.VowStatScaling
   - limits <- covenants.VowFocusPickLimit
   - character_choices <- covenants.CharacterVowFocusPick
   - situational_perks <- covenants.VowSituationalPerk
@@ -3784,6 +3779,7 @@
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
+  - focus_pick -> covenants.VowFocusPick [FK] (nullable)
 
 ### WeaknessPoolEntry
 **Foreign Keys:**
@@ -3805,7 +3801,6 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' - Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' - Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' - CharacterSheets of active `covenant` members present in `room`.`
-- `covenant_role_action_scaling_bonus(character: 'object', action: 'CovenantScaledAction') -> 'float' - Return the per-role scaling bonus for a scaled action (#2529, was #2022; #4739).`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' - Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' - Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' - Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
@@ -6062,6 +6057,7 @@
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
   - character_grants <- magic.CharacterGift
@@ -6293,6 +6289,7 @@
   - damage_type <- conditions.DamageType
   - corruption_condition_templates <- conditions.ConditionTemplate
   - modifier_target <- mechanics.ModifierTarget
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
   - alteration_templates <- magic.MagicalAlterationTemplate
@@ -6598,6 +6595,7 @@
   - action_enhancements <- actions.ActionEnhancement
   - consequence_effects <- checks.ConsequenceEffect
   - conditions_caused <- conditions.ConditionInstance
+  - effect_modifier_targets <- mechanics.ModifierTarget
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
   - ultimate_for_gifts <- magic.Gift
@@ -7087,6 +7085,10 @@
   - consequence_pool -> actions.ConsequencePool [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 
+### ManeuverEffect
+**Pointed to by:**
+  - modifier_targets <- mechanics.ModifierTarget
+
 ### ModifierCategory
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -7116,6 +7118,11 @@
   - target_aspect -> classes.Aspect [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
   - target_being -> worship.WorshippedBeing [FK] (nullable)
+  - scope_maneuver_effect -> mechanics.ManeuverEffect [FK] (nullable)
+  - scope_technique -> magic.Technique [FK] (nullable)
+  - scope_gift -> magic.Gift [FK] (nullable)
+  - scope_damage_type -> conditions.DamageType [FK] (nullable)
+  - scope_resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
@@ -7256,6 +7263,7 @@
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
+- `ensure_skill_target(trait: 'Trait') -> 'ModifierTarget | None' - The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).`
 - `equipment_walk_parts(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'EquipmentWalkParts' - ``equipment_walk_total``'s terms, split into the worn-item part and the vow part.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
@@ -7279,6 +7287,7 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
+- `skill_modifiers_for_sheet(character_sheet: 'CharacterSheet', skills: 'Iterable[Skill]') -> 'dict[int, int]' - ``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' - Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`

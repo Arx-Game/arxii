@@ -47,6 +47,7 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
+| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); eight fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
 | `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE), `residence_comfort` (bool), `form_combat_profile` (FK forms.FormCombatProfile, SET_NULL) |
 | `CharacterModifier` | Materialized modifier value on a character for fast lookup (SharedMemoryModel) | `character` (FK CharacterSheet), `value` (int, can be negative), `source` (FK ModifierSource, CASCADE), `expires_at` (nullable datetime), `created_at` |
 
@@ -132,6 +133,20 @@ target = ensure_aspect_target(aspect)   # AspectAdmin.save_model and ensure_aspe
 `ModifierTarget.target_aspect` is a nullable one-to-one onto `classes.Aspect`, the sibling of
 `target_check_type`; the check seam reads it through `aspect.modifier_target`
 (`docs/systems/checks.md`, "The aspect lever").
+
+### Skill targets (#4820)
+
+```python
+from world.mechanics.services import ensure_skill_target, skill_modifiers_for_sheet
+
+# The stat-category target a skill's bonuses land on (target_trait = the skill's trait),
+# created if missing; None when another category already owns the name (retarget by hand).
+target = ensure_skill_target(skill.trait)   # SkillAdmin.save_model and the paste call this
+
+# skill.pk -> the modifier a roll on that skill gets, for the sheet: card and condition
+# rows in three queries, worn crafted pieces and the equipment walk from cached handlers.
+modifiers = skill_modifiers_for_sheet(sheet, skills)
+```
 
 ### Amplification and Immunity
 
@@ -253,6 +268,156 @@ distinction effect on one of the targets is how a Gambler, a Renowned or a Guard
 its teeth. Priced rows carry pluses, awarded rows minuses (the purse rule).
 
 ---
+
+## Maneuver effects (#4783, ADR-4783-A)
+
+Each combat maneuver's numbers are a fixed catalog of effects that any modifier source can
+target. Maneuvers stay verbs that code fires at set moments; only their numbers moved out of
+code. `world/mechanics/maneuver_effects.py` holds the catalog's code side,
+`world/mechanics/effect_targets.py` the reader.
+
+**The catalog.** `ManeuverEffect` (`key` unique, a `ManeuverEffectKey`; `base_value`; staff-only
+`notes`) has exactly eight rows. The kind of each is derived from the key
+(`MANEUVER_EFFECT_KIND`), never stored. Code finds a row by `key`, never by name. The admin
+(`ManeuverEffectAdmin`) edits `base_value` and `notes`, with no add, no delete and a read-only key.
+Rows are written by migration `0334` in every migrated database, by `ensure_maneuver_effect_rows()`
+on the Big Button combat cluster (`world/seeds/clusters.py`), and by `get_maneuver_effect` on a
+missing key; an edited base value is kept.
+
+| Key | Kind | Base | Read by |
+|---|---|---|---|
+| `charge_to_hit` | to hit | 10 | `CombatTechniqueResolver` check modifiers for a CHARGE |
+| `charge_damage` | damage | 5 | the same resolver's damage budget for a CHARGE |
+| `charge_reach` | reach | 5 | `declare_charge` (hops a charge may cover) |
+| `cover_escape_bonus` | escape bonus | 10 | `_resolve_flee`, once per coverer |
+| `succor_partial_protection` | partial protection | 50 | `apply_succor_outcome`, combat and scene rounds |
+| `interpose_partial_protection` | partial protection | 50 | `interpose_dispatch`, a partial block |
+| `rally_morale` | morale | 15 | `_resolve_rally`, per success level of a great success |
+| `rally_surge_intensity` | surge intensity | 100 | `_surge_rallied_ally`, as a percentage |
+
+**Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
+`CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
+(`modifier_target_one_scope`) stops both being set. In the "maneuver_effect" category
+(`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0334`, and by `ensure_maneuver_effects` for a schema built
+without migrations; the seeder never writes it, since a category is content,
+and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
+scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
+recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
+one of the two (a target with a technique scope names a kind instead, see "Technique effect scopes"); no other category may set either. A target with neither set matches nothing.
+Staff author targets after the catalog rows exist, then point a source at the target (an unsized
+distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
+crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
+reach an effect target: it needs a resonance on the target, and an effect target has none.
+
+**The reader.**
+- `effect_value(sheet, key)`: base value plus `effect_modifier_total`, floored at 0, and capped
+  at 100 for partial protection. `sheet=None` gives the base value.
+- `effect_modifier_total(sheet, key)`: the unclamped sum of `get_modifier_total` and
+  `get_condition_modifier_total` over every active target scoped to this effect or its kind.
+  For a caller that scales the base itself.
+
+**Wiring (the sheet is the acting character's).**
+- **Charge.** To hit and damage are `max(0, base x (2 with a Lance, else 1) + modifier total)`:
+  a Lance doubles the base only, so a +3 modifier stays +3 (5 x 2 + 3 = 13). Reach is
+  `effect_value(Charge: reach)` hops, checked at declaration. The roll label stays "Charge".
+- **Cover.** `_resolve_flee` adds one contribution per coverer, labelled "Covered by <persona
+  name>", worth that coverer's own Cover escape bonus. `FleeConfig.cover_bonus` and the
+  "Covering allies xN" label are gone.
+- **Succor.** `apply_succor_outcome(result, partial_protection)`: clean success 0.0, partial
+  `1 - partial_protection / 100`, failure 1.0. Combat and scene rounds both pass the
+  succorer's value.
+- **Interpose.** A partial block leaves `amount x (100 - value) // 100`; with no interposer
+  sheet the base value is used.
+- **Rally.** Morale restored is success level x the rallier's Rally morale. The surge intensity
+  scale is `value / 100`, and the ally's roll line says "surge +N" when it adds intensity.
+- **Vows.** A `VowStatScaling` row on an effect target adds the holder's SHOWN thread level
+  (stored // 10) x `bonus_per_level`; every other category keeps the stored level. Rows on an
+  engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
+  their scaling (`docs/systems/covenants.md`).
+
+**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
+modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
+target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
+the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts and sized modifiers
+on effects (#4824) and scopes for the opponent (#4823) are not built. A maneuver reads only the
+targets that carry no technique scope, so a technique-scoped target never reaches a maneuver
+(see "Technique effect scopes"). A kind-wide "damage" target with no technique scope reaches the
+damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
+targets scoped to "Charge: damage". The battle Rally
+(`world/battles`, `RALLY_MORALE_PER_LEVEL`) is a different action and is untouched.
+
+## Technique effect scopes (#4822, ADR-4783-A)
+
+A modifier can name the technique it changes. Slice 2 of #4783 adds five scope columns to
+`ModifierTarget` and two effect kinds, so "+4 fire damage on Pyromancy techniques" or "+2 severity
+on the conditions of Ember Veil" is a target a distinction, crafted recipe modifier, condition,
+facet or mantle crossing-choice condition or vow stat scaling row points at, like any maneuver
+effect.
+
+**Scopes.** `scope_technique` (FK `Technique`), `scope_gift` (FK `Gift`), `scope_technique_function`
+(a `TechniqueFunction`), `scope_damage_type` (FK `DamageType`) and `scope_resonance` (FK
+`Resonance`). The FKs are `CASCADE`, since clearing one would widen the target. They are new
+columns, separate from `target_damage_type` and `target_resonance`, which are one-to-one identity
+links for their own categories. Targets stay in the "maneuver_effect" category, which already
+reaches every source. Rules, held by `ModifierTarget.clean()` and the
+`modifier_target_technique_scope_needs_kind` constraint:
+- A technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; a technique scope on
+  any other category is refused.
+- `scope_damage_type` is for the damage kind only.
+- A technique scope works only with damage, condition severity and condition duration; the admin
+  refuses any other kind.
+- Scopes combine: every scope a target sets must match. Gift + damage type + damage kind is "fire
+  damage of any Pyromancy technique". An unset scope means any.
+- A gift scope matches the technique's gift and that gift's parent, so a target scoped to an
+  umbrella gift reaches the techniques of its child gifts. A target scoped to a child gift does not
+  reach the parent's own techniques.
+
+**What a kind modifier reaches.** A kind-only damage modifier applies to every damage profile a
+cast deals, signature and vow-added profiles included, and a negative one lowers the whole hit
+(floored at 0). Severity and duration modifiers apply only to the technique's own condition rows,
+not signature or vow-added ones.
+
+**Kinds.** `EffectKind` gains `CONDITION_SEVERITY` and `CONDITION_DURATION` (rounds); `DAMAGE`
+already existed. Neither new kind has a catalog effect, so they are reached by a kind scope only.
+
+**The reader** (`world/mechanics/effect_targets.py`):
+- `technique_effect_context(sheet, technique, damage_type_id=None)` builds a frozen
+  `TechniqueEffectContext` (`world/mechanics/types.py`): the technique id, its gift and parent
+  gift ids, the function set from `cached_function_tags`, the resonance ids from
+  `gift_resonances_for`, and the resolved damage type id.
+- `technique_effect_targets(kind)`: one query for the active maneuver-effect targets of that kind
+  that name no one maneuver effect. Kind-wide and technique-scoped targets both come back.
+- `technique_effect_total(sheet, context, targets)`: the unclamped sum over the targets that fit
+  the context. No sheet gives 0.
+- `technique_condition_bonuses(sheet, technique)`: the `(severity, duration)` pair for a cast,
+  loaded once; with neither kind authored anywhere it builds no context.
+- `effect_modifier_total(sheet, key, kind_wide=False)` leaves out targets that name only the kind,
+  which Charge damage uses so a kind-wide damage target is not counted twice.
+
+Matching uses the technique as authored, not the caster's specialized variant.
+
+**Damage** (combat only; a scene cast has no technique damage step). `_profile_damage` in
+`world/combat/services/techniques/technique_resolver.py` adds one flat term per damage profile,
+matched on the profile's resolved damage type (untyped counts as Physical), with the other flat
+terms and inside the existing floor at 0, so a large negative modifier cannot heal. A technique
+with two profiles gains the bonus twice, and an area technique gains it on every opponent.
+`TechniqueDamageBonus` is built once per cast and works out the total once per distinct damage
+type. In a Charge a kind-only damage target is counted by this term; the Charge damage term counts
+only targets scoped to "Charge: damage". Charge to hit is unchanged.
+
+**Conditions.** `technique_condition_bonuses` feeds the `severity_bonus` and `duration_bonus` of
+`apply_technique_conditions` on the technique's own condition rows in a combat cast
+(`CombatTechniqueResolver`), a scene cast (`scenes.cast_services`) and a passive technique
+(`combat/services/damage/passive_techniques.py`). Signature-motif and vow-added rows keep their own
+sources. `bonused_severity` and `bonused_duration` (`world/magic/services/condition_application.py`)
+floor a negative bonus at 1; a condition with no duration stays without one; a team-lane row
+ignores both bonuses.
+
+**Not built.** Opponent scopes (#4823); derived and sized amounts (#4824), so technique-scoped
+modifiers are flat. The staff power evaluator values a technique alone, so per-character modifiers
+do not show there. Power-category targets that gate on `target_resonance` or `target_damage_type`
+raise power, which scales a profile; this term is a flat amount after scaling, and neither counts
+the other.
 
 ## API Endpoints
 

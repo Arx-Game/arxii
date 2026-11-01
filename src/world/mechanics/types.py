@@ -209,3 +209,21 @@ class EquipmentWalkParts:
     @property
     def total(self) -> int:
         return self.item_part + self.vow_part
+
+
+@dataclass(frozen=True)
+class TechniqueEffectContext:
+    """What a cast technique is, as a technique-scoped modifier target sees it (#4822).
+
+    ``gift_ids`` holds the technique's gift and that gift's parent (the umbrella gift),
+    so a target scoped to the umbrella reaches every child gift's techniques.
+    ``functions`` holds ``TechniqueFunction`` values, ``resonance_ids`` the resonances
+    the gift manifests as for this caster, and ``damage_type_id`` the resolved damage
+    type (damage effects only).
+    """
+
+    technique_id: int
+    gift_ids: frozenset[int]
+    functions: frozenset[str]
+    resonance_ids: frozenset[int]
+    damage_type_id: int | None = None

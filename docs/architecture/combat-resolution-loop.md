@@ -1328,7 +1328,7 @@ apply_damage_to_participant(participant, pre_payload)
         → dispatch_capability_reaction(...)       # resolve_challenge → CheckOutcome
         → apply_interpose_outcome(pre_payload, result):
             SUCCESS  → pre_payload.amount = 0
-            PARTIAL  → pre_payload.amount //= 2
+            PARTIAL  → stops the interposer's partial-protection share (effect_value, base 50)
             FAILURE  → no-op
   → vitals.health -= pre_payload.amount          # reduced (possibly 0) amount applied
 ```

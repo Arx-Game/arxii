@@ -126,10 +126,17 @@ character-creation/
         │                         #   stage is absent), each beat a `ChapterOffers`
         │                         #   `layout="grid"` of its `backgrounds` offers picked
         │                         #   straight from the cards, the pick line from the
-        │                         #   entry's `allowance` (one, up to N with the years
-        │                         #   lived, any), a line of the player's own once a card
+        │                         #   entry's `allowance` (one, N career points on a beat
+        │                         #   whose `allowance_is_points` is on (#4829: a ranked
+        │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
+        │                         #   a line of the player's own once a card
         │                         #   is picked, the unknown mark; the footer counts the
-        │                         #   taken beats and the purse. Replaces BeatsBlock.
+        │                         #   taken beats and the purse. Every life ends on the
+        │                         #   Recent History box (#4831), a textarea saved on blur
+        │                         #   to draft_data.recent_history; a beginning that
+        │                         #   strikes every stage shows its struck_stages_text
+        │                         #   where the stages would be, over the box, with no
+        │                         #   footer. Replaces BeatsBlock.
         ├── UpbringingPrompts.tsx # Route prompts; `scope: 'any'` renders the pick-lists
         │                         #   asked on every path (a general write-in never
         │                         #   renders, #4395), `scope: 'path'` renders below the

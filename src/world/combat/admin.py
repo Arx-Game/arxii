@@ -629,7 +629,7 @@ class EncounterOutcomeMappingAdmin(admin.ModelAdmin):
 class FleeConfigAdmin(admin.ModelAdmin):
     """#3831 - the singleton authored flee-check wiring (#878)."""
 
-    list_display = ["pk", "check_type", "base_difficulty", "cover_bonus", "updated_at"]
+    list_display = ["pk", "check_type", "base_difficulty", "updated_at"]
     autocomplete_fields = ["check_type", "consequence_pool", "updated_by"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002

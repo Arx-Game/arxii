@@ -60,6 +60,8 @@ class ReactionTuning:
     dodge_anima_cost: int
     dodge_fatigue_cost: int
     reaction_difficulty_step: int
+    wound_cap_shrink_per_round: int
+    reactive_save_max_cut: int
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,8 @@ def reaction_tuning() -> ReactionTuning:
         dodge_anima_cost=row.dodge_anima_cost,
         dodge_fatigue_cost=row.dodge_fatigue_cost,
         reaction_difficulty_step=row.reaction_difficulty_step,
+        wound_cap_shrink_per_round=row.wound_cap_shrink_per_round,
+        reactive_save_max_cut=row.reactive_save_max_cut,
     )
 
 

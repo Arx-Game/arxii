@@ -474,6 +474,9 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   check at round resolution (`_resolve_flee`): authored difficulty via the
   `FleeConfig` singleton + per-`OpponentTier` `FleeTierModifier` rows (Hero Killer
   +20 — the #875 lever), ally COVER declarations add an authored `cover_bonus`
+  (since #4783: one "Covered by <name>" contribution per coverer, worth that coverer's
+  "Cover: escape bonus" maneuver effect; `FleeConfig.cover_bonus` was dropped and its value
+  carried into the catalog row)
   through the shared modifier seam, and PARTIAL/FAILURE/BOTCH route through a
   seeded consequence pool (PARTIAL = escape at a cost; a successful escape skips
   later same-round NPC hits). New `cover` endpoint + web declaration UI

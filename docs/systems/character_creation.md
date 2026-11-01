@@ -44,7 +44,7 @@ from world.character_creation.types import (
 |-------|---------|------------|
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level` (ALL or STAFF_ONLY) |
-| `Beginnings` | Worldbuilding paths per area; since #4395 a frame, a station and a strike-list | `name`, `starting_area` (FK), `description`, `frame` (the prose every character who starts here shares, shown at the pick; carried from the route's `frame_narrative` by migration 0244), `station` (one line of standing), `strikes_childhood`/`strikes_youth`/`strikes_adulthood` (a struck stage is absent from the life grids, `struck_stages()`), `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank`, `beat_mode` |
+| `Beginnings` | Worldbuilding paths per area; since #4395 a frame, a station and a strike-list | `name`, `starting_area` (FK), `description`, `frame` (the prose every character who starts here shares, shown at the pick; carried from the route's `frame_narrative` by migration 0244), `station` (one line of standing), `strikes_childhood`/`strikes_youth`/`strikes_adulthood` (a struck stage is absent from the life grids, `struck_stages()`), `struck_stages_text` (#4830: what the life page shows in place of the stage rows when every stage is struck; the Sleeper's), `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank`, `beat_mode` |
 | `OriginTemplate` | The beginning's family route (#3617; since #4395 assigned with the beginning, `services.route_for_beginning`/`assign_route`, never a player pick: "Upbringing" is retired as a player term) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `max_claim_tier` (`TitleTier`, blank = any: the highest seat a founder raised here may define, #3983; editable in the Upbringing Builder's Family paths since #4202), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
 | `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) and, optionally, how a new family starts (`family_standing`, #4060) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
@@ -749,15 +749,41 @@ The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unkn
 #4395 `allowance`). A beat's answers are open while it is in the pool and not unknown
 (`open_beat_ids`, `_opener_satisfied`); a pick under it, a line, or the unknown mark is
 what takes it (the grids never ask the player to add a beat first), and marking it
-unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395):**
+unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395, career points since #4829):**
 `beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
-beat whose `picks_scale_with_age` is on `age_pick_allowance(age)`: one at or under
-`AGE_PICKS_FROM_AGE` (20) and one more per `AGE_PICKS_YEARS_PER_PICK` (10) years lived
-past it, so nineteen is one "known for" pick and fifty four. The distinctions sync
-refuses more picks than the allowance (`beat_pick_conflicts`); the leaf disables the
-rest at it. `Beginnings.beat_mode`
-`ONE_KEPT` (the Sleeper) takes the one unexcluded beat itself and marks nothing else
-addable; every other beat stands unknown. Apart from an age-scaled beat's allowance,
+beat whose `picks_scale_with_age` is on `age_pick_allowance(age)` career points: one at or
+under `AGE_PICKS_FROM_AGE` (19), one more per `AGE_PICKS_YEARS_PER_PICK` (5) full years
+lived past it, none past `AGE_PICKS_CAP_AGE` (59), so nineteen is one point, fifty seven,
+fifty-nine and older nine. A point buys a card on the beat or a rank on one, so the beat
+counts ranks: `beat_pick_conflicts(offers, age=, ranks=)` sums the ranks the payload asks
+for on such a beat (a one-of beat still counts cards) and returns `BeatConflict(name,
+allowance, points)`; the sync's refusal reads "At most 7 career points on Past Careers".
+`BeatPoolEntry.allowance_is_points` tells the leaf which it is. **The age floor:**
+`CharacterDraftSerializer.validate_age` refuses an age whose points are fewer than the
+ranks already held on such a beat (`age_scaled_points_spent`) and names the youngest age
+that fits (`youngest_age_for_points`): "Sailor at rank 4 and Soldier at rank 3 need 7
+career points; the youngest age with 7 is 49. Unpick a career or a rank first." On the
+leaf a ranked card in a career-point grid shows its ranks as pips in its top right
+(`ChapterOffers` `pointsPicks`; a pip sets the rank, the pips past the points left are
+dimmed) and the pick line reads copy key `beats_pick_points`. Finalize writes the entry's
+rank (`_create_distinctions`), so a rank-four career lands as rank four. Journeys:
+`integration_tests/test_career_points_journeys.py`. `Beginnings.beat_mode`
+has one value, `POOL`, since #4830: the one-kept mode (the Sleeper's one unexcluded beat
+as the whole stage) is retired, because the Sleeper strikes every stage and shows its
+`struck_stages_text` instead. **Recent History (#4830):** `draft_data["recent_history"]`,
+free text of at most `RECENT_HISTORY_MAX_LENGTH` (2000) characters, validated with the
+beats; at finalize it becomes the lead-in paragraph of `Profile.background`, a blank line,
+then the told prose (`assemble_origin_prose`), or the whole background when nothing else
+was told. Public by ruling (2026-10-30, 2026-10-31). Journeys:
+`integration_tests/test_struck_life_journeys.py`. **On the leaf (#4831):** `LifeGrids` ends
+every life on the Recent History box (a textarea under the last stage, before the footer;
+copy keys `life_recent_history_label` and `life_recent_history_help`; `maxLength` from the
+frontend's mirror of `RECENT_HISTORY_MAX_LENGTH`), saved on blur to
+`draft_data.recent_history` by itself. When the pool is empty and the draft's beginning
+strikes all three stages, the beginning's `struck_stages_text` stands where the stage rows
+would be (a `.absent` paragraph over the box; copy key `life_struck_fallback` stands in until
+the text is authored), with no pick lines and no footer; an empty pool on a beginning that
+keeps its stages shows the box alone. Apart from an age-scaled beat's allowance,
 nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with

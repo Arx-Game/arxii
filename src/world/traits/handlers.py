@@ -24,6 +24,10 @@ from world.traits.models import (
     display_trait_value,
 )
 
+#: The trait types a ``ModifierTarget`` with ``target_trait`` set can modify (#4820). A
+#: language or OTHER trait reads its stored value alone.
+MODIFIABLE_TRAIT_TYPES: frozenset[str] = frozenset({TraitType.STAT, TraitType.SKILL})
+
 
 class DefaultTraitValue:
     """
@@ -172,9 +176,11 @@ class TraitHandler:
         """
         Get the current value of a trait including modifiers (case-insensitive).
 
-        For stats (strength, dexterity, etc.), this includes modifiers from
-        distinctions like Giant's Blood. Modifiers are scaled appropriately
-        (modifier value of 10 = 1.0 display value = 10 internal).
+        For stats (strength, dexterity, etc.) and skills (sailing, melee combat),
+        this includes modifiers from distinctions like Giant's Blood or Sailor,
+        in the trait's stored units: a +10 on a stat is +1.0 shown, a +10 on a
+        skill is +10 shown (#4820). Advancement never reads this number; it reads
+        the stored value, so a bonus never raises the cost of the next rank.
 
         Args:
             trait_name: Name of the trait to look up
@@ -184,17 +190,27 @@ class TraitHandler:
         """
         base_value = self.get_base_trait_value(trait_name)
 
-        # Check if this is a stat that might have modifiers
         trait = Trait.get_by_name(trait_name)
-        if trait and trait.trait_type == TraitType.STAT:
-            modifier = self._get_stat_modifier(trait)
-            return base_value + modifier
+        if trait and trait.trait_type in MODIFIABLE_TRAIT_TYPES:
+            return base_value + self.get_trait_modifier(trait)
 
         return base_value
 
+    def get_trait_modifier(self, trait: "Trait") -> int:
+        """The modifier ``get_trait_value`` adds to ``trait``'s stored value (#4820).
+
+        Zero for a trait type nothing modifies (a language, OTHER) and for a stat or
+        skill whose trait has no ``ModifierTarget`` yet. The character sheet reads
+        this beside the stored value so a skill shows the number a roll uses.
+        """
+        if trait.trait_type not in MODIFIABLE_TRAIT_TYPES:
+            return 0
+        return self._get_stat_modifier(trait)
+
     def _get_stat_modifier(self, trait: "Trait") -> int:
         """
-        Get the total modifier for a stat, valued and tapered in the stat lane (#4726).
+        Get the total modifier for a stat or skill, valued and tapered in the stat lane
+        (#4726; skills join it in #4820).
 
         Uses the ModifierTarget.target_trait FK for type-safe lookup
         instead of string matching. Takes the already-resolved ``Trait``

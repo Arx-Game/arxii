@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -12,18 +13,20 @@ from flows.events.payloads import (
     DamagePreApplyPayload,
 )
 from world.combat import services as _svc
-from world.combat.constants import StrikeDelivery
+from world.combat.constants import ParticipantStatus, StrikeDelivery
 from world.combat.damage_source import classify_source
 from world.combat.models import CombatOpponent, CombatParticipant
 from world.combat.services.damage.companion_defend import _fire_on_hit_pool, _try_companion_defend
 from world.combat.services.damage.condition_interaction import _apply_condition_damage_interactions
 from world.combat.services.damage.execute import _apply_execute_multiplier
 from world.combat.services.damage.interception import apply_rampart_interception
+from world.combat.services.damage.reactive_save import try_reactive_save
 from world.combat.services.declarations.cover import apply_position_cover
 from world.combat.services.encounter.death_gate import _emit_death_gate
 from world.combat.services.equipment.armor_soak import apply_equipped_armor_soak
 from world.combat.services.npc.sustained import _apply_sustained_erosion_rider
 from world.combat.types import ParticipantDamageResult, WoundCrossing
+from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -37,8 +40,54 @@ if TYPE_CHECKING:
     from flows.events.payloads import DamageSource
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter
     from world.conditions.models import DamageType
-    from world.vitals.models import CharacterVitals
+    from world.vitals.models import CharacterVitals, WoundDetails
+
+
+@dataclass(frozen=True)
+class CombatWoundOrigin:
+    """The live fight a character is in, and its current round (#4810)."""
+
+    encounter: CombatEncounter
+    round_number: int
+
+
+def combat_wound_origin(character_sheet: CharacterSheet) -> CombatWoundOrigin | None:
+    """The unfinished fight she is an active participant of, or None out of combat.
+
+    A wound that lands now lands in this fight and round; a mend made now is made
+    in it. Her newest participation wins if somehow more than one is live.
+    """
+    participant = (
+        CombatParticipant.objects.filter(
+            character_sheet=character_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .exclude(encounter__status=RoundStatus.COMPLETED)
+        .select_related("encounter")
+        .order_by("-pk")
+        .first()
+    )
+    if participant is None:
+        return None
+    encounter = participant.encounter
+    return CombatWoundOrigin(encounter=encounter, round_number=encounter.round_number)
+
+
+def stamp_combat_wound_origin(details: WoundDetails, character_sheet: CharacterSheet) -> None:
+    """Stamp a new wound with the fight and round it landed in (#4810).
+
+    Called by ``world.vitals.services._record_wound_details`` when it mints a
+    ``WoundDetails`` row. Out of combat nothing is stamped, so that wound's healable
+    limit never shrinks. ``mend_wound`` reads these to shrink the limit per round.
+    """
+    origin = combat_wound_origin(character_sheet)
+    if origin is None:
+        return
+    details.created_encounter = origin.encounter
+    details.created_round = origin.round_number
+    details.save(update_fields=["created_encounter", "created_round"])
 
 
 def _answer_with_strike_backs(applied_payload: DamageAppliedPayload) -> None:
@@ -200,6 +249,8 @@ def _run_pre_apply_interceptors(
 
     _svc._try_interpose(participant, pre_payload)  # noqa: SLF001 (test patch seam)
     _try_companion_defend(participant, pre_payload)
+    # Last answer: a covenant healer softens a blow that would still drop her (#4810).
+    try_reactive_save(participant, pre_payload, vitals)
     return None
 
 

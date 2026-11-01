@@ -25,7 +25,10 @@ from world.combat.services.encounter.config import get_flee_config
 from world.combat.types import ActionOutcome
 from world.conditions.services import spend_contributing_conditions
 from world.fatigue.constants import EffortLevel
+from world.mechanics.constants import ManeuverEffectKey
+from world.mechanics.effect_targets import effect_values
 from world.scenes.constants import RoundStatus
+from world.scenes.services import persona_names_for_sheets
 
 
 def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
@@ -86,7 +89,8 @@ def _resolve_flee(
     Difficulty = FleeConfig.base_difficulty + max(FleeTierModifier over active
     opponents' tiers); zero active opponents → tier term 0 (no auto-success).
     Each same-round COVER declaration by an ACTIVE participant whose
-    focused_ally_target is this participant adds FleeConfig.cover_bonus.
+    focused_ally_target is this participant adds that coverer's Cover escape
+    bonus (the maneuver effect catalog).
 
     Graded outcome by success_level: PARTIAL (-1) or better escapes
     (status → FLED); PARTIAL and below applies the selected pool consequence
@@ -120,27 +124,38 @@ def _resolve_flee(
     tier_term = max((tier_modifiers.get(tier, 0) for tier in active_tiers), default=0)
     difficulty = config.base_difficulty + tier_term
 
-    # Cover: one COUNT over this round's COVER declarations targeting the fleer.
-    cover_count = CombatRoundAction.objects.filter(
-        participant__encounter=encounter,
-        participant__status=ParticipantStatus.ACTIVE,
-        round_number=action.round_number,
-        maneuver=CombatManeuver.COVER,
-        focused_ally_target=participant,
-    ).count()
-
-    # Route the cover bonus through the shared modifier seam (the same idiom
-    # as effort in CombatTechniqueResolver._roll_check) so the recorded
-    # provenance carries a labeled "covering allies" contribution.
-    extra_contributions: list[ModifierContribution] = []
-    if cover_count:
-        extra_contributions.append(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.CHARACTER,
-                source_label=f"Covering allies x{cover_count}",
-                value=config.cover_bonus * cover_count,
-            )
+    # Cover: each ally covering the fleer this round adds the Cover escape bonus the
+    # catalog gives THAT coverer (base plus their own modifiers), labelled with their
+    # name. One query for the cover actions, one batched name lookup, and the catalog row
+    # and its targets read once (``effect_values``); only each coverer's own modifier
+    # totals are read per coverer. Routed through the shared modifier
+    # seam (the same idiom as effort in CombatTechniqueResolver._roll_check) so the
+    # recorded provenance carries a labeled contribution per coverer.
+    coverers = [
+        cover_action.participant
+        for cover_action in CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            participant__status=ParticipantStatus.ACTIVE,
+            round_number=action.round_number,
+            maneuver=CombatManeuver.COVER,
+            focused_ally_target=participant,
         )
+        .select_related("participant__character_sheet__character")
+        .order_by("pk")
+    ]
+    cover_names = persona_names_for_sheets(c.character_sheet_id for c in coverers)
+    cover_bonuses = effect_values(
+        (c.character_sheet for c in coverers), ManeuverEffectKey.COVER_ESCAPE_BONUS
+    )
+    extra_contributions: list[ModifierContribution] = [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label="Covered by "
+            + cover_names.get(coverer.character_sheet_id, coverer.character_sheet.character.key),
+            value=cover_bonuses[coverer.character_sheet_id],
+        )
+        for coverer in coverers
+    ]
     # Bond combat bonus (#2021): relationship co-combatant passive.
     from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
 

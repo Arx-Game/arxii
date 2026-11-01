@@ -47,6 +47,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def bonused_severity(severity: int, bonus: int) -> int:
+    """``severity`` plus ``bonus``; a negative bonus never takes it below 1 (#4822)."""
+    severity += bonus
+    return max(1, severity) if bonus < 0 else severity
+
+
+def bonused_duration(duration: int | None, bonus: int) -> int | None:
+    """``duration`` plus ``bonus``; a row without a duration keeps none, and a negative bonus
+    never takes a duration below 1 (#4822)."""
+    if duration is None:
+        return None
+    duration += bonus
+    return max(1, duration) if bonus < 0 else duration
+
+
 def _build_bulk_applications_for_row(  # noqa: PLR0913
     *,
     row: Any,
@@ -82,6 +97,7 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         pos_b_id: Cast-time position-B FK, or ``None``.
         severity_bonus: Flat amount added to a non-team-lane row's severity (#4581).
         duration_bonus: Flat rounds added to a row's duration when it has one (#4581).
+            A negative bonus never takes severity or a duration below 1 (#4822).
             A team-lane row ignores both bonuses: its severity is priced against the
             landing target, and the lane is bounded.
         level_table: The cast power-to-level rows (#4594). A row authoring a
@@ -110,19 +126,19 @@ def _build_bulk_applications_for_row(  # noqa: PLR0913
         if is_team_lane_row:
             severity = priced_percent_severity(eff_intensity=eff_intensity, target=target)
         else:
-            severity = (
+            severity = bonused_severity(
                 row.compute_severity(
                     effective_power=eff_intensity,
                     success_level=success_level,
-                )
-                + severity_bonus
+                ),
+                severity_bonus,
             )
         duration = row.compute_duration_rounds(
             effective_power=eff_intensity,
             success_level=success_level,
         )
-        if duration is not None and not is_team_lane_row:
-            duration += duration_bonus
+        if not is_team_lane_row:
+            duration = bonused_duration(duration, duration_bonus)
         applications.append(
             BulkConditionApplication(
                 target=target,

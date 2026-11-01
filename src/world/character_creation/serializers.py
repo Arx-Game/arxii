@@ -16,6 +16,7 @@ from world.character_creation.constants import (
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
     PERSONALIZATION_COPY_KEYS,
+    RECENT_HISTORY_MAX_LENGTH,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
@@ -45,7 +46,13 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
-from world.character_creation.offers import schooling_training_points
+from world.character_creation.offers import (
+    RECENT_HISTORY_KEY,
+    age_pick_allowance,
+    age_scaled_points_spent,
+    schooling_training_points,
+    youngest_age_for_points,
+)
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -182,6 +189,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "strikes_childhood",
             "strikes_youth",
             "strikes_adulthood",
+            "struck_stages_text",
             "art_image",
             "allowed_species_ids",
             "grants_species_languages",
@@ -1190,8 +1198,8 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     unknown = serializers.BooleanField()
     line = serializers.CharField(allow_blank=True)
     answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
-    kept = serializers.BooleanField()
     allowance = serializers.IntegerField(allow_null=True)
+    allowance_is_points = serializers.BooleanField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):
@@ -1746,6 +1754,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if value < AGE_MIN or value > AGE_MAX:
             msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
             raise serializers.ValidationError(msg)
+        self._refuse_age_under_career_points(value)
         if value <= bounds.maximum:
             return value
         # Name the cap that bound: eternal youth when it set the ceiling, else
@@ -1765,6 +1774,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         msg = (
             f"{heritage_name} can be at most {bounds.maximum} years old: "
             f"the first were born in {bounds.heritage_first_year} AS."
+        )
+        raise serializers.ValidationError(msg)
+
+    def _refuse_age_under_career_points(self, age: int) -> None:
+        """The age floor (#4829): an age whose career points are fewer than the ranks the
+        draft already holds on a career-point beat is refused, naming the youngest age
+        that fits, so a player unpicks a career or a rank before growing younger.
+        """
+        if self.instance is None:
+            return
+        spent = age_scaled_points_spent(self.instance)
+        total = sum(rank for _, rank in spent)
+        if total <= age_pick_allowance(age):
+            return
+        held = " and ".join(f"{name} at rank {rank}" for name, rank in spent)
+        points = "career point" if total == 1 else "career points"
+        msg = (
+            f"{held} need {total} {points}; the youngest age with {total} is "
+            f"{youngest_age_for_points(total)}. Unpick a career or a rank first."
         )
         raise serializers.ValidationError(msg)
 
@@ -1857,6 +1885,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_beats(value)
+        self._validate_recent_history(value)
         self._validate_kin_rows(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
@@ -2069,6 +2098,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
                 msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
                 raise serializers.ValidationError({"beats": msg})
+
+    def _validate_recent_history(self, data: dict) -> None:
+        """``recent_history`` is the optional text a life ends on (#4830): a string of at
+        most ``RECENT_HISTORY_MAX_LENGTH`` characters, written at finalize as the lead-in
+        paragraph of the told background."""
+        if RECENT_HISTORY_KEY not in data:
+            return
+        text = data[RECENT_HISTORY_KEY]
+        if text is None:
+            data[RECENT_HISTORY_KEY] = ""
+            return
+        if not isinstance(text, str) or len(text) > RECENT_HISTORY_MAX_LENGTH:
+            msg = f"recent_history is text of at most {RECENT_HISTORY_MAX_LENGTH} characters"
+            raise serializers.ValidationError({"recent_history": msg})
 
     def _validate_kin_rows(self, data: dict) -> None:
         """``kin_rows`` is the list of people seated beside the parents (#4395).

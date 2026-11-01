@@ -25,6 +25,7 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver, apply_damage_to_participant
 from world.combat.services.held_ground import encounter_holds
+from world.combat.services.techniques.technique_resolver import TechniqueDamageBonus
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionResistanceModifierFactory,
@@ -216,6 +217,7 @@ class OutgoingDamageDealtTests(TestCase):
             sl=1,
             multiplier=Decimal("1.0"),
             eff_intensity=10,
+            technique_bonus=TechniqueDamageBonus.none(),
         )
 
     def test_physical_cut_to_a_quarter_fire_untouched(self):

@@ -13,6 +13,7 @@ from world.combat.models import (
 )
 from world.combat.services.damage.probing import increment_probing
 from world.conditions.constants import Allegiance
+from world.mechanics.effect_targets import technique_condition_bonuses
 
 if TYPE_CHECKING:
     from world.magic.models import Technique
@@ -54,6 +55,10 @@ def _apply_passive_technique(
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
     from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+    from world.magic.services.condition_application import (  # noqa: PLC0415
+        bonused_duration,
+        bonused_severity,
+    )
     from world.npc_services.allegiance import effective_allegiances  # noqa: PLC0415
 
     actor = participant.character_sheet.character
@@ -92,6 +97,11 @@ def _apply_passive_technique(
     if not rows:
         return
 
+    # The actor's condition severity and duration modifiers (#4822), worked out once for the
+    # passive however many rows and targets it has.
+    severity_bonus, duration_bonus = technique_condition_bonuses(
+        participant.character_sheet, technique
+    )
     applications: list[BulkConditionApplication] = []
     for row in rows:
         severity = row.compute_severity(
@@ -102,6 +112,8 @@ def _apply_passive_technique(
             effective_power=technique.intensity,
             success_level=row.minimum_success_level,
         )
+        severity = bonused_severity(severity, severity_bonus)
+        duration = bonused_duration(duration, duration_bonus)
 
         if row.target_kind == ConditionTargetKind.SELF:
             targets = [actor]

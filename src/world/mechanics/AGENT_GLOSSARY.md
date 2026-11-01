@@ -12,6 +12,22 @@ _Avoid_: modifiable, affinity/resonance (as separate models), attribute
 The two modifier categories that carry favor with a worshipped being. A `ModifierTarget` in them names its being through `target_being` (a plain FK; one target per being per category); null there means the target applies to any being. `favor_invocation` values are difficulty points eased on an invocation check, `favor_earning` values are percentage points added to the earning rate. Read only by `world.worship.favor_services.favor_modifier_total`; created by `ensure_being_modifier_targets`.
 _Avoid_: a being-specific modifier model, "blessing" as a category name
 
+**Maneuver effect** (#4783):
+One named part of a combat maneuver with one number, held as a row of the fixed `ManeuverEffect` catalog (`key` unique, `base_value`, staff `notes`; eight rows: Charge to hit 10, Charge damage 5, Charge reach 5, Cover escape bonus 10, Succor partial protection 50, Interpose partial protection 50, Rally morale 15, Rally surge intensity 100). Staff edit a base value in the admin and can neither add nor delete a row; code finds a row by `key`, never by name (`ensure_maneuver_effects`, `get_maneuver_effect`). A character's value for an effect is `effect_value(sheet, key)`: the base plus every modifier on a `ModifierTarget` in the "maneuver_effect" category that is scoped to that effect (`scope_maneuver_effect`) or to its kind (`scope_effect_kind`), summed from distinctions, crafted recipe modifiers on worn items, facet and mantle crossing-choice conditions, vow stat scaling and active conditions (a facet's own flat bonus does not reach an effect). A target with neither scope matches nothing. The value is never below 0, and partial protection never above 100. `effect_modifier_total` is the same sum unclamped, for a caller that scales the base itself (a lance doubles Charge's base only).
+_Avoid_: maneuver stat, maneuver tuning, action scaling (the removed vow-only table)
+
+**Effect kind** (#4783):
+What sort of number a maneuver effect is (`EffectKind`: to hit, damage, reach, escape bonus, partial protection, morale, surge intensity; and, for technique scopes (#4822), condition severity and condition duration in rounds). A broad target names a kind, such as "partial protection, any maneuver". Each kind fixes the unit of every modifier that targets it, so a modifier on a kind adds the same sort of number wherever it applies. Derived from the key by the `MANEUVER_EFFECT_KIND` map, not stored on the row. A modifier on a maneuver effect is a flat amount; a vow adds its shown thread level times its `bonus_per_level`.
+_Avoid_: effect type, effect category (a `ModifierCategory` is the registry grouping, and "maneuver_effect" is one of them)
+
+**Technique scope** (#4822):
+A narrowing on a "maneuver_effect" `ModifierTarget` that names the technique it changes: `scope_technique`, `scope_gift`, `scope_technique_function`, `scope_damage_type` or `scope_resonance`. Scopes combine (every one set must match), an unset scope means any, and a technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; the damage type scope is for the damage kind only. A gift scope matches the technique's gift and that gift's parent, so an umbrella gift reaches its child gifts' techniques. The kinds a technique scope narrows are damage, condition severity and condition duration (rounds), all flat. A technique-scoped target never reaches a maneuver. Matching uses the technique as authored, not the caster's specialized variant.
+_Avoid_: technique filter, technique modifier (the modifier is the source's; the scope is the target's), effect scope (a maneuver scope is `scope_maneuver_effect`)
+
+**Technique effect context** (#4822):
+The frozen `TechniqueEffectContext` that `technique_effect_context(sheet, technique, damage_type_id=None)` builds for one cast: the technique id, its gift and parent gift ids, its function set, the resonance ids its gift manifests as for the caster and the resolved damage type id. `technique_effect_total(sheet, context, targets)` sums the modifiers of the targets whose technique scopes all match it. Built once per cast, and the damage type slot is filled per damage profile.
+_Avoid_: technique snapshot
+
 **ModifierSource**:
 The provenance record for a character's modifier — where it came from (e.g. a distinction effect template plus the character-distinction instance). It answers WHICH target a modifier grants and its base value, and drives cascade cleanup when the source is removed.
 _Avoid_: origin, provider, grantor
