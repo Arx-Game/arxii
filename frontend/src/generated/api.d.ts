@@ -49390,6 +49390,7 @@ export interface components {
       label: string;
       value: string;
       detail: string;
+      lapsed: boolean;
     };
     RoomAlarmDetails: {
       /** @description The room this alarm watches. */

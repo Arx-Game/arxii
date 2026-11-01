@@ -87701,9 +87701,12 @@ components:
           type: string
         detail:
           type: string
+        lapsed:
+          type: boolean
       required:
       - detail
       - label
+      - lapsed
       - value
     RoomAlarmDetails:
       type: object

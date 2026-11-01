@@ -1,1 +1,1 @@
-0355_combat_style_skill_gear_and_vows
+0356_strike_roll_style_snapshot

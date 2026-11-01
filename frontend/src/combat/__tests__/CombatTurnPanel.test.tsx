@@ -984,9 +984,14 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
     {
       heading: "Hit roll against Bandit's defense",
       lines: [
-        { label: 'Melee Combat', value: '25', detail: 'strike skill for one-handed melee' },
-        { label: 'Agility', value: '', detail: 'stat for one-handed melee' },
-        { label: 'Intensity', value: '+2', detail: 'misses add to hit' },
+        {
+          label: 'Melee Combat',
+          value: '25',
+          detail: 'strike skill for one-handed melee',
+          lapsed: false,
+        },
+        { label: 'Agility', value: '', detail: 'stat for one-handed melee', lapsed: false },
+        { label: 'Intensity', value: '+2', detail: 'misses add to hit', lapsed: false },
       ],
       result: 'Hit, good',
       result_note: 'then the damage roll',
@@ -998,8 +1003,13 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
     {
       heading: 'Damage roll',
       lines: [
-        { label: 'Rapier, fine quality', value: '', detail: 'weapon damage and quality' },
-        { label: 'Melee Combat', value: '25', detail: 'strike skill' },
+        {
+          label: 'Rapier, fine quality',
+          value: '',
+          detail: 'weapon damage and quality',
+          lapsed: false,
+        },
+        { label: 'Melee Combat', value: '25', detail: 'strike skill', lapsed: false },
       ],
       result: '11 damage',
       result_note: '',

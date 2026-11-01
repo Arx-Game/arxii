@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     )
     from world.combat.types import OpponentDamageResult
     from world.conditions.models import DamageType
+    from world.covenants.style_fit import StyleFit
     from world.items.models import ItemInstance
 
     StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None, RollSnapshot]
@@ -325,9 +326,16 @@ def _skill_rating(participant: CombatParticipant, check_type: CheckType) -> int 
 
 
 def _roll_hit(
-    participant: CombatParticipant, action: CombatRoundAction, check_type: CheckType
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    check_type: CheckType,
+    style_fit: StyleFit,
 ) -> tuple[CheckResult, ModifierBreakdown]:
-    """The hit roll through the shared attack-roll seam, with its modifiers."""
+    """The hit roll through the shared attack-roll seam, with its modifiers.
+
+    ``style_fit`` is the striker's combat style for this weapon (#4884): its hit stat
+    replaces the weapon's, and its skill adds while it fits.
+    """
     from world.combat.services.techniques.technique_resolver import (  # noqa: PLC0415
         CombatTechniqueResolver,
     )
@@ -340,6 +348,7 @@ def _roll_hit(
         offense_check_type=check_type,
         offense_check_fn=None,
         strike_weapon=_weapon_of(action),
+        style_fit=style_fit,
     )
     return resolver.roll_check_with_breakdown()
 
@@ -514,9 +523,12 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
         _broadcast_fizzle_no_one_in_reach(participant, action)
         return outcome
 
+    from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
+
+    style_fit = style_fit_for_attack(character, weapon.gear_archetype)
     rating = _skill_rating(participant, check_type)
-    snapshot = _roll_snapshot(weapon, check_type)
-    hit, hit_breakdown = _roll_hit(participant, action, check_type)
+    snapshot = _roll_snapshot(weapon, check_type, style_fit, participant)
+    hit, hit_breakdown = _roll_hit(participant, action, check_type, style_fit)
     missed = is_miss(hit.success_level)
     rolls: list[StrikeRoll] = [
         (
@@ -577,22 +589,48 @@ def _weapon_label(weapon: StrikeWeapon) -> str:
     return f"{weapon.name}, {tier.name.lower()} quality" if tier is not None else weapon.name
 
 
-def _roll_snapshot(weapon: StrikeWeapon, check_type: CheckType) -> RollSnapshot:
-    """What the Strike's breakdown names, captured at roll time (#4858)."""
+def _style_skill_rating(participant: CombatParticipant, style_fit: StyleFit) -> int | None:
+    """The striker's style skill rating now, when it counts on this roll; else None."""
+    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+
+    if not style_fit.counts:
+        return None
+    return (
+        CharacterTraitValue.objects.filter(
+            character=participant.character_sheet, trait_id=style_fit.style.skill.trait_id
+        )
+        .values_list("value", flat=True)
+        .first()
+    ) or 0
+
+
+def _roll_snapshot(
+    weapon: StrikeWeapon,
+    check_type: CheckType,
+    style_fit: StyleFit,
+    participant: CombatParticipant,
+) -> RollSnapshot:
+    """What the Strike's breakdown names, captured at roll time (#4858, #4884)."""
     from world.checks.types import RollSnapshot  # noqa: PLC0415
     from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
 
-    override = weapon_stat_for(weapon.item_instance)
+    hit_stat = style_fit.hit_stat_name
+    override = hit_stat if hit_stat is not None else weapon_stat_for(weapon.item_instance)
     if override is not None:
         stats = [_stat_label(check_type, override)]
     else:
         stats = [
             stat.capitalize() for stat in strike_check_traits({check_type.pk})[check_type.pk][1]
         ]
+    has_style_term = style_fit.has_skill_term
     return RollSnapshot(
         weapon_label=_weapon_label(weapon),
         weapon_kind=_gear_kind_words(weapon),
         stat_label=", ".join(stats),
+        style_name=style_fit.style.name if has_style_term else "",
+        style_skill_rating=_style_skill_rating(participant, style_fit),
+        style_lapse_note=style_fit.lapse_note if has_style_term else "",
+        stat_from_style=hit_stat is not None,
     )
 
 
@@ -700,11 +738,13 @@ def _hit_roll_breakdown(
     lines: list[RollLine] = []
     if skill is not None:
         lines.append(RollLine(skill, _skill_value(outcome), f"strike skill for {kind}".strip()))
+    stat_detail = "the style's hit stat" if outcome.stat_from_style else f"stat for {kind}".strip()
     lines.extend(
-        RollLine(stat, "", f"stat for {kind}".strip())
-        for stat in (outcome.stat_label or "").split(", ")
-        if stat
+        RollLine(stat, "", stat_detail) for stat in (outcome.stat_label or "").split(", ") if stat
     )
+    style_line = style_roll_line(outcome)
+    if style_line is not None:
+        lines.append(style_line)
     heading = f"Hit roll against {target.name}'s defense" if target is not None else "Hit roll"
     return RollBreakdown(
         heading=heading,
@@ -712,6 +752,22 @@ def _hit_roll_breakdown(
         result=outcome.summary,
         result_note="then the damage roll" if went_on_to_damage else "",
     )
+
+
+def style_roll_line(outcome: ConsequenceOutcome) -> RollLine | None:
+    """The combat style's row on a recorded roll (#4884), or None with no style term.
+
+    "The Daring Dance, 20, style skill" while it counted; struck through with its reason
+    ("two-handed weapons are not this style's") when it lapsed.
+    """
+    from world.checks.types import RollLine  # noqa: PLC0415
+
+    if not outcome.style_name:
+        return None
+    if outcome.style_lapse_note:
+        return RollLine(outcome.style_name, "", outcome.style_lapse_note, lapsed=True)
+    rating = outcome.style_skill_rating
+    return RollLine(outcome.style_name, str(rating) if rating is not None else "", "style skill")
 
 
 def _damage_roll_breakdown(outcome: ConsequenceOutcome, skill: str | None) -> RollBreakdown:

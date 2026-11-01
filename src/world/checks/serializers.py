@@ -94,6 +94,8 @@ class RollLineSerializer(serializers.Serializer):
     label = serializers.CharField()
     value = serializers.CharField(allow_blank=True)
     detail = serializers.CharField(allow_blank=True)
+    # A source that would have counted and did not (a lapsed style skill, #4884).
+    lapsed = serializers.BooleanField()
 
 
 class RollBreakdownSerializer(serializers.Serializer):
@@ -218,7 +220,9 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
                 if modifier.source_label == INTENSITY_MODIFIER_LABEL
                 else modifier.get_source_kind_display()
             )
-            lines.append({"label": modifier.source_label, "value": signed, "detail": detail})
+            lines.append(
+                {"label": modifier.source_label, "value": signed, "detail": detail, "lapsed": False}
+            )
         return {
             "heading": breakdown.heading,
             "lines": lines,

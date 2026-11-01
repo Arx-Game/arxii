@@ -1520,7 +1520,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         skill_rating: The character's rating in the check's skill at roll time (#4858),
             kept so a breakdown shows what was rolled; None records none.
         snapshot: What a breakdown names, kept at roll time (#4858): the weapon, its kind
-            and the stat. None records none.
+            and the stat, and the combat style (#4884). None records none.
 
     Returns:
         The newly created ConsequenceOutcome instance.
@@ -1552,6 +1552,10 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         weapon_label=snapshot.weapon_label if snapshot is not None else None,
         weapon_kind=snapshot.weapon_kind if snapshot is not None else None,
         stat_label=snapshot.stat_label if snapshot is not None else None,
+        style_name=(snapshot.style_name or None) if snapshot is not None else None,
+        style_skill_rating=snapshot.style_skill_rating if snapshot is not None else None,
+        style_lapse_note=(snapshot.style_lapse_note or None) if snapshot is not None else None,
+        stat_from_style=snapshot.stat_from_style if snapshot is not None else False,
         combat_interaction=combat_interaction,
         combat_interaction_timestamp=(
             combat_interaction.timestamp if combat_interaction is not None else None

@@ -327,6 +327,9 @@ class RollLine:
     label: str
     value: str
     detail: str
+    # The source would have counted and did not (#4884): a lapsed style skill, drawn
+    # struck through.
+    lapsed: bool = False
 
 
 @dataclass(frozen=True)
@@ -348,3 +351,10 @@ class RollSnapshot:
     weapon_label: str
     weapon_kind: str
     stat_label: str
+    # The attacker's combat style on the roll (#4884): its name, the style skill rating
+    # when it counted, why it lapsed when it did not, and whether the stat is the style's
+    # hit stat. Empty name: no style term.
+    style_name: str = ""
+    style_skill_rating: int | None = None
+    style_lapse_note: str = ""
+    stat_from_style: bool = False

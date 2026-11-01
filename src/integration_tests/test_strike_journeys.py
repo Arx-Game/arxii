@@ -183,11 +183,13 @@ class StrikeWithAWeapon(_StrikeField):
                         "label": "Melee Combat",
                         "value": "25",
                         "detail": "strike skill for one-handed melee",
+                        "lapsed": False,
                     },
                     {
                         "label": "Agility",
                         "value": "",
                         "detail": "stat for one-handed melee",
+                        "lapsed": False,
                     },
                 ],
                 "result": "Hit, fair",
@@ -203,8 +205,14 @@ class StrikeWithAWeapon(_StrikeField):
                         "label": sword.display_name,
                         "value": "",
                         "detail": "weapon damage and quality",
+                        "lapsed": False,
                     },
-                    {"label": "Melee Combat", "value": "25", "detail": "strike skill"},
+                    {
+                        "label": "Melee Combat",
+                        "value": "25",
+                        "detail": "strike skill",
+                        "lapsed": False,
+                    },
                 ],
                 "result": f"{SWORD_DAMAGE} damage",
                 "result_note": "",
@@ -404,7 +412,12 @@ class MissesBuildIntensity(_StrikeField):
             latest_hit["modifiers"],
         )
         self.assertIn(
-            {"label": "Intensity", "value": "+1", "detail": "misses add to hit"},
+            {
+                "label": "Intensity",
+                "value": "+1",
+                "detail": "misses add to hit",
+                "lapsed": False,
+            },
             latest_hit["roll_breakdown"]["lines"],
         )
         first_hit = self.shown_rolls()[0]["roll_breakdown"]

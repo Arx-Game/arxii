@@ -105,6 +105,32 @@ class ConsequenceOutcome(SharedMemoryModel):
         blank=True,
         help_text="The stat or stats the roll used, as the breakdown names them, at roll time.",
     )
+    # The attacker's combat style on the roll, kept at roll time so renaming or retuning
+    # the style later does not rewrite the record (#4884).
+    style_name = models.CharField(
+        max_length=80,
+        null=True,
+        blank=True,
+        help_text="The combat style's name as it was when the roll was made. Null: no style.",
+    )
+    style_skill_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="The style skill rating the roll added. Null when it lapsed or had none.",
+    )
+    style_lapse_note = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text=(
+            "Why the style skill did not count, as the breakdown says it ('two-handed "
+            "weapons are not this style's'). Null when it counted."
+        ),
+    )
+    stat_from_style = models.BooleanField(
+        default=False,
+        help_text="Whether the roll's stat was the style's hit stat.",
+    )
 
     # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite
