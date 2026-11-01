@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+  &rsaquo; <a href="{% url 'admin_ops' %}">{% translate "Ops" %}</a>
+  &rsaquo; <a href="{% url 'admin_ops' %}#panel-ops-required-content">{% translate "Required content" %}</a>
+  &rsaquo; {% translate "Combat roles" %}
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<style>
+  #combat-content-root .combat-content-note {
+    margin-left: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: var(--body-quiet-color);
+  }
+</style>
+<div id="combat-content-root">
+  <section class="tuning-panel">
+    <h2>{% translate "Combat roles" %}<span class="combat-content-note">{% translate "flags only, nothing blocked" %}</span></h2>
+    {% if open_flags %}
+    <table class="tuning-table">
+      <thead>
+        <tr>
+          <th>{% translate "Flag" %}</th>
+          <th>{% translate "What" %}</th>
+          <th>{% translate "Fix it" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in open_flags %}
+        <tr>
+          <td>{{ row.dependency.label }}</td>
+          <td>{{ row.result.missing|join:", " }}</td>
+          <td>{% for flagged in row.result.flagged %}{% if flagged.url %}<a href="{{ flagged.url }}">{{ flagged.text }}</a>{% else %}{{ flagged.text }}{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>{% translate "Nothing is flagged." %}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

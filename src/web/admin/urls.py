@@ -76,6 +76,7 @@ from web.admin.trial_builder.views import (
     trial_builder_delete,
     trial_builder_index,
 )
+from web.admin.tuning.combat_content_views import combat_content
 from web.admin.tuning.ops_views import (
     ops_dashboard,
     ops_economy_fragment,
@@ -198,6 +199,7 @@ urlpatterns = [
     path("_ops/story/", ops_story_fragment, name="admin_ops_story"),
     path("_ops/reports/", ops_reports_fragment, name="admin_ops_reports"),
     path("_ops/tech/", ops_tech_fragment, name="admin_ops_tech"),
+    path("_combat_content/", combat_content, name="admin_combat_content"),
     path("_authoring/", authoring_dashboard, name="admin_authoring"),
     path("_authoring/stats/", authoring_stats_fragment, name="admin_authoring_stats"),
     path("_authoring/queue/", authoring_queue_fragment, name="admin_authoring_queue"),

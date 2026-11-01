@@ -2,8 +2,8 @@
 
 Every page staff use to author a vow's combat kit, one click from the front page
 ("I wouldn't want to hunt around for things", owner ruling 2026-11-01). The combo
-map arrived with slice 3 (#4891); later slices of #4843 add the kit view and
-missing combat content rows here as they land.
+map arrived with slice 3 (#4891), and the Missing combat content row, with its count
+of open flags, with slice 4 (#4906); a later slice of #4843 adds the kit view.
 """
 
 from __future__ import annotations
@@ -123,6 +123,20 @@ def _combo_map_link(user: AbstractBaseUser | AnonymousUser) -> CombatRolesLink |
     )
 
 
+def _missing_combat_content_link() -> CombatRolesLink:
+    """The Missing combat content row (#4906): its page and how many flags are open."""
+    from web.admin.tuning.combat_role_flags import collect_combat_role_flags  # noqa: PLC0415
+
+    count = sum(1 for row in collect_combat_role_flags() if not row.result.present)
+    if count == 0:
+        note = "no open flags"
+    else:
+        note = f"{count} open flag{'' if count == 1 else 's'}"
+    return CombatRolesLink(
+        label="Missing combat content", url=reverse("admin_combat_content"), note=note
+    )
+
+
 def can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
     """Whether ``user`` may open ``model``'s admin pages: a view or a change permission."""
     return user.has_perm(f"arxii.view_{model.__name__.lower()}") or user.has_perm(
@@ -134,8 +148,7 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
     """The panel's rows a user can open, in the order an author works through a vow.
 
     A row whose page would refuse the user is left out: a model they cannot view, and
-    the vow pages and Required content (the Game Ops dashboard) for anyone but a
-    superuser.
+    the vow pages and Missing combat content for anyone but a superuser.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.covenants.models import (  # noqa: PLC0415
@@ -170,11 +183,5 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
     if can_view(user, VowFocusPickConfig):
         links.append(_budget_link())
     if user.is_superuser:
-        links.append(
-            CombatRolesLink(
-                label="Required content",
-                url=reverse("admin_ops"),
-                note="missing-content flags",
-            )
-        )
+        links.append(_missing_combat_content_link())
     return links

@@ -23,6 +23,7 @@ from django.urls import reverse
 from web.admin.tuning.required_content import (
     ContentDependency,
     CustomProbe,
+    DependencyRow,
     DependencyTier,
     FlaggedRow,
     ProbeResult,
@@ -302,3 +303,12 @@ def combat_role_declarations() -> tuple[ContentDependency, ...]:
             admin_model="VowFocusPick",
         ),
     )
+
+
+def collect_combat_role_flags() -> list[DependencyRow]:
+    """The five flags resolved, in declaration order, for the Missing combat content page
+    and the Combat roles panel. A clear flag is ``result.present``."""
+    return [
+        DependencyRow(dependency=dependency, result=dependency.probe.resolve(None))
+        for dependency in combat_role_declarations()
+    ]
