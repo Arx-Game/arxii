@@ -297,7 +297,7 @@ ADR. `ensure_appetite_distinctions` / `ensure_ravenous_condition` /
 seeded content routes through `authored_or_sample` in `_seed_appetite_content`
 (Vesperi is the eighth khati subspecies).
 
-## Moon Control & Lycans (#2845, #4802, ADR-0329)
+## Moon Control & Lycans (#2845, #4802, ADR-4802)
 
 The moon is a *control* pressure, not exposure damage, and since #4802 it is one
 `ControlLossTrigger` row (`fires_on=MOON_PULL`) hung on the **Lycan blood** vulnerability, not code.
@@ -315,7 +315,9 @@ apply the shared **Berserk** condition and set `forces_form`, which forces the b
 shift (`trigger_transformation(cause="moon")`, battle form lazily provisioned by
 `world.species.moon_provisioning.ensure_lycan_battle_form`). Lycan blood reaches new lycans
 through the lycan `SpeciesGiftGrant.drawback_condition`; migration `0333` created the trigger
-and the existing characters' instances. `moon_constants.py` keeps only the pull's own magnitudes.
+and the existing characters' instances. The Moon-Bound distinction (the grant's
+`drawback_distinction`) is CG flavour no runtime reads; the Required content moon probe lists
+any holder of it without Lycan blood. `moon_constants.py` keeps only the pull's own magnitudes.
 Berserk's seed, Restore-to-Sense removal effect and compulsion live in
 `world.conditions.berserk_content`; the compulsion's resolution in `world.combat.compulsion`
 (see `docs/systems/conditions.md`, "Losing control"). Cani (the umbrella subspecies) get the

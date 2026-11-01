@@ -2162,7 +2162,7 @@ intensity that buys. Code: `world/magic/services/fury.py`, models in `world/magi
   `ConditionCheckModifier` staff author on the Berserk template (template or stage level)
   against `FleeConfig.check_type` or `SocialManeuverConfig.parley_check_type` lands on the
   roll. Leaving the encounter and changing form back roll the compulsion's resist check as
-  well (#4802, ADR-0329); nothing is refused any more. Required content `berserk-disengage-penalty`
+  well (#4802, ADR-4802); nothing is refused any more. Required content `berserk-disengage-penalty`
   lists a Berserk with no penalty against either check: a negative modifier authored on the
   check type or on its category, at template or stage level. Journeys:
   `src/integration_tests/test_berserk_disengage_journeys.py`.

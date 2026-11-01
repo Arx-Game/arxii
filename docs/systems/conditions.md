@@ -780,7 +780,7 @@ stats. It is the consent signal used by cast targeting and by
 `Control` (`alters_behavior=True`), and the `Berserk` condition created by the fury
 system belongs to it.
 
-## Losing control: vulnerabilities, triggers and compulsions (#4802, ADR-0329) [BUILT & WIRED]
+## Losing control: vulnerabilities, triggers and compulsions (#4802, ADR-4802) [BUILT & WIRED]
 
 Involuntary control loss is one mechanism with authored rows, replacing the moon-only
 Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
@@ -792,7 +792,9 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   `MOON_PULL`, `WOUND_THRESHOLD`, `CONDITION_STAGE`). Shared fields: `check_type`,
   `base_difficulty`, `relief_per_level`. Moon-only fields: `min_moon_pull`,
   `difficulty_per_pull`, `relief_gift`, `relief_per_thread_level`, `relief_cap`,
-  `exempt_from_level`, `impaired_willpower_drop`. Wound: `health_below_percent`.
+  `exempt_from_level`, `impaired_willpower_drop` (the impaired threshold: condition-driven
+  willpower at or below minus this value rolls even past the exempt level). Wound:
+  `health_below_percent`.
   Stage: `stage` (must belong to the vulnerability). A CheckConstraint per kind enforces
   which columns each kind takes.
 - **`ControlLossBand`** (FK trigger and `CheckOutcome`, unique together): what a roll outcome
@@ -801,13 +803,20 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   better outcome may never be worse for the character (`control_loss_bands.py`, the same
   monotonic rule `validate_surge_bands` uses; model `clean()` and the admin formsets both call it).
 - **Engine** (`world/conditions/control_loss.py`): `fire_control_loss_triggers(character,
-  fires_on, context=...)` rolls `perform_check_with_modifiers` (so authored condition and
-  equipment modifiers count) and applies the band. Callers: the moon sweep
-  (`world.species.moon_sensitivity.reconcile_moon_pull`), `fire_wound_triggers` from the
-  damage service (fires on each downward crossing of the threshold within one hit; a hit
-  that incapacitates rolls nothing) and `fire_stage_triggers` from
-  `CONDITION_STAGE_CHANGED`. Only player characters roll. The room is told when a roll lets
-  the character lose control.
+  fires_on, *, moon_pull=0, stage=None)` rolls `perform_check_with_modifiers` (so authored
+  condition and equipment modifiers count) and applies the band. Callers: the moon sweep
+  (`world.species.moon_sensitivity.reconcile_moon_pull`, with `moon_pull=`),
+  `fire_wound_triggers(character, *, health_before, health_after, max_health)` from the
+  damage service (fires on each downward crossing of the threshold within one hit; a
+  killing hit and a character who cannot act (`can_act`) roll nothing, while a hit into the
+  knockout band still rolls, since that hit's knockout check is rolled afterwards), and
+  `fire_stage_triggers(instance)` (with `stage=`) from
+  `world.conditions.services._fire_stage_entry_triggers`, the one call every stage-entry
+  path makes: the severity advance, the round tick and the flow-driven
+  `advance_condition_stage`. Only player characters roll, and a character already under a
+  compulsion rolls no trigger of any kind (ruled 2026-10-31). Whenever a band applies a
+  condition or moves intensity or control, the character and the room are told, by persona
+  name (`display_name_of`), once the transaction commits.
 - **`Compulsion`** (one-to-one with a `ConditionTemplate` whose category is
   `alters_behavior`; `clean()` rejects any other): `wants` (`CompulsionWant`, today
   `ATTACK_OPPONENT`), `check_type` (the roll to go against it; distinct from
@@ -817,15 +826,23 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
     `extra_difficulty`. Unique per compulsion and action.
   - **`CompulsionResistBand`**: per `CheckOutcome`, a `result` (`CompulsionResult`:
     `ACTS_FREELY`, `ACTS_STRAINED`, `COMPULSION_ACTS`), an `action_penalty` and a
-    `control_change`, validated monotonic by `validate_compulsion_bands`.
+    `control_change`, validated monotonic by `validate_compulsion_bands`. The penalty bites
+    only an action that rolls: taking cover and using an item have no roll, so a strained
+    cover or item use costs nothing (ruled 2026-10-31).
+  - `retry_wait_minutes`: how long a character who failed to change back outside a fight
+    waits before trying again (`ConditionInstance.compulsion_retry_after` holds the time).
+    In a fight the wait is the rest of the round (`CombatParticipant.compulsion_attempt_round`).
   - Readers: `active_compulsion(character)` (the most severe when several apply),
-    `has_compulsion`, `compulsion_difficulty`, `compulsion_summary_for` (the payload the
-    declare screen shows). Resolution lives in `world/combat/compulsion.py`
+    `active_compulsions_for(characters)` (the same for many, one compulsion query),
+    `forbidden_rows_for(compulsions)`, `has_compulsion`, `compulsion_difficulty`,
+    `compulsion_summary_for` (the payload the declare screen shows). Resolution lives in `world/combat/compulsion.py`
     (see `docs/roadmap/combat.md` and the combat entry in `docs/systems/INDEX.md`).
 - **Nothing is refused.** Any action stays declarable; anything other than what the
   compulsion wants rolls the resist check at the round lock. `reject_leave_if_berserk` and the
   revert refusal for a compulsion are gone: leaving and changing back roll
-  (`resist_compulsion_now`). Charmed and Calm (`alters_behavior`, no compulsion) revert
+  (`resist_compulsion_now`). A failed roll cannot be retried at once: in a fight the next
+  try is next round, outside one it waits `retry_wait_minutes`, and a try inside the wait
+  rolls nothing and says when to try again. Charmed and Calm (`alters_behavior`, no compulsion) revert
   freely; a `TALKED_DOWN` alternate self held by its emergence condition stays blocked
   (see `docs/systems/forms.md`).
 - **Seeded content.** `world/conditions/berserk_content.py` seeds Berserk's compulsion
@@ -833,7 +850,9 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   check type. Migration `0333_control_loss_content` carries the moon's old constants into
   one moon trigger row with its bands, creates Lycan blood (blank description) only where the
   lycan grant has no drawback condition, and applies it to existing moon-bound characters.
-  Required content probes `berserk-compulsion` and `moon-control-loss-trigger` list a gap.
+  Required content probes `berserk-compulsion` and `moon-control-loss-trigger` list a gap;
+  the moon probe also lists every holder of the lycan grant's `drawback_distinction` who
+  carries no instance of its `drawback_condition` (the condition the trigger hangs on).
 
 ## Self-shakeable categories (#4732)
 

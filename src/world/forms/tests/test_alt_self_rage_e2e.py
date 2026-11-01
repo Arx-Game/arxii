@@ -61,7 +61,7 @@ def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution
 
 @tag("postgres")
 class AltSelfRageEndToEndTests(TestCase):
-    """shift -> rage -> revert blocked -> calm-down -> revert unblocked."""
+    """shift -> rage -> a failed revert roll holds -> calm-down -> revert goes free."""
 
     @classmethod
     def setUpTestData(cls):
@@ -110,7 +110,7 @@ class AltSelfRageEndToEndTests(TestCase):
 
     @patch("actions.effects.conditions.perform_check")
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_revert_blocked_while_raging_unblocked_after_calm_down(
+    def test_a_failed_revert_roll_holds_while_raging_and_calm_down_frees_it(
         self,
         mock_resolve: MagicMock,
         mock_check: MagicMock,
@@ -139,11 +139,11 @@ class AltSelfRageEndToEndTests(TestCase):
         self.assertTrue(has_condition(self.character, self.berserk))
         self.assertFalse(self.character.sheet_data.in_control)
 
-        # 3. Revert is BLOCKED while raging (the headline invariant).
-        # The rage is a compulsion (#4802): changing back is a roll, and a failed one holds.
+        # 3. The rage is a compulsion (#4802): changing back is a resist roll, never a
+        # refusal, and a failed roll holds the shape.
         with force_check_outcome(self.failure):
             revert = RevertFormAction().run(self.character)
-        self.assertFalse(revert.success, "revert_form must be blocked while raging.")
+        self.assertFalse(revert.success, "a failed resist roll must hold the shape.")
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt_self)
 
@@ -165,7 +165,7 @@ class AltSelfRageEndToEndTests(TestCase):
         assert_sheet = self.character.sheet_data
         self.assertTrue(assert_sheet.in_control)
 
-        # 5. Revert now SUCCEEDS (unblocked after the alters_behavior condition cleared).
+        # 5. Revert now goes ahead with no roll: the compulsion went with Berserk.
         revert2 = RevertFormAction().run(self.character)
         self.assertTrue(revert2.success, revert2.message)
 

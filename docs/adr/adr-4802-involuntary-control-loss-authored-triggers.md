@@ -1,4 +1,4 @@
-# ADR-0329: Losing control is one mechanism with authored triggers, and a compulsion rolls instead of refusing
+# ADR-4802: Losing control is one mechanism with authored triggers, and a compulsion rolls instead of refusing
 
 **Status:** Accepted (built #4802; supersedes ADR-0183)
 

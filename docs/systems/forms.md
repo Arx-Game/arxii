@@ -182,7 +182,10 @@ attempt_revert_form(sheet)                       # Player path (#4802): rolls a 
   reverts): it stays blocked while `not sheet.in_control` and raises `RevertBlockedError`.
   A player's own revert goes through `attempt_revert_form(sheet)` (#4802), in order:
   (1) a character carrying a compulsion rolls its resist check for `REVERT_FORM` and
-  changes back only when the roll lets them (an NPC changes back with no roll);
+  changes back only when the roll lets them (an NPC changes back with no roll); a failed
+  roll waits before the next try (the next round in a fight, the compulsion's
+  `retry_wait_minutes` outside one), and a try inside the wait rolls nothing and says
+  when to try again;
   (2) otherwise a `TALKED_DOWN` self whose emergence condition is still active stays
   blocked with `RevertBlockedError`, the ratified "must be talked down" rule, which is
   not a compulsion refusal; (3) anything else (Charmed, Calm, any other

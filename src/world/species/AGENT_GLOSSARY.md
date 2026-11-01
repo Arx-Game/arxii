@@ -65,10 +65,15 @@ Domain-local vocabulary for `world.species`. Root terms live in
   (`moon_pull.felt_moon_pull`: illumination × sky exposure − radiant shade;
   NIGHT only). Only occlusion dampens it — clothing and modifier magic never
   enter an instinct read. _Avoid:_ "moon exposure" (it is not a damage ladder).
-- **Moon-Bound** — the control-pressure anchor Distinction (`moon-bound` tag,
-  #2845/ADR-0183): holders roll `moon_control` (willpower + composure) under a
-  strong pull; failure forces the battle-form shift + shared Berserk. Lycans
-  innately via "The Wolf's Fury" grant. _Avoid:_ species-probed lycanthropy.
+- **Lycan blood** - the vulnerability condition the moon trigger hangs on (#4802,
+  ADR-4802): the lycan grant's `drawback_condition`, applied at CG. A carrier under a
+  strong pull rolls the moon `ControlLossTrigger` (`moon_control`, willpower +
+  composure); failure forces the battle-form shift + shared Berserk. The runtime
+  keys on this condition, never on a distinction. _Avoid:_ species-probed lycanthropy.
+- **Moon-Bound** - the lycan grant's `drawback_distinction` (`moon-bound` tag,
+  #2845): CG flavour that no runtime reads since #4802. The Required content moon
+  probe lists a holder without Lycan blood. _Avoid:_ treating it as what makes the
+  moon roll.
 - **Battle form** — a lycan's ALTERNATE `CharacterForm` + `FormCombatProfile`
   stat suite (`moon_provisioning.ensure_lycan_battle_form`, lazily provisioned);
   moon clarity scales the whole suite at shift time via `instance_value`, and
