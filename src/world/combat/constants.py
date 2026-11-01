@@ -17,6 +17,7 @@ from actions.constants import (
 )
 from world.areas.positioning.constants import CreatureTraversal
 from world.gm.constants import GMLevel
+from world.items.constants import GearArchetype
 
 # #2051 — the combo invariant: combos are never solo. A combo definition must
 # have at least this many slots, each filled by a distinct PC-controlled action.
@@ -110,6 +111,9 @@ class SurgeTriggerKind(models.TextChoices):
     ALLY_HURT = "ally_hurt", "Ally Hurt"
     CONDITION_FED = "condition_fed", "Emotional Condition"
     DUG_DEEP = "dug_deep", "Dug deep"
+    # A missed attack builds intensity (#4858): once a round, a fixed amount from the
+    # maneuver effect catalog ("Miss: intensity gained").
+    MISSED = "missed", "Missed"
 
 
 # Surge kinds resolved by a roll with degrees (#4737). Each has one SurgeTuning row
@@ -161,6 +165,40 @@ class CombatManeuver(models.TextChoices):
     # The waiting strike (#4608): a melee strike held for an enemy that comes into
     # reach or attacks. It is the PC's one action for the round and fires at most once.
     AWAIT_OPENING = "await_opening", "Wait for an opening"
+    # The basic Strike (#4858): an attack with an equipped weapon or bare hands and no
+    # technique. A hit roll on the strike skill, then a damage roll if it lands.
+    STRIKE = "strike", "Strike"
+
+
+# ---------------------------------------------------------------------------
+# The basic Strike (#4858)
+# ---------------------------------------------------------------------------
+
+# The strike skills' check types, by name. Each is authored content (a Skill, its Trait
+# and a CheckType of the same name); the Required content dashboard lists a missing one,
+# and a Strike that needs it is refused.
+MELEE_STRIKE_CHECK_TYPE_NAME = "Melee Combat"
+RANGED_STRIKE_CHECK_TYPE_NAME = "Ranged Combat"
+THROWN_STRIKE_CHECK_TYPE_NAME = "Thrown Combat"
+UNARMED_STRIKE_CHECK_TYPE_NAME = "Unarmed Combat"
+
+STRIKE_CHECK_TYPE_NAMES: tuple[str, ...] = (
+    MELEE_STRIKE_CHECK_TYPE_NAME,
+    RANGED_STRIKE_CHECK_TYPE_NAME,
+    THROWN_STRIKE_CHECK_TYPE_NAME,
+    UNARMED_STRIKE_CHECK_TYPE_NAME,
+)
+
+# A weapon's gear kind picks the strike skill its Strike rolls. Bare hands are Unarmed.
+STRIKE_CHECK_TYPE_BY_ARCHETYPE: dict[str, str] = {
+    GearArchetype.MELEE_ONE_HAND: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.MELEE_TWO_HAND: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.SHIELD: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.LANCE: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.RANGED: RANGED_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.THROWN: THROWN_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.UNARMED: UNARMED_STRIKE_CHECK_TYPE_NAME,
+}
 
 
 # ---------------------------------------------------------------------------

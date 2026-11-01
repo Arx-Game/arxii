@@ -55,3 +55,21 @@ class CombatCheckSeedTests(TestCase):
         # No separate Melee Defense CheckType exists anymore
         self.assertFalse(CheckType.objects.filter(name="Melee Defense").exists())
         self.assertEqual(CheckType.objects.filter(name="Melee Combat").count(), 1)
+
+    def test_other_strike_skills_seeded(self):
+        """#4858: Ranged, Thrown and Unarmed Combat each get a skill and a check type."""
+        from world.checks.models import CheckType
+        from world.skills.models import Skill
+
+        seed_combat_check_content()
+        seed_combat_check_content()  # re-run converges
+        expected = {
+            "Ranged Combat": "agility",
+            "Thrown Combat": "strength",
+            "Unarmed Combat": "strength",
+        }
+        for name, stat in expected.items():
+            self.assertTrue(Skill.objects.filter(trait__name=name).exists())
+            ct = CheckType.objects.get(name=name)
+            trait_names = {t.trait.name for t in ct.traits.all()}  # type: ignore[attr-defined]
+            self.assertEqual(trait_names, {stat, name})

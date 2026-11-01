@@ -1,1 +1,1 @@
-0344_card_grants_at_finalize
+0345_strike_choices

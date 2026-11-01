@@ -17,11 +17,20 @@ outside ``CONTENT_MODELS`` and keep seeding unconditionally via
 each run (#2698 Part 1) — a re-seed converges via ``get_or_create``, so
 authored/staff-edited weights survive. Weights are PLACEHOLDER (1.00) per
 "build the mechanism, defer the magnitudes".
+
+The other strike skills (#4858), Ranged, Thrown and Unarmed Combat, are seeded the same
+way: a COMBAT skill and a check type of the same name, skill + a default stat.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
+
+from world.combat.constants import (
+    RANGED_STRIKE_CHECK_TYPE_NAME,
+    THROWN_STRIKE_CHECK_TYPE_NAME,
+    UNARMED_STRIKE_CHECK_TYPE_NAME,
+)
 
 # (specialization name) — weapon-class specs under Melee Combat.
 _WEAPON_SPECIALIZATIONS: list[str] = ["Small Weapons", "Medium Weapons", "Heavy Weapons"]
@@ -154,8 +163,63 @@ def ensure_melee_combat_check_type(skill, specs) -> object | None:
     return check_type
 
 
+# The other strike skills (#4858): (name, tooltip, default stat). Each mirrors Melee Combat:
+# a COMBAT skill and a check type of the same name, skill + a default stat that the
+# chosen weapon's stat override replaces.
+_OTHER_STRIKE_SKILLS: tuple[tuple[str, str, str], ...] = (
+    (RANGED_STRIKE_CHECK_TYPE_NAME, "Shooting bows, crossbows and slings.", "agility"),
+    (THROWN_STRIKE_CHECK_TYPE_NAME, "Throwing knives, axes and javelins.", "strength"),
+    (UNARMED_STRIKE_CHECK_TYPE_NAME, "Fighting with fists, wraps or natural weapons.", "strength"),
+)
+
+
+def ensure_strike_skill_check_type(name: str, tooltip: str, stat_name: str) -> object | None:
+    """Look up (or sample) one strike skill and its check type: skill + ``stat_name``.
+
+    The skill, its Trait and the check type are content (``authored_or_sample``); each
+    returns ``None`` when absent and sampling is off, and the check type is skipped.
+    """
+    from world.checks.models import CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    category = _ensure_combat_category()
+    if category is None:
+        return None
+    trait = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.SKILL, "category": TraitCategory.COMBAT, "is_public": True},
+        name=name,
+    )
+    if trait is not None:
+        authored_or_sample(
+            Skill, {"tooltip": tooltip, "display_order": 0, "is_active": True}, trait=trait
+        )
+    check_type = authored_or_sample(
+        CheckType,
+        {"description": f"A {name.lower()} roll: skill + situational stat (default {stat_name})."},
+        name=name,
+        category=category,
+    )
+    if check_type is None:
+        return None
+    weight = Decimal("1.00")
+    stat = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name=stat_name,
+    )
+    for leg in (stat, trait):
+        if leg is not None:
+            authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=leg)
+    return check_type
+
+
 def seed_combat_check_content() -> None:
-    """Cluster entry — seed Melee Combat skill catalog + Melee Combat check."""
+    """Cluster entry: seed the strike skills and their checks (Melee Combat and the rest)."""
     skill = ensure_melee_combat_skill()
     specs = ensure_weapon_specializations(skill)
     ensure_melee_combat_check_type(skill, specs)
+    for name, tooltip, stat_name in _OTHER_STRIKE_SKILLS:
+        ensure_strike_skill_check_type(name, tooltip, stat_name)

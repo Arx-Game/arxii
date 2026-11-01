@@ -19,15 +19,15 @@ from world.mechanics.models import ManeuverEffect, ModifierCategory, ModifierTar
 
 
 class EnsureManeuverEffectsTests(TestCase):
-    def test_ensure_creates_eight_rows_with_todays_values(self):
+    def test_ensure_creates_every_row_with_todays_values(self):
         ensure_maneuver_effects()
         assert {e.key: e.base_value for e in ManeuverEffect.objects.all()} == (
             MANEUVER_EFFECT_DEFAULTS
         )
-        assert len(MANEUVER_EFFECT_DEFAULTS) == 8
+        assert len(MANEUVER_EFFECT_DEFAULTS) == 12
         assert ModifierCategory.objects.filter(name=MANEUVER_EFFECT_CATEGORY_NAME).exists()
         ensure_maneuver_effects()
-        assert ManeuverEffect.objects.count() == 8
+        assert ManeuverEffect.objects.count() == 12
         assert ModifierCategory.objects.filter(name=MANEUVER_EFFECT_CATEGORY_NAME).count() == 1
 
     def test_ensure_keeps_an_edited_value(self):

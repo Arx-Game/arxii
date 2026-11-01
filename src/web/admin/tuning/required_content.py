@@ -2364,6 +2364,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.combat.constants import (  # noqa: PLC0415
         CONCENTRATION_CHECK_TYPE_NAME,
         PENETRATION_CHECK_TYPE_NAME,
+        STRIKE_CHECK_TYPE_NAMES,
     )
     from world.combat.defend_content import SHIELDED_CONDITION_NAME  # noqa: PLC0415
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
@@ -2806,6 +2807,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "CheckType.DoesNotExist instead of rolling the check."
             ),
             probe=NamedRowsProbe(label="CheckType", names=(PENETRATION_CHECK_TYPE_NAME,)),
+        ),
+        ContentDependency(
+            key="strike-check-types",
+            label="Strike skill check types",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/strike.py strike_check_type()",
+            consequence=(
+                "A Strike with a weapon of that kind (or bare hands, for Unarmed Combat) "
+                "is refused: the strike skill it rolls has no check type."
+            ),
+            probe=NamedRowsProbe(label="CheckType", names=STRIKE_CHECK_TYPE_NAMES),
         ),
         ContentDependency(
             key="concentration-check-type",
