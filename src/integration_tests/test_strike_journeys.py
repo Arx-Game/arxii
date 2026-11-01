@@ -254,3 +254,33 @@ class MissesBuildIntensity(_StrikeField):
             {"source_kind": "character", "source_label": "Intensity", "value": 1},
             latest_hit["modifiers"],
         )
+
+
+class StrikeThroughTelnet(_StrikeField):
+    def test_strike_with_a_named_weapon(self) -> None:
+        sword = self.equip_sword()
+
+        told = self.telnet(self.hobb, f"strike bandit with {sword.display_name}")
+
+        self.assertIn(f"You ready a strike at Bandit with {sword.display_name}.", told)
+        before = CombatOpponent.objects.get(pk=self.bandit.pk).health
+        with self.forced_rolls("Success", "Success"):
+            resolve_round(self.encounter)
+        self.assertEqual(before - CombatOpponent.objects.get(pk=self.bandit.pk).health, 6)
+        self.assertIn("Melee Combat with Agility", self.shown_rolls()[0]["summary"])
+
+    def test_combat_strike_with_no_weapon_is_bare_handed(self) -> None:
+        told = self.telnet(self.hobb, "combat strike bandit")
+
+        self.assertIn("You ready a strike at Bandit with your bare hands.", told)
+        before = CombatOpponent.objects.get(pk=self.bandit.pk).health
+        with self.forced_rolls("Success", "Success"):
+            resolve_round(self.encounter)
+        self.assertEqual(
+            before - CombatOpponent.objects.get(pk=self.bandit.pk).health, BARE_HANDS_DAMAGE
+        )
+
+    def test_a_weapon_you_do_not_carry_is_refused(self) -> None:
+        told = self.telnet(self.hobb, "strike bandit with halberd")
+
+        self.assertIn("You have no such weapon equipped.", told)

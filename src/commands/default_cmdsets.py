@@ -33,7 +33,7 @@ from commands.captivity import CmdDemandRansom
 from commands.carry import CmdCarry, CmdSetDown  # #2852
 from commands.ceremonies import CmdCeremony
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
-from commands.combat_maneuvers import CmdCombat
+from commands.combat_maneuvers import CmdCombat, CmdStrike
 from commands.comfort import CmdComfort
 from commands.companion import CmdCompanion
 from commands.conditions import (
@@ -457,6 +457,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdClashCommit,
             # Shared combat verbs: combat <subverb> (#1453, #1452)
             CmdCombat,
+            CmdStrike,
             # Standoff before a fight: standoff <subverb> (#4145)
             CmdStandoff,
             # PC-vs-PC duel lifecycle: duel <subverb> (#1492)

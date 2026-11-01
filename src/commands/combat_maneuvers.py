@@ -45,6 +45,7 @@ _SUBVERBS: dict[str, str] = {
     "mark": "combat_mark",
     "dodge": "combat_dodge",
     "charge": "combat_charge",
+    "strike": "combat_strike",
     "await": "combat_await_opening",
     "joust": "combat_joust",
     "engage": "combat_engage",
@@ -124,6 +125,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat dodge [<place>|here|off] - where you land if you dodge this round
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
+        combat strike <opp> [with <weapon>] - attack with an equipped weapon, or bare
+                                     hands when no weapon is named (also: strike)
         combat await <technique> [soulfray] - wait for an opening: strike first at the
                                      first enemy to come within reach or attack you
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
@@ -202,7 +205,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return {"place": text}
 
     def _resolve_technique_subverb_args(self) -> dict[str, Any]:
-        """charge / await / joust: the subverbs that carry a technique."""
+        """charge / await / joust: the subverbs that carry a technique; and strike, the
+        attack that carries none (#4858)."""
+        if self._subverb == "strike":  # noqa: STRING_LITERAL
+            return self._resolve_strike_args(self._require_rest("an opponent> [with <weapon"))
         if self._subverb == "charge":  # noqa: STRING_LITERAL
             return self._resolve_charge_args(self._require_rest("an opponent with <technique>"))
         if self._subverb == "await":  # noqa: STRING_LITERAL
@@ -356,6 +362,22 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "opponent_id": self._resolve_opponent_pk(opponent_text),
             "technique_id": self._find_technique_id(technique_text),
         }
+
+    def _resolve_strike_args(self, text: str) -> dict[str, Any]:
+        """Parse ``<opponent> [with <weapon>]`` for a basic Strike (#4858).
+
+        With no ``with`` clause the Strike is bare-handed. The weapon name is matched
+        against the striker's equipped weapons by ``StrikeAction`` itself.
+        """
+        clause = _split_padded(text, _WITH_SEPARATOR)
+        opponent_text, weapon_text = clause if clause is not None else (text.strip(), "")
+        if not opponent_text or (clause is not None and not weapon_text):
+            msg = "Usage: combat strike <opponent> [with <weapon>]."
+            raise CommandError(msg)
+        kwargs: dict[str, Any] = {"opponent_id": self._resolve_opponent_pk(opponent_text)}
+        if weapon_text:
+            kwargs["weapon_name"] = weapon_text
+        return kwargs
 
     def _resolve_ally_pk(self, name: str) -> int:
         """Return the pk of the active ally named *name* in the caller's encounter."""
@@ -746,3 +768,27 @@ def _round_combo_slot_line(fill: ComboSlotFill, own_participant_pk: int) -> str:
         who = "you" if fill.participant_id == own_participant_pk else fill.character_name
         filler = f"{who} ({fill.technique_name})"
     return f"{fill.slot.slot_number}. {fill.slot.requirement_label} - {filler}"
+
+
+class CmdStrike(CmdCombat):
+    """Strike an opponent with no technique (#4858).
+
+    Usage:
+        strike <opponent>                - attack with your bare hands
+        strike <opponent> with <weapon>  - attack with one of your equipped weapons
+
+    The same action as ``combat strike``: a hit roll on the strike skill for the
+    weapon's kind, then a damage roll if it lands. It is your action for the round.
+    """
+
+    key = "strike"
+    locks = "cmd:all()"
+
+    def func(self) -> None:
+        """Route straight to the ``strike`` subverb."""
+        self._subverb = "strike"
+        self._rest = (self.args or "").strip()
+        if not self._rest:
+            self.msg("Usage: strike <opponent> [with <weapon>].")
+            return
+        super(CmdCombat, self).func()  # resolve_action_ref + resolve_action_args + dispatch
