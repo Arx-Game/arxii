@@ -99,6 +99,9 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
 // CombatTurnPanel
 // ---------------------------------------------------------------------------
 
+/** Enough rows for one round's rolls by one character (#4884). */
+const LAST_ROUND_PAGE_SIZE = 20;
+
 export function CombatTurnPanel({
   encounterId,
   characterId,
@@ -118,24 +121,27 @@ export function CombatTurnPanel({
   // Available COMBAT-backend actions for the character (includes clash refs) and its moves.
   const { data: combatActions } = useAvailableActions(characterId);
 
-  // The most recent roll this character made in the current encounter, with the roll
-  // before it when both came from one action: a Strike records its hit roll and then its
-  // damage roll on one interaction (#4858). Shown oldest first.
+  // Every roll this character made in the most recent round of the current encounter
+  // (#4884): a Strike's hit and damage rolls, the defense roll against each NPC blow, and
+  // any knockout or wound rolls those blows caused. A page of 20 covers a round; rows with
+  // no round (older records) fall back to the rolls sharing the newest row's interaction.
+  // Shown oldest first.
   const { data: consequenceOutcomes } = useConsequenceOutcomes({
     character: characterId,
     encounter: encounterId,
-    page_size: 2,
+    page_size: LAST_ROUND_PAGE_SIZE,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
   const latestOutcomes =
     latestOutcome === null
       ? []
       : (consequenceOutcomes ?? [])
-          .filter(
-            (row) =>
-              row === latestOutcome ||
-              (latestOutcome.combat_interaction_id != null &&
-                row.combat_interaction_id === latestOutcome.combat_interaction_id)
+          .filter((row) =>
+            latestOutcome.combat_round != null
+              ? row.combat_round === latestOutcome.combat_round
+              : row === latestOutcome ||
+                (latestOutcome.combat_interaction_id != null &&
+                  row.combat_interaction_id === latestOutcome.combat_interaction_id)
           )
           .reverse();
 

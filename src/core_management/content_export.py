@@ -176,6 +176,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantroletechniquespecialty",
         # #4759: a vow's focus pick catalog and its limits, and combat styles.
         "covenants.combatstyle",
+        # #4884: the weapon and armor kinds a style fights with.
+        "covenants.combatstylegear",
         "covenants.vowfocuspick",
         "covenants.vowfocuspicklimit",
         "covenants.geararchetypecompatibility",

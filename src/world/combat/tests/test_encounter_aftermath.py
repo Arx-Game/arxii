@@ -317,6 +317,8 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
         interaction = self._outcome_interaction_qs(encounter).get()
         for outcome_row in outcomes:
             self.assertEqual(outcome_row.combat_interaction, interaction)
+            # The aftermath (and flee) writer reads the round the fight ended on (#4884).
+            self.assertEqual(outcome_row.combat_round, encounter.round_number)
             self.assertEqual(outcome_row.pool, pool)
             self.assertEqual(outcome_row.selected_consequence, consequence)
         self.assertEqual(

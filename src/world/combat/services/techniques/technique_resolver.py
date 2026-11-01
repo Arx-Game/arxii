@@ -75,6 +75,7 @@ if TYPE_CHECKING:
     from world.combat.types import StrikeWeapon, WeaponContribution
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.covenants.style_fit import StyleFit
     from world.covenants.types import FiredVowEffect
     from world.magic.models import Technique
     from world.magic.models.techniques import AbstractDamageProfile
@@ -201,6 +202,9 @@ class CombatTechniqueResolver:
     # A basic Strike's chosen weapon (#4858). Set, the roll reads this weapon (bare hands
     # when its item is None) instead of the strongest one equipped.
     strike_weapon: StrikeWeapon | None = None
+    # The attacker's combat style on this roll (#4884). None: worked out from the weapon
+    # the roll is made with; a Strike passes the fit it already read for its record.
+    style_fit: StyleFit | None = None
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
@@ -213,14 +217,30 @@ class CombatTechniqueResolver:
             return self.strike_weapon.gear_archetype
         return _equipped_weapon_archetype(character)
 
-    def _stat_override(self, character: Character) -> str | int | None:
-        """The stat the roll uses in place of the check's default, from the weapon."""
+    def _attack_style_fit(self, character: Character) -> StyleFit:
+        """The attacker's style on this roll: the one passed in, else read for the weapon."""
+        if self.style_fit is not None:
+            return self.style_fit
+        from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
+
+        return style_fit_for_attack(character, self._weapon_archetype(character))
+
+    def _stat_override(self, character: Character, fit: StyleFit) -> str | int | None:
+        """The stat the roll uses in place of the check's default.
+
+        A Strike hits with its style's hit stat, lapsed or not (#4884), else its weapon's
+        stat. A technique keeps its weapon stat: the style adds its skill only (owner
+        ruling, 2026-11-01).
+        """
         from world.combat.stat_mapping import (  # noqa: PLC0415
             weapon_stat_for,
             weapon_stat_override,
         )
 
         if self.strike_weapon is not None:
+            hit_stat = fit.hit_stat_name
+            if hit_stat is not None:
+                return hit_stat
             return weapon_stat_for(self.strike_weapon.item_instance)
         return weapon_stat_override(character)
 
@@ -332,12 +352,19 @@ class CombatTechniqueResolver:
                     )
                 )
 
+        # The style skill (#4884) joins the cast's own skill terms while the character
+        # fights the style's way: the weapon and every held vow on the style.
+        style_fit = self._attack_style_fit(character)
+        offense_traits = (
+            *self.offense_extra_traits,
+            *style_fit.extra_traits(self.offense_check_type, counted=self.offense_extra_traits),
+        )
         breakdown = _svc.collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
             scene=self.participant.encounter.scene,
             extra_contributions=extra_contributions,
-            extra_traits=self.offense_extra_traits,
+            extra_traits=offense_traits,
         )
         # A strained compulsion resist (#4802) lands its penalty on this roll.
         extra_modifiers = breakdown.extra_modifiers_total - self.action.compulsion_penalty
@@ -374,7 +401,7 @@ class CombatTechniqueResolver:
             if focused is not None
             else 0
         )
-        stat_override = self._stat_override(character)
+        stat_override = self._stat_override(character, style_fit)
         result = check_fn(
             character,
             self.offense_check_type,
@@ -384,7 +411,7 @@ class CombatTechniqueResolver:
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
             stat_override=stat_override,
-            extra_traits=self.offense_extra_traits,
+            extra_traits=offense_traits,
         )
         spend_contributing_conditions(breakdown)
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415

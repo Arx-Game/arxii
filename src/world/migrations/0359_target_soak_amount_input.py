@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0355_derived_amount_inputs"),
-    ]
+    dependencies = [("arxii", "0358_kin_row_states")]
 
     operations = [
         migrations.AlterField(

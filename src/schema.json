@@ -53627,6 +53627,12 @@ components:
           - $ref: '#/components/schemas/RollBreakdown'
           nullable: true
           readOnly: true
+        combat_round:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The encounter round a combat roll was made in, so the turn
+            panel can show every roll of the last round. Null outside combat.
         created_at:
           type: string
           format: date-time
@@ -53637,6 +53643,7 @@ components:
       - character
       - check_type
       - combat_interaction_id
+      - combat_round
       - created_at
       - id
       - modifier_total
@@ -87701,9 +87708,12 @@ components:
           type: string
         detail:
           type: string
+        lapsed:
+          type: boolean
       required:
       - detail
       - label
+      - lapsed
       - value
     RoomAlarmDetails:
       type: object

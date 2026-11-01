@@ -1476,6 +1476,61 @@ def chart_has_success_outcomes(rank_difference: int) -> bool:
     ).exists()
 
 
+def _require_one_outcome_source(
+    *,
+    combat_interaction: "Interaction | None",
+    challenge_record: "CharacterChallengeRecord | None",
+    action_interaction: "Interaction | None",
+) -> None:
+    """Raise ValueError unless exactly one outcome source is given."""
+    sources = {
+        "combat_interaction": combat_interaction,
+        "challenge_record": challenge_record,
+        "action_interaction": action_interaction,
+    }
+    populated = [name for name, value in sources.items() if value is not None]
+    if len(populated) != 1:
+        raise ValueError(
+            "record_consequence_outcome requires exactly one source; got "
+            + (", ".join(populated) if populated else "none")
+            + "."
+        )
+
+
+def _current_combat_round(combat_interaction: "Interaction") -> int | None:
+    """The round of the encounter in ``combat_interaction``'s scene, as it stands now.
+
+    The round only advances in ``begin_declaration_phase``, never while a round resolves,
+    so a writer during resolution reads the round it ran in (#4884).
+    """
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+
+    return (
+        CombatEncounter.objects.filter(scene_id=combat_interaction.scene_id)
+        .order_by("-pk")
+        .values_list("round_number", flat=True)
+        .first()
+    )
+
+
+def _apply_roll_snapshot(outcome: ConsequenceOutcome, snapshot: "RollSnapshot | None") -> None:
+    """Copy what a breakdown names onto the unsaved ``outcome`` (#4858, #4884).
+
+    Empty labels are stored as null, so a column says "not recorded" one way only.
+    """
+    if snapshot is None:
+        return
+    outcome.weapon_label = snapshot.weapon_label or None
+    outcome.weapon_kind = snapshot.weapon_kind or None
+    outcome.stat_label = snapshot.stat_label or None
+    outcome.style_name = snapshot.style_name or None
+    outcome.style_skill_rating = snapshot.style_skill_rating
+    outcome.style_lapse_note = snapshot.style_lapse_note or None
+    outcome.stat_from_style = snapshot.stat_from_style
+    outcome.against_label = snapshot.against_label or None
+    outcome.armor_share_tenths = snapshot.armor_share_tenths
+
+
 def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs all context fields
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
@@ -1489,6 +1544,8 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     summary: str = "",
     skill_rating: int | None = None,
     snapshot: "RollSnapshot | None" = None,
+    combat_round: int | None = None,
+    combat_roll_kind: str | None = None,
 ) -> ConsequenceOutcome:
     """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
 
@@ -1521,7 +1578,14 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         skill_rating: The character's rating in the check's skill at roll time (#4858),
             kept so a breakdown shows what was rolled; None records none.
         snapshot: What a breakdown names, kept at roll time (#4858): the weapon, its kind
-            and the stat. None records none.
+            and the stat, and the combat style (#4884). None records none.
+        combat_round: The encounter round a combat roll was made in (#4884). None with a
+            ``combat_interaction`` reads it from the scene's encounter: the round only
+            advances in ``begin_declaration_phase``, never while a round resolves, so
+            every combat writer (survivability, flee, aftermath) reads the round it ran
+            in.
+        combat_roll_kind: ``CombatRollKind`` for a roll laid out as rows (a Strike's hit
+            or damage roll, a defense roll); None for any other.
 
     Returns:
         The newly created ConsequenceOutcome instance.
@@ -1529,30 +1593,23 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     Raises:
         ValueError: If neither or both of combat_interaction/challenge_record are provided.
     """
-    sources = {
-        "combat_interaction": combat_interaction,
-        "challenge_record": challenge_record,
-        "action_interaction": action_interaction,
-    }
-    populated = [name for name, value in sources.items() if value is not None]
-    if len(populated) != 1:
-        raise ValueError(
-            "record_consequence_outcome requires exactly one source; got "
-            + (", ".join(populated) if populated else "none")
-            + "."
-        )
-
-    outcome = ConsequenceOutcome.objects.create(
+    _require_one_outcome_source(
+        combat_interaction=combat_interaction,
+        challenge_record=challenge_record,
+        action_interaction=action_interaction,
+    )
+    if combat_round is None and combat_interaction is not None:
+        combat_round = _current_combat_round(combat_interaction)
+    outcome = ConsequenceOutcome(
         character=character_sheet,
+        combat_round=combat_round,
+        combat_roll_kind=combat_roll_kind,
         check_type=check_type,
         pool=pool,
         selected_consequence=selected_consequence,
         modifier_total=breakdown.total,
         summary=summary,
         skill_rating=skill_rating,
-        weapon_label=snapshot.weapon_label if snapshot is not None else None,
-        weapon_kind=snapshot.weapon_kind if snapshot is not None else None,
-        stat_label=snapshot.stat_label if snapshot is not None else None,
         combat_interaction=combat_interaction,
         combat_interaction_timestamp=(
             combat_interaction.timestamp if combat_interaction is not None else None
@@ -1563,6 +1620,8 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
             action_interaction.timestamp if action_interaction is not None else None
         ),
     )
+    _apply_roll_snapshot(outcome, snapshot)
+    outcome.save(force_insert=True)
 
     if breakdown.contributions:
         # #4594: each row records what its contribution counted for after the light taper,

@@ -812,16 +812,27 @@ than one path, then the path body: the house and the parents come first), the
 pick-lists asked on every path, the path's prompts, the kin rows (`KinRows`), then the
 life grids (`LifeGrids`), then the record.
 
-**Kin rows (#4395).** The people seated beside the parents: `draft_data["kin_rows"]`, a
-list of `{kind, name, gender_id, fate}` (`KinRowKind` twin / spouse / child, `SpouseFate`
-alive / dead / divorced / fled, `ChildFate` raised / fostered away / lost; one twin at
-most, `KIN_ROWS_MAX` rows; `_validate_kin_rows`). Finalize's `_bind_kin_rows`, after
+**Kin rows (#4395; the states of #4870, slice 8 of #4813).** The people seated beside the
+parents: `draft_data["kin_rows"]`, a list of `{kind, name, gender_id, fate}` (`KinRowKind`
+twin / spouse / child / betrothed; `TwinFate` alive / dead, or blank; `SpouseFate` alive /
+dead / divorced / separated / fled, the last reading "Missing"; `BetrothedFate` promised /
+dead / missing / broken; `ChildFate` raised / fostered away / lost; one twin at most,
+`KIN_ROWS_MAX` rows; `_validate_kin_rows`). Finalize's `_bind_kin_rows`, after
 `_bind_kinship_node`, seats them in the kinship graph: a twin is a `Kinsperson` in the
-PC's family sharing every parent edge the PC has; a spouse is a wedlock `Union`
-(`wedlock_union_kind`), ended by death or divorce, the spouse `is_missing` when fled; a
-child is a parentage edge from the PC, in the PC's family when raised, in none when
-fostered away, `is_deceased` when lost. Best-effort like the bind: a kinship refusal logs
-and skips the row.
+PC's family sharing every parent edge the PC has, `is_deceased` when its fate says so; a
+spouse is a wedlock `Union` (`wedlock_union_kind`), ended by death or divorce, dated
+`separated_at` through `separate_union` when separated, the spouse `is_missing` when fled;
+a betrothed is a `Union` of the kind marked `UnionKind.is_betrothal`
+(`betrothal_union_kind`, which refuses when no such kind is authored, so the row is logged
+and skipped), ended when broken off, the person dead or missing by fate; a child is a
+parentage edge from the PC, in the PC's family when raised, in none when fostered away,
+`is_deceased` when lost. Best-effort like the bind: a kinship refusal logs and skips the
+row. **The named parents' fates (#4870):** `draft_data.line_parent_fate` and
+`other_parent_fate` (`ParentFate` alive / dead / missing, blank is alive;
+`_validate_parent_fates`); `_bind_invented_parents` creates a dead parent `is_deceased`
+and marks a missing one `is_missing`. A claimed family's staff-authored parents are not
+touched. On the leaf, a fate select sits under each named parent's gender and the kin
+rows carry a fate row for every kind.
 
 ### Backgrounds: the beats of a life (#4124)
 

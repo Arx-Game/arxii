@@ -261,6 +261,37 @@ def end_union(union: Union, *, ended_at: object | None = None) -> Union:
     return union
 
 
+def separate_union(union: Union, *, separated_at: object | None = None) -> Union:
+    """Mark a living union's members as living apart (#4870, slice 8 of #4813).
+
+    The union stands in law: ``ended_at`` stays null, marital status still reads married;
+    only ``separated_at`` is set. The first writer is character creation's separated spouse
+    (``_seat_spouse``). Idempotent, like ``end_union``.
+    """
+    if union.separated_at is not None:
+        return union
+    union.separated_at = separated_at or timezone.now()
+    union.save(update_fields=["separated_at"])
+    return union
+
+
+def betrothal_union_kind() -> UnionKind:
+    """The ``UnionKind`` a betrothal is recorded under (#4870): the universal row marked
+    ``is_betrothal``, else any realm's. Refuses when none exists, the way
+    ``wedlock_union_kind`` refuses without a law of marriage, so a caller that seats a
+    betrothed on a game with no such row logs and skips."""
+    kind = (
+        UnionKind.objects.filter(is_betrothal=True, realm__isnull=True).first()
+        or UnionKind.objects.filter(is_betrothal=True).first()
+    )
+    if kind is None:
+        msg = "no betrothal UnionKind exists"
+        raise KinshipServiceError(
+            msg, user_message="No custom of betrothal exists to promise under."
+        )
+    return kind
+
+
 def wedlock_union_kind() -> UnionKind:
     """The ``UnionKind`` a wedding marries under: the universal wedlock kind, else any.
 

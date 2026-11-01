@@ -3557,8 +3557,17 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - skill -> skills.Skill [OneToOne] (nullable)
+  - hit_stat -> traits.Trait [FK] (nullable)
+  - taught_by -> magic.Tradition [M2M]
+  - compatible_roles -> covenants.CovenantRole [M2M]
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
+  - gear <- covenants.CombatStyleGear
+
+### CombatStyleGear
+**Foreign Keys:**
+  - style -> covenants.CombatStyle [FK]
 
 ### CourtGrantConfig
 **Foreign Keys:**
@@ -3656,6 +3665,7 @@
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
   - focus_picks <- covenants.VowFocusPick
+  - combat_styles <- covenants.CombatStyle
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
@@ -6937,6 +6947,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_grants <- magic.TraditionGiftGrant
   - ritual_grants <- magic.TraditionRitualGrant
+  - combat_styles <- covenants.CombatStyle
   - teaching_npc_roles <- npc_services.NPCRole
 
 ### TraditionGiftGrant
@@ -9711,6 +9722,7 @@
   - technique_skill_gifts <- magic.Gift
   - override_techniques <- magic.Technique
   - magic_activity_rows <- magic.MagicActivitySkill
+  - combat_style <- covenants.CombatStyle
   - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
   - character_values <- skills.CharacterSkillValue

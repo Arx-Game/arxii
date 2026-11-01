@@ -984,9 +984,14 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
     {
       heading: "Hit roll against Bandit's defense",
       lines: [
-        { label: 'Melee Combat', value: '25', detail: 'strike skill for one-handed melee' },
-        { label: 'Agility', value: '', detail: 'stat for one-handed melee' },
-        { label: 'Intensity', value: '+2', detail: 'misses add to hit' },
+        {
+          label: 'Melee Combat',
+          value: '25',
+          detail: 'strike skill for one-handed melee',
+          lapsed: false,
+        },
+        { label: 'Agility', value: '', detail: 'stat for one-handed melee', lapsed: false },
+        { label: 'Intensity', value: '+2', detail: 'misses add to hit', lapsed: false },
       ],
       result: 'Hit, good',
       result_note: 'then the damage roll',
@@ -998,8 +1003,13 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
     {
       heading: 'Damage roll',
       lines: [
-        { label: 'Rapier, fine quality', value: '', detail: 'weapon damage and quality' },
-        { label: 'Melee Combat', value: '25', detail: 'strike skill' },
+        {
+          label: 'Rapier, fine quality',
+          value: '',
+          detail: 'weapon damage and quality',
+          lapsed: false,
+        },
+        { label: 'Melee Combat', value: '25', detail: 'strike skill', lapsed: false },
       ],
       result: '11 damage',
       result_note: '',
@@ -1079,5 +1089,80 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
     });
 
     expect(screen.getAllByTestId('outcome-summary').map((el) => el.textContent)).toEqual(['Fled.']);
+  });
+});
+
+describe("CombatTurnPanel: the Last Outcome card shows the last round's rolls (#4884)", () => {
+  const row = (
+    id: number,
+    interaction: number,
+    round: number,
+    heading: string | null,
+    summary: string
+  ) => ({
+    id,
+    character: 100,
+    check_type: 3,
+    pool: heading === null ? 7 : null,
+    selected_consequence: null,
+    modifier_total: 0,
+    summary,
+    outcome_display:
+      heading === null
+        ? [{ label: summary, tier_name: 'Failure', weight: 1, is_selected: true }]
+        : [],
+    modifiers: [],
+    combat_interaction_id: interaction,
+    challenge_record_id: null,
+    action_interaction_id: null,
+    roll_breakdown:
+      heading === null ? null : { heading, lines: [], result: summary, result_note: '' },
+    combat_round: round,
+    created_at: '2026-11-01T06:00:00Z',
+  });
+
+  const show = (data: unknown[]) => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data,
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+  };
+
+  it('shows her Strike and the defense against the blow she took in the same round', () => {
+    show([
+      row(13, 51, 2, 'Defense against Blade', 'Hit, 8 damage'),
+      row(12, 50, 2, 'Damage roll', '6 damage'),
+      row(11, 50, 2, "Hit roll against Bandit's defense", 'Hit, fair'),
+      row(10, 49, 1, 'Defense against Blade', 'Defended, no damage'),
+    ]);
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      "Hit roll against Bandit's defense",
+      'Damage roll',
+      'Defense against Blade',
+    ]);
+  });
+
+  it('keeps the defense card beside the knockout and wound rolls the blow caused', () => {
+    show([
+      row(23, 60, 3, null, 'Wounded'),
+      row(22, 60, 3, null, 'Stays standing'),
+      row(21, 60, 3, 'Defense against Brute', 'Hit, 14 damage'),
+      row(20, 58, 2, "Hit roll against Brute's defense", 'Miss'),
+    ]);
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      'Defense against Brute',
+    ]);
+    expect(screen.getAllByTestId('roll-result').map((el) => el.textContent)).toEqual([
+      'Hit, 14 damage',
+    ]);
+    expect(screen.queryByText("Hit roll against Brute's defense")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('outcome-roulette-section')[0]).toHaveTextContent('Wounded');
   });
 });

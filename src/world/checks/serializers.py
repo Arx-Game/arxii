@@ -8,7 +8,7 @@ from django.db import models
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import CombatRollKind, ModifierSourceKind
 from world.checks.models import CheckCallTarget, CheckType
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
@@ -94,6 +94,8 @@ class RollLineSerializer(serializers.Serializer):
     label = serializers.CharField()
     value = serializers.CharField(allow_blank=True)
     detail = serializers.CharField(allow_blank=True)
+    # A source that would have counted and did not (a lapsed style skill, #4884).
+    lapsed = serializers.BooleanField()
 
 
 class RollBreakdownSerializer(serializers.Serializer):
@@ -105,6 +107,19 @@ class RollBreakdownSerializer(serializers.Serializer):
     result_note = serializers.CharField(allow_blank=True)
 
 
+def combat_roll_breakdowns(rows: list[ConsequenceOutcome]) -> dict[int, object]:
+    """Every combat roll among ``rows`` laid out as rows: a Strike's hit and damage rolls
+    (#4858) and a PC's defense roll (#4884). The two builders claim disjoint rows."""
+    from world.combat.services.declarations.strike import (  # noqa: PLC0415
+        strike_roll_breakdowns,
+    )
+    from world.combat.services.npc.defense_roll import (  # noqa: PLC0415
+        defense_roll_breakdowns,
+    )
+
+    return {**strike_roll_breakdowns(rows), **defense_roll_breakdowns(rows)}
+
+
 class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
     """Builds every Strike roll breakdown on the page at once (#4858).
 
@@ -113,12 +128,8 @@ class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
     """
 
     def to_representation(self, data: object) -> list:
-        from world.combat.services.declarations.strike import (  # noqa: PLC0415
-            strike_roll_breakdowns,
-        )
-
         rows = list(data.all()) if isinstance(data, models.Manager) else list(data)
-        self.child.context["roll_breakdowns"] = strike_roll_breakdowns(rows)
+        self.child.context["roll_breakdowns"] = combat_roll_breakdowns(rows)
         return super().to_representation(rows)
 
 
@@ -182,6 +193,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             "challenge_record_id",
             "action_interaction_id",
             "roll_breakdown",
+            "combat_round",
             "created_at",
         ]
         read_only_fields = fields
@@ -198,14 +210,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             # A roll's sources (the skill rating above all) are the roller's own; others
             # learn hidden numbers only through checks of their own.
             return None
-        breakdowns = self.context.get("roll_breakdowns")
-        if breakdowns is None:
-            from world.combat.services.declarations.strike import (  # noqa: PLC0415
-                strike_roll_breakdowns,
-            )
-
-            breakdowns = strike_roll_breakdowns([obj])
-        breakdown = breakdowns.get(obj.pk)
+        breakdown = self._combat_breakdowns(obj).get(obj.pk)
         if breakdown is None:
             return None
         from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
@@ -218,13 +223,35 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
                 if modifier.source_label == INTENSITY_MODIFIER_LABEL
                 else modifier.get_source_kind_display()
             )
-            lines.append({"label": modifier.source_label, "value": signed, "detail": detail})
+            lines.append(
+                {"label": modifier.source_label, "value": signed, "detail": detail, "lapsed": False}
+            )
         return {
             "heading": breakdown.heading,
             "lines": lines,
             "result": breakdown.result,
             "result_note": breakdown.result_note,
         }
+
+    def _combat_breakdowns(self, obj: ConsequenceOutcome) -> dict[int, object]:
+        """The page's combat roll breakdowns, or this row's alone outside a list."""
+        breakdowns = self.context.get("roll_breakdowns")
+        return breakdowns if breakdowns is not None else combat_roll_breakdowns([obj])
+
+    def to_representation(self, instance: ConsequenceOutcome) -> dict[str, object]:
+        """Withhold a combat roll's numbers from anyone but its roller and staff (#4884).
+
+        A Strike or defense row stays in another viewer's list, so the turn's rows still
+        line up, but without its modifiers or their total; a defense row also loses its
+        summary, which says how much damage the defender took.
+        """
+        data = super().to_representation(instance)
+        if instance.combat_roll_kind and not self._sees_roll_detail(instance):
+            data["modifiers"] = []
+            data["modifier_total"] = 0
+            if instance.combat_roll_kind == CombatRollKind.DEFENSE:
+                data["summary"] = ""
+        return data
 
     def _sees_roll_detail(self, obj: ConsequenceOutcome) -> bool:
         """Staff, or the account playing the roll's own character."""
