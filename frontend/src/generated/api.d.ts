@@ -28635,10 +28635,9 @@ export interface components {
        * @description Public persona identity only — id/name/thumbnail(s), never account/username.
        *
        *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
-       *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
-       *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
-       *     kept alongside for callers still on it.
+       *     ``get_thumbnail_media_url``: the presented persona's uploaded-portrait ``Media``
+       *     FK, joined by ``personas_for_sheets``, so this never issues a query.
+       *     ``thumbnail_url`` is the legacy URLField, kept alongside for callers still on it.
        */
       readonly persona: {
         [key: string]: unknown;
