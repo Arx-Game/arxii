@@ -95,7 +95,7 @@ export function CompulsionCostTag({ cost }: { cost: ActionCost }) {
   );
 }
 
-/** The line under the chosen action: what the check is and what makes it hard. */
+/** The amber box under the chosen action: what the check is and what makes it hard. */
 export function CompulsionChosenLine({
   compulsion,
   actionKey,
@@ -108,7 +108,7 @@ export function CompulsionChosenLine({
   const { condition_name: name, check_name: check } = compulsion;
   return (
     <p
-      className="rounded-md border border-red-500/60 bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200"
+      className="rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
       data-testid="compulsion-chosen-line"
     >
       <span className="font-semibold">Against {name}.</span>{' '}

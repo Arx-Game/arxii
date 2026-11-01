@@ -96,3 +96,20 @@ describe('CompulsionChosenLine', () => {
     );
   });
 });
+
+describe('the chosen-action box', () => {
+  it('is amber, apart from the red banner', () => {
+    render(
+      <>
+        <CompulsionBanner compulsion={COMPULSION} />
+        <CompulsionChosenLine compulsion={COMPULSION} actionKey="flee" />
+      </>
+    );
+    expect(screen.getByTestId('compulsion-chosen-line')).toHaveClass(
+      'border-amber-500/60',
+      'bg-amber-50',
+      'text-amber-900'
+    );
+    expect(screen.getByTestId('compulsion-banner')).toHaveClass('border-red-500/60');
+  });
+});

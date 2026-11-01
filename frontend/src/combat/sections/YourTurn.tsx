@@ -1674,6 +1674,9 @@ function ManeuverDeclarationSection({
         animaCurrent={animaCurrent}
         guardSoulfrayAccepted={guardSoulfrayAccepted}
       />
+      {compulsion && declaredManeuver && (
+        <CompulsionChosenLine compulsion={compulsion} actionKey={declaredManeuver} />
+      )}
 
       {/* Flee button — only when not already declared a flee maneuver */}
       {declaredManeuver !== 'flee' && (
@@ -2686,9 +2689,6 @@ export function YourTurn({
       />
 
       {compulsion && <CompulsionBanner compulsion={compulsion} />}
-      {compulsion && chosenCompulsionKey && (
-        <CompulsionChosenLine compulsion={compulsion} actionKey={chosenCompulsionKey} />
-      )}
       {compulsion && <CompulsionDeclareNote />}
 
       {/* Submitted / ready badge */}
@@ -2736,6 +2736,11 @@ export function YourTurn({
             }
           />
         </CompulsionMark>
+        {/* The amber box sits under the chosen action (#4802); a declared maneuver's
+            sits under its badge instead. */}
+        {compulsion && chosenCompulsionKey === focusedNoTargetKey && (
+          <CompulsionChosenLine compulsion={compulsion} actionKey={focusedNoTargetKey} />
+        )}
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate
             warning={soulfrayWarning}
