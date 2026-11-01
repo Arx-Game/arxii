@@ -949,8 +949,8 @@ until slices 2 to 7. What was built:
 - `CombatStyle.skill` (Magic skill, one per style), `hit_stat`, `taught_by` (Traditions),
   `compatible_roles` (vows) and `CombatStyleGear` (weapon and armor kinds), all on the
   style's admin page; four TUNING Required content rows (no skill, no hit stat, no weapon
-  kind, a Tradition teaching no style). Migrations `0355` (the style's fields and gear, weapon
-  and armor kinds only) and `0356` (the Strike and defense roll snapshot on
+  kind, a Tradition teaching no style). Migrations `0356` (the style's fields and gear, weapon
+  and armor kinds only) and `0357` (the Strike and defense roll snapshot on
   `ConsequenceOutcome`: style fields, `combat_roll_kind`, `against_label`,
   `armor_share_tenths`, `combat_round`).
 - `world.covenants.style_fit`: the style skill adds to the Strike, a technique's hit roll and
@@ -980,7 +980,10 @@ the vow-only action scaling table is gone. What was built:
 - **Sized modifiers on effects** (#4876): damage, to-hit and partial protection take a size,
   valued from their own `ModifierLane` at the holder's level (the owner's "likely grants only"
   ruling on #4824); other kinds stay flat.
-- **Not built**: derived amounts (a source choosing what its number scales from, #4824). The technique scopes
+- **Derived amounts** (#4878): distinction effects and condition modifier effects can derive
+  their amount from character level, a thread on a named trait or facet, or a named check's rank,
+  with a "per N" step and a cap (the owner's shared menu, #4824). Other row kinds and the target's
+  soak input are still to come. The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for
   the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. A gear

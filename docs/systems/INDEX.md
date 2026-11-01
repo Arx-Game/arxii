@@ -1206,6 +1206,9 @@ Check resolution engine — converts trait values to ranks and rolls against res
   value a sized modifier on those effect kinds (`EFFECT_KIND_LANE`, `ModifierTarget.value_lane`);
   `mechanics.effect_targets._modifier_total` reads a laned target through the same two builders
   and tapers by the lane's rows. A size on any other kind is refused.
+  Derived amounts (#4878): `DerivedAmountMixin` (`mechanics/derived_amount_models.py`) gives
+  `DistinctionEffect` and `ConditionModifierEffect` an input (`AmountInput`), a "per N" step and
+  a cap; `mechanics.derived_amounts.derived_amount` computes it at read time.
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
@@ -7906,7 +7909,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
-    `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
+    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
     `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),
@@ -8095,7 +8098,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary). Runs
+  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
   `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck`

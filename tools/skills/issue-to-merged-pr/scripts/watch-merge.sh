@@ -59,6 +59,9 @@ NAME="${REPO##*/}"
 # An evidence challenge is open when the NEWEST challenge comment (any verdict) says
 # verdict=open and no evidence-answer comment comes after it. Both markers must open the
 # comment: the challenger's own text quotes the answer marker in its instructions.
+# A challenge whose unproven items are ALL `BLOCKED` (none `OPEN`) needs no answer:
+# the skill says not to spend a round on it but to list it in the PR body, so waking
+# the session for it only loops (#4882, a challenge blocked on secrets setup).
 poll() {
   local json
   json=$(gh api graphql -f query="$QUERY" -f o="$OWNER" -f r="$NAME" -F p="$PR") || return 1
@@ -78,6 +81,8 @@ poll() {
       elif $challenge != null
            and ($challenge.value.body | test("verdict=open"))
            and $challenge.key > $answered_at
+           and (($challenge.value.body | test("\\*\\*: OPEN\\b"))
+                or ($challenge.value.body | test("\\*\\*: BLOCKED\\b") | not))
         then "NEEDS_ANSWER evidence challenge open"
       elif .mergeQueueEntry != null then "WAITING queued \(.mergeQueueEntry.state) position \(.mergeQueueEntry.position)"
       elif .autoMergeRequest != null then "WAITING armed, review \(.reviewDecision)"

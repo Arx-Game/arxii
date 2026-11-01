@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0355_combat_style_skill_gear_and_vows"),
+        ("arxii", "0356_combat_style_skill_gear_and_vows"),
     ]
 
     operations = [

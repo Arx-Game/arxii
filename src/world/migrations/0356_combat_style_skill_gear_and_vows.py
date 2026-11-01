@@ -8,7 +8,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0354_strike_roll_snapshot_and_unarmed_damage"),
+        ("arxii", "0355_derived_amount_inputs"),
     ]
 
     operations = [

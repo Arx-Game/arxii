@@ -51,6 +51,10 @@ HANDLED_RELATIONS: frozenset[str] = frozenset(
         "answer_sacrifice_lines",  # worship.AnswerSacrificeLine.facet, unique per answer
         "worship_requests",  # worship.RequestedItem.facet: a request for a facet follows it (#4530)
         "aliases",  # FacetAlias.facet: the losers' aliases follow the winner
+        # DistinctionEffect / ConditionModifierEffect.amount_thread_facet: a derived amount
+        # read off a thread on the facet now reads the winner's thread (#4878)
+        "distinctioneffect_amount_inputs",
+        "conditionmodifiereffect_amount_inputs",
     }
 )
 
@@ -213,6 +217,16 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
             _move_unique_fk(loser, winner, "answer_sacrifice_lines", "answer", result)
             _move_fk(loser, winner, "worship_requests", "facet", result)
             _move_ceremony_offerings(loser, winner, result)
+            _move_fk(
+                loser, winner, "distinctioneffect_amount_inputs", "amount_thread_facet", result
+            )
+            _move_fk(
+                loser,
+                winner,
+                "conditionmodifiereffect_amount_inputs",
+                "amount_thread_facet",
+                result,
+            )
             for alias in loser.aliases.all():
                 alias.facet = winner
                 alias.save(update_fields=["facet"])

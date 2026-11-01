@@ -1,0 +1,350 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css only. `forms.css`
+(form rows, help lines, `.submit-row`) is linked by `change_form.html`, so a page
+extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it, as
+`change_form.html` does.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_covenantrole_changelist' %}">Covenant roles</a>
+  &rsaquo; {{ role.name }}
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/vow_builder/_css.html" %}
+{% comment %}The vow's name is admin's own content title (base.html), so no heading here.{% endcomment %}
+<div id="vow-builder-root">
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  {{ price_rules|json_script:"vow-price-rules" }}
+
+  <div class="vb-columns">
+    <div class="vb-main">
+      <form method="post" id="vow-form">
+        {% csrf_token %}
+
+        <div class="module" id="vow-module">
+          <h2>The vow
+            <span class="vb-chips"><span class="vb-chip">{{ chip }}</span></span>
+          </h2>
+          {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+          <table class="tuning-table vb-table">
+            <tbody>
+              <tr><th scope="row">{{ form.name.label_tag }}</th><td>{{ form.name.errors }}{{ form.name }}</td>
+                <th scope="row">Slug</th><td>{{ role.slug }}</td></tr>
+              <tr><th scope="row">{{ form.covenant_type.label_tag }}</th>
+                <td>{{ form.covenant_type.errors }}{{ form.covenant_type }}</td>
+                <th scope="row">{{ form.speed_rank.label_tag }}</th>
+                <td>{{ form.speed_rank.errors }}{{ form.speed_rank }}</td></tr>
+              <tr><th scope="row">{{ form.description.label_tag }}</th>
+                <td colspan="3">{{ form.description.errors }}{{ form.description }}</td></tr>
+              <tr><th scope="row">Blend</th>
+                <td colspan="3">{{ form.sword_weight.errors }}{{ form.shield_weight.errors }}{{ form.crown_weight.errors }}
+                  {{ form.sword_weight.label_tag }} {{ form.sword_weight }}
+                  {{ form.shield_weight.label_tag }} {{ form.shield_weight }}
+                  {{ form.crown_weight.label_tag }} {{ form.crown_weight }}</td></tr>
+              <tr><th scope="row">{{ form.parent_role.label_tag }}</th>
+                <td>{{ form.parent_role.errors }}{{ form.parent_role }}</td>
+                <th scope="row">{{ form.resonance.label_tag }}</th>
+                <td>{{ form.resonance.errors }}{{ form.resonance }}</td></tr>
+              <tr><th scope="row">{{ form.command_tier.label_tag }}</th>
+                <td colspan="3">{{ form.command_tier.errors }}{{ form.command_tier }}</td></tr>
+              <tr><th scope="row">Flags</th>
+                <td colspan="3"><div class="vb-flags">
+                  {% for field in flag_fields %}
+                  <label for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>{{ field.errors }}
+                  {% endfor %}
+                </div></td></tr>
+              <tr><th scope="row">Sub-roles</th>
+                <td colspan="3">{{ sub_roles|length }} sub-role{{ sub_roles|length|pluralize }}{% if sub_roles %}:
+                  {% for name, url in sub_roles %}<a href="{{ url }}">{{ name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}{% endif %}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="module" id="base-module">
+          <h2>Base vow
+            <span class="vb-chips"><span class="vb-chip">every holder</span></span>
+          </h2>
+          <div class="vb-level">Technique specialties</div>
+          {{ specialties.management_form }}
+          {% if specialties.non_form_errors %}<p class="errornote">{{ specialties.non_form_errors }}</p>{% endif %}
+          <table class="tuning-table vb-table">
+            <thead><tr><th scope="col">Function</th><th scope="col">Multiplier (tenths)</th><th scope="col">Rides</th><th scope="col">Remove</th></tr></thead>
+            <tbody id="specialties-body">
+              {% for sf, rides_count in specialty_rows %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ sf.function.errors }}{{ sf.function }}</td>
+                <td>{{ sf.multiplier_tenths.errors }}{{ sf.multiplier_tenths }}</td>
+                <td>{% if rides_count is not None %}{{ rides_count }} technique{{ rides_count|pluralize }}{% endif %}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+              {% if sf.non_field_errors %}<tr><td colspan="4">{{ sf.non_field_errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="empty-specialty-template">
+            <tr>
+              {% for hidden in specialties.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ specialties.empty_form.function }}</td>
+              <td>{{ specialties.empty_form.multiplier_tenths }}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </template>
+          <div class="vb-addrow">
+            <button type="button" class="button" id="add-specialty-btn"
+                    data-prefix="{{ specialties.prefix }}" data-target="specialties-body"
+                    data-template="empty-specialty-template">+ Add specialty</button>
+          </div>
+
+          <div class="vb-level">Payload</div>
+          {% if base_payload %}
+          <ul class="vb-payload">
+            {% for line in base_payload %}
+            <li>{{ line.kind }}: {{ line.summary }} <a href="{{ line.popup_url }}" data-popup>edit</a></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="help">No base payload rows.</p>
+          {% endif %}
+          <div class="vb-addrow">
+            {% for label, url in base_add_links %}
+            <a href="{{ url }}" data-popup>+ Add {{ label }}</a>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="module" id="picks-module">
+          <h2>Focus picks
+            <span class="vb-chips"><span class="vb-chip">budget {{ budget }} per level</span></span>
+          </h2>
+          {{ picks.management_form }}
+          {% if picks.non_form_errors %}<p class="errornote">{{ picks.non_form_errors }}</p>{% endif %}
+          <div class="vb-pick-head">
+            <span>Level</span><span>Pick</span><span>Value</span><span>Limits</span>
+            <span>Price</span><span>Payload</span><span>Held by</span>
+          </div>
+          {% for section in level_sections %}
+          <div class="vb-level">Level {{ section.level }}</div>
+          <div id="picks-level-{{ section.level }}">
+            {% for entry in section.entries %}
+              {% include "admin/vow_builder/_pick.html" %}
+            {% empty %}
+            <p class="help" data-empty-level>No picks at this level.</p>
+            {% endfor %}
+          </div>
+          {% endfor %}
+          <template id="empty-pick-template">
+            <details class="vb-pick" data-pick-row open>
+              <summary class="vb-pick-summary">
+                <span></span><span class="vb-pick-name"><b>New pick</b></span>
+                <span data-pick-value></span><span>none</span>
+                <span class="vb-price" data-pick-price data-stored-price=""></span>
+                <span></span><span></span>
+              </summary>
+              <div class="vb-pickbody">
+                {% for hidden in picks.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                <table class="tuning-table vb-table">
+                  <tbody>
+                    <tr><th scope="row">{{ picks.empty_form.pick_level.label_tag }}</th>
+                      <td>{{ picks.empty_form.pick_level }}</td>
+                      <th scope="row">{{ picks.empty_form.value.label_tag }}</th>
+                      <td>{{ picks.empty_form.value }}</td></tr>
+                    <tr><th scope="row">{{ picks.empty_form.name.label_tag }}</th>
+                      <td colspan="3">{{ picks.empty_form.name }}</td></tr>
+                    <tr><th scope="row">{{ picks.empty_form.description.label_tag }}</th>
+                      <td colspan="3">{{ picks.empty_form.description }}</td></tr>
+                  </tbody>
+                </table>
+                <p class="help">Save the pick first to add limits and payload rows.</p>
+              </div>
+            </details>
+          </template>
+          <div class="vb-addrow">
+            {% for section in level_sections %}
+            <button type="button" class="button" data-add-pick data-level="{{ section.level }}"
+                    data-prefix="{{ picks.prefix }}">+ Add pick at level {{ section.level }}</button>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% if changes %}
+        <div class="module" id="holders-module">
+          <h2>Before you save
+            <span class="vb-chips"><span class="vb-chip">unsaved changes: {{ changes|length }}</span></span>
+          </h2>
+          {% for change in changes %}
+          <div class="vb-warn">
+            {{ change.headline }}
+            <ul>
+              {% for line in change.holders %}
+              <li><a href="{{ line.impact.picks_url }}">{{ line.impact.holder_name }}</a>
+                {% if line.impact.over %}<span class="vb-over">{{ line.text }}</span>{% else %}{{ line.text }}{% endif %}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="submit-row">
+          <a href="{% url 'admin_vow_builder' role.pk %}" class="closelink">Discard changes</a>
+          {% if changes %}
+          <input type="submit" name="{{ confirm_field }}" value="Save anyway" class="default">
+          {% else %}
+          <input type="submit" name="save" value="Save" class="default">
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <aside class="vb-rail">
+      {% include "admin/vow_builder/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById("vow-form");
+  if (!form) { return; }
+  var formsets = window.arxBuilderFormsets;
+  var rules = JSON.parse(document.getElementById("vow-price-rules").textContent);
+
+  // The same formula as world.covenants.focus_picks.price_for: each frequency limit
+  // multiplies the value by tenths / full (integer floor at the end), each reduction
+  // limit subtracts, and the price never drops below the minimum.
+  function priceFor(row) {
+    var valueInput = row.querySelector('.vb-pickbody input[name$="-value"]');
+    if (!valueInput || valueInput.value === "") { return ""; }
+    var numerator = parseInt(valueInput.value, 10);
+    var denominator = 1;
+    var reductions = 0;
+    var limitRows = row.querySelectorAll(".vb-limit-row");
+    for (var limit of limitRows) {
+      var removed = limit.querySelector('input[name$="-DELETE"]');
+      var kind = limit.querySelector('select[name$="-kind"]');
+      if ((removed && removed.checked) || !kind || !kind.value) { continue; }
+      if (rules.frequency_kinds.includes(kind.value)) {
+        var freq = limit.querySelector('input[name$="-frequency_tenths"]');
+        numerator *= parseInt(freq.value || rules.full, 10);
+        denominator *= rules.full;
+      } else if (rules.reduction_kinds.includes(kind.value)) {
+        var reduction = limit.querySelector('input[name$="-reduction"]');
+        reductions += parseInt(reduction.value || "0", 10);
+      }
+    }
+    return Math.max(rules.min_price, Math.floor(numerator / denominator) - reductions);
+  }
+
+  // The collapsed row shows the live value and price; a price that differs from the
+  // stored one reads "3 (was 2)".
+  function refreshPrice(row) {
+    var valueInput = row.querySelector('.vb-pickbody input[name$="-value"]');
+    var valueCell = row.querySelector("[data-pick-value]");
+    if (valueCell && valueInput) { valueCell.textContent = valueInput.value; }
+    var cell = row.querySelector("[data-pick-price]");
+    if (!cell) { return; }
+    var price = String(priceFor(row));
+    var stored = cell.dataset.storedPrice;
+    cell.textContent = stored && stored !== price ? price + " (was " + stored + ")" : price;
+  }
+
+  var pickRows = document.querySelectorAll("[data-pick-row]");
+  for (var pickRow of pickRows) { refreshPrice(pickRow); }
+
+  var dirty = false;
+  function onEdit(evt) {
+    dirty = true;
+    var row = evt.target.closest && evt.target.closest("[data-pick-row]");
+    if (row) { refreshPrice(row); }
+  }
+  form.addEventListener("input", onEdit);
+  form.addEventListener("change", onEdit);
+
+  function cloneInto(button, targetId) {
+    var index = formsets.nextFormIndex(button.dataset.prefix);
+    var wrapper = button.dataset.wrapper || "div";
+    var row = formsets.cloneFromTemplate(button.dataset.template, index, wrapper);
+    document.getElementById(targetId).appendChild(row);
+    formsets.announceFormsetAdded(button.dataset.prefix, row);
+    dirty = true;
+    return row;
+  }
+
+  var addSpecialty = document.getElementById("add-specialty-btn");
+  addSpecialty.dataset.wrapper = "tbody";
+  addSpecialty.addEventListener("click", function () {
+    cloneInto(addSpecialty, addSpecialty.dataset.target);
+  });
+
+  document.querySelectorAll("[data-add-limit]").forEach(function (button) {
+    button.dataset.wrapper = "tbody";
+    button.addEventListener("click", function () {
+      cloneInto(button, button.dataset.target);
+    });
+  });
+
+  document.querySelectorAll("[data-add-pick]").forEach(function (button) {
+    button.dataset.template = "empty-pick-template";
+    button.addEventListener("click", function () {
+      var level = button.dataset.level;
+      var container = document.getElementById("picks-level-" + level);
+      var empty = container.querySelector("[data-empty-level]");
+      if (empty) { empty.remove(); }
+      var row = cloneInto(button, "picks-level-" + level);
+      var levelInput = row.querySelector('[name$="-pick_level"]');
+      if (levelInput) { levelInput.value = level; }
+    });
+  });
+
+  // Payload rows open on their stock admin form in the admin popup. The popup's own
+  // response script calls back into these three on save or delete; the page reloads
+  // to show the row, asking first when it holds unsaved edits.
+  function closeAndReload(win) {
+    win.close();
+    if (dirty && !window.confirm("Reload the vow page? Your unsaved edits here will be lost.")) {
+      return;
+    }
+    window.location.reload();
+  }
+  window.dismissAddRelatedObjectPopup = closeAndReload;
+  window.dismissChangeRelatedObjectPopup = closeAndReload;
+  window.dismissDeleteRelatedObjectPopup = closeAndReload;
+
+  document.addEventListener("click", function (evt) {
+    var link = evt.target.closest && evt.target.closest("a[data-popup]");
+    if (!link) { return; }
+    evt.preventDefault();
+    var popup = window.open(link.href, "vowpayload", "height=760,width=1040,resizable=yes,scrollbars=yes");
+    if (popup) { popup.focus(); }
+  });
+})();
+</script>
+{% endblock %}
