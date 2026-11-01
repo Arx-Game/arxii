@@ -21,9 +21,14 @@ if TYPE_CHECKING:
 @dataclass
 class DerivedInputs:
     """Inputs read for one sheet during one read of several rows, so a check rank that two
-    rows name is worked out once. A caller looping over rows makes one and passes it in."""
+    rows name is worked out once. A caller looping over rows makes one and passes it in.
+
+    ``target_soak`` is the soak of the opponent a technique damage hit lands on (#4892), set
+    by the damage step, the one reader that has an opponent. Every other read leaves it 0.
+    """
 
     check_ranks: dict[int, int] = field(default_factory=dict)
+    target_soak: int = 0
 
 
 def derived_amount(
@@ -59,6 +64,8 @@ def input_value(
         if row.amount_check_type_id not in inputs.check_ranks:
             inputs.check_ranks[row.amount_check_type_id] = _check_rank(sheet, row)
         return inputs.check_ranks[row.amount_check_type_id]
+    if row.amount_input == AmountInput.TARGET_SOAK:
+        return max(0, inputs.target_soak) if inputs is not None else 0
     return 0
 
 

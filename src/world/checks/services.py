@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from world.covenants.models import VowSituationalPerk
     from world.covenants.perks.context import SituationContext
     from world.items.models import ItemCheckModifier
+    from world.mechanics.derived_amounts import DerivedInputs
     from world.mechanics.models import CharacterChallengeRecord, ModifierTarget
     from world.scenes.models import Interaction, Scene, SceneCheckModifier
     from world.skills.models import Specialization
@@ -1827,6 +1828,7 @@ def modifier_target_contributions(
     target: "ModifierTarget",
     *,
     lane: str,
+    inputs: "DerivedInputs | None" = None,
 ) -> list[ModifierContribution]:
     """A ModifierTarget's CHARACTER and EQUIPMENT contributions, priced from ``lane``.
 
@@ -1847,6 +1849,9 @@ def modifier_target_contributions(
 
     **No double count:** ``equipment_walk_parts`` is called directly, never
     ``get_modifier_total`` (which would re-add the rows emitted as CHARACTER).
+
+    ``inputs`` (#4892) carries the derived-amount inputs only the caller knows: the technique
+    damage step sets the soak of the opponent being hit. Omitted, a soak row reads 0.
     """
     # Mechanics' get_modifier_breakdown / ModifierBreakdown are distinct from
     # this module's checks ModifierBreakdown, so the import is aliased.
@@ -1855,7 +1860,9 @@ def modifier_target_contributions(
         get_modifier_breakdown as get_character_modifier_breakdown,
     )
 
-    character_breakdown = get_character_modifier_breakdown(character_sheet, target, value_lane=lane)
+    character_breakdown = get_character_modifier_breakdown(
+        character_sheet, target, value_lane=lane, inputs=inputs
+    )
     contributions = [
         ModifierContribution(
             source_kind=ModifierSourceKind.CHARACTER,

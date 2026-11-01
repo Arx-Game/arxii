@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
+    from world.mechanics.derived_amounts import DerivedInputs
 
 PARTIAL_PROTECTION_CAP = 100
 
@@ -50,7 +51,11 @@ def effect_value(sheet: "CharacterSheet | None", key: str) -> int:
 
 
 def effect_modifier_total(
-    sheet: "CharacterSheet | None", key: str, *, kind_wide: bool = True
+    sheet: "CharacterSheet | None",
+    key: str,
+    *,
+    kind_wide: bool = True,
+    inputs: "DerivedInputs | None" = None,
 ) -> int:
     """The unclamped sum of every modifier on maneuver effect ``key`` for ``sheet``.
 
@@ -59,11 +64,13 @@ def effect_modifier_total(
 
     The same targets ``effect_value`` counts, without the base value and without the floor
     or cap, so a caller that scales the base itself (a lance doubling a charge) can clamp
-    once, on its own total. With no sheet there are no modifiers: 0.
+    once, on its own total. With no sheet there are no modifiers: 0. ``inputs`` carries the
+    soak of the opponent a Charge hits (#4892); without it a soak row reads 0.
     """
     if sheet is None:
         return 0
-    return _modifier_total(sheet, _matching_targets(get_maneuver_effect(key), kind_wide=kind_wide))
+    targets = _matching_targets(get_maneuver_effect(key), kind_wide=kind_wide)
+    return _modifier_total(sheet, targets, inputs)
 
 
 def effect_values(sheets: Iterable["CharacterSheet"], key: str) -> dict[int, int]:
@@ -147,15 +154,16 @@ def technique_effect_total(
     sheet: "CharacterSheet | None",
     context: TechniqueEffectContext,
     targets: list[ModifierTarget],
+    inputs: "DerivedInputs | None" = None,
 ) -> int:
     """The unclamped sum of ``sheet``'s modifiers over the ``targets`` that fit ``context``.
 
     A target fits when every technique scope it sets matches the cast. No sheet, no
-    modifiers: 0.
+    modifiers: 0. ``inputs`` carries the soak of the opponent being hit (#4892).
     """
     if sheet is None:
         return 0
-    return _modifier_total(sheet, [t for t in targets if _fits(t, context)])
+    return _modifier_total(sheet, [t for t in targets if _fits(t, context)], inputs)
 
 
 def opponent_targets_exist(targets: list[ModifierTarget]) -> bool:
@@ -296,14 +304,20 @@ def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
     return all(matches for scope, matches in checks if scope)
 
 
-def _modifier_total(sheet: "CharacterSheet", targets: list[ModifierTarget]) -> int:
+def _modifier_total(
+    sheet: "CharacterSheet",
+    targets: list[ModifierTarget],
+    inputs: "DerivedInputs | None" = None,
+) -> int:
     """``sheet``'s modifier and active-condition totals summed over ``targets``.
 
     A target whose kind has a value lane (damage, to-hit, partial protection; #4876) is read
     as the stat read is: its CHARACTER, EQUIPMENT and CONDITION contributions, a sized
     distinction effect or technique buff valued from the lane's table, all of them gathered
     into one breakdown that tapers by the lane's rows. Every other target is a flat sum.
-    For unsized rows and a lane with no taper rows the two reads agree.
+    For unsized rows and a lane with no taper rows the two reads agree. ``inputs`` reaches the
+    laned rows' derived amounts (#4892); only a damage target can take the soak input, and
+    damage is laned.
     """
     flat = 0
     laned: dict[str, list[ModifierContribution]] = {}
@@ -313,8 +327,8 @@ def _modifier_total(sheet: "CharacterSheet", targets: list[ModifierTarget]) -> i
             flat += get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
             continue
         laned.setdefault(lane, []).extend(
-            modifier_target_contributions(sheet, target, lane=lane)
-            + condition_target_contributions(sheet, target, lane=lane)
+            modifier_target_contributions(sheet, target, lane=lane, inputs=inputs)
+            + condition_target_contributions(sheet, target, lane=lane, inputs=inputs)
         )
     return flat + sum(_tapered_total(lane, rows) for lane, rows in laned.items())
 

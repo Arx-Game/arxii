@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 
-from world.mechanics.constants import STAT_CATEGORY_NAME, AmountInput
+from world.mechanics.constants import STAT_CATEGORY_NAME, AmountInput, EffectKind
 
 AMOUNT_INPUT_ANCHOR_FIELDS: dict[str, tuple[str, ...]] = {
     AmountInput.CHECK_RANK: ("amount_check_type",),
@@ -84,7 +84,9 @@ class DerivedAmountMixin(models.Model):
         The chosen input's anchor is set (one of the two for a thread), every other anchor
         is blank, and a check rank never feeds a stat or skill target (the stat category, or
         any target linked to a trait, which is how a stat read finds it): a check's rating reads
-        stats, which would read this row again. ``derived_amounts`` also guards the read.
+        stats, which would read this row again. ``derived_amounts`` also guards the read. The
+        target's soak is read only at the technique damage step, so only a damage target takes
+        it (#4892).
         """
         errors: dict[str, str] = {}
         allowed = AMOUNT_INPUT_ANCHOR_FIELDS.get(self.amount_input, ())
@@ -105,6 +107,12 @@ class DerivedAmountMixin(models.Model):
             errors["amount_input"] = (
                 "A stat or skill cannot take a check rank input: the check reads the stat."
             )
+        if (
+            self.amount_input == AmountInput.TARGET_SOAK
+            and target is not None
+            and target.effect_kind != EffectKind.DAMAGE
+        ):
+            errors["amount_input"] = "Only a damage modifier can read the target's soak."
         if not self.has_amount_input and self.amount_cap is not None:
             errors["amount_cap"] = "A cap needs an input."
         return errors
