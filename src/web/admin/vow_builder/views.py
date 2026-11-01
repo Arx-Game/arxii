@@ -355,7 +355,7 @@ def vow_builder_review(request: HttpRequest, pk: int) -> HttpResponse:
         stamp_reviewed(role, contributor)
         for pick in role.focus_picks.all():
             stamp_reviewed(pick, contributor)
-            for limit in pick.limits.all():
-                stamp_reviewed(limit, contributor)
+        for limit in VowFocusPickLimit.objects.filter(pick__covenant_role=role):
+            stamp_reviewed(limit, contributor)
         messages.success(request, "Marked reviewed.")
     return redirect(reverse("admin_vow_builder", args=[pk]))

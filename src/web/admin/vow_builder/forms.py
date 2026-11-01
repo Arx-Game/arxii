@@ -16,8 +16,11 @@ from world.admin_utils import OneRowPerFormSet
 from world.covenants.models import (
     CovenantRole,
     CovenantRoleTechniqueSpecialty,
+    VowAddedEffect,
     VowFocusPick,
     VowFocusPickLimit,
+    VowSituationalPerk,
+    VowStatScaling,
 )
 
 #: The vow's own fields the page edits; ``slug`` is shown, never edited, since code reads it.
@@ -86,17 +89,13 @@ class _PickBaseFormSet(OneRowPerFormSet):
 
     def clean(self) -> None:
         super().clean()
-        blocked: list[str] = []
-        for form in self.forms:
-            pick = form.instance
-            if pick.pk is None or not form.cleaned_data.get("DELETE"):
-                continue
-            if (
-                pick.added_effects.exists()
-                or pick.situational_perks.exists()
-                or pick.stat_scalings.exists()
-            ):
-                blocked.append(pick.name)
+        deleting = {
+            form.instance.pk: form.instance.name
+            for form in self.forms
+            if form.instance.pk is not None and form.cleaned_data.get("DELETE")
+        }
+        with_payload = _picks_with_payload(set(deleting))
+        blocked = [name for pk, name in deleting.items() if pk in with_payload]
         if blocked:
             raise ValidationError(
                 [
@@ -104,6 +103,18 @@ class _PickBaseFormSet(OneRowPerFormSet):
                     for name in blocked
                 ]
             )
+
+
+def _picks_with_payload(pick_ids: set[int]) -> set[int]:
+    """Which of ``pick_ids`` still carry a payload row: three queries, none when empty."""
+    if not pick_ids:
+        return set()
+    found: set[int] = set()
+    for model in (VowAddedEffect, VowSituationalPerk, VowStatScaling):
+        found.update(
+            model.objects.filter(focus_pick_id__in=pick_ids).values_list("focus_pick_id", flat=True)
+        )
+    return found
 
 
 PickFormSet = inlineformset_factory(
