@@ -1,5 +1,5 @@
 /**
- * StrikeControl — declare a basic Strike (#4858, slice 1 of #4844).
+ * StrikeControl: declare a basic Strike (#4858, slice 1 of #4844).
  *
  * Any character can Strike an opponent with no technique: with one of their equipped
  * weapons, or bare hands. The weapon choices come from the viewer's own participant
@@ -38,7 +38,7 @@ export interface StrikeControlProps {
   error: string | null;
   /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
   disabled: boolean;
-  /** Locked or out of phase, ignoring dispatch — drives the button styling. */
+  /** Locked or out of phase, ignoring dispatch; drives the button styling. */
   inactive: boolean;
   pending: boolean;
   onStrike: (opponentId: number, itemInstanceId: number | null) => void;

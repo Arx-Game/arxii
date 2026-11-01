@@ -6988,10 +6988,10 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Maneuver effects (#4783, ADR-4783-A):** `ManeuverEffect` (`key`, `base_value`, `notes`; eight
+- **Maneuver effects (#4783, ADR-4783-A):** `ManeuverEffect` (`key`, `base_value`, `notes`; twelve
   fixed rows, admin edit-only) holds each combat maneuver's numbers (Charge to hit, damage and
   reach; Cover escape bonus; Succor and Interpose partial protection; Rally morale and surge
-  intensity). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
+  intensity; the Strike's base and bare-hands damage, miss intensity and intensity to hit, #4858). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
   "maneuver_effect") let any modifier source target one effect or one kind across maneuvers.
   `effect_value(sheet, key)` and `effect_modifier_total(sheet, key)` in
   `world/mechanics/effect_targets.py`; `get_maneuver_effect(key)`,
@@ -8306,8 +8306,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   itself the objective (`kind=ENCOUNTER`); the old find-every-linked-beat
   scan is gone - an unrouted encounter with no running beat grades nothing),
   `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
-  JOUST (#1843, see "Mounted combat" below); plus the
+  `CombatRoundAction` (`maneuver` field: FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
+  JOUST (#1843, see "Mounted combat" below) / STRIKE (#4858, see "The basic Strike" below;
+  its weapon is `item_instance`, null for bare hands); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
@@ -8526,6 +8527,31 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `ThreatPoolEntry.delivery` is MISSILE — symmetric with the offense side ("the gale that
   ruins your shot ruins theirs"); flat `base_damage` entries with no defense check
   (`defense_check_type` unset) never reach this seam.
+- **The basic Strike (#4858, slice 1 of #4844):** any character attacks an opponent with no
+  technique, with one equipped weapon or bare hands. `world/combat/services/declarations/strike.py`:
+  `declare_strike(participant, opponent, item_instance=None)` (refuses a weapon not equipped, a
+  strike skill with no check type, an opponent out of reach: ranged and thrown reach the room,
+  every other Strike its own position or the next), `strike_weapon_options(character)`
+  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, then bare hands),
+  `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
+  draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
+  with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
+  strongest equipped weapon); the strike skill per gear kind is
+  `STRIKE_CHECK_TYPE_BY_ARCHETYPE` (Melee, Ranged, Thrown, Unarmed Combat; `combat/constants.py`),
+  authored content with a Required content row (`strike-check-types`). If it lands, a damage roll
+  of the same check (no difficulty, no modifiers) multiplies the weapon's damage by
+  `get_damage_multiplier`, floored at "Strike: base damage", plus that effect's modifiers, then
+  `scaled_outgoing_damage`, `apply_damage_to_opponent` and one point of weapon wear. Both rolls are
+  `ConsequenceOutcome` rows on the Strike's interaction (pool null), summaries naming the skill
+  and stat; the web Last Outcome card lists every roll of the latest action. Action
+  `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
+  <opp> [with <weapon>]` and `combat strike`, web `StrikeControl` fed by the own participant's
+  `strike_weapons`. **Misses build intensity:** a missed attack (Strike or technique, at an
+  opponent) runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED
+  `apply_dramatic_surge` once a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no
+  outcome since 0347); every attack roll adds an "Intensity" contribution of engagement intensity
+  x "Intensity: to hit per point" (`intensity_to_hit_contribution`). `GearArchetype.UNARMED`
+  joins `WEAPON_ARCHETYPES`.
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →

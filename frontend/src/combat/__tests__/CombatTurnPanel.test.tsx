@@ -941,7 +941,7 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
   });
 });
 
-describe('CombatTurnPanel — a Strike shows its hit roll, then its damage roll (#4858)', () => {
+describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4858)', () => {
   it('lists both rolls of the latest action, oldest first, and no earlier roll', () => {
     mockEncounter({ is_participant: true });
     const row = (id: number, interaction: number, summary: string) => ({

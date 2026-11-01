@@ -647,6 +647,10 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
+  `strike <opp> [with <weapon>]` (#4858) declares a basic Strike (`combat_strike`), bare-handed
+  with no `with` clause; `CmdStrike` (key `strike`) is the same subverb as a top-level verb,
+  the one exception to the namespacing above, because the Strike is every character's basic
+  attack (the demo's telnet screen types `strike bandit with rapier`).
 - **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712/#1713/#1715/#2010/#2007) — the
   large-scale-battle namespace. One `ArxCommand` routes a leading subverb (`battle declare
   strike/support/rescue/rout/rally/repel/hold/breach/fortify/set_environment/move/reposition

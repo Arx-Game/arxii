@@ -277,10 +277,10 @@ code. `world/mechanics/maneuver_effects.py` holds the catalog's code side,
 `world/mechanics/effect_targets.py` the reader.
 
 **The catalog.** `ManeuverEffect` (`key` unique, a `ManeuverEffectKey`; `base_value`; staff-only
-`notes`) has exactly eight rows. The kind of each is derived from the key
+`notes`) has exactly twelve rows. The kind of each is derived from the key
 (`MANEUVER_EFFECT_KIND`), never stored. Code finds a row by `key`, never by name. The admin
 (`ManeuverEffectAdmin`) edits `base_value` and `notes`, with no add, no delete and a read-only key.
-Rows are written by migration `0334` in every migrated database, by `ensure_maneuver_effect_rows()`
+Rows are written by migrations `0334` and `0346` (the four #4858 rows) in every migrated database, by `ensure_maneuver_effect_rows()`
 on the Big Button combat cluster (`world/seeds/clusters.py`), and by `get_maneuver_effect` on a
 missing key; an edited base value is kept.
 
@@ -294,6 +294,10 @@ missing key; an edited base value is kept.
 | `interpose_partial_protection` | partial protection | 50 | `interpose_dispatch`, a partial block |
 | `rally_morale` | morale | 15 | `_resolve_rally`, per success level of a great success |
 | `rally_surge_intensity` | surge intensity | 100 | `_surge_rallied_ally`, as a percentage |
+| `strike_base_damage` | damage | 3 | `_resolve_strike` (#4858): a landed Strike's floor; its modifiers (kind-wide too) add to every landed Strike |
+| `strike_bare_hands_damage` | damage | 2 | `_resolve_strike`: bare hands' damage and floor; only modifiers scoped to it alone |
+| `miss_intensity` | intensity | 1 | `record_miss_intensity`: what a missed attack (Strike or technique) adds to the engagement |
+| `intensity_to_hit` | to hit | 1 | `intensity_to_hit_contribution`: to hit per point of engagement intensity, on every attack roll; only modifiers scoped to it alone |
 
 **Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
 `CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
