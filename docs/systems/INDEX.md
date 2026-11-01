@@ -7161,6 +7161,16 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Natural weapons (#4898, slice 4 of #4844):** `Gift.natural_weapon_template` (nullable FK
+  to an Unarmed `ItemTemplate`, SET_NULL). `world/items/services/natural_weapons.py`:
+  `provision_natural_weapon(sheet, gift)` (idempotent; called from `grant_gift_to_character`
+  and the covenant role grant), `is_natural_weapon(item)` (template is a held gift's natural
+  weapon template; no item field), `require_removable(item)`,
+  `natural_weapon_template_ids(sheet)`. Exceptions `NaturalWeaponNotRemovable`,
+  `NaturalWeaponInTheWay`. Every removal path refuses one (backstops in `unequip_item`,
+  `set_item_holder` and `destroy_consumed_item_instance`); `covered_regions` skips it;
+  Required content `natural-weapon-templates`. See docs/systems/items.md ("Natural weapons").
+
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
   (template check-bonus + default-Property authoring; `checks/services.py`'s
   `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
@@ -8551,7 +8561,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `declare_strike(participant, opponent, item_instance=None)` (refuses a weapon not equipped, a
   strike skill with no check type, an opponent out of reach: ranged and thrown reach the room,
   every other Strike its own position or the next), `strike_weapon_options(character)`
-  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, then bare hands),
+  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, a natural weapon
+  from a gift among them (#4898), then bare hands),
   `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
   draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
   with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
