@@ -820,11 +820,18 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   `advance_condition_stage`. Only player characters roll, and a character already under a
   compulsion rolls no trigger of any kind (ruled 2026-10-31). Whenever a band applies a
   condition or moves intensity or control, the character and the room are told, by persona
-  name (`display_name_of`). Inside a combat round (the character's encounter is
+  name (`display_name_of`). The line reads cause, roll, onset, every part from rows: the
+  cause from `fires_on` and its kind's column ("Garrick falls below 50% health.", "Hollow
+  curse reaches the Hollowing.", "The moon pulls at Wynn."), the roll as "<check> vs
+  <difficulty>: <outcome>.", and the band's onset ("Garrick loses control: Berserk,
+  severity 3, for 3 rounds · Control -6 · Intensity +4."; a zero or unset part is left
+  out). Inside a combat round (the character's encounter is
   `RESOLVING`: a wound from a swing, a stage reached by the round tick) the line is one of
-  the round's narration rows (`broadcast_action_outcome`), so it persists in the scene log
-  and lands where the round resolves it; outside a round it goes out as plain text once the
-  transaction commits.
+  the round's narration rows (`broadcast_action_outcome`), so it persists in the scene log.
+  Round resolution wraps each fighter's slot in `trigger_lines_after_action`, which holds
+  the rows a slot's damage sets off until the slot's own lines are out, so a wound
+  trigger follows the hit that caused it on every damage path. Outside a round it goes
+  out as plain text once the transaction commits.
 - **`Compulsion`** (one-to-one with a `ConditionTemplate` whose category is
   `alters_behavior`; `clean()` rejects any other): `wants` (`CompulsionWant`, today
   `ATTACK_OPPONENT`), `check_type` (the roll to go against it; distinct from

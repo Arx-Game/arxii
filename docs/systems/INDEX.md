@@ -8729,11 +8729,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   the fight until turned off) who can act (`can_act`), no compulsion of their own, the `MovementConfig.steadying_capability` above its baseline and the anima; the biggest
   bonus (capability + `steady_bonus_per_depth` x bond depth via `qualifying_bond_depths`, less
   the reaction penalty) wins, ties to the lowest participant pk. `try_steady` pays
-  `steady_anima_cost`, records a reaction and rerolls, returning `SteadyResult`. The plan is
+  `steady_anima_cost`, records a reaction and rerolls, returning `SteadyResult` (with the
+  `bonus` the reroll carried and the `anima_paid` the pool actually lost, which the steady
+  round line names: "Tomas steadies Mira (+6). <check> vs 36: Success. Tomas spends 4
+  anima; their next reaction this round is harder."). A strained result tells its cost from
+  the band after the roll line ("Berserk drags at Mira: -4 to this action, Control -2."). The plan is
   `SteadyPlanAction` (key `combat_steady`; telnet `combat steady [on|off]`; web "Steady allies"
   toggle). The encounter payload carries `compulsion` (what it wants, each action's difficulty)
   and `steady_plan` for the viewer's own participant only; `YourTurn` shows
-  `CompulsionBanner`, and telnet declares print an `Against <condition>: ...` line. Out of combat
+  `CompulsionBanner`, an amber `CompulsionChosenLine` under the chosen action (the focused
+  card, or the declared maneuver's badge), and telnet declares print an
+  `Against <condition>: ...` line. `ParticipantSerializer.character_name` is the persona
+  name the room lines use (batched per roster by `_ParticipantListSerializer`), never the
+  key, so a disguise holds in the roster and the ally pickers. Out of combat
   the NPC rampage (`berserk_rampage_window`) is unchanged. Models and trigger engine:
   `docs/systems/conditions.md`. Journeys: `integration_tests/test_losing_control_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
