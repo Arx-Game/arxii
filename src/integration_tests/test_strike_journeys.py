@@ -92,7 +92,9 @@ class _StrikeField(JourneyCase):
         self.steading = self.make_room("The Steading")
         self.hobb = self.make_player("Hobb", room=self.steading)
         self.sheet = self.hobb.sheet_data
-        CharacterTraitValueFactory(character=self.sheet, trait=melee_skill, value=25)
+        self.melee_rating = CharacterTraitValueFactory(
+            character=self.sheet, trait=melee_skill, value=25
+        )
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=100, max_health=100, base_max_health=100
         )
@@ -203,6 +205,18 @@ class StrikeWithAWeapon(_StrikeField):
                 "result": f"{SWORD_DAMAGE} damage",
             },
         )
+
+    def test_the_breakdown_shows_the_rating_that_was_rolled(self) -> None:
+        sword = self.equip_sword()
+        self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+
+        # Hobb trains Melee Combat after the fight; the record still shows the 25 he rolled.
+        self.melee_rating.value = 40
+        self.melee_rating.save()
+
+        hit_row, damage_row = self.shown_rolls()
+        self.assertEqual(hit_row["roll_breakdown"]["lines"][0]["value"], "25")
+        self.assertEqual(damage_row["roll_breakdown"]["lines"][1]["value"], "25")
 
     def test_a_great_hit_reads_good(self) -> None:
         sword = self.equip_sword()

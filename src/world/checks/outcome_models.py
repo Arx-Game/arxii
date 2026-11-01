@@ -76,6 +76,15 @@ class ConsequenceOutcome(SharedMemoryModel):
     )
     modifier_total = models.IntegerField(default=0)
     summary = models.CharField(max_length=255, blank=True)
+    skill_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The character's rating in the skill the check weighted, as it was when the "
+            "roll was made (#4858), so a breakdown shows what was rolled. Null when the "
+            "writer records none or the check weights no skill."
+        ),
+    )
 
     # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite

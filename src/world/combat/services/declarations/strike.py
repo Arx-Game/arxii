@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
     from world.items.models import ItemInstance
 
-    StrikeRoll = tuple[CheckType, ModifierBreakdown, str]
+    StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None]
 
 BARE_HANDS_NAME = "bare hands"
 _RANGED_ARCHETYPES = frozenset({GearArchetype.RANGED, GearArchetype.THROWN})
@@ -301,6 +301,23 @@ def _strike_damage(
     return weapon_damage, dealt, damage_type
 
 
+def _skill_rating(participant: CombatParticipant, check_type: CheckType) -> int | None:
+    """The striker's rating in the skill ``check_type`` weights, now; None with no skill.
+
+    Stored with each roll so the breakdown shows what was rolled, not a later rating.
+    """
+    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+
+    skill, _stats = strike_check_traits({check_type.pk})[check_type.pk]
+    if skill is None:
+        return None
+    return (
+        CharacterTraitValue.objects.filter(character=participant.character_sheet, trait__name=skill)
+        .values_list("value", flat=True)
+        .first()
+    )
+
+
 def _roll_hit(
     participant: CombatParticipant, action: CombatRoundAction, check_type: CheckType
 ) -> tuple[CheckResult, ModifierBreakdown]:
@@ -410,7 +427,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
         push_interaction(interaction)
-        for check_type, breakdown, summary in rolls:
+        for check_type, breakdown, summary, skill_rating in rolls:
             record_consequence_outcome(
                 sheet,
                 check_type,
@@ -419,6 +436,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
                 breakdown,
                 combat_interaction=interaction,
                 summary=summary[:255],
+                skill_rating=skill_rating,
             )
 
     narrate = partial(
@@ -489,10 +507,11 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
         _broadcast_fizzle_no_one_in_reach(participant, action)
         return outcome
 
+    rating = _skill_rating(participant, check_type)
     hit, hit_breakdown = _roll_hit(participant, action, check_type)
     missed = is_miss(hit.success_level)
     rolls: list[StrikeRoll] = [
-        (check_type, hit_breakdown, hit_result_line(hit.success_level, missed=missed))
+        (check_type, hit_breakdown, hit_result_line(hit.success_level, missed=missed), rating)
     ]
     damage: OpponentDamageResult | None = None
     if missed:
@@ -515,7 +534,7 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
             )
 
             decrement_item_durability(item_instance=weapon.item_instance)
-        rolls.append((check_type, _Breakdown(), f"{damage.damage_dealt} damage"))
+        rolls.append((check_type, _Breakdown(), f"{damage.damage_dealt} damage", rating))
 
     _attempt_allegiance_breaks_for_action(participant, outcome)
     apply_fatigue(participant.character_sheet, ActionCategory.PHYSICAL, 0, action.effort_level)
@@ -586,7 +605,7 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
 
     A Strike records its hit roll and then its damage roll on its interaction; the first
     is the hit roll. The rows name the strike skill the check type weights (with the
-    character's rating in it; no skill row when it weights none), the stat or stats the
+    rating stored with the roll; no skill row when it weights none), the stat or stats the
     roll used, the weapon and its quality, and the result line the roll was recorded
     with. The roll's modifiers are the caller's to add (it knows which a viewer may see).
     Outcomes from anything but a Strike are left out. A fixed number of queries however
@@ -597,7 +616,6 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
     from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
-    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
 
     interaction_ids = {o.combat_interaction_id for o in outcomes if o.combat_interaction_id}
     if not interaction_ids:
@@ -620,14 +638,6 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     )
     strike_outcomes = [o for o in outcomes if o.combat_interaction_id in actions]
     traits = strike_check_traits({o.check_type_id for o in strike_outcomes})
-    skill_names = {skill for skill, _stats in traits.values() if skill is not None}
-    ratings = {
-        (row.character_id, row.trait.name): row.value
-        for row in CharacterTraitValue.objects.filter(
-            character_id__in={o.character_id for o in strike_outcomes},
-            trait__name__in=skill_names,
-        ).select_related("trait")
-    }
 
     breakdowns: dict[int, RollBreakdown] = {}
     for o in strike_outcomes:
@@ -635,10 +645,8 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
         weapon = _weapon_of(action)
         skill, stats = traits[o.check_type_id]
         skill_lines: list[RollLine] = []
-        skill_value = ""
-        if skill is not None:
-            rating = ratings.get((o.character_id, skill))
-            skill_value = str(rating) if rating is not None else ""
+        # The rating stored with the roll: what was rolled, not today's rating.
+        skill_value = str(o.skill_rating) if o.skill_rating is not None else ""
         if o.pk in hit_pks:
             if skill is not None:
                 skill_lines.append(

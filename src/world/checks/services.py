@@ -1486,6 +1486,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     challenge_record: "CharacterChallengeRecord | None" = None,
     action_interaction: "Interaction | None" = None,
     summary: str = "",
+    skill_rating: int | None = None,
 ) -> ConsequenceOutcome:
     """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
 
@@ -1515,6 +1516,8 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         action_interaction: Interaction created for a template-driven action
             resolution outside combat. Mutually exclusive with the other sources.
         summary: Optional human-readable summary string.
+        skill_rating: The character's rating in the check's skill at roll time (#4858),
+            kept so a breakdown shows what was rolled; None records none.
 
     Returns:
         The newly created ConsequenceOutcome instance.
@@ -1542,6 +1545,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         selected_consequence=selected_consequence,
         modifier_total=breakdown.total,
         summary=summary,
+        skill_rating=skill_rating,
         combat_interaction=combat_interaction,
         combat_interaction_timestamp=(
             combat_interaction.timestamp if combat_interaction is not None else None
