@@ -191,6 +191,24 @@ def _sized_distinction_value(
     return magnitude, size
 
 
+def _distinction_base_value(
+    mod: CharacterModifier,
+    value_table: ValueTable | None,
+    level: int | None,
+    sheet,
+    inputs: DerivedInputs,
+) -> tuple[int, tuple[int, int] | None]:
+    """One distinction source's base value, and its table (value, size) when it was sized.
+
+    A derived amount (#4878) is the stored per-step value times its input and is never
+    sized; otherwise a sized effect reads the table, and anything else keeps its value.
+    """
+    if mod.source.distinction_effect.has_amount_input:
+        return derived_amount(sheet, mod.source.distinction_effect, mod.value, inputs), None
+    sized = _sized_distinction_value(mod, value_table, level)
+    return (mod.value if sized is None else sized[0]), sized
+
+
 def _distinction_contributions(
     distinction_mods: list,
     amplifiers: list[tuple[int, int]],
@@ -217,12 +235,7 @@ def _distinction_contributions(
     inputs = DerivedInputs()
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
-        if effect.has_amount_input:
-            sized = None
-            base_value = derived_amount(sheet, effect, mod.value, inputs)
-        else:
-            sized = _sized_distinction_value(mod, value_table, level)
-            base_value = mod.value if sized is None else sized[0]
+        base_value, sized = _distinction_base_value(mod, value_table, level, sheet, inputs)
         amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
         final_value = base_value + amplification
         blocked = has_immunity and final_value < 0

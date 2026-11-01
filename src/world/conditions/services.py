@@ -2523,31 +2523,39 @@ def condition_target_contributions(
     if any(_is_sized(instance) for instance, _effect in matched):
         value_table = load_value_table(lane)
 
-    contributions: list[ModifierContribution] = []
-    for instance, effect in matched:
-        priced = (
-            None
-            if effect.has_amount_input
-            else _priced_sized_modifier(instance, effect.value, value_table)
-        )
-        label = instance.condition.name
-        if instance.current_stage is not None:
-            label = f"{label} ({instance.current_stage.name})"
-        if priced is None:
-            value, vow_part = scaled_condition_effect_value(effect, instance), 0
-        else:
-            value, vow_part = priced
-        contributions.append(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.CONDITION,
-                source_label=label,
-                value=value,
-                level=instance.modifier_level if priced is not None else None,
-                size=instance.modifier_size if priced is not None else None,
-                vow_part=vow_part,
-            )
-        )
-    return contributions
+    return [_condition_contribution(instance, effect, value_table) for instance, effect in matched]
+
+
+def _condition_contribution(
+    instance: ConditionInstance,
+    effect: ConditionModifierEffect,
+    value_table: ValueTable | None,
+) -> ModifierContribution:
+    """One effect on one instance as a CONDITION contribution (``condition_target_contributions``).
+
+    A sized instance's effect is priced from the table (level and size kept for provenance);
+    a derived amount (#4878) and an unsized instance read ``scaled_condition_effect_value``.
+    """
+    priced = (
+        None
+        if effect.has_amount_input
+        else _priced_sized_modifier(instance, effect.value, value_table)
+    )
+    label = instance.condition.name
+    if instance.current_stage is not None:
+        label = f"{label} ({instance.current_stage.name})"
+    if priced is None:
+        value, vow_part = scaled_condition_effect_value(effect, instance), 0
+    else:
+        value, vow_part = priced
+    return ModifierContribution(
+        source_kind=ModifierSourceKind.CONDITION,
+        source_label=label,
+        value=value,
+        level=instance.modifier_level if priced is not None else None,
+        size=instance.modifier_size if priced is not None else None,
+        vow_part=vow_part,
+    )
 
 
 def active_condition_instances_by_sheet(sheet_ids: Iterable[int]) -> list[ConditionInstance]:
