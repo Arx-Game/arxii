@@ -163,6 +163,11 @@ def _variant_label(row: Any) -> str:
     return variant.name_override or f"Variant of {variant.parent_technique.name}"
 
 
+def _interaction_label(row: ConditionConditionInteraction) -> str:
+    """Both conditions by name; ``__str__`` repeats what the Does column shows."""
+    return f"{row.condition.name} and {row.other_condition.name}"
+
+
 def _named(path: str = "") -> RowText:
     """The ``name`` of the row at ``path`` (dotted; blank for the row itself).
 
@@ -612,6 +617,7 @@ READER_SOURCES: tuple[ReaderSource, ...] = (
         Reads.CONDITION,
         lambda row: f"{row.get_trigger_display()}: {row.get_outcome_display()}",
         related=("condition", "other_condition"),
+        label=_interaction_label,
     ),
     ReaderSource(
         "condition interaction",
@@ -620,6 +626,7 @@ READER_SOURCES: tuple[ReaderSource, ...] = (
         Reads.CONDITION,
         lambda row: f"{row.get_trigger_display()}: {row.get_outcome_display()}",
         related=("condition", "other_condition"),
+        label=_interaction_label,
     ),
     ReaderSource(
         "treatment",

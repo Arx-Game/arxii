@@ -126,7 +126,13 @@ class ReadersTest(ComboMapLiveCase):
 
     def test_condition_readers(self) -> None:
         rows = live.readers_for_condition(self.tipsy)
-        self.assertEqual([r.kind for r in rows], ["condition interaction", "modifier target"])
+        self.assertEqual(
+            [(r.source.label, r.kind) for r in rows],
+            [
+                ("Tipsy and Signed", "condition interaction"),
+                ("Against the tipsy", "modifier target"),
+            ],
+        )
 
 
 class MapsTest(ComboMapLiveCase):
