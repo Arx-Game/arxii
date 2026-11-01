@@ -369,6 +369,11 @@ describe('LineageStage', () => {
       renderWith({ ...adoptive, parentage: 'known' as never, parentage_note: '' } as never);
       expect(await screen.findByRole('heading', { name: /your family/i })).toBeInTheDocument();
       expect(screen.getByText('Your Parents')).toBeInTheDocument();
+      // #4870: each named parent carries a fate, alive until said otherwise.
+      expect(screen.getByRole('combobox', { name: 'Line parent fate' })).toHaveTextContent('Alive');
+      expect(screen.getByRole('combobox', { name: 'Other parent fate' })).toHaveTextContent(
+        'Alive'
+      );
     });
   });
 

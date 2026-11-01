@@ -87,3 +87,53 @@ describe('KinRows', () => {
     ]);
   });
 });
+
+describe('KinRows (the kin-row states, #4870)', () => {
+  beforeEach(() => mutate.mockClear());
+
+  it('adds a betrothed, promised by default, and reads Missing where fled was', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({
+      draft_data: { kin_rows: [{ kind: 'spouse', name: 'Aldo', gender_id: null, fate: 'fled' }] },
+    });
+    renderWithCharacterCreationProviders(<KinRows draft={draft} copy={{}} />);
+    const spouse = screen.getByRole('listitem', { name: 'A spouse' });
+    expect(within(spouse).getByRole('button', { name: 'Missing' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(within(spouse).getByRole('button', { name: 'Separated' })).toBeInTheDocument();
+    expect(within(spouse).queryByRole('button', { name: 'Fled' })).toBeNull();
+    const add = screen.getByRole('group', { name: 'Add' });
+    await user.click(within(add).getByRole('button', { name: 'A betrothed' }));
+    expect(mutate.mock.lastCall?.[0].data.draft_data.kin_rows[1]).toEqual({
+      kind: 'betrothed',
+      name: '',
+      gender_id: null,
+      fate: 'promised',
+    });
+  });
+
+  it('a twin takes a fate and a betrothed its own', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({
+      draft_data: {
+        kin_rows: [
+          { kind: 'twin', name: 'Wen', gender_id: null, fate: '' },
+          { kind: 'betrothed', name: 'Rue', gender_id: null, fate: 'promised' },
+        ],
+      },
+    });
+    renderWithCharacterCreationProviders(<KinRows draft={draft} copy={{}} />);
+    const twin = screen.getByRole('listitem', { name: 'A twin' });
+    await user.click(within(twin).getByRole('button', { name: 'Dead' }));
+    expect(mutate.mock.lastCall?.[0].data.draft_data.kin_rows[0].fate).toBe('dead');
+    const betrothed = screen.getByRole('listitem', { name: 'A betrothed' });
+    expect(within(betrothed).getByRole('button', { name: 'Promised' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.click(within(betrothed).getByRole('button', { name: 'Broken off' }));
+    expect(mutate.mock.lastCall?.[0].data.draft_data.kin_rows[1].fate).toBe('broken');
+  });
+});

@@ -38,8 +38,8 @@ import {
 } from '../queries';
 import { Input } from '@/components/ui/input';
 import { ChapterLeaf, Paragraphs } from '../folio';
-import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
-import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
+import { PARENT_FATES, resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
+import type { CharacterDraft, Family, KinSlot, KinSlotPool, ParentFate, TarotCard } from '../types';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { KinRows } from './lineage/KinRows';
 import { LifeGrids } from './lineage/LifeGrids';
@@ -246,6 +246,11 @@ export function InventedParentsCard({
               ))}
             </SelectContent>
           </Select>
+          <ParentFateRow
+            label="Line parent fate"
+            value={draftData.line_parent_fate || 'alive'}
+            onChange={(fate) => commitDraftData({ line_parent_fate: fate })}
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="other-parent-name" className="text-xs">
@@ -275,6 +280,11 @@ export function InventedParentsCard({
               ))}
             </SelectContent>
           </Select>
+          <ParentFateRow
+            label="Other parent fate"
+            value={draftData.other_parent_fate || 'alive'}
+            onChange={(fate) => commitDraftData({ other_parent_fate: fate })}
+          />
           {!adoptive && (
             <Select
               value={
@@ -803,5 +813,31 @@ export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
         </CardContent>
       )}
     </Card>
+  );
+}
+
+/** A named parent's fate (#4870): alive, dead or missing, saved as it is picked. */
+function ParentFateRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: ParentFate;
+  onChange: (fate: ParentFate) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(fate) => onChange(fate as ParentFate)}>
+      <SelectTrigger aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {PARENT_FATES.map((fate) => (
+          <SelectItem key={fate.value} value={fate.value}>
+            {fate.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
