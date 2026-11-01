@@ -109,6 +109,7 @@ from world.magic.seeds_cast import ensure_technique_cast_content
 from world.magic.services.fury import get_berserk_template
 from world.magic.types.techniques import SoulfrayWarning
 from world.mechanics.factories import ModifierCategoryFactory
+from world.mechanics.maneuver_effects import ensure_maneuver_effects
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.relationships.constants import TypeValence
 from world.relationships.factories import (
@@ -138,7 +139,8 @@ def _berserk_of(character):
 
 
 # Two of these name the roster by persona (ruling 39), once for every participant.
-COMPELLED_READ_QUERIES = 28
+# One reads the attack check types behind the viewer's own Strike weapons (#4858).
+COMPELLED_READ_QUERIES = 29
 
 
 def knock_out_condition():
@@ -1047,6 +1049,21 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
         self.assertNoRoomRow("tries to")
         # The rage keeps the attack she steered it into; it is never swapped for its own.
         self.assertEqual(self.declared().maneuver, CombatManeuver.AWAIT_OPENING)
+
+    def test_a_basic_strike_is_an_attack_and_rolls_nothing(self) -> None:
+        # The Strike (#4858) carries no technique; the rage still counts it as an attack.
+        ensure_maneuver_effects()
+        CheckTypeFactory(name="Unarmed Attack")
+        told = self.telnet(self.mira, f"strike {self.captain.name}")
+        self.assertEqual(self.declared().maneuver, CombatManeuver.STRIKE, told)
+        self.assertNotIn("Against Berserk", told)
+
+        with self.resist_rolls() as spy:
+            self.resolve()
+
+        self.assertEqual(self.rolled_on(spy, self.berserk.compulsion.check_type), [])
+        self.assertNoRoomRow("tries to")
+        self.assertEqual(self.declared().maneuver, CombatManeuver.STRIKE)
 
     def test_idle_compelled_pc_is_auto_declared(self) -> None:
         with self.resist_rolls() as spy:

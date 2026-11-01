@@ -115,6 +115,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     compulsion: null,
     steady_plan: null,
     dig_deep: null,
+    strike_weapons: null,
     ...overrides,
   };
 }

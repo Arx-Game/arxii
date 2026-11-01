@@ -187,6 +187,11 @@ def _square_payload(
     return {"x": square[0], "y": square[1]} if square is not None else None
 
 
+# Surges written with no room line (``narrate=False``): their beats render no narration
+# and never reach a bystander (#4739 emotional-condition feed, #4858 missed attack).
+_UNANNOUNCED_SURGE_KINDS = frozenset({SurgeTriggerKind.CONDITION_FED, SurgeTriggerKind.MISSED})
+
+
 class OpponentSerializer(serializers.ModelSerializer):
     """Read serializer for combat opponents.
 
@@ -503,6 +508,19 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class StrikeWeaponOptionSerializer(serializers.Serializer):
+    """One thing the viewer's own character can Strike with (#4858); read-only."""
+
+    item_instance_id = serializers.IntegerField(
+        allow_null=True, help_text="The equipped weapon's item id; null for bare hands."
+    )
+    name = serializers.CharField(help_text="The weapon's name, or 'bare hands'.")
+    gear_kind = serializers.CharField(help_text="The weapon's gear kind, as players read it.")
+    strike_skill = serializers.CharField(
+        help_text="The strike skill its hit roll weights, or the check's name when it has none."
+    )
+
+
 class SteadyPlanSerializer(serializers.Serializer):
     """The viewer's own steady plan (#4802). Schema-only."""
 
@@ -589,6 +607,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     compulsion = serializers.SerializerMethodField()
     steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
+    strike_weapons = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -620,6 +639,32 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "compulsion",
             "steady_plan",
             "dig_deep",
+            "strike_weapons",
+        ]
+
+    @extend_schema_field(StrikeWeaponOptionSerializer(many=True, allow_null=True))
+    def get_strike_weapons(self, obj: CombatParticipant) -> list[dict[str, Any]] | None:
+        """What the viewer's own character can Strike with (#4858); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.services import strike_weapon_options  # noqa: PLC0415
+        from world.combat.services.declarations.strike import (  # noqa: PLC0415
+            strike_skill_names,
+        )
+        from world.items.constants import GearArchetype  # noqa: PLC0415
+
+        weapons = strike_weapon_options(obj.character_sheet.character)
+        skills = strike_skill_names({weapon.check_type_name for weapon in weapons})
+        return [
+            {
+                "item_instance_id": (
+                    weapon.item_instance.pk if weapon.item_instance is not None else None
+                ),
+                "name": weapon.name,
+                "gear_kind": GearArchetype(weapon.gear_archetype).label,
+                "strike_skill": skills[weapon.check_type_name],
+            }
+            for weapon in weapons
         ]
 
     def get_character_name(self, obj: CombatParticipant) -> str:
@@ -1079,6 +1124,7 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "combo_upgrade",
             "is_ready",
             "maneuver",
+            "item_instance",
             "cast_destination",
             "cast_position_a",
             "cast_position_b",
@@ -2055,11 +2101,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
             if not sees_detail and (
-                not beat["narration"] or record.trigger_kind == SurgeTriggerKind.CONDITION_FED
+                not beat["narration"] or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS
             ):
                 # Nothing was announced to the room (a control-only or condition-only
-                # surge, or an emotional condition's feed, #4739, which is never
-                # announced), so a bystander has no beat to show.
+                # surge, an emotional condition's feed, #4739, or a missed attack's
+                # intensity, #4858, neither ever announced), so a bystander has no beat.
                 continue
             if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind
@@ -2085,7 +2131,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
 
         curve = record.encounter.escalation_curve
-        if curve is None or record.amount == 0:
+        if curve is None or record.amount == 0 or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS:
             return ""
         return _render_surge_narration(curve, character_name)
 

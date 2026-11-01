@@ -214,6 +214,11 @@ def render_action_declaration_label(
     """
     technique = action.focused_action
     if technique is None:
+        from world.combat.constants import CombatManeuver  # noqa: PLC0415
+
+        if action.maneuver == CombatManeuver.STRIKE and action.focused_opponent_target_id:
+            # A basic Strike (#4858) carries no technique.
+            return f"Strike at {action.focused_opponent_target.name}"
         return "passives only"
 
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
@@ -765,15 +770,20 @@ def _victory_outcome_clauses(
     return clauses
 
 
-def broadcast_action_outcome(
+def broadcast_action_outcome(  # noqa: PLR0913 - keyword-only delivery options
     *,
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
     target_personas: list[Persona] | None = None,
+    telnet_exclude: Iterable[ObjectDB] = (),  # noqa: OBJECTDB_PARAM - room characters
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
+
+    ``telnet_exclude`` (#4858) names characters whose telnet sessions skip this line
+    because the caller tells them the same event in their own words; the web row and the
+    scene log are unchanged.
 
     Returns the created Interaction, or None when there is no narration
     text (empty string -> nothing to say). The OUTCOME is persisted in
@@ -878,7 +888,7 @@ def broadcast_action_outcome(
         # complete_encounter pushes immediately. _broadcast_to_location only
         # reaches webclient sessions with the structured payload, so this adds
         # the plain-text line for non-web sessions only -- nothing twice.
-        send_outcome_text_to_non_web(interaction, location=room)
+        send_outcome_text_to_non_web(interaction, location=room, exclude=telnet_exclude)
         return interaction
 
     # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match

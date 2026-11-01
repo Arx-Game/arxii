@@ -673,6 +673,26 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   opponent's state chip); no vow added effect can carry morale; the power valuation formula
   and the builder price (per point, like damage) are estimates awaiting tuning.
 
+- **Any character can Strike with no technique (#4858, slice 1 of #4844):** `strike <opp>
+  [with <weapon>]`, `combat strike`, and the web Your Turn "Strike" control (opponent plus a
+  weapon pick naming each weapon's gear kind and strike skill) declare a Strike with an
+  equipped weapon or bare hands. The hit roll uses the attack check for the weapon's kind
+  (production's Melee, Ranged, Thrown or Unarmed Attack: its strike skill and the weapon's
+  stat); a landed Strike's damage
+  roll scales the weapon's damage and never deals less than the Strike's base damage; bare
+  hands deal the bare-hands damage; a vow on "Strike: base damage" adds to every landed
+  Strike. The Last Outcome card shows the hit roll then the damage roll as rows (skill and
+  rating, stat, intensity, weapon and quality, "Hit, good" / "11 damage"); the striker's telnet
+  hears it in the second person, the room in the third. A miss (Strike or
+  technique) raises intensity, and intensity adds to every hit roll. Proven by
+  `src/integration_tests/test_strike_journeys.py` and the `StrikeControl` / `CombatTurnPanel`
+  Vitest suites. **Known gaps (later #4844 slices):** no combat style (skill, hit stat,
+  lapsing bonus) on the roll yet (slice 2); natural weapons (slice 4); production has no
+  Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
+  a plain message until staff author them (Required content `strike-check-types`); the
+  breakdown's skill rating is read when shown, not stored with the roll; a Strike's damage roll
+  takes no modifiers and no opponent-property damage bonus.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC

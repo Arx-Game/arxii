@@ -189,6 +189,12 @@ class ManeuverEffectKey(models.TextChoices):
     )
     RALLY_MORALE = "rally_morale", "Rally: morale"
     RALLY_SURGE_INTENSITY = "rally_surge_intensity", "Rally: surge intensity"
+    # The basic Strike (#4858).
+    STRIKE_BASE_DAMAGE = "strike_base_damage", "Strike: base damage"
+    STRIKE_BARE_HANDS_DAMAGE = "strike_bare_hands_damage", "Strike: bare-hands damage"
+    # A missed attack builds intensity, and intensity adds to hit (#4858).
+    MISS_INTENSITY = "miss_intensity", "Miss: intensity gained"
+    INTENSITY_TO_HIT = "intensity_to_hit", "Intensity: to hit per point"
 
 
 class EffectKind(models.TextChoices):
@@ -204,6 +210,8 @@ class EffectKind(models.TextChoices):
     PARTIAL_PROTECTION = "partial_protection", "Partial protection"
     MORALE = "morale", "Morale"
     SURGE_INTENSITY = "surge_intensity", "Surge intensity"
+    # Points added to an engagement's intensity (#4858). Surge intensity is a percentage.
+    INTENSITY = "intensity", "Intensity"
     CONDITION_SEVERITY = "condition_severity", "Condition severity"
     CONDITION_DURATION = "condition_duration", "Condition duration"
 
@@ -232,11 +240,17 @@ MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: EffectKind.PARTIAL_PROTECTION,
     ManeuverEffectKey.RALLY_MORALE: EffectKind.MORALE,
     ManeuverEffectKey.RALLY_SURGE_INTENSITY: EffectKind.SURGE_INTENSITY,
+    ManeuverEffectKey.STRIKE_BASE_DAMAGE: EffectKind.DAMAGE,
+    ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: EffectKind.DAMAGE,
+    ManeuverEffectKey.MISS_INTENSITY: EffectKind.INTENSITY,
+    ManeuverEffectKey.INTENSITY_TO_HIT: EffectKind.TO_HIT,
 }
 
 # Today's number for each effect: what a maneuver gives with no modifier anywhere.
 # Charge hops, Cover per coverer, partial protection and surge intensity are
-# percentages or counts as their kind says; morale is per success level.
+# percentages or counts as their kind says; morale is per success level. A Strike's base
+# damage is the least a landed Strike deals; bare hands are the weakest Unarmed weapon and
+# their own floor. Intensity to hit is check points per point of engagement intensity.
 MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
     ManeuverEffectKey.CHARGE_TO_HIT: 10,
     ManeuverEffectKey.CHARGE_DAMAGE: 5,
@@ -246,4 +260,8 @@ MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
     ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: 50,
     ManeuverEffectKey.RALLY_MORALE: 15,
     ManeuverEffectKey.RALLY_SURGE_INTENSITY: 100,
+    ManeuverEffectKey.STRIKE_BASE_DAMAGE: 3,
+    ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: 2,
+    ManeuverEffectKey.MISS_INTENSITY: 1,
+    ManeuverEffectKey.INTENSITY_TO_HIT: 1,
 }
