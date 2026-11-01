@@ -47,6 +47,8 @@ if TYPE_CHECKING:
 Pip = tuple[int, int]
 # One pip a write touched: (x, y, holder before, holder after); None is open ground.
 PipChange = tuple[int, int, int | None, int | None]
+# A pip and the holder to give it: (x, y, area id), None for open ground.
+PipHolder = tuple[int, int, int | None]
 
 MAX_MAP_FILE_BYTES = 64 * 1024 * 1024
 MAX_WIDTH_CELLS = 100
@@ -353,6 +355,7 @@ def set_footprint(
 
 
 _NO_FOOTPRINT_BELOW_BARONY = "Only a barony or a larger domain has a footprint."
+_NO_SUCH_AREA = "No such area."
 
 
 def clear_footprint(*, area: Area) -> FootprintChange:
@@ -382,6 +385,61 @@ def clear_footprint(*, area: Area) -> FootprintChange:
             if rows:
                 AreaFootprintPip.objects.filter(pk__in=[row.pk for row in rows]).delete()
     return FootprintChange(removed=len(rows), changed=tuple(changed))
+
+
+def _wanted_holders(pips: Iterable[PipHolder]) -> tuple[dict[Pip, int | None], dict[int, Area]]:
+    """The pips a restore names, deduped (last wins) and capped, with their areas loaded;
+    refuses an area that does not exist or sits below BARONY."""
+    wanted: dict[Pip, int | None] = {}
+    for x, y, area_id in pips:
+        if len(wanted) >= MAX_FOOTPRINT_PIPS_PER_CALL and (x, y) not in wanted:
+            break
+        wanted[(x, y)] = area_id
+    area_ids = {area_id for area_id in wanted.values() if area_id is not None}
+    areas = {a.pk: a for a in Area.objects.filter(pk__in=area_ids)}
+    if len(areas) != len(area_ids):
+        raise WorldMapServiceError(_NO_SUCH_AREA)
+    if any(area.level < AreaLevel.BARONY for area in areas.values()):
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
+    return wanted, areas
+
+
+def restore_pips(*, pips: Iterable[PipHolder]) -> int:
+    """Give each pip the holder named for it, or open ground for None (#4905). This is
+    the staff undo and redo: a carve or clear reports every pip's holder before and
+    after, and restoring one column puts the map back in a state it has already been
+    in, so no containment rule is checked beyond the staff gate on the action. The
+    last entry wins for a pip named twice; the call is capped like a carve. Refuses
+    an area that does not exist or sits below BARONY. Returns the rows written."""
+    wanted, areas = _wanted_holders(pips)
+    if not wanted:
+        return 0
+    with transaction.atomic():
+        held = _rows_at(set(wanted))
+        to_delete: list[int] = []
+        to_move: list[AreaFootprintPip] = []
+        fresh: list[AreaFootprintPip] = []
+        for pip, area_id in wanted.items():
+            row = held.get(pip)
+            if area_id is None:
+                if row is not None:
+                    to_delete.append(row.pk)
+            elif row is None:
+                fresh.append(AreaFootprintPip(area=areas[area_id], x=pip[0], y=pip[1]))
+            elif row.area_id != area_id:
+                row.area = areas[area_id]
+                to_move.append(row)
+        if to_delete:
+            AreaFootprintPip.objects.filter(pk__in=to_delete).delete()
+        if to_move:
+            AreaFootprintPip.objects.bulk_update_with_reason(
+                to_move,
+                ["area"],
+                batch_size=5000,
+                reason="restore moves rows loaded in this transaction",
+            )
+        AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
+    return len(to_delete) + len(to_move) + len(fresh)
 
 
 def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:

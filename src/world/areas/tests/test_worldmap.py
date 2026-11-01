@@ -44,6 +44,7 @@ from world.areas.worldmap.services import (
     import_region_map_file,
     paint_terrain,
     region_read,
+    restore_pips,
     set_footprint,
 )
 
@@ -328,6 +329,27 @@ class FootprintServiceTests(TestCase):
             clear_footprint(
                 area=AreaFactory(name="Ward2", level=AreaLevel.WARD, parent=self.barony)
             )
+
+    def test_restore_puts_pips_back_with_their_prior_holders(self) -> None:
+        duchy = AreaFactory(name="Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
+        county = AreaFactory(name="County2", level=AreaLevel.COUNTY, parent=duchy)
+        set_footprint(area=self.kingdom, add=[(6, 6), (7, 6)])
+        change = set_footprint(area=county, add=[(6, 6), (7, 6), (8, 6)])
+        # an inverse carve would hand (6, 6) to the duchy; a restore hands it to the kingdom
+        before = [(x, y, prior) for x, y, prior, _after in change.changed]
+        assert restore_pips(pips=before) == 3
+        assert holder_at(6, 6) == self.kingdom
+        assert holder_at(8, 6) is None
+        after = [(x, y, new) for x, y, _prior, new in change.changed]
+        assert restore_pips(pips=after) == 3
+        assert holder_at(8, 6) == county
+        assert AreaFootprintPip.objects.filter(x=6, y=6).count() == 1
+        assert restore_pips(pips=[(6, 6, self.kingdom.pk), (6, 6, self.kingdom.pk)]) == 1
+        assert holder_at(6, 6) == self.kingdom
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=[(6, 6, AreaFactory(name="W3", level=AreaLevel.WARD).pk)])
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=[(6, 6, 999999)])
 
 
 class RegionMapApiTests(TestCase):
