@@ -590,7 +590,13 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): first settle the evidence challenge (Step 6a), then run
   `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
   report against the reviewed code revision, refuses while an open code-scanning
-  alert or unresolved review thread sits on the PR head ref, and only then arms squash auto-merge. Then post a
+  alert or unresolved review thread sits on the PR head ref, refuses while SonarCloud
+  holds an open issue on the PR's new code or has not analyzed its head yet (#4850),
+  and only then arms squash auto-merge. **Every SonarCloud issue is fixed before
+  merge, always**: SonarCloud's quality gate passes with issues open and its comment
+  says "Quality Gate passed", so the gate is the issue count, not the badge. Change the
+  code so the rule stops firing and push; only an issue the maintainer has marked
+  Accepted or False positive in SonarCloud stops counting. Then post a
   brief status comment. **Do NOT re-sync with main or merge by
   hand.** The merge queue re-tests the PR on top of the latest main and merges it in
   order once a human approves - that human approval is the only remaining gate. If
@@ -606,8 +612,9 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
   - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
-    unresolved review thread or an open evidence challenge, so it will never merge on
-    its own. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
+    unresolved review thread, an open evidence challenge or an open SonarCloud issue
+    on its analyzed head (#4850), so it will never merge on its own (the SonarCloud
+    issue merges, but must not). For a SonarCloud issue, fix it as above and push. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
     flags, push, reply on the thread, and resolve it (`gh api graphql` with
     `resolveReviewThread`). For an evidence challenge with `verdict=open`, answer it
     with an `<!-- evidence-answer -->` comment: what was run, expected, seen, and the

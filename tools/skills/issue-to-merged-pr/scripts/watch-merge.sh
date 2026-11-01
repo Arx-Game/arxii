@@ -20,9 +20,10 @@
 #   8  CONFLICTING   - merge conflicts with main; merge main in, push, re-enqueue
 #   9  DROPPED       - open, but neither queued nor armed (the queue ejected it,
 #                      a check failed in the queue, or auto-merge was turned off)
-#  10  NEEDS_ANSWER  - armed or queued, but an unresolved review thread or an open
-#                      evidence challenge is holding it (#4834): fix what it flags,
-#                      reply, resolve the thread or post an evidence-answer, re-enqueue
+#  10  NEEDS_ANSWER  - armed or queued, but an unresolved review thread, an open
+#                      evidence challenge (#4834) or an open SonarCloud issue on the
+#                      analyzed head (#4850) is holding it: fix what it flags, reply,
+#                      resolve the thread or post an evidence-answer, re-enqueue
 #
 # Env: WATCH_MERGE_INTERVAL (seconds between polls, default 120),
 #      WATCH_MERGE_CAP (seconds, default 6600: under the harness's two-hour limit on a
@@ -36,11 +37,15 @@ PR="$1"
 [[ "$PR" =~ ^[0-9]+$ ]] || usage
 
 INTERVAL="${WATCH_MERGE_INTERVAL:-120}"
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_sonar-helpers.sh"
 CAP="${WATCH_MERGE_CAP:-6600}"
 
 # shellcheck disable=SC2016  # GraphQL variables, not shell expansions.
 QUERY='query($o:String!,$r:String!,$p:Int!){repository(owner:$o,name:$r){
-  pullRequest(number:$p){state mergeStateStatus reviewDecision
+  pullRequest(number:$p){state headRefOid mergeStateStatus reviewDecision
     autoMergeRequest{enabledAt} mergeQueueEntry{state position}
     reviewThreads(first:100){nodes{isResolved}}
     comments(last:50){nodes{body}}}}}'
@@ -49,7 +54,8 @@ REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 OWNER="${REPO%%/*}"
 NAME="${REPO##*/}"
 
-# Emit one of: MERGED, CLOSED, CONFLICTING, NEEDS_ANSWER <detail>, UNARMED, WAITING <detail>.
+# Emit "<head sha> <state>", the state one of: MERGED, CLOSED, CONFLICTING,
+# NEEDS_ANSWER <detail>, UNARMED, WAITING <detail>.
 # An evidence challenge is open when the NEWEST challenge comment (any verdict) says
 # verdict=open and no evidence-answer comment comes after it. Both markers must open the
 # comment: the challenger's own text quotes the answer marker in its instructions.
@@ -57,6 +63,7 @@ poll() {
   local json
   json=$(gh api graphql -f query="$QUERY" -f o="$OWNER" -f r="$NAME" -F p="$PR") || return 1
   jq -r '.data.repository.pullRequest
+    | (.headRefOid // "none") as $head
     | [(.reviewThreads.nodes // [])[] | select(.isResolved | not)] as $open_threads
     | ((.comments.nodes // []) | to_entries) as $comments
     | ([$comments[] | select(.value.body | test("^\\s*<!-- evidence-challenge"))] | last)
@@ -74,15 +81,28 @@ poll() {
         then "NEEDS_ANSWER evidence challenge open"
       elif .mergeQueueEntry != null then "WAITING queued \(.mergeQueueEntry.state) position \(.mergeQueueEntry.position)"
       elif .autoMergeRequest != null then "WAITING armed, review \(.reviewDecision)"
-      else "UNARMED" end' <<<"$json"
+      else "UNARMED" end
+    | "\($head) \(.)"' <<<"$json"
 }
 
 elapsed=0
 errors=0
 unarmed=0
 while :; do
-  if state=$(poll); then
+  if polled=$(poll); then
     errors=0
+    head="${polled%% *}"
+    state="${polled#* }"
+    # A waiting PR still has to carry no SonarCloud issue (#4850). Only an analysis
+    # of the current head counts; one still pending, or SonarCloud not answering,
+    # keeps waiting.
+    if [[ "$state" == WAITING* && "$head" != none ]]; then
+      sonar=$(sonar_gate "$PR" "$head")
+      sonar="${sonar%%$'\n'*}"
+      if [[ "$sonar" == OPEN* ]]; then
+        state="NEEDS_ANSWER ${sonar#OPEN } open SonarCloud issue(s)"
+      fi
+    fi
   else
     errors=$((errors + 1))
     if (( errors >= 3 )); then

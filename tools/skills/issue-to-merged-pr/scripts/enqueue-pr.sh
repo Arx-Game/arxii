@@ -14,7 +14,7 @@
 #
 # Exits:
 #   0  auto-merge enabled (or already enabled)
-#   1  usage / generic error / unresolved review threads
+#   1  usage / generic error / unresolved review threads / open SonarCloud issues
 set -euo pipefail
 
 DRY_RUN=0
@@ -30,6 +30,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/_wt-helpers.sh"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_evidence-helpers.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_sonar-helpers.sh"
 REPO_FULL=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 REPO_OWNER=${REPO_FULL%%/*}
 REPO_NAME=${REPO_FULL##*/}
@@ -145,6 +147,31 @@ Read them with:
 MSG
   exit 1
 fi
+
+# SonarCloud's quality gate can pass with issues open, and its findings fail no
+# check (#4850): #4841 and #4845 reached the queue carrying one each. Every one is
+# fixed before merge. ENQUEUE_HEAD_SHA substitutes the PR head (tests, no network).
+HEAD_SHA="${ENQUEUE_HEAD_SHA:-$(gh pr view "$PR" --json headRefOid --jq .headRefOid)}"
+SONAR=$(sonar_gate "$PR" "$HEAD_SHA")
+case "$(head -n 1 <<<"$SONAR")" in
+  CLEAN) ;;
+  OPEN*)
+    echo "ERROR: PR #$PR has open SonarCloud issues on its new code:" >&2
+    tail -n +2 <<<"$SONAR" >&2
+    cat >&2 <<'MSG'
+
+A passing quality gate is not enough: fix each one in the code and push. Only an
+issue the maintainer has marked Accepted or False positive in SonarCloud stops
+counting; rewriting the code so the rule no longer fires is the agent's path.
+MSG
+    exit 1 ;;
+  PENDING*)
+    echo "ERROR: SonarCloud has not analyzed PR #$PR's head ${HEAD_SHA:0:9} yet (newest: ${SONAR#PENDING }). Wait for its comment on the PR, then re-run." >&2
+    exit 1 ;;
+  *)
+    echo "ERROR: SonarCloud did not answer for PR #$PR; re-run when it does." >&2
+    exit 1 ;;
+esac
 
 # The ruleset requires every review thread resolved before merge (#4510). An
 # agent that replied to the code reviewer's threads and enqueued anyway left the
