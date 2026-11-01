@@ -647,6 +647,10 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
+  `strike <opp> [with <weapon>]` (#4858) declares a basic Strike (`combat_strike`), bare-handed
+  with no `with` clause; `CmdStrike` (key `strike`) is the same subverb as a top-level verb,
+  the one exception to the namespacing above, because the Strike is every character's basic
+  attack (the demo's telnet screen types `strike bandit with rapier`).
   `steady [on|off]` (#4802) sets the caller's steady plan beside `dodge`: it dispatches
   `SteadyPlanAction` (key `combat_steady`). Turning it on needs the steadying capability
   above its baseline and otherwise answers "Nothing you have lets you steady an ally.";

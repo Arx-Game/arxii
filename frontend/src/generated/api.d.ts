@@ -31730,6 +31730,7 @@ export interface components {
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
       readonly action_interaction_id: number | null;
+      readonly roll_breakdown: components['schemas']['RollBreakdown'] | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -35393,6 +35394,7 @@ export interface components {
      *     * `thrown` - Thrown
      *     * `shield` - Shield
      *     * `lance` - Lance
+     *     * `unarmed` - Unarmed
      *     * `jewelry` - Jewelry
      *     * `clothing` - Clothing
      *     * `other` - Other
@@ -35409,6 +35411,7 @@ export interface components {
       | 'thrown'
       | 'shield'
       | 'lance'
+      | 'unarmed'
       | 'jewelry'
       | 'clothing'
       | 'other';
@@ -44679,6 +44682,7 @@ export interface components {
       readonly compulsion: components['schemas']['Compulsion'] | null;
       readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
+      readonly strike_weapons: components['schemas']['StrikeWeaponOption'][] | null;
     };
     /**
      * @description Read serializer for combat participants.
@@ -49374,6 +49378,19 @@ export interface components {
      * @enum {string}
      */
     RoleEnum: 'attacker' | 'defender';
+    /** @description A roll laid out as a heading, source rows and a result line (#4858); read-only. */
+    RollBreakdown: {
+      heading: string;
+      lines: components['schemas']['RollLine'][];
+      result: string;
+      result_note: string;
+    };
+    /** @description One source row in a roll breakdown (#4858); read-only, schema shape. */
+    RollLine: {
+      label: string;
+      value: string;
+      detail: string;
+    };
     RoomAlarmDetails: {
       /** @description The room this alarm watches. */
       room_profile: number;
@@ -52346,6 +52363,17 @@ export interface components {
      * @enum {integer}
      */
     StrengthEnum: 1 | 2 | 3;
+    /** @description One thing the viewer's own character can Strike with (#4858); read-only. */
+    StrikeWeaponOption: {
+      /** @description The equipped weapon's item id; null for bare hands. */
+      item_instance_id: number | null;
+      /** @description The weapon's name, or 'bare hands'. */
+      name: string;
+      /** @description The weapon's gear kind, as players read it. */
+      gear_kind: string;
+      /** @description The strike skill its hit roll weights, or the check's name when it has none. */
+      strike_skill: string;
+    };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {
       readonly id: number;
@@ -65373,6 +65401,7 @@ export interface operations {
          *     * `thrown` - Thrown
          *     * `shield` - Shield
          *     * `lance` - Lance
+         *     * `unarmed` - Unarmed
          *     * `jewelry` - Jewelry
          *     * `clothing` - Clothing
          *     * `other` - Other
@@ -65390,7 +65419,8 @@ export interface operations {
           | 'ranged'
           | 'robe'
           | 'shield'
-          | 'thrown';
+          | 'thrown'
+          | 'unarmed';
       };
       header?: never;
       path?: never;

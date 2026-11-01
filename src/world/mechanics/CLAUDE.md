@@ -14,7 +14,7 @@ The mechanics app centralizes all game mechanical calculations:
 ### `models.py`
 - **`ModifierCategory`**: Categories for organizing modifier targets (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
 - **`ModifierTarget`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching. Has an optional `target_trait` FK for stat-category targets.
-- **`ManeuverEffect`** (#4783): the fixed catalog of eight named maneuver numbers (`key` unique, `base_value`, staff `notes`). Staff edit a base value and cannot add or delete a row; code finds a row by `key`, never by name (`ensure_maneuver_effects`, `get_maneuver_effect` in `maneuver_effects.py`).
+- **`ManeuverEffect`** (#4783): the fixed catalog of twelve named maneuver numbers (the Strike and miss rows added by #4858) (`key` unique, `base_value`, staff `notes`). Staff edit a base value and cannot add or delete a row; code finds a row by `key`, never by name (`ensure_maneuver_effects`, `get_maneuver_effect` in `maneuver_effects.py`).
 - **`CharacterModifier`**: Active modifiers on a character with source tracking and direct target FK. Uses regular Model (not SharedMemoryModel) since this is per-character data.
 
 ### `types.py`

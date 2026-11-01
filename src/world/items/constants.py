@@ -270,6 +270,9 @@ class GearArchetype(models.TextChoices):
     THROWN = "thrown", "Thrown"
     SHIELD = "shield", "Shield"
     LANCE = "lance", "Lance"
+    # Fists, wraps and natural weapons (#4858). Bare hands are the Unarmed weapon with the
+    # lowest damage and need no item.
+    UNARMED = "unarmed", "Unarmed"
     JEWELRY = "jewelry", "Jewelry"
     CLOTHING = "clothing", "Clothing"
     OTHER = "other", "Other"
@@ -277,7 +280,8 @@ class GearArchetype(models.TextChoices):
 
 # Archetype groupings for combat-stat gating (issue #508). SHIELD appears in
 # both: a shield can soak and (rarely) bash. LANCE (#1843) is a mounted-combat
-# weapon archetype — off-mount attacks take LANCE_UNMOUNTED_PENALTY.
+# weapon archetype: off-mount attacks take LANCE_UNMOUNTED_PENALTY. UNARMED (#4858) is
+# the Strike's Unarmed kind: wraps, gauntlets and natural weapons.
 WEAPON_ARCHETYPES = frozenset(
     {
         GearArchetype.MELEE_ONE_HAND,
@@ -286,6 +290,7 @@ WEAPON_ARCHETYPES = frozenset(
         GearArchetype.THROWN,
         GearArchetype.SHIELD,
         GearArchetype.LANCE,
+        GearArchetype.UNARMED,
     }
 )
 ARMOR_ARCHETYPES = frozenset(

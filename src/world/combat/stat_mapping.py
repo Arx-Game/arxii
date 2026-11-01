@@ -23,6 +23,7 @@ from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character as CharacterType
+    from world.items.models import ItemInstance
 
 # GearArchetype → stat name. None = use the check's default stat.
 WEAPON_ARCHETYPE_STAT_MAP: dict[str, str | None] = {
@@ -50,7 +51,15 @@ def weapon_stat_override(character: CharacterType) -> str | int | None:
     """
     from world.combat.services import _select_equipped_weapon  # noqa: PLC0415
 
-    inst = _select_equipped_weapon(character)
+    return weapon_stat_for(_select_equipped_weapon(character))
+
+
+def weapon_stat_for(inst: ItemInstance | None) -> str | int | None:
+    """The stat override for one weapon instance, or None (bare hands, unmapped kind).
+
+    The same rule as ``weapon_stat_override``, for a weapon the caller already chose: a
+    Strike rolls with the weapon the player picked, not the strongest one (#4858).
+    """
     if inst is None:
         return None
     weapon_class = inst.template.weapon_class

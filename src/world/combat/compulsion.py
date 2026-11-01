@@ -250,8 +250,11 @@ def _is_compelled_attack(action: CombatRoundAction) -> bool:
 
     A technique at an opponent with no maneuver, or an attack maneuver with its strike
     technique: a charge, a joust, a waiting strike (a joust and a waiting strike name no
-    opponent until they land).
+    opponent until they land). A basic Strike (#4858) needs no technique: it is an attack
+    whenever it names an opponent.
     """
+    if action.maneuver == CombatManeuver.STRIKE:
+        return action.focused_opponent_target_id is not None
     if action.focused_action_id is None:
         return False
     if action.maneuver:

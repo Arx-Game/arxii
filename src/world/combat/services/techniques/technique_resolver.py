@@ -66,10 +66,11 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult, ExtraTraitTerm
-    from world.combat.types import WeaponContribution
+    from world.checks.types import CheckResult, ExtraTraitTerm, ModifierBreakdown
+    from world.combat.types import StrikeWeapon, WeaponContribution
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.types import FiredVowEffect
@@ -183,9 +184,34 @@ class CombatTechniqueResolver:
     offense_check_fn: PerformCheckFn | None
     # Skill terms the cast adds to the offense roll (the technique skill, #4450).
     offense_extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    # A basic Strike's chosen weapon (#4858). Set, the roll reads this weapon (bare hands
+    # when its item is None) instead of the strongest one equipped.
+    strike_weapon: StrikeWeapon | None = None
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
+        return self.roll_check_with_breakdown()[0]
+
+    def _weapon_archetype(self, character: Character) -> str | None:
+        """The gear kind this roll is made with: the Strike's chosen weapon, else the
+        strongest equipped weapon's."""
+        if self.strike_weapon is not None:
+            return self.strike_weapon.gear_archetype
+        return _equipped_weapon_archetype(character)
+
+    def _stat_override(self, character: Character) -> str | int | None:
+        """The stat the roll uses in place of the check's default, from the weapon."""
+        from world.combat.stat_mapping import (  # noqa: PLC0415
+            weapon_stat_for,
+            weapon_stat_override,
+        )
+
+        if self.strike_weapon is not None:
+            return weapon_stat_for(self.strike_weapon.item_instance)
+        return weapon_stat_override(character)
+
+    def roll_check_with_breakdown(self) -> tuple[CheckResult, ModifierBreakdown]:
+        """Roll the offense check; return it and the modifiers it was rolled with."""
         check_fn = self.offense_check_fn or _svc.perform_check
         penalty = get_fatigue_penalty(
             self.participant.character_sheet,
@@ -230,7 +256,16 @@ class CombatTechniqueResolver:
         from world.items.constants import GearArchetype  # noqa: PLC0415
 
         character = self.participant.character_sheet.character
-        weapon_archetype = _equipped_weapon_archetype(character)
+        weapon_archetype = self._weapon_archetype(character)
+
+        # Intensity adds to hit (#4858): misses build it, and it counts on every attack.
+        from world.combat.services.techniques.intensity import (  # noqa: PLC0415
+            intensity_to_hit_contribution,
+        )
+
+        intensity_contribution = intensity_to_hit_contribution(self.participant, self.action)
+        if intensity_contribution is not None:
+            extra_contributions.append(intensity_contribution)
 
         if self.action.maneuver == CombatManeuver.CHARGE:
             charge_bonus = _charge_effect(
@@ -325,9 +360,7 @@ class CombatTechniqueResolver:
             if focused is not None
             else 0
         )
-        from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
-
-        stat_override = weapon_stat_override(character)
+        stat_override = self._stat_override(character)
         result = check_fn(
             character,
             self.offense_check_type,
@@ -342,7 +375,7 @@ class CombatTechniqueResolver:
         spend_contributing_conditions(breakdown)
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
 
-        return floor_ultimate_check(result, self.action.focused_action)
+        return floor_ultimate_check(result, self.action.focused_action), breakdown
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""

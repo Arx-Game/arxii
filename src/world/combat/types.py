@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         DamageInteractionResult,
         RemovedConditionResult,
     )
+    from world.items.models import ItemInstance
     from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
@@ -199,6 +200,24 @@ class ActionOutcome:
     damage_consequences: list[DamageConsequenceResult] = field(default_factory=list)
     participant_id: int | None = None
     effect_type_id: int | None = None
+
+
+@dataclass(frozen=True)
+class StrikeWeapon:
+    """What a basic Strike is made with (#4858): one equipped weapon, or bare hands.
+
+    ``item_instance`` is None for bare hands, whose gear kind is Unarmed.
+    ``check_type_name`` names the strike skill's check type the hit roll uses.
+    """
+
+    item_instance: ItemInstance | None
+    name: str
+    gear_archetype: str
+    check_type_name: str
+
+    @property
+    def is_bare_hands(self) -> bool:
+        return self.item_instance is None
 
 
 @dataclass

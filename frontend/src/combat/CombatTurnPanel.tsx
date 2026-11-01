@@ -40,6 +40,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
+import { RollBreakdownCard } from './components/RollBreakdownCard';
 import { StandoffCard } from './standoff/StandoffCard';
 import { StandoffSummaryCard } from './standoff/StandoffSummaryCard';
 import type { EncounterDetail } from './types';
@@ -117,13 +118,26 @@ export function CombatTurnPanel({
   // Available COMBAT-backend actions for the character (includes clash refs) and its moves.
   const { data: combatActions } = useAvailableActions(characterId);
 
-  // Most recent consequence outcome for this character scoped to the current encounter.
+  // The most recent roll this character made in the current encounter, with the roll
+  // before it when both came from one action: a Strike records its hit roll and then its
+  // damage roll on one interaction (#4858). Shown oldest first.
   const { data: consequenceOutcomes } = useConsequenceOutcomes({
     character: characterId,
     encounter: encounterId,
-    page_size: 1,
+    page_size: 2,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
+  const latestOutcomes =
+    latestOutcome === null
+      ? []
+      : (consequenceOutcomes ?? [])
+          .filter(
+            (row) =>
+              row === latestOutcome ||
+              (latestOutcome.combat_interaction_id != null &&
+                row.combat_interaction_id === latestOutcome.combat_interaction_id)
+          )
+          .reverse();
 
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
@@ -452,13 +466,24 @@ export function CombatTurnPanel({
             </span>
           </button>
           {!collapsed.outcomeRoulette && (
-            <div className="border-t border-border px-3 py-2">
-              <OutcomeRoulette
-                outcomeDisplay={latestOutcome.outcome_display}
-                modifiers={latestOutcome.modifiers}
-                modifierTotal={latestOutcome.modifier_total}
-                summary={latestOutcome.summary}
-              />
+            <div className="space-y-3 border-t border-border px-3 py-2">
+              {latestOutcomes.map((row) =>
+                row.roll_breakdown ? (
+                  <RollBreakdownCard key={row.id} breakdown={row.roll_breakdown} />
+                ) : (
+                  <OutcomeRoulette
+                    key={row.id}
+                    // A roll with no pool and no challenge has no roulette: never show
+                    // the server's placeholder row as if it were a result.
+                    outcomeDisplay={
+                      !row.pool && !row.challenge_record_id ? [] : row.outcome_display
+                    }
+                    modifiers={row.modifiers}
+                    modifierTotal={row.modifier_total}
+                    summary={row.summary}
+                  />
+                )
+              )}
             </div>
           )}
         </div>

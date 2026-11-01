@@ -96,6 +96,20 @@ export interface ActionDeclarationCardProps {
    * beside the anima strain. Omitted when no pull is chosen.
    */
   strainBurn?: StrainBurn;
+  /**
+   * A pick shown first in the action pick row, ahead of the techniques (combat's Strike,
+   * #4858). Picked, its panel sits directly under the row and the technique-only sections
+   * (effort, cost, thread pulls) step aside; the target selection stays shared.
+   */
+  leadingPick?: LeadingPick;
+}
+
+export interface LeadingPick {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+  /** Shown under the pick row while the pick is selected. */
+  panel: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,10 +182,17 @@ interface TechniquePickerProps {
   selectedId: number | undefined;
   onSelect: (techniqueId: number) => void;
   disabled?: boolean;
+  leadingPick?: LeadingPick;
 }
 
-function TechniquePicker({ techniques, selectedId, onSelect, disabled }: TechniquePickerProps) {
-  if (techniques.length === 0) {
+function TechniquePicker({
+  techniques,
+  selectedId,
+  onSelect,
+  disabled,
+  leadingPick,
+}: TechniquePickerProps) {
+  if (techniques.length === 0 && leadingPick === undefined) {
     return <p className="text-xs text-muted-foreground">No techniques available.</p>;
   }
 
@@ -181,6 +202,24 @@ function TechniquePicker({ techniques, selectedId, onSelect, disabled }: Techniq
 
   return (
     <div className="flex flex-wrap gap-1.5">
+      {leadingPick !== undefined && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={leadingPick.onSelect}
+          aria-pressed={leadingPick.selected}
+          data-testid="leading-pick"
+          className={cn(
+            'rounded border px-2.5 py-1 text-left text-xs font-medium transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            leadingPick.selected
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border bg-background text-foreground hover:border-primary/50'
+          )}
+        >
+          {leadingPick.label}
+        </button>
+      )}
       {ordered.map((action) => {
         const techId = action.ref.technique_id;
         if (techId === null) return null;
@@ -669,6 +708,7 @@ export function ActionDeclarationCard({
   strainMax,
   strainPreview,
   strainBurn,
+  leadingPick,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
@@ -762,6 +802,7 @@ export function ActionDeclarationCard({
   }
 
   const hasTechnique = actionContext.techniqueId !== undefined;
+  const leadingPicked = leadingPick?.selected === true;
 
   const renderTechniqueDetail = () => {
     if (castPreview) {
@@ -777,27 +818,34 @@ export function ActionDeclarationCard({
     if (isLoading) {
       return <p className="text-xs text-muted-foreground">Loading techniques...</p>;
     }
-    if (!hasTechnique) {
-      return (
-        <div className="space-y-2">
-          <p className="text-xs italic text-muted-foreground">Pick a technique</p>
-          <TechniquePicker
-            techniques={techniques}
-            selectedId={actionContext.techniqueId}
-            onSelect={handleTechniqueSelect}
-            disabled={readOnly}
-          />
-        </div>
-      );
-    }
-    return (
+    const picker = (
       <TechniquePicker
         techniques={techniques}
         selectedId={actionContext.techniqueId}
         onSelect={handleTechniqueSelect}
         disabled={readOnly}
+        leadingPick={leadingPick}
       />
     );
+    if (leadingPicked) {
+      return (
+        <div className="space-y-2">
+          {picker}
+          {leadingPick?.panel}
+        </div>
+      );
+    }
+    if (!hasTechnique) {
+      return (
+        <div className="space-y-2">
+          <p className="text-xs italic text-muted-foreground">
+            {leadingPick === undefined ? 'Pick a technique' : 'Pick an action'}
+          </p>
+          {picker}
+        </div>
+      );
+    }
+    return picker;
   };
 
   return (
@@ -810,8 +858,10 @@ export function ActionDeclarationCard({
         {castPreview && <ICChip intensity={castPreview.intensity} control={castPreview.control} />}
       </div>
 
-      {/* Technique section */}
-      <Section label="Technique">{renderTechniquePicker()}</Section>
+      {/* Technique section: "Your action" when a leading pick (Strike) joins the row */}
+      <Section label={leadingPick === undefined ? 'Technique' : 'Your action'}>
+        {renderTechniquePicker()}
+      </Section>
 
       {/* Target section */}
       <Section label="Target">
@@ -844,107 +894,111 @@ export function ActionDeclarationCard({
       )}
 
       {/* Effort section */}
-      <Section label="Effort">
-        <EffortSelector
-          selected={actionContext.effort}
-          onChange={handleEffortChange}
-          disabled={readOnly}
-        />
-        {/* Strain (#3446) — the push-yourself anima overcommit on an ordinary
-         * declared cast. Mirrors the per-clash strain slider in YourTurn;
-         * capped by available_strain, validated again server-side. */}
-        {strainMax !== undefined && actionContext.techniqueId !== undefined && (
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Strain commitment
-              </span>
-              <span className="font-mono text-xs text-foreground">
-                {actionContext.strainCommitment}
-              </span>
-              {strainPreview && (
-                <span className="text-[10px] text-muted-foreground">
-                  +{strainPowerBonus(strainPreview, actionContext.strainCommitment)} power
+      {!leadingPicked && (
+        <Section label="Effort">
+          <EffortSelector
+            selected={actionContext.effort}
+            onChange={handleEffortChange}
+            disabled={readOnly}
+          />
+          {/* Strain (#3446): the push-yourself anima overcommit on an ordinary
+           * declared cast. Mirrors the per-clash strain slider in YourTurn;
+           * capped by available_strain, validated again server-side. */}
+          {strainMax !== undefined && actionContext.techniqueId !== undefined && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Strain commitment
                 </span>
-              )}
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={strainMax}
-              value={actionContext.strainCommitment}
-              disabled={readOnly}
-              onChange={(e) =>
-                onContextChange({ ...actionContext, strainCommitment: Number(e.target.value) })
-              }
-              data-testid="focused-strain-slider"
-              className="w-full accent-primary"
-              aria-label="Strain commitment"
-            />
-            {strainPreview && (
-              <div className="space-y-0.5 text-[10px] text-muted-foreground">
-                <div>
-                  {actionContext.strainCommitment === 0
-                    ? 'No push: baseline power'
-                    : `Projected cost: ${strainPreview.base_effective_cost + actionContext.strainCommitment} anima (base ${strainPreview.base_effective_cost})`}
-                </div>
-                {strainPreview.base_effective_cost + actionContext.strainCommitment >
-                  strainPreview.cap && (
-                  <div className="text-amber-500">
-                    This push empties anima and can add Soulfray and fatigue-collapse risk when
-                    resolved.
-                  </div>
+                <span className="font-mono text-xs text-foreground">
+                  {actionContext.strainCommitment}
+                </span>
+                {strainPreview && (
+                  <span className="text-[10px] text-muted-foreground">
+                    +{strainPowerBonus(strainPreview, actionContext.strainCommitment)} power
+                  </span>
                 )}
               </div>
-            )}
-            {strainBurn && (
-              <PullBurnInput
-                {...strainBurn}
+              <input
+                type="range"
+                min={0}
+                max={strainMax}
+                value={actionContext.strainCommitment}
                 disabled={readOnly}
-                powerBonus={
-                  strainPreview
-                    ? strainPowerBonus(
-                        strainPreview,
-                        actionContext.strainCommitment +
-                          burnStrainUnits(
-                            strainBurn.preview,
-                            effectiveBurn(strainBurn.preview, strainBurn.value)
-                          )
-                      )
-                    : null
+                onChange={(e) =>
+                  onContextChange({ ...actionContext, strainCommitment: Number(e.target.value) })
                 }
+                data-testid="focused-strain-slider"
+                className="w-full accent-primary"
+                aria-label="Strain commitment"
               />
-            )}
-          </div>
-        )}
-      </Section>
+              {strainPreview && (
+                <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <div>
+                    {actionContext.strainCommitment === 0
+                      ? 'No push: baseline power'
+                      : `Projected cost: ${strainPreview.base_effective_cost + actionContext.strainCommitment} anima (base ${strainPreview.base_effective_cost})`}
+                  </div>
+                  {strainPreview.base_effective_cost + actionContext.strainCommitment >
+                    strainPreview.cap && (
+                    <div className="text-amber-500">
+                      This push empties anima and can add Soulfray and fatigue-collapse risk when
+                      resolved.
+                    </div>
+                  )}
+                </div>
+              )}
+              {strainBurn && (
+                <PullBurnInput
+                  {...strainBurn}
+                  disabled={readOnly}
+                  powerBonus={
+                    strainPreview
+                      ? strainPowerBonus(
+                          strainPreview,
+                          actionContext.strainCommitment +
+                            burnStrainUnits(
+                              strainBurn.preview,
+                              effectiveBurn(strainBurn.preview, strainBurn.value)
+                            )
+                        )
+                      : null
+                  }
+                />
+              )}
+            </div>
+          )}
+        </Section>
+      )}
 
       {/* Cost section */}
-      <Section label="Cost">{renderTechniqueDetail()}</Section>
+      {!leadingPicked && <Section label="Cost">{renderTechniqueDetail()}</Section>}
 
       {/* Thread pulls section — Phase 6.4 */}
-      <Section label="Thread Pulls">
-        {/* Auto-revert notice */}
-        {revertNotice && (
-          <p className="mb-1 text-xs text-amber-400" data-testid="revert-notice">
-            {revertNotice}
-          </p>
-        )}
-        {pullsContext !== null ? (
-          <ThreadPullPicker
-            characterSheetId={characterSheetId}
-            actionContext={pullsContext}
-            selectedPulls={selectedPulls}
-            onPullsChange={setSelectedPulls}
-            showInapplicable={showInapplicable}
-            onToggleInapplicable={setShowInapplicable}
-            onAutoRevertNotice={setRevertNotice}
-            balanceByResonanceId={balanceByResonanceId}
-          />
-        ) : (
-          <p className="text-xs text-muted-foreground">(no sheet context)</p>
-        )}
-      </Section>
+      {!leadingPicked && (
+        <Section label="Thread Pulls">
+          {/* Auto-revert notice */}
+          {revertNotice && (
+            <p className="mb-1 text-xs text-amber-400" data-testid="revert-notice">
+              {revertNotice}
+            </p>
+          )}
+          {pullsContext !== null ? (
+            <ThreadPullPicker
+              characterSheetId={characterSheetId}
+              actionContext={pullsContext}
+              selectedPulls={selectedPulls}
+              onPullsChange={setSelectedPulls}
+              showInapplicable={showInapplicable}
+              onToggleInapplicable={setShowInapplicable}
+              onAutoRevertNotice={setRevertNotice}
+              balanceByResonanceId={balanceByResonanceId}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">(no sheet context)</p>
+          )}
+        </Section>
+      )}
     </div>
   );
 }

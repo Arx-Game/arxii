@@ -766,3 +766,63 @@ describe('ActionDeclarationCard — #1001a combatant target picker', () => {
     );
   });
 });
+
+describe('ActionDeclarationCard: a leading pick (combat Strike, #4858)', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({
+      count: MOCK_TECHNIQUES.length,
+      next: null,
+      previous: null,
+      results: MOCK_TECHNIQUES,
+    });
+    mockPickerHooks();
+  });
+
+  it('puts the pick first in the row, ahead of the techniques', async () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+        leadingPick={{ label: 'Strike', selected: false, onSelect: () => {}, panel: null }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await screen.findByText('Tidal Fury');
+    expect(screen.getByText('Your action')).toBeInTheDocument();
+    const row = screen.getByTestId('leading-pick').parentElement as HTMLElement;
+    expect(row.firstElementChild).toBe(screen.getByTestId('leading-pick'));
+    expect(within(row).getByText('Tidal Fury')).toBeInTheDocument();
+  });
+
+  it('shows its panel under the row when picked, and drops the technique-only sections', async () => {
+    const onSelect = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+        targets={[]}
+        leadingPick={{
+          label: 'Strike',
+          selected: true,
+          onSelect,
+          panel: <div data-testid="strike-panel">With</div>,
+        }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await screen.findByText('Tidal Fury');
+    expect(screen.getByTestId('strike-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('leading-pick')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Target')).toBeInTheDocument();
+    expect(screen.queryByText('Effort')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thread Pulls')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('leading-pick'));
+    expect(onSelect).toHaveBeenCalled();
+  });
+});

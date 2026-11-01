@@ -1,6 +1,6 @@
 """The maneuver effect catalog's code side (#4783).
 
-``ensure_maneuver_effect_rows`` writes the eight fixed rows from explicit values; the
+``ensure_maneuver_effect_rows`` writes the fixed rows from explicit values; the
 combat seed cluster calls it. ``ensure_maneuver_effects`` writes the rows and the
 modifier category their targets live in, for a database whose schema was built from the
 models without running migration 0334 (tests, a scratch schema): a migrated database gets

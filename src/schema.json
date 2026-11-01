@@ -11781,6 +11781,7 @@ paths:
           - robe
           - shield
           - thrown
+          - unarmed
         description: |-
           * `light_armor` - Light Armor
           * `medium_armor` - Medium Armor
@@ -11792,6 +11793,7 @@ paths:
           * `thrown` - Thrown
           * `shield` - Shield
           * `lance` - Lance
+          * `unarmed` - Unarmed
           * `jewelry` - Jewelry
           * `clothing` - Clothing
           * `other` - Other
@@ -53620,6 +53622,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        roll_breakdown:
+          allOf:
+          - $ref: '#/components/schemas/RollBreakdown'
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -53636,6 +53643,7 @@ components:
       - modifiers
       - outcome_display
       - pool
+      - roll_breakdown
       - selected_consequence
       - summary
     ConsequenceOutcomeModifier:
@@ -61445,6 +61453,7 @@ components:
       - thrown
       - shield
       - lance
+      - unarmed
       - jewelry
       - clothing
       - other
@@ -61460,6 +61469,7 @@ components:
         * `thrown` - Thrown
         * `shield` - Shield
         * `lance` - Lance
+        * `unarmed` - Unarmed
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
@@ -78573,6 +78583,12 @@ components:
           - $ref: '#/components/schemas/DigDeepOffer'
           nullable: true
           readOnly: true
+        strike_weapons:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrikeWeaponOption'
+          nullable: true
+          readOnly: true
       required:
       - active_conditions
       - aftermath
@@ -78597,6 +78613,7 @@ components:
       - persona_id
       - reactions_used
       - steady_plan
+      - strike_weapons
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -87654,6 +87671,40 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    RollBreakdown:
+      type: object
+      description: A roll laid out as a heading, source rows and a result line (#4858);
+        read-only.
+      properties:
+        heading:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RollLine'
+        result:
+          type: string
+        result_note:
+          type: string
+      required:
+      - heading
+      - lines
+      - result
+      - result_note
+    RollLine:
+      type: object
+      description: One source row in a roll breakdown (#4858); read-only, schema shape.
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        detail:
+          type: string
+      required:
+      - detail
+      - label
+      - value
     RoomAlarmDetails:
       type: object
       properties:
@@ -94162,6 +94213,29 @@ components:
         * `1` - Minor
         * `2` - Major
         * `3` - Defining
+    StrikeWeaponOption:
+      type: object
+      description: One thing the viewer's own character can Strike with (#4858); read-only.
+      properties:
+        item_instance_id:
+          type: integer
+          nullable: true
+          description: The equipped weapon's item id; null for bare hands.
+        name:
+          type: string
+          description: The weapon's name, or 'bare hands'.
+        gear_kind:
+          type: string
+          description: The weapon's gear kind, as players read it.
+        strike_skill:
+          type: string
+          description: The strike skill its hit roll weights, or the check's name
+            when it has none.
+      required:
+      - gear_kind
+      - item_instance_id
+      - name
+      - strike_skill
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).

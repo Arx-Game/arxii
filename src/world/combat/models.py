@@ -1806,7 +1806,10 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         null=True,
         blank=True,
         related_name="+",
-        help_text="Item to use when maneuver == USE_ITEM.",
+        help_text=(
+            "Item to use when maneuver == USE_ITEM; the chosen weapon when maneuver == "
+            "STRIKE (empty means bare hands)."
+        ),
     )
     succor_resolution = models.FloatField(
         null=True,
@@ -4787,8 +4790,9 @@ class DramaticSurgeRecord(SharedMemoryModel):
                 name="surge_repeat_round_is_round_number",
             ),
             # A rolled record has both a repeat_round and an outcome; an old-kind has neither.
-            # The one exception is an emotional condition's per-round feed (#4739): it
-            # recurs each round but rolls nothing, so it has a repeat_round and no outcome.
+            # The exceptions recur each round but roll nothing, so they have a repeat_round
+            # and no outcome: an emotional condition's per-round feed (#4739) and a missed
+            # attack (#4858).
             models.CheckConstraint(
                 condition=(
                     models.Q(repeat_round__isnull=True, outcome__isnull=True)
@@ -4796,7 +4800,7 @@ class DramaticSurgeRecord(SharedMemoryModel):
                     | models.Q(
                         repeat_round__isnull=False,
                         outcome__isnull=True,
-                        trigger_kind=SurgeTriggerKind.CONDITION_FED,
+                        trigger_kind__in=[SurgeTriggerKind.CONDITION_FED, SurgeTriggerKind.MISSED],
                     )
                 ),
                 name="surge_rolled_has_round_and_outcome",

@@ -276,6 +276,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -410,6 +411,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -571,6 +573,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -712,6 +715,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
         {
           id: 7,
@@ -740,6 +744,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -828,6 +833,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           compulsion: null,
           steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
     });
