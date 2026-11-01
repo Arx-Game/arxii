@@ -862,7 +862,7 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   (see `docs/systems/forms.md`).
 - **Seeded content.** `world/conditions/berserk_content.py` seeds Berserk's compulsion
   (wants an attack; forbids flee, parley, leave and revert) and the "Resist compulsion"
-  check type. Migration `0341_control_loss_content` carries the moon's old constants into
+  check type. Migration `0346_control_loss_content` carries the moon's old constants into
   one moon trigger row with its bands, creates Lycan blood (blank description) only where the
   lycan grant has no drawback condition, and applies it to existing moon-bound characters.
   Required content probes `berserk-compulsion` and `moon-control-loss-trigger` list a gap;
