@@ -262,6 +262,8 @@ interface RoundScopedState {
   chargeError: string | null;
   joustTechniqueId: string;
   joustError: string | null;
+  /** Strike is the focused pick this round (#4858), in place of a technique. */
+  strikePicked: boolean;
 }
 
 /** Everything a new round must wipe — reset WHOLESALE so a missed atom is impossible (#2423). */
@@ -299,6 +301,7 @@ function initialRoundState(): RoundScopedState {
     chargeTechniqueId: '',
     chargeError: null,
     joustTechniqueId: '',
+    strikePicked: false,
     joustError: null,
   };
 }
@@ -1888,6 +1891,7 @@ export function YourTurn({
     chargeError,
     joustTechniqueId,
     joustError,
+    strikePicked,
   } = roundState;
 
   // Per-field setter preserving React.SetStateAction semantics so every
@@ -1949,6 +1953,7 @@ export function YourTurn({
   const setChargeError = useMemo(() => makeFieldSetter('chargeError'), []);
   const setJoustTechniqueId = useMemo(() => makeFieldSetter('joustTechniqueId'), []);
   const setJoustError = useMemo(() => makeFieldSetter('joustError'), []);
+  const setStrikePicked = useMemo(() => makeFieldSetter('strikePicked'), []);
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
@@ -2662,8 +2667,46 @@ export function YourTurn({
             setSubmitError(null);
             // A burn is sized against the technique's ceiling; a new technique starts over.
             if (next.techniqueId !== focusedContext.techniqueId) setPullBurn(0);
+            // Picking a technique un-picks Strike: one focused action a round.
+            if (next.techniqueId !== undefined) setStrikePicked(false);
             setFocusedContext(next);
           }}
+          leadingPick={
+            (myParticipantSelf?.strike_weapons ?? []).length > 0
+              ? {
+                  label: 'Strike',
+                  selected: strikePicked,
+                  onSelect: () => {
+                    setSubmitError(null);
+                    setStrikePicked(true);
+                    setFocusedContext({ ...focusedContext, techniqueId: undefined });
+                  },
+                  panel: (
+                    <StrikeControl
+                      weapons={myParticipantSelf?.strike_weapons ?? []}
+                      targetOpponentId={
+                        focusedContext.targetKind === 'opponent'
+                          ? (focusedContext.targetId ?? null)
+                          : null
+                      }
+                      declaredTargetName={
+                        declaredManeuver === 'strike'
+                          ? (activeOpponents.find(
+                              (o) => o.id === ownRoundAction?.focused_opponent_target
+                            )?.name ?? null)
+                          : null
+                      }
+                      error={strikeError}
+                      disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+                      pending={maneuverDispatchPending}
+                      onStrike={(opponentId, itemInstanceId) => {
+                        handleStrike(opponentId, itemInstanceId).catch(() => {});
+                      }}
+                    />
+                  ),
+                }
+              : undefined
+          }
           readOnly={isLocked}
           targets={focusedTargets}
           reach={focusedTechniqueReach}
@@ -2924,24 +2967,6 @@ export function YourTurn({
           }}
         />
       )}
-
-      <StrikeControl
-        weapons={myParticipantSelf?.strike_weapons ?? []}
-        opponents={activeOpponents}
-        declaredTargetName={
-          declaredManeuver === 'strike'
-            ? (activeOpponents.find((o) => o.id === ownRoundAction?.focused_opponent_target)
-                ?.name ?? null)
-            : null
-        }
-        error={strikeError}
-        disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-        inactive={isLocked || !isDeclaringPhase}
-        pending={maneuverDispatchPending}
-        onStrike={(opponentId, itemInstanceId) => {
-          handleStrike(opponentId, itemInstanceId).catch(() => {});
-        }}
-      />
 
       <WaitingStrikeControl
         techniques={meleeTechniques}

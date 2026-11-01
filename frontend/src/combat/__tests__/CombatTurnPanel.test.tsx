@@ -942,20 +942,88 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
 });
 
 describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4858)', () => {
-  it('lists both rolls of the latest action, oldest first, and no earlier roll', () => {
+  // The two rows the consequence-outcomes API returns for one Strike, newest first, as
+  // the server writes them: no pool, no challenge, the roulette list empty.
+  const strikeRow = (id: number, rollBreakdown: Record<string, unknown>, summary: string) => ({
+    id,
+    character: 100,
+    check_type: 3,
+    pool: null,
+    selected_consequence: null,
+    modifier_total: 2,
+    summary,
+    outcome_display: [],
+    modifiers: [{ source_kind: 'character', source_label: 'Intensity', value: 2 }],
+    combat_interaction_id: 40,
+    challenge_record_id: null,
+    action_interaction_id: null,
+    roll_breakdown: rollBreakdown,
+    created_at: '2026-11-01T06:00:00Z',
+  });
+  const hit = strikeRow(
+    2,
+    {
+      heading: "Hit roll against Bandit's defense",
+      lines: [
+        { label: 'Melee Combat', value: '25', detail: 'strike skill for one-handed melee' },
+        { label: 'Agility', value: '', detail: 'stat for one-handed melee' },
+        { label: 'Intensity', value: '+2', detail: 'misses add to hit' },
+      ],
+      result: 'Hit, good',
+    },
+    'Hit, good'
+  );
+  const damage = strikeRow(
+    3,
+    {
+      heading: 'Damage roll',
+      lines: [
+        { label: 'Rapier, fine quality', value: '', detail: 'weapon damage and quality' },
+        { label: 'Melee Combat', value: '25', detail: 'strike skill' },
+      ],
+      result: '11 damage',
+    },
+    '11 damage'
+  );
+
+  it('lays out both rolls as rows, hit roll first, with no placeholder roulette', () => {
     mockEncounter({ is_participant: true });
-    const row = (id: number, interaction: number, summary: string) => ({
-      id,
-      combat_interaction_id: interaction,
-      summary,
-      outcome_display: [],
-      modifiers: [],
-      modifier_total: 0,
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [damage, hit],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
     });
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      "Hit roll against Bandit's defense",
+      'Damage roll',
+    ]);
+    expect(screen.getAllByTestId('roll-result').map((el) => el.textContent)).toEqual([
+      'Hit, good',
+      '11 damage',
+    ]);
+    expect(screen.getByText('misses add to hit')).toBeInTheDocument();
+    expect(screen.getByText('Rapier, fine quality')).toBeInTheDocument();
+    const section = screen.getByTestId('outcome-roulette-section');
+    expect(section).not.toHaveTextContent('Unknown');
+    expect(section).not.toHaveTextContent('Outcome Pool');
+  });
+
+  it('never shows the placeholder roulette for a pool-less row without a breakdown', () => {
+    mockEncounter({ is_participant: true });
     vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
       data: [
-        row(3, 40, 'Damage roll: Rapier 6, Melee Combat with Agility. Success: 6 damage.'),
-        row(2, 40, 'Hit roll against Bandit: Melee Combat with Agility. Success.'),
+        {
+          ...strikeRow(4, {}, 'A roll.'),
+          roll_breakdown: null,
+          outcome_display: [
+            { label: 'Unknown', tier_name: 'Unknown', weight: 1, is_selected: true },
+          ],
+        },
       ],
       isLoading: false,
       isError: false,
@@ -965,33 +1033,18 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
       wrapper: createWrapper(),
     });
 
-    const summaries = screen.getAllByTestId('outcome-summary').map((el) => el.textContent);
-    expect(summaries).toEqual([
-      'Hit roll against Bandit: Melee Combat with Agility. Success.',
-      'Damage roll: Rapier 6, Melee Combat with Agility. Success: 6 damage.',
-    ]);
+    const section = screen.getByTestId('outcome-roulette-section');
+    expect(section).toHaveTextContent('A roll.');
+    expect(section).not.toHaveTextContent('Unknown');
+    expect(section).not.toHaveTextContent('Outcome Pool');
   });
 
   it('shows only the latest roll when the one before it came from another action', () => {
     mockEncounter({ is_participant: true });
     vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
       data: [
-        {
-          id: 3,
-          combat_interaction_id: 41,
-          summary: 'Fled.',
-          outcome_display: [],
-          modifiers: [],
-          modifier_total: 0,
-        },
-        {
-          id: 2,
-          combat_interaction_id: 40,
-          summary: 'Older.',
-          outcome_display: [],
-          modifiers: [],
-          modifier_total: 0,
-        },
+        { ...strikeRow(5, {}, 'Fled.'), roll_breakdown: null, combat_interaction_id: 41 },
+        { ...strikeRow(4, {}, 'Older.'), roll_breakdown: null },
       ],
       isLoading: false,
       isError: false,

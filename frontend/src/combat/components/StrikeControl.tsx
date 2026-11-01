@@ -1,45 +1,32 @@
 /**
- * StrikeControl: declare a basic Strike (#4858, slice 1 of #4844).
+ * StrikeControl: the "With" row a picked Strike shows (#4858, slice 1 of #4844).
  *
- * Any character can Strike an opponent with no technique: with one of their equipped
- * weapons, or bare hands. The weapon choices come from the viewer's own participant
- * (`strike_weapons`), each showing its gear kind and the strike skill its hit roll uses.
- * Dispatches the `combat_strike` registry action; the server refuses what it cannot
- * declare and the message shows inline. The Strike is the round's one action.
+ * Strike is the first pick in the Focused Action's pick row; once picked, this row sits
+ * directly under it. Each weapon shows its gear kind and the strike skill its hit roll
+ * uses; bare hands are always offered. The target is the Focused Action's own target
+ * selection. The button dispatches the `combat_strike` registry action; the server
+ * refuses what it cannot declare and the message shows inline.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { components } from '@/generated/api';
 
 export type StrikeWeaponOption = components['schemas']['StrikeWeaponOption'];
 
-/** The select value for bare hands, which have no item id. */
+/** The value for bare hands, which have no item id. */
 const BARE_HANDS_VALUE = 'bare';
-
-export interface StrikeOpponent {
-  id: number;
-  name: string;
-}
 
 export interface StrikeControlProps {
   weapons: StrikeWeaponOption[];
-  opponents: StrikeOpponent[];
+  /** The opponent picked in the Focused Action's target selection, if any. */
+  targetOpponentId: number | null;
   /** The opponent this round's declared Strike is aimed at, when one is declared. */
   declaredTargetName: string | null;
   error: string | null;
   /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
   disabled: boolean;
-  /** Locked or out of phase, ignoring dispatch; drives the button styling. */
-  inactive: boolean;
   pending: boolean;
   onStrike: (opponentId: number, itemInstanceId: number | null) => void;
 }
@@ -48,29 +35,33 @@ function weaponValue(weapon: StrikeWeaponOption): string {
   return weapon.item_instance_id === null ? BARE_HANDS_VALUE : String(weapon.item_instance_id);
 }
 
+/** "one-handed melee · Melee Combat": the kind in sentence case, then the skill. */
+function weaponChip(weapon: StrikeWeaponOption): string {
+  return `${weapon.gear_kind.toLowerCase()} · ${weapon.strike_skill}`;
+}
+
 export function StrikeControl({
   weapons,
-  opponents,
+  targetOpponentId,
   declaredTargetName,
   error,
   disabled,
-  inactive,
   pending,
   onStrike,
 }: StrikeControlProps) {
-  const [opponentId, setOpponentId] = useState('');
   const [weapon, setWeapon] = useState(() => (weapons[0] ? weaponValue(weapons[0]) : ''));
 
-  if (weapons.length === 0 || opponents.length === 0) return null;
+  // The weapon list arrives with the encounter and changes when gear does: keep the
+  // choice while it is still offered, otherwise fall back to the first weapon.
+  useEffect(() => {
+    if (weapons.some((option) => weaponValue(option) === weapon)) return;
+    setWeapon(weapons[0] ? weaponValue(weapons[0]) : '');
+  }, [weapons, weapon]);
 
-  const blocked = opponentId === '' || weapon === '';
+  const blocked = targetOpponentId === null || weapon === '';
 
   return (
-    <div
-      className="space-y-1.5 rounded border border-border bg-card/60 p-2"
-      data-testid="strike-control"
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Strike</p>
+    <div className="space-y-1.5" data-testid="strike-control">
       {declaredTargetName !== null && (
         <div
           className="rounded border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs text-orange-300"
@@ -79,18 +70,6 @@ export function StrikeControl({
           Striking {declaredTargetName}
         </div>
       )}
-      <Select value={opponentId} onValueChange={setOpponentId} disabled={disabled}>
-        <SelectTrigger data-testid="strike-opponent-select" className="h-8 text-xs">
-          <SelectValue placeholder="Strike at…" />
-        </SelectTrigger>
-        <SelectContent>
-          {opponents.map((opponent) => (
-            <SelectItem key={opponent.id} value={String(opponent.id)}>
-              {opponent.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         With
       </p>
@@ -108,17 +87,15 @@ export function StrikeControl({
               onClick={() => setWeapon(value)}
               data-testid={`strike-weapon-${value}`}
               className={cn(
-                'rounded border px-2 py-1 text-left text-xs transition-colors',
+                'rounded border px-2.5 py-1 text-left text-xs transition-colors',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 selected
-                  ? 'border-orange-500/60 bg-orange-500/10 text-orange-300'
-                  : 'border-border text-foreground hover:bg-muted/40'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-background text-foreground hover:border-primary/50'
               )}
             >
-              <span className="font-semibold capitalize">{option.name}</span>
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {option.gear_kind} · {option.strike_skill}
-              </span>
+              <span className="font-medium">{option.name}</span>
+              <span className="ml-1.5 text-[10px] text-muted-foreground">{weaponChip(option)}</span>
             </button>
           );
         })}
@@ -126,16 +103,17 @@ export function StrikeControl({
       <button
         type="button"
         disabled={disabled || blocked}
-        onClick={() =>
-          onStrike(Number(opponentId), weapon === BARE_HANDS_VALUE ? null : Number(weapon))
-        }
+        onClick={() => {
+          if (targetOpponentId === null) return;
+          onStrike(targetOpponentId, weapon === BARE_HANDS_VALUE ? null : Number(weapon));
+        }}
         data-testid="strike-confirm-btn"
         className={cn(
           'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          inactive || blocked
+          disabled || blocked
             ? 'border-border bg-muted text-muted-foreground'
-            : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+            : 'border-primary bg-primary/10 text-primary hover:bg-primary/20'
         )}
       >
         {pending ? 'Declaring…' : 'Strike'}

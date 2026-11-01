@@ -31710,6 +31710,7 @@ export interface components {
       readonly combat_interaction_id: number;
       readonly challenge_record_id: number;
       readonly action_interaction_id: number | null;
+      readonly roll_breakdown: components['schemas']['RollBreakdown'] | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -49337,6 +49338,18 @@ export interface components {
      * @enum {string}
      */
     RoleEnum: 'attacker' | 'defender';
+    /** @description A roll laid out as a heading, source rows and a result line (#4858); read-only. */
+    RollBreakdown: {
+      heading: string;
+      lines: components['schemas']['RollLine'][];
+      result: string;
+    };
+    /** @description One source row in a roll breakdown (#4858); read-only, schema shape. */
+    RollLine: {
+      label: string;
+      value: string;
+      detail: string;
+    };
     RoomAlarmDetails: {
       /** @description The room this alarm watches. */
       room_profile: number;
@@ -52310,7 +52323,7 @@ export interface components {
       name: string;
       /** @description The weapon's gear kind, as players read it. */
       gear_kind: string;
-      /** @description The strike skill its hit roll uses. */
+      /** @description The strike skill its hit roll weights, or the check's name when it has none. */
       strike_skill: string;
     };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */

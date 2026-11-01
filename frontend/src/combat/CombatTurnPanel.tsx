@@ -39,6 +39,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
+import { RollBreakdownCard } from './components/RollBreakdownCard';
 import { StandoffCard } from './standoff/StandoffCard';
 import { StandoffSummaryCard } from './standoff/StandoffSummaryCard';
 import type { EncounterDetail } from './types';
@@ -460,15 +461,23 @@ export function CombatTurnPanel({
           </button>
           {!collapsed.outcomeRoulette && (
             <div className="space-y-3 border-t border-border px-3 py-2">
-              {latestOutcomes.map((row) => (
-                <OutcomeRoulette
-                  key={row.id}
-                  outcomeDisplay={row.outcome_display}
-                  modifiers={row.modifiers}
-                  modifierTotal={row.modifier_total}
-                  summary={row.summary}
-                />
-              ))}
+              {latestOutcomes.map((row) =>
+                row.roll_breakdown ? (
+                  <RollBreakdownCard key={row.id} breakdown={row.roll_breakdown} />
+                ) : (
+                  <OutcomeRoulette
+                    key={row.id}
+                    // A roll with no pool and no challenge has no roulette: never show
+                    // the server's placeholder row as if it were a result.
+                    outcomeDisplay={
+                      !row.pool && !row.challenge_record_id ? [] : row.outcome_display
+                    }
+                    modifiers={row.modifiers}
+                    modifierTotal={row.modifier_total}
+                    summary={row.summary}
+                  />
+                )
+              )}
             </div>
           )}
         </div>

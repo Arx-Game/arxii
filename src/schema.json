@@ -53567,6 +53567,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        roll_breakdown:
+          allOf:
+          - $ref: '#/components/schemas/RollBreakdown'
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -53583,6 +53588,7 @@ components:
       - modifiers
       - outcome_display
       - pool
+      - roll_breakdown
       - selected_consequence
       - summary
     ConsequenceOutcomeModifier:
@@ -87574,6 +87580,37 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    RollBreakdown:
+      type: object
+      description: A roll laid out as a heading, source rows and a result line (#4858);
+        read-only.
+      properties:
+        heading:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RollLine'
+        result:
+          type: string
+      required:
+      - heading
+      - lines
+      - result
+    RollLine:
+      type: object
+      description: One source row in a roll breakdown (#4858); read-only, schema shape.
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        detail:
+          type: string
+      required:
+      - detail
+      - label
+      - value
     RoomAlarmDetails:
       type: object
       properties:
@@ -94081,7 +94118,8 @@ components:
           description: The weapon's gear kind, as players read it.
         strike_skill:
           type: string
-          description: The strike skill its hit roll uses.
+          description: The strike skill its hit roll weights, or the check's name
+            when it has none.
       required:
       - gear_kind
       - item_instance_id

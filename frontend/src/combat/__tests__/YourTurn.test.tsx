@@ -2889,3 +2889,78 @@ describe('YourTurn — mounted maneuvers panel (#3381)', () => {
     expect(await screen.findByTestId('charge-error')).toHaveTextContent('Not mounted.');
   });
 });
+
+describe('YourTurn: Strike as the first focused pick (#4858)', () => {
+  afterEach(() => {
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  type LeadingPickProps = CardProps & {
+    leadingPick?: { label: string; selected: boolean; onSelect: () => void; panel: ReactNode };
+  };
+
+  it('offers Strike in the focused card and strikes the focused target', async () => {
+    setupMocks();
+    mockActionDeclarationCard.mockImplementation((props: LeadingPickProps) => (
+      <div data-testid={`action-card-${props.actionContext.slot}`}>
+        {props.leadingPick && (
+          <>
+            <button type="button" data-testid="pick-strike" onClick={props.leadingPick.onSelect}>
+              {props.leadingPick.label}
+            </button>
+            {props.leadingPick.selected && props.leadingPick.panel}
+          </>
+        )}
+        <button
+          type="button"
+          data-testid={`pick-target-${props.actionContext.slot}`}
+          onClick={() =>
+            props.onContextChange({
+              ...props.actionContext,
+              effort: 'MEDIUM',
+              targetKind: 'opponent',
+              targetId: 20,
+            } as Parameters<CardProps['onContextChange']>[0])
+          }
+        >
+          target
+        </button>
+      </div>
+    ));
+    const self = {
+      ...makeSelfParticipant(5),
+      strike_weapons: [
+        {
+          item_instance_id: 9,
+          name: 'Rapier',
+          gear_kind: 'One-Handed Melee',
+          strike_skill: 'Melee Combat',
+        },
+        {
+          item_instance_id: null,
+          name: 'bare hands',
+          gear_kind: 'Unarmed',
+          strike_skill: 'Unarmed Combat',
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [self],
+      opponents: [makeOpponentFixture({ id: 20, name: 'Bandit' })],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('strike-control')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('pick-strike'));
+    expect(screen.getByTestId('strike-control')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('pick-target-focused'));
+    await userEvent.click(screen.getByTestId('strike-confirm-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_strike',
+      kwargs: { opponent_id: 20, weapon_id: 9 },
+    });
+  });
+});
