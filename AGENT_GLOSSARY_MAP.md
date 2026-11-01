@@ -379,6 +379,17 @@ damage type or resonance (they combine; unset means any). It lets a modifier cha
 damage, or the severity or duration of the conditions it applies. _Avoid_: technique filter.
 Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
 
+**Opponent scope** (#4823):
+A narrowing on a "maneuver_effect" `ModifierTarget` to the opponent's property or condition (the
+condition's target, for condition severity and duration). Follows the technique scope rules and
+combines with them. _Avoid_: target filter, enemy scope.
+Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
+
+**Opponent facts** (#4823):
+The properties and active conditions an opponent carries, as an opponent-scoped target sees them,
+read only when such a target exists. _Avoid_: opponent snapshot.
+Full entry: [mechanics AGENT_GLOSSARY](src/world/mechanics/AGENT_GLOSSARY.md).
+
 **Technique effect context** (#4822):
 What one cast is, as a technique-scoped target sees it: the technique, its gift and parent gift,
 its functions, the caster's resonances for the gift and the resolved damage type. _Avoid_:

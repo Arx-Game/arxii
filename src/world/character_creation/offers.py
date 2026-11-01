@@ -22,6 +22,7 @@ from world.character_creation.constants import (
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
     BeatSelection,
+    FinalTouchesPrompt,
     LifeStage,
     OfferArrival,
     OfferChapter,
@@ -40,19 +41,25 @@ from world.character_creation.models import (
     TraditionStateLine,
 )
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
-from world.character_creation.types import BeatPoolEntry, ClosedDistinction, VisibleOffer
+from world.character_creation.types import (
+    BeatPoolEntry,
+    ClosedDistinction,
+    FinalTouchesCard,
+    VisibleOffer,
+)
 from world.character_sheets.types import EnemyDegree
+from world.classes.models import Aspect, Path
 from world.distinctions.models import Distinction, DistinctionEffect
 from world.distinctions.types import (
     DraftDistinctionEntry,
     build_distinction_entry,
     feature_of,
 )
+from world.societies.models import Organization
 
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
     from world.magic.models import Tradition
-    from world.societies.models import Organization
 
 
 #: Where the Appearance chapter's feature-rows lines (#3739) sort relative to its
@@ -417,6 +424,10 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
+    if chapter == OfferChapter.FINAL_TOUCHES:
+        # A card the draft holds unlocks the line (#4846); unpicking the card hides it
+        # again, and ``reconcile_offer_picks`` drops whatever it had opened.
+        return offer.unlocked_by_id is not None and offer.unlocked_by_id in ctx["held_ids"]
     return False
 
 
@@ -437,7 +448,112 @@ def _context(draft: CharacterDraft) -> dict:
         "enemy_degree": enemy.get("degree", ""),
         # The Backgrounds chapter's opener (#4124, #4395): the beats open to the draft.
         "open_beat_ids": open_beat_ids(draft),
+        # The Final Touches chapter's opener (#4846): the cards the draft holds.
+        "held_ids": held_distinction_ids(draft),
     }
+
+
+def held_distinction_ids(draft: CharacterDraft) -> set[int]:
+    """The distinctions the draft holds right now, from any line or grant.
+
+    Called by ``_context`` (the Final Touches opener) and ``final_touches_prompts``.
+    """
+    return {entry["distinction_id"] for entry in draft.draft_data.get("distinctions", [])}
+
+
+def held_cards(draft: CharacterDraft) -> list[Distinction]:
+    """The cards the draft holds, with their grant sidecars joined, by name (#4852).
+
+    Called by ``final_touches_cards`` and by finalize's grant writers, so one query serves
+    every ask and every grant a draft's cards raise.
+    """
+    held = held_distinction_ids(draft)
+    if not held:
+        return []
+    return list(
+        Distinction.objects.filter(pk__in=held)
+        .select_related("prestige_grant", "organization_grant", "path_aspect_grant")
+        .order_by("name")
+    )
+
+
+def strongest_path_aspect(path: Path | None) -> Aspect | None:
+    """The Aspect that weighs most on a Path, ties by name; ``None`` with no Path or rows.
+
+    The Path's own reading of "stronger" (``PathAspect.weight``): where Capable Mentor's
+    bonus lands (#4852). Called by ``final_touches_cards`` and finalize.
+    """
+    if path is None:
+        return None
+    rows = sorted(path.cached_path_aspects, key=lambda pa: (-pa.weight, pa.aspect.name))
+    return rows[0].aspect if rows else None
+
+
+def final_touches_cards(draft: CharacterDraft) -> list[FinalTouchesCard]:
+    """Every ask the draft's held cards raise at Final Touches, one per card and prompt.
+
+    A card asks what staff set on it (``Distinction.final_touches_prompt``, #4846) and what
+    its grant sidecars raise on their own (#4852): a prestige grant asks the story, an
+    organization grant with no fixed organization asks for the pick, a path aspect grant
+    shows the line naming the Path's stronger Aspect (``detail``, blank until a Path is
+    picked). Enum order, then card name. Called by ``CharacterDraftSerializer``.
+    """
+    cards = held_cards(draft)
+    if not cards:
+        return []
+    aspect = strongest_path_aspect(draft.selected_path)
+    asks: list[FinalTouchesCard] = []
+    for card in cards:
+        if card.final_touches_prompt:
+            asks.append(FinalTouchesCard(card.pk, card.name, card.final_touches_prompt, ""))
+        if card.prestige_grant_or_none is not None:
+            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PRESTIGE_STORY, ""))
+        org_grant = card.organization_grant_or_none
+        if org_grant is not None and org_grant.organization_id is None:
+            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.ORGANIZATION, ""))
+        if card.path_aspect_grant_or_none is not None:
+            detail = aspect.name if aspect is not None else ""
+            asks.append(
+                FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PATH_ASPECT, detail)
+            )
+    order = {prompt.value: index for index, prompt in enumerate(FinalTouchesPrompt)}
+    asks.sort(key=lambda ask: (order[ask.prompt], ask.name))
+    return asks
+
+
+def final_touches_prompts(draft: CharacterDraft) -> list[str]:
+    """The optional questions the draft's cards ask at Final Touches (#4846), in enum order.
+
+    Called by ``CharacterDraftSerializer`` (the leaf's chapter gate) and by finalize, which
+    writes an answer only while a held card still asks for it. Empty for most drafts: the
+    leaf hides the chapter when this and the chapter's offers are both empty. The cards
+    behind each prompt are ``final_touches_cards``.
+    """
+    prompts: list[str] = []
+    for ask in final_touches_cards(draft):
+        if ask.prompt not in prompts:
+            prompts.append(ask.prompt)
+    return prompts
+
+
+def organization_choices(draft: CharacterDraft) -> list[Organization]:
+    """The organizations a card with an open organization grant may seat the character in.
+
+    The organizations of the draft's realm (the realm page's own reading, #3725: the
+    society's realm is the starting area's) that ``admits_player_characters``, covenants
+    excluded, by name. A covert organization is listed too: the parent's leak table has the
+    list shown to its own player only. Called by ``CharacterDraftSerializer`` and by the
+    draft's answer validation (#4852).
+    """
+    if draft.selected_area_id is None or draft.selected_area.realm_id is None:
+        return []
+    return list(
+        Organization.objects.filter(
+            society__realm_id=draft.selected_area.realm_id,
+            admits_player_characters=True,
+            covenant__isnull=True,
+        ).order_by("name")
+    )
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:
@@ -472,6 +588,7 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
         "enemy_reason",
         "appearance_section",
         "beat",
+        "unlocked_by",
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -524,14 +641,13 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
         # rather than the generic word; this is the fallback for a caller that has
         # no feature in hand (the picker, a closed-distinction hint).
         return "a feature"
-    if offer.glimpse_tag_id:
-        return offer.glimpse_tag.name
     if offer.origin_choice_id:
         return _origin_opener_label(offer, draft)
-    if offer.schooling_line_id:
-        return offer.schooling_line.name
-    if offer.beat_id:
-        return offer.beat.name
+    # The openers that are a named row: a Glimpse tag, a schooling line, a beat, the
+    # card that unlocks a Final Touches line (#4846).
+    for field in ("glimpse_tag", "schooling_line", "beat", "unlocked_by"):
+        if getattr(offer, f"{field}_id"):
+            return getattr(offer, field).name
     return ""
 
 
@@ -743,7 +859,12 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
         arrives_as=OfferArrival.CHOICE,
         distinction_id__in=closed_ids,
     ).select_related(
-        "glimpse_tag", "origin_choice", "schooling_line", "enemy_reason", "appearance_section"
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+        "enemy_reason",
+        "appearance_section",
+        "unlocked_by",
     )
     openers: dict[int, list[str]] = defaultdict(list)
     opener_ids: dict[int, list[int]] = defaultdict(list)

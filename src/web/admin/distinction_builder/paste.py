@@ -57,6 +57,7 @@ from world.distinctions.models import Distinction, DistinctionCategory, Distinct
 from world.magic.models import GlimpseTag
 from world.mechanics.models import ModifierTarget
 from world.mechanics.services import ensure_skill_target
+from world.societies.models import DistinctionPrestigeGrant
 from world.traits.models import Trait, TraitType
 
 COLUMNS: tuple[str, ...] = (
@@ -84,6 +85,7 @@ _PROMPT_WORDS = {
 }
 _KIND_DEGREE = "degree"
 _KIND_BEAT = "beat"
+_PRESTIGE_WORD = "prestige"
 _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
 
 
@@ -121,6 +123,9 @@ class RowSpec:
     offers: list[OfferSpec] = field(default_factory=list)
     first_look_ids: list[int] = field(default_factory=list)
     first_look_names: list[str] = field(default_factory=list)
+    #: A starting prestige (#4852): the ``+150 prestige`` effect token makes the
+    #: ``DistinctionPrestigeGrant`` sidecar, not a modifier effect.
+    prestige: int | None = None
     status: str = STATUS_CREATE
     notes: list[str] = field(default_factory=list)
 
@@ -135,6 +140,8 @@ class RowSpec:
         if self.effects:
             effects = "; ".join(e.label for e in self.effects)
             parts.append(f"{len(self.effects)} effect(s): {effects}")
+        if self.prestige is not None:
+            parts.append(f"starts with {self.prestige:+d} prestige")
         if self.offers:
             offers = "; ".join(o.label for o in self.offers)
             parts.append(f"{len(self.offers)} offer line(s): {offers}")
@@ -175,6 +182,9 @@ def _parse_effect_token(token: str, row: RowSpec) -> None:
             row.fail(f"effect {token!r} must read +Target, -Target or immune:Target")
             return
         sign, magnitude, target_raw = match.group(1), match.group(2), match.group(3).strip()
+        if target_raw.lower() == _PRESTIGE_WORD:
+            _parse_prestige_token(sign, magnitude, row)
+            return
 
     target, why = _one(
         ModifierTarget.objects.filter(name__iexact=target_raw.replace(" ", "_")),
@@ -204,6 +214,17 @@ def _parse_effect_token(token: str, row: RowSpec) -> None:
     row.effects.append(EffectSpec(target.pk, value, immune, token))
 
 
+def _parse_prestige_token(sign: str, magnitude: str | None, row: RowSpec) -> None:
+    """``+150 prestige`` / ``-300 prestige`` (#4852): a starting prestige, one per card."""
+    if not magnitude:
+        row.fail("a prestige token needs an amount, as in +150 prestige")
+        return
+    if row.prestige is not None:
+        row.fail("a card carries one starting prestige")
+        return
+    row.prestige = int(magnitude) * (-1 if sign == "-" else 1)
+
+
 def _parse_effects(raw: str, row: RowSpec) -> None:
     for token in (t.strip() for t in raw.split(";") if t.strip()):
         _parse_effect_token(token, row)
@@ -221,6 +242,9 @@ _NAMED_OPENERS: dict[str, tuple[str, str, type, str]] = {
         SchoolingLine,
         "schooling line",
     ),
+    # The Final Touches chapter (#4846): the card a draft must hold for the line to show.
+    # The card must already exist; a card earlier in the same table is not found yet.
+    "unlocked": (OfferChapter.FINAL_TOUCHES, "unlocked_by_id", Distinction, "card"),
 }
 
 
@@ -359,6 +383,7 @@ def table_digest(rows: list[RowSpec]) -> str:
             "cost": r.cost_per_rank,
             "max_rank": r.max_rank,
             "effects": [(e.target_id, e.value, e.immune) for e in r.effects],
+            "prestige": r.prestige,
             "offers": [(o.chapter, o.arrives_as, o.opener_field, o.opener_value) for o in r.offers],
             "pins": r.first_look_ids,
         }
@@ -401,6 +426,10 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     description=fx.label,
                 )
                 stamp_written(effect, contributor)
+            if row.prestige is not None:
+                DistinctionPrestigeGrant.objects.create(
+                    distinction=distinction, amount=row.prestige
+                )
             for spec in row.offers:
                 offer = DistinctionOffer.objects.create(
                     distinction=distinction,

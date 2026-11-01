@@ -70,6 +70,8 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_technique_function",
         "scope_damage_type",
         "scope_resonance",
+        "scope_opponent_property",
+        "scope_opponent_condition",
         "display_order",
         "is_active",
     ]
@@ -80,6 +82,8 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_gift",
         "scope_damage_type",
         "scope_resonance",
+        "scope_opponent_property",
+        "scope_opponent_condition",
     ]
     # target_being__name (#4333): a being's favor targets are found by the being's
     # name in every picker that autocompletes against this admin.
@@ -96,6 +100,8 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "scope_gift",
         "scope_damage_type",
         "scope_resonance",
+        "scope_opponent_property",
+        "scope_opponent_condition",
     ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):

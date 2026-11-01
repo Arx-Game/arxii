@@ -832,6 +832,10 @@ export const mockEmptyDraft: CharacterDraft = {
   enemy_degree_grants: { ruined: 'Marked', destroy: 'Hunted' },
   enemy_reasons: [],
   introductions_offered: { first_journal: true },
+  final_touches_prompts: [],
+  crime_kinds: [],
+  final_touches_cards: [],
+  organization_choices: [],
 };
 
 export const mockDraftWithArea: CharacterDraft = {

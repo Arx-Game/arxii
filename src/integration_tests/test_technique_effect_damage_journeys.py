@@ -88,8 +88,9 @@ def grant_damage_modifier(sheet, name: str, value: int, **scopes: object) -> Mod
     return target
 
 
-class TechniqueDamageModifiers(JourneyCase):
-    """Hobb in the Yard, striking a bandit with techniques of his own."""
+class _DamageField(JourneyCase):
+    """Hobb in the Yard, striking a bandit with techniques of his own. Holds no tests, so a
+    journey module that builds on it does not rerun these."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -177,6 +178,8 @@ class TechniqueDamageModifiers(JourneyCase):
         config.physical_damage_type = DamageTypeFactory(name="Physical")
         config.save(update_fields=["physical_damage_type"])
 
+
+class TechniqueDamageModifiers(_DamageField):
     def test_gift_and_type_scoped_bonus_raises_matching_hit(self) -> None:
         grant_damage_modifier(
             self.sheet, "Ember fire", 4, scope_gift=self.ember, scope_damage_type=self.fire

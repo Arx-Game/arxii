@@ -67,6 +67,8 @@ from world.mechanics.factories import (
     CharacterModifierFactory,
     DistinctionModifierSourceFactory,
     ModifierTargetFactory,
+    ObjectPropertyFactory,
+    PropertyFactory,
 )
 from world.mechanics.maneuver_effects import ensure_maneuver_effects, get_maneuver_effect
 from world.mechanics.models import ModifierCategory
@@ -228,6 +230,36 @@ class ChargeReadsTheCatalog(_ChargeField):
         # Baseline numbers: +10 to hit, 5 damage (the bandit loses 5).
         self.assertEqual(to_hit, TO_HIT)
         self.assertEqual(damage, DAMAGE)
+
+    def test_an_opponent_scoped_target_leaves_the_charge_alone(self) -> None:
+        # The rider holds "+5 damage against abyssal" and the charged bandit is abyssal.
+        # Charge's own damage term reads only "Charge: damage" targets, never a kind target,
+        # so it stays at its 5. The technique carries one zero-damage profile (the charge's
+        # hit is computed per profile), and a damage modifier counts once per profile: that
+        # profile is 0 + 5. Spec: +10 to hit, 5 (Charge) + 5 (the profile) = 10 damage, the
+        # +5 counted once. Counted twice (also by Charge's term) it would be 15.
+        abyssal = PropertyFactory(name="Abyssal")
+        ObjectPropertyFactory(object=self.bandit.objectdb, property=abyssal)
+        category = ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME)
+        target = ModifierTargetFactory(
+            category=category,
+            name="Damage vs abyssal",
+            scope_effect_kind=EffectKind.DAMAGE,
+            scope_opponent_property=abyssal,
+        )
+        CharacterModifierFactory(
+            character=self.sheet,
+            target=target,
+            value=5,
+            source=DistinctionModifierSourceFactory(
+                distinction_effect=DistinctionEffectFactory(target=target)
+            ),
+        )
+
+        to_hit, damage = self.charge_and_resolve()
+
+        self.assertEqual(to_hit, TO_HIT)
+        self.assertEqual(damage, DAMAGE + 5)
 
     def test_unmodified_lance_charge_doubles_both(self) -> None:
         _equip_weapon(self.hobb, archetype=GearArchetype.LANCE)

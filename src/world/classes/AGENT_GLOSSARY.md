@@ -19,3 +19,7 @@ _Avoid_: rank, grade.
 **ClassStageHealthRate**:
 The authored per-(`CharacterClass`, `PathStage`) rate of health gained per character level while inside that stage band.
 _Avoid_: HP curve, health table.
+
+**Path aspect grant** (`DistinctionPathAspectGrant`, #4852, slice 6 of #4813):
+A card's bonus that lands on the holder's **stronger Aspect**: the Aspect weighing most on the character's Path (`PathAspect.weight`, ties by aspect name; `character_creation.offers.strongest_path_aspect`). Capable Mentor's +5. Character creation's finalize writes it as one `CharacterModifier` on the Aspect's target, sourced to the pick with no effect template, since the Path is not known when the card is authored.
+_Avoid_: path bonus (a Path's own aspect weights are not a modifier), mentor effect, conditional effect.

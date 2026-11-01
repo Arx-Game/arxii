@@ -10,6 +10,7 @@ from world.classes.models import (
     CharacterClass,
     CharacterClassLevel,
     ClassStageHealthRate,
+    DistinctionPathAspectGrant,
     Path,
     PathAspect,
     PathStage,
@@ -87,3 +88,12 @@ class PathAspectFactory(factory.django.DjangoModelFactory):
     character_path = factory.SubFactory(PathFactory)
     aspect = factory.SubFactory(AspectFactory)
     weight = factory.Faker("random_int", min=1, max=3)
+
+
+class DistinctionPathAspectGrantFactory(factory.django.DjangoModelFactory):
+    """A card's bonus on the holder's Path's stronger Aspect (#4852); pass ``distinction``."""
+
+    class Meta:
+        model = DistinctionPathAspectGrant
+
+    value = 5

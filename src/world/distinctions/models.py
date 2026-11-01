@@ -26,6 +26,7 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import RelatedCacheClearingMixin
+from world.character_creation.constants import FinalTouchesPrompt
 from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.distinctions.types import (
@@ -272,6 +273,18 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Level for the auto-minted Secret when secret_by_default.",
     )
 
+    # The Final Touches chapter (#4846, slice 5 of #4813): a card may ask one optional
+    # question at Final Touches, answered or skipped there. Set by staff on the
+    # Distinction Builder; read by ``character_creation.offers.final_touches_prompts``
+    # for the cards a draft holds, and by finalize to decide what the answer writes.
+    final_touches_prompt = models.CharField(
+        max_length=20,
+        choices=FinalTouchesPrompt.choices,
+        blank=True,
+        default="",
+        help_text="The optional question this card asks at Final Touches, if any.",
+    )
+
     objects = DistinctionManager()
 
     class Meta:
@@ -293,6 +306,14 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # The ``currency.DistinctionStartingGrant`` sidecar (#4062), or ``None``: read
     # by the serializers' effects summary without importing ``world.currency``.
     starting_grant_or_none = ReverseOneToOneOrNone("starting_grant")
+    # The finalize-time grants of #4852 (slice 6 of #4813), each ``None`` when the card
+    # carries none: a starting prestige (``societies.DistinctionPrestigeGrant``), a
+    # membership (``societies.DistinctionOrganizationGrant``), a bonus on the Path's
+    # stronger Aspect (``classes.DistinctionPathAspectGrant``). Read by the effects summary
+    # and by ``character_creation.offers`` without importing either app.
+    prestige_grant_or_none = ReverseOneToOneOrNone("prestige_grant")
+    organization_grant_or_none = ReverseOneToOneOrNone("organization_grant")
+    path_aspect_grant_or_none = ReverseOneToOneOrNone("path_aspect_grant")
 
     @PrunedCachedProperty
     def cached_item_grants(self) -> list:

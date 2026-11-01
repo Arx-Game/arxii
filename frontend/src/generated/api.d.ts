@@ -30713,6 +30713,10 @@ export interface components {
       };
       readonly enemy_reasons: components['schemas']['EnemyReason'][];
       readonly introductions_offered: components['schemas']['IntroductionsOffered'];
+      readonly final_touches_prompts: string[];
+      readonly crime_kinds: components['schemas']['CrimeKind'][];
+      readonly final_touches_cards: components['schemas']['FinalTouchesCard'][];
+      readonly organization_choices: components['schemas']['OrganizationChoice'][];
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -32175,6 +32179,13 @@ export interface components {
       readonly description: string;
       readonly has_phases: boolean;
       readonly threat_pool_name: string | null;
+    };
+    /** @description One crime kind the Final Touches crime prompt picks from (#4846). */
+    CrimeKind: {
+      id: number;
+      slug: string;
+      name: string;
+      description: string;
     };
     /** @description A look's 4:5 frame in the file's own pixels; height is width x 5/4. */
     Crop: {
@@ -34434,6 +34445,13 @@ export interface components {
       | 'obituary'
       | 'description'
       | 'glimpse';
+    /** @description One ask a held card raises at Final Touches (#4852, slice 6 of #4813). */
+    FinalTouchesCard: {
+      distinction_id: number;
+      name: string;
+      prompt: components['schemas']['PromptEnum'];
+      detail: string;
+    };
     /** @description One axis a fixture kind mitigates (negative value = mitigation). */
     FixtureAffinity: {
       key: string;
@@ -40480,6 +40498,12 @@ export interface components {
       readonly org_type_name: string;
       readonly ranks: components['schemas']['OrganizationRank'][];
       readonly house: components['schemas']['HouseDetail'] | null;
+    };
+    /** @description One organization a card with an open organization grant may seat the character in. */
+    OrganizationChoice: {
+      id: number;
+      name: string;
+      is_covert: boolean;
     };
     OrganizationMembership: {
       readonly id: number;
@@ -48210,6 +48234,14 @@ export interface components {
       new_level: components['schemas']['NewLevelEnum'];
       reason: string;
     };
+    /**
+     * @description * `crime` - Name the crime (Jailbird)
+     *     * `prestige_story` - What people say happened (a prestige grant)
+     *     * `organization` - The organization that takes you in (an organization grant)
+     *     * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
+     * @enum {string}
+     */
+    PromptEnum: 'crime' | 'prestige_story' | 'organization' | 'path_aspect';
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;

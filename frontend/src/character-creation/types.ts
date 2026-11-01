@@ -496,7 +496,68 @@ export interface CharacterDraft {
   enemy_reasons: EnemyReason[];
   /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
   introductions_offered: { first_journal: boolean };
+  /**
+   * The optional questions the held cards ask at Final Touches (#4846), `FinalTouchesPrompt`
+   * values in enum order; empty when no held card asks one. The leaf hides the chapter when
+   * this and its `final_touches` offers are both empty.
+   */
+  final_touches_prompts: FinalTouchesPrompt[];
+  /** The justice list the `crime` prompt picks from (#4846). */
+  crime_kinds: CrimeKind[];
+  /**
+   * The held cards behind the Final Touches prompts (#4852), one entry per card and prompt,
+   * enum order then card name; `detail` names the Path's stronger Aspect for `path_aspect`.
+   */
+  final_touches_cards: FinalTouchesCard[];
+  /**
+   * The realm's organizations that admit player characters, for the `organization` prompt
+   * (#4852); empty unless a held card asks it.
+   */
+  organization_choices: OrganizationChoice[];
 }
+
+/**
+ * The optional question a card asks at Final Touches (#4846); `crime` is Jailbird's. A grant
+ * sidecar raises its own (#4852): `prestige_story` (a prestige grant), `organization` (an
+ * organization grant with no fixed organization), `path_aspect` (a path aspect grant; nothing
+ * to answer, a line naming the Aspect).
+ */
+export type FinalTouchesPrompt = 'crime' | 'prestige_story' | 'organization' | 'path_aspect';
+
+/** One ask a held card raises at Final Touches (#4852). */
+export interface FinalTouchesCard {
+  distinction_id: number;
+  name: string;
+  prompt: FinalTouchesPrompt;
+  detail: string;
+}
+
+/** One organization a card with an open organization grant may seat the character in (#4852). */
+export interface OrganizationChoice {
+  id: number;
+  name: string;
+  is_covert: boolean;
+}
+
+/** The longest story a prestige card takes; mirrors the backend's `PRESTIGE_STORY_MAX_LENGTH`. */
+export const PRESTIGE_STORY_MAX_LENGTH = 500;
+
+/** One crime kind the Final Touches crime prompt picks from (#4846). */
+export interface CrimeKind {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+}
+
+/** Jailbird's crime (#4846): a kind from `crime_kinds` and an optional line, saved on the draft. */
+export interface DraftCrime {
+  kind_id: number;
+  line: string;
+}
+
+/** The longest line the crime prompt takes; mirrors the backend's `CRIME_LINE_MAX_LENGTH`. */
+export const CRIME_LINE_MAX_LENGTH = 500;
 
 export interface Stats {
   // Physical
@@ -972,6 +1033,12 @@ export interface DraftData {
   introductions?: DraftIntroductions;
   // Officially dead (#4396): the established face worn from day one, or null
   officially_dead?: DraftOfficiallyDead | null;
+  // Jailbird's crime (#4846): the kind and the line, or null; written only while a held card asks
+  crime?: DraftCrime | null;
+  /** What people say happened, per prestige card (#4852), keyed by the card's id as text. */
+  prestige_stories?: Record<string, string>;
+  /** The organization a card seats the character in (#4852), keyed by the card's id as text. */
+  organizations?: Record<string, number | null>;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
@@ -1531,7 +1598,8 @@ export type OfferChapter =
   | 'appearance'
   | 'actors_sheet'
   | 'enemy'
-  | 'backgrounds';
+  | 'backgrounds'
+  | 'final_touches';
 
 /** One beat of the Backgrounds library as this draft meets it (#4124):
  * `GET /api/character-creation/drafts/{id}/beats/`. Its answers are the

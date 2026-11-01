@@ -94,6 +94,45 @@ class ParseTableTest(PasteTestCase):
         assert "unknown reason 'Nobody'" in notes
         assert "unknown Beginning 'Elsewhere'" in notes
 
+    def test_an_unlocked_token_names_the_card_that_opens_a_final_touches_line(self):
+        """#4846: ``unlocked:<card>`` is the Final Touches opener; the card must exist."""
+        jailbird = DistinctionFactory(name="Jailbird", slug="jailbird", category=self.category)
+        (row,) = parse_table(
+            "Escape Artist | Personality | 5 | 1 | Locks open. | | | unlocked:Jailbird |"
+        )
+        assert row.status == "create", row.notes
+        (offer,) = row.offers
+        assert offer.chapter == OfferChapter.FINAL_TOUCHES
+        assert offer.arrives_as == OfferArrival.CHOICE
+        assert (offer.opener_field, offer.opener_value) == ("unlocked_by_id", jailbird.pk)
+        (missing,) = parse_table("Escape Artist | Personality | 5 | 1 | | | | unlocked:Nobody |")
+        assert missing.status == "error"
+        assert "unknown card 'Nobody'" in " ".join(missing.notes)
+
+    def test_a_prestige_token_makes_the_starting_prestige_sidecar(self):
+        """#4852: ``+150 prestige`` / ``-300 prestige`` is a grant, not a modifier effect."""
+        (row,) = parse_table(
+            "Renowned | Personality | 5 | 1 | Broadly admired. | | +150 prestige | rules |"
+        )
+        assert row.status == "create", row.notes
+        assert row.prestige == 150
+        assert row.effects == []
+        assert "starts with +150 prestige" in row.will_create
+        (infamous,) = parse_table(
+            "Infamous | Personality | -10 | 1 | Wanted dead. | | -300 prestige; -Menace | rules |"
+        )
+        assert infamous.status == "create", infamous.notes
+        assert infamous.prestige == -300
+        assert len(infamous.effects) == 1
+        (bare,) = parse_table("Bare | Personality | 5 | 1 | | | +prestige | rules |")
+        assert bare.status == "error"
+        assert "needs an amount" in " ".join(bare.notes)
+        (twice,) = parse_table(
+            "Twice | Personality | 5 | 1 | | | +150 prestige; +10 prestige | rules |"
+        )
+        assert twice.status == "error"
+        assert "one starting prestige" in " ".join(twice.notes)
+
     def test_a_degree_opener_must_mark_and_arrives_bundled(self):
         (bad,) = parse_table("Marked | Personality | 0 | 1 | | | | degree:thwarted |")
         assert bad.status == "error"
@@ -188,6 +227,24 @@ class PasteViewTest(PasteTestCase):
         self.existing.refresh_from_db()
         assert self.existing.cost_per_rank != 25
         assert not DistinctionOffer.objects.filter(distinction=self.existing).exists()
+
+    def test_an_unlocked_token_creates_a_final_touches_line_through_the_page(self):
+        """#4846: the paste view previews and creates a line the named card unlocks."""
+        jailbird = DistinctionFactory(name="Jailbird", slug="jailbird", category=self.category)
+        text = "Escape Artist | Personality | 5 | 1 | Locks open. | | | unlocked:Jailbird |"
+        self.client.force_login(self.author)
+        resp = self._check(text)
+        assert resp.status_code == 200
+        assert "1 to create" in resp.content.decode()
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302, resp.content
+        created = Distinction.objects.get(slug="escape-artist")
+        (offer,) = DistinctionOffer.objects.filter(distinction=created)
+        assert offer.chapter == OfferChapter.FINAL_TOUCHES
+        assert offer.unlocked_by == jailbird
+        assert offer.opener_key == f"unlocked:{jailbird.pk}"
+        assert offer.written_by == self.writer
 
     def test_create_makes_the_skill_target_and_the_effect_lands_on_it(self):
         """The create step makes the stat-category target for the skill's trait inside the

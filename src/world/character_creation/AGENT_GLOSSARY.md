@@ -73,3 +73,22 @@ _Avoid_: bio, backstory flag, public beats.
 **Maturation floor** (`CharacterSheet.maturation_floor`, #4124):
 The matured years a character arrived with; milestones at or below it never bank.
 _Avoid_: starting milestones, CG bank.
+
+**Final Touches chapter** (`OfferChapter.FINAL_TOUCHES`, #4846):
+The offers chapter whose lines a held card unlocks, by the chapter rule of 2026-10-29:
+optional, each answerable or skippable, hidden when nothing is unlocked. Its one opener is
+the **unlocking card** (`DistinctionOffer.unlocked_by`). _Avoid_: card-gated offers (the
+mechanism, not the name), Final Touches stage (the stage holds more than this chapter),
+unlock requirement.
+
+**Final Touches prompt** (`Distinction.final_touches_prompt`, `FinalTouchesPrompt`, #4846):
+The optional question a card asks at Final Touches; `crime` is Jailbird's, answered in
+`draft_data.crime` and written as a staff-only crime note (`justice.CharacterCrimeNote`) at
+finalize. A grant sidecar raises its own prompt without the staff field (#4852):
+`prestige_story` (a prestige grant; the answer in `draft_data.prestige_stories` becomes the
+pick's notes), `organization` (an organization grant with no fixed organization; the pick
+in `draft_data.organizations` from the **organization choices**, the realm's organizations
+that admit player characters), `path_aspect` (a path aspect grant; nothing to answer, the
+line names the Path's stronger Aspect). `final_touches_cards` lists the card behind each
+ask. _Avoid_: lingering question, door (the officially-dead door is a different shape),
+card effect, grant prompt field (a grant's prompt is derived, never authored).

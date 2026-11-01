@@ -734,3 +734,43 @@ class WitnessReactionTarget(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"WitnessReactionTarget(window={self.window_id}, deed={self.legend_entry_id})"
+
+
+class CharacterCrimeNote(SharedMemoryModel):
+    """A crime a character is said to have committed, for a GM to pick up or never (#4846).
+
+    The first writer is character creation: Jailbird's card asks the player to name the
+    crime at Final Touches (``FinalTouchesPrompt.CRIME``), and finalize writes the answer
+    here, slice 5 of #4813. It is a note and nothing more: no ``PersonaHeat``, no
+    ``DeedCrimeTag``, no Legend row (decision 6 of #4813). Staff-only by the parent's leak
+    table: registered in the admin, on no serializer and no API, never on the public
+    sheet. An FK rather than a one-to-one so a GM can add a second note by hand later.
+    Lives in justice, beside ``CrimeKind``, so ``character_sheets`` stays free of it
+    (ADR-0010: the specific side holds the FK).
+    """
+
+    sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="crime_notes",
+        help_text="The character the note is about.",
+    )
+    crime_kind = models.ForeignKey(
+        CrimeKind,
+        on_delete=models.PROTECT,
+        related_name="character_notes",
+        help_text="The kind of crime named.",
+    )
+    note = models.TextField(
+        blank=True,
+        help_text="The player's own sentence about it, if they wrote one.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Character crime note"
+        verbose_name_plural = "Character crime notes"
+        ordering = ("created_at", "pk")
+
+    def __str__(self) -> str:
+        return f"CharacterCrimeNote(sheet={self.sheet_id}, kind={self.crime_kind_id})"

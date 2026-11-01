@@ -84,6 +84,19 @@ Charge: the technique's own damage term reads it, and the Charge damage effect r
 scoped to "Charge: damage". Opponent scopes remain #4823; decisions 9 and 10 (flat amounts only,
 derived amounts later, #4824) are unchanged.
 
+## Amendment, 2026-10-31 (#4823, slice 3 of #4783)
+
+Opponent scopes landed as the third "later slice" decision 11 expected: two more nullable foreign
+key columns on `ModifierTarget` (`scope_opponent_property`, `scope_opponent_condition`), not link
+tables, with the technique scopes' rules: they combine, an unset scope means any, and they need a
+kind and no single maneuver effect. They narrow damage, condition severity and condition duration.
+What an opponent "has" is read once per opponent and only while an opponent-scoped target exists:
+a property is a stored `ObjectProperty`, one an active condition's template or current stage
+grants, or a character's primary persona tag; a condition is an active, unsuppressed instance.
+Condition bonuses are worked out per target rather than once per cast, so a cast that lands one
+condition on several targets can give each a different amount. Single maneuver effects and to hit
+take no opponent scope, and decisions 9 and 10 are unchanged.
+
 ## Rejected
 
 - **Link tables on the specific side (ADR-0010's preference).** One table per scope, each pointing

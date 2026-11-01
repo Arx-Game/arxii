@@ -12,8 +12,11 @@ from world.magic.narration import fill_narration_placeholders, validate_outcome_
 from world.scenes.interaction_services import render_challenge_outcome_narration
 
 
-def _opp_dmg(*, damage_dealt: int, defeated: bool = False) -> OpponentDamageResult:
+def _opp_dmg(
+    *, damage_dealt: int, defeated: bool = False, opponent_id: int | None = None
+) -> OpponentDamageResult:
     return OpponentDamageResult(
+        opponent_id=opponent_id,
         damage_dealt=damage_dealt,
         health_damaged=damage_dealt > 0,
         probed=False,
@@ -279,3 +282,131 @@ class AuthoredOutcomeNarrationTest(SimpleTestCase):
             validate_outcome_narration("{actor} strikes", "hit_narration")
         with self.assertRaises(ValidationError):
             validate_outcome_narration("strikes {target}", "hit_narration")
+
+
+HOUND_ID = 11
+WYRM_ID = 12
+DRAKE_ID = 13
+LABELS = {HOUND_ID: "Hound", WYRM_ID: "Wyrm", DRAKE_ID: "Drake"}
+
+
+def _area_outcome(*damages: tuple[int, int]) -> ActionOutcome:
+    """An outcome with one damage result per ``(opponent_id, damage)`` given."""
+    outcome = ActionOutcome(entity_type="pc", entity_label="Vesper")
+    for opponent_id, damage in damages:
+        outcome.damage_results.append(_opp_dmg(damage_dealt=damage, opponent_id=opponent_id))
+    return outcome
+
+
+class AreaOutcomeNarrationTest(SimpleTestCase):
+    """#4842: an area cast names each opponent with its own damage."""
+
+    def _render(self, outcome: ActionOutcome, **extra: object) -> str:
+        return render_action_outcome_narration(
+            actor_label="Vesper",
+            technique_name="Sweep",
+            target_label="Hound",
+            outcome=outcome,
+            target_opponent_id=HOUND_ID,
+            opponent_labels=LABELS,
+            **extra,
+        )
+
+    def test_single_opponent_line_is_unchanged(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 6)))
+        assert text == "Vesper’s Sweep strikes Hound for 6 damage."
+
+    def test_profiles_on_one_opponent_still_sum_into_one_figure(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 4), (HOUND_ID, 2)))
+        assert text == "Vesper’s Sweep strikes Hound for 6 damage."
+
+    def test_two_opponents_each_get_their_own_figure(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 6), (WYRM_ID, 11)))
+        assert text == "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage."
+
+    def test_focused_target_is_named_first_whatever_the_result_order(self) -> None:
+        text = self._render(_area_outcome((WYRM_ID, 11), (HOUND_ID, 6)))
+        assert text == "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage."
+
+    def test_three_opponents_read_as_a_series(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 6), (DRAKE_ID, 4), (WYRM_ID, 11)))
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage, Drake for 4 damage and Wyrm for 11 damage."
+        )
+
+    def test_authored_hit_text_head_is_kept_for_the_focused_target(self) -> None:
+        text = self._render(
+            _area_outcome((HOUND_ID, 6), (WYRM_ID, 11)),
+            hit_text="{actor} whirls a ring of steel through {target}",
+        )
+        assert text == (
+            "Vesper whirls a ring of steel through Hound for 6 damage and Wyrm for 11 damage."
+        )
+
+    def test_opponent_that_took_nothing_is_left_out(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 6), (WYRM_ID, 0), (DRAKE_ID, 4)))
+        assert text == "Vesper’s Sweep strikes Hound for 6 damage and Drake for 4 damage."
+
+    def test_focused_target_that_took_nothing_is_left_out(self) -> None:
+        text = self._render(_area_outcome((HOUND_ID, 0), (WYRM_ID, 11)))
+        assert text == "Vesper’s Sweep strikes Wyrm for 11 damage."
+
+    def test_tail_and_suffix_clauses_come_once_at_the_end(self) -> None:
+        outcome = _area_outcome((HOUND_ID, 6), (WYRM_ID, 11))
+        outcome.damage_results[1] = _opp_dmg(damage_dealt=11, defeated=True, opponent_id=WYRM_ID)
+        text = self._render(outcome, signature_snippet="a hiss of steel")
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage, "
+            "defeating Wyrm — a hiss of steel."
+        )
+
+    def test_only_the_defeated_opponent_is_named_in_the_clause(self) -> None:
+        outcome = _area_outcome((HOUND_ID, 6), (WYRM_ID, 11))
+        outcome.damage_results[0] = _opp_dmg(damage_dealt=6, defeated=True, opponent_id=HOUND_ID)
+        text = self._render(outcome)
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage and Wyrm for 11 damage, defeating Hound."
+        )
+
+    def test_every_defeated_opponent_is_named_in_the_clause(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Vesper")
+        for opponent_id, damage in ((WYRM_ID, 11), (HOUND_ID, 6), (DRAKE_ID, 4)):
+            outcome.damage_results.append(
+                _opp_dmg(
+                    damage_dealt=damage, defeated=opponent_id != DRAKE_ID, opponent_id=opponent_id
+                )
+            )
+        text = self._render(outcome)
+        assert text == (
+            "Vesper’s Sweep strikes Hound for 6 damage, Wyrm for 11 damage and Drake for 4 "
+            "damage, defeating Hound and Wyrm."
+        )
+
+    def test_single_target_defeat_still_says_them(self) -> None:
+        outcome = ActionOutcome(entity_type="pc", entity_label="Vesper")
+        outcome.damage_results.append(
+            _opp_dmg(damage_dealt=40, defeated=True, opponent_id=HOUND_ID)
+        )
+        assert (
+            self._render(outcome) == "Vesper’s Sweep strikes Hound for 40 damage, defeating them."
+        )
+
+    def test_without_labels_the_summed_line_stays(self) -> None:
+        text = render_action_outcome_narration(
+            actor_label="Vesper",
+            technique_name="Sweep",
+            target_label="Hound",
+            outcome=_area_outcome((HOUND_ID, 6), (WYRM_ID, 11)),
+        )
+        assert text == "Vesper’s Sweep strikes Hound for 17 damage."
+
+    def test_an_opponent_missing_from_the_labels_falls_back_to_the_sum(self) -> None:
+        text = render_action_outcome_narration(
+            actor_label="Vesper",
+            technique_name="Sweep",
+            target_label="Hound",
+            outcome=_area_outcome((HOUND_ID, 6), (99, 11)),
+            target_opponent_id=HOUND_ID,
+            opponent_labels=LABELS,
+        )
+        assert text == "Vesper’s Sweep strikes Hound for 17 damage."

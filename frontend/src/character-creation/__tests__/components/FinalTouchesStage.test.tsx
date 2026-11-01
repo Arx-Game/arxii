@@ -40,11 +40,16 @@ const EMPTY_FACE_FOR_TEST = {
   background: '',
 };
 let offersResponse: OffersResponse;
+// The card-unlocked chapter's own response (#4846); empty unless a test fills it.
+let finalTouchesOffers: OffersResponse = { offers: [], closed: [] };
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: mockCGExplanations }),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync }),
-  useDraftOffers: () => ({ data: offersResponse, isLoading: false }),
+  useDraftOffers: (_draftId: number, chapter: string) => ({
+    data: chapter === 'final_touches' ? finalTouchesOffers : offersResponse,
+    isLoading: false,
+  }),
 }));
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: [] }),
@@ -450,6 +455,138 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
             introductions: expect.objectContaining({ whispers: '' }),
           }),
         },
+      })
+    );
+  });
+});
+
+describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
+  const theft = { id: 5, slug: 'theft', name: 'Theft', description: '' };
+  const arson = { id: 6, slug: 'arson', name: 'Arson', description: '' };
+  const escapeArtist: VisibleOffer = {
+    ...hedonistic,
+    offer_id: 401,
+    distinction_id: 41,
+    name: 'Escape Artist',
+    distinction_name: 'Escape Artist',
+    player_line: 'Locks open for you.',
+    chapter: 'final_touches',
+    opener_key: 'unlocked:31',
+    opener_label: 'Jailbird',
+  };
+  const HEADING = 'What the cards leave to settle';
+  const PROMPT = 'The crime, if you care to name it.';
+
+  beforeEach(() => {
+    offersResponse = { offers: [], closed: [] };
+  });
+  afterEach(() => {
+    finalTouchesOffers = { offers: [], closed: [] };
+    mutateAsync.mockClear();
+  });
+
+  it('is absent when no held card unlocks a line or asks a question', () => {
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it('ignores a route-closed row no held card would have opened, and counts one it would', () => {
+    const closedRow = {
+      distinction_id: 51,
+      name: 'Marked Hands',
+      reason: 'Not on this road.',
+      opener_labels: [] as string[],
+      opener_ids: [] as number[],
+    };
+    finalTouchesOffers = { offers: [], closed: [closedRow] };
+    const { unmount } = renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+    unmount();
+    finalTouchesOffers = {
+      offers: [],
+      closed: [{ ...closedRow, opener_labels: ['Jailbird'], opener_ids: [401] }],
+    };
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText(HEADING)).toBeInTheDocument();
+    expect(screen.getByText(/Marked Hands/)).toBeInTheDocument();
+  });
+
+  it('shows the lines a held card unlocks, with no crime prompt when no card asks', () => {
+    finalTouchesOffers = { offers: [escapeArtist], closed: [] };
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText(HEADING)).toBeInTheDocument();
+    expect(screen.getByText('Escape Artist')).toBeInTheDocument();
+    expect(screen.getByText('Locks open for you.')).toBeInTheDocument();
+    expect(screen.queryByLabelText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it('asks the crime when a held card does, lists the kinds, caps the line and saves it', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | undefined;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ final_touches_prompts: ['crime'], crime_kinds: [theft, arson] })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByText(HEADING)).toBeInTheDocument();
+    const kind = screen.getByLabelText(PROMPT);
+    expect(within(kind).getByRole('option', { name: 'Unnamed' })).toBeInTheDocument();
+    expect(within(kind).getByRole('option', { name: 'Theft' })).toBeInTheDocument();
+    expect(within(kind).getByRole('option', { name: 'Arson' })).toBeInTheDocument();
+    const line = screen.getByLabelText('In a sentence');
+    expect(line).toHaveAttribute('maxlength', '500');
+    expect(
+      screen.getByText('Nothing follows from this unless a GM picks it up.')
+    ).toBeInTheDocument();
+    await user.selectOptions(kind, '5');
+    await user.type(line, 'A purse that was not mine.');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({
+            crime: { kind_id: 5, line: 'A purse that was not mine.' },
+          }),
+        }),
+      })
+    );
+  });
+
+  it('opens on the crime already saved and saves null once the kind is cleared', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | undefined;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['crime'],
+          crime_kinds: [theft],
+          draft_data: { crime: { kind_id: 5, line: 'A purse.' } },
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    const kind = screen.getByLabelText(PROMPT);
+    expect(kind).toHaveValue('5');
+    expect(screen.getByLabelText('In a sentence')).toHaveValue('A purse.');
+    await user.selectOptions(kind, '');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ draft_data: expect.objectContaining({ crime: null }) }),
       })
     );
   });

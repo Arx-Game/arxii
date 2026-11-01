@@ -6,10 +6,27 @@ from typing import TYPE_CHECKING
 
 from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
 from world.combat.services.techniques.cast_audience import _resolve_combat_cast_audience
-from world.combat.types import ActionOutcome, CombatTechniqueResult
+from world.combat.types import ActionOutcome, CombatTechniqueResult, OpponentDamageResult
 
 if TYPE_CHECKING:
     from world.magic.models import Technique
+
+
+def _opponent_labels(outcome: ActionOutcome) -> dict[int, str] | None:
+    """Opponent id to player-facing name for an outcome that hurt several opponents (#4842).
+
+    An area cast names each opponent with its own damage. One query for the names
+    (``CombatOpponent.name``, what ``target.name`` is), and none when the outcome touched
+    fewer than two opponents.
+    """
+    opponent_ids = {
+        dr.opponent_id
+        for dr in outcome.damage_results
+        if isinstance(dr, OpponentDamageResult) and dr.opponent_id is not None
+    }
+    if len(opponent_ids) < 2:  # noqa: PLR2004 - one opponent is the single-target line
+        return None
+    return dict(CombatOpponent.objects.filter(pk__in=opponent_ids).values_list("pk", "name"))
 
 
 def _record_and_broadcast_pc_action(  # noqa: PLR0913
@@ -107,6 +124,8 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         (dr.damage_interaction for dr in outcome.damage_results if dr.damage_interaction),
         None,
     )
+    opponent_labels = _opponent_labels(outcome)
+    target_opponent_id = target.pk if target is not None else None
     narration = render_action_outcome_narration(
         # The persona this PC is CURRENTLY presenting as, not str(participant)
         # -> "Sheet for {key}" (#4091 fix round 2). One call per action.
@@ -120,12 +139,17 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         interaction_result=interaction_result,
         hit_text=technique.hit_narration,
         miss_text=technique.miss_narration,
+        target_opponent_id=target_opponent_id,
+        opponent_labels=opponent_labels,
     )
     # Rendered unconditionally rather than under `if audience.concealed`: it is a pure
     # string build over data already in hand, and branching here would put the
     # concealment decision in two places.
     unattributed_narration = render_unattributed_action_narration(
-        target_label=target_label, outcome=outcome
+        target_label=target_label,
+        outcome=outcome,
+        target_opponent_id=target_opponent_id,
+        opponent_labels=opponent_labels,
     )
     broadcast_action_outcome(
         encounter=participant.encounter,

@@ -32,6 +32,8 @@ from world.societies.models import (
     Crown,
     CrownBid,
     CrownVote,
+    DistinctionOrganizationGrant,
+    DistinctionPrestigeGrant,
     GangTurfDetails,
     GangTurfReputationAward,
     GangTurfTierThreshold,
@@ -417,10 +419,18 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
         "tradition",
         "org_type",
         "is_covert",
+        "admits_player_characters",
         "family",
         "member_count",
     ]
-    list_filter = ["society__realm", "society", "org_type", "is_covert", "house_state"]
+    list_filter = [
+        "society__realm",
+        "society",
+        "org_type",
+        "is_covert",
+        "admits_player_characters",
+        "house_state",
+    ]
     search_fields = ["name", "description", "society__name", "family__name"]
     ordering = ["society", "name"]
     raw_id_fields = ["tradition"]
@@ -444,6 +454,7 @@ class OrganizationAdmin(ReviewedDeleteMixin, GrantReachOnSaveMixin, admin.ModelA
                     "society",
                     "org_type",
                     "is_covert",
+                    "admits_player_characters",
                     "tradition",
                     "description",
                 )
@@ -612,6 +623,27 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
         if not change:
             learned = apply_organization_codex_grants(obj)
             messages.info(request, f"Applied the organization's codex grants: {learned} learned.")
+
+
+@admin.register(DistinctionPrestigeGrant)
+class DistinctionPrestigeGrantAdmin(admin.ModelAdmin):
+    """A card's starting prestige (#4852, slice 6 of #4813); the paste's ``+150 prestige``
+    token makes one too."""
+
+    list_display = ("distinction", "amount")
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)
+
+
+@admin.register(DistinctionOrganizationGrant)
+class DistinctionOrganizationGrantAdmin(admin.ModelAdmin):
+    """The membership a card opens (#4852); a blank organization means the player picks
+    one of the realm's admitting organizations at Final Touches."""
+
+    list_display = ("distinction", "organization", "rank")
+    search_fields = ("distinction__name", "organization__name")
+    raw_id_fields = ("distinction", "rank")
+    autocomplete_fields = ("organization",)
 
 
 @admin.register(OrganizationObligation)

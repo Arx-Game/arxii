@@ -6,18 +6,21 @@ its kind). Combat and scene maneuvers call it instead of a constant.
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.conditions.services import get_condition_modifier_total
+from world.conditions.services import _active_matching_instances, get_condition_modifier_total
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
 from world.mechanics.maneuver_effects import get_maneuver_effect
-from world.mechanics.models import ManeuverEffect, ModifierTarget
+from world.mechanics.models import ManeuverEffect, ModifierTarget, ObjectProperty, Property
 from world.mechanics.services import get_modifier_total
-from world.mechanics.types import TechniqueEffectContext
+from world.mechanics.types import OpponentFacts, TechniqueEffectContext
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Technique
 
@@ -88,6 +91,8 @@ def _matching_targets(effect: ManeuverEffect, *, kind_wide: bool = True) -> list
             scope_technique_function="",
             scope_damage_type__isnull=True,
             scope_resonance__isnull=True,
+            scope_opponent_property__isnull=True,
+            scope_opponent_condition__isnull=True,
         ).filter(scope)
     )
 
@@ -145,26 +150,119 @@ def technique_effect_total(
     return _modifier_total(sheet, [t for t in targets if _fits(t, context)])
 
 
-def technique_condition_bonuses(
-    sheet: "CharacterSheet | None", technique: "Technique"
-) -> tuple[int, int]:
-    """The severity and duration ``sheet``'s modifiers add to ``technique``'s own conditions.
+def opponent_targets_exist(targets: list[ModifierTarget]) -> bool:
+    """Whether any of ``targets`` is narrowed by who the effect lands on (#4823)."""
+    return any(target.has_opponent_scope for target in targets)
 
-    Worked out once per cast, not per row or target. Both target lists load first; with
-    neither in the game there is nothing to match, so no context is built. Unclamped: the
-    condition builder floors a negative bonus at 1. With no sheet: ``(0, 0)``.
+
+def opponent_facts(
+    target: "ObjectDB | None",  # noqa: OBJECTDB_PARAM - an opponent may be any object, or none
+) -> OpponentFacts:
+    """The properties and conditions ``target`` carries, for an opponent-scoped modifier.
+
+    Property ids are the union of the three surfaces the game's "has property" reads: the
+    target's stored ``ObjectProperty`` rows, the ``properties`` of the template and current
+    stage of each of its active conditions (``PropertyRequirement._granted_by_condition``),
+    and, when it has a character sheet, the primary persona's authored tags
+    (``CharacterSheet.has_property``). Condition ids are the templates of those active
+    conditions. "Active" is the conditions app's own: not suppressed, not past an in-game
+    expiry. A fixed handful of queries however many conditions it holds; with no object,
+    nothing.
     """
-    if sheet is None:
-        return 0, 0
-    severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
-    duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
-    if not severity_targets and not duration_targets:
-        return 0, 0
-    context = technique_effect_context(sheet, technique)
-    return (
-        technique_effect_total(sheet, context, severity_targets),
-        technique_effect_total(sheet, context, duration_targets),
+    if target is None:
+        return OpponentFacts()
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    instances = list(
+        _active_matching_instances([target], Q()).values_list("condition_id", "current_stage_id")
     )
+    condition_ids = {condition_id for condition_id, _ in instances}
+    stage_ids = {stage_id for _, stage_id in instances if stage_id is not None}
+    property_ids = set(
+        ObjectProperty.objects.filter(object_id=target.pk).values_list("property_id", flat=True)
+    )
+    if condition_ids:
+        property_ids.update(
+            Property.objects.filter(
+                Q(condition_templates__in=condition_ids)
+                | Q(condition_stages_carrying__in=stage_ids)
+            ).values_list("pk", flat=True)
+        )
+    # A character's sheet shares the object's pk, so the persona is reached without
+    # fetching the sheet.
+    property_ids.update(
+        Property.objects.filter(
+            personas__character_sheet_id=target.pk,
+            personas__persona_type=PersonaType.PRIMARY,
+        ).values_list("pk", flat=True)
+    )
+    return OpponentFacts(frozenset(property_ids), frozenset(condition_ids))
+
+
+@dataclass(frozen=True)
+class TechniqueConditionBonus:
+    """The caster's modifiers on the conditions one cast applies, worked out per target (#4823).
+
+    Built once per cast by ``for_cast``: both target lists load first, and with neither in
+    the game there is nothing to match, so no context is built. ``for_target`` answers "what
+    do the matching modifiers add to a condition landing on this target", as a
+    ``(severity, duration)`` pair, worked out once per target per cast and reused by every
+    later row.
+    A target's properties and conditions are read only when a severity or duration target is
+    narrowed by who it lands on, and are read before the cast's first condition lands, since
+    the builder works out every row before any is applied. ``none`` is ``(0, 0)`` for everyone.
+    Unclamped: the condition builder floors a negative bonus at 1.
+    """
+
+    sheet: "CharacterSheet | None"
+    context: TechniqueEffectContext | None
+    severity_targets: list[ModifierTarget]
+    duration_targets: list[ModifierTarget]
+    totals: dict[int | None, tuple[int, int]] = field(default_factory=dict)
+
+    @classmethod
+    def none(cls) -> "TechniqueConditionBonus":
+        return cls(sheet=None, context=None, severity_targets=[], duration_targets=[])
+
+    @classmethod
+    def for_cast(
+        cls, sheet: "CharacterSheet | None", technique: "Technique"
+    ) -> "TechniqueConditionBonus":
+        """The bonus for ``sheet`` casting ``technique``'s own conditions; none with no sheet."""
+        if sheet is None:
+            return cls.none()
+        severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
+        duration_targets = technique_effect_targets(EffectKind.CONDITION_DURATION)
+        if not severity_targets and not duration_targets:
+            return cls.none()
+        return cls(
+            sheet=sheet,
+            context=technique_effect_context(sheet, technique),
+            severity_targets=severity_targets,
+            duration_targets=duration_targets,
+        )
+
+    def for_target(
+        self,
+        target: "ObjectDB",  # noqa: OBJECTDB_PARAM - a condition may land on any object
+    ) -> tuple[int, int]:
+        """The ``(severity, duration)`` the modifiers add to a condition landing on ``target``."""
+        context = self.context
+        if context is None:
+            return 0, 0
+        narrowed = opponent_targets_exist(self.severity_targets) or opponent_targets_exist(
+            self.duration_targets
+        )
+        # Without an opponent scope every target gets the same answer: one entry, no reads.
+        key = target.pk if narrowed else None
+        if key not in self.totals:
+            if narrowed:
+                context = context.landing_on(opponent_facts(target))
+            self.totals[key] = (
+                technique_effect_total(self.sheet, context, self.severity_targets),
+                technique_effect_total(self.sheet, context, self.duration_targets),
+            )
+        return self.totals[key]
 
 
 def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
@@ -178,6 +276,14 @@ def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
         ),
         (target.scope_damage_type_id, context.damage_type_id == target.scope_damage_type_id),
         (target.scope_resonance_id, target.scope_resonance_id in context.resonance_ids),
+        (
+            target.scope_opponent_property_id,
+            target.scope_opponent_property_id in context.opponent_property_ids,
+        ),
+        (
+            target.scope_opponent_condition_id,
+            target.scope_opponent_condition_id in context.opponent_condition_ids,
+        ),
     )
     return all(matches for scope, matches in checks if scope)
 

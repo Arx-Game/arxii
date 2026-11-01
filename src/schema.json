@@ -51298,6 +51298,26 @@ components:
           allOf:
           - $ref: '#/components/schemas/IntroductionsOffered'
           readOnly: true
+        final_touches_prompts:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        crime_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/CrimeKind'
+          readOnly: true
+        final_touches_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinalTouchesCard'
+          readOnly: true
+        organization_choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationChoice'
+          readOnly: true
       required:
       - age_max
       - age_min
@@ -51307,18 +51327,22 @@ components:
       - cg_points_spent
       - claimed_kin_pool
       - claimed_kin_slot
+      - crime_kinds
       - derived_anchors
       - enemy_degree_grants
       - enemy_offers
       - enemy_price_tables
       - enemy_reasons
       - family
+      - final_touches_cards
+      - final_touches_prompts
       - has_existing_characters
       - height_band
       - ic_month_names
       - id
       - introductions_offered
       - magic_training
+      - organization_choices
       - public_worship
       - second_parent_species
       - secret_worship
@@ -54526,6 +54550,23 @@ components:
       - name
       - threat_pool_name
       - tier
+    CrimeKind:
+      type: object
+      description: One crime kind the Final Touches crime prompt picks from (#4846).
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
+      - slug
     Crop:
       type: object
       description: A look's 4:5 frame in the file's own pixels; height is width x
@@ -59320,6 +59361,24 @@ components:
         * `obituary` - Obituary
         * `description` - Physical description
         * `glimpse` - Glimpse
+    FinalTouchesCard:
+      type: object
+      description: 'One ask a held card raises at Final Touches (#4852, slice 6 of
+        #4813).'
+      properties:
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        prompt:
+          $ref: '#/components/schemas/PromptEnum'
+        detail:
+          type: string
+      required:
+      - detail
+      - distinction_id
+      - name
+      - prompt
     FixtureAffinity:
       type: object
       description: One axis a fixture kind mitigates (negative value = mitigation).
@@ -71770,6 +71829,21 @@ components:
       - org_type_name
       - ranks
       - society_name
+    OrganizationChoice:
+      type: object
+      description: One organization a card with an open organization grant may seat
+        the character in.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_covert:
+          type: boolean
+      required:
+      - id
+      - is_covert
+      - name
     OrganizationMembership:
       type: object
       properties:
@@ -85233,6 +85307,18 @@ components:
       required:
       - new_level
       - reason
+    PromptEnum:
+      enum:
+      - crime
+      - prestige_story
+      - organization
+      - path_aspect
+      type: string
+      description: |-
+        * `crime` - Name the crime (Jailbird)
+        * `prestige_story` - What people say happened (a prestige grant)
+        * `organization` - The organization that takes you in (an organization grant)
+        * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
     Pronouns:
       type: object
       description: Serializer for pronoun sets.

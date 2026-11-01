@@ -1491,6 +1491,7 @@
   - enemy_reason -> character_creation.EnemyReason [FK] (nullable)
   - appearance_section -> character_creation.AppearanceSection [FK] (nullable)
   - beat -> character_creation.LifeBeat [FK] (nullable)
+  - unlocked_by -> distinctions.Distinction [FK] (nullable)
   - first_look -> character_creation.Beginnings [M2M]
 **Pointed to by:**
   - pins <- character_creation.OfferFirstLook
@@ -1849,6 +1850,7 @@
   - journal_bequests_granted <- journals.JournalBequestGrant
   - frame_jobs_against <- justice.FrameJobDetails
   - denouncements_made <- justice.DenounceRecord
+  - crime_notes <- justice.CharacterCrimeNote
   - commanded_military_units <- military.MilitaryUnit
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
@@ -2160,6 +2162,10 @@
 ### ClassStageHealthRate
 **Foreign Keys:**
   - character_class -> classes.CharacterClass [FK]
+
+### DistinctionPathAspectGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
 
 ### Path
 **Foreign Keys:**
@@ -2944,6 +2950,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
+- `settle_wound_triggers(participant: 'CombatParticipant', result: 'ParticipantDamageResult') -> 'None' - Roll the wound triggers a knockout-band hit held back, once its knockout check landed.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None, line: 'OpponentLine | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
@@ -3241,6 +3248,7 @@
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - compulsion <- conditions.Compulsion
   - control_loss_triggers <- conditions.ControlLossTrigger
+  - opponent_modifier_targets <- mechanics.ModifierTarget
   - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
@@ -4044,11 +4052,15 @@
   - reward_definitions <- achievements.RewardDefinition
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
+  - path_aspect_grant <- classes.DistinctionPathAspectGrant
   - closed_by_routes <- character_creation.OriginTemplate
   - carried_by_state_lines <- character_creation.TraditionStateLine
   - granted_by_schooling_lines <- character_creation.SchoolingLine
   - offers <- character_creation.DistinctionOffer
+  - unlocked_offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
+  - prestige_grant <- societies.DistinctionPrestigeGrant
+  - organization_grant <- societies.DistinctionOrganizationGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
@@ -5496,6 +5508,11 @@
   - area -> areas.Area [FK]
   - crime_kind -> justice.CrimeKind [FK]
 
+### CharacterCrimeNote
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [FK]
+  - crime_kind -> justice.CrimeKind [FK]
+
 ### CrimeEvidence
 **Foreign Keys:**
   - deed -> societies.LegendEntry [OneToOne]
@@ -5511,6 +5528,7 @@
   - deed_tags <- justice.DeedCrimeTag
   - accusation_claims <- justice.AccusationCrimeClaim
   - frame_jobs <- justice.FrameJobDetails
+  - character_notes <- justice.CharacterCrimeNote
 
 ### DeedCrimeTag
 **Foreign Keys:**
@@ -7123,6 +7141,8 @@
   - scope_gift -> magic.Gift [FK] (nullable)
   - scope_damage_type -> conditions.DamageType [FK] (nullable)
   - scope_resonance -> magic.Resonance [FK] (nullable)
+  - scope_opponent_property -> mechanics.Property [FK] (nullable)
+  - scope_opponent_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
   - reward_definitions <- achievements.RewardDefinition
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
@@ -7171,6 +7191,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
+  - opponent_modifier_targets <- mechanics.ModifierTarget
   - prerequisites <- mechanics.Prerequisite
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
@@ -9477,6 +9498,7 @@
 - `persona_discovery_between(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if`
 - `persona_for_character(character: 'Character') -> 'Persona' - Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `persona_names_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, str]' - Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).`
+- `personas_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, Persona]' - Batched ``active_persona_for_sheet``: the face each sheet presents, two queries.`
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
@@ -9784,6 +9806,16 @@
   - legend_entry -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - organization -> societies.Organization [FK]
+
+### DistinctionOrganizationGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+  - organization -> societies.Organization [FK] (nullable)
+  - rank -> societies.OrganizationRank [FK] (nullable)
+
+### DistinctionPrestigeGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
 
 ### Domain
 **Foreign Keys:**
@@ -10188,6 +10220,7 @@
   - claimed_crew_slots <- societies.CrewSlot
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
+  - distinction_grants <- societies.DistinctionOrganizationGrant
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
@@ -10308,6 +10341,7 @@
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
   - vacancies <- societies.Vacancy
+  - distinction_grants <- societies.DistinctionOrganizationGrant
 
 ### OrganizationRelation
 **Foreign Keys:**

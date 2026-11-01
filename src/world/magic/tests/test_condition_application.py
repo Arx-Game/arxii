@@ -803,7 +803,7 @@ class VowSeamKwargTests(TestCase):
         self.technique = TechniqueFactory(gift=GiftFactory())
         self.cond = ConditionTemplateFactory(name="VowSeamCond", default_duration_value=2)
 
-    def _apply(self, **kwargs: int) -> list[AppliedConditionResult]:
+    def _apply(self, **kwargs: object) -> list[AppliedConditionResult]:
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as bulk:
             bulk.side_effect = lambda apps, **_kw: [ApplyConditionResult(success=True)] * len(apps)
             return apply_technique_conditions(
@@ -855,6 +855,40 @@ class VowSeamKwargTests(TestCase):
         self.assertEqual(plain.severity_applied, 7)
         self.assertEqual(bonused.severity_applied, plain.severity_applied)
         self.assertEqual(bonused.duration_rounds, plain.duration_rounds)
+
+    def test_a_target_bonus_adds_to_the_flat_bonus_for_that_target(self) -> None:
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=self.cond,
+            target_kind=ConditionTargetKind.ALLY,
+            base_severity=2,
+            base_duration_rounds=3,
+        )
+        seen: list[object] = []
+
+        def target_bonus(target: object) -> tuple[int, int]:
+            seen.append(target)
+            return 3, 1
+
+        [result] = self._apply(severity_bonus=4, duration_bonus=2, target_bonus=target_bonus)
+        self.assertEqual((result.severity_applied, result.duration_rounds), (9, 6))
+        self.assertEqual(seen, [self.target])
+
+    def test_a_team_lane_row_ignores_the_target_bonus(self) -> None:
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=self.cond,
+            target_kind=ConditionTargetKind.ALLY,
+            base_severity=1,
+            base_duration_rounds=3,
+        )
+        with (
+            patch("world.conditions.models.ConditionModifierEffect.objects.filter") as team_filter,
+            patch("world.conditions.services.priced_percent_severity", return_value=7),
+        ):
+            team_filter.return_value.exists.return_value = True
+            [result] = self._apply(target_bonus=lambda _target: (9, 9))
+        self.assertEqual((result.severity_applied, result.duration_rounds), (7, 3))
 
     def test_removed_rows_override_strips_a_condition_the_technique_does_not_name(self) -> None:
         other = TechniqueFactory(gift=GiftFactory())

@@ -42,7 +42,7 @@ tier.range_description                       # "+250 to +499"
 |-------|---------|------------|
 | `Society` | Socio-political stratum within a Realm | `name`, `realm` (FK to `realms.Realm`), `description`, 6 principle fields (`mercy`, `method`, `status`, `change`, `allegiance`, `power`) |
 | `OrganizationType` | Template with default rank titles for org categories | `name`, `reach` (`EnemyReach`, #3621: how far a group of this type reaches a character who made an enemy of it; prices the enemy on the group scale), `rank_1_title` through `rank_5_title` |
-| `Organization` | Specific group within a Society | `name`, `society`, `org_type`, `is_covert` (#2820, #4570: clandestine; a checkbox on the organization, not its type, since a 'tradition' type holds an open academy and a secret lodge alike; hidden from public listings, joining mints a Secret), `family`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields, `patron_nickname` (#3776: nullable FK → `worship.BeingNickname`, SET_NULL — this org's own name for its patron deity, reaching the `WorshippedBeing` transitively via `patron_nickname.being`; never a direct FK to `WorshippedBeing`. Written once, at founding, from the pick on the charter's `sets_patron` aspect question (#4205, `houses.creator._stamp_facets`); staff change it in admin; read by the house block's `patron`, the Almanach document and the god's Codex companion) |
+| `Organization` | Specific group within a Society | `name`, `society`, `org_type`, `is_covert` (#2820, #4570: clandestine; a checkbox on the organization, not its type, since a 'tradition' type holds an open academy and a secret lodge alike; hidden from public listings, joining mints a Secret), `admits_player_characters` (#4852: a player character may join from creation; the organization is listed at Final Touches for a card that opens a membership, `character_creation.offers.organization_choices`), `family`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields, `patron_nickname` (#3776: nullable FK → `worship.BeingNickname`, SET_NULL — this org's own name for its patron deity, reaching the `WorshippedBeing` transitively via `patron_nickname.being`; never a direct FK to `WorshippedBeing`. Written once, at founding, from the pick on the charter's `sets_patron` aspect question (#4205, `houses.creator._stamp_facets`); staff change it in admin; read by the house block's `patron`, the Almanach document and the god's Codex companion) |
 
 ### Membership and Reputation (SharedMemoryModel - per-persona instances)
 
@@ -53,6 +53,8 @@ tier.range_description                       # "+250 to +499"
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
+| `DistinctionPrestigeGrant` (#4852, slice 6 of #4813) | A card's starting prestige, paid once at finalize through `renown.apply_starting_prestige` (the `award_deed_prestige` seam; negative valid, no Legend row); the Final Touches story becomes the pick's `CharacterDistinction.notes` | `distinction` (O2O `Distinction`, `related_name="prestige_grant"`), `amount` (non-zero) |
+| `DistinctionOrganizationGrant` (#4852) | The membership a card opens, seated once at finalize through `join_organization`: the grant's organization, or the player's pick from the realm's admitting organizations at Final Touches | `distinction` (O2O, `related_name="organization_grant"`), `organization` (nullable FK, PROTECT; null = the player picks), `rank` (nullable FK `OrganizationRank`, PROTECT, that organization's; null = the entry rank) |
 | `StandingDeclaration` (#3290) | A leader's audited favor/disfavor declaration | `organization`, `target_persona`, `declared_by_persona`, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` (FK, rate-limit key), `created_at`; unique per (organization, target_persona, game_week) |
 
 ### Legend System (models.Model)
@@ -452,7 +454,8 @@ from world.societies.membership_services import (
 ```
 
 - `ensure_default_rank_ladder(organization)` creates tiers 1–5 if absent; top tier gets all capability flags.
-- `join_organization(organization, persona)` admits at the lowest tier (5) after checking blocks and persona validity.
+- `join_organization(organization, persona, *, rank=None, vacancy=None)` admits at the lowest tier (5), or at `rank` when it is one of this organization's rungs, after checking blocks and persona validity. Character creation's finalize calls it for a card's `DistinctionOrganizationGrant` (#4852) and skips an `OrganizationMembershipError` there.
+- `renown.apply_starting_prestige(char_dist)` (#4852) pays a card's `DistinctionPrestigeGrant` to the primary persona through `award_deed_prestige`, once, from creation's finalize; returns the amount, 0 without a grant.
 - `invite_to_organization(...)` / `apply_to_organization(...)` create pending offers.
 - `accept_invitation(offer, persona)` / `accept_application(offer, actor_persona)` promote the offer to a membership.
 - `leave_organization(membership)` records a voluntary departure (`left_at`).
@@ -621,6 +624,9 @@ All models registered with Django admin:
 - `OrganizationMembershipAdmin` - With effective title display; a membership created here
   (not edited) applies the organization's codex grants to the new member (#3788)
 - `SocietyReputationAdmin` / `OrganizationReputationAdmin` - With tier display
+- `DistinctionPrestigeGrantAdmin` / `DistinctionOrganizationGrantAdmin` (#4852) - The two
+  finalize grant sidecars, raw id to the distinction (the paste's `+150 prestige` token makes a
+  prestige grant too); `OrganizationAdmin` shows and filters `admits_player_characters`
 - `StandingDeclarationAdmin` (#3290) - `delta_applied` visible for staff dispute resolution (the player-facing API omits it)
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`
 - `LegendSpreadAdmin` - With society reach tracking

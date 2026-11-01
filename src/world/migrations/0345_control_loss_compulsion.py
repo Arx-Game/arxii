@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0339_modifier_target_technique_scope_rules")]
+    dependencies = [("arxii", "0344_card_grants_at_finalize")]
 
     operations = [
         migrations.AddField(

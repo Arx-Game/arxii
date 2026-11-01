@@ -29,6 +29,7 @@ from world.classes.models import PathStage
 | `Path` | Narrative path definition with evolution hierarchy | `name`, `description`, `stage` (PathStage), `minimum_level`, `action_category`, `style` (nullable FK to `magic.TechniqueStyle`, `related_name="paths"` — how this path's practitioners work magic; #2700/ADR-0167. Style is a property of the caster, so the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Drives the style's `StyleCapabilityRequirement` rows at cast time via `technique_performable`. Null = the path imposes no style), `parent_paths` (M2M self, asymmetric), `is_active`, `icon_url`, `icon_name`, `sort_order` |
 | `Aspect` | Broad character archetype for check bonuses | `name`, `description` |
 | `PathAspect` | Links a path to an aspect with a weight multiplier | `character_path` (FK Path), `aspect` (FK Aspect), `weight` (default 1) |
+| `DistinctionPathAspectGrant` (#4852, slice 6 of #4813) | A card's bonus on the holder's Path's stronger Aspect (Capable Mentor): character creation's finalize resolves the Path's heaviest `PathAspect` (`character_creation.offers.strongest_path_aspect`, ties by aspect name) and writes one `CharacterModifier` on that Aspect's target, sourced to the pick | `distinction` (O2O `Distinction`, `related_name="path_aspect_grant"`), `value` (non-zero) |
 
 ### Character Class System (SharedMemoryModel - cached)
 
@@ -154,5 +155,6 @@ Both `PathCodexGrant` and `PathSkillSuggestion` appear as inlines on the Path ad
 
 Path and Aspect models registered with appropriate filters, search, and inline editing:
 
+- **`DistinctionPathAspectGrantAdmin`** (#4852) - The Capable Mentor sidecar, raw id to the distinction.
 - **`PathAdmin`** - List display with stage filter, active status, parent count, and aspect summary. Includes `PathAspectInline` (aspect weights with autocomplete), `PathCodexGrantInline` (codex entry grants), and `PathSkillSuggestionInline` (skill suggestions). Fieldsets group core fields, display options, and evolution hierarchy separately.
 - **`AspectAdmin`** - Simple list with path count display, name/description search.

@@ -1102,6 +1102,11 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
   the Glimpse-provenance state, mirroring `.secret`; set via
   `world.magic.services.glimpse.link_distinction_to_glimpse`/`unlink_distinction_from_glimpse`)
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
+- **Finalize grant sidecars (#4852, slice 6 of #4813):** `societies.DistinctionPrestigeGrant`,
+  `societies.DistinctionOrganizationGrant`, `classes.DistinctionPathAspectGrant`, read through
+  `Distinction.*_grant_or_none` and priced in `effects_summary`; each raises its own ask at
+  Final Touches (`character_creation.offers.final_touches_cards`). See
+  [distinctions.md](distinctions.md)'s "The finalize grants of the life cards".
 - **Check lane (#4638):** `DistinctionEffect.modifier_size` (Paramount refused): on a check-scoped
   target the effect reads the check value table at its holder's level and the size its held rank
   names (`DistinctionEffect.size_at_rank`: the highest `DistinctionEffectRankSize` at or below
@@ -1528,7 +1533,11 @@ per-class, per-stage health rate authoring and the primary-class level service.
 - **Models:** `Path`, `CharacterClass`, `CharacterClassLevel`,
   `ClassStageHealthRate` (authored per `(CharacterClass, PathStage)`;
   `health_per_level` SmallInt — the HP gained per level while in that stage band;
-  unique `(character_class, stage)`)
+  unique `(character_class, stage)`), `DistinctionPathAspectGrant` (#4852, slice 6 of
+  #4813: a card's bonus on the holder's Path's stronger Aspect, Capable Mentor; creation's
+  finalize resolves the heaviest `PathAspect` through
+  `character_creation.offers.strongest_path_aspect` and writes one `CharacterModifier`
+  sourced to the pick; see [classes.md](classes.md))
 - **Enums:** `PathStage` (Prospect L1, Potential L3, Puissant L6, True L11,
   Grand L16, Transcendent L21)
 - **Key Services (`world.classes.services`):**
@@ -1967,7 +1976,7 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership` (`favor` + `favor_note`, #4106, ADR-0327: the organization's verdict on a standing member, in favour / in disgrace / exiled, distinct from `exiled_at` which removes them), `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `OrganizationReputationEvent` (#4448 - one recorded change to an organization's reputation of a persona: `reputation` FK, `cause` (`OrganizationReputationCause`), applied `amount`, `value_before`/`value_after` (staff only), `tier_before`/`tier_after`, nullable citation FKs `legend_entry`/`mission_deed`/`secret`/`stake_resolution`/`standing_declaration`/`source_event`; `clean()` enforces the citation per cause), `OrganizationReputationReasonLine` (#4448 - staff-authored player reason text, one row per cause, `{tier}`/`{title}`/`{organization}`/`{other_tier}` tokens), `NamedOrganization` (#4473 - an organization a `MissionRenownAward` or LEGEND_AWARD `ConsequenceEffect` names as HARMED/HELPED; one owner, `only_if_exposed` on harmed rows, `base_amount` on consequence rows), `DeedOrganization` (#4473 - which organizations a `LegendEntry` or `MissionDeedRecord` named), `OrganizationRelation` (#4473 - staff-authored RIVAL/ALLY follow of another organization's reputation changes, `share_percent` 1 to 50), `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
+- **Models:** `Society`, `OrganizationType`, `Organization` (`admits_player_characters` #4852 — a player may join from creation; the organizations of a realm with it are `character_creation.offers.organization_choices`), `DistinctionPrestigeGrant` and `DistinctionOrganizationGrant` (#4852, slice 6 of #4813 — a card's starting prestige, paid once at finalize by `renown.apply_starting_prestige` through `award_deed_prestige`, and the membership a card opens, seated through `join_organization`; see [societies.md](societies.md)), `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership` (`favor` + `favor_note`, #4106, ADR-0327: the organization's verdict on a standing member, in favour / in disgrace / exiled, distinct from `exiled_at` which removes them), `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `OrganizationReputationEvent` (#4448 - one recorded change to an organization's reputation of a persona: `reputation` FK, `cause` (`OrganizationReputationCause`), applied `amount`, `value_before`/`value_after` (staff only), `tier_before`/`tier_after`, nullable citation FKs `legend_entry`/`mission_deed`/`secret`/`stake_resolution`/`standing_declaration`/`source_event`; `clean()` enforces the citation per cause), `OrganizationReputationReasonLine` (#4448 - staff-authored player reason text, one row per cause, `{tier}`/`{title}`/`{organization}`/`{other_tier}` tokens), `NamedOrganization` (#4473 - an organization a `MissionRenownAward` or LEGEND_AWARD `ConsequenceEffect` names as HARMED/HELPED; one owner, `only_if_exposed` on harmed rows, `base_amount` on consequence rows), `DeedOrganization` (#4473 - which organizations a `LegendEntry` or `MissionDeedRecord` named), `OrganizationRelation` (#4473 - staff-authored RIVAL/ALLY follow of another organization's reputation changes, `share_percent` 1 to 50), `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
   raises a deed's `base_value`), `LegendLevelCalibration` (#3466 — per-level honor Hare
   cost/value-added/title-threshold dials)
 - **`Vacancy` model (#3648, ADR-0273):** an opening on a staff-minted family's org
@@ -2634,7 +2643,9 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
-  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society;
+  (→ `LegendEntry`), `CharacterCrimeNote` (→ `CharacterSheet` × `CrimeKind` + a note: the
+  crime Jailbird's card asked the player to name at Final Touches, written by creation's
+  finalize, staff-only, no heat and no deed tag, #4846), `PersonaHeat` (persona × area × enforcing society;
   `pinned_until` — decay-exempt exile-pin hold, #2378), `HeatSource`
   (allegation provenance — false accusations are emergent, never flagged),
   `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
@@ -3112,10 +3123,10 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   error: the create step makes the target, #4820).
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
-  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet/enemy/backgrounds/final_touches],
   `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, exactly one opener
   of its chapter's kind [`schooling_line`/`glimpse_tag`/`origin_choice`/`prompt`/`enemy_reason`/
-  `enemy_degree`/`appearance_section`, #3709], `first_look` [M2M `Beginnings` through
+  `enemy_degree`/`appearance_section`/`feature_rows`/`beat`/`unlocked_by` (#4846: the Final Touches chapter, the card a draft must hold for the line to show; `Distinction.final_touches_prompt` is the optional question a held card asks there, `final_touches_prompts`), #3709], `first_look` [M2M `Beginnings` through
   `OfferFirstLook`, #3709]) is the one row that says where a distinction is shown, what opens
   it there and how it arrives, read by `world.character_creation
   .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
@@ -6997,13 +7008,24 @@ Unified modifier system — categories, types, sources, and per-character modifi
   combine; unset means any; a technique scope needs a kind and no single maneuver effect;
   `modifier_target_technique_scope_needs_kind`), and `EffectKind` gained `CONDITION_SEVERITY` and
   `CONDITION_DURATION`. Readers in `world/mechanics/effect_targets.py`: `technique_effect_context`,
-  `technique_effect_targets`, `technique_effect_total`, `technique_condition_bonuses`, and
-  `effect_modifier_total(kind_wide=False)`; the frozen `TechniqueEffectContext` is in
+  `technique_effect_targets`, `technique_effect_total`, `TechniqueConditionBonus`
+  (`for_cast(...).for_target(...)`) and `effect_modifier_total(kind_wide=False)`; the frozen `TechniqueEffectContext` is in
   `world/mechanics/types.py`. Wired to a flat damage term per profile in combat
   (`TechniqueDamageBonus` in `technique_resolver.py`) and to the severity and duration of a
   technique's own conditions in combat, scene casts and passive techniques
   (`bonused_severity`, `bonused_duration` in `magic/services/condition_application.py`). Opponent
-  scopes are #4823; derived and sized amounts #4824. See `mechanics.md` "Technique effect scopes".
+  scopes shipped in #4823 (see below); derived and sized amounts are #4824. See `mechanics.md`
+  "Technique effect scopes".
+- **Opponent scopes (#4823, slice 3 of #4783):** `ModifierTarget` gained `scope_opponent_property`
+  (FK `Property`) and `scope_opponent_condition` (FK `ConditionTemplate`), with the technique scope
+  rules (they combine, need a kind, never ride with one maneuver effect) and
+  `has_opponent_scope`. `opponent_facts(target)` returns the frozen `OpponentFacts`
+  (`world/mechanics/types.py`), `opponent_targets_exist(targets)` gates the read, and
+  `TechniqueConditionBonus.for_cast(sheet, technique).for_target(target)` works out the condition
+  severity and duration per target; `apply_technique_conditions` takes it as `target_bonus`.
+  `TechniqueDamageBonus.read_opponent` / `for_type(type, opponent)` cache per (damage type,
+  opponent). Not built: opponent scopes on a single maneuver effect, to hit, or derived and sized
+  amounts. See `mechanics.md` "Opponent scopes".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".
