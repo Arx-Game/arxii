@@ -17,6 +17,11 @@ check whose stat weight is 1 a stat buff of N units moves the check N points: th
 lane's value is the check lane's value divided by that rate, which is the same number.
 A check that weights its stat below 1 moves less, as it does for the stat itself. The
 taper is the check lane's ratio and floor, for the kinds a stat read gathers.
+
+The maneuver effect lanes (#4876) value a sized modifier on a damage, to-hit or partial
+protection target. To-hit is check points added to the attack check, so its rows are the
+check lane's. Damage (points) and partial protection (percentage points) get small example
+ladders. Each takes the same light taper for the kinds the effect read gathers.
 """
 
 from __future__ import annotations
@@ -81,6 +86,31 @@ _STAT_TAPERED_KINDS: tuple[str, ...] = (
     ModifierSourceKind.CHARACTER,
 )
 
+# A Large damage and partial protection modifier at each level, against Charge's base 5
+# damage and Succor's base 50% protection (examples, #4876).
+_DAMAGE_LARGE_VALUES: tuple[tuple[int, int], ...] = (
+    (1, 2),
+    (6, 4),
+    (11, 6),
+    (16, 8),
+    (21, 10),
+    (26, 12),
+)
+_PARTIAL_PROTECTION_LARGE_VALUES: tuple[tuple[int, int], ...] = (
+    (1, 5),
+    (6, 8),
+    (11, 10),
+    (16, 13),
+    (21, 16),
+    (26, 20),
+)
+# The maneuver effect read gathers the same kinds a stat read does.
+_EFFECT_LANE_LARGE_VALUES: tuple[tuple[str, tuple[tuple[int, int], ...]], ...] = (
+    (ModifierLane.TO_HIT, _LARGE_VALUES),
+    (ModifierLane.DAMAGE, _DAMAGE_LARGE_VALUES),
+    (ModifierLane.PARTIAL_PROTECTION, _PARTIAL_PROTECTION_LARGE_VALUES),
+)
+
 # Effective cast power to modifier level, against the tier budgets (20/40/60/80/100
 # power for tiers 1-5, representative levels 1/6/11/16/21).
 _CAST_POWER_LEVELS: tuple[tuple[int, int], ...] = (
@@ -105,8 +135,25 @@ def _stat_value(check_value: int) -> int:
     return max(1, round(check_value / _STAT_POINTS_PER_UNIT))
 
 
+def _seed_effect_lanes() -> None:
+    """The maneuver effect lanes' example values and taper rows (#4876), if missing."""
+    for lane, large_values in _EFFECT_LANE_LARGE_VALUES:
+        for level, large in large_values:
+            for size, share in _SIZE_SHARES:
+                ModifierValue.objects.get_or_create(
+                    lane=lane, level=level, size=size, defaults={"value": _scaled(large, share)}
+                )
+        for kind in _STAT_TAPERED_KINDS:
+            ModifierTaper.objects.get_or_create(
+                lane=lane,
+                source_kind=kind,
+                defaults={"ratio": _TAPER_RATIO, "floor": _TAPER_FLOOR},
+            )
+
+
 def seed_modifier_value_tables() -> None:
-    """Create the example check-lane, stat-lane and cast-level rows, if missing."""
+    """Create the example check, stat and maneuver effect lane rows and cast-level rows,
+    if missing."""
     for level, baseline in _LEVEL_BASELINES:
         ModifierLevelBaseline.objects.get_or_create(
             lane=ModifierLane.CHECK, level=level, defaults={"baseline": baseline}
@@ -139,6 +186,7 @@ def seed_modifier_value_tables() -> None:
             source_kind=kind,
             defaults={"ratio": _TAPER_RATIO, "floor": _TAPER_FLOOR},
         )
+    _seed_effect_lanes()
     for min_power, level in _CAST_POWER_LEVELS:
         CastPowerLevel.objects.get_or_create(min_power=min_power, defaults={"level": level})
     for success_level, shift in _CAST_OUTCOME_SHIFTS:

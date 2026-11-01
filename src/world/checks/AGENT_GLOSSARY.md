@@ -195,7 +195,8 @@ _Avoid_: magnitude, strength, small/big buff
 
 **Value table** (#4594, ADR-4594-A):
 The `ModifierValue` rows: what a modifier of each size is worth at each level, in its lane's units
-(check points for the check lane, stored stat units for the stat lane). Sparse rows read as steps: a level reads the row at the highest
+(check points for the check lane, stored stat units for the stat lane; damage points, check points
+and percentage points for the damage, to-hit and partial protection lanes, #4876). Sparse rows read as steps: a level reads the row at the highest
 authored level at or below it. The value is a magnitude; the authored modifier keeps its sign.
 _Avoid_: buff table, modifier curve
 

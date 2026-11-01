@@ -958,8 +958,10 @@ the vow-only action scaling table is gone. What was built:
 - **Sub-role fix**: `vow_stat_scaling_bonus` counts rows on an engaged role and on its anchor
   role, so a holder graduated to a sub-role keeps their scaling; this also changes existing
   stat rows for sub-role holders, as intended. The thread level always comes from the anchor.
-- **Not built**: sized (leveled) modifiers on effects and derived amounts (a source choosing
-  what its number scales from, #4824). The technique scopes
+- **Sized modifiers on effects** (#4876): damage, to-hit and partial protection take a size,
+  valued from their own `ModifierLane` at the holder's level (the owner's "likely grants only"
+  ruling on #4824); other kinds stay flat.
+- **Not built**: derived amounts (a source choosing what its number scales from, #4824). The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for
   the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. A gear

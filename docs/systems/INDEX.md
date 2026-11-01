@@ -1202,6 +1202,10 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `modifier_target_contributions(sheet, target, lane=...)` (CHARACTER + EQUIPMENT, the builder
   the check seam shares) and `conditions.services.condition_target_contributions` (CONDITION),
   so every stat reader sees one buffed number.
+  The maneuver effect lanes (#4876): `ModifierLane.DAMAGE`, `TO_HIT` and `PARTIAL_PROTECTION`
+  value a sized modifier on those effect kinds (`EFFECT_KIND_LANE`, `ModifierTarget.value_lane`);
+  `mechanics.effect_targets._modifier_total` reads a laned target through the same two builders
+  and tapers by the lane's rows. A size on any other kind is refused.
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
