@@ -591,3 +591,161 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
     );
   });
 });
+
+describe('FinalTouchesStage (the grants the cards reconcile, #4852)', () => {
+  const HEADING = 'What the cards leave to settle';
+  const STORY_PROMPT = 'What people say happened.';
+  const ORG_PROMPT = 'The body that marked your coming of age takes you in.';
+  const drama = {
+    distinction_id: 61,
+    name: 'Explosive Drama',
+    prompt: 'prestige_story' as const,
+    detail: '',
+  };
+  const honors = {
+    distinction_id: 62,
+    name: 'With Honors',
+    prompt: 'organization' as const,
+    detail: '',
+  };
+  const mentor = {
+    distinction_id: 63,
+    name: 'Capable Mentor',
+    prompt: 'path_aspect' as const,
+    detail: 'Warfare',
+  };
+  const lodge = { id: 7, name: 'The Honor Lodge', is_covert: false };
+
+  beforeEach(() => {
+    offersResponse = { offers: [], closed: [] };
+  });
+  afterEach(() => mutateAsync.mockClear());
+
+  it('renders none of the blocks when no held card raises an ask', () => {
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(STORY_PROMPT)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(ORG_PROMPT)).not.toBeInTheDocument();
+    expect(screen.queryByText(/lessons settle on/)).not.toBeInTheDocument();
+  });
+
+  it('asks the story, the organization and shows the mentor line, then saves both answers', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | undefined;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['prestige_story', 'organization', 'path_aspect'],
+          final_touches_cards: [drama, honors, mentor],
+          organization_choices: [lodge],
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByText(HEADING)).toBeInTheDocument();
+    expect(screen.getByText('Explosive Drama')).toBeInTheDocument();
+    const story = screen.getByLabelText(STORY_PROMPT);
+    expect(story).toHaveAttribute('maxlength', '500');
+    expect(
+      screen.getByText(
+        'A sentence or two. This is the story attached to your name, not the truth of it.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('With Honors')).toBeInTheDocument();
+    const pick = screen.getByLabelText(ORG_PROMPT);
+    const options = within(pick).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['None', 'The Honor Lodge']);
+    expect(screen.getByText('Capable Mentor')).toBeInTheDocument();
+    expect(
+      screen.getByText("Your mentor's lessons settle on Warfare, the stronger Aspect of your Path.")
+    ).toBeInTheDocument();
+    expect(screen.getByText('Applied for you.')).toBeInTheDocument();
+
+    await user.type(story, 'They say the duel emptied a chapel.');
+    await user.selectOptions(pick, '7');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({
+            prestige_stories: { '61': 'They say the duel emptied a chapel.' },
+            organizations: { '62': 7 },
+          }),
+        }),
+      })
+    );
+  });
+
+  it('reads the generic line before a Path is picked', () => {
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['path_aspect'],
+          final_touches_cards: [{ ...mentor, detail: '' }],
+        })}
+        onRegisterBeforeLeave={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByText(
+        "Your mentor's lessons settle on your Path's stronger Aspect, the stronger Aspect of your Path."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('opens on the saved answers, drops a blanked story and saves null for None', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | undefined;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          final_touches_prompts: ['prestige_story', 'organization'],
+          final_touches_cards: [drama, honors],
+          organization_choices: [lodge],
+          draft_data: { prestige_stories: { '61': 'A chapel.' }, organizations: { '62': 7 } },
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    const story = screen.getByLabelText(STORY_PROMPT);
+    expect(story).toHaveValue('A chapel.');
+    const pick = screen.getByLabelText(ORG_PROMPT);
+    expect(pick).toHaveValue('7');
+    await user.clear(story);
+    await user.selectOptions(pick, '');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draft_data: expect.objectContaining({
+            prestige_stories: {},
+            organizations: { '62': null },
+          }),
+        }),
+      })
+    );
+  });
+
+  it('emits no class hook that cg.css has no rule for in the grant blocks (#3667 shape)', () => {
+    const { container } = renderWithCharacterCreationProviders(
+      <div className="interview">
+        <FinalTouchesStage
+          draft={createMockDraft({
+            final_touches_prompts: ['prestige_story', 'organization', 'path_aspect'],
+            final_touches_cards: [drama, honors, mentor],
+            organization_choices: [lodge],
+          })}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      </div>
+    );
+    const styledElsewhere = new Set(['leaf-body', 'chosen', 'entry', 'note-group']);
+    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
+  });
+});

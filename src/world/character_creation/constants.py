@@ -541,6 +541,27 @@ FINAL_TOUCHES_CRIME_HELP = (
     "Nothing follows from this unless a GM picks it up."  # PLACEHOLDER: Apostate rewrite
 )
 FINAL_TOUCHES_CRIME_BLANK = "Unnamed"  # PLACEHOLDER: Apostate rewrite
+# The grants' asks (#4852, slice 6 of #4813): a prestige card's story, the organization a card
+# seats the character in, Capable Mentor's line. Twins of the leaf's ``GRANTS`` fallbacks.
+FINAL_TOUCHES_PRESTIGE_PROMPT = "What people say happened."  # PLACEHOLDER: Apostate rewrite
+# PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_PRESTIGE_HELP = (
+    "A sentence or two. This is the story attached to your name, not the truth of it."
+)
+FINAL_TOUCHES_ORGANIZATION_PROMPT = (
+    "The body that marked your coming of age takes you in."  # PLACEHOLDER: Apostate rewrite
+)
+FINAL_TOUCHES_ORGANIZATION_HELP = (
+    "Any organization of your realm that admits player characters, secret societies "
+    "included. Skipped, the ritual stays a line in your story and no membership is made."
+)  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_ORGANIZATION_NONE = "None"  # PLACEHOLDER: Apostate rewrite
+# PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_ASPECT_PROMPT = (
+    "Your mentor's lessons settle on {aspect}, the stronger Aspect of your Path."
+)
+FINAL_TOUCHES_ASPECT_HELP = "Applied for you."  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_ASPECT_UNKNOWN = "your Path's stronger Aspect"  # PLACEHOLDER: Apostate rewrite
 
 OFFICIALLY_DEAD_HEADING = "Officially dead"
 OFFICIALLY_DEAD_INTRO = (
