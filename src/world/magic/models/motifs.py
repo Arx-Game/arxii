@@ -133,6 +133,7 @@ class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["facet", "target"]
+        dependencies = ["arxii.Facet", "arxii.ModifierTarget"]
 
     def __str__(self) -> str:
         return f"{self.facet.name}: {self.amount:+d} {self.target.name}"
