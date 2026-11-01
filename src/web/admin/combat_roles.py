@@ -81,7 +81,8 @@ def _vow_pages_link() -> CombatRolesLink:
     )
 
 
-def _can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
+def can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
+    """Whether ``user`` may open ``model``'s admin pages: a view or a change permission."""
     return user.has_perm(f"arxii.view_{model.__name__.lower()}") or user.has_perm(
         f"arxii.change_{model.__name__.lower()}"
     )
@@ -119,9 +120,9 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
         # The vow page is superuser-only, like every builder page.
         links.append(_vow_pages_link())
     links.extend(
-        _counted(model, label, noun) for model, label, noun in counted if _can_view(user, model)
+        _counted(model, label, noun) for model, label, noun in counted if can_view(user, model)
     )
-    if _can_view(user, VowFocusPickConfig):
+    if can_view(user, VowFocusPickConfig):
         links.append(_budget_link())
     if user.is_superuser:
         links.append(
