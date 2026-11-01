@@ -228,7 +228,7 @@ def _stat_label(check_type: CheckType, stat_override: str | int | None) -> str:
     stat = next(
         (
             leg.trait.name
-            for leg in check_type.traits.select_related("trait")  # type: ignore[attr-defined]
+            for leg in check_type.traits.select_related("trait")
             if leg.trait.trait_type == TraitType.STAT
         ),
         None,
