@@ -95,6 +95,20 @@ class WearingAnotherFace(JourneyCase):
         self.assertTold(self.hobb, "a person wearing a Crow Mask keeps to the shadows.")
         self.assertNotTold(self.hobb, "Ysmay")
 
+    def test_a_mask_reads_with_one_article_whether_or_not_she_typed_it(self) -> None:
+        """#4802: "a person wearing a a scarred sellsword" doubled the article she typed."""
+        self.telnet(self.ysmay, "persona mask a scarred sellsword")
+        self.telnet(self.ysmay, "pose waits.")
+        self.assertTold(self.hobb, "a person wearing a scarred sellsword waits.")
+
+        self.telnet(self.ysmay, "persona mask scarred sellsword")
+        self.telnet(self.ysmay, "pose waits again.")
+        self.assertTold(self.hobb, "a person wearing a scarred sellsword waits again.")
+
+        self.telnet(self.ysmay, "persona mask owl mask")
+        self.telnet(self.ysmay, "pose hoots.")
+        self.assertTold(self.hobb, "a person wearing an owl mask hoots.")
+
     @override_settings(MAX_ESTABLISHED_PERSONAS_PER_SHEET=2)
     def test_established_identities_are_capped(self) -> None:
         self.telnet(self.ysmay, "persona create The Grey Lady")
