@@ -15874,8 +15874,7 @@ paths:
   /api/forms/alternate-selves/revert/:
     post:
       operationId: forms_alternate_selves_revert_create
-      description: '#1111 — revert the active alternate self (blocked while not in
-        control).'
+      description: '#1111 — revert the active alternate self (rolls against a compulsion).'
       tags:
       - alternate-selves
       requestBody:
