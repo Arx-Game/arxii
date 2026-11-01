@@ -482,8 +482,14 @@ writes one staff-only `justice.CharacterCrimeNote` (sheet, kind, the stripped li
 while a held card still asks the question; no `PersonaHeat`, no `DeedCrimeTag`, no Legend
 row come of it (decision 6 of #4813), and no serializer carries the note. The prestige
 blurb's prompt arrives with the starting prestige event (slice 6), whose text it is. The
-leaf's rendering of the chapter is the frontend half; the prompt and helper copy are
-placeholders for the maintainer's voice (the authoring plan's Final Touches copy table).
+leaf (#4848, the frontend half of the slice) mounts the chapter between the Actor's Sheet
+questions and the goals in `FinalTouchesStage`: `ChapterOffers chapter="final_touches"` for the
+lines and, per prompt in `final_touches_prompts`, its block (`crime`: a select over
+`crime_kinds` and a `CRIME_LINE_MAX_LENGTH` line, saved as `draft_data.crime` in the stage's one
+PATCH on leave, `null` when no kind is picked); the section is absent when nothing is unlocked.
+Copy keys `finaltouches_cards_heading` / `_intro`, `finaltouches_crime_prompt` / `_line_label` /
+`_help` / `_blank` (seeded, PLACEHOLDER for the maintainer's voice from the authoring plan's
+Final Touches copy table).
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,

@@ -10,7 +10,11 @@
  * at one of four degrees, awarding CG points; the Officially dead door (#4396),
  * which names the established face the world meets while the character's own
  * is believed dead, with that face's guise texts; and The Introductions, three
- * white journals in the character's own voice, each with a Skip door. Nothing
+ * white journals in the character's own voice, each with a Skip door. Between the
+ * questions and the goals, the card-unlocked chapter (#4846): the lines a held card
+ * unlocks (`ChapterOffers chapter="final_touches"`) and the prompt a held card asks,
+ * today Jailbird's crime (a kind from the justice list and a sentence, saved as
+ * `draft_data.crime`); the whole section is absent when nothing is unlocked. Nothing
  * here blocks finalize. Everything is held locally and saved in one PATCH when
  * the player leaves the stage. Copy comes from CG explanation rows; the
  * in-code twins below are the fallbacks and must stay identical to the seeds
@@ -34,9 +38,10 @@ import {
 } from '../folio';
 import { useGoalDomains } from '../goals';
 import { ChapterOffers } from './offers/ChapterOffers';
-import { useCGExplanations, useUpdateDraft } from '../queries';
+import { useCGExplanations, useDraftOffers, useUpdateDraft } from '../queries';
 import type {
   CharacterDraft,
+  DraftCrime,
   DraftEnemy,
   DraftGoal,
   DraftIntroductions,
@@ -44,7 +49,7 @@ import type {
   EnemyOffer,
   GoalHorizon,
 } from '../types';
-import { Stage } from '../types';
+import { CRIME_LINE_MAX_LENGTH, Stage } from '../types';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
@@ -230,6 +235,34 @@ const OFFICIALLY_DEAD = {
     'name stays on the rolls of the dead until someone sees through the face.',
 };
 
+/** The card-unlocked chapter (#4846); every line PLACEHOLDER for ApostateCD's rewrite,
+ * twins of `FINAL_TOUCHES_*` in `world/character_creation/constants.py`. */
+const CARDS = {
+  heading: 'What the cards leave to settle',
+  intro:
+    'A few of the cards you picked leave something for you to settle. Each one here can be ' +
+    'skipped.',
+  crimePrompt: 'The crime, if you care to name it.',
+  crimeLineLabel: 'In a sentence',
+  crimeHelp: 'Nothing follows from this unless a GM picks it up.',
+  crimeBlank: 'Unnamed',
+};
+
+/** The crime as the leaf holds it: a kind or none yet, and the line. */
+interface CrimeDraft {
+  kind_id: number | null;
+  line: string;
+}
+
+/** The crime as the draft stores it: whole when a kind is picked, null when not. */
+function crimeToSave(crime: CrimeDraft): DraftCrime | null {
+  return crime.kind_id === null ? null : { kind_id: crime.kind_id, line: crime.line };
+}
+
+function crimeFromDraft(crime: DraftCrime | null | undefined): CrimeDraft {
+  return { kind_id: crime?.kind_id ?? null, line: crime?.line ?? '' };
+}
+
 const EMPTY_FACE: DraftOfficiallyDead = {
   face_name: '',
   concept: '',
@@ -321,6 +354,12 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const [openFace, setOpenFace] = useState(
     (draftData.officially_dead?.face_name ?? '').trim() !== ''
   );
+  const [crime, setCrime] = useState<CrimeDraft>(() => crimeFromDraft(draftData.crime));
+  // The card-unlocked chapter (#4846): shown only when a held card unlocks a line or asks
+  // a question; `ChapterOffers` itself renders nothing for an empty chapter.
+  const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
+  const prompts = draft.final_touches_prompts ?? [];
+  const showCards = prompts.length > 0 || (cardOffers?.offers.length ?? 0) > 0;
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
@@ -333,8 +372,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const remaining = BASE_GOAL_POINTS - usedPoints;
 
   // --- save on leave -------------------------------------------------------------
-  const payloadRef = useRef({ answers, goals, enemy, intros, face });
-  payloadRef.current = { answers, goals, enemy, intros, face };
+  const payloadRef = useRef({ answers, goals, enemy, intros, face, crime });
+  payloadRef.current = { answers, goals, enemy, intros, face, crime };
   const hasChangesRef = useRef(false);
   useEffect(() => {
     const current = JSON.stringify(payloadRef.current);
@@ -348,13 +387,14 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       enemy: draftData.enemy ?? null,
       intros: { ...EMPTY_INTRODUCTIONS, ...(draftData.introductions ?? {}) },
       face: { ...EMPTY_FACE, ...(draftData.officially_dead ?? {}) },
+      crime: crimeFromDraft(draftData.crime),
     });
     hasChangesRef.current = current !== server;
-  }, [answers, goals, enemy, intros, face, draftData]);
+  }, [answers, goals, enemy, intros, face, crime, draftData]);
 
   const save = useCallback(async () => {
     if (!hasChangesRef.current) return true;
-    const { answers: a, goals: g, enemy: e, intros: i, face: f } = payloadRef.current;
+    const { answers: a, goals: g, enemy: e, intros: i, face: f, crime: c } = payloadRef.current;
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
@@ -365,6 +405,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             enemy: e,
             introductions: i,
             officially_dead: faceToSave(f),
+            crime: crimeToSave(c),
           },
         },
       });
@@ -554,6 +595,63 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           />
         </div>
       ))}
+
+      {showCards && (
+        <>
+          <h2 className="section-h">{copy?.finaltouches_cards_heading ?? CARDS.heading}</h2>
+          <p>{copy?.finaltouches_cards_intro ?? CARDS.intro}</p>
+          <ChapterOffers
+            draft={draft}
+            chapter="final_touches"
+            headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
+            closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
+            syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+            wordBundled={copy?.offers_word_bundled}
+            wordPerRank={copy?.offers_word_per_rank}
+            wordSpent={copy?.offers_word_spent}
+            wordAwards={copy?.offers_word_awards}
+            wordSeeMore={copy?.offers_word_see_more}
+            wordHeld={copy?.offers_word_held}
+            className="conditional"
+          />
+          {prompts.includes('crime') && (
+            <div className="conditional">
+              <Field id="crime-kind" label={copy?.finaltouches_crime_prompt ?? CARDS.crimePrompt}>
+                <select
+                  id="crime-kind"
+                  value={crime.kind_id ?? ''}
+                  onChange={(e) =>
+                    setCrime((prev) => ({
+                      ...prev,
+                      kind_id: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                >
+                  <option value="">{copy?.finaltouches_crime_blank ?? CARDS.crimeBlank}</option>
+                  {draft.crime_kinds.map((kind) => (
+                    <option key={kind.id} value={kind.id}>
+                      {kind.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                id="crime-line"
+                label={copy?.finaltouches_crime_line_label ?? CARDS.crimeLineLabel}
+                hint={copy?.finaltouches_crime_help ?? CARDS.crimeHelp}
+              >
+                <input
+                  id="crime-line"
+                  type="text"
+                  maxLength={CRIME_LINE_MAX_LENGTH}
+                  value={crime.line}
+                  onChange={(e) => setCrime((prev) => ({ ...prev, line: e.target.value }))}
+                />
+              </Field>
+            </div>
+          )}
+        </>
+      )}
 
       <h2 className="section-h">{copy?.finaltouches_goals_heading ?? 'Goals'}</h2>
       <InstrumentFrame

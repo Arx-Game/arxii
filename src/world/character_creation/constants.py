@@ -497,6 +497,21 @@ CRIME_KIND_ID = "kind_id"
 CRIME_LINE = "line"
 CRIME_LINE_MAX_LENGTH = 500
 
+# The Final Touches chapter (#4846, slice 5 of #4813): the card-unlocked section's copy keys.
+# Every line below is PLACEHOLDER for the maintainer's voice (the authoring plan's Final
+# Touches copy table); the leaf's in-code twins must stay identical to these.
+FINAL_TOUCHES_CARDS_HEADING = "What the cards leave to settle"
+FINAL_TOUCHES_CARDS_INTRO = (
+    "A few of the cards you picked leave something for you to settle. Each one here can be "
+    "skipped."
+)  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_CRIME_PROMPT = "The crime, if you care to name it."  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_CRIME_LINE_LABEL = "In a sentence"  # PLACEHOLDER: Apostate rewrite
+FINAL_TOUCHES_CRIME_HELP = (
+    "Nothing follows from this unless a GM picks it up."  # PLACEHOLDER: Apostate rewrite
+)
+FINAL_TOUCHES_CRIME_BLANK = "Unnamed"  # PLACEHOLDER: Apostate rewrite
+
 OFFICIALLY_DEAD_HEADING = "Officially dead"
 OFFICIALLY_DEAD_INTRO = (
     "The world believes you dead. Name the face it meets instead: an established identity "

@@ -71,7 +71,14 @@ character-creation/
     │                        #   Directly under the three questions mounts this chapter's own
     │                        #   offered distinctions (ChapterOffers chapter="actors_sheet",
     │                        #   #3675 Task 15), the personality-flavored ones each prompt
-    │                        #   answers.
+    │                        #   answers. Between the questions and the goals, the
+    │                        #   card-unlocked chapter (#4846, slice 5 of #4813): the lines
+    │                        #   a held card unlocks (ChapterOffers chapter="final_touches")
+    │                        #   and the prompt a held card asks (draft.final_touches_prompts;
+    │                        #   `crime` is Jailbird's: a select over draft.crime_kinds and a
+    │                        #   500-character line, saved as draft_data.crime in the stage's
+    │                        #   one PATCH, null when no kind is picked). The section is
+    │                        #   absent when no held card unlocks or asks anything.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
