@@ -59,6 +59,7 @@ const alluringOffer = makeVisibleOffer({
 let offersResponse: OffersResponse = {
   offers: [unlockOffer, alluringOffer],
   closed: [],
+  terms: [],
 };
 let draftDistinctions: DraftDistinctionEntry[] = [];
 
@@ -95,7 +96,7 @@ function renderBlock(feature: { feature_trait?: string; feature_marking?: number
 beforeEach(() => {
   mutate.mockClear();
   draftDistinctions = [];
-  offersResponse = { offers: [unlockOffer, alluringOffer], closed: [] };
+  offersResponse = { offers: [unlockOffer, alluringOffer], closed: [], terms: [] };
 });
 
 describe('FeatureDistinctions', () => {
@@ -178,7 +179,7 @@ describe('FeatureDistinctions', () => {
   });
 
   it('renders nothing when no unlock is offered', () => {
-    offersResponse = { offers: [alluringOffer], closed: [] };
+    offersResponse = { offers: [alluringOffer], closed: [], terms: [] };
     const { container } = renderBlock({ feature_trait: 'eye_color' });
     expect(container.querySelector('.feature-buy')).toBeNull();
   });

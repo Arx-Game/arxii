@@ -61,10 +61,17 @@ def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
 
 
 def get_origin_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Origin stage."""
+    """Return validation errors for the Origin stage.
+
+    The first name is asked on the opening screen (#4872, ruled 2026-10-19), so the
+    rail and the life can read "Marisol was born" instead of "you".
+    """
+    errors: list[str] = []
     if not draft.selected_area:
-        return ["Select a starting area"]
-    return []
+        errors.append("Select a starting area")
+    if not draft.draft_data.get("first_name"):
+        errors.append("Enter a first name")
+    return errors
 
 
 def get_heritage_errors(draft: CharacterDraft) -> list[str]:
@@ -478,10 +485,13 @@ def get_appearance_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
-def get_identity_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Identity stage."""
-    if not draft.draft_data.get("first_name"):
-        return ["Enter a first name"]
+def get_identity_errors(draft: CharacterDraft) -> list[str]:  # noqa: ARG001
+    """Return validation errors for the Identity stage.
+
+    Nothing here is required: the first name moved to the Origin stage (#4872) and
+    concept, quote and description are the player's to leave blank. The draft stays
+    in the signature so the stage table calls every validator the same way.
+    """
     return []
 
 

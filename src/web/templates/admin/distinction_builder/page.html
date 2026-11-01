@@ -101,6 +101,9 @@ reason; a page extending `base_site.html` directly does not get it for free.
                 <tr><th>{{ form.is_automatic.label_tag }}</th><td>{{ form.is_automatic }}</td></tr>
                 <tr><th>{{ form.requires_slot_filled.label_tag }}</th>
                   <td>{{ form.requires_slot_filled }}</td></tr>
+                <tr><th>{{ form.asks_figure_name.label_tag }}</th>
+                  <td>{{ form.asks_figure_name }}
+                    <div class="help">{{ form.asks_figure_name.help_text }}</div></td></tr>
               </tbody>
             </table>
           </details>
@@ -185,7 +188,8 @@ reason; a page extending `base_site.html` directly does not get it for free.
           {% endif %}
           <table class="tuning-table db-table">
             <thead><tr><th>Chapter</th><th>Opened by</th><th>Arrives as</th>
-              <th>The player reads</th><th>First look for</th><th>Order</th><th>Remove</th></tr></thead>
+              <th>The player reads</th><th>First look for</th><th>Group</th><th>Order</th>
+              <th>Remove</th></tr></thead>
             <tbody id="offers-body">
               {% for f in offer_rows %}
               <tr class="db-offer-row">
@@ -215,10 +219,11 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   </span>
                 </td>
                 <td class="db-first-look">{{ f.first_look }}</td>
+                <td class="db-group">{{ f.group }}</td>
                 <td>{{ f.sort_order }}</td>
                 <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
               </tr>
-              {% if f.errors %}<tr><td colspan="7">{{ f.errors }}</td></tr>{% endif %}
+              {% if f.errors %}<tr><td colspan="8">{{ f.errors }}</td></tr>{% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -257,6 +262,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
                 </span>
               </td>
               <td class="db-first-look">{{ offers.empty_form.first_look }}</td>
+              <td class="db-group">{{ offers.empty_form.group }}</td>
               <td>{{ offers.empty_form.sort_order }}</td>
               <td></td>
             </tr>

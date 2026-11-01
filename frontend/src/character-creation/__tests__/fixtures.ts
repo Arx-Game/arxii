@@ -1437,6 +1437,10 @@ export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): Visible
     opens_feature: false,
     requires_feature_opened: false,
     cg_max_rank: 0,
+    // The life page (#4872): no heading, no figure, no effect rows unless a test says.
+    group: '',
+    asks_figure_name: false,
+    effects: [],
     ...overrides,
   };
 }

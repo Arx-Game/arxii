@@ -180,6 +180,10 @@ class DistinctionEntry(TypedDict):
     # Glimpse editor "linked distinction" chip state (id here is the
     # CharacterDistinction pk, matching the aura endpoints' character_distinction_id).
     is_from_glimpse: bool
+    # A cover story (#4872): the answer the character claims on a beat whose real
+    # answer is a Secret. A stranger's list shows it like any held card, which is the
+    # point; the owner and staff see it flagged. It grants nothing.
+    is_cover: bool
 
 
 class TechniqueEntry(TypedDict):

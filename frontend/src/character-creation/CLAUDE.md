@@ -251,7 +251,9 @@ character-creation/
   table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
 - `GET /api/character-creation/drafts/{id}/beats/` - The life's beats as this draft meets
   them (#4124, #4395: each with its `allowance`); the `backgrounds` offers come through
-  `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds`
+  `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds` (#4872: each offer
+  carries its `group`, `asks_figure_name` and `effects` with magnitudes; the response's
+  `terms` give each lever's definition for the term popovers)
 - `GET /api/character-creation/beginnings/{id}/perspectives/` - A beginning's shop-window
   perspective entries, ungated by codex knowledge (ADR-0224, #3281)
 - `GET /api/character-creation/traditions/{id}/perspectives/` - Same, for a tradition
