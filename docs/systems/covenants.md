@@ -1239,7 +1239,8 @@ decides defense" under Combat Seams).
   `compatible_roles` (M2M `CovenantRole`, the vows it works with). **`CombatStyleGear`**
   (NK `(style, gear_archetype)`, unique, in `CONTENT_MODELS`) lists the kinds it fights with:
   weapon kinds (`WEAPON_ARCHETYPES`) are its attack profile, armor kinds
-  (`ARMOR_ARCHETYPES`) its defense profile. The style admin page edits them all (gear kinds
+  (`ARMOR_ARCHETYPES`) its defense profile; its choices are those two sets only
+  (`COMBAT_STYLE_GEAR_CHOICES`), never jewelry, clothing or other gear. The style admin page edits them all (gear kinds
   as an inline). Required content (TUNING): a style with no skill, no hit stat or no weapon
   kind, and an active Tradition that teaches no style.
 
@@ -1374,7 +1375,11 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
   (`record_defense_roll`), keeping `against_label` (the attacker), the defense skill rating,
   the style fields and `armor_share_tenths` at roll time. `defense_roll_breakdowns` lays it
   out ("Defense against <attacker>", defense skill, style skill or lapse, "Armor, N of 10",
-  then the result); `against_label` set is its key, so it never claims a Strike row.
+  then the result). `ConsequenceOutcome.combat_roll_kind` (`CombatRollKind`: HIT, DAMAGE,
+  DEFENSE, in `world.checks.constants`) says which roll a row is; both builders and the
+  bystander rule key on it, so they never claim each other's rows. A check constraint
+  (`consequence_outcome_style_snapshot_shape`) holds the style snapshot to no style, a
+  counted style (rating, no lapse) or a lapsed one (reason, no rating).
   `combat_roll_breakdowns` (`world.checks.serializers`) serves both builders, defender and
   staff only; any other viewer gets a combat roll row without its modifiers or their total,
   and a defense row without its summary. An automatic dodge's bonus is recorded as a

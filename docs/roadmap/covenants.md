@@ -949,13 +949,15 @@ until slices 2 to 7. What was built:
 - `CombatStyle.skill` (Magic skill, one per style), `hit_stat`, `taught_by` (Traditions),
   `compatible_roles` (vows) and `CombatStyleGear` (weapon and armor kinds), all on the
   style's admin page; four TUNING Required content rows (no skill, no hit stat, no weapon
-  kind, a Tradition teaching no style). Migrations `0355` (schema) and `0356` (the Strike's
-  style snapshot on `ConsequenceOutcome`).
+  kind, a Tradition teaching no style). Migrations `0355` (the style's fields and gear, weapon
+  and armor kinds only) and `0356` (the Strike and defense roll snapshot on
+  `ConsequenceOutcome`: style fields, `combat_roll_kind`, `against_label`,
+  `armor_share_tenths`, `combat_round`).
 - `world.covenants.style_fit`: the style skill adds to the Strike, a technique's hit roll and
   the PC defense roll while the weapon, worn armor and every held vow are the style's, and
   lapses otherwise; a Strike hits with the style's hit stat either way, a technique keeps
   its own stat. The Strike breakdown shows the style skill, or the style struck through with
-  the reason. The PC defense roll is recorded too (migration `0357`) and shows on the
+  the reason. The PC defense roll is recorded too and shows on the
   defender's Last Outcome card: "Defense against <attacker>", the defense skill, the style
   skill or its lapse, "Armor, N of 10". Journeys:
   `src/integration_tests/test_combat_style_journeys.py`.

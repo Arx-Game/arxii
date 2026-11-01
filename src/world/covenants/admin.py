@@ -531,8 +531,10 @@ class CombatStyleGearInline(admin.TabularInline):
 
     model = CombatStyleGear
     extra = 0
-    verbose_name = "weapon or armor kind"
-    verbose_name_plural = "Weapon and armor kinds"
+    verbose_name = "gear kind"
+    verbose_name_plural = "Gear kinds"
+    # The demo's help line, shown under the inline rather than only as a tooltip.
+    template = "admin/covenants/combat_style_gear_inline.html"
 
 
 @admin.register(CombatStyle)
