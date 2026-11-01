@@ -2226,6 +2226,22 @@ class TestNaturalWeaponTemplatesProbe(TestCase):
             ),
         )
 
+    def test_lists_a_template_named_by_two_gifts(self) -> None:
+        from world.magic.factories import GiftFactory
+
+        template = self._claws()
+        GiftFactory(name="Probe Vulpi", kind=GiftKind.MINOR, natural_weapon_template=template)
+
+        result = _probe_for(self.KEY).resolve(None)
+
+        self.assertEqual(
+            result.missing,
+            (
+                "Probe Claws: named by more than one gift (Probe Clawed, Probe Vulpi), so a "
+                "holder of both gets a second pair that cannot be worn",
+            ),
+        )
+
     def test_lists_a_template_with_no_slots(self) -> None:
         from world.items.constants import GearArchetype
         from world.items.factories import ItemTemplateFactory
