@@ -337,8 +337,7 @@ def set_footprint(
     if not to_add and not to_remove:
         return FootprintChange()
     if area.level < AreaLevel.BARONY:
-        msg = "Only a barony or a larger domain has a footprint."
-        raise WorldMapServiceError(msg)
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
     skipped: dict[str, int] = {}
     changed: list[PipChange] = []
     with transaction.atomic():
@@ -351,6 +350,38 @@ def set_footprint(
         skipped_holders=tuple(sorted(skipped)),
         changed=tuple(changed),
     )
+
+
+_NO_FOOTPRINT_BELOW_BARONY = "Only a barony or a larger domain has a footprint."
+
+
+def clear_footprint(*, area: Area) -> FootprintChange:
+    """Take every pip the area itself holds off the map, on every region map (#4905):
+    its own rows go to its ladder parent, or to open ground when it has none. A
+    descendant's rows stay where they are, the same rule as shrinking. ``changed``
+    names every row moved so the staff undo can put the footprint back."""
+    if area.level < AreaLevel.BARONY:
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
+    parent = _ladder_parent(area)
+    changed: list[PipChange] = []
+    with transaction.atomic():
+        rows = list(AreaFootprintPip.objects.filter(area=area).order_by("y", "x"))
+        if parent is not None:
+            for row in rows:
+                changed.append((row.x, row.y, area.pk, parent.pk))
+                row.area = parent
+            if rows:
+                AreaFootprintPip.objects.bulk_update_with_reason(
+                    rows,
+                    ["area"],
+                    batch_size=5000,
+                    reason="clear moves rows loaded in this transaction",
+                )
+        else:
+            changed.extend((row.x, row.y, area.pk, None) for row in rows)
+            if rows:
+                AreaFootprintPip.objects.filter(pk__in=[row.pk for row in rows]).delete()
+    return FootprintChange(removed=len(rows), changed=tuple(changed))
 
 
 def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:

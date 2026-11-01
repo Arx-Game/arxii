@@ -37,6 +37,7 @@ from world.areas.worldmap.models import (
 )
 from world.areas.worldmap.services import (
     WorldMapServiceError,
+    clear_footprint,
     create_region_map,
     footprint_of,
     holder_at,
@@ -308,6 +309,25 @@ class FootprintServiceTests(TestCase):
         other = AreaFactory(name="Other2", level=AreaLevel.COUNTY, parent=self.kingdom)
         change = set_footprint(area=other, add=[(4, 3)])
         assert change.changed == ()
+
+    def test_clear_takes_a_domains_own_pips_off_everywhere_and_keeps_its_children(self) -> None:
+        set_footprint(area=self.county, add=[(1, 1), (2, 1), (30, 30)])  # (30, 30) is off this map
+        set_footprint(area=self.barony, add=[(2, 1)])
+        change = clear_footprint(area=self.county)
+        assert change.removed == 2
+        assert sorted(change.changed) == [
+            (1, 1, self.county.pk, self.kingdom.pk),
+            (30, 30, self.county.pk, self.kingdom.pk),
+        ]
+        assert holder_at(2, 1) == self.barony
+        assert holder_at(1, 1) == self.kingdom
+        change = clear_footprint(area=self.kingdom)
+        assert holder_at(1, 1) is None
+        assert change.changed == ((1, 1, self.kingdom.pk, None), (30, 30, self.kingdom.pk, None))
+        with self.assertRaises(WorldMapServiceError):
+            clear_footprint(
+                area=AreaFactory(name="Ward2", level=AreaLevel.WARD, parent=self.barony)
+            )
 
 
 class RegionMapApiTests(TestCase):
