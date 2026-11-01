@@ -1362,8 +1362,18 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
   `style_skill_rating`, `style_lapse_note`, `stat_from_style`) and its hit-roll breakdown
   shows "the style's hit stat" and a style row, "style skill" with the rating or struck
   through (`RollLine.lapsed`) with the reason (`strike.style_roll_line`).
+- The PC defense roll (`world.combat.services.npc.defense_roll`): `resolve_npc_attack`,
+  handed the NPC action's `get_npc_action_interaction` factory, records one
+  `ConsequenceOutcome` for the defender on that Narrator ACTION interaction
+  (`record_defense_roll`), keeping `against_label` (the attacker), the defense skill rating,
+  the style fields and `armor_share_tenths` at roll time. `defense_roll_breakdowns` lays it
+  out ("Defense against <attacker>", defense skill, style skill or lapse, "Armor, N of 10",
+  then the result); `against_label` set is its key, so it never claims a Strike row.
+  `combat_roll_breakdowns` (`world.checks.serializers`) serves both builders, defender and
+  staff only. A barrier's re-roll records no row. Since this, every defended NPC blow mints
+  the NPC action's interaction (before, only a survivability roll did).
 - Not yet: `is_gear_compatible` still reads the vow's `GearArchetypeCompatibility` (slice
-  3 re-keys it with the data migration), and the PC defense roll has no breakdown card yet.
+  3 re-keys it with the data migration).
 
 ### Defense styles + gear substitution (#2533, ADR-0149 Layer 3)
 

@@ -689,8 +689,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   Vitest suites. **Combat style on the roll (#4884, slice 2) SHIPPED:** the style skill adds
   to the Strike, technique hit and PC defense rolls while the weapon, worn armor and held vows
   are the style's, a Strike hits with the style's hit stat, and the Strike breakdown shows the
-  style skill or strikes it through with the reason (`test_combat_style_journeys.py`).
-  **Known gaps (later #4844 slices):** the PC defense roll has no breakdown card; vow gear
+  style skill or strikes it through with the reason (`test_combat_style_journeys.py`). The
+  PC defense roll against an NPC blow is recorded on the NPC action's Narrator interaction
+  and shown to the defender as "Defense against <attacker>" with the defense skill, the style
+  skill or its lapse, and "Armor, N of 10".
+  **Known gaps (later #4844 slices):** vow gear
   compatibility still keyed to the vow (slice 3); natural weapons (slice 4); production has no
   Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
   a plain message until staff author them (Required content `strike-check-types`); the

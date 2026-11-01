@@ -955,9 +955,11 @@ until slices 2 to 7. What was built:
   the PC defense roll while the weapon, worn armor and every held vow are the style's, and
   lapses otherwise; a Strike hits with the style's hit stat either way, a technique keeps
   its own stat. The Strike breakdown shows the style skill, or the style struck through with
-  the reason. Journeys: `src/integration_tests/test_combat_style_journeys.py`.
-- Left for slice 3: `is_gear_compatible` still reads the vow's gear table; the defense roll
-  breakdown card is not built yet.
+  the reason. The PC defense roll is recorded too (migration `0357`) and shows on the
+  defender's Last Outcome card: "Defense against <attacker>", the defense skill, the style
+  skill or its lapse, "Armor, N of 10". Journeys:
+  `src/integration_tests/test_combat_style_journeys.py`.
+- Left for slice 3: `is_gear_compatible` still reads the vow's gear table.
 
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
