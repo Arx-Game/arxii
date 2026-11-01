@@ -6,9 +6,6 @@ from django.test import TestCase, override_settings
 
 from world.conditions.berserk_content import ensure_berserk_content
 from world.conditions.constants import (
-    CompulsionForbidden,
-    CompulsionResult,
-    CompulsionWant,
     ControlLossFiresOn,
     DurationType,
 )
@@ -16,7 +13,7 @@ from world.conditions.control_loss_bands import (
     validate_compulsion_bands,
     validate_control_loss_bands,
 )
-from world.conditions.models import ConditionTemplate
+from world.conditions.models import Compulsion, ConditionTemplate
 from world.magic.factories import GiftFactory
 from world.magic.services.fury import get_berserk_template
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
@@ -35,36 +32,19 @@ class BerserkCompulsionSeedTests(TestCase):
         stage = get_berserk_template().stages.get()
         self.assertIsInstance(stage.severity_multiplier, Decimal)
 
-    def test_berserk_seed_carries_compulsion_with_forbidden_actions(self) -> None:
+    def test_berserk_seed_is_idempotent_and_its_bands_validate(self) -> None:
+        """A second seeding adds no rows, and the seeded bands pass the admin's order rule.
+
+        The seeded numbers themselves are proven by the losing-control journeys, which roll
+        against them (``_CompelledMira``).
+        """
         ensure_berserk_content()
-        ensure_berserk_content()  # idempotent
         compulsion = get_berserk_template().compulsion
-        self.assertEqual(compulsion.wants, CompulsionWant.ATTACK_OPPONENT)
-        self.assertEqual(compulsion.check_type.name, "Resist compulsion")
-        weights = {row.trait.name: float(row.weight) for row in compulsion.check_type.traits.all()}
-        self.assertEqual(weights, {"willpower": 1.0, "composure": 0.5})
-        self.assertEqual((compulsion.base_difficulty, compulsion.difficulty_per_severity), (25, 2))
-        self.assertEqual(
-            {row.action: row.extra_difficulty for row in compulsion.forbidden.all()},
-            {
-                CompulsionForbidden.FLEE: 5,
-                CompulsionForbidden.PARLEY: 5,
-                CompulsionForbidden.LEAVE: 10,
-                CompulsionForbidden.REVERT_FORM: 10,
-            },
-        )
-        bands = list(compulsion.bands.select_related("outcome"))
-        self.assertEqual(len(bands), 5)
-        by_level = {band.outcome.success_level: band for band in bands}
-        self.assertEqual(by_level[2].result, CompulsionResult.ACTS_FREELY)
-        self.assertEqual(by_level[1].result, CompulsionResult.ACTS_FREELY)
-        self.assertEqual(by_level[0].result, CompulsionResult.ACTS_STRAINED)
-        self.assertEqual((by_level[0].action_penalty, by_level[0].control_change), (4, -2))
-        self.assertEqual(by_level[-1].result, CompulsionResult.COMPULSION_ACTS)
-        self.assertEqual(by_level[-1].control_change, -2)
-        self.assertEqual(by_level[-2].result, CompulsionResult.COMPULSION_ACTS)
-        self.assertEqual(by_level[-2].control_change, -4)
-        self.assertEqual(validate_compulsion_bands(bands), [])
+        before = (compulsion.forbidden.count(), compulsion.bands.count())
+        ensure_berserk_content()
+        self.assertEqual(Compulsion.objects.filter(condition=compulsion.condition).count(), 1)
+        self.assertEqual((compulsion.forbidden.count(), compulsion.bands.count()), before)
+        self.assertEqual(validate_compulsion_bands(list(compulsion.bands.all())), [])
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

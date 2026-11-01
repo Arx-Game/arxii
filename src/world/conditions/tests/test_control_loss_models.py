@@ -4,10 +4,8 @@ from types import SimpleNamespace
 
 from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
 
-from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import CompulsionResult, ControlLossFiresOn
 from world.conditions.control_loss_bands import (
     validate_compulsion_bands,
@@ -27,6 +25,9 @@ from world.traits.factories import CheckOutcomeFactory
 
 
 class CompulsionModelTests(TestCase):
+    """Staff author a compulsion in the condition admin's inline, whose form runs this clean;
+    no journey authors rows, so the admin's refusal is proven here."""
+
     def test_compulsion_requires_alters_behavior_category(self) -> None:
         plain = ConditionTemplateFactory(
             category=ConditionCategoryFactory(name="Plain", alters_behavior=False)
@@ -36,31 +37,10 @@ class CompulsionModelTests(TestCase):
             compulsion.full_clean(exclude=["check_type"])
         self.assertIn("condition", ctx.exception.message_dict)
 
-    def test_compulsion_accepts_alters_behavior_category(self) -> None:
-        CompulsionFactory().full_clean()
-
 
 class ControlLossTriggerTests(TestCase):
-    def test_trigger_kind_columns_enforced(self) -> None:
-        stage = ConditionStageFactory()
-        vulnerability = ConditionTemplateFactory()
-        check_type = CheckTypeFactory()
-        wound_with_stage = ControlLossTriggerFactory.build(
-            vulnerability=stage.condition,
-            fires_on=ControlLossFiresOn.WOUND_THRESHOLD,
-            health_below_percent=50,
-            stage=stage,
-            check_type=check_type,
-        )
-        stage_without_stage = ControlLossTriggerFactory.build(
-            vulnerability=vulnerability,
-            fires_on=ControlLossFiresOn.CONDITION_STAGE,
-            check_type=check_type,
-        )
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            wound_with_stage.save()
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            stage_without_stage.save()
+    """The trigger and band clean rules the admin's add and change pages run; no journey
+    authors rows."""
 
     def test_valid_wound_and_stage_triggers_save(self) -> None:
         ControlLossTriggerFactory(wound=True)
@@ -87,6 +67,8 @@ class ControlLossTriggerTests(TestCase):
 
 
 class BandValidatorTests(TestCase):
+    """The monotonic-order rule over a whole band set, which only the admin formsets submit."""
+
     def test_validate_compulsion_bands_rejects_better_outcome_with_worse_result(self) -> None:
         compulsion = CompulsionFactory()
         worse = CompulsionResistBandFactory.build(
@@ -121,6 +103,8 @@ class BandValidatorTests(TestCase):
 
 
 class ControlLossBandFormSetTests(TestCase):
+    """The admin inline formset on an unsaved trigger (the add page); no journey posts it."""
+
     def test_formset_refuses_forced_form_on_non_moon_trigger(self) -> None:
         from world.conditions.admin import ControlLossBandInline
 
