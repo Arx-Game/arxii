@@ -394,6 +394,19 @@ def _damage_figure(split: _AreaSplit) -> str:
     return join_labels([first, *rest])
 
 
+def _lead_and_figure(
+    split: _AreaSplit | None, target_label: str, total_damage: int
+) -> tuple[str, str]:
+    """Who the head names and the figure after "for" (#4842).
+
+    A split line leads with its first hurt opponent (the focused target, unless it took
+    nothing) and lists each figure; otherwise the target and the one summed figure.
+    """
+    if split and split.damage:
+        return split.damage[0][0], _damage_figure(split)
+    return target_label, f"{total_damage} damage"
+
+
 def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one narration; cohesive
     *,
     actor_label: str,
@@ -489,13 +502,11 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
         target_opponent_id=target_opponent_id,
         opponent_labels=opponent_labels,
     )
-    # The head names whoever leads the figures: the focused target, unless it took nothing.
-    lead_label = split.damage[0][0] if split and split.damage else target_label
+    lead_label, figure = _lead_and_figure(split, target_label, total_damage)
     if hit_text:
         blow = fill_narration_placeholders(hit_text, actor=actor_label, target=lead_label)
     else:
         blow = f"{actor_label}’s {technique_name} strikes {lead_label}"
-    figure = _damage_figure(split) if split and split.damage else f"{total_damage} damage"
     head = f"{blow} for {figure}"
     tail = _build_tail_clauses(
         wounds=wounds,
