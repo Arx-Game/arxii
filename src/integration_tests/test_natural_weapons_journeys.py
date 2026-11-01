@@ -18,6 +18,8 @@ facet, adds 2: the claws take enchantments through the ordinary facet path.
 
 from __future__ import annotations
 
+from evennia.objects.models import ObjectDB
+
 from integration_tests.harness import JourneyCase
 from integration_tests.test_strike_journeys import BARE_HANDS_DAMAGE, _StrikeField
 from world.character_creation.services import finalize_character
@@ -67,8 +69,23 @@ def clawed_gift():
 
 
 def claws_of(sheet) -> list[ItemInstance]:
+    """The natural weapons ``sheet`` holds: claws made by the gift, never a plain copy."""
     return list(
-        ItemInstance.objects.in_play().filter(holder_character_sheet=sheet, template__name=CLAWS)
+        ItemInstance.objects.in_play().filter(
+            holder_character_sheet=sheet, template__name=CLAWS, natural_weapon_gift__isnull=False
+        )
+    )
+
+
+def ordinary_copy(character, gift) -> ItemInstance:
+    """A plain pair of the gift's claws template, bought or crafted: carried, not worn."""
+    from evennia_extensions.factories import ObjectDBFactory
+    from world.items.factories import ItemInstanceFactory
+
+    return ItemInstanceFactory(
+        template=gift.natural_weapon_template,
+        game_object=ObjectDBFactory(db_key="Trophy Claws", location=character),
+        holder_character_sheet=character.sheet_data,
     )
 
 
@@ -176,6 +193,20 @@ class GainingTheGiftInPlay(JourneyCase):
         )
         self.telnet(self.hobb, f"learn technique {swipe.pk}")
         self.assertEqual(claws_of(self.sheet), [claws])
+
+    def test_gaining_the_gift_makes_its_own_claws_beside_an_owned_copy(self) -> None:
+        copy = ordinary_copy(self.hobb, self.gift)
+
+        grant_gift_to_character(self.sheet, self.gift)
+
+        (claws,) = claws_of(self.sheet)
+        self.assertNotEqual(claws, copy)
+        self.assertEqual(
+            worn_slots(self.sheet, claws), {(region, EquipmentLayer.SKIN) for region in HANDS}
+        )
+        self.assertEqual(worn_slots(self.sheet, copy), set())
+        copy.refresh_from_db()
+        self.assertIsNone(copy.natural_weapon_gift)
 
     def test_a_staff_species_edit_grants_the_claws_once(self) -> None:
         from evennia_extensions.factories import AccountFactory
@@ -304,6 +335,42 @@ class TheClawsNeverComeOff(_ClawedField):
             [self.claws, sword, None],
         )
 
+    def test_an_ordinary_copy_of_the_template_drops_and_gives_like_any_gear(self) -> None:
+        dropped_copy = ordinary_copy(self.hobb, self.gift)
+        given_copy = ordinary_copy(self.hobb, self.gift)
+
+        dropped = self.web(
+            self.hobb, "drop", menu_target={"kind": "items", "target_id": dropped_copy.pk}
+        )
+        given = self.web(
+            self.hobb,
+            "give",
+            menu_target={"kind": "items", "target_id": given_copy.pk},
+            recipient_persona_id=self.wren.sheet_data.primary_persona.pk,
+        )
+
+        self.assertTrue(dropped.detail.success, dropped.detail.message)
+        self.assertEqual(dropped_copy.game_object.location, self.steading)
+        self.assertTrue(given.detail.success, given.detail.message)
+        given_copy.refresh_from_db()
+        self.assertEqual(given_copy.holder_character_sheet, self.wren.sheet_data)
+        self.assert_still_clawed()
+
+    def test_removing_the_gift_through_the_api_takes_the_claws(self) -> None:
+        from world.magic.models import CharacterGift
+
+        row = CharacterGift.objects.get(character=self.sheet, gift=self.gift)
+        claw_object_id = self.claws.game_object_id
+
+        response = self.api(self.account_of(self.hobb)).delete(
+            f"/api/magic/character-gifts/{row.pk}/"
+        )
+
+        self.assertEqual(response.status_code, 204, response.content)
+        self.assertEqual(claws_of(self.sheet), [])
+        self.assertFalse(EquippedItem.objects.filter(character=self.sheet).exists())
+        self.assertFalse(ObjectDB.objects.filter(pk=claw_object_id, db_location=self.hobb).exists())
+
     def test_nothing_else_takes_their_layer(self) -> None:
         hand_wear(self.hobb, "Henna Gloves", layer=EquipmentLayer.SKIN)
 
@@ -373,3 +440,58 @@ class StrikingWithClaws(_ClawedField):
         damage, _rolled = self.strike_and_resolve("Success", "Success", weapon_id=self.claws.pk)
 
         self.assertEqual(damage, CLAWS_DAMAGE + 2)
+
+
+class AnNpcCopyTakesTheClawsWithTheGift(JourneyCase):
+    """Ravenna's two story NPCs: copying Powers moves the gift, and its claws, with it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.gm.constants import GMLevel
+        from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
+        from world.roster.models import RosterEntry
+
+        seed_default_gm_level_caps()
+        self.room = self.make_room("Low Gate")
+        self.ravenna = self.make_player("Ravenna", room=self.room)
+        self.owner = self.account_of(self.ravenna)
+        GMProfileFactory(account=self.owner, level=GMLevel.JUNIOR)
+        entries = []
+        for name in ("Captain Vael", "Mirelle"):
+            minted = self.web(self.ravenna, "mint_story_npc", name=name)
+            self.assertTrue(minted.detail.success, minted.detail.message)
+            entries.append(RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"]))
+        self.vael, self.mirelle = entries
+        self.gift = clawed_gift()
+        grant_gift_to_character(self.vael.character_sheet, self.gift)
+
+    def copy_powers(self, source, target) -> None:
+        response = self.api(self.owner).post(
+            f"/api/roster/npcs/{target.pk}/copy-section/",
+            {"source_entry": source.pk, "section": "powers"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_copying_powers_without_the_gift_takes_the_claws_away(self) -> None:
+        sheet = self.vael.character_sheet
+        (claws,) = claws_of(sheet)
+        claw_object_id = claws.game_object_id
+
+        self.copy_powers(self.mirelle, self.vael)
+
+        self.assertEqual(claws_of(sheet), [])
+        self.assertFalse(EquippedItem.objects.filter(character=sheet).exists())
+        self.assertFalse(
+            ObjectDB.objects.filter(pk=claw_object_id, db_location=sheet.character).exists()
+        )
+
+    def test_copying_powers_with_the_gift_gives_the_claws(self) -> None:
+        self.copy_powers(self.vael, self.mirelle)
+
+        (claws,) = claws_of(self.mirelle.character_sheet)
+        self.assertEqual(
+            worn_slots(self.mirelle.character_sheet, claws),
+            {(region, EquipmentLayer.SKIN) for region in HANDS},
+        )
+        self.assertEqual(len(claws_of(self.vael.character_sheet)), 1)
