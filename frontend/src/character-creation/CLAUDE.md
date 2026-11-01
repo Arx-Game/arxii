@@ -85,8 +85,15 @@ character-creation/
     │                        #   select over draft.organization_choices with "None" first,
     │                        #   draft_data.organizations, null for None), Capable Mentor's line
     │                        #   naming the Path's stronger Aspect from the ask's detail (nothing
-    │                        #   to answer). The section is absent when no held card unlocks or
-    │                        #   asks anything.
+    │                        #   to answer), and a card's organization tie (#4856: a select over
+    │                        #   the ask's choices with "None" first, then the kind as a
+    │                        #   ChoiceRow, membership or renown; draft_data.ties keyed by card
+    │                        #   id, null for None). The section is absent when no held card
+    │                        #   unlocks or asks anything. The Officially dead door (#4396)
+    │                        #   renders only when the prompts include officially_dead (#4856:
+    │                        #   Presumed Dead's card), and a second door of the same shape,
+    │                        #   "A second face", when they include alter_ego (saved as
+    │                        #   draft_data.alter_ego, null when skipped); both share FaceForm.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep

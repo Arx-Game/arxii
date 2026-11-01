@@ -509,18 +509,32 @@ def final_touches_cards(draft: CharacterDraft) -> list[FinalTouchesCard]:
     if not cards:
         return []
     aspect = strongest_path_aspect(draft.selected_path)
+    # One organizations query for every ask that offers them (review on #4863): the realm's
+    # admitting organizations, filtered per tie by type in Python.
+    needs_organizations = any(
+        (
+            card.organization_grant_or_none is not None
+            and card.organization_grant_or_none.organization_id is None
+        )
+        or card.organization_tie_or_none is not None
+        for card in cards
+    )
+    realm_organizations = organization_choices(draft) if needs_organizations else []
     asks: list[FinalTouchesCard] = []
     for card in cards:
-        asks.extend(_asks_of(card, draft, aspect))
+        asks.extend(_asks_of(card, aspect, realm_organizations))
     order = {prompt.value: index for index, prompt in enumerate(FinalTouchesPrompt)}
     asks.sort(key=lambda ask: (order[ask.prompt], ask.name))
     return asks
 
 
 def _asks_of(
-    card: Distinction, draft: CharacterDraft, aspect: Aspect | None
+    card: Distinction,
+    aspect: Aspect | None,
+    realm_organizations: list[Organization],
 ) -> list[FinalTouchesCard]:
-    """One card's asks: its staff-set prompt and the ones its sidecars raise (#4852, #4856)."""
+    """One card's asks: its staff-set prompt and the ones its sidecars raise (#4852, #4856).
+    ``realm_organizations`` is the realm's admitting list, fetched once by the caller."""
 
     def ask(prompt: str, detail: str = "", choices: tuple = ()) -> FinalTouchesCard:
         return FinalTouchesCard(card.pk, card.name, prompt, detail, choices)
@@ -532,7 +546,7 @@ def _asks_of(
         asks.append(ask(FinalTouchesPrompt.PRESTIGE_STORY))
     org_grant = card.organization_grant_or_none
     if org_grant is not None and org_grant.organization_id is None:
-        choices = _organization_choice_rows(organization_choices(draft))
+        choices = _organization_choice_rows(realm_organizations)
         asks.append(ask(FinalTouchesPrompt.ORGANIZATION, choices=choices))
     if card.path_aspect_grant_or_none is not None:
         asks.append(ask(FinalTouchesPrompt.PATH_ASPECT, aspect.name if aspect is not None else ""))
@@ -542,7 +556,12 @@ def _asks_of(
         asks.append(ask(worn if persona_grant.worn else FinalTouchesPrompt.ALTER_EGO))
     tie = card.organization_tie_or_none
     if tie is not None:
-        choices = _organization_choice_rows(organization_choices(draft, org_type=tie.org_type))
+        of_kind = [
+            org
+            for org in realm_organizations
+            if tie.org_type_id is None or org.org_type_id == tie.org_type_id
+        ]
+        choices = _organization_choice_rows(of_kind)
         detail = tie.org_type.name if tie.org_type_id else ""
         asks.append(ask(FinalTouchesPrompt.TIE, detail, choices))
     return asks
