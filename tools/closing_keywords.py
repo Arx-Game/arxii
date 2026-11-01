@@ -52,16 +52,31 @@ def branch_issue(branch: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _current_branch() -> str:
-    # symbolic-ref, not rev-parse --abbrev-ref: it names the branch before a first commit.
-    argv = ["git", "symbolic-ref", "--quiet", "--short", "HEAD"]
+def _git(*args: str) -> str:
     proc = subprocess.run(  # noqa: S603 - fixed argv
-        argv,
+        ["git", *args],  # noqa: S607 - git on PATH
         capture_output=True,
         text=True,
         check=False,
     )
-    return proc.stdout.strip()
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _current_branch() -> str:
+    """The branch being committed to, also mid-rebase, when HEAD is detached.
+
+    symbolic-ref, not rev-parse --abbrev-ref: it names the branch before a first
+    commit. A `reword` or `squash` in `git rebase -i` runs this hook with HEAD
+    detached; git keeps the branch being rebased in rebase-merge/ (or rebase-apply/).
+    """
+    branch = _git("symbolic-ref", "--quiet", "--short", "HEAD")
+    if branch:
+        return branch
+    for state in ("rebase-merge", "rebase-apply"):
+        head_name = Path(_git("rev-parse", "--git-path", f"{state}/head-name") or "/nonexistent")
+        if head_name.is_file():
+            return head_name.read_text(encoding="utf-8").strip().removeprefix("refs/heads/")
+    return ""
 
 
 def check_commit_message(path: str) -> int:

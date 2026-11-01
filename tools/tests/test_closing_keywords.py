@@ -73,3 +73,22 @@ def test_the_hook_rejects_the_incident_and_accepts_its_rewording(tmp_path: Path)
         tmp_path / "again", "Fix the dedupe\n\nCloses #4903. The bot renumbered #4866."
     )
     assert accepted.returncode == 0, accepted.stderr
+
+
+def test_a_reword_during_an_interactive_rebase_keeps_the_branch_issue(tmp_path: Path):
+    """HEAD is detached mid-rebase; git records the branch in rebase-merge/head-name."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    first = _commit(tmp_path, "Start")
+    assert first.returncode == 0, first.stderr
+    repo = tmp_path / "repo"
+
+    def git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=False
+        )
+
+    git("checkout", "-q", "--detach")
+    (repo / ".git/rebase-merge").mkdir()
+    (repo / ".git/rebase-merge/head-name").write_text("refs/heads/chore-4903-x\n")
+    reworded = git("commit", "-q", "--allow-empty", "-m", "Reword\n\nCloses #4903")
+    assert reworded.returncode == 0, reworded.stderr
