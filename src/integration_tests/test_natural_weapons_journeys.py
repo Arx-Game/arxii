@@ -356,13 +356,16 @@ class TheClawsNeverComeOff(_ClawedField):
         self.assertEqual(given_copy.holder_character_sheet, self.wren.sheet_data)
         self.assert_still_clawed()
 
-    def test_removing_the_gift_through_the_api_takes_the_claws(self) -> None:
+    def test_staff_removing_the_gift_through_the_api_takes_the_claws(self) -> None:
         from world.magic.models import CharacterGift
 
         row = CharacterGift.objects.get(character=self.sheet, gift=self.gift)
         claw_object_id = self.claws.game_object_id
 
-        response = self.api(self.account_of(self.hobb)).delete(
+        from evennia_extensions.factories import AccountFactory
+
+        # Writing a gift row is staff work (a player's DELETE is refused).
+        response = self.api(AccountFactory(is_staff=True)).delete(
             f"/api/magic/character-gifts/{row.pk}/"
         )
 

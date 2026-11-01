@@ -95,6 +95,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.permissions import (
     CanPrepareCharacterText,
     IsRitualAuthorOrStaff,
+    IsStaffForBaseWrites,
     IsStaffOrReadOnly,
     IsThreadOwner,
 )
@@ -431,7 +432,7 @@ class GiftViewSet(viewsets.ModelViewSet):
     # router/schema introspection in some code paths, so keep a bare model
     # reference rather than duplicating the Prefetch/annotate chain here.
     queryset = Gift.objects.none()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -670,7 +671,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterAuraSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterAuraFilter
 
@@ -774,7 +775,7 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterResonanceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterResonanceFilter
 
@@ -807,7 +808,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterGiftSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterGiftFilter
 
@@ -873,7 +874,7 @@ class CharacterAnimaViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterAnimaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterAnimaFilter
 

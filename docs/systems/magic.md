@@ -5159,7 +5159,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 | `/effect-types/` | GET | List effect types |
 | `/restrictions/` | GET | List DESIGN-kind restrictions only (the builder catalog); PRICE-kind rows never appear here (#4099 final fix) |
 | `/facets/` | GET | List facets (flat vocabulary, #3776) |
-| `/gifts/` | GET | List all gifts |
+| `/gifts/` | GET (POST/PATCH/DELETE staff only, #4898) | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |
 
 **Note:** The `/thread-types/` endpoint was removed as part of Spec A —
@@ -5167,15 +5167,19 @@ the legacy ThreadType lookup no longer exists.
 
 ### Character Data (Filtered to owned characters)
 
+Reads are scoped to the characters the account plays (staff see all). The router's own
+create, update and delete on these rows are staff-only (`IsStaffForBaseWrites`,
+`world/magic/permissions.py`, #4898): the game writes them through services, and no web
+client flow writes them directly.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/character-auras/` | GET/POST | Character aura data |
-| `/character-resonances/` | GET | Character resonances (balance + lifetime_earned per Spec A §2.2; create/delete via service functions, not REST mutations) |
-| `/character-gifts/` | GET/POST/DELETE | Character's acquired gifts |
-| `/character-anima/` | GET/POST/PATCH | Character anima pool (`band` — qualitative `anima_band_for` word, #1446) |
-| `/character-anima-rituals/` | GET/POST/PATCH/DELETE | Character's rituals |
-| `/character-facets/` | GET/POST/PATCH/DELETE | Character facet assignments |
-| `/techniques/` | GET/POST/PATCH | Character techniques |
+| `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data |
+| `/character-auras/{id}/set-glimpse-tags/`, `set-glimpse-prose/`, `link-glimpse-distinction/`, `unlink-glimpse-distinction/` | POST | The player's own Glimpse edits (the web client's aura writers) |
+| `/character-resonances/` | GET (POST/PATCH/DELETE staff only) | Character resonances (balance + lifetime_earned per Spec A §2.2; players change them through service functions, not REST mutations) |
+| `/character-gifts/` | GET (POST/PATCH/DELETE staff only) | Character's acquired gifts. Players gain gifts through `grant_gift_to_character`; a staff DELETE also takes the gift's natural weapon (#4898) |
+| `/character-anima/` | GET (POST/PATCH/DELETE staff only) | Character anima pool (`band`, the qualitative `anima_band_for` word, #1446) |
+| `/techniques/` | GET (POST/PATCH/DELETE staff only) | Character techniques |
 | `/techniques/author/` | POST | Author a technique via `AuthorTechniqueAction`; 201/400/403 |
 | `/techniques/price/` | POST | Dry-run budget breakdown (read-only) |
 
