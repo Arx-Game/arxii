@@ -163,6 +163,33 @@ class AreaCastNarration(JourneyCase):
             "defeating Marsh Wyrm.",
         )
 
+    def test_an_area_hit_that_defeats_two_opponents_names_both(self) -> None:
+        # The Wyrm has 3 health and takes 4; the Hound has 5 and takes 6. Both fall, the
+        # focused Wyrm first:
+        #   "Hobb’s Sweep strikes Marsh Wyrm for 4 damage and Pack Hound for 6 damage,
+        #    defeating Marsh Wyrm and Pack Hound."
+        wyrm = self.opponent("Marsh Wyrm", soak=2, health=3)
+        self.opponent("Pack Hound", soak=0, health=5)
+        self.wyrm.delete()
+        self.hound.delete()
+
+        line = self.cast_at(self.technique(ActionTargetType.AREA), wyrm)
+
+        self.assertEqual(
+            line,
+            "Hobb’s Sweep strikes Marsh Wyrm for 4 damage and Pack Hound for 6 damage, "
+            "defeating Marsh Wyrm and Pack Hound.",
+        )
+
+    def test_a_single_target_defeat_still_says_them(self) -> None:
+        # Only the Hound is struck, and its 5 health does not survive the 6:
+        #   "Hobb’s Sweep strikes Pack Hound for 6 damage, defeating them."
+        hound = self.opponent("Pack Hound", soak=0, health=5)
+
+        line = self.cast_at(self.technique(ActionTargetType.SINGLE), hound)
+
+        self.assertEqual(line, "Hobb’s Sweep strikes Pack Hound for 6 damage, defeating them.")
+
     def test_a_concealed_area_cast_splits_the_same_way(self) -> None:
         # Hobb's gift has a concealing style and Mira is in the Yard; with no detection check
         # authored nobody can name the caster, so Mira reads the effect with no caster in it,
