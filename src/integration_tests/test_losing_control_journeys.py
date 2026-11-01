@@ -422,9 +422,8 @@ class WoundTriggers(_ControlLossCase):
         """R1: a wound trigger fired inside a round is a narration row in the scene log, so
         a reload still shows it. The row names the face Garrick wears, never his own name.
 
-        It lands where the round resolves it: the damage rolls the trigger before the
-        swing's own summary line goes out, so it is pushed ahead of that line, as every
-        effect of an action is.
+        Ruling 38: cause before effect. The damage rolls the trigger before the swing's
+        own line goes out, and the trigger's row waits for that line, so it follows it.
         """
         from world.scenes.models import Interaction
 
@@ -455,7 +454,7 @@ class WoundTriggers(_ControlLossCase):
         rows = self.mailbox(witness).rows
         control = next(i for i, row in enumerate(rows) if line in row)
         swing = next(i for i, row in enumerate(rows) if "Haymaker strikes a hooded man" in row)
-        self.assertEqual(control + 1, swing, rows)
+        self.assertEqual(swing + 1, control, rows)
 
     def test_a_disguised_fighter_who_declares_nothing_holds_back_under_the_disguise(
         self,

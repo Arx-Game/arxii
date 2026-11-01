@@ -13,6 +13,10 @@ currently compelled, and by what.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+import contextvars
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.conditions.constants import ControlLossFiresOn
@@ -39,6 +43,44 @@ if TYPE_CHECKING:
         ControlLossBand,
         ControlLossTrigger,
     )
+
+
+@dataclass(frozen=True)
+class _HeldRoundLine:
+    """A trigger's round line waiting for the narration of the action that set it off."""
+
+    encounter: CombatEncounter
+    character: ObjectDB
+    line: str
+
+
+#: The trigger lines a resolving action has set off, held until that action's own
+#: narration is out (cause before effect); None when no action is holding them.
+_HELD_ROUND_LINES: contextvars.ContextVar[list[_HeldRoundLine] | None] = contextvars.ContextVar(
+    "held_round_lines", default=None
+)
+
+
+@contextmanager
+def trigger_lines_after_action() -> Iterator[None]:
+    """Hold the round lines of triggers fired inside one action, then send them after it.
+
+    Round resolution wraps each fighter's slot in this, so a wound trigger set off by a
+    swing lands after the swing's own line, whichever damage path rolled it. Inside an
+    outer hold it adds nothing: the outer one sends them. A slot that raises sends
+    nothing, since the round rolls back with it.
+    """
+    if _HELD_ROUND_LINES.get() is not None:
+        yield
+        return
+    held: list[_HeldRoundLine] = []
+    token = _HELD_ROUND_LINES.set(held)
+    try:
+        yield
+    finally:
+        _HELD_ROUND_LINES.reset(token)
+    for entry in held:
+        _send_round_line(entry.encounter, entry.character, entry.line)
 
 
 def active_compulsion(
@@ -586,8 +628,23 @@ def _narrate_in_round(
 ) -> None:
     """Send a trigger line as a round narration row, the seam the compulsion lines use.
 
-    With no room the row is still kept in the scene log and the character is told directly.
+    Inside an action's hold (``trigger_lines_after_action``) the row waits for the
+    action's own narration. With no room the row is still kept in the scene log and the
+    character is told directly.
     """
+    held = _HELD_ROUND_LINES.get()
+    if held is not None:
+        held.append(_HeldRoundLine(encounter=encounter, character=character, line=line))
+        return
+    _send_round_line(encounter, character, line)
+
+
+def _send_round_line(
+    encounter: CombatEncounter,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    line: str,
+) -> None:
+    """Persist and push one trigger round line now."""
     from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
     broadcast_action_outcome(encounter=encounter, narration=line, target_personas=[])
