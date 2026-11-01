@@ -1,4 +1,5 @@
 # Security updates are alert-triggered and remain independent of this schedule.
+# Version-update limits do not change GitHub's separate security PR limit.
 version: 2
 updates:
   - package-ecosystem: "uv"
