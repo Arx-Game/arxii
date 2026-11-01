@@ -1,0 +1,92 @@
+{% comment %}
+One focus pick row (#4880): a <details> whose summary reads level, name, value,
+limits, live price, payload and holders, and whose body holds the pick's fields, its
+limits formset and its payload lines. `entry` is a views._PickEntry.
+{% endcomment %}
+{% with f=entry.form %}
+<details class="vb-pick" data-pick-row{% if f.errors or entry.limits.total_error_count %} open{% endif %}>
+  <summary class="vb-pick-summary">
+    <span><b>{{ f.instance.name|default:"New pick" }}</b></span>
+    <span>value {{ f.value.value|default:"" }}</span>
+    <span>{{ entry.limits_text }}</span>
+    <span>price <span class="vb-price" data-pick-price>{{ entry.price|default_if_none:"" }}</span></span>
+    <span>{% if entry.payload %}{{ entry.payload|length }} payload row{{ entry.payload|length|pluralize }}{% else %}<span class="vb-muted">no payload</span>{% endif %}</span>
+    <span>held by {{ entry.held_by }}</span>
+  </summary>
+  <div class="vb-pickbody">
+    {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+    {% if f.non_field_errors %}<p class="errornote">{{ f.non_field_errors }}</p>{% endif %}
+    <table class="tuning-table vb-table">
+      <tbody>
+        <tr><th>{{ f.pick_level.label_tag }}</th><td>{{ f.pick_level.errors }}{{ f.pick_level }}</td>
+          <th>{{ f.value.label_tag }}</th><td>{{ f.value.errors }}{{ f.value }}</td></tr>
+        <tr><th>{{ f.name.label_tag }}</th><td colspan="3">{{ f.name.errors }}{{ f.name }}</td></tr>
+        <tr><th>{{ f.description.label_tag }}</th>
+          <td colspan="3">{{ f.description.errors }}{{ f.description }}</td></tr>
+        {% if f.instance.pk %}
+        <tr><th>{{ f.DELETE.label_tag }}</th><td colspan="3">{{ f.DELETE }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    {% if entry.limits %}
+    {% with limits=entry.limits %}
+    <div class="vb-sub">Limits</div>
+    {{ limits.management_form }}
+    {% if limits.non_form_errors %}<p class="errornote">{{ limits.non_form_errors }}</p>{% endif %}
+    <table class="tuning-table vb-table">
+      <thead><tr><th>Kind</th><th>How often met (tenths)</th><th>Reduction</th>
+        <th>Description</th><th>Remove</th></tr></thead>
+      <tbody id="limits-body-{{ limits.prefix }}">
+        {% for lf in limits.forms %}
+        <tr class="vb-limit-row">
+          {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+          <td>{{ lf.kind.errors }}{{ lf.kind }}</td>
+          <td>{{ lf.frequency_tenths.errors }}{{ lf.frequency_tenths }}</td>
+          <td>{{ lf.reduction.errors }}{{ lf.reduction }}</td>
+          <td>{{ lf.description }}</td>
+          <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+        </tr>
+        {% if lf.non_field_errors %}<tr><td colspan="5">{{ lf.non_field_errors }}</td></tr>{% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <template id="empty-limit-{{ limits.prefix }}">
+      <tr class="vb-limit-row">
+        {% for hidden in limits.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+        <td>{{ limits.empty_form.kind }}</td>
+        <td>{{ limits.empty_form.frequency_tenths }}</td>
+        <td>{{ limits.empty_form.reduction }}</td>
+        <td>{{ limits.empty_form.description }}</td>
+        <td></td>
+      </tr>
+    </template>
+    <div class="vb-addrow">
+      <button type="button" class="button" data-add-limit
+              data-prefix="{{ limits.prefix }}" data-target="limits-body-{{ limits.prefix }}"
+              data-template="empty-limit-{{ limits.prefix }}">+ Add limit</button>
+    </div>
+    {% endwith %}
+
+    <div class="vb-sub">Payload</div>
+    {% if entry.payload %}
+    <ul class="vb-payload">
+      {% for line in entry.payload %}
+      <li>{{ line.kind }}: {{ line.summary }}
+        <a href="{{ line.popup_url }}" data-popup>edit</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="help">No payload rows yet: holders who choose it get nothing.</p>
+    {% endif %}
+    <div class="vb-addrow">
+      {% for label, url in entry.add_links %}
+      <a href="{{ url }}" data-popup>+ Add {{ label }}</a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="help">Save the pick first to add limits and payload rows.</p>
+    {% endif %}
+  </div>
+</details>
+{% endwith %}

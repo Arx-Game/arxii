@@ -1,0 +1,136 @@
+{% comment %}
+The vow page's own stylesheet (#4880), in the Distinction Builder's shape: admin's own
+classes (`.module`, `div.help`, `.errornote`, `.submit-row`, `table.tuning-table`) carry
+the structure, and this sheet adds only what admin has no class for: the two-column
+shell, the header chips, the pick rows grouped by level, the live price, the holder
+warning and the rail's stat rows. Every colour is an admin variable or a token set
+against admin's light and dark selectors, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #vow-builder-root {
+    --vb-warn: #b4541b;
+  }
+  @media (prefers-color-scheme: dark) {
+    #vow-builder-root { --vb-warn: #d8a06a; }
+  }
+  html[data-theme="light"] #vow-builder-root { --vb-warn: #b4541b; }
+  html[data-theme="dark"] #vow-builder-root { --vb-warn: #d8a06a; }
+
+  /* The vow on the left, the rail on the right; the rail carries its own
+     "Mark reviewed" form, so it sits beside the main form, not inside it. */
+  #vow-builder-root .vb-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #vow-builder-root .vb-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #vow-builder-root .vb-main { min-width: 0; }
+
+  #vow-builder-root .module > h2 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  #vow-builder-root .vb-chips { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
+  #vow-builder-root .vb-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  #vow-builder-root .vb-table th { text-align: left; white-space: nowrap; }
+  #vow-builder-root .vb-table td { vertical-align: top; padding: 0.4rem 0.5rem; }
+  #vow-builder-root .vb-table td .help { margin: 0.2rem 0 0; }
+  #vow-builder-root .vb-table td input[type="text"],
+  #vow-builder-root .vb-table td textarea {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  #vow-builder-root .vb-table td input[type="number"] { width: 5rem; }
+  #vow-builder-root .vb-flags { display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; }
+  #vow-builder-root .vb-flags label { white-space: nowrap; }
+  #vow-builder-root .vb-muted { color: var(--body-quiet-color); }
+  #vow-builder-root .vb-addrow { margin: 0.5rem 10px 1rem; }
+  #vow-builder-root .vb-addrow a,
+  #vow-builder-root .vb-addrow button { margin-right: 0.6rem; }
+
+  /* Payload lines: one plain sentence each, with its edit link in the popup. */
+  #vow-builder-root .vb-payload { margin: 0; padding: 0 10px; list-style: none; }
+  #vow-builder-root .vb-payload li {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.8125rem;
+  }
+  #vow-builder-root .vb-payload li:last-child { border-bottom: none; }
+
+  /* Picks, grouped by level. Each pick is a native <details>: the summary row reads
+     at a glance, the body holds its fields, limits and payload. */
+  #vow-builder-root .vb-level {
+    margin: 0.75rem 10px 0.25rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--body-quiet-color);
+  }
+  #vow-builder-root .vb-pick {
+    margin: 0 10px 0.4rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 3px;
+  }
+  #vow-builder-root .vb-pick-summary {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1.4fr) 4rem minmax(6rem, 1fr) 5rem minmax(8rem, 2fr) 5rem;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    cursor: pointer;
+    font-size: 0.8125rem;
+  }
+  #vow-builder-root .vb-pick-summary b { font-weight: 600; }
+  #vow-builder-root .vb-pickbody { padding: 0.25rem 0.6rem 0.6rem; }
+  #vow-builder-root .vb-sub {
+    margin: 0.6rem 0 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--body-quiet-color);
+  }
+  #vow-builder-root .vb-price { font-variant-numeric: tabular-nums; font-weight: 600; }
+  #vow-builder-root .vb-limit-row td { vertical-align: top; }
+
+  /* The holder warning: a save that moves a held pick's price stops here first. */
+  #vow-builder-root .vb-warn {
+    border-left: 3px solid var(--vb-warn);
+    padding: 0.5rem 0.8rem;
+    margin: 0.5rem 10px;
+  }
+  #vow-builder-root .vb-warn ul { margin: 0.3rem 0 0; padding-left: 1rem; }
+  #vow-builder-root .vb-over { color: var(--vb-warn); font-weight: 600; }
+
+  /* The rail */
+  #vow-builder-root .vb-rail .module { margin-bottom: 1rem; }
+  #vow-builder-root .vb-stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #vow-builder-root .vb-stat:last-child { border-bottom: none; }
+  #vow-builder-root .vb-stat b {
+    color: var(--link-fg);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  #vow-builder-root .vb-rail p { font-size: 0.75rem; padding: 0 10px; }
+  #vow-builder-root .vb-rail .submit-row { margin: 10px; }
+</style>

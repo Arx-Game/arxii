@@ -271,19 +271,45 @@ def payload_summaries(role: CovenantRole) -> dict[int | None, list[PayloadLine]]
     return lines
 
 
-def holder_impact(role: CovenantRole, new_prices: Mapping[int, int | None]) -> list[HolderImpact]:
+@dataclass(frozen=True)
+class StoredPick:
+    """A pick's level and price as the database holds them, read before any form binds."""
+
+    level: int
+    price: int
+
+
+def stored_picks(role: CovenantRole) -> dict[int, StoredPick]:
+    """Each of the vow's picks as stored, keyed by pk.
+
+    Validating a pick or limit form writes the posted values onto the identity-mapped
+    row, so a POST reads this before binding and hands it to ``holder_impact``.
+    """
+    return {
+        pick.pk: StoredPick(level=pick.pick_level, price=pick_price(pick))
+        for pick in role_picks(role)
+    }
+
+
+def holder_impact(
+    role: CovenantRole,
+    new_prices: Mapping[int, int | None],
+    stored: Mapping[int, StoredPick] | None = None,
+) -> list[HolderImpact]:
     """Each live holder whose spend at a level an edit moves, with old and new totals.
 
     ``new_prices`` maps a pick of ``role`` to the price the edit leaves it at, or
     ``None`` for a pick the edit deletes. A pick whose price does not change moves
     nothing. A holder's total at a level counts every pick they chose there, a sub-role
     holder's picks from the anchor's catalog too; a deleted pick drops out of it.
+    ``stored`` is ``stored_picks(role)`` read before any form bound; without it the
+    picks are read now.
     """
-    old_prices = {pick.pk: pick_price(pick) for pick in role_picks(role)}
+    stored = dict(stored) if stored is not None else stored_picks(role)
     changed = {
         pick_id
         for pick_id, price in new_prices.items()
-        if pick_id in old_prices and price != old_prices[pick_id]
+        if pick_id in stored and price != stored[pick_id].price
     }
     if not changed:
         return []
@@ -296,22 +322,26 @@ def holder_impact(role: CovenantRole, new_prices: Mapping[int, int | None]) -> l
         .select_related("character_role__character_sheet__character", "pick")
         .order_by("character_role__character_sheet__character__db_key", "pick__pick_level")
     )
+
+    def old_price(choice: CharacterVowFocusPick) -> int:
+        if choice.pick_id in stored:
+            return stored[choice.pick_id].price
+        return pick_price(choice.pick)
+
+    def new_price(choice: CharacterVowFocusPick) -> int:
+        if choice.pick_id in new_prices:
+            return new_prices[choice.pick_id] or 0
+        return old_price(choice)
+
     by_membership_level: dict[tuple[int, int], list[CharacterVowFocusPick]] = {}
     for choice in choices:
-        key = (choice.character_role_id, choice.pick.pick_level)
-        by_membership_level.setdefault(key, []).append(choice)
+        level = stored[choice.pick_id].level if choice.pick_id in stored else choice.pick.pick_level
+        by_membership_level.setdefault((choice.character_role_id, level), []).append(choice)
     budget = focus_pick_budget()
     impacts: list[HolderImpact] = []
     for (membership_id, level), level_choices in by_membership_level.items():
         if not any(choice.pick_id in changed for choice in level_choices):
             continue
-        old_total = sum(pick_price(choice.pick) for choice in level_choices)
-        new_total = sum(
-            (new_prices[choice.pick_id] or 0)
-            if choice.pick_id in new_prices
-            else pick_price(choice.pick)
-            for choice in level_choices
-        )
         sheet = level_choices[0].character_role.character_sheet
         impacts.append(
             HolderImpact(
@@ -321,8 +351,8 @@ def holder_impact(role: CovenantRole, new_prices: Mapping[int, int | None]) -> l
                     f"?character_role__id__exact={membership_id}"
                 ),
                 level=level,
-                old_total=old_total,
-                new_total=new_total,
+                old_total=sum(old_price(choice) for choice in level_choices),
+                new_total=sum(new_price(choice) for choice in level_choices),
                 budget=budget,
             )
         )
