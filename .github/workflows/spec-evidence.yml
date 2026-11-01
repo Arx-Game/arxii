@@ -71,6 +71,18 @@ jobs:
                   "with `Closes #<number>`; use a child issue for partial work."
               )
           print(f"pull request closes issue #{issue_number}")
+
+          # GitHub closes every issue or PR a closing keyword names when this merges
+          # (#4903: "the bot fixed #4866" closed an open PR). Edit the body to fix.
+          from tools.closing_keywords import stray_references
+
+          stray = stray_references(body, issue_number)
+          if stray:
+              raise SystemExit(
+                  f"The PR body names other issues after a closing keyword: {stray}. "
+                  f"Merging would close them. Only #{issue_number} may follow close/fix/"
+                  "resolve; reword the rest (e.g. 'on #N', 'renumbered #N')."
+              )
           PY
       - name: Validate labeled review evidence
         env:

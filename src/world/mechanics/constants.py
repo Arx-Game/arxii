@@ -202,13 +202,15 @@ class AmountInput(models.TextChoices):
 
     The row's own amount is the amount per step; the total is that amount times the input
     divided by the row's "per N" step, held at its cap. Blank means no input: the row keeps
-    its own fixed scaling (rank, severity, size). The target's soak joins in a later slice.
+    its own fixed scaling (rank, severity, size). The target's soak (#4892) is the soak of the
+    opponent a technique damage hit lands on, so only a damage modifier takes it.
     """
 
     NONE = "", "No input"
     CHARACTER_LEVEL = "character_level", "Character level"
     THREAD_LEVEL = "thread_level", "Thread level"
     CHECK_RANK = "check_rank", "Check rank"
+    TARGET_SOAK = "target_soak", "Target's soak"
 
 
 class EffectKind(models.TextChoices):

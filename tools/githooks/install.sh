@@ -51,3 +51,18 @@ SHIM
 
 write_shim pre-commit
 write_shim pre-push
+
+# commit-msg (#4903): pre-commit configures nothing for this stage, and its own
+# hook-impl stashes unstaged files (#3814), so a branch cut before the tracked hook
+# existed simply skips it instead of falling back.
+path="$hooks_dir/commit-msg"
+rm -f "$path"
+cat >"$path" <<'SHIM'
+#!/usr/bin/env bash
+# Written by tools/githooks/install.sh (#4903). Re-run that script; do not edit.
+tracked="$(git rev-parse --show-toplevel)/tools/githooks/commit-msg"
+[ -f "$tracked" ] || exit 0
+exec bash "$tracked" "$@"
+SHIM
+chmod +x "$path"
+echo "Installed $path (runs tools/githooks/commit-msg)"

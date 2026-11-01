@@ -1,0 +1,105 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css only. `forms.css` and
+`widgets.css` are linked by `change_form.html`, so a page extending `base_site.html` asks
+for them itself (#3667).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:index' %}#group-combat-roles">Combat roles</a>
+  &rsaquo; Combo map
+  &rsaquo; {{ combo.name }}
+</div>
+{% endblock %}
+
+{% block content_title %}<h1>{{ combo.name }} <small class="cm-kind">{{ combo.kind }}</small></h1>{% endblock %}
+
+{% block content %}
+<ul class="object-tools">
+  <li><a href="{{ combo.edit_url }}">Edit {{ combo.kind }}</a></li>
+</ul>
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/combo_map/_css.html" %}
+<div id="combo-map-root">
+
+  <div class="module" id="combo-map-carriers">
+    <h2>{% if is_property %}Conditions carrying it{% else %}Properties it carries{% endif %}</h2>
+    <p class="cm-carriers">
+      {% for carrier in combo.carriers %}
+        <a href="{% if is_property %}{% url 'admin_combo_map_condition' carrier.pk %}{% else %}{% url 'admin_combo_map_property' carrier.pk %}{% endif %}">{{ carrier.name }}</a>{% if carrier.stage_note %} {{ carrier.stage_note }}{% endif %}{% if not forloop.last %} &middot;{% endif %}
+      {% empty %}
+        <span class="cm-muted">None</span>
+      {% endfor %}
+    </p>
+  </div>
+
+  <div class="cm-columns">
+    <div class="module" id="combo-map-set-by">
+      <h2>Set by</h2>
+      <div class="cm-scroll">
+        <table class="tuning-table cm-table">
+          <thead>
+            <tr><th scope="col">Source</th><th scope="col">Kind</th><th scope="col">Lands</th></tr>
+          </thead>
+          <tbody>
+            {% for line in combo.set_by %}
+              {% if line.setter %}
+                <tr>
+                  <td>{% if line.setter.source.url %}<a href="{{ line.setter.source.url }}">{{ line.setter.source.label }}</a>{% else %}{{ line.setter.source.label }}{% endif %}</td>
+                  <td>{{ line.setter.kind }}</td>
+                  <td>{{ line.setter.lands }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td>{{ line.unset_condition }}</td>
+                  <td colspan="2"><span class="cm-chip cm-gap">Set by nothing</span></td>
+                </tr>
+              {% endif %}
+            {% empty %}
+              <tr><td colspan="3"><span class="cm-chip cm-gap">Set by nothing</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="module" id="combo-map-read-by">
+      <h2>Read by</h2>
+      <div class="cm-scroll">
+        <table class="tuning-table cm-table">
+          <thead>
+            <tr><th scope="col">Reader</th><th scope="col">Kind</th><th scope="col">Does</th></tr>
+          </thead>
+          {% for group in combo.reader_groups %}
+            <tbody>
+              {% if group.heading %}
+                <tr class="cm-group"><th scope="colgroup" colspan="3">{{ group.heading }}</th></tr>
+              {% endif %}
+              {% for reader in group.readers %}
+                <tr>
+                  <td>{% if reader.source.url %}<a href="{{ reader.source.url }}">{{ reader.source.label }}</a>{% else %}{{ reader.source.label }}{% endif %}</td>
+                  <td>{{ reader.kind }}</td>
+                  <td>{{ reader.does }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3"><span class="cm-chip cm-gap">Read by nothing</span></td></tr>
+              {% endfor %}
+            </tbody>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

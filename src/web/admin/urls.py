@@ -23,6 +23,12 @@ from web.admin.authoring.views import (
     authoring_stats_fragment,
 )
 from web.admin.being_service.views import being_service, being_service_review
+from web.admin.combo_map.views import (
+    combo_map_condition,
+    combo_map_condition_pick,
+    combo_map_property,
+    combo_map_property_pick,
+)
 from web.admin.content_conflict_views import (
     content_conflict_detail,
     content_conflict_resolve,
@@ -266,6 +272,18 @@ urlpatterns = [
     path("_vow_builder/pick/", vow_builder_pick, name="admin_vow_builder_pick"),
     path("_vow_builder/<int:pk>/", vow_builder, name="admin_vow_builder"),
     path("_vow_builder/<int:pk>/review/", vow_builder_review, name="admin_vow_builder_review"),
+    path(
+        "_combo_map/property/pick/",
+        combo_map_property_pick,
+        name="admin_combo_map_property_pick",
+    ),
+    path("_combo_map/property/<int:pk>/", combo_map_property, name="admin_combo_map_property"),
+    path(
+        "_combo_map/condition/pick/",
+        combo_map_condition_pick,
+        name="admin_combo_map_condition_pick",
+    ),
+    path("_combo_map/condition/<int:pk>/", combo_map_condition, name="admin_combo_map_condition"),
     path(
         "_standoff_profile/<int:template_pk>/",
         standoff_profile,

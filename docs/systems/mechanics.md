@@ -373,8 +373,17 @@ and `scaled_condition_effect_value`, never stored; readers that sum stored
 input replaces the row's own scaling: a size, severity or stage never applies with it (`clean()`),
 and a check-rank input is refused on a stat or skill target (the stat category or any target with
 `target_trait`), whose check would read it again; a row written past `clean()` reads 0 inside its
-own rating instead of recursing (`_RATINGS_IN_PROGRESS`). The
-target's soak input is the next slice. A maneuver reads only the targets that carry no technique or
+own rating instead of recursing (`_RATINGS_IN_PROGRESS`). **The target's soak (#4892)** is the
+one input only a caller knows: the technique damage step (`_apply_profiles_to_target`) reads the
+soak of the opponent before each profile lands (`combat.services.damage.soak.target_soak_of`: the opponent's
+`soak_value`, 0 while it is vulnerable or for a swarm; for a duel mirror, the mirrored player's
+worn-armor soak, `equipped_armor_soak`, read without wear) and carries it in
+`DerivedInputs.target_soak` through `technique_effect_total`, `effect_modifier_total` (Charge
+damage), `modifier_target_contributions` and `condition_target_contributions`. The basic Strike
+does the same (`declarations/strike.py`, `_strike_damage`, owner ruling): its base damage and bare
+hands damage reads get the struck opponent's soak. Every other read
+passes nothing and the row reads 0. `clean()` refuses the input on anything but a damage target
+("Only a damage modifier can read the target's soak."). A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
 "Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
 damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
