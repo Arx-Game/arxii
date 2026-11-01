@@ -1225,10 +1225,16 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   it shows, the submit row's Save becomes "Save anyway" (`confirm_holders`); a POST without
   that field writes nothing. Nobody's picks are changed by the save: a deleted pick's `CharacterVowFocusPick`
   rows CASCADE with it and the budget is derived on read.
-- **Refused and warned saves** - both re-render the posted values and then
-  `flush_refused_instances` every bound form, formset and limit formset, even when the
-  render raises; a save that raises inside its transaction flushes the same rows as the
-  error propagates. A pick marked for delete that still has payload rows is refused by the
+- **Refused and warned saves** - the vow page restores in place, like the Soulfray Stage
+  Builder, rather than flushing: `_VowForms.cache_guard()` keeps the vow, every specialty,
+  pick and limit a form is bound to (a `CacheGuard`, plus `watch_created` on the three
+  child models) before anything validates, and every POST path that does not commit (the
+  setup gate, a refusal, the held-pick warning, an error in `_new_prices` or
+  `live.pick_changes`, a save that raises) restores the kept values onto the same objects
+  after the page renders. Flushing was not enough: a character's covenant-role handler
+  holds memberships loaded with `select_related("covenant_role")` for the life of the
+  process, a sub-role's `parent_role` and a holder row's `pick` point at the same objects,
+  and combat reads blend weights, speed rank and flags off them. A pick marked for delete that still has payload rows is refused by the
   pick formset (their `focus_pick` is RESTRICT), naming the pick.
 - **Credit** - one `transaction.atomic()` saves `VowForm`, the specialties, the picks and
   every surviving pick's limits, then `stamp_written` credits the vow, every created or
