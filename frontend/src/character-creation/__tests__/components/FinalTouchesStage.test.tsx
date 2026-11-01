@@ -601,18 +601,21 @@ describe('FinalTouchesStage (the grants the cards reconcile, #4852)', () => {
     name: 'Explosive Drama',
     prompt: 'prestige_story' as const,
     detail: '',
+    choices: [],
   };
   const honors = {
     distinction_id: 62,
     name: 'With Honors',
     prompt: 'organization' as const,
     detail: '',
+    choices: [],
   };
   const mentor = {
     distinction_id: 63,
     name: 'Capable Mentor',
     prompt: 'path_aspect' as const,
     detail: 'Warfare',
+    choices: [],
   };
   const lodge = { id: 7, name: 'The Honor Lodge', is_covert: false };
 

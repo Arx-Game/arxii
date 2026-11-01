@@ -146,18 +146,24 @@ class TheCardGrantsAtFinalize(FinalizationTestMixin, JourneyCase):
                     "name": "Explosive Drama",
                     "prompt": "prestige_story",
                     "detail": "",
+                    "choices": [],
                 },
                 {
                     "distinction_id": self.honors.pk,
                     "name": "With Honors",
                     "prompt": "organization",
                     "detail": "",
+                    # The ask carries its choices too since #4856, the same list as below.
+                    "choices": [
+                        {"id": self.lodge.pk, "name": "The Honor Lodge", "is_covert": False}
+                    ],
                 },
                 {
                     "distinction_id": self.mentor.pk,
                     "name": "Capable Mentor",
                     "prompt": "path_aspect",
                     "detail": "Warfare",
+                    "choices": [],
                 },
             ],
         )

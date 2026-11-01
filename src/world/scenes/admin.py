@@ -3,6 +3,7 @@ from django.contrib import admin
 from world.admin_utils import OneRowPerFormSet
 from world.scenes.models import (
     BlockContactFlag,
+    DistinctionPersonaGrant,
     Interaction,
     InteractionFavorite,
     InteractionReaction,
@@ -98,6 +99,16 @@ class SceneAdmin(admin.ModelAdmin):
         return obj.participants.count()
 
     participant_count.short_description = "Participants"
+
+
+@admin.register(DistinctionPersonaGrant)
+class DistinctionPersonaGrantAdmin(admin.ModelAdmin):
+    """A card's second face (#4856, slice 6 of #4813): worn is the Officially dead door."""
+
+    list_display = ("distinction", "worn")
+    list_filter = ("worn",)
+    search_fields = ("distinction__name",)
+    raw_id_fields = ("distinction",)
 
 
 @admin.register(Persona)

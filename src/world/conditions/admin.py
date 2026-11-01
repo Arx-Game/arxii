@@ -81,7 +81,7 @@ class ConditionStageInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     ordering = ["stage_order"]
-    autocomplete_fields = ["resist_check_type"]
+    autocomplete_fields = ["resist_check_type", "properties"]
 
 
 class ConditionCapabilityEffectInline(admin.TabularInline):
@@ -156,6 +156,11 @@ class ConditionConditionInteractionInline(admin.TabularInline):
 # =============================================================================
 
 
+#: The help line under a condition's Properties field (#4857, the #4843 demo's wording).
+PROPERTIES_FIELD = "properties"
+PROPERTIES_HELP = "What perk situations and filters can read on whoever carries it."
+
+
 @admin.register(ConditionTemplate)
 class ConditionTemplateAdmin(admin.ModelAdmin):
     list_display = [
@@ -188,14 +193,22 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "allegiance_break_check_type",
         "settle_consequence_pool",
         "cure_check_type",
+        "properties",
     ]
     readonly_fields = ["get_mechanics_diagnostic"]
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """The Properties help line reads as the authoring tools mean it (#4857)."""
+        if db_field.name == PROPERTIES_FIELD:
+            kwargs["help_text"] = PROPERTIES_HELP
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     fieldsets = [
         (
             None,
             {"fields": ["name", "category", "description", "get_mechanics_diagnostic"]},
         ),
+        ("Properties", {"fields": ["properties"]}),
         (
             "Player Descriptions",
             {
@@ -358,7 +371,7 @@ class ConditionStageAdmin(admin.ModelAdmin):
     ]
     list_filter = ["condition"]
     search_fields = ["name", "condition__name"]
-    autocomplete_fields = ["condition", "resist_check_type"]
+    autocomplete_fields = ["condition", "resist_check_type", "properties"]
 
     @admin.display(boolean=True, description="Has Thumbnail")
     def has_thumbnail(self, obj):
