@@ -33,7 +33,9 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
   level 6") needs a value table per effect kind, and filling those tables is tuning, so it waits.
   A distinction effect with a size on a maneuver effect target is refused by `clean()` ("Maneuver
   effects take flat amounts only; clear the size."), and so is a rank size row on such an effect,
-  so a sized amount can never silently count as its flat value.
+  so a sized amount can never silently count as its flat value. *Amended by #4876 (owner
+  ruling on #4824, 2026-11-01):* damage, to-hit and partial protection now take a size, valued
+  from their own `ModifierLane`; the refusal stays on every other kind.
 - **Derived amounts are their own later design (decision 10).** A source row choosing what its
   number scales from is not built. The fixed-input forms keep working: per thread level, per
   character level, per condition severity.

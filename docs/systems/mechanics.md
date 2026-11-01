@@ -335,11 +335,19 @@ reach an effect target: it needs a resonance on the target, and an effect target
   engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
   their scaling (`docs/systems/covenants.md`).
 
-**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
-modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
-target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
-the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts and sized modifiers
-on effects (#4824) are not built. A maneuver reads only the targets that carry no technique or
+**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it.
+Damage, to-hit and partial protection take a size (#4876, the owner's "likely grants only"
+ruling on #4824): `EFFECT_KIND_LANE` (`constants.py`) maps each to a `ModifierLane` (damage
+points, check points, percentage points), and `ModifierTarget.value_lane` reads it from the
+target's kind (`ModifierTarget.effect_kind`). The effect readers' shared sum (`_modifier_total`
+in `effect_targets.py`) reads a laned target as the stat read does:
+`modifier_target_contributions` and `condition_target_contributions` in that lane, one
+`ModifierBreakdown` per lane tapered by its `ModifierTaper` rows, so a sized distinction effect
+counts the lane's value at its holder's level and held-rank size, and a sized technique buff at
+its own level and size. With no table row it keeps its flat amount. Every other kind takes flat
+amounts only: a size there is refused by `DistinctionEffect.clean()` ("Only damage, to-hit and
+partial protection effects take a size; clear the size."), as is a `DistinctionEffectRankSize`
+row on one. Derived amounts (#4824 part 1) are not built. A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
 "Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
 damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
