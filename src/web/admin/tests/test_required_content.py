@@ -997,6 +997,32 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
         self.assertIn("Widget-Alpha", body)
         self.assertIn("Widget-Alpha row is absent from this database.", body)
 
+    def test_flagged_rows_render_as_links_to_their_own_pages(self) -> None:
+        """A probe that names rows with urls (#4906) links each one; a row with no
+        url shows as plain text."""
+        from django.urls import reverse
+
+        probe = rc.CustomProbe(
+            fn=lambda: rc.ProbeResult(
+                present=False,
+                missing=("Gadget-One", "Gadget-Two"),
+                flagged=(
+                    rc.FlaggedRow(text="Gadget-One", url="/admin/gadget/1/"),
+                    rc.FlaggedRow(text="Gadget-Two", url=None),
+                ),
+            )
+        )
+        dep = self._dependency(probe, "detail-render-flagged")
+
+        self.client.force_login(self.super)
+        with self.patch_declarations((dep,)):
+            resp = self.client.get(reverse("admin_ops_required_content"))
+
+        body = resp.content.decode()
+        self.assertIn('<a href="/admin/gadget/1/">Gadget-One</a>', body)
+        self.assertIn("Gadget-Two", body)
+        self.assertNotIn(">Gadget-Two</a>", body)
+
     def test_all_present_renders_the_nothing_missing_state(self) -> None:
         from django.urls import reverse
 

@@ -35,18 +35,36 @@ class DependencyTier(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class FlaggedRow:
+    """One row a probe names as a gap, with the page that fixes that row (#4906).
+
+    `url` is None when no single page fixes the row; the panel then shows the
+    text alone.
+    """
+
+    text: str
+    url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeResult:
     """The outcome of resolving one `ContentProbe`.
 
     `admin_url` lets a probe that knows the exact page to author its gap on
     (the Soulfray Stage Builder at the first empty stage, #4089) name it; the
     panel prefers it over the model changelist.
+
+    `flagged` lets a probe that names rows link each one to its own fix page
+    (a vow's builder, a condition's combo map, #4906). Such a probe fills both:
+    `missing` keeps the texts, so every reader of `missing` is unchanged, and
+    `flagged` carries the same texts with their links, in the same order.
     """
 
     present: bool
     missing: tuple[str, ...] = ()
     detail: str = ""
     admin_url: str | None = None
+    flagged: tuple[FlaggedRow, ...] = ()
 
 
 class ContentProbe:
