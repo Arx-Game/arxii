@@ -33,6 +33,8 @@ from world.combat.models import MovementConfig
 from world.combat.types import Steadier, SteadyResult
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatOpponentAction, CombatParticipant
     from world.conditions.models import CapabilityType, Compulsion, ConditionInstance
@@ -412,8 +414,12 @@ def try_steady(
     best = steadiers[0]
     config = MovementConfig.objects.cached_singleton()
     cost = config.steady_anima_cost if config is not None else 0
+    paid = 0
     if cost:
-        deduct_anima(best.participant.character_sheet.character, cost, lethal=False)
+        steadier = best.participant.character_sheet.character
+        before = _anima_held(steadier)
+        deduct_anima(steadier, cost, lethal=False)
+        paid = before - _anima_held(steadier)
     record_reaction(best.participant)
     result = perform_check_with_modifiers(
         participant.character_sheet.character,
@@ -421,4 +427,18 @@ def try_steady(
         target_difficulty=difficulty,
         extra_modifiers=best.bonus,
     )
-    return SteadyResult(steadier=best.participant, check_result=result)
+    return SteadyResult(
+        steadier=best.participant, check_result=result, bonus=best.bonus, anima_paid=paid
+    )
+
+
+def _anima_held(character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM
+    """The anima *character*'s pool holds now, glut included, read from the table."""
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    row = (
+        CharacterAnima.objects.filter(character_id=character.pk)
+        .values_list("current", "glut")
+        .first()
+    )
+    return sum(row) if row is not None else 0

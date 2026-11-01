@@ -1175,8 +1175,12 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         first, second = calls[0][1]["extra_modifiers"], calls[1][1]["extra_modifiers"]
         self.assertEqual(len(calls), 2)
         self.assertEqual(second - first, 4)
-        # L2: the steady line names the check the second roll used and how it came out.
-        self.assertRoomRow("Brann steadies Mira. Resist compulsion vs 36: Success.")
+        # L2 and ruling 34: the steady line names the bonus the second roll carried, its
+        # check and outcome, and the anima Brann's pool actually lost.
+        self.assertRoomRow(
+            "Brann steadies Mira (+4). Resist compulsion vs 36: Success. "
+            "Brann spends 3 anima; their next reaction this round is harder."
+        )
         self.assertNoRoomRow("Berserk wins out")
         self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
         self.assertEqual(
@@ -1208,7 +1212,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
 
         bonus = calls[1][1]["extra_modifiers"] - calls[0][1]["extra_modifiers"]
         self.assertEqual(bonus, 4 + STEADY_PER_DEPTH * 10)
-        self.assertRoomRow("Brann steadies Mira.")
+        self.assertRoomRow("Brann steadies Mira (+24). Resist compulsion vs 36: Success.")
         self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
         self.assertEqual(self.anima(cade), 20)
 
@@ -1221,7 +1225,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
 
         self.resolve_with_rolls(self.failure, self.success)
 
-        self.assertRoomRow("Brann steadies Mira.")
+        self.assertRoomRow("Brann steadies Mira (+4).")
         self.assertEqual(self.anima(cade), 20)
 
     def test_a_compelled_ally_cannot_steady(self) -> None:

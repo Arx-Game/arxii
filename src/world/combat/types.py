@@ -755,10 +755,16 @@ class Steadier:
 
 @dataclass(frozen=True)
 class SteadyResult:
-    """A steadying that happened: who steadied, and the second resist roll she gave (#4802)."""
+    """A steadying that happened: who steadied, and the second resist roll she gave (#4802).
+
+    ``bonus`` is the steady bonus the second roll carried; ``anima_paid`` is the anima the
+    steadier's pool actually lost (a short pool pays less than the configured cost).
+    """
 
     steadier: CombatParticipant
     check_result: CheckResult
+    bonus: int
+    anima_paid: int
 
 
 @dataclass(frozen=True)

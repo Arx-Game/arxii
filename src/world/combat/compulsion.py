@@ -40,7 +40,7 @@ import math
 from typing import TYPE_CHECKING
 
 from world.combat.constants import CombatManeuver
-from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
+from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll, SteadyResult
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import (
     active_compulsion,
@@ -459,12 +459,7 @@ def _resist(
         steady = try_steady(participant, compulsion, difficulty)
         if steady is not None:
             steadied_by = steady.steadier
-            _tell_room(
-                participant,
-                f"{_name(steadied_by)} steadies {name}. "
-                f"{steady.check_result.check_type.name} vs {difficulty}: "
-                f"{_outcome_name(steady.check_result)}.",
-            )
+            _tell_room(participant, _steady_line(steady, name=name, difficulty=difficulty))
             band = compulsion_band(compulsion, steady.check_result.outcome, bands)
     _apply_band(participant, action, compulsion, band, name=name)
     return CompulsionRoll(
@@ -475,6 +470,26 @@ def _resist(
         steadied_by=steadied_by,
         final_band=band,
     )
+
+
+def _steady_line(steady: SteadyResult, *, name: str, difficulty: int) -> str:
+    """The steady round line, from what the steadying did: its bonus, roll and anima paid.
+
+    "Tomas steadies Mira (+6). Resist compulsion vs 36: Success. Tomas spends 4 anima;
+    their next reaction this round is harder." With nothing paid the spend is left out.
+    """
+    steadier = _name(steady.steadier)
+    roll = steady.check_result
+    line = (
+        f"{steadier} steadies {name} ({steady.bonus:+d}). "
+        f"{roll.check_type.name} vs {difficulty}: {_outcome_name(roll)}."
+    )
+    if steady.anima_paid:
+        return (
+            f"{line} {steadier} spends {steady.anima_paid} anima; "
+            "their next reaction this round is harder."
+        )
+    return f"{line} {steadier}'s next reaction this round is harder."
 
 
 def _apply_band(
