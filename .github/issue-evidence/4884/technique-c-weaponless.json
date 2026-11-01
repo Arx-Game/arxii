@@ -1,0 +1,26 @@
+{
+ "scenario": "no weapon in hand; style lists only two-handed melee",
+ "captured_from": "the real perform_check call made by resolve_round, wrapped by a recording spy that kept the kwargs it received before calling the real perform_check; techniques record no breakdown row",
+ "check_type": "CheckType18",
+ "extra_traits_received": [
+  [
+   "trait_55",
+   "1.00"
+  ],
+  [
+   "The Daring Dance",
+   "1"
+  ]
+ ],
+ "stat_override_received": null,
+ "style_skill": "The Daring Dance",
+ "style_hit_stat": "strength",
+ "path_technique_skill": "trait_55",
+ "other_kwargs": [
+  "effort_level",
+  "extra_modifiers",
+  "fatigue_penalty",
+  "situation_ctx",
+  "target_difficulty"
+ ]
+}

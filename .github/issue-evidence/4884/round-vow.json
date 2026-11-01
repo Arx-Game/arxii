@@ -1,0 +1,320 @@
+{
+ "tag": "vow",
+ "encounter_id": 12,
+ "sheet_id": 50,
+ "style": "The Daring Dance",
+ "style_lists": [
+  "one-handed melee",
+  "light armor"
+ ],
+ "style_compatible_vows": [
+  "Quicksilver"
+ ],
+ "vow_sworn": "Bulwark",
+ "strike_roll_kwargs_seen_by_perform_check": [
+  {
+   "check_type": "Melee Attack",
+   "extra_traits": [],
+   "stat_override": "strength"
+  },
+  {
+   "check_type": "Melee Attack",
+   "extra_traits": [],
+   "stat_override": "agility"
+  }
+ ],
+ "after": {
+  "id": 12,
+  "scene": 12,
+  "room": 49,
+  "encounter_type": "party_combat",
+  "status": "between_rounds",
+  "outcome": "",
+  "completed_at": null,
+  "round_number": 1,
+  "risk_level": "moderate",
+  "stakes_level": "local",
+  "pace_mode": "timed",
+  "pace_timer_minutes": 10,
+  "is_paused": false,
+  "round_started_at": null,
+  "created_at": "2026-11-01T18:42:03.968726Z",
+  "participants": [
+   {
+    "id": 12,
+    "character_sheet_id": 50,
+    "character_name": "Mira",
+    "persona_id": 27,
+    "status": "active",
+    "health": 92,
+    "max_health": 100,
+    "character_status": "alive",
+    "available_strain": 20,
+    "fatigue": {
+     "physical": {
+      "current": 1,
+      "capacity": 0
+     },
+     "social": {
+      "current": 0,
+      "capacity": 0
+     },
+     "mental": {
+      "current": 0,
+      "capacity": 0
+     }
+    },
+    "active_conditions": [],
+    "audere_state": null,
+    "thumbnail_url": "",
+    "thumbnail_media_url": null,
+    "escalation_level": null,
+    "intensity_modifier": 0,
+    "control_modifier": 0,
+    "fury_control_surrendered": 0,
+    "current_position": null,
+    "current_square": null,
+    "aftermath": null,
+    "reactions_used": 0,
+    "dodge_plan": null,
+    "compulsion": null,
+    "steady_plan": null,
+    "dig_deep": {
+     "free_dig_deeps": 0,
+     "fatigue_category": "mental",
+     "fatigue_cost": 3,
+     "dug_deep_this_round": false,
+     "given_by": null
+    },
+    "strike_weapons": [
+     {
+      "item_instance_id": 14,
+      "name": "Steading longsword",
+      "gear_kind": "One-Handed Melee",
+      "strike_skill": "Melee Combat"
+     },
+     {
+      "item_instance_id": null,
+      "name": "bare hands",
+      "gear_kind": "Unarmed",
+      "strike_skill": "Unarmed Attack"
+     }
+    ]
+   }
+  ],
+  "opponents": [
+   {
+    "id": 12,
+    "objectdb_id": 51,
+    "name": "Blade",
+    "description": "",
+    "tier": "mook",
+    "level": 1,
+    "health": 194,
+    "max_health": 200,
+    "soak_value": null,
+    "probing_current": 6,
+    "probing_threshold": null,
+    "current_phase": 1,
+    "phase_count": null,
+    "damage_multiplier": null,
+    "break_bar_current": null,
+    "break_bar_threshold": null,
+    "vulnerability_rounds_remaining": null,
+    "morale": null,
+    "max_morale": null,
+    "morale_state": "steady",
+    "is_enraged": false,
+    "is_wall_broken": false,
+    "status": "active",
+    "allegiance": "enemy",
+    "active_conditions": [],
+    "thumbnail_url": null,
+    "thumbnail_media_url": null,
+    "current_position": null,
+    "current_square": null,
+    "mirrors_participant_id": null
+   }
+  ],
+  "current_round_actions": [
+   {
+    "id": 2,
+    "participant": 12,
+    "participant_name": "Mira",
+    "round_number": 1,
+    "focused_category": "physical",
+    "effort_level": "medium",
+    "focused_action": null,
+    "focused_opponent_target": 12,
+    "focused_ally_target": null,
+    "physical_passive": null,
+    "social_passive": null,
+    "mental_passive": null,
+    "combo_upgrade": null,
+    "is_ready": false,
+    "maneuver": "strike",
+    "item_instance": 14,
+    "cast_destination": null,
+    "cast_position_a": null,
+    "cast_position_b": null
+   }
+  ],
+  "surge_beats": [],
+  "is_participant": true,
+  "is_gm": false,
+  "clashes": [],
+  "engagement_locks": [],
+  "marks": [],
+  "pending_attacks": [],
+  "companion_orders": [],
+  "resolution_order": [
+   12
+  ],
+  "escalation_curve": null,
+  "escalation_curve_name": null,
+  "escalation_start_round": null,
+  "escalation_tick_narration": null,
+  "forced_escape": false,
+  "position_adjacency": [],
+  "position_nodes": [],
+  "position_edges": [],
+  "held_positions": [],
+  "volatile_objects": [],
+  "objective": null,
+  "pending_selections": [],
+  "sustained_actions": [],
+  "protection_commitments": [],
+  "standoff": null,
+  "gm_standoff": null,
+  "standoff_summary": null,
+  "is_lethal": false,
+  "duel_winner": null
+ },
+ "outcomes": {
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "page_size": 20,
+  "num_pages": 1,
+  "current_page": 1,
+  "results": [
+   {
+    "id": 16,
+    "character": 50,
+    "check_type": 26,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "6 damage",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 37,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Damage roll",
+     "lines": [
+      {
+       "label": "Steading longsword",
+       "value": "",
+       "detail": "weapon damage and quality",
+       "lapsed": false
+      },
+      {
+       "label": "Melee Combat",
+       "value": "25",
+       "detail": "strike skill",
+       "lapsed": false
+      }
+     ],
+     "result": "6 damage",
+     "result_note": ""
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T18:42:04.711847Z"
+   },
+   {
+    "id": 15,
+    "character": 50,
+    "check_type": 26,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "Hit, fair",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 37,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Hit roll against Blade's defense",
+     "lines": [
+      {
+       "label": "Melee Combat",
+       "value": "25",
+       "detail": "strike skill for one-handed melee",
+       "lapsed": false
+      },
+      {
+       "label": "Strength",
+       "value": "",
+       "detail": "the style's hit stat",
+       "lapsed": false
+      },
+      {
+       "label": "The Daring Dance",
+       "value": "",
+       "detail": "Bulwark is not this style's vow",
+       "lapsed": true
+      }
+     ],
+     "result": "Hit, fair",
+     "result_note": "then the damage roll"
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T18:42:04.710630Z"
+   },
+   {
+    "id": 14,
+    "character": 50,
+    "check_type": 25,
+    "pool": null,
+    "selected_consequence": null,
+    "modifier_total": 0,
+    "summary": "Partial Success, 8 damage",
+    "outcome_display": [],
+    "modifiers": [],
+    "combat_interaction_id": 35,
+    "challenge_record_id": null,
+    "action_interaction_id": null,
+    "roll_breakdown": {
+     "heading": "Defense against Blade",
+     "lines": [
+      {
+       "label": "Dodge",
+       "value": "15",
+       "detail": "defense skill",
+       "lapsed": false
+      },
+      {
+       "label": "The Daring Dance",
+       "value": "",
+       "detail": "Bulwark is not this style's vow",
+       "lapsed": true
+      },
+      {
+       "label": "Armor, 5 of 10",
+       "value": "",
+       "detail": "the style's armor share",
+       "lapsed": false
+      }
+     ],
+     "result": "Partial Success, 8 damage",
+     "result_note": ""
+    },
+    "combat_round": 1,
+    "created_at": "2026-11-01T18:42:04.580839Z"
+   }
+  ]
+ }
+}
