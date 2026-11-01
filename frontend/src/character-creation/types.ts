@@ -496,7 +496,35 @@ export interface CharacterDraft {
   enemy_reasons: EnemyReason[];
   /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
   introductions_offered: { first_journal: boolean };
+  /**
+   * The optional questions the held cards ask at Final Touches (#4846), `FinalTouchesPrompt`
+   * values in enum order; empty when no held card asks one. The leaf hides the chapter when
+   * this and its `final_touches` offers are both empty.
+   */
+  final_touches_prompts: FinalTouchesPrompt[];
+  /** The justice list the `crime` prompt picks from (#4846). */
+  crime_kinds: CrimeKind[];
 }
+
+/** The optional question a card asks at Final Touches (#4846); `crime` is Jailbird's. */
+export type FinalTouchesPrompt = 'crime';
+
+/** One crime kind the Final Touches crime prompt picks from (#4846). */
+export interface CrimeKind {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+}
+
+/** Jailbird's crime (#4846): a kind from `crime_kinds` and an optional line, saved on the draft. */
+export interface DraftCrime {
+  kind_id: number;
+  line: string;
+}
+
+/** The longest line the crime prompt takes; mirrors the backend's `CRIME_LINE_MAX_LENGTH`. */
+export const CRIME_LINE_MAX_LENGTH = 500;
 
 export interface Stats {
   // Physical
@@ -972,6 +1000,8 @@ export interface DraftData {
   introductions?: DraftIntroductions;
   // Officially dead (#4396): the established face worn from day one, or null
   officially_dead?: DraftOfficiallyDead | null;
+  // Jailbird's crime (#4846): the kind and the line, or null; written only while a held card asks
+  crime?: DraftCrime | null;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
@@ -1531,7 +1561,8 @@ export type OfferChapter =
   | 'appearance'
   | 'actors_sheet'
   | 'enemy'
-  | 'backgrounds';
+  | 'backgrounds'
+  | 'final_touches';
 
 /** One beat of the Backgrounds library as this draft meets it (#4124):
  * `GET /api/character-creation/drafts/{id}/beats/`. Its answers are the

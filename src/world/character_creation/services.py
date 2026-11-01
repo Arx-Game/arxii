@@ -342,8 +342,9 @@ def finalize_character(
     # fired for this character — sync explicitly now.
     _sync_finalized_name_aliases(sheet)
 
-    # Officially dead (#4396): after the kin node exists, so the belief lands on it too.
-    _write_officially_dead(draft, sheet, primary_persona)
+    # The Final Touches doors (#4396, #4846): after the kin node exists, so the
+    # officially-dead belief lands on it too.
+    _write_final_touches_doors(draft, sheet, primary_persona)
 
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
@@ -521,6 +522,16 @@ def _write_actor_sheet(
     _write_introductions(draft, sheet, persona, character)
 
 
+def _write_final_touches_doors(
+    draft: CharacterDraft, sheet: CharacterSheet, primary: Persona
+) -> None:
+    """The optional doors of Final Touches a draft may have walked through: the face the
+    world meets while the true one is believed dead (#4396), and the crime a held card
+    asked the player to name (#4846). Called by both finalize paths."""
+    _write_officially_dead(draft, sheet, primary)
+    _write_crime_note(draft, sheet)
+
+
 def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary: Persona) -> None:
     """Start as someone the world believes dead (#4396).
 
@@ -563,6 +574,36 @@ def _write_officially_dead(draft: CharacterDraft, sheet: CharacterSheet, primary
         node = None
     if node is not None:
         record_public_belief(node, believed_deceased=True)
+
+
+def _write_crime_note(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Record the crime Jailbird's card asked the player to name (#4846, slice 5 of #4813).
+
+    One staff-only ``justice.CharacterCrimeNote``, written only while a card the draft
+    holds still asks the question (``FinalTouchesPrompt.CRIME``) and the answer names a
+    kind. No ``PersonaHeat`` and no ``DeedCrimeTag``: nothing follows from it unless a GM
+    picks it up (decision 6 of #4813). An unpicked card leaves a stale answer behind on
+    the draft, and this is where it is ignored.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        CRIME_KEY,
+        CRIME_KIND_ID,
+        CRIME_LINE,
+        FinalTouchesPrompt,
+    )
+    from world.character_creation.offers import final_touches_prompts  # noqa: PLC0415
+    from world.justice.models import CharacterCrimeNote, CrimeKind  # noqa: PLC0415
+
+    crime = draft.draft_data.get(CRIME_KEY) or {}
+    kind_id = crime.get(CRIME_KIND_ID)
+    if kind_id is None or FinalTouchesPrompt.CRIME not in final_touches_prompts(draft):
+        return
+    kind = CrimeKind.objects.filter(pk=kind_id).first()
+    if kind is None:
+        return
+    CharacterCrimeNote.objects.create(
+        sheet=sheet, crime_kind=kind, note=(crime.get(CRIME_LINE) or "").strip()
+    )
 
 
 def _create_enemy(
@@ -3100,7 +3141,7 @@ def finalize_gm_character(
     # Connection reputation seeding (#3660): mirrors the player finalize flow.
     _seed_connection_reputation(draft, primary_persona)
     _write_actor_sheet(draft, sheet, primary_persona, character)
-    _write_officially_dead(draft, sheet, primary_persona)
+    _write_final_touches_doors(draft, sheet, primary_persona)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).

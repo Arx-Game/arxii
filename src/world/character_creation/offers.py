@@ -22,6 +22,7 @@ from world.character_creation.constants import (
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
     BeatSelection,
+    FinalTouchesPrompt,
     LifeStage,
     OfferArrival,
     OfferChapter,
@@ -417,6 +418,10 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
+    if chapter == OfferChapter.FINAL_TOUCHES:
+        # A card the draft holds unlocks the line (#4846); unpicking the card hides it
+        # again, and ``reconcile_offer_picks`` drops whatever it had opened.
+        return offer.unlocked_by_id is not None and offer.unlocked_by_id in ctx["held_ids"]
     return False
 
 
@@ -437,7 +442,35 @@ def _context(draft: CharacterDraft) -> dict:
         "enemy_degree": enemy.get("degree", ""),
         # The Backgrounds chapter's opener (#4124, #4395): the beats open to the draft.
         "open_beat_ids": open_beat_ids(draft),
+        # The Final Touches chapter's opener (#4846): the cards the draft holds.
+        "held_ids": held_distinction_ids(draft),
     }
+
+
+def held_distinction_ids(draft: CharacterDraft) -> set[int]:
+    """The distinctions the draft holds right now, from any line or grant.
+
+    Called by ``_context`` (the Final Touches opener) and ``final_touches_prompts``.
+    """
+    return {entry["distinction_id"] for entry in draft.draft_data.get("distinctions", [])}
+
+
+def final_touches_prompts(draft: CharacterDraft) -> list[str]:
+    """The optional questions the draft's cards ask at Final Touches (#4846), in enum order.
+
+    Called by ``CharacterDraftSerializer`` (the leaf asks each one) and by finalize, which
+    writes an answer only while a held card still asks for it. Empty for most drafts: the
+    leaf hides the chapter when this and the chapter's offers are both empty.
+    """
+    held = held_distinction_ids(draft)
+    if not held:
+        return []
+    asked = set(
+        Distinction.objects.filter(pk__in=held)
+        .exclude(final_touches_prompt="")
+        .values_list("final_touches_prompt", flat=True)
+    )
+    return [prompt.value for prompt in FinalTouchesPrompt if prompt.value in asked]
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:
@@ -472,6 +505,7 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
         "enemy_reason",
         "appearance_section",
         "beat",
+        "unlocked_by",
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -524,14 +558,13 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
         # rather than the generic word; this is the fallback for a caller that has
         # no feature in hand (the picker, a closed-distinction hint).
         return "a feature"
-    if offer.glimpse_tag_id:
-        return offer.glimpse_tag.name
     if offer.origin_choice_id:
         return _origin_opener_label(offer, draft)
-    if offer.schooling_line_id:
-        return offer.schooling_line.name
-    if offer.beat_id:
-        return offer.beat.name
+    # The openers that are a named row: a Glimpse tag, a schooling line, a beat, the
+    # card that unlocks a Final Touches line (#4846).
+    for field in ("glimpse_tag", "schooling_line", "beat", "unlocked_by"):
+        if getattr(offer, f"{field}_id"):
+            return getattr(offer, field).name
     return ""
 
 
@@ -743,7 +776,12 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
         arrives_as=OfferArrival.CHOICE,
         distinction_id__in=closed_ids,
     ).select_related(
-        "glimpse_tag", "origin_choice", "schooling_line", "enemy_reason", "appearance_section"
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+        "enemy_reason",
+        "appearance_section",
+        "unlocked_by",
     )
     openers: dict[int, list[str]] = defaultdict(list)
     opener_ids: dict[int, list[int]] = defaultdict(list)

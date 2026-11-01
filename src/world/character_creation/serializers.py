@@ -12,6 +12,10 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     BEAT_LINE_MAX_LENGTH,
+    CRIME_KEY,
+    CRIME_KIND_ID,
+    CRIME_LINE,
+    CRIME_LINE_MAX_LENGTH,
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
@@ -143,6 +147,15 @@ class EnemyOfferSerializer(serializers.Serializer):
     why = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
     reason_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class CrimeKindSerializer(serializers.Serializer):
+    """One crime kind the Final Touches crime prompt picks from (#4846)."""
+
+    id = serializers.IntegerField()
+    slug = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField()
 
 
 class EnemyReasonSerializer(serializers.Serializer):
@@ -1408,6 +1421,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     enemy_degree_grants = serializers.SerializerMethodField()
     enemy_reasons = serializers.SerializerMethodField()
     introductions_offered = serializers.SerializerMethodField()
+    # The Final Touches chapter (#4846): the optional questions the held cards ask, and
+    # the crime kinds the first of them picks from.
+    final_touches_prompts = serializers.SerializerMethodField()
+    crime_kinds = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
     derived_anchors = serializers.SerializerMethodField()
@@ -1478,6 +1495,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_degree_grants",
             "enemy_reasons",
             "introductions_offered",
+            "final_touches_prompts",
+            "crime_kinds",
         ]
         read_only_fields = [
             "id",
@@ -1489,6 +1508,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_degree_grants",
             "enemy_reasons",
             "introductions_offered",
+            "final_touches_prompts",
+            "crime_kinds",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1646,6 +1667,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return [
             {"id": r.pk, "name": r.name, "player_line": r.player_line, "fits": r.fits}
             for r in EnemyReason.objects.filter(is_active=True)
+        ]
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_final_touches_prompts(self, obj: CharacterDraft) -> list[str]:
+        """The questions the draft's cards ask at Final Touches (#4846), ``FinalTouchesPrompt``
+        values in enum order; empty for a draft holding no card that asks one."""
+        from world.character_creation.offers import final_touches_prompts  # noqa: PLC0415
+
+        return final_touches_prompts(obj)
+
+    @extend_schema_field(CrimeKindSerializer(many=True))
+    def get_crime_kinds(self, obj: CharacterDraft) -> list[dict]:  # noqa: ARG002
+        """The justice list the crime prompt picks from (#4846)."""
+        from world.justice.models import CrimeKind  # noqa: PLC0415
+
+        return [
+            {"id": k.pk, "slug": k.slug, "name": k.name, "description": k.description}
+            for k in CrimeKind.objects.all()
         ]
 
     @extend_schema_field(IntroductionsOfferedSerializer())
@@ -1990,6 +2029,32 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_introductions(data["introductions"])
         if data.get("officially_dead") is not None:
             self._validate_officially_dead(data["officially_dead"])
+        if data.get(CRIME_KEY) is not None:
+            self._validate_crime(data[CRIME_KEY])
+
+    @staticmethod
+    def _validate_crime(crime: object) -> None:
+        """Jailbird's crime (#4846): a crime kind from the justice list and an optional line.
+
+        Not gated on the card being held: the leaf shows the prompt only while a held card
+        asks it, and finalize writes the answer only then, so a player who unpicks Jailbird
+        and picks it back keeps what they wrote.
+        """
+        from world.justice.models import CrimeKind  # noqa: PLC0415
+
+        if not isinstance(crime, dict):
+            raise serializers.ValidationError({CRIME_KEY: "Must be an object."})
+        if set(crime) - {CRIME_KIND_ID, CRIME_LINE}:
+            raise serializers.ValidationError({CRIME_KEY: "Unknown field."})
+        kind_id = crime.get(CRIME_KIND_ID)
+        if not isinstance(kind_id, int) or not CrimeKind.objects.filter(pk=kind_id).exists():
+            raise serializers.ValidationError({CRIME_KEY: "Pick a crime from the list."})
+        line = crime.get(CRIME_LINE, "")
+        if not isinstance(line, str):
+            raise serializers.ValidationError({CRIME_KEY: "The line must be text."})
+        if len(line) > CRIME_LINE_MAX_LENGTH:
+            msg = f"The line can be at most {CRIME_LINE_MAX_LENGTH} characters."
+            raise serializers.ValidationError({CRIME_KEY: msg})
 
     @staticmethod
     def _validate_enemy_pick(enemy: object) -> None:

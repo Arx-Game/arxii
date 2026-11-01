@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from world.justice.models import (
     AreaLaw,
+    CharacterCrimeNote,
     CrimeKind,
     DeedCrimeTag,
     HeatSource,
@@ -14,6 +15,17 @@ from world.justice.models import (
 class CrimeKindAdmin(admin.ModelAdmin):
     list_display = ("slug", "name")
     search_fields = ("slug", "name")
+
+
+@admin.register(CharacterCrimeNote)
+class CharacterCrimeNoteAdmin(admin.ModelAdmin):
+    """The crime a character named at creation (#4846): staff read it here and nowhere else."""
+
+    list_display = ("sheet", "crime_kind", "created_at")
+    list_filter = ("crime_kind",)
+    search_fields = ("sheet__character__db_key", "note")
+    raw_id_fields = ("sheet",)
+    readonly_fields = ("created_at",)
 
 
 @admin.register(AreaLaw)

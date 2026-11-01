@@ -94,6 +94,21 @@ class ParseTableTest(PasteTestCase):
         assert "unknown reason 'Nobody'" in notes
         assert "unknown Beginning 'Elsewhere'" in notes
 
+    def test_an_unlocked_token_names_the_card_that_opens_a_final_touches_line(self):
+        """#4846: ``unlocked:<card>`` is the Final Touches opener; the card must exist."""
+        jailbird = DistinctionFactory(name="Jailbird", slug="jailbird", category=self.category)
+        (row,) = parse_table(
+            "Escape Artist | Personality | 5 | 1 | Locks open. | | | unlocked:Jailbird |"
+        )
+        assert row.status == "create", row.notes
+        (offer,) = row.offers
+        assert offer.chapter == OfferChapter.FINAL_TOUCHES
+        assert offer.arrives_as == OfferArrival.CHOICE
+        assert (offer.opener_field, offer.opener_value) == ("unlocked_by_id", jailbird.pk)
+        (missing,) = parse_table("Escape Artist | Personality | 5 | 1 | | | | unlocked:Nobody |")
+        assert missing.status == "error"
+        assert "unknown card 'Nobody'" in " ".join(missing.notes)
+
     def test_a_degree_opener_must_mark_and_arrives_bundled(self):
         (bad,) = parse_table("Marked | Personality | 0 | 1 | | | | degree:thwarted |")
         assert bad.status == "error"
