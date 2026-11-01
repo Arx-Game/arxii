@@ -1009,9 +1009,13 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.partial):
             self.resolve()
 
-        self.assertRoomRow(
-            "Mira tries to flee against Berserk. Resist compulsion vs 36: Partial Success.",
-        )
+        roll = "Mira tries to flee against Berserk. Resist compulsion vs 36: Partial Success."
+        strain = "Berserk drags at Mira: -4 to this action, Control -2."
+        rows = self.room_rows()
+        at_roll = next(i for i, row in enumerate(rows) if roll in row)
+        at_strain = next(i for i, row in enumerate(rows) if strain in row)
+        # Ruling 36: the strained cost is told from the band, right after the roll line.
+        self.assertEqual(at_strain, at_roll + 1, rows)
         flee_rolls = self.rolled_on(spy, self.flee_check)
         self.assertEqual(len(flee_rolls), 1)
         # perform_check(character, check_type, target_difficulty, extra_modifiers, ...)
@@ -1088,6 +1092,7 @@ class ACompelledFighterWhoHeals(_CompelledMira):
             self.resolve(offense)
 
         self.assertRoomRow("Resist compulsion vs 31: Partial Success.")
+        self.assertRoomRow("Berserk drags at Mira: -4 to this action, Control -2.")
         # Kept as a modifier assertion: the strain penalty moves only the Mend roll's points,
         # not its difficulty or any line, so it has no visible effect on a pinned roll.
         self.assertEqual(offense.call_args.kwargs["extra_modifiers"], -4)

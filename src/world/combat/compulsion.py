@@ -509,10 +509,29 @@ def _apply_band(
     if band.result == CompulsionResult.ACTS_STRAINED:
         action.compulsion_penalty = band.action_penalty
         action.save(update_fields=["compulsion_penalty"])
+        strain = _strain_line(compulsion, band, name=name)
+        if strain:
+            _tell_room(participant, strain)
     elif band.result == CompulsionResult.COMPULSION_ACTS:
         _compulsion_acts(participant, action, compulsion, name=name)
     if band.control_change:
         _shift_control(participant, band.control_change)
+
+
+def _strain_line(compulsion: Compulsion, band: CompulsionResistBand, *, name: str) -> str:
+    """What a strained result costs, from the band: "Berserk drags at Mira: -4 to this
+    action, Control -2." A zero part is left out; empty when the band costs nothing.
+
+    The room reads the line, so it names the persona, never "you".
+    """
+    costs = []
+    if band.action_penalty:
+        costs.append(f"-{band.action_penalty} to this action")
+    if band.control_change:
+        costs.append(f"Control {band.control_change:+d}")
+    if not costs:
+        return ""
+    return f"{compulsion.condition.name} drags at {name}: {', '.join(costs)}."
 
 
 def _compulsion_acts(
