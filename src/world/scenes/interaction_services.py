@@ -364,6 +364,8 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
     )
     if existing is not None:
         interaction.cached_target_personas = [*existing, *personas]
+    # bulk_create calls no save(), so the rows list the feed reads is dropped here.
+    interaction.__dict__.pop("cached_interaction_targets", None)
 
 
 def _effective_interaction_receivers(

@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0347_modifier_effect_lanes"),
-    ]
+    dependencies = [("arxii", "0349_modifier_effect_lanes")]
 
     operations = [
         migrations.AddField(

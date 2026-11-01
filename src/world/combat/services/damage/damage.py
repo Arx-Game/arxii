@@ -25,7 +25,7 @@ from world.combat.services.declarations.cover import apply_position_cover
 from world.combat.services.encounter.death_gate import _emit_death_gate
 from world.combat.services.equipment.armor_soak import apply_equipped_armor_soak
 from world.combat.services.npc.sustained import _apply_sustained_erosion_rider
-from world.combat.types import ParticipantDamageResult
+from world.combat.types import ParticipantDamageResult, WoundCrossing
 from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
@@ -118,19 +118,24 @@ def _emit_post_damage_events(  # noqa: PLR0913
     effective_damage: int,
     damage_type: DamageType | None,
     damage_source: DamageSource,
+    health_before: int,
     health_after: int,
+    max_health: int,
     knockout_eligible: bool,
     was_in_knockout_band: bool,
     death_eligible: bool,
     force_death: bool,
-) -> None:
+) -> WoundCrossing | None:
     """Emit DAMAGE_APPLIED, CHARACTER_INCAPACITATED, and CHARACTER_KILLED events post-save.
+
+    Returns the hit's wound crossing when its wound triggers wait for the knockout check
+    (a hit into the knockout band); the caller rolls them with ``settle_wound_triggers``.
 
     Called after vitals.save(); no-op when room is None (unlocated characters).
     Strike-back wards on the struck PC answer right after DAMAGE_APPLIED (#4584).
     """
     if room is None:
-        return
+        return None
     applied_payload = DamageAppliedPayload(
         target=character,
         amount_dealt=effective_damage,
@@ -140,6 +145,26 @@ def _emit_post_damage_events(  # noqa: PLR0913
     )
     _svc.emit_event(EventName.DAMAGE_APPLIED, applied_payload, location=room)
     _answer_with_strike_backs(applied_payload)
+    # Lazy import: world.conditions.control_loss imports checks and magic services.
+    from world.conditions.control_loss import fire_wound_triggers  # noqa: PLC0415
+
+    # A killing hit rolls nothing; nor does a character who cannot act (fire_wound_triggers
+    # checks can_act). A hit into the knockout band waits for its knockout check, which the
+    # caller rolls next: one who passes fights on and rolls, one knocked out rolls nothing.
+    pending = None
+    if health_after > 0 and not (death_eligible or force_death):
+        crossing = WoundCrossing(
+            health_before=health_before, health_after=health_after, max_health=max_health
+        )
+        if knockout_eligible:
+            pending = crossing
+        else:
+            fire_wound_triggers(
+                character,
+                health_before=health_before,
+                health_after=health_after,
+                max_health=max_health,
+            )
 
     will_emit_death_gate = death_eligible or force_death
     if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
@@ -153,6 +178,31 @@ def _emit_post_damage_events(  # noqa: PLR0913
         )
     if will_emit_death_gate:
         _emit_death_gate(character, room)
+    return pending
+
+
+def settle_wound_triggers(participant: CombatParticipant, result: ParticipantDamageResult) -> None:
+    """Roll the wound triggers a knockout-band hit held back, once its knockout check landed.
+
+    Every caller of ``apply_damage_to_participant`` that rolls the hit's consequences
+    (``process_damage_consequences``) calls this right after; a caller that rolls none calls
+    it straight away. ``fire_wound_triggers`` skips a character the knockout left unable to
+    act. A hit that held nothing back does nothing here.
+    """
+    crossing = result.pending_wound_crossing
+    if crossing is None:
+        return
+    from world.conditions.control_loss import fire_wound_triggers  # noqa: PLC0415
+
+    character = participant.character_sheet.character
+    if character is None:
+        return
+    fire_wound_triggers(
+        character,
+        health_before=crossing.health_before,
+        health_after=crossing.health_after,
+        max_health=crossing.max_health,
+    )
 
 
 def _run_pre_apply_interceptors(
@@ -408,13 +458,15 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
     # call sites are pre-threaded.
     del source_sheet
 
-    _emit_post_damage_events(
+    pending_wound_crossing = _emit_post_damage_events(
         character=character,
         room=room,
         effective_damage=effective_damage,
         damage_type=pre_payload.damage_type,
         damage_source=damage_source,
+        health_before=health_before,
         health_after=health_after,
+        max_health=vitals.max_health,
         knockout_eligible=knockout_eligible,
         was_in_knockout_band=was_in_knockout_band,
         death_eligible=death_eligible,
@@ -435,4 +487,5 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
         death_eligible=death_eligible,
         permanent_wound_eligible=permanent_wound_eligible,
         damage_interaction=interaction_result,
+        pending_wound_crossing=pending_wound_crossing,
     )

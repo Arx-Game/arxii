@@ -264,6 +264,7 @@ describe('CombatTacticalMap', () => {
           {
             id: 1,
             character_sheet_id: 10,
+            persona_id: null,
             character_name: 'Aerande',
             status: 'active',
             health: 10,
@@ -284,6 +285,8 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            compulsion: null,
+            steady_plan: null,
             dig_deep: null,
           },
         ],
@@ -368,6 +371,7 @@ describe('CombatTacticalMap', () => {
     {
       id: 1,
       character_sheet_id: 10,
+      persona_id: null,
       character_name: 'Aerande',
       status: 'active',
       health: 10,
@@ -388,11 +392,14 @@ describe('CombatTacticalMap', () => {
       aftermath: null,
       reactions_used: null,
       dodge_plan: null,
+      compulsion: null,
+      steady_plan: null,
       dig_deep: null,
     },
     {
       id: 3,
       character_sheet_id: 30,
+      persona_id: null,
       character_name: 'Sir Alaric',
       status: 'active',
       health: 10,
@@ -413,6 +420,8 @@ describe('CombatTacticalMap', () => {
       aftermath: null,
       reactions_used: null,
       dodge_plan: null,
+      compulsion: null,
+      steady_plan: null,
       dig_deep: null,
     },
   ];
@@ -814,6 +823,7 @@ describe('CombatTacticalMap', () => {
           {
             id: 1,
             character_sheet_id: 10,
+            persona_id: null,
             character_name: 'Aerande',
             status: 'active',
             health: 10,
@@ -834,6 +844,8 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            compulsion: null,
+            steady_plan: null,
             dig_deep: null,
           },
         ],
@@ -964,6 +976,7 @@ describe('CombatTacticalMap', () => {
           {
             id: 1,
             character_sheet_id: 10,
+            persona_id: null,
             character_name: 'Aerande',
             status: 'active',
             health: 10,
@@ -982,6 +995,8 @@ describe('CombatTacticalMap', () => {
             aftermath: null,
             reactions_used: null,
             dodge_plan: null,
+            compulsion: null,
+            steady_plan: null,
             dig_deep: null,
             current_square: null,
             current_position: { id: 101, name: 'North Wall' },
@@ -1032,6 +1047,119 @@ describe('CombatTacticalMap', () => {
     expect(avatars[1].querySelector('title')).toHaveTextContent('Onlooker (bystander)');
     // Wanderer has no position: not drawn anywhere.
     expect(screen.queryByTitle('Wanderer (bystander)')).not.toBeInTheDocument();
+  });
+
+  it('keys another, masked fighter on the persona it presents, never a sheet id (#4802)', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(
+      makeScene({
+        personas: [
+          { id: 100, name: 'Aerande', persona_type: 'primary', character_sheet: 10 },
+          { id: 400, name: 'a hooded man', persona_type: 'temporary', character_sheet: 10 },
+          { id: 200, name: 'Onlooker', persona_type: 'primary', character_sheet: 20 },
+          { id: 300, name: 'Wanderer', persona_type: 'primary', character_sheet: 30 },
+        ],
+        persona_positions: [
+          {
+            persona_id: 100,
+            square_x: null,
+            square_y: null,
+            position: { id: 101, name: 'North Wall' },
+          },
+          {
+            persona_id: 400,
+            square_x: null,
+            square_y: null,
+            position: { id: 101, name: 'North Wall' },
+          },
+          {
+            persona_id: 200,
+            square_x: null,
+            square_y: null,
+            position: { id: 101, name: 'North Wall' },
+          },
+          { persona_id: 300, square_x: null, square_y: null, position: null },
+        ],
+      })
+    );
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [
+          {
+            id: 1,
+            character_sheet_id: null,
+            persona_id: 400,
+            character_name: 'a hooded man',
+            status: 'active',
+            health: 10,
+            max_health: 10,
+            character_status: null,
+            available_strain: null,
+            fatigue: null,
+            active_conditions: [],
+            audere_state: null,
+            thumbnail_url: null,
+            thumbnail_media_url: null,
+            escalation_level: null,
+            intensity_modifier: null,
+            control_modifier: null,
+            fury_control_surrendered: null,
+            aftermath: null,
+            reactions_used: null,
+            dodge_plan: null,
+            compulsion: null,
+            steady_plan: null,
+            dig_deep: null,
+            current_square: null,
+            current_position: { id: 101, name: 'North Wall' },
+          },
+        ],
+        opponents: [],
+        position_nodes: [
+          {
+            id: 101,
+            name: 'North Wall',
+            kind: 'feature',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+            is_roofed: false,
+            screens_ranged: false,
+            area_x: null,
+            area_y: null,
+            area_w: null,
+            area_h: null,
+            terrain_name: null,
+            terrain_art_url: null,
+            features: [],
+          },
+        ],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={20} />, {
+      wrapper: createWrapper(),
+    });
+
+    const nodeEl = await screen.findByTestId('tactical-map-node-101');
+    await vi.waitFor(() => {
+      expect(within(nodeEl).getAllByTestId('occupant-token')).toHaveLength(2);
+    });
+    const avatars = within(nodeEl).getAllByTestId('occupant-token');
+    // The masked fighter's row carries no sheet id; matched by the mask persona, the
+    // mask and his own face are both skipped as bystanders, so he is drawn once.
+    expect(avatars[0]).not.toHaveAttribute('data-bystander');
+    expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
+    expect(avatars[1].querySelector('title')).toHaveTextContent('Onlooker (bystander)');
+    // Wanderer has no position: not drawn anywhere.
+    expect(screen.queryByTitle('Aerande (bystander)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('a hooded man (bystander)')).not.toBeInTheDocument();
   });
 
   it('excludes an opponent with a scene persona from the bystanders by objectdb_id (#3557)', async () => {

@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Q
 from django.utils.functional import cached_property
@@ -30,8 +30,12 @@ from world.checks.models import OutcomeTierAward
 from world.conditions.constants import (
     Allegiance,
     BreakFreeMode,
+    CompulsionForbidden,
+    CompulsionResult,
+    CompulsionWant,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
+    ControlLossFiresOn,
     DamageTickTiming,
     DurationType,
     StackBehavior,
@@ -1677,6 +1681,15 @@ class ConditionInstance(SharedMemoryModel):
             "one per round-equivalent (SECONDS_PER_ROUND)."
         ),
     )
+    compulsion_retry_after = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Out of combat, when the bearer may next try to change back against this "
+            "condition's compulsion after a failed roll (#4802). Set from "
+            "Compulsion.retry_wait_minutes; the revert roll reads it."
+        ),
+    )
     stage_rounds_remaining = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -2324,3 +2337,457 @@ class BreathHoldDurationAward(OutcomeTierAward):
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: {self.rounds} rounds"
+
+
+class Compulsion(SharedMemoryModel):
+    """What a condition drives its bearer to do, and the roll that resists it (#4802).
+
+    One optional row per ``ConditionTemplate`` (most templates have none). Combat
+    resolution rolls ``check_type`` when the bearer declares something the compulsion
+    does not want, looks the outcome up in ``bands`` and, when the compulsion acts,
+    replaces the declaration. Staff author it in the admin.
+    """
+
+    condition = models.OneToOneField(
+        ConditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="compulsion",
+        help_text=(
+            "The condition that carries this compulsion; the compulsion is active while "
+            "a character holds it. Staff pick it; combat resolution reads it."
+        ),
+    )
+    wants = models.CharField(
+        max_length=30,
+        choices=CompulsionWant.choices,
+        default=CompulsionWant.ATTACK_OPPONENT,
+        help_text="What the bearer is driven to do. Staff pick it; combat resolution reads it.",
+    )
+    check_type = models.ForeignKey(
+        _CHECK_TYPE_FK,
+        on_delete=models.PROTECT,
+        related_name="compulsions",
+        help_text=(
+            "The check the bearer rolls to go against the compulsion. Distinct from the "
+            "template's resist check, which resists the condition being applied. Staff "
+            "pick it; combat resolution rolls it."
+        ),
+    )
+    base_difficulty = models.PositiveIntegerField(
+        help_text="Base difficulty of the resist roll. Staff set it; combat resolution reads it.",
+    )
+    difficulty_per_severity = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty added per point of the condition's severity. Staff set it; combat "
+            "resolution reads it."
+        ),
+    )
+    retry_wait_minutes = models.PositiveSmallIntegerField(
+        default=5,
+        help_text=(
+            "Out of combat, how many minutes a character who failed to change back against "
+            "this compulsion waits before trying again (in combat the wait is the rest of "
+            "the round). Staff set it; the revert roll reads it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Compulsion"
+        verbose_name_plural = "Compulsions"
+
+    def clean(self) -> None:
+        """Reject a condition whose category does not alter behavior."""
+        super().clean()
+        if self.condition_id is None:
+            return
+        if not self.condition.category.alters_behavior:
+            raise ValidationError(
+                {
+                    "condition": (
+                        "A compulsion changes how a character behaves, so its condition "
+                        "must be in a category marked 'alters behavior'."
+                    )
+                }
+            )
+
+    def __str__(self) -> str:
+        return f"Compulsion: {self.condition.name}"
+
+
+class CompulsionForbiddenAction(SharedMemoryModel):
+    """An action a compulsion resists, with its own extra difficulty (#4802)."""
+
+    compulsion = models.ForeignKey(
+        Compulsion,
+        on_delete=models.CASCADE,
+        related_name="forbidden",
+        help_text="The compulsion that resists this action. Set by staff in its inline.",
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=CompulsionForbidden.choices,
+        help_text="The action the bearer must roll to do. Staff pick it; combat reads it.",
+    )
+    extra_difficulty = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty added to the resist roll when the bearer attempts this action. "
+            "Staff set it; combat resolution reads it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Compulsion Forbidden Action"
+        verbose_name_plural = "Compulsion Forbidden Actions"
+        ordering = ["compulsion", "action"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["compulsion", "action"],
+                name="unique_forbidden_action_per_compulsion",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.compulsion}: {self.get_action_display()}"
+
+
+class CompulsionResistBand(SharedMemoryModel):
+    """What one resist outcome does against a compulsion (#4802).
+
+    One row per (compulsion, outcome). ``validate_compulsion_bands`` rejects a set where
+    a better outcome is worse for the character.
+    """
+
+    compulsion = models.ForeignKey(
+        Compulsion,
+        on_delete=models.CASCADE,
+        related_name="bands",
+        help_text="The compulsion this band belongs to. Set by staff in its inline.",
+    )
+    outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The roll outcome this band answers. Staff pick it; combat looks it up.",
+    )
+    result = models.CharField(
+        max_length=20,
+        choices=CompulsionResult.choices,
+        help_text="How the resist roll turns out. Staff pick it; combat resolution applies it.",
+    )
+    action_penalty = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Penalty on the strained action's roll when the result is Acts, strained. "
+            "Only an action that rolls takes it: taking cover and using an item have no "
+            "roll, so a strained cover or item use costs nothing. Staff set it; combat "
+            "resolution applies it."
+        ),
+    )
+    control_change = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Control change at this outcome; negative loses control. Staff set it; combat "
+            "resolution applies it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Compulsion Resist Band"
+        verbose_name_plural = "Compulsion Resist Bands"
+        ordering = ["compulsion", "outcome__success_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["compulsion", "outcome"],
+                name="unique_resist_band_per_compulsion_outcome",
+            ),
+        ]
+
+    # The admin inline's form turns this off for its own validation (see SurgeDegreeBand).
+    validate_against_stored_siblings: bool = True
+
+    def clean(self) -> None:
+        """Reject a band that breaks monotonic order against its compulsion's other bands."""
+        from world.conditions.control_loss_bands import (  # noqa: PLC0415
+            validate_compulsion_bands,
+        )
+
+        super().clean()
+        if not self.validate_against_stored_siblings:
+            return
+        if self.compulsion_id is None or self.outcome_id is None:
+            return
+        siblings = [
+            band
+            for band in CompulsionResistBand.objects.filter(
+                compulsion_id=self.compulsion_id
+            ).select_related("outcome")
+            if band.pk is None or band.pk != self.pk
+        ]
+        problems = validate_compulsion_bands([*siblings, self])
+        if problems:
+            raise ValidationError(problems)
+
+    def __str__(self) -> str:
+        return f"{self.compulsion}: {self.outcome.name}"
+
+
+class ControlLossTrigger(SharedMemoryModel):
+    """An event that can make a vulnerable character lose control (#4802).
+
+    A vulnerability is a condition the character carries; each trigger names one event
+    (the moon pulls, a wound crosses a threshold, the condition enters a stage) that
+    rolls ``check_type`` and looks the outcome up in ``bands``. The kind-specific
+    columns are nullable and a CheckConstraint per kind says which a row takes.
+    """
+
+    vulnerability = models.ForeignKey(
+        ConditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="control_loss_triggers",
+        help_text=(
+            "The condition a character carries to be subject to this trigger. Staff pick "
+            "it; the trigger engine finds triggers through the characters' conditions."
+        ),
+    )
+    fires_on = models.CharField(
+        max_length=20,
+        choices=ControlLossFiresOn.choices,
+        help_text="The event that fires this trigger. Staff pick it; the engine reads it.",
+    )
+    min_moon_pull = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Moon pull only: the lowest moon pull that rolls. Staff set it; the engine reads "
+            "it. Blank = any pull."
+        ),
+    )
+    health_below_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text=(
+            "Wound threshold only (required there): fires when a hit takes health below this "
+            "percent of maximum. Staff set it; the engine reads it."
+        ),
+    )
+    stage = models.ForeignKey(
+        ConditionStage,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="control_loss_triggers",
+        help_text=(
+            "Condition stage only (required there): fires on entering this stage, which "
+            "must belong to the vulnerability. Staff pick it; the engine reads it."
+        ),
+    )
+    check_type = models.ForeignKey(
+        _CHECK_TYPE_FK,
+        on_delete=models.PROTECT,
+        related_name="control_loss_triggers",
+        help_text="The check the character rolls to keep control. Staff pick it.",
+    )
+    base_difficulty = models.PositiveIntegerField(
+        help_text="Base difficulty of the roll. Staff set it; the engine reads it.",
+    )
+    difficulty_per_pull = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Moon pull only: difficulty added per point of pull. Staff set it.",
+    )
+    relief_per_level = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty removed per character level, as relief for the experienced. Staff "
+            "set it; the engine reads it."
+        ),
+    )
+    relief_gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Moon pull only: a gift whose threads give relief. Staff pick it.",
+    )
+    relief_per_thread_level = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Moon pull only: relief per level of thread in the relief gift. Staff set it.",
+    )
+    relief_cap = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Moon pull only: the most relief the gift can give. Staff set it.",
+    )
+    exempt_from_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Moon pull only: characters at or above this level never roll. Staff set it. "
+            "Blank = nobody is exempt."
+        ),
+    )
+    impaired_willpower_drop = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Moon pull only: the impaired threshold. A character whose willpower from "
+            "conditions is at or below minus this value counts as impaired and rolls even "
+            "past the exempt level. Staff set it; the engine reads it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Control Loss Trigger"
+        verbose_name_plural = "Control Loss Triggers"
+        ordering = ["vulnerability", "fires_on"]
+        constraints = [
+            models.CheckConstraint(
+                check=~Q(fires_on=ControlLossFiresOn.MOON_PULL)
+                | Q(health_below_percent__isnull=True, stage__isnull=True),
+                name="control_loss_moon_pull_columns",
+            ),
+            models.CheckConstraint(
+                check=~Q(fires_on=ControlLossFiresOn.WOUND_THRESHOLD)
+                | Q(
+                    health_below_percent__isnull=False,
+                    stage__isnull=True,
+                    min_moon_pull__isnull=True,
+                    difficulty_per_pull__isnull=True,
+                    relief_gift__isnull=True,
+                    relief_per_thread_level__isnull=True,
+                    relief_cap__isnull=True,
+                    exempt_from_level__isnull=True,
+                    impaired_willpower_drop__isnull=True,
+                ),
+                name="control_loss_wound_threshold_columns",
+            ),
+            models.CheckConstraint(
+                check=~Q(fires_on=ControlLossFiresOn.CONDITION_STAGE)
+                | Q(
+                    stage__isnull=False,
+                    health_below_percent__isnull=True,
+                    min_moon_pull__isnull=True,
+                    difficulty_per_pull__isnull=True,
+                    relief_gift__isnull=True,
+                    relief_per_thread_level__isnull=True,
+                    relief_cap__isnull=True,
+                    exempt_from_level__isnull=True,
+                    impaired_willpower_drop__isnull=True,
+                ),
+                name="control_loss_condition_stage_columns",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Reject a stage that belongs to a different condition than the vulnerability."""
+        super().clean()
+        if self.stage_id is not None and self.stage.condition_id != self.vulnerability_id:
+            raise ValidationError(
+                {"stage": "The stage must be one of the vulnerability condition's stages."}
+            )
+
+    def __str__(self) -> str:
+        return f"{self.vulnerability.name}: {self.get_fires_on_display()}"
+
+
+class ControlLossBand(SharedMemoryModel):
+    """What one roll outcome does when a control-loss trigger fires (#4802).
+
+    One row per (trigger, outcome). ``validate_control_loss_bands`` rejects a set where
+    a better outcome is worse for the character. ``forces_form`` is allowed only on a
+    moon-pull trigger in this slice, the only one with a form-provisioning seam.
+    """
+
+    trigger = models.ForeignKey(
+        ControlLossTrigger,
+        on_delete=models.CASCADE,
+        related_name="bands",
+        help_text="The trigger this band belongs to. Set by staff in its inline.",
+    )
+    outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The roll outcome this band answers. Staff pick it; the engine looks it up.",
+    )
+    intensity = models.PositiveIntegerField(
+        default=0,
+        help_text="Intensity gained at this outcome. Staff set it; the engine applies it.",
+    )
+    control_change = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Control change at this outcome; negative loses control. Staff set it; the "
+            "engine applies it."
+        ),
+    )
+    applies = models.ForeignKey(
+        ConditionTemplate,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Condition applied at this outcome. Staff pick it; the engine applies it. Blank = none."
+        ),
+    )
+    severity = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Severity of the applied condition. Staff set it; the engine reads it.",
+    )
+    duration_rounds = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Rounds the applied condition lasts. Staff set it; the engine reads it.",
+    )
+    forces_form = models.BooleanField(
+        default=False,
+        help_text=(
+            "Force the character into her battle form at this outcome. Only moon-pull "
+            "triggers allow it. Staff set it; the engine reads it."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Control Loss Band"
+        verbose_name_plural = "Control Loss Bands"
+        ordering = ["trigger", "outcome__success_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["trigger", "outcome"],
+                name="unique_control_loss_band_per_trigger_outcome",
+            ),
+        ]
+
+    validate_against_stored_siblings: bool = True
+
+    def clean(self) -> None:
+        """Reject a forced form off the moon, and a band that breaks monotonic order."""
+        from world.conditions.control_loss_bands import (  # noqa: PLC0415
+            validate_control_loss_bands,
+        )
+
+        super().clean()
+        if self.trigger_id is None:
+            return
+        if self.forces_form and self.trigger.fires_on != ControlLossFiresOn.MOON_PULL:
+            raise ValidationError({"forces_form": "Only a moon-pull trigger can force a form."})
+        if not self.validate_against_stored_siblings or self.outcome_id is None:
+            return
+        siblings = [
+            band
+            for band in ControlLossBand.objects.filter(trigger_id=self.trigger_id).select_related(
+                "outcome"
+            )
+            if band.pk is None or band.pk != self.pk
+        ]
+        problems = validate_control_loss_bands([*siblings, self])
+        if problems:
+            raise ValidationError(problems)
+
+    def __str__(self) -> str:
+        return f"{self.trigger}: {self.outcome.name}"

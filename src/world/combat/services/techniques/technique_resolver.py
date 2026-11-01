@@ -290,7 +290,8 @@ class CombatTechniqueResolver:
             extra_contributions=extra_contributions,
             extra_traits=self.offense_extra_traits,
         )
-        extra_modifiers = breakdown.extra_modifiers_total
+        # A strained compulsion resist (#4802) lands its penalty on this roll.
+        extra_modifiers = breakdown.extra_modifiers_total - self.action.compulsion_penalty
 
         # #2536 Task 5: thread the live round context so CHECK_BONUS situational
         # perks can fire on the technique's own offense check — the check-side

@@ -296,9 +296,8 @@ class DodgingAutomatically(_TheCellar):
         theirs = self.api(self.account_of(bram)).get(url).json()
 
         def plan_of(payload: dict, character) -> Any:
-            row = next(
-                p for p in payload["participants"] if p["character_sheet_id"] == character.pk
-            )
+            seat = self.participant(character).pk
+            row = next(p for p in payload["participants"] if p["id"] == seat)
             return row["dodge_plan"]
 
         own = plan_of(mine, self.ondrelle)

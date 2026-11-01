@@ -12,6 +12,13 @@ export function dodgeRequest(kwargs: Record<string, unknown>): DispatchActionReq
   return { ref: { backend: 'registry', registry_key: DODGE_REGISTRY_KEY }, kwargs };
 }
 
+export const STEADY_REGISTRY_KEY = 'combat_steady';
+
+/** A `combat_steady` registry dispatch turning the steady plan on or off. */
+export function steadyRequest(steady: boolean): DispatchActionRequest {
+  return { ref: { backend: 'registry', registry_key: STEADY_REGISTRY_KEY }, kwargs: { steady } };
+}
+
 /** The pending attacks that will cover the place with this id. */
 export function attacksCoveringPlace(
   attacks: PendingAttack[],

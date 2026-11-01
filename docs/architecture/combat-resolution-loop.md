@@ -977,8 +977,9 @@ class ClashStateSerializer(serializers.ModelSerializer):
     def get_contributors(self, obj: Clash) -> list[dict]:
         """Per-PC contribution rollup for the active clash round."""
         # Walk obj.cached_contributions (Prefetch in EncounterDetailSerializer)
-        # → group by character → render {character_id, character_name,
-        # action_slot, progress_delta}.
+        # → group by character → render {participant_id, character_name,
+        # action_slot, progress_delta, anima}. participant_id is the seat, never the
+        # sheet id, which would tie a mask to the real character (#4802).
         ...
 
     def get_side_favored(self, obj: Clash) -> str:
