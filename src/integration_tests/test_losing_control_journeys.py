@@ -182,6 +182,16 @@ class _ControlLossCase(JourneyCase):
         extra = {"applies": applies, "severity": 3, "duration_rounds": 3} if applies else {}
         ControlLossBandFactory(trigger=trigger, outcome=outcome, **extra)
 
+    def assertToldNothingOfControl(self, *characters) -> None:  # noqa: N802 - unittest style
+        """None of *characters* was told, or pushed a row, about a fight to keep control.
+
+        Each must have been watched before the act under test.
+        """
+        for character in characters:
+            self.assertNotTold(character, "keep control")
+            rows = self.mailbox(character).rows
+            self.assertFalse(any("keep control" in row for row in rows), rows)
+
 
 class WoundTriggers(_ControlLossCase):
     def setUp(self) -> None:
@@ -285,6 +295,8 @@ class WoundTriggers(_ControlLossCase):
         self.assertTold(witness, "Garrick loses control: Berserk.")
 
     def test_a_killing_hit_rolls_no_wound_trigger(self) -> None:
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(self.garrick, witness)
         with (
             patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
             force_check_outcome(self.failure),
@@ -293,6 +305,7 @@ class WoundTriggers(_ControlLossCase):
 
         self.assertEqual(rolled.call_count, 0)
         self.assertIsNone(_berserk_of(self.garrick))
+        self.assertToldNothingOfControl(self.garrick, witness)
 
     def test_a_hit_into_the_knockout_band_still_rolls(self) -> None:
         """Ruling 21: 60 to 15 is in the knockout band, but Garrick can still act."""
@@ -313,6 +326,8 @@ class WoundTriggers(_ControlLossCase):
         unconscious Garrick never rolls the trigger his 50 percent line would fire."""
         unconscious = knock_out_condition()
         self.knockout_pool(unconscious)
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(self.garrick, witness)
 
         spy = self.brute_swings(85, self.failure)
 
@@ -322,6 +337,7 @@ class WoundTriggers(_ControlLossCase):
         )
         self.assertEqual(self.trigger_rolls(spy), 0)
         self.assertIsNone(_berserk_of(self.garrick))
+        self.assertToldNothingOfControl(self.garrick, witness)
 
     @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_a_hit_he_stays_standing_through_rolls_once_the_knockout_is_passed(self) -> None:
@@ -334,11 +350,14 @@ class WoundTriggers(_ControlLossCase):
 
     def test_a_character_who_cannot_act_rolls_no_wound_trigger(self) -> None:
         knock_out(self.garrick)
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(self.garrick, witness)
         with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
             self.hit(60)
 
         self.assertEqual(rolled.call_count, 0)
         self.assertIsNone(_berserk_of(self.garrick))
+        self.assertToldNothingOfControl(self.garrick, witness)
 
     def test_the_room_hears_the_persona_not_the_character(self) -> None:
         """A disguised Garrick is named by the face he wears, never his own name."""
@@ -422,10 +441,16 @@ class WoundTriggers(_ControlLossCase):
         self.assertTrue(pending)
 
     def test_a_held_roll_applies_nothing(self) -> None:
-        with force_check_outcome(self.success):
+        """A held roll lands on a band that applies nothing and moves no control, so the game
+        says nothing of it: Garrick and the room are told nothing (a quiet success)."""
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(self.garrick, witness)
+        with force_check_outcome(self.success) as capture:
             self.hit(60)
 
+        self.assertEqual(capture.target_difficulty, 30)
         self.assertIsNone(_berserk_of(self.garrick))
+        self.assertToldNothingOfControl(self.garrick, witness)
 
     def test_wound_trigger_fires_on_each_downward_crossing(self) -> None:
         """100 to 60 stays above 50 (no roll); healed to 70, 70 to 40 crosses once."""
@@ -447,6 +472,8 @@ class WoundTriggers(_ControlLossCase):
     def test_an_already_compelled_character_rolls_nothing(self) -> None:
         """Ruling 24: a raging Garrick does not re-roll on each crossing."""
         apply_condition(self.garrick, self.berserk, severity=1, duration_rounds=3)
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(self.garrick, witness)
 
         with (
             patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
@@ -456,6 +483,7 @@ class WoundTriggers(_ControlLossCase):
 
         self.assertEqual(rolled.call_count, 0)
         self.assertEqual(_berserk_of(self.garrick).severity, 1)
+        self.assertToldNothingOfControl(self.garrick, witness)
 
     def test_a_character_without_the_vulnerability_never_rolls(self) -> None:
         safe = self.make_player("Safe", room=self.field)
@@ -465,10 +493,16 @@ class WoundTriggers(_ControlLossCase):
         seat = CombatParticipantFactory(
             encounter=self.seat.encounter, character_sheet=safe.sheet_data
         )
-        with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
+        self.watch(safe, self.garrick)
+        with (
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             apply_damage_to_participant(seat, 80)
 
         self.assertEqual(rolled.call_count, 0)
+        self.assertEqual(CharacterVitals.objects.get(character_sheet=safe.sheet_data).health, 20)
+        self.assertToldNothingOfControl(safe, self.garrick)
 
 
 class StageTriggers(_ControlLossCase):
@@ -490,6 +524,8 @@ class StageTriggers(_ControlLossCase):
         with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
             advance_condition_severity(instance, 5)
             self.assertEqual(rolled.call_count, 0)
+            self.assertIsNone(_berserk_of(maren))
+            self.assertToldNothingOfControl(maren)
             with (
                 self.captureOnCommitCallbacks(execute=True),
                 force_check_outcome(self.failure) as capture,
@@ -588,6 +624,8 @@ class StageTriggers(_ControlLossCase):
         from world.character_sheets.factories import CharacterSheetFactory
 
         room = self.make_room("The Crypt")
+        witness = self.make_player("Witness", room=room)
+        self.watch(witness)
         ghoul = CharacterFactory(db_key="Ghoul", location=room)
         CharacterSheetFactory(character=ghoul)
         curse = ConditionTemplateFactory(name="Crypt curse", has_progression=True)
@@ -599,11 +637,15 @@ class StageTriggers(_ControlLossCase):
         self.band(trigger, self.failure, applies=self.berserk)
         instance = apply_condition(ghoul, curse).instance
 
-        with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
+        with (
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             advance_condition_severity(instance, 5)
 
         self.assertEqual(rolled.call_count, 0)
         self.assertIsNone(_berserk_of(ghoul))
+        self.assertToldNothingOfControl(witness)
 
 
 def _night_full_moon():
@@ -655,10 +697,19 @@ class MoonTrigger(_ControlLossCase):
         self.assertTold(self.wynn, "You lose control: Berserk.")
 
     def test_a_held_roll_leaves_the_lycan_themself(self) -> None:
-        with _night_full_moon(), force_check_outcome(self.success):
+        """The seeded Success band applies nothing and moves no control, so the game says
+        nothing of a held moon roll: Wynn is told nothing."""
+        self.watch(self.wynn)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            _night_full_moon(),
+            force_check_outcome(self.success) as capture,
+        ):
             moon_reconcile_tick()
 
+        self.assertEqual(capture.target_difficulty, 50)
         self.assertIsNone(_berserk_of(self.wynn))
+        self.assertToldNothingOfControl(self.wynn)
 
     def test_a_daylit_moon_never_rolls(self) -> None:
         with (
@@ -668,6 +719,8 @@ class MoonTrigger(_ControlLossCase):
             moon_reconcile_tick()
 
         self.assertEqual(rolled.call_count, 0)
+        self.assertIsNone(_berserk_of(self.wynn))
+        self.assertFalse(ActiveAlternateSelf.objects.filter(character=self.sheet).exists())
 
     def test_moon_roll_counts_condition_modifiers(self) -> None:
         ConditionCheckModifierFactory(
@@ -681,6 +734,9 @@ class MoonTrigger(_ControlLossCase):
         ):
             moon_reconcile_tick()
 
+        # Kept as a modifier assertion: a condition modifier moves only the roll's points,
+        # never its difficulty, and the outcome a single real roll lands on is chance, so
+        # the -10 has no effect a player or the capture can see on one roll.
         self.assertEqual(rolled.call_args.kwargs["extra_modifiers"], -10)
 
 
@@ -911,6 +967,8 @@ class ACompelledFighterWhoHeals(_CompelledMira):
             self.resolve(offense)
 
         self.assertRoomRow("Resist compulsion vs 31: Partial Success.")
+        # Kept as a modifier assertion: the strain penalty moves only the Mend roll's points,
+        # not its difficulty or any line, so it has no visible effect on a pinned roll.
         self.assertEqual(offense.call_args.kwargs["extra_modifiers"], -4)
 
 
@@ -933,6 +991,8 @@ class ACompelledFighterWhoParleys(_CompelledMira):
         self.assertRoomRow("Mira tries to parley against Berserk. Resist compulsion vs 36")
         parley_rolls = self.rolled_on(spy, self.parley_check)
         self.assertEqual(len(parley_rolls), 1)
+        # Kept as a modifier assertion: the strain penalty moves only the parley roll's
+        # points, not its difficulty or any line, so it has no visible effect on one roll.
         self.assertEqual(parley_rolls[0].kwargs["extra_modifiers"], -4)
 
 
