@@ -41,6 +41,7 @@ HANDLED_RELATIONS: frozenset[str] = frozenset(
     {
         "motif_usages",  # MotifResonanceAssociation.facet, unique per motif resonance
         "signature_bonuses",  # SignatureMotifBonus.required_facet
+        "effect_bonuses",  # FacetEffectBonus.facet, unique per maneuver target (#4815)
         "anchored_threads",  # Thread.target_facet
         "inherent_on_templates",  # ItemTemplate.inherent_facets (M2M)
         "item_attachments",  # ItemFacet.facet, unique per item instance
@@ -200,6 +201,8 @@ def merge_facets(winner: Facet, losers: Sequence[Facet]) -> FacetMerge:
         for loser in losers:
             _move_unique_fk(loser, winner, "motif_usages", "motif_resonance", result)
             _move_fk(loser, winner, "signature_bonuses", "required_facet", result)
+            # A target both facets boost keeps the winner's amount.
+            _move_unique_fk(loser, winner, "effect_bonuses", "target", result)
             _move_fk(loser, winner, "anchored_threads", "target_facet", result)
             _move_m2m(loser, winner, "inherent_on_templates", "inherent_facets", result)
             _move_item_facets(loser, winner, result)

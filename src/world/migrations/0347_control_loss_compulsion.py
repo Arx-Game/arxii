@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0345_persona_grants_and_organization_ties")]
+    dependencies = [("arxii", "0346_facet_effect_bonus")]
 
     operations = [
         migrations.AddField(
@@ -499,7 +499,9 @@ class Migration(migrations.Migration):
             constraint=models.CheckConstraint(
                 condition=models.Q(
                     models.Q(("fires_on", "moon_pull"), _negated=True),
-                    models.Q(("health_below_percent__isnull", True), ("stage__isnull", True)),
+                    models.Q(
+                        ("health_below_percent__isnull", True), ("stage__isnull", True)
+                    ),
                     _connector="OR",
                 ),
                 name="control_loss_moon_pull_columns",

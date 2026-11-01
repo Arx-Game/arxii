@@ -104,7 +104,8 @@
   losers as `FacetAlias` rows, refuses with `UnmergedFacetRelation` when a relation has no
   handler). API: `GET /api/magic/facets/near/?name=`; `POST /api/magic/facets/` is staff-only
   and answers an existing facet with `matched: true` for a spelling that already resolves.
-  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` inline.
+  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` and
+  `FacetEffectBonus` (#4815, a facet's bonus to a maneuver effect) inlines.
   Frontend: `FacetPicker` (`frontend/src/magic/components/`), used by the deity page and item
   crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
@@ -7061,7 +7062,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
     equipment (crafted pieces, the equipment walk) all count
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
-    `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
+    `ThreadPullEffect` contributions per worn item, plus the worn facets' own
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled by the shown thread
+    level); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
