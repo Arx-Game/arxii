@@ -36,8 +36,11 @@ SEED_MOON_BOUND_SLUG = "moon-bound"
 # Config row named by a code literal (ADR-0171), registered in config_prerequisites. The
 # literal is the name players read on the roll line; it only names a row this code
 # creates. Runtime finds the check through ``ControlLossTrigger.check_type``, never by name,
-# and an existing row (an older "moon_control" one included) is never renamed.
+# and no existing row is ever renamed.
 MOON_CONTROL_CHECK_NAME = "Hold against the moon"
+# The name an earlier seed gave the same check (#2845). A database that already has it
+# keeps using it, so no second moon check is ever made beside it (#4802).
+LEGACY_MOON_CONTROL_CHECK_NAME = "moon_control"
 
 BATTLE_FORM_NAME = "Battle Form"
 # PLACEHOLDER stat suite: (stat trait name, modifier value).
@@ -230,11 +233,18 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
 
 
 def _ensure_moon_control_check_type() -> CheckType:
-    """Idempotently seed the "Hold against the moon" CheckType (willpower + composure).
+    """The moon's check type: an existing "moon_control" row, else "Hold against the moon".
 
-    Config row named by a code literal (ADR-0171), also registered in
-    ``world.seeds.config_prerequisites`` so it exists after a press.
+    A database an earlier seed gave "moon_control" keeps that row as it is (never renamed,
+    never a second moon check beside it); only when it is absent is the willpower +
+    composure check made, or reused, under its player-facing name. Config row named by a
+    code literal (ADR-0171), also registered in ``world.seeds.config_prerequisites`` so it
+    exists after a press.
     """
+    from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.berserk_content import ensure_willpower_check_type  # noqa: PLC0415
 
-    return ensure_willpower_check_type(MOON_CONTROL_CHECK_NAME)
+    try:
+        return CheckType.objects.get(name=LEGACY_MOON_CONTROL_CHECK_NAME)
+    except CheckType.DoesNotExist:
+        return ensure_willpower_check_type(MOON_CONTROL_CHECK_NAME)

@@ -67,8 +67,8 @@ Domain-local vocabulary for `world.species`. Root terms live in
   enter an instinct read. _Avoid:_ "moon exposure" (it is not a damage ladder).
 - **Lycan blood** - the vulnerability condition the moon trigger hangs on (#4802,
   ADR-4802): the lycan grant's `drawback_condition`, applied at CG. A carrier under a
-  strong pull rolls the moon `ControlLossTrigger` (seeded check "Hold against the
-  moon", willpower + composure; an older `moon_control` row is never renamed); failure forces the battle-form shift + shared Berserk. The runtime
+  strong pull rolls the moon `ControlLossTrigger` (an existing `moon_control` check
+  is reused as it is, else the seed makes "Hold against the moon"; willpower + composure); failure forces the battle-form shift + shared Berserk. The runtime
   keys on this condition, never on a distinction. _Avoid:_ species-probed lycanthropy.
 - **Moon-Bound** - the lycan grant's `drawback_distinction` (`moon-bound` tag,
   #2845): CG flavour that no runtime reads since #4802. The Required content moon

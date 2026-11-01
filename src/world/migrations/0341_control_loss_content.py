@@ -7,9 +7,9 @@ Data-only, and only prose-free mechanics. On a populated database it:
 * for the lycan gift grant with no ``drawback_condition``: makes a "Lycan blood" nameplate
   condition (permanent, no prose), sets it as the grant's drawback, puts an instance of it
   on every sheet holding a distinction tagged ``moon-bound``, and seeds the moon-pull
-  trigger and its bands, with the "Hold against the moon" CheckType (its player-facing
-  name; an existing row of that name is used as it is), unless a moon-pull trigger
-  already exists;
+  trigger and its bands, rolled on an existing "moon_control" CheckType if there is one,
+  else on "Hold against the moon" (its player-facing name; found or made), unless a
+  moon-pull trigger already exists;
 * for a grant whose drawback has no moon-pull trigger (a rollback and re-apply leaves
   exactly this): seeds the trigger and its bands on that drawback, and nothing else. No
   instance is ever put on a drawback this migration did not just create.
@@ -190,6 +190,19 @@ def _moon_block(apps, berserk):
         _moon_trigger(apps, blood, grant, berserk)
 
 
+def _moon_check_type(apps):
+    """An existing "moon_control" check (an earlier seed's name), else "Hold against the moon".
+
+    Never a second moon check beside an existing one, and no row is renamed.
+    """
+    CheckType = apps.get_model("arxii", "CheckType")
+
+    legacy = CheckType.objects.filter(name="moon_control").first()
+    if legacy is not None:
+        return legacy
+    return _check_type(apps, "Hold against the moon")
+
+
 def _moon_trigger(apps, blood, grant, berserk):
     """The moon-pull trigger on *blood* and its bands, rolled on "Hold against the moon"."""
     ControlLossTrigger = apps.get_model("arxii", "ControlLossTrigger")
@@ -199,7 +212,7 @@ def _moon_trigger(apps, blood, grant, berserk):
         vulnerability=blood,
         fires_on="moon_pull",
         min_moon_pull=6,
-        check_type=_check_type(apps, "Hold against the moon"),
+        check_type=_moon_check_type(apps),
         base_difficulty=20,
         difficulty_per_pull=5,
         relief_per_level=10,

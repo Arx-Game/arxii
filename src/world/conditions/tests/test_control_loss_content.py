@@ -119,6 +119,30 @@ class MoonTriggerSeedTests(TestCase):
         config.save(update_fields=["berserk_condition"])
         self.assertIsNone(ensure_moon_control_loss_trigger())
 
+    def test_an_existing_moon_control_check_is_reused_never_doubled(self) -> None:
+        """An earlier seed's "moon_control" row rolls the trigger; no second check is made."""
+        from world.checks.factories import CheckTypeFactory
+        from world.checks.models import CheckType
+
+        legacy = CheckTypeFactory(name="moon_control")
+        self._give_lycan_blood()
+
+        trigger = ensure_moon_control_loss_trigger()
+
+        self.assertEqual(trigger.check_type, legacy)
+        self.assertEqual(CheckType.objects.get(pk=legacy.pk).name, "moon_control")
+        self.assertFalse(CheckType.objects.filter(name="Hold against the moon").exists())
+
+    def test_without_moon_control_the_check_is_made_under_its_player_name(self) -> None:
+        from world.checks.models import CheckType
+
+        self._give_lycan_blood()
+
+        trigger = ensure_moon_control_loss_trigger()
+
+        self.assertEqual(trigger.check_type.name, "Hold against the moon")
+        self.assertFalse(CheckType.objects.filter(name="moon_control").exists())
+
 
 class ControlLossContentMigrationTests(TestCase):
     """The data migration run against the live app registry (its logic, not the executor)."""
@@ -249,6 +273,34 @@ class ControlLossContentMigrationTests(TestCase):
             self.assertEqual(CheckType.objects.get(name=name).description, "", name)
         self.assertEqual(CheckCategory.objects.get(name="Species").description, "")
         self.assertEqual(ConditionCategory.objects.get(name="Instinct").description, "")
+
+    def test_the_migration_rolls_an_existing_moon_control_check(self) -> None:
+        """A database with "moon_control" keeps it, unrenamed, and gets no second check."""
+        from world.checks.factories import CheckTypeFactory
+        from world.checks.models import CheckType
+        from world.conditions.models import ControlLossTrigger
+
+        legacy = CheckTypeFactory(name="moon_control")
+        self._populated()
+
+        self._run()
+
+        trigger = ControlLossTrigger.objects.get(fires_on=ControlLossFiresOn.MOON_PULL)
+        self.assertEqual(trigger.check_type, legacy)
+        self.assertEqual(CheckType.objects.get(pk=legacy.pk).name, "moon_control")
+        self.assertFalse(CheckType.objects.filter(name="Hold against the moon").exists())
+
+    def test_without_moon_control_the_migration_makes_the_player_named_check(self) -> None:
+        from world.checks.models import CheckType
+        from world.conditions.models import ControlLossTrigger
+
+        self._populated()
+
+        self._run()
+
+        trigger = ControlLossTrigger.objects.get(fires_on=ControlLossFiresOn.MOON_PULL)
+        self.assertEqual(trigger.check_type.name, "Hold against the moon")
+        self.assertFalse(CheckType.objects.filter(name="moon_control").exists())
 
     def test_outcomes_are_found_by_canonical_name_not_by_level(self) -> None:
         """F3: a decoy at Failure's level with a lower pk never takes Failure's band."""
