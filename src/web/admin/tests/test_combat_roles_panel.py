@@ -4,6 +4,7 @@ Staff find every combat role authoring page from the front page; each link opens
 """
 
 from pathlib import Path
+import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -83,8 +84,10 @@ class CombatRolesPanelTests(TestCase):
         response = self.client.get(by_label["condition"].action, {"pk": condition.pk})
         self.assertRedirects(response, reverse("admin_combo_map_condition", args=[condition.pk]))
         body = self.client.get(reverse("admin:index")).content.decode()
-        self.assertIn('aria-label="Combo map: property"', body)
-        self.assertIn(">Open condition</button>", body)
+        # Each select is named by visible text: the row's label and its own button.
+        row = re.search(r'id="(combat-roles-link-\d+)">Combo map</th>', body).group(1)
+        self.assertIn(f'aria-labelledby="{row} combat-roles-open-', body)
+        self.assertRegex(body, r'id="combat-roles-open-\d+-2">Open condition</button>')
 
     def test_counts_read_the_rows(self) -> None:
         styles = next(link for link in self._links() if link.label == "Combat styles")
