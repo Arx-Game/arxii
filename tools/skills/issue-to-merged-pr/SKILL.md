@@ -620,7 +620,9 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
     unresolved review thread, an open evidence challenge or an open SonarCloud issue
     on its analyzed head (#4850), so it will never merge on its own (the SonarCloud
-    issue merges, but must not). For a SonarCloud issue, fix it as above and push. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
+    issue merges, but must not). A challenge whose unproven items are all `BLOCKED`
+    does not trigger this (#4882): list them under `## Open evidence challenges` in
+    the PR body (Step 6a) and let the watcher keep waiting. For a SonarCloud issue, fix it as above and push. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
     flags, push, reply on the thread, and resolve it (`gh api graphql` with
     `resolveReviewThread`). For an evidence challenge with `verdict=open`, answer it
     with an `<!-- evidence-answer -->` comment: what was run, expected, seen, and the
