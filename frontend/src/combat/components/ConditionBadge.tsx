@@ -1,7 +1,8 @@
 /**
  * ConditionBadge — small chip representing a single active condition on a
- * combatant. Renders the condition's icon, tinted by its `color_hex`, and
- * deep-links to the shared condition-detail modal on click.
+ * combatant. Renders the condition's icon (or its initial when none is authored),
+ * tinted by its `color_hex`, and deep-links to the shared condition-detail modal
+ * on click.
  *
  * Reuses the existing deep-link slice (`openDeepLink`) + `ConditionDetailModal`
  * (mounted via DeepLinkModalHost) — no new modal or dispatch path. (#553)
@@ -30,6 +31,15 @@ function buildTooltip(condition: ConditionInstance): string {
   return condition.source_description ? `${head}\n${condition.source_description}` : head;
 }
 
+/**
+ * What the chip shows: the authored icon, else the name's initial (the chip is one
+ * glyph wide, so the full name lives in the tooltip). Never empty (#4802 Ruling 42).
+ */
+function chipGlyph(condition: ConditionInstance): string {
+  const icon = condition.icon.trim();
+  return icon || condition.name.trim().charAt(0).toUpperCase();
+}
+
 export function ConditionBadge({ condition }: ConditionBadgeProps) {
   const dispatch = useAppDispatch();
   const tooltip = buildTooltip(condition);
@@ -44,7 +54,7 @@ export function ConditionBadge({ condition }: ConditionBadgeProps) {
       style={{ borderColor: condition.color_hex, color: condition.color_hex }}
       data-testid={`condition-badge-${condition.id}`}
     >
-      <span aria-hidden="true">{condition.icon}</span>
+      <span aria-hidden="true">{chipGlyph(condition)}</span>
     </button>
   );
 }

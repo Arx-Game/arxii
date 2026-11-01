@@ -9,15 +9,17 @@ consorts — expressed as the absence of a Luxen consort row, never a flag.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 # name, rank, min_percentile, threat_multiplier, headline_template
 _BANDS = [
-    ("Unassailable", 1, 92, "0.50", "PLACEHOLDER None dare test {org}."),
-    ("Formidable", 2, 75, "0.75", "PLACEHOLDER Few would move against {org}."),
-    ("Secure", 3, 55, "0.90", "PLACEHOLDER {org} stands firm."),
-    ("Steady", 4, 40, "1.00", "PLACEHOLDER {org} holds its own."),
-    ("Uncertain", 5, 22, "1.25", "PLACEHOLDER Eyes linger on {org}'s walls."),
-    ("Vulnerable", 6, 8, "1.60", "PLACEHOLDER Wolves circle {org}."),
-    ("Imperiled", 7, 0, "2.00", "PLACEHOLDER {org} bleeds, and the realm knows it."),
+    ("Unassailable", 1, 92, Decimal("0.50"), "PLACEHOLDER None dare test {org}."),
+    ("Formidable", 2, 75, Decimal("0.75"), "PLACEHOLDER Few would move against {org}."),
+    ("Secure", 3, 55, Decimal("0.90"), "PLACEHOLDER {org} stands firm."),
+    ("Steady", 4, 40, Decimal("1.00"), "PLACEHOLDER {org} holds its own."),
+    ("Uncertain", 5, 22, Decimal("1.25"), "PLACEHOLDER Eyes linger on {org}'s walls."),
+    ("Vulnerable", 6, 8, Decimal("1.60"), "PLACEHOLDER Wolves circle {org}."),
+    ("Imperiled", 7, 0, Decimal("2.00"), "PLACEHOLDER {org} bleeds, and the realm knows it."),
 ]
 
 # name, min_rank, max_rank, negative_only, prosperity_bonus

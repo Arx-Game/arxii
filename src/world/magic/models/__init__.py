@@ -19,7 +19,7 @@ Submodules (see Scope 6 §4.4):
   TechniqueVariantDamageProfile, TechniqueVariantAppliedCondition
   (gift-technique specialization variants, #1578)
 - manifestation: TechniqueManifestOption, CharacterManifestation (#4118)
-- motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
+- motifs: Facet, FacetEffectBonus, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
 - threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
@@ -162,6 +162,7 @@ from world.magic.models.modifier_level import CastOutcomeLevelShift, CastPowerLe
 from world.magic.models.motifs import (
     Facet,
     FacetAlias,
+    FacetEffectBonus,
     FacetManager,
     Motif,
     MotifResonance,
@@ -366,6 +367,7 @@ __all__ = [
     "EntryFlourishRecord",
     "Facet",
     "FacetAlias",
+    "FacetEffectBonus",
     "FacetManager",
     "FallRedemptionConfig",
     "FallRedemptionRecord",

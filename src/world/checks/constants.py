@@ -29,6 +29,18 @@ CRITICAL_SUCCESS_TIER_MIN_LEVEL = 2
 FAILURE_TIER_MAX_LEVEL = -1
 
 
+class CombatRollKind(models.TextChoices):
+    """Which combat roll a ``ConsequenceOutcome`` records, for its breakdown (#4884).
+
+    Set by the writers that lay their rolls out as rows: a Strike's hit and damage rolls
+    and a PC's defense roll against an NPC blow. Null on every other outcome.
+    """
+
+    HIT = "hit", "Hit roll"
+    DAMAGE = "damage", "Damage roll"
+    DEFENSE = "defense", "Defense roll"
+
+
 class EffectType(models.TextChoices):
     """Type of mechanical effect applied by a consequence."""
 
@@ -118,10 +130,16 @@ class ModifierLane(models.TextChoices):
     lane (#4726) are wired; the other lanes in #4551's inventory join one at a time.
     The stat lane values a modifier on a stat target in internal stat units (stats are
     stored x10), and applies wherever a stat is read (``TraitHandler._get_stat_modifier``).
+    The three maneuver effect lanes (#4876) value a modifier on a damage, to-hit or partial
+    protection target, in damage points, check points and percentage points; the effect
+    readers pick one by the target's kind (``EFFECT_KIND_LANE``).
     """
 
     CHECK = "check", "Check points"
     STAT = "stat", "Stats"
+    DAMAGE = "damage", "Damage"
+    TO_HIT = "to_hit", "To hit"
+    PARTIAL_PROTECTION = "partial_protection", "Partial protection"
 
 
 class ModifierSize(models.IntegerChoices):

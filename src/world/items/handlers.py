@@ -83,6 +83,10 @@ class CharacterEquipmentHandler:
 
             qs = (
                 EquippedItem.objects.filter(character_id=self._character.pk)
+                # A stable order: lists built from this (the Strike's weapon choices,
+                # whose first entry is the default) must not reshuffle when a row is
+                # updated (#4858).
+                .order_by("pk")
                 .select_related(
                     "item_instance",
                     "item_instance__template",

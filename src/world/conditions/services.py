@@ -96,6 +96,7 @@ from world.conditions.types import (
     TreatmentOutcome,
 )
 from world.game_clock.services import get_ic_now
+from world.mechanics.derived_amounts import derived_amount
 from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
@@ -1370,6 +1371,7 @@ def advance_condition_stage(*, payload: object, condition_name: str) -> int | No
     # advance_condition_severity): the reactive layer only dispatches to DB
     # Trigger rows, so on-entry effects are invoked directly.
     apply_stage_entry_aftermath(stage_change_payload)
+    _fire_stage_entry_triggers(instance)
 
     return next_stage.stage_order
 
@@ -2352,13 +2354,27 @@ def scaled_condition_effect_value(
 
     The single scaling rule every condition-modifier read shares: ``scales_with_severity``
     multiplies by the instance's effective severity; otherwise a staged instance scales
-    by its current stage's ``severity_multiplier``.
+    by its current stage's ``severity_multiplier``. An effect with a derived-amount input
+    (#4878) is ``value`` per step of that input on the condition's bearer instead, and
+    neither severity nor stage scales it.
     """
+    if effect.has_amount_input:
+        return derived_amount(_bearer_sheet(instance), effect, effect.value)
     if effect.scales_with_severity:
         return int(effect.value * instance.effective_severity)
     if instance.current_stage:
         return int(effect.value * instance.current_stage.severity_multiplier)
     return effect.value
+
+
+def _bearer_sheet(instance: ConditionInstance) -> "CharacterSheet | None":
+    """The character sheet of the object a condition is on, or None for one with no sheet."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return instance.target.sheet_data
+    except (AttributeError, CharacterSheet.DoesNotExist):
+        return None
 
 
 def scaled_resistance_value(
@@ -2507,27 +2523,39 @@ def condition_target_contributions(
     if any(_is_sized(instance) for instance, _effect in matched):
         value_table = load_value_table(lane)
 
-    contributions: list[ModifierContribution] = []
-    for instance, effect in matched:
-        priced = _priced_sized_modifier(instance, effect.value, value_table)
-        label = instance.condition.name
-        if instance.current_stage is not None:
-            label = f"{label} ({instance.current_stage.name})"
-        if priced is None:
-            value, vow_part = scaled_condition_effect_value(effect, instance), 0
-        else:
-            value, vow_part = priced
-        contributions.append(
-            ModifierContribution(
-                source_kind=ModifierSourceKind.CONDITION,
-                source_label=label,
-                value=value,
-                level=instance.modifier_level if priced is not None else None,
-                size=instance.modifier_size if priced is not None else None,
-                vow_part=vow_part,
-            )
-        )
-    return contributions
+    return [_condition_contribution(instance, effect, value_table) for instance, effect in matched]
+
+
+def _condition_contribution(
+    instance: ConditionInstance,
+    effect: ConditionModifierEffect,
+    value_table: ValueTable | None,
+) -> ModifierContribution:
+    """One effect on one instance as a CONDITION contribution (``condition_target_contributions``).
+
+    A sized instance's effect is priced from the table (level and size kept for provenance);
+    a derived amount (#4878) and an unsized instance read ``scaled_condition_effect_value``.
+    """
+    priced = (
+        None
+        if effect.has_amount_input
+        else _priced_sized_modifier(instance, effect.value, value_table)
+    )
+    label = instance.condition.name
+    if instance.current_stage is not None:
+        label = f"{label} ({instance.current_stage.name})"
+    if priced is None:
+        value, vow_part = scaled_condition_effect_value(effect, instance), 0
+    else:
+        value, vow_part = priced
+    return ModifierContribution(
+        source_kind=ModifierSourceKind.CONDITION,
+        source_label=label,
+        value=value,
+        level=instance.modifier_level if priced is not None else None,
+        size=instance.modifier_size if priced is not None else None,
+        vow_part=vow_part,
+    )
 
 
 def active_condition_instances_by_sheet(sheet_ids: Iterable[int]) -> list[ConditionInstance]:
@@ -3346,24 +3374,25 @@ def _process_round_tick(
     return result
 
 
-def _advance_stage(instance: ConditionInstance, result: RoundTickResult) -> None:
+def _advance_stage(instance: ConditionInstance, result: RoundTickResult) -> bool:
     """Count the instance's current stage down a round, advancing it when it runs out.
 
     A progressive condition with no stage left to reach simply stops counting and
-    stays at its final stage.
+    stays at its final stage. Returns whether the instance entered a new stage.
     """
     if instance.stage_rounds_remaining is None:
-        return
+        return False
     instance.stage_rounds_remaining -= 1
     if instance.stage_rounds_remaining > 0:
-        return
+        return False
     next_stage = _get_next_stage(instance)
     if next_stage is None:
         instance.stage_rounds_remaining = None
-        return
+        return False
     instance.current_stage = next_stage
     instance.stage_rounds_remaining = next_stage.rounds_to_next
     result.progressed_conditions.append(instance)
+    return True
 
 
 def _process_duration_and_progression(
@@ -3374,6 +3403,7 @@ def _process_duration_and_progression(
     Process duration countdown and stage progression at end of round.
     """
     active_instances = list(get_active_conditions(target))
+    entered: list[ConditionInstance] = []
 
     for instance in active_instances:
         # Duration countdown
@@ -3383,12 +3413,20 @@ def _process_duration_and_progression(
                 result.expired_conditions.append(instance)
                 expired_condition = instance.condition
                 instance.delete()
+                # Drop the cached active list now, so what runs later in this tick (the
+                # stage triggers below read it) never counts a condition that just ran out.
+                _invalidate_condition_handler(target)
                 _clear_unseen_observer_if_concealing(target, expired_condition)
                 _breath_ran_out(target, expired_condition)
                 continue
 
-        _advance_stage(instance, result)
+        if _advance_stage(instance, result):
+            entered.append(instance)
         instance.save()
+
+    # Triggers fire once every instance is saved, so a rage they apply joins a settled list.
+    for instance in entered:
+        _fire_stage_entry_triggers(instance)
 
 
 def _get_next_stage(instance: ConditionInstance) -> ConditionStage | None:
@@ -3908,6 +3946,19 @@ def _emit_stage_advanced(
     # Only ascending transitions apply aftermath - apply_stage_entry_aftermath
     # gates internally on stage_order comparison.
     apply_stage_entry_aftermath(stage_change_payload)
+    _fire_stage_entry_triggers(instance)
+
+
+def _fire_stage_entry_triggers(instance: ConditionInstance) -> None:
+    """Fire the control-loss triggers hung on the stage *instance* just entered (#4802).
+
+    The one call every stage-entry path makes: the severity advance
+    (``_emit_stage_advanced``), the round tick (``_process_duration_and_progression``)
+    and the flow-driven ``advance_condition_stage``. Call it after the instance is saved.
+    """
+    from world.conditions.control_loss import fire_stage_triggers  # noqa: PLC0415
+
+    fire_stage_triggers(instance)
 
 
 def advance_condition_severity(

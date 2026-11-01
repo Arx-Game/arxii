@@ -13,11 +13,14 @@ if TYPE_CHECKING:
     from django.db.models import Q
     from evennia.objects.models import ObjectDB
 
+    from world.checks.types import CheckResult
     from world.conditions.models import (
         ConditionDamageInteraction,
         ConditionInstance,
         ConditionStage,
         ConditionTemplate,
+        ControlLossBand,
+        ControlLossTrigger,
         DamageType,
         TreatmentAttempt,
     )
@@ -39,6 +42,20 @@ class BreakFreeOutcome(models.TextChoices):
     WEAKENED = "weakened", "Severity reduced"
     HELD = "held", "No change"
     STRENGTHENED = "strengthened", "Condition grew stronger"
+
+
+@dataclass(frozen=True)
+class ControlLossOutcome:
+    """What one fired control-loss trigger did (#4802).
+
+    ``band`` is None when the roll's outcome has no band authored; ``applied`` is the
+    condition instance the band applied or raised, if it applied one.
+    """
+
+    trigger: "ControlLossTrigger"
+    check_result: "CheckResult"
+    band: "ControlLossBand | None"
+    applied: "ConditionInstance | None"
 
 
 @dataclass(frozen=True)
@@ -306,3 +323,42 @@ class TreatmentOutcome:
     helper_backlash_applied: int
     target_resolved: bool
     health_mended: int = 0
+
+
+@dataclass(frozen=True)
+class CompulsionOption:
+    """One action a caller wants costed under a compulsion (#4802).
+
+    ``forbidden_key`` is the ``CompulsionForbidden`` value the compulsion may name for the
+    action, or None when no compulsion can forbid it.
+    """
+
+    action_key: str
+    label: str | None
+    forbidden_key: str | None
+
+
+@dataclass(frozen=True)
+class CompulsionActionCost:
+    """What one action costs under a compulsion: its resist difficulty and forbidden extra."""
+
+    action_key: str
+    label: str | None
+    difficulty: int
+    forbidden: bool
+    extra_difficulty: int
+
+
+@dataclass(frozen=True)
+class CompulsionSummary:
+    """A character's compulsion and what each costed action asks of them (#4802).
+
+    ``attack_target_name`` is who the compulsion would strike as things stand, set by a
+    caller that knows the fight; None when it would strike nobody.
+    """
+
+    condition_name: str
+    wants_label: str
+    check_name: str
+    attack_target_name: str | None
+    against: list[CompulsionActionCost]

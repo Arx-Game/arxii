@@ -1,37 +1,47 @@
 """Berserk compulsion (#2845). SQLite tier — condition state is patched via
-``is_berserk`` (apply_condition is PG-only); declaration plumbing is observed
+the compulsion lookups (apply_condition is PG-only); declaration plumbing is observed
 at the ``_declare_rage_attack`` seam where full validation isn't the subject."""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.berserk_compulsion import (
+from world.combat.compulsion import (
     berserk_rampage_window,
     compulsion_technique_for,
-    select_berserk_actions,
-)
-from world.combat.factories import (
-    CombatEncounterFactory,
-    CombatOpponentFactory,
-    CombatParticipantFactory,
-    CombatRoundActionFactory,
 )
 from world.magic.factories import EffectTypeFactory, TechniqueFactory
 from world.magic.models.techniques import CharacterTechnique
 
 
+@contextmanager
 def _berserk_only(*characters):
-    """Patch is_berserk to be True only for the given characters."""
+    """Patch the compulsion lookups to find one only for the given characters."""
     pks = {c.pk for c in characters}
-    return patch(
-        "world.combat.berserk_compulsion.is_berserk",
-        side_effect=lambda c: c is not None and c.pk in pks,
-    )
+
+    def one(character, *_args):
+        return (MagicMock(), MagicMock()) if character.pk in pks else None
+
+    def many(found):
+        return {c.pk: (MagicMock(), MagicMock()) for c in found if c.pk in pks}
+
+    with (
+        patch("world.combat.compulsion.active_compulsion", side_effect=one),
+        patch("world.combat.compulsion.active_compulsions_for", side_effect=many),
+    ):
+        yield
 
 
 class CompulsionTechniqueTest(TestCase):
+    """Which technique the rage swings with, ranked over the whole technique list.
+
+    A journey sees only the one technique a compelled attack used; the ranking cases
+    (lighter over heavier, a harmless technique never chosen, none at all) are a pure
+    selection over rows that no single fight can show side by side.
+    """
+
     def test_picks_the_simplest_damaging_technique(self):
         sheet = CharacterSheetFactory()
         heavy = TechniqueFactory(effect_type=EffectTypeFactory(base_power=8), level=5)
@@ -48,50 +58,6 @@ class CompulsionTechniqueTest(TestCase):
             technique=TechniqueFactory(effect_type=EffectTypeFactory(base_power=None)),
         )
         self.assertIsNone(compulsion_technique_for(sheet))
-
-
-class SelectBerserkActionsTest(TestCase):
-    def setUp(self):
-        self.encounter = CombatEncounterFactory()
-        self.participant = CombatParticipantFactory(encounter=self.encounter)
-        self.opponent = CombatOpponentFactory(encounter=self.encounter)
-        self.character = self.participant.character_sheet.character
-        technique = TechniqueFactory(effect_type=EffectTypeFactory(base_power=3), level=1)
-        CharacterTechnique.objects.create(
-            character=self.participant.character_sheet, technique=technique
-        )
-        self.technique = technique
-
-    def test_non_berserk_participants_are_left_alone(self):
-        with (
-            _berserk_only(),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
-        ):
-            select_berserk_actions(self.encounter)
-        declare.assert_not_called()
-
-    def test_berserk_participant_gets_an_auto_attack(self):
-        with (
-            _berserk_only(self.character),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
-        ):
-            select_berserk_actions(self.encounter)
-        declare.assert_called_once()
-        _participant, technique, target = declare.call_args.args
-        self.assertEqual(technique, self.technique)
-        self.assertEqual(target, self.opponent)
-
-    def test_steered_rage_is_not_overridden(self):
-        """A berserk participant who declared their own attack keeps it."""
-        CombatRoundActionFactory(
-            participant=self.participant, round_number=self.encounter.round_number
-        )
-        with (
-            _berserk_only(self.character),
-            patch("world.combat.berserk_compulsion._declare_rage_attack") as declare,
-        ):
-            select_berserk_actions(self.encounter)
-        declare.assert_not_called()
 
 
 class RampageWindowTest(TestCase):
@@ -154,7 +120,7 @@ class RampageWindowTest(TestCase):
             _berserk_only(self.character),
             patch.object(type(self.character), "location", room, create=True),
             patch(
-                "world.combat.berserk_compulsion._in_uncompleted_encounter",
+                "world.combat.compulsion._in_uncompleted_encounter",
                 return_value=True,
             ),
         ):

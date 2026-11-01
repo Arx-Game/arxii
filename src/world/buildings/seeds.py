@@ -11,6 +11,8 @@ Plan 3 seeds:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from world.buildings.models import BuildingKind, PropertyGrantProfile
 from world.buildings.services import BUILDING_PERMIT_TEMPLATE_NAME
 
@@ -197,8 +199,8 @@ def ensure_architectural_styles() -> None:
         defaults={"description": "PLACEHOLDER — the built world's styles and lost arts."},
     )
     throwbacks = (
-        ("Antique Imperial", 50, "1.500"),
-        ("Drowned Dynasty", 80, "2.000"),
+        ("Antique Imperial", 50, Decimal("1.500")),
+        ("Drowned Dynasty", 80, Decimal("2.000")),
     )
     for style_name, prestige_bonus, cost_multiplier in throwbacks:
         subject, _ = CodexSubject.objects.get_or_create(

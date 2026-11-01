@@ -14,6 +14,8 @@ Success 6 (taunt and rally), and a Success on a hurt ally's roll is worth 15 at 
   player's next check lower, for an opponent's taunt and a player's alike.
 - The round payload gives the surged player, a GM and staff the roll, and a bystander only
   the generic beat; the roll is the line the surged player was told.
+- Mira masks herself before the jibe: Tomas hears and reads the surge under her mask,
+  never "Mira" (#4802).
 - Mira rallies Tomas through ``combat rally``; the Rally roll's result picks Tomas's surge,
   he ends up with the condition staff designated for a rally (Inspired), and the next
   round's rally surges him again.
@@ -572,6 +574,40 @@ class TheRoundPayloadShowsTheRollToTheRightPeople(_SurgeField):
 
         self.assertEqual(set(beat), GENERIC_BEAT_KEYS)
         self.assertEqual(beat["narration"], "Mira surges.")
+
+
+class AMaskedFighterSurgesUnderTheMask(_SurgeField):
+    """Mira wears a mask when the captain's jibe surges her (#4802)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.enter_combat(self.mira)
+        self.author_tuning(
+            SurgeTriggerKind.TAUNT_RECEIVED,
+            "Composure",
+            partial=PARTIAL_INTENSITY,
+            success=SUCCESS_INTENSITY,
+        )
+        entry = ThreatPoolEntryFactory(
+            pool=self.captain.threat_pool,
+            name="Sneering Jibe",
+            base_damage=0,
+            taunt_potency=TAUNT_POTENCY,
+            targeting_mode=TargetingMode.SINGLE,
+            target_selection=TargetSelection.SPECIFIC_ROLE,
+        )
+        action = CombatOpponentActionFactory(
+            opponent=self.captain, threat_entry=entry, round_number=self.encounter.round_number
+        )
+        action.targets.add(self.mira_seat)
+        self.masked = self.telnet(self.mira, "persona mask a hooded woman")
+        self.resolve(self.partial)
+
+    def test_tomas_hears_and_reads_the_surge_under_her_mask(self) -> None:
+        self.assertTold(self.tomas, "a hooded woman surges.")
+        self.assertNotTold(self.tomas, "Mira surges.")
+        (beat,) = self.beats_seen_by(self.account_of(self.tomas))
+        self.assertEqual(beat["narration"], "a hooded woman surges.", self.masked)
 
 
 class BeingRallied(_SurgeField):

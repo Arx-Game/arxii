@@ -104,7 +104,8 @@
   losers as `FacetAlias` rows, refuses with `UnmergedFacetRelation` when a relation has no
   handler). API: `GET /api/magic/facets/near/?name=`; `POST /api/magic/facets/` is staff-only
   and answers an existing facet with `matched: true` for a spelling that already resolves.
-  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` inline.
+  Admin: `FacetAdmin` action **Merge into...** with a confirmation page; `FacetAlias` and
+  `FacetEffectBonus` (#4815, a facet's bonus to a maneuver effect) inlines.
   Frontend: `FacetPicker` (`frontend/src/magic/components/`), used by the deity page and item
   crafting; `facetKey` mirrors the rule in TypeScript.
 Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
@@ -1201,6 +1202,13 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `modifier_target_contributions(sheet, target, lane=...)` (CHARACTER + EQUIPMENT, the builder
   the check seam shares) and `conditions.services.condition_target_contributions` (CONDITION),
   so every stat reader sees one buffed number.
+  The maneuver effect lanes (#4876): `ModifierLane.DAMAGE`, `TO_HIT` and `PARTIAL_PROTECTION`
+  value a sized modifier on those effect kinds (`EFFECT_KIND_LANE`, `ModifierTarget.value_lane`);
+  `mechanics.effect_targets._modifier_total` reads a laned target through the same two builders
+  and tapers by the lane's rows. A size on any other kind is refused.
+  Derived amounts (#4878): `DerivedAmountMixin` (`mechanics/derived_amount_models.py`) gives
+  `DistinctionEffect` and `ConditionModifierEffect` an input (`AmountInput`), a "per N" step and
+  a cap; `mechanics.derived_amounts.derived_amount` computes it at read time.
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
@@ -1415,17 +1423,18 @@ ADR-0214), and species-gift provisioning.
   `tasks.sun_reconcile_tick` (`species.sun_reconcile` cron), factories
   `ensure_sunlight_exposure_content` (staged template) + `ensure_sunlight_distinctions`
   (Bane/Allergy: Sunlight anchor rows); PLACEHOLDER constants in `sun_constants.py`.
-  Moon control (#2845, ADR-0183): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
-  `moon_sensitivity.reconcile_moon_pull` (control window: `moon_control` check →
-  forced shift + shared Berserk) + `reconcile_cani_unease` (umbrella flavor state),
+  Moon control (#2845, #4802, ADR-4802): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
+  `moon_sensitivity.reconcile_moon_pull` (the sweep: fires the character's moon
+  `ControlLossTrigger` through `world.conditions.control_loss`; band applies Berserk and forced
+  shift) + `reconcile_cani_unease` (umbrella flavor state),
   `moon_provisioning.ensure_lycan_battle_form` (lazy battle-form provisioning),
   `tasks.moon_reconcile_tick` (`species.moon_reconcile` cron), factories
   `ensure_moon_bound_distinction`/`ensure_moonlit_unease_condition`; seeded content in
   `_seed_moon_content` ("The Wolf's Fury" grant); Berserk production seed + Restore-to-Sense
-  removal effect in `world/conditions/berserk_content.py`; compulsion in
-  `world/combat/berserk_compulsion.py` (auto-attack fallback, leave refusal
-  `reject_leave_if_berserk`; flee/parley roll with Berserk's authored check modifiers,
-  out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
+  removal effect and compulsion rows in `world/conditions/berserk_content.py`; compulsion
+  resolution in `world/combat/compulsion.py` (see the Losing control entry below);
+  `moon_constants.py` keeps only the pull's own magnitudes.
+  Losing control (#4802, ADR-4802): see `docs/systems/conditions.md`.
   Language mechanics (#2993, ADR-0214): `language_constants.py` (`Fluency` bands
   broken/conversational/fluent, `BAND_KEEP_RATIO`, `FLUENT_GRANT_VALUE=70`),
   `language_services.py` (`garble_text`, `speech_seed`, `fluency_value`, `effective_band`,
@@ -6990,10 +6999,10 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Maneuver effects (#4783, ADR-4783-A):** `ManeuverEffect` (`key`, `base_value`, `notes`; eight
+- **Maneuver effects (#4783, ADR-4783-A):** `ManeuverEffect` (`key`, `base_value`, `notes`; twelve
   fixed rows, admin edit-only) holds each combat maneuver's numbers (Charge to hit, damage and
   reach; Cover escape bonus; Succor and Interpose partial protection; Rally morale and surge
-  intensity). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
+  intensity; the Strike's base and bare-hands damage, miss intensity and intensity to hit, #4858). `ModifierTarget.scope_maneuver_effect` / `scope_effect_kind` (category
   "maneuver_effect") let any modifier source target one effect or one kind across maneuvers.
   `effect_value(sheet, key)` and `effect_modifier_total(sheet, key)` in
   `world/mechanics/effect_targets.py`; `get_maneuver_effect(key)`,
@@ -7060,7 +7069,9 @@ Unified modifier system — categories, types, sources, and per-character modifi
     equipment (crafted pieces, the equipment walk) all count
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
-    `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
+    `ThreadPullEffect` contributions per worn item, plus the worn facets' own
+    `FacetEffectBonus` rows on a maneuver-effect target (#4815, scaled by the shown thread
+    level); called by `get_modifier_total`
   - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
     `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
     (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
@@ -7887,13 +7898,18 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `VowFocusPickLimit` (NK `(pick, kind)`, `FocusPickLimitKind`, `frequency_tenths`,
     `reduction`), `VowFocusPickConfig` (singleton, `budget_per_level`),
     `CharacterVowFocusPick` (`character_role` x `pick`, play state) and `CombatStyle`
-    (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`).
+    (NK `name`, `defense_style`, `armor_share_tenths`; `CharacterSheet.combat_style`;
+    since #4884 `skill`, `hit_stat`, `taught_by`, `compatible_roles` and
+    `CombatStyleGear` (NK `(style, gear_archetype)`)). `world.covenants.style_fit`
+    (`style_fit_for_attack`, `style_fit_for_defense`, `StyleFit`, `StyleLapse`) puts the
+    style skill on Strike, technique hit and PC defense rolls while the weapon, armor and
+    vow are on the style [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
     `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
-    `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
+    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
     `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),
@@ -8082,7 +8098,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary). Runs
+  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
   `vow_holder_candidates`, `vow_holder_thread_levels` and `SituationCheck`
@@ -8308,8 +8325,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   itself the objective (`kind=ENCOUNTER`); the old find-every-linked-beat
   scan is gone - an unrouted encounter with no running beat grades nothing),
   `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
-  JOUST (#1843, see "Mounted combat" below); plus the
+  `CombatRoundAction` (`maneuver` field: FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
+  JOUST (#1843, see "Mounted combat" below) / STRIKE (#4858, see "The basic Strike" below;
+  its weapon is `item_instance`, null for bare hands); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454; `cast_destination` / `cast_position_a` /
   `cast_position_b` — nullable FKs → `areas.Position` carrying a declared cast-position
@@ -8528,6 +8546,52 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `ThreatPoolEntry.delivery` is MISSILE — symmetric with the offense side ("the gale that
   ruins your shot ruins theirs"); flat `base_damage` entries with no defense check
   (`defense_check_type` unset) never reach this seam.
+- **The basic Strike (#4858, slice 1 of #4844):** any character attacks an opponent with no
+  technique, with one equipped weapon or bare hands. `world/combat/services/declarations/strike.py`:
+  `declare_strike(participant, opponent, item_instance=None)` (refuses a weapon not equipped, a
+  strike skill with no check type, an opponent out of reach: ranged and thrown reach the room,
+  every other Strike its own position or the next), `strike_weapon_options(character)`
+  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, then bare hands),
+  `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
+  draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
+  with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
+  strongest equipped weapon); the check type per gear kind is
+  `STRIKE_CHECK_TYPE_BY_ARCHETYPE` (production's Melee, Ranged, Thrown and Unarmed Attack;
+  `combat/constants.py`), authored content with a Required content row (`strike-check-types`;
+  production has Melee and Ranged Attack only). The strike skill is whichever SKILL trait the
+  check type weights (Melee Combat for Melee Attack; production's Ranged Attack weights none).
+  If it lands, a damage roll
+  of the same check (no difficulty, no modifiers) multiplies the weapon's damage by
+  `get_damage_multiplier`, floored at "Strike: base damage", plus that effect's modifiers, then
+  `scaled_outgoing_damage`, `apply_damage_to_opponent` and one point of weapon wear. Both rolls are
+  `ConsequenceOutcome` rows on the Strike's interaction (pool null), each summary its result line
+  ("Hit, good", "Miss", "11 damage"; `STRIKE_HIT_QUALITY`). `strike_roll_breakdowns(outcomes)`
+  lays them out at read time (`RollBreakdown`/`RollLine` in `world/checks/types.py`: heading,
+  the strike skill with the character's rating, the stat or stats, the weapon and its quality),
+  served as `roll_breakdown` on the consequence-outcomes API with the visible modifiers as rows
+  ("Intensity", "misses add to hit"); a pool-less, challenge-less row's `outcome_display` is
+  empty. The web Last Outcome card renders every roll of the latest action as those rows. The
+  room is told "Hobb strikes Bandit with a rapier. A good hit: 11 damage." and the striker's
+  telnet "You strike Bandit with your rapier. ..." instead (`broadcast_action_outcome`'s
+  `telnet_exclude`; `core.text.with_indefinite_article`). Action
+  `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
+  <opp> [with <weapon>]` and `combat strike`, web: Strike is the first pick in the focused
+  `ActionDeclarationCard` row (`leadingPick`), its `StrikeControl` "With" row fed by the own
+  participant's `strike_weapons`, the target the card's own. **Misses build intensity:** intensity helps attacks only, gated by
+  `is_attack_on_opponent(action)` (an opponent target, or a joust pass). A missed attack (the hit
+  roll failed, success level below 1: a Strike, a technique at an opponent, a lost joust pass)
+  runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED `apply_dramatic_surge` once
+  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0352; never
+  narrated, and left out of a bystander's `surge_beats`); an attack roll adds an "Intensity"
+  contribution of the COMBAT engagement's intensity x "Intensity: to hit per point"
+  (`intensity_to_hit_contribution`). Each Strike roll stores what its breakdown shows at roll
+  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0353 and
+  0354), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
+  reaches only the roll's own account and staff. The striker's second-person telnet line is
+  sent right after the room line (none in a room-less encounter, as for technique outcomes);
+  the live `combat_encounter_state` frame refetches the Last Outcome card.
+  `GearArchetype.UNARMED` joins `WEAPON_ARCHETYPES` and the
+  `items_weapon_damage_requires_weapon_archetype` constraint (0354).
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →
@@ -8732,6 +8796,48 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `acute_peril_hand_off_condition_ids()` replace the `*_names()` lists. Unset = the mechanic
   does nothing. `ParticipantSerializer.audere_state` (`audere` | `audere_majora` | null) drives
   the web client's Audere strip. See `docs/systems/conditions.md` "Designated conditions".
+- **Losing control in combat (#4802, ADR-4802) [BUILT & WIRED]:** `world/combat/compulsion.py`.
+  At the DECLARING to RESOLVING boundary `resolve_compulsions` has every compelled player
+  character whose declared action is not an attack on an opponent roll the compulsion's resist
+  check (difficulty = base + per-severity x severity + the forbidden action's extra; a charge,
+  joust or waiting strike counts as attacking and rolls nothing). The `CompulsionResistBand` for
+  the outcome sets `ACTS_FREELY`, `ACTS_STRAINED` (the action rolls with
+  `CombatRoundAction.compulsion_penalty`; rally and interpose too; cover and use-item have no
+  roll, so a strained one costs nothing) or `COMPULSION_ACTS` (the
+  declaration is replaced by the compulsion attack, `declared_by_compulsion`, with no Soulfray
+  consent given for the player). `select_compelled_actions` auto-declares for an idle compelled
+  participant. NPCs never roll. Leave and revert-form roll at once through
+  `resist_compulsion_now` (no declaration to replace, no steadier); a failed roll waits for the
+  next round in a fight (`CombatParticipant.compulsion_attempt_round`) or
+  `Compulsion.retry_wait_minutes` outside one (`ConditionInstance.compulsion_retry_after`).
+  Several compulsions: the most severe governs. The compulsion, forbidden and band rows are
+  read once per round (`active_compulsions_for`, `forbidden_rows_for`, `bands_by_outcome`). **Steadying:** on a failed first roll, `reactions.steadiers_for` lists
+  active allies in the encounter with `CombatParticipant.steady_enabled` (the plan holds for
+  the fight until turned off) who can act (`can_act`), no compulsion of their own, the `MovementConfig.steadying_capability` above its baseline and the anima; the biggest
+  bonus (capability + `steady_bonus_per_depth` x bond depth via `qualifying_bond_depths`, less
+  the reaction penalty) wins, ties to the lowest participant pk. `try_steady` pays
+  `steady_anima_cost`, records a reaction and rerolls, returning `SteadyResult` (with the
+  `bonus` the reroll carried and the `anima_paid` the pool actually lost, which the steady
+  round line names: "Tomas steadies Mira (+6). <check> vs 36: Success. Tomas spends 4
+  anima; their next reaction this round is harder."). A strained result tells its cost from
+  the band after the roll line ("Berserk drags at Mira: -4 to this action, Control -2."); the
+  action penalty is named and applied only for declarations whose roll takes it
+  (`COMPULSION_PENALISED_MANEUVERS` plus a declared technique; Cover and Use Item say only
+  "Control -2", and no line when control does not move). The plan is
+  `SteadyPlanAction` (key `combat_steady`; telnet `combat steady [on|off]`; web "Steady allies"
+  toggle). The encounter payload carries `compulsion` (what it wants, each action's difficulty)
+  and `steady_plan` for the viewer's own participant only; `YourTurn` shows
+  `CompulsionBanner`, an amber `CompulsionChosenLine` under the chosen action (the focused
+  card, or the declared maneuver's badge), and telnet declares print an
+  `Against <condition>: ...` line. `ParticipantSerializer.character_name` is the persona
+  name the room lines use (batched per roster by `_ParticipantListSerializer` through
+  `scenes.services.personas_for_sheets`), never the key, so a disguise holds in the roster
+  and the ally pickers; the participant portrait, the surge line and surge beats, and the
+  clash contributor rollup use the same presented persona. `resolve_thumbnail` never falls
+  back to the character's own display image for a non-PRIMARY persona, so a bare mask
+  shows no portrait rather than the face behind it. Out of combat
+  the NPC rampage (`berserk_rampage_window`) is unchanged. Models and trigger engine:
+  `docs/systems/conditions.md`. Journeys: `integration_tests/test_losing_control_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
   `SocialManeuverConfig` (singleton pk=1, `world/combat/models.py`) holds
   `taunt_check_type` (the taunter's own check; the target's composure roll is the

@@ -65,7 +65,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     interaction = create_action_interaction(
         participant=participant,
         round_number=action.round_number,
-        summary_label=render_action_declaration_label(action),
+        summary_label=render_action_declaration_label(action, ally_persona=target_persona),
         strain_committed=(
             combat_result.declared_strain_commitment
             if isinstance(combat_result, CombatTechniqueResult)

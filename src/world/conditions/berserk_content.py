@@ -15,13 +15,17 @@ Control category so `CharacterSheet.in_control` derives False while raging.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.conditions.models import ConditionTemplate
+    from world.checks.models import CheckType
+    from world.conditions.models import Compulsion, ConditionTemplate
+    from world.traits.models import CheckOutcome
 
 BERSERK_SEED_TEMPLATE_NAME = "Berserk"
 CONTROL_CATEGORY_NAME = "Control"
+COMPULSION_RESIST_CHECK_NAME = "Resist compulsion"
 
 
 def ensure_berserk_content() -> None:
@@ -77,11 +81,12 @@ def ensure_berserk_content() -> None:
                 "Consumed by uncontrolled rage, lashing out at any target within reach."
             ),
             "rounds_to_next": None,
-            "severity_multiplier": "1.00",
+            "severity_multiplier": Decimal("1.00"),
         },
     )
     _designate_unset_berserk(template)
     ensure_restore_to_sense_effect(template)
+    ensure_berserk_compulsion(template)
 
 
 def _designate_unset_berserk(template: ConditionTemplate) -> None:
@@ -136,3 +141,109 @@ def ensure_restore_to_sense_effect(berserk_template: ConditionTemplate) -> None:
             "execution_order": 0,
         },
     )
+
+
+def ensure_compulsion_resist_check_type() -> CheckType:
+    """Idempotently seed the "Resist compulsion" CheckType (#4802)."""
+    return ensure_willpower_check_type(COMPULSION_RESIST_CHECK_NAME)
+
+
+def ensure_willpower_check_type(name: str) -> CheckType:
+    """Idempotently seed a willpower-led check type called *name* (#4802).
+
+    Willpower at full weight, composure at half, in the Species category: the shape of
+    both "Resist compulsion" and "Hold against the moon". The row is found by name, so an
+    authored one is reused; the weights are only written when the trait link is first
+    made, so staff edits to an authored weight survive a re-run. A row made here carries
+    no prose: its description, and the Species category's, are left for staff.
+    """
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.traits.services import ensure_stat_trait  # noqa: PLC0415
+
+    category, _ = CheckCategory.objects.get_or_create(
+        name="Species",
+        defaults={"description": "", "display_order": 97},
+    )
+    check_type, _ = CheckType.objects.get_or_create(
+        name=name, defaults={"category": category, "description": ""}
+    )
+    for trait_name, weight in (("willpower", "1.00"), ("composure", "0.50")):
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type,
+            trait=ensure_stat_trait(trait_name),
+            defaults={"weight": weight},
+        )
+    return check_type
+
+
+def outcome_at_level(success_level: int) -> CheckOutcome:
+    """The CheckOutcome at *success_level*, found by level and never by name (#4802).
+
+    A missing tier is created at its canonical name, the same way every other seed does.
+    """
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
+
+    existing = CheckOutcome.objects.filter(success_level=success_level).order_by("pk").first()
+    if existing is not None:
+        return existing
+    name = next(n for n, level in CANONICAL_OUTCOME_LEVELS.items() if level == success_level)
+    return ensure_canonical_check_outcome(name)
+
+
+def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
+    """Idempotently seed Berserk's compulsion, its forbidden actions and resist bands (#4802).
+
+    The rage drives the bearer to attack; fleeing, parleying, leaving the fight and
+    reverting form each need a resist roll, harder than the base. A compulsion staff
+    already authored is returned untouched: its forbidden actions and bands are theirs.
+    """
+    from world.conditions.constants import (  # noqa: PLC0415
+        CompulsionForbidden,
+        CompulsionResult,
+        CompulsionWant,
+    )
+    from world.conditions.models import (  # noqa: PLC0415
+        Compulsion,
+        CompulsionForbiddenAction,
+        CompulsionResistBand,
+    )
+
+    compulsion, created = Compulsion.objects.get_or_create(
+        condition=template,
+        defaults={
+            "wants": CompulsionWant.ATTACK_OPPONENT,
+            "check_type": ensure_compulsion_resist_check_type(),
+            "base_difficulty": 25,
+            "difficulty_per_severity": 2,
+            "retry_wait_minutes": 5,
+        },
+    )
+    if not created:
+        return compulsion
+    for action, extra in (
+        (CompulsionForbidden.FLEE, 5),
+        (CompulsionForbidden.PARLEY, 5),
+        (CompulsionForbidden.LEAVE, 10),
+        (CompulsionForbidden.REVERT_FORM, 10),
+    ):
+        CompulsionForbiddenAction.objects.get_or_create(
+            compulsion=compulsion, action=action, defaults={"extra_difficulty": extra}
+        )
+    # (success_level, result, action_penalty, control_change). The failures carry the
+    # strained penalty too: a better outcome may never be worse for the bearer, and the
+    # penalty is moot once the compulsion acts in place of the declaration.
+    for level, result, penalty, control in (
+        (2, CompulsionResult.ACTS_FREELY, 0, 0),
+        (1, CompulsionResult.ACTS_FREELY, 0, 0),
+        (0, CompulsionResult.ACTS_STRAINED, 4, -2),
+        (-1, CompulsionResult.COMPULSION_ACTS, 4, -2),
+        (-2, CompulsionResult.COMPULSION_ACTS, 4, -4),
+    ):
+        CompulsionResistBand.objects.get_or_create(
+            compulsion=compulsion,
+            outcome=outcome_at_level(level),
+            defaults={"result": result, "action_penalty": penalty, "control_change": control},
+        )
+    return compulsion

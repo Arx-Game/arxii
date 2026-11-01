@@ -197,6 +197,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
                 target_participant,
                 defense_check_type,
                 perform_check_fn=defense_check_fn,
+                interaction_factory=get_npc_action_interaction,
             )
             dmg_result = defense.damage_result
         else:
@@ -218,6 +219,8 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
             combat_interaction_factory=get_npc_action_interaction,
             source_character=opponent.objectdb,
         )
+        # The knockout check has landed: a knockout-band hit's wound triggers roll now.
+        _svc.settle_wound_triggers(target_participant, dmg_result)
     outcome.damage_consequences.append(consequence)
 
     # Sent Flying trigger (#2638): a sends_flying attack that connects with
@@ -437,9 +440,10 @@ def _resolve_npc_action(
     # so they never contribute a target.
     npc_target_personas = personas_for_participants(targets)
 
-    # Lazy factory: mint the ACTION-mode Interaction only when the first
-    # survivability tier actually fires (#864). Memoised so all targets of this
-    # NPC action share one row.
+    # Lazy factory: mint the ACTION-mode Interaction the first time something records
+    # on it, a target's defense roll (#4884) or a survivability tier (#864), and push it
+    # live when it is minted (``create_npc_action_interaction``), the way a PC's action
+    # row is. Memoised so all targets of this NPC action share one row.
     npc_action_label = _npc_action_target_label(label_targets)
     _npc_interaction_cache: list[Interaction] = []
 

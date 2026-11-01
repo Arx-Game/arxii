@@ -364,6 +364,8 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
     )
     if existing is not None:
         interaction.cached_target_personas = [*existing, *personas]
+    # bulk_create calls no save(), so the rows list the feed reads is dropped here.
+    interaction.__dict__.pop("cached_interaction_targets", None)
 
 
 def _effective_interaction_receivers(
@@ -1328,8 +1330,12 @@ def send_outcome_text_to_non_web(
     interaction: Interaction,
     *,
     location: ObjectDB | None,  # noqa: OBJECTDB_PARAM - any room may host it, see above
+    exclude: Iterable[ObjectDB] = (),  # noqa: OBJECTDB_PARAM - the room's own characters
 ) -> None:
     """Send ``interaction.content`` as plain text to the non-web sessions it reaches, now.
+
+    ``exclude`` leaves out characters told the same event in their own words (a striker
+    hears "You strike ..." instead of the room's line, #4858).
 
     The telnet/ssh-parity half of ``deliver_outcome_interaction``, factored out so
     a caller that pushes the structured payload itself, synchronously, can add the
@@ -1353,7 +1359,10 @@ def send_outcome_text_to_non_web(
     else:
         recipients = []
 
+    excluded = {obj.pk for obj in exclude}
     for obj in recipients:
+        if obj.pk in excluded:
+            continue
         non_web = non_web_sessions(obj)
         if non_web:
             obj.msg(interaction.content, session=non_web)

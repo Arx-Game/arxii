@@ -91,6 +91,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
     character_sheet_id: 1001,
+    persona_id: null,
     character_name: 'Aerande',
     status: 'active',
     health: 8,
@@ -111,7 +112,10 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
+    strike_weapons: null,
     ...overrides,
   };
 }
@@ -572,6 +576,53 @@ describe('CombatantsList', () => {
         kwargs: { opponent_id: 10 },
       });
       void label;
+    });
+
+    it('tags the maneuvers a compulsion judges with their difficulty, and not Mark', async () => {
+      const user = userEvent.setup();
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const compulsion = {
+        condition_name: 'Berserk',
+        wants_label: 'Attack an opponent',
+        attack_target_name: 'Bandit Captain',
+        check_name: 'Resist compulsion',
+        against: [
+          {
+            action_key: 'parley',
+            label: 'parley',
+            difficulty: 36,
+            forbidden: true,
+            extra_difficulty: 5,
+          },
+          {
+            action_key: 'taunt',
+            label: 'taunt',
+            difficulty: 31,
+            forbidden: false,
+            extra_difficulty: 0,
+          },
+        ],
+      };
+
+      render(
+        <CombatantsList
+          encounter={encounter}
+          characterId={7}
+          canDeclareManeuvers={true}
+          compulsion={compulsion}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      expect(await screen.findByTestId('opponent-combat_parley-10')).toHaveTextContent(
+        'ParleyForbidden, difficulty 36'
+      );
+      expect(screen.getByTestId('opponent-combat_taunt-10')).toHaveTextContent(
+        'TauntDifficulty 31'
+      );
+      expect(screen.getByTestId('opponent-combat_mark-10')).toHaveTextContent(/^Mark$/);
+      expect(screen.getByTestId('opponent-combat_demoralize-10')).toHaveTextContent(/^Demoralize$/);
     });
 
     it('pins the component-to-dispatch contract: taunting an opponent sends opponent_id only', async () => {

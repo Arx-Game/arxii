@@ -323,6 +323,77 @@ class ChargeAction(Action):
         return ActionResult(success=True, message="You spur your mount into a charge!")
 
 
+# What a telnet player may type for a bare-handed Strike (#4858).
+_BARE_HANDS_WORDS = frozenset({"hands", "bare hands", "fists", "fist", "bare"})
+
+
+def _resolve_strike_item(actor: ObjectDB, weapon_id: int | None, weapon_name: str | None) -> Any:
+    """The equipped item a Strike names: by id (web) or by name (telnet); None for bare
+    hands. Returns ``False`` when a weapon was named and none of the actor's equipped
+    weapons matches it."""
+    from world.combat.services import strike_weapon_options  # noqa: PLC0415
+
+    if weapon_id is None and not weapon_name:
+        return None
+    items = [w.item_instance for w in strike_weapon_options(actor) if w.item_instance is not None]
+    if weapon_id is not None:
+        return next((item for item in items if item.pk == int(weapon_id)), False)
+    wanted = (weapon_name or "").strip().lower()
+    if wanted in _BARE_HANDS_WORDS:
+        return None
+    exact = next((item for item in items if item.display_name.lower() == wanted), None)
+    if exact is not None:
+        return exact
+    return next((item for item in items if item.display_name.lower().startswith(wanted)), False)
+
+
+@dataclass
+class StrikeAction(Action):
+    """Declare a basic Strike: attack an opponent with no technique (#4858).
+
+    ``opponent_id`` names the target; ``weapon_id`` (web) or ``weapon_name`` (telnet)
+    names one of the actor's equipped weapons, and neither means bare hands. Wraps
+    ``declare_strike``; the Strike is the round's one action.
+    """
+
+    key: str = "combat_strike"
+    name: str = "Strike"
+    icon: str = "sword"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        weapon_id: int | None = None,
+        weapon_name: str | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_strike  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message=_NO_SUCH_OPPONENT_MSG)
+        item = _resolve_strike_item(actor, weapon_id, weapon_name)
+        if item is False:
+            return ActionResult(success=False, message="You have no such weapon equipped.")
+        try:
+            declare_strike(participant, opponent, item)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        weapon = item.display_name if item is not None else "bare hands"
+        return ActionResult(
+            success=True, message=f"You ready a strike at {opponent.name} with your {weapon}."
+        )
+
+
 @dataclass
 class AwaitOpeningAction(Action):
     """Declare a waiting strike: hold a melee technique for an enemy's approach (#4608).
@@ -1127,6 +1198,53 @@ class DodgePlanAction(Action):
         if participant.dodge_landing is None:
             return ActionResult(success=True, message=_DODGE_IN_PLACE_MSG)
         return ActionResult(success=True, message=_DODGE_TO_MSG.format(place=landing.name))
+
+
+_STEADY_KWARG = "steady"
+_NO_STEADY_MSG = "Nothing you have lets you steady an ally."
+_STEADY_OFF_MSG = "You won't steady an ally."
+_STEADY_ON_MSG = "If an ally loses their nerve, you'll steady them."
+
+
+@dataclass
+class SteadyPlanAction(Action):
+    """Say whether to steady a compelled ally this fight (#4802).
+
+    The steadying itself happens at the round lock, when a compelled ally's resist roll
+    fails (``world.combat.services.reactions``); this only turns the plan on or off.
+    Kwarg ``steady`` (false turns it off); with it absent the plan turns on, provided
+    the actor holds the steadying capability above its baseline.
+    """
+
+    key: str = "combat_steady"
+    name: str = "Steady plan"
+    icon: str = "shield"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
+        from world.combat.services.reactions import steady_capability_value  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        if _STEADY_KWARG in kwargs and not truthy_kwarg(kwargs[_STEADY_KWARG]):
+            participant.steady_enabled = False
+            participant.save(update_fields=["steady_enabled"])
+            return ActionResult(success=True, message=_STEADY_OFF_MSG)
+        if steady_capability_value(participant) <= 0:
+            return ActionResult(success=False, message=_NO_STEADY_MSG)
+        participant.steady_enabled = True
+        participant.save(update_fields=["steady_enabled"])
+        return ActionResult(success=True, message=_STEADY_ON_MSG)
 
 
 def _dodge_landing_from(options: list, kwargs: dict[str, Any]) -> Any:

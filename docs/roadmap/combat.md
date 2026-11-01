@@ -576,7 +576,29 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   scaled by the anchor's cap). The trade lands on `CharacterEngagement`, and the cast it was
   declared with already channels it. Berserk tiers are chosen, never rolled into. Inert until
   staff set the rate and the share rows (Required content lists both). Still to come: the
-  web/telnet surfaces in the new terms. Berserk now penalises flee/parley instead of refusing: they roll with the Berserk template's authored check modifiers (Required content `berserk-disengage-penalty`), and only leaving the encounter is refused.
+  web/telnet surfaces in the new terms. Berserk now penalises flee/parley instead of refusing: they roll with the Berserk template's authored check modifiers (Required content `berserk-disengage-penalty`). Leaving the encounter used to be refused here; since #4802 it rolls the compulsion's resist check (next entry).
+- **Involuntary control loss (#4802, ADR-4802), journey-proven
+  (`test_losing_control_journeys`, `fuzz/test_compulsion_never_refuses`).** One mechanism with
+  authored rows. A vulnerability condition carries `ControlLossTrigger` rows (moon pull, wound
+  threshold, condition stage) whose bands apply Berserk, an engagement shift or a forced form;
+  the moon is one such row, its constants moved into the database. A condition in an
+  `alters_behavior` category carries a `Compulsion` (wants, resist check, forbidden actions with
+  extra difficulty, resist bands). A compelled player character may declare anything: an attack
+  rolls nothing, anything else rolls at the round lock, and a bad result replaces the action with
+  an attack, a middling one applies a penalty. Leaving the encounter and changing form back roll
+  too; the old refusals (`reject_leave_if_berserk`, the revert block for a compulsion) are gone.
+  A failed leave or revert waits before the next try: the next round in a fight, the
+  compulsion's `retry_wait_minutes` outside one. An ally who can act and holds the steadying
+  capability (`MovementConfig.steadying_capability`) can give a second roll, costing anima and
+  a reaction, scaled by bond depth. Stage triggers fire however the stage is reached (severity,
+  round tick, flow step); no trigger rolls for a character already compelled; a wound trigger
+  skips a killing hit and a character who cannot act. Built: models and
+  migrations `0332`/`0333`, `world/conditions/control_loss.py`, `world/combat/compulsion.py`,
+  `SteadyPlanAction`, the encounter payload's `compulsion` and `steady_plan`, the
+  `CompulsionBanner` and steady toggle in the combat panel, and the telnet `Against ...` line
+  and `combat steady`. Still deferred (owner ruling): compulsion rolls outside combat and
+  non-lethal fights against PCs; the out-of-combat NPC rampage stays. Forced forms exist only
+  for the moon trigger (the lycan battle form is the one provisioning seam).
 - **Rolled surges (#4737), journey-proven (`test_surge_rolls_journeys`,
   `test_taunt_targets_journeys`).** An NPC taunt entry surges a player character through a
   Composure roll with degrees (a better result surges more, the roll line reaches only that
@@ -650,6 +672,33 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   **Known gaps:** no narrated line for a technique's morale shift (players see only the
   opponent's state chip); no vow added effect can carry morale; the power valuation formula
   and the builder price (per point, like damage) are estimates awaiting tuning.
+
+- **Any character can Strike with no technique (#4858, slice 1 of #4844):** `strike <opp>
+  [with <weapon>]`, `combat strike`, and the web Your Turn "Strike" control (opponent plus a
+  weapon pick naming each weapon's gear kind and strike skill) declare a Strike with an
+  equipped weapon or bare hands. The hit roll uses the attack check for the weapon's kind
+  (production's Melee, Ranged, Thrown or Unarmed Attack: its strike skill and the weapon's
+  stat); a landed Strike's damage
+  roll scales the weapon's damage and never deals less than the Strike's base damage; bare
+  hands deal the bare-hands damage; a vow on "Strike: base damage" adds to every landed
+  Strike. The Last Outcome card shows the hit roll then the damage roll as rows (skill and
+  rating, stat, intensity, weapon and quality, "Hit, good" / "11 damage"); the striker's telnet
+  hears it in the second person, the room in the third. A miss (Strike or
+  technique) raises intensity, and intensity adds to every hit roll. Proven by
+  `src/integration_tests/test_strike_journeys.py` and the `StrikeControl` / `CombatTurnPanel`
+  Vitest suites. **Combat style on the roll (#4884, slice 2) SHIPPED:** the style skill adds
+  to the Strike, technique hit and PC defense rolls while the weapon, worn armor and held vows
+  are the style's, a Strike hits with the style's hit stat, and the Strike breakdown shows the
+  style skill or strikes it through with the reason (`test_combat_style_journeys.py`). The
+  PC defense roll against an NPC blow is recorded on the NPC action's Narrator interaction
+  and shown to the defender as "Defense against <attacker>" with the defense skill, the style
+  skill or its lapse, and "Armor, N of 10".
+  **Known gaps (later #4844 slices):** vow gear
+  compatibility still keyed to the vow (slice 3); natural weapons (slice 4); production has no
+  Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
+  a plain message until staff author them (Required content `strike-check-types`); the
+  breakdown's skill rating is read when shown, not stored with the roll; a Strike's damage roll
+  takes no modifiers and no opponent-property damage bonus.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

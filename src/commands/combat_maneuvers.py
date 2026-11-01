@@ -44,13 +44,34 @@ _SUBVERBS: dict[str, str] = {
     "parley": "combat_parley",
     "mark": "combat_mark",
     "dodge": "combat_dodge",
+    "steady": "combat_steady",
     "charge": "combat_charge",
+    "strike": "combat_strike",
     "await": "combat_await_opening",
     "joust": "combat_joust",
     "engage": "combat_engage",
     "disengage": "combat_disengage",
 }
 
+# subverbs that set a reaction plan for the round.
+_PLAN_SUBVERBS = {"dodge", "steady"}
+# subverbs that declare the round's focused action (#4802), so a compulsion may warn.
+_DECLARING_SUBVERBS = frozenset(
+    {
+        "flee",
+        "cover",
+        "interpose",
+        "succor",
+        "use",
+        "rally",
+        "demoralize",
+        "taunt",
+        "parley",
+        "charge",
+        "await",
+        "joust",
+    }
+)
 # subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
@@ -123,7 +144,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat dodge [<place>|here|off] - where you land if you dodge this round
+        combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
+        combat strike <opp> [with <weapon>] - attack with an equipped weapon, or bare
+                                     hands when no weapon is named (also: strike)
         combat await <technique> [soulfray] - wait for an opening: strike first at the
                                      first enemy to come within reach or attack you
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
@@ -162,6 +186,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
 
+    def _declares_a_round_action(self) -> bool:
+        """Only the subverbs that declare a round action can go against a compulsion."""
+        return self._subverb in _DECLARING_SUBVERBS
+
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for the parsed subverb."""
         from actions.types import ActionRef  # noqa: PLC0415
@@ -186,9 +214,19 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
-        if self._subverb == "dodge":  # noqa: STRING_LITERAL
-            return self._resolve_dodge_args(self._rest)
+        if self._subverb in _PLAN_SUBVERBS:
+            return self._resolve_plan_args()
         return self._resolve_technique_subverb_args()
+
+    def _resolve_plan_args(self) -> dict[str, Any]:
+        """The reaction plans: ``dodge ...`` (#4676) and ``steady [on|off]`` (#4802)."""
+        if self._subverb == "steady":  # noqa: STRING_LITERAL
+            word = self._rest.strip().lower()
+            if word not in ("", "on", "off"):  # noqa: STRING_LITERAL
+                msg = "Usage: combat steady [on|off]."
+                raise CommandError(msg)
+            return {"steady": word != "off"}  # noqa: STRING_LITERAL
+        return self._resolve_dodge_args(self._rest)
 
     @staticmethod
     def _resolve_dodge_args(text: str) -> dict[str, Any]:
@@ -202,7 +240,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         return {"place": text}
 
     def _resolve_technique_subverb_args(self) -> dict[str, Any]:
-        """charge / await / joust: the subverbs that carry a technique."""
+        """charge / await / joust: the subverbs that carry a technique; and strike, the
+        attack that carries none (#4858)."""
+        if self._subverb == "strike":  # noqa: STRING_LITERAL
+            return self._resolve_strike_args(self._require_rest("an opponent> [with <weapon"))
         if self._subverb == "charge":  # noqa: STRING_LITERAL
             return self._resolve_charge_args(self._require_rest("an opponent with <technique>"))
         if self._subverb == "await":  # noqa: STRING_LITERAL
@@ -356,6 +397,22 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "opponent_id": self._resolve_opponent_pk(opponent_text),
             "technique_id": self._find_technique_id(technique_text),
         }
+
+    def _resolve_strike_args(self, text: str) -> dict[str, Any]:
+        """Parse ``<opponent> [with <weapon>]`` for a basic Strike (#4858).
+
+        With no ``with`` clause the Strike is bare-handed. The weapon name is matched
+        against the striker's equipped weapons by ``StrikeAction`` itself.
+        """
+        clause = _split_padded(text, _WITH_SEPARATOR)
+        opponent_text, weapon_text = clause if clause is not None else (text.strip(), "")
+        if not opponent_text or (clause is not None and not weapon_text):
+            msg = "Usage: combat strike <opponent> [with <weapon>]."
+            raise CommandError(msg)
+        kwargs: dict[str, Any] = {"opponent_id": self._resolve_opponent_pk(opponent_text)}
+        if weapon_text:
+            kwargs["weapon_name"] = weapon_text
+        return kwargs
 
     def _resolve_ally_pk(self, name: str) -> int:
         """Return the pk of the active ally named *name* in the caller's encounter."""
@@ -746,3 +803,27 @@ def _round_combo_slot_line(fill: ComboSlotFill, own_participant_pk: int) -> str:
         who = "you" if fill.participant_id == own_participant_pk else fill.character_name
         filler = f"{who} ({fill.technique_name})"
     return f"{fill.slot.slot_number}. {fill.slot.requirement_label} - {filler}"
+
+
+class CmdStrike(CmdCombat):
+    """Strike an opponent with no technique (#4858).
+
+    Usage:
+        strike <opponent>                - attack with your bare hands
+        strike <opponent> with <weapon>  - attack with one of your equipped weapons
+
+    The same action as ``combat strike``: a hit roll on the strike skill for the
+    weapon's kind, then a damage roll if it lands. It is your action for the round.
+    """
+
+    key = "strike"
+    locks = "cmd:all()"
+
+    def func(self) -> None:
+        """Route straight to the ``strike`` subverb."""
+        self._subverb = "strike"
+        self._rest = (self.args or "").strip()
+        if not self._rest:
+            self.msg("Usage: strike <opponent> [with <weapon>].")
+            return
+        super(CmdCombat, self).func()  # resolve_action_ref + resolve_action_args + dispatch
