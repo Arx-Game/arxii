@@ -54,6 +54,16 @@ the nearest lower one. On checks a distinction's rank steps the size of each eff
 never multiplies its value. Say "steps up a size", never "scales" or "multiplies".
 _Avoid_: rank multiplier, size per rank flag, tier.
 
+**Cover story** (`CharacterDistinction.is_cover`, #4872):
+A held card that grants nothing, written at creation in a secret answer's place so a
+stranger's sheet lists it where the secret is absent. Never a Secret itself.
+_Avoid_: fake distinction, decoy.
+
+**Person card** (`Distinction.asks_figure_name`, #4872):
+A card whose whole mechanics are a figure (Rival, Capable Mentor, Imaginary Friend); the
+player names them when picking it and the name is the pick's notes. _Avoid_: NPC card,
+companion grant (an asset grant is its own sidecar).
+
 **Offer** (#3675):
 Not a `distinctions` app concept: CG-time distinction picks are gated by a
 `character_creation.DistinctionOffer` row, never added directly. See "Offer" in

@@ -65,6 +65,8 @@ class DistinctionForm(forms.ModelForm):
             "cg_max_rank",
             # The Final Touches chapter (#4846): the optional question this card asks there.
             "final_touches_prompt",
+            # A person card (#4872): the player names the figure when picking it.
+            "asks_figure_name",
         ]
         labels = {"max_rank": "Ranks", "mutually_exclusive_with": "Distinctions"}
         help_texts = {
@@ -111,6 +113,7 @@ DISTINCTION_MORE_FIELDS = (
     "requires_feature_opened",
     "cg_max_rank",
     "final_touches_prompt",
+    "asks_figure_name",
 )
 
 
@@ -166,6 +169,8 @@ class OfferForm(forms.ModelForm):
             "beat",
             # The Final Touches chapter's opener (#4846): the card that unlocks this line.
             "unlocked_by",
+            # The life page (#4872): the heading a Backgrounds answer is listed under.
+            "group",
             "sort_order",
         ]
         widgets = {
