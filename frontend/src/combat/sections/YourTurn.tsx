@@ -32,6 +32,7 @@ import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
 import {
   CompulsionBanner,
   CompulsionChosenLine,
+  CompulsionDeclareNote,
   CompulsionMark,
   NO_TARGET_TECHNIQUE_KEY,
   type Compulsion,
@@ -2688,6 +2689,7 @@ export function YourTurn({
       {compulsion && chosenCompulsionKey && (
         <CompulsionChosenLine compulsion={compulsion} actionKey={chosenCompulsionKey} />
       )}
+      {compulsion && <CompulsionDeclareNote />}
 
       {/* Submitted / ready badge */}
       <ReadyBadge submitted={submitted} serverReady={serverReady} />

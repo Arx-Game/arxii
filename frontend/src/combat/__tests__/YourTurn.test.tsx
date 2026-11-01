@@ -2919,6 +2919,9 @@ describe('YourTurn — compulsion', () => {
     render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('compulsion-banner')).toHaveTextContent('Berserk compels');
+    expect(screen.getByTestId('compulsion-declare-note')).toHaveTextContent(
+      'If you declare nothing, you attack, as today.'
+    );
     expect(screen.getByTestId('compulsion-difficulty-flee')).toHaveTextContent('difficulty 36');
     expect(screen.queryByTestId('compulsion-mark-cover')).not.toBeInTheDocument();
   });
@@ -2969,5 +2972,6 @@ describe('YourTurn — compulsion', () => {
     render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
 
     expect(screen.queryByTestId('compulsion-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('compulsion-declare-note')).not.toBeInTheDocument();
   });
 });

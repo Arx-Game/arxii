@@ -509,6 +509,7 @@ class SteadyPlanSerializer(serializers.Serializer):
     enabled = serializers.BooleanField()
     cost_line = serializers.CharField()
     bonus_hint = serializers.CharField()
+    capability_name = serializers.CharField()
 
 
 class DigDeepOfferSerializer(serializers.Serializer):
@@ -678,6 +679,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "enabled": obj.steady_enabled,
             "cost_line": f"{config.steady_anima_cost} anima each",
             "bonus_hint": f"+{capability}",
+            "capability_name": config.steadying_capability.name,
         }
 
     def _is_viewers_own(self, obj: CombatParticipant) -> bool:

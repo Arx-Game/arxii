@@ -917,6 +917,20 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
     expect(screen.getByTestId('open-encounter-leave-btn')).toBeInTheDocument();
   });
 
+  it('puts Leave below the YourTurn section, where the compulsion banner sits', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'between_rounds',
+      is_participant: true,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    const yourTurn = screen.getByTestId('your-turn-stub');
+    const leave = screen.getByTestId('open-encounter-leave-btn');
+    expect(yourTurn.compareDocumentPosition(leave) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('hides both buttons for party_combat encounters', () => {
     mockEncounter({
       encounter_type: 'party_combat',

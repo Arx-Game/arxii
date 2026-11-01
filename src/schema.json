@@ -92735,8 +92735,11 @@ components:
           type: string
         bonus_hint:
           type: string
+        capability_name:
+          type: string
       required:
       - bonus_hint
+      - capability_name
       - cost_line
       - enabled
     StewardActionResult:

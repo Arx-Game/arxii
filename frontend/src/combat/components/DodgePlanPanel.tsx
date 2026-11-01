@@ -1,5 +1,5 @@
 /**
- * DodgePlanPanel — "If you're attacked this round" (#4676, demo Screen 3).
+ * DodgePlanPanel — "Reactions" (#4676, demo Screen 3).
  *
  * The dodge itself is automatic on the server; this sets whether to dodge and where to
  * land, through the `combat_dodge` registry action. Shown only when the viewer's own
@@ -8,6 +8,7 @@
  */
 
 import { toast } from 'sonner';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
@@ -54,7 +55,10 @@ export function DodgePlanPanel({
   };
 
   return (
-    <>
+    <section className="space-y-1.5" data-testid="reactions">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Reactions
+      </h3>
       {plan && (
         <DodgeSection
           plan={plan}
@@ -64,20 +68,26 @@ export function DodgePlanPanel({
         />
       )}
       {steadyPlan && (
-        <section className="space-y-1.5" data-testid="steady-plan">
-          <DodgeOption
-            label="Steady allies who lose to a compulsion"
-            chosen={steadyPlan.enabled}
-            disabled={isLocked}
-            testId="steady-toggle"
-            onClick={() => dispatchPlan(steadyRequest(!steadyPlan.enabled))}
-          />
+        <div className="space-y-1.5" data-testid="steady-plan">
+          <div className="flex items-center gap-2 text-sm">
+            <Switch
+              id="steady-toggle"
+              data-testid="steady-toggle"
+              checked={steadyPlan.enabled}
+              disabled={isLocked}
+              onCheckedChange={(on) => dispatchPlan(steadyRequest(on))}
+            />
+            <label htmlFor="steady-toggle">Steady allies who lose to a compulsion</label>
+          </div>
           <p className="text-xs text-muted-foreground" data-testid="steady-cost">
-            {steadyPlan.cost_line} · {steadyPlan.bonus_hint}
+            ({steadyPlan.capability_name}) · {steadyPlan.cost_line} · {steadyPlan.bonus_hint}
           </p>
-        </section>
+          <p className="text-xs text-muted-foreground" data-testid="reaction-shared-note">
+            Each reaction this round makes the next one harder, steadying and dodging alike.
+          </p>
+        </div>
       )}
-    </>
+    </section>
   );
 }
 
@@ -96,10 +106,7 @@ function DodgeSection({
   const inPlace = plan.enabled && plan.landing_id === null;
 
   return (
-    <section className="space-y-1.5" data-testid="dodge-plan">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        If you're attacked this round
-      </h3>
+    <div className="space-y-1.5" data-testid="dodge-plan">
       <DodgeOption
         label="Dodge in place"
         chosen={inPlace}
@@ -127,7 +134,7 @@ function DodgeSection({
       <p className="text-xs text-muted-foreground" data-testid="dodge-cost">
         {plan.cost_line}
       </p>
-    </section>
+    </div>
   );
 }
 

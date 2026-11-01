@@ -51729,6 +51729,7 @@ export interface components {
       enabled: boolean;
       cost_line: string;
       bonus_hint: string;
+      capability_name: string;
     };
     /** @description What the panel's send or dismiss reports back. */
     StewardActionResult: {

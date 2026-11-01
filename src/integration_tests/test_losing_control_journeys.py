@@ -1426,7 +1426,13 @@ class TheDeclarePanelPayload(_SteadyingAllies):
         plan = self.payload(brann, self.ally_seats["Brann"])["steady_plan"]
 
         self.assertEqual(
-            plan, {"enabled": False, "cost_line": f"{STEADY_ANIMA} anima each", "bonus_hint": "+4"}
+            plan,
+            {
+                "enabled": False,
+                "cost_line": f"{STEADY_ANIMA} anima each",
+                "bonus_hint": "+4",
+                "capability_name": self.steadying.name,
+            },
         )
         self.assertIsNone(self.payload(self.mira, self.seat)["steady_plan"])
         self.assertIsNone(self.payload(brann, self.seat)["steady_plan"])

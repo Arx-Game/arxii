@@ -123,3 +123,12 @@ export function CompulsionChosenLine({
     </p>
   );
 }
+
+/** The note above Declare: what happens when a compelled player declares nothing. */
+export function CompulsionDeclareNote() {
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="compulsion-declare-note">
+      If you declare nothing, you attack, as today.
+    </p>
+  );
+}
