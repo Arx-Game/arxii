@@ -189,6 +189,14 @@ def create_npc_action_interaction(
     )
     if target_personas:
         write_target_personas(interaction, target_personas)
+    # Delivered live like a PC's action row (#4884): since the defender's roll is
+    # recorded on it, every defended blow mints this row, and a row only the refetch
+    # showed would appear in the log after the fact. Its content is the action's label
+    # ("Blade strike at Mira"), the counterpart of a PC's "Strike at Bandit"; the round's
+    # narration of what happened is a separate OUTCOME row.
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
+
+    push_interaction(interaction, location=opponent_action.opponent.encounter.room)
     return interaction
 
 

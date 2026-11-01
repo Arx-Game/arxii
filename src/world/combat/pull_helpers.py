@@ -283,12 +283,13 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     sheet = participant.character_sheet
 
     # The traits this cast rolls (#4450) are in its action, so a TRAIT thread on the
-    # caster's stat, a skill or the technique skill can be pulled.
+    # caster's stat, a skill or the technique skill can be pulled; so is the combat
+    # style's skill while it counts on the hit roll (#4884).
     action_context = PullActionContext(
         combat_encounter=encounter,
         participant=participant,
         involved_techniques=(technique_id,),
-        involved_traits=cast_involved_trait_ids(cast_check),
+        involved_traits=_with_style_skill(sheet, cast_involved_trait_ids(cast_check)),
         target=target,
     )
 
@@ -342,6 +343,26 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
 
         announce_burn(sheet.character, burn_result)
+
+
+def _with_style_skill(sheet: CharacterSheet, trait_ids: tuple[int, ...]) -> tuple[int, ...]:
+    """``trait_ids`` plus the combat style skill's trait when it counts on this cast (#4884).
+
+    The hit roll adds the style skill while the weapon in hand (none: no weapon test) and
+    every held vow are on the style, so a TRAIT thread on it is in the cast's action then.
+    """
+    if not trait_ids:
+        return trait_ids
+    from world.combat.services.equipment.equipped_weapon import (  # noqa: PLC0415
+        _equipped_weapon_archetype,
+    )
+    from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
+
+    character = sheet.character
+    fit = style_fit_for_attack(character, _equipped_weapon_archetype(character))
+    if not fit.counts:
+        return trait_ids
+    return tuple(dict.fromkeys([*trait_ids, fit.style.skill.trait_id]))
 
 
 def _resolve_combat_burn(

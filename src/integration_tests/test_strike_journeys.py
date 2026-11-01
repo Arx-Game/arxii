@@ -554,6 +554,11 @@ class StrikeRecordsWhatWasRolled(_StrikeField):
         rows = response.json()["results"]
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["roll_breakdown"] is None for row in rows))
+        # Nor the numbers behind his rolls (#4884); the result line stays, as the room
+        # heard it.
+        self.assertTrue(all(row["modifiers"] == [] for row in rows))
+        self.assertTrue(all(row["modifier_total"] == 0 for row in rows))
+        self.assertEqual([row["summary"] for row in rows], ["6 damage", "Hit, fair"])
         # Hobb's own account still sees his rows laid out.
         self.assertTrue(all(row["roll_breakdown"] for row in self.shown_rolls()))
 

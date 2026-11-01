@@ -341,7 +341,10 @@ class CombatTechniqueResolver:
         # The style skill (#4884) joins the cast's own skill terms while the character
         # fights the style's way: the weapon and every held vow on the style.
         style_fit = self._attack_style_fit(character)
-        offense_traits = (*self.offense_extra_traits, *style_fit.extra_traits())
+        offense_traits = (
+            *self.offense_extra_traits,
+            *style_fit.extra_traits(self.offense_check_type, counted=self.offense_extra_traits),
+        )
         breakdown = _svc.collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,

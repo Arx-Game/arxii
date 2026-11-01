@@ -1567,16 +1567,15 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         limit_choices_to=MAGIC_SKILL_CHOICES,
         error_messages=MAGIC_SKILL_ERROR_MESSAGES,
         help_text=(
-            "The style's own skill (#4884). It adds to the Strike, technique hit and defense "
-            "rolls while the character fights the style's way. One style per skill. "
-            f"{MAGIC_SKILL_HELP}"
+            "The style's own skill, added to Strike, technique hit and defense rolls while "
+            f"the character fights this style's way. One style per skill. {MAGIC_SKILL_HELP}"
         ),
     )
     taught_by = models.ManyToManyField(
         "arxii.Tradition",
         blank=True,
         related_name="combat_styles",
-        help_text="The Traditions that teach this style (#4884).",
+        help_text="The Traditions that teach this style.",
     )
     hit_stat = models.ForeignKey(
         "arxii.Trait",
@@ -1586,18 +1585,18 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="+",
         limit_choices_to={"trait_type": TraitType.STAT},
         help_text=(
-            "The stat a Strike hits with (#4884), e.g. Agility for a duelist. It applies "
-            "even when the style's bonus lapses. Blank: the Strike keeps its weapon's stat."
+            "The stat a Strike hits with, even while the style's bonus is off. Blank: the "
+            "weapon's stat."
         ),
     )
     compatible_roles = models.ManyToManyField(
         COVENANT_ROLE_MODEL,
         blank=True,
         related_name="combat_styles",
+        verbose_name="Works with vows",
         help_text=(
-            "The vows this style works with (#4884). While the character holds a vow not "
-            "listed here, the style skill stops counting. A sub-role counts when it or its "
-            "anchor vow is listed."
+            "The vows this style can be used with. A vow not listed turns the style's "
+            "benefits off while it is active."
         ),
     )
 
@@ -1635,7 +1634,7 @@ class CombatStyleGear(NaturalKeyMixin, SharedMemoryModel):
     gear_archetype = models.CharField(
         max_length=20,
         choices=GearArchetype.choices,
-        help_text="A weapon or armor kind this style fights with. Unarmed is bare hands.",
+        help_text="A weapon or armor kind this style fights with. Unarmed is fists and wraps.",
     )
 
     objects = CombatStyleGearManager()

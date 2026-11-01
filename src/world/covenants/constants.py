@@ -206,6 +206,7 @@ STYLE_LAPSE_GEAR_WORDS: dict[str, str] = {
     "shield": "shields are",
     "lance": "lances are",
     "unarmed": "unarmed strikes are",
+    "other": "other weapons are",
 }
 
 

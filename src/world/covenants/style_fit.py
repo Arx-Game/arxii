@@ -4,7 +4,8 @@ A ``CombatStyle`` adds its own skill to the Strike, to a technique's hit roll an
 defense roll, but only while the character fights the way it teaches. The bonus lapses:
 
 - on an attack roll (a Strike or a technique), when the weapon used is not one of the
-  style's weapon kinds, or a held vow is not on the style's list;
+  style's weapon kinds, or a held vow is not on the style's list. A technique cast with no
+  weapon in hand has no weapon to test; only the vow test applies;
 - on a defense roll, when any worn armor piece's kind is not one of the style's armor
   kinds, or a held vow is not on the list.
 
@@ -29,7 +30,10 @@ from world.covenants.constants import STYLE_LAPSE_GEAR_WORDS, StyleLapse
 from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from typeclasses.characters import Character
+    from world.checks.models import CheckType
     from world.checks.types import ExtraTraitTerm
     from world.covenants.models import CombatStyle, CovenantRole
 
@@ -69,13 +73,25 @@ class StyleFit:
             return None
         return self.style.hit_stat.name
 
-    def extra_traits(self) -> tuple[ExtraTraitTerm, ...]:
-        """The style skill as a roll term while it counts, else nothing."""
+    def extra_traits(
+        self, check_type: CheckType | None = None, counted: Sequence[ExtraTraitTerm] = ()
+    ) -> tuple[ExtraTraitTerm, ...]:
+        """The style skill as a roll term while it counts, else nothing.
+
+        Never a second time: when the roll already counts the style skill's trait, through
+        ``check_type``'s own trait rows or one of the ``counted`` terms (a Path, Gift or
+        technique skill that is also a style's skill), the style adds nothing more.
+        """
         if not self.counts:
             return ()
         from world.checks.types import ExtraTraitTerm  # noqa: PLC0415
 
-        return (ExtraTraitTerm(trait=self.style.skill.trait, weight=STYLE_SKILL_WEIGHT),)
+        trait = self.style.skill.trait
+        if any(term.trait.pk == trait.pk for term in counted):
+            return ()
+        if check_type is not None and check_type.traits.filter(trait_id=trait.pk).exists():
+            return ()
+        return (ExtraTraitTerm(trait=trait, weight=STYLE_SKILL_WEIGHT),)
 
 
 def _style_of(character: Character) -> CombatStyle | None:
@@ -118,9 +134,11 @@ def _fit(
     style = _style_of(character)
     if style is None or style.skill is None or not style.skill.is_active:
         return StyleFit(style=style)
-    listed = {
-        kind for kind in style.gear.values_list("gear_archetype", flat=True) if kind in gear_test
-    }
+    listed = (
+        {kind for kind in style.gear.values_list("gear_archetype", flat=True) if kind in gear_test}
+        if kinds_used
+        else set()
+    )
     for kind in kinds_used:
         if kind not in listed:
             return StyleFit(style=style, lapse=lapse_kind, lapse_note=_gear_note(kind))
@@ -133,9 +151,14 @@ def _fit(
 
 
 def style_fit_for_attack(character: Character, weapon_archetype: str | None) -> StyleFit:
-    """The style fit for an attack made with ``weapon_archetype`` (None: bare hands)."""
-    kind = weapon_archetype or GearArchetype.UNARMED
-    return _fit(character, WEAPON_ARCHETYPES, [kind], StyleLapse.WEAPON)
+    """The style fit for an attack made with ``weapon_archetype``.
+
+    A Strike always names its kind (bare hands are ``UNARMED``). ``None`` is a technique
+    cast with no weapon in hand: there is no weapon to test, so only the vow test applies
+    and a caster keeps the style skill on every spell.
+    """
+    kinds = [weapon_archetype] if weapon_archetype is not None else []
+    return _fit(character, WEAPON_ARCHETYPES, kinds, StyleLapse.WEAPON)
 
 
 def worn_armor_kinds(character: Character) -> list[str]:

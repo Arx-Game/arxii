@@ -259,7 +259,7 @@ def resolve_npc_attack(
     # The defender's style skill (#4884) counts while every worn armor kind and every
     # held vow is on their combat style. The defense type applies either way.
     style_fit = style_fit_for_defense(character)
-    style_traits = style_fit.extra_traits()
+    style_traits = style_fit.extra_traits(check_type)
     breakdown = _svc.collect_check_modifiers(
         participant.character_sheet,
         check_type,
@@ -374,8 +374,10 @@ def resolve_npc_attack(
             check_type=check_type,
             breakdown=breakdown,
             style_fit=style_fit,
-            summary=defense_result_line(result.success_level, damage_result.damage_dealt),
+            summary=defense_result_line(result, damage_result.damage_dealt),
             interaction=interaction_factory(),
+            combat_round=opponent_action.round_number,
+            dodge_modifier=dodge_modifier,
         )
 
     return DefenseResult(

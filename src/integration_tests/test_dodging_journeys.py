@@ -235,6 +235,26 @@ class DodgingAutomatically(_TheCellar):
         self.assertEqual(self.anima(self.ondrelle), 20 - 3 * 2)
         self.assertEqual(position_of(self.ondrelle), self.stage)  # no landing set: in place
 
+    def test_her_defense_card_shows_what_the_dodge_added(self) -> None:
+        """The dodge's 4 is part of what the dice used, so her defense roll shows it (#4884)."""
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4])
+        response = self.api(self.account_of(self.ondrelle)).get(
+            "/api/checks/consequence-outcomes/",
+            {"character": self.ondrelle.sheet_data.pk, "encounter": self.encounter.pk},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        (row,) = response.json()["results"]
+        self.assertEqual(row["modifier_total"], 4)
+        self.assertEqual(
+            row["roll_breakdown"]["lines"],
+            [{"label": "Dodge", "value": "+4", "detail": "Character", "lapsed": False}],
+        )
+
     def test_a_planned_landing_is_where_a_good_dodge_puts_her(self) -> None:
         told = self.web(self.ondrelle, "combat_dodge", position_id=self.gallery.pk)
         self.assertTrue(told.detail.success)

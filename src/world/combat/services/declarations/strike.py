@@ -453,6 +453,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
                 summary=summary[:255],
                 skill_rating=skill_rating,
                 snapshot=snapshot,
+                combat_round=action.round_number,
             )
 
     narrate = partial(

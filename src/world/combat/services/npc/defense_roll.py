@@ -22,28 +22,40 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.constants import DEFENSE_REDUCED_THRESHOLD
+#: The row an automatic dodge's bonus shows as on the defense roll.
+DODGE_LABEL = "Dodge"
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.checks.models import CheckType
     from world.checks.outcome_models import ConsequenceOutcome
-    from world.checks.types import ModifierBreakdown, RollBreakdown
+    from world.checks.types import CheckResult, ModifierBreakdown, RollBreakdown
     from world.combat.models import CombatParticipant
     from world.covenants.style_fit import StyleFit
     from world.scenes.models import Interaction
 
 
-def defense_result_line(success_level: int | None, damage: int) -> str:
-    """The defense roll's result line: "Defended, no damage", "Partly defended, 4 damage"
-    or "Hit, 8 damage"."""
-    level = success_level or 0
-    if damage <= 0:
-        return "Defended, no damage"
-    if level >= DEFENSE_REDUCED_THRESHOLD:
-        return f"Partly defended, {damage} damage"
-    return f"Hit, {damage} damage"
+def defense_result_line(result: CheckResult, damage: int) -> str:
+    """The defense roll's result line: the outcome the roll got, then what landed.
+
+    "Partial Success, 8 damage", "Critical Success, no damage". A roll with no recorded
+    outcome (a stand-in result) is named by the canonical outcome for its success level.
+    """
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    outcome = result.outcome
+    if isinstance(outcome, CheckOutcome):
+        name = outcome.name
+    else:
+        level = result.success_level or 0
+        name = next(
+            (label for label, at in CANONICAL_OUTCOME_LEVELS.items() if at == level),
+            "Defense roll",
+        )
+    landed = f"{damage} damage" if damage > 0 else "no damage"
+    return f"{name}, {landed}"
 
 
 def _defense_skill_rating(participant: CombatParticipant, check_type: CheckType) -> int | None:
@@ -84,10 +96,33 @@ def record_defense_roll(  # noqa: PLR0913 - one record, its parts
     style_fit: StyleFit,
     summary: str,
     interaction: Interaction,
+    combat_round: int,
+    dodge_modifier: int = 0,
 ) -> ConsequenceOutcome:
-    """Record ``participant``'s defense roll on the NPC action's ``interaction``."""
+    """Record ``participant``'s defense roll on the NPC action's ``interaction``.
+
+    ``dodge_modifier`` is what an automatic dodge added to the roll (its source's value
+    less the reaction penalty); it is recorded as a "Dodge" contribution, so the card
+    shows what the dice used.
+    """
+    from dataclasses import replace  # noqa: PLC0415
+
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.services import record_consequence_outcome  # noqa: PLC0415
-    from world.checks.types import RollSnapshot  # noqa: PLC0415
+    from world.checks.types import ModifierContribution, RollSnapshot  # noqa: PLC0415
+
+    if dodge_modifier:
+        breakdown = replace(
+            breakdown,
+            contributions=[
+                *breakdown.contributions,
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CHARACTER,
+                    source_label=DODGE_LABEL,
+                    value=dodge_modifier,
+                ),
+            ],
+        )
 
     style = style_fit.style
     has_style_term = style_fit.has_skill_term
@@ -111,6 +146,7 @@ def record_defense_roll(  # noqa: PLR0913 - one record, its parts
         summary=summary[:255],
         skill_rating=_defense_skill_rating(participant, check_type),
         snapshot=snapshot,
+        combat_round=combat_round,
     )
 
 

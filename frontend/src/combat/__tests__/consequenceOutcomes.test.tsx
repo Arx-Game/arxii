@@ -36,6 +36,7 @@ const SAMPLE_OUTCOME: ConsequenceOutcome = {
   modifier_total: -2,
   summary: 'You suffer a minor wound.',
   roll_breakdown: null,
+  combat_round: null,
   outcome_display: [
     { label: 'Scratch', tier_name: 'Trivial', weight: 40, is_selected: false },
     { label: 'Bruised', tier_name: 'Minor', weight: 35, is_selected: true },

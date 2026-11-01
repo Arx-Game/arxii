@@ -17,9 +17,10 @@ class Migration(migrations.Migration):
             name="compatible_roles",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="The vows this style works with (#4884). While the character holds a vow not listed here, the style skill stops counting. A sub-role counts when it or its anchor vow is listed.",
+                help_text="The vows this style can be used with. A vow not listed turns the style's benefits off while it is active.",
                 related_name="combat_styles",
                 to="arxii.covenantrole",
+                verbose_name="Works with vows",
             ),
         ),
         migrations.AddField(
@@ -27,7 +28,7 @@ class Migration(migrations.Migration):
             name="hit_stat",
             field=models.ForeignKey(
                 blank=True,
-                help_text="The stat a Strike hits with (#4884), e.g. Agility for a duelist. It applies even when the style's bonus lapses. Blank: the Strike keeps its weapon's stat.",
+                help_text="The stat a Strike hits with, even while the style's bonus is off. Blank: the weapon's stat.",
                 limit_choices_to={"trait_type": "stat"},
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
@@ -43,7 +44,7 @@ class Migration(migrations.Migration):
                 error_messages={
                     "invalid": "Choose a skill in the Magic category. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
                 },
-                help_text="The style's own skill (#4884). It adds to the Strike, technique hit and defense rolls while the character fights the style's way. One style per skill. Magic-category skills only.",
+                help_text="The style's own skill, added to Strike, technique hit and defense rolls while the character fights this style's way. One style per skill. Magic-category skills only.",
                 limit_choices_to=models.Q(("trait__category", "magic")),
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
@@ -56,7 +57,7 @@ class Migration(migrations.Migration):
             name="taught_by",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="The Traditions that teach this style (#4884).",
+                help_text="The Traditions that teach this style.",
                 related_name="combat_styles",
                 to="arxii.tradition",
             ),
@@ -92,7 +93,7 @@ class Migration(migrations.Migration):
                             ("clothing", "Clothing"),
                             ("other", "Other"),
                         ],
-                        help_text="A weapon or armor kind this style fights with. Unarmed is bare hands.",
+                        help_text="A weapon or armor kind this style fights with. Unarmed is fists and wraps.",
                         max_length=20,
                     ),
                 ),

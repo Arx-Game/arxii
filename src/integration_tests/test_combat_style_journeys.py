@@ -36,6 +36,7 @@ from integration_tests.test_defense_style_journeys import _TheYard
 from integration_tests.test_strike_journeys import _StrikeField
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import perform_check
+from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
 from world.classes.factories import PathFactory
 from world.combat.constants import ActionCategory, ParticipantStatus
@@ -46,6 +47,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatOpponent
 from world.combat.services import resolve_round
+from world.combat.tests.test_mounted_combat import _equip_weapon
 from world.covenants.constants import CovenantType, DefenseStyle
 from world.covenants.factories import (
     CombatStyleFactory,
@@ -67,7 +69,13 @@ from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.constants import RoundStatus
 from world.skills.factories import MagicSkillFactory, SkillFactory
 from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
-from world.traits.models import CharacterTraitValue, PointConversionRange, Trait, TraitType
+from world.traits.models import (
+    CharacterTraitValue,
+    CheckOutcome,
+    PointConversionRange,
+    Trait,
+    TraitType,
+)
 from world.vitals.models import CharacterVitals
 
 STYLE = "The Daring Dance"
@@ -254,8 +262,9 @@ class StrikeRecordsTheStyle(_StyledStriker):
 
 
 class TechniquesInStyle(JourneyCase):
-    """Ysmay, on a Path with a technique skill, casts a technique in a combat round with no
-    weapon in hand: the technique hit roll keeps its own stat and adds the style skill."""
+    """Ysmay, on a Path with a technique skill, casts a technique in a combat round: the
+    technique hit roll keeps its own stat and adds the style skill. With no weapon in hand
+    there is no weapon to test; a held vow still counts."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -341,13 +350,43 @@ class TechniquesInStyle(JourneyCase):
         # No weapon in hand: the technique rolls its own check's stat, not Strength.
         self.assertIsNone(cast["stat_override"])
 
-    def test_casting_off_the_style_drops_only_the_style_skill(self) -> None:
+    def test_a_weapon_off_the_style_drops_only_the_style_skill(self) -> None:
         _give_style(self.sheet, _style(GearArchetype.MELEE_TWO_HAND, hit_stat=self.strength))
+        _equip_weapon(self.ysmay, archetype=GearArchetype.MELEE_ONE_HAND)
 
         cast = self.cast()
 
         self.assertEqual(tuple(cast["extra_traits"]), (self.path_term(),))
-        self.assertIsNone(cast["stat_override"])
+        # The one-handed weapon's own stat, never the style's hit stat.
+        self.assertEqual(cast["stat_override"], "agility")
+
+    def test_with_no_weapon_in_hand_there_is_no_weapon_to_test(self) -> None:
+        style = _style(GearArchetype.MELEE_TWO_HAND, hit_stat=self.strength)
+        _give_style(self.sheet, style)
+
+        cast = self.cast()
+
+        self.assertEqual(
+            tuple(cast["extra_traits"]),
+            (self.path_term(), ExtraTraitTerm(trait=style.skill.trait, weight=ONE)),
+        )
+
+    def test_a_vow_off_the_style_still_lapses_a_weaponless_cast(self) -> None:
+        _give_style(self.sheet, _style(GearArchetype.MELEE_TWO_HAND, hit_stat=self.strength))
+        _swear(self.sheet, CovenantRoleFactory(name="Bulwark"))
+
+        cast = self.cast()
+
+        self.assertEqual(tuple(cast["extra_traits"]), (self.path_term(),))
+
+    def test_a_style_skill_that_is_also_the_technique_skill_counts_once(self) -> None:
+        style = CombatStyleFactory(name=STYLE, skill=self.path_skill)
+        CombatStyleGearFactory(style=style, gear_archetype=GearArchetype.UNARMED)
+        _give_style(self.sheet, style)
+
+        cast = self.cast()
+
+        self.assertEqual(tuple(cast["extra_traits"]), (self.path_term(),))
 
 
 class _DefenseYard(_TheYard):
@@ -411,13 +450,33 @@ class DefendingInStyle(_DefenseYard):
 class ReadingTheDefenseRoll(_DefenseYard):
     """Mira's defense roll, as her Last Outcome card reads it (demo screen 5, "Defending in
     plate"). The Parry check weights Dodge, in which she has 15; she has 20 in the style
-    skill. The defense roll is a plain failure, so the 10 blow lands on her armor: 2 of the
-    4 soak counts (5 of 10), and 8 lands."""
+    skill. The defense roll lands at Partial Success, the full-damage rung, so the 10 blow
+    lands on her armor: 2 of the 4 soak counts (5 of 10), and 8 lands. The result line is
+    the roll's outcome, then the damage: "Partial Success, 8 damage"."""
 
     def setUp(self) -> None:
         super().setUp()
         self.dodge = SkillTraitFactory(name="Dodge")
         CheckTypeTraitFactory(check_type=self.defense, trait=self.dodge, weight=1)
+        StatTraitFactory(name="agility")
+
+    def defend(self, fighter) -> dict[str, Any]:
+        """Resolve one blade blow at ``fighter``; her real defence roll lands at Partial
+        Success (success level 0, the full-damage rung)."""
+        del fighter  # she is the only fighter in the yard, so the blow is hers
+        partial = CheckOutcome.objects.get(name="Partial Success")
+        self.blade()
+
+        def defence(character, check_type, *args, **kwargs) -> CheckResult:
+            with force_check_outcome(partial):
+                return perform_check(character, check_type, *args, **kwargs)
+
+        resolve_round(
+            self.encounter,
+            defense_check_fn=defence,
+            offense_check_fn=lambda *_a, **_k: MagicMock(success_level=2),
+        )
+        return {}
 
     def mira(self, *gear: str):
         style = self.styled(*gear)
@@ -462,7 +521,7 @@ class ReadingTheDefenseRoll(_DefenseYard):
                         "lapsed": False,
                     },
                 ],
-                "result": "Hit, 8 damage",
+                "result": "Partial Success, 8 damage",
                 "result_note": "",
             },
         )
@@ -496,6 +555,11 @@ class ReadingTheDefenseRoll(_DefenseYard):
 
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["roll_breakdown"])
+        # Nor the numbers behind it, nor how much damage she took.
+        self.assertEqual(rows[0]["modifiers"], [])
+        self.assertEqual(rows[0]["modifier_total"], 0)
+        self.assertEqual(rows[0]["summary"], "")
+        self.assertEqual(self.defense_row(mira)["summary"], "Partial Success, 8 damage")
         self.assertIsNotNone(self.defense_row(mira)["roll_breakdown"])
 
     def test_renaming_the_style_later_does_not_rewrite_the_row(self) -> None:

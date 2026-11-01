@@ -193,6 +193,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             "challenge_record_id",
             "action_interaction_id",
             "roll_breakdown",
+            "combat_round",
             "created_at",
         ]
         read_only_fields = fields
@@ -209,10 +210,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             # A roll's sources (the skill rating above all) are the roller's own; others
             # learn hidden numbers only through checks of their own.
             return None
-        breakdowns = self.context.get("roll_breakdowns")
-        if breakdowns is None:
-            breakdowns = combat_roll_breakdowns([obj])
-        breakdown = breakdowns.get(obj.pk)
+        breakdown = self._combat_breakdowns(obj).get(obj.pk)
         if breakdown is None:
             return None
         from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
@@ -234,6 +232,28 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             "result": breakdown.result,
             "result_note": breakdown.result_note,
         }
+
+    def _combat_breakdowns(self, obj: ConsequenceOutcome) -> dict[int, object]:
+        """The page's combat roll breakdowns, or this row's alone outside a list."""
+        breakdowns = self.context.get("roll_breakdowns")
+        return breakdowns if breakdowns is not None else combat_roll_breakdowns([obj])
+
+    def to_representation(self, instance: ConsequenceOutcome) -> dict[str, object]:
+        """Withhold a combat roll's numbers from anyone but its roller and staff (#4884).
+
+        A Strike or defense row stays in another viewer's list, so the turn's rows still
+        line up, but without its modifiers or their total; a defense row also loses its
+        summary, which says how much damage the defender took.
+        """
+        data = super().to_representation(instance)
+        if instance.pk in self._combat_breakdowns(instance) and not self._sees_roll_detail(
+            instance
+        ):
+            data["modifiers"] = []
+            data["modifier_total"] = 0
+            if instance.against_label:
+                data["summary"] = ""
+        return data
 
     def _sees_roll_detail(self, obj: ConsequenceOutcome) -> bool:
         """Staff, or the account playing the roll's own character."""

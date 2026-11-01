@@ -139,6 +139,14 @@ class ConsequenceOutcome(SharedMemoryModel):
         blank=True,
         help_text="Who a defense roll was against, as its breakdown names them, at roll time.",
     )
+    combat_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The encounter round a combat roll was made in, so the turn panel can show every "
+            "roll of the last round. Null outside combat."
+        ),
+    )
     armor_share_tenths = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
