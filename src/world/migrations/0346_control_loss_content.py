@@ -15,8 +15,9 @@ Data-only, and only prose-free mechanics. On a populated database it:
   instance is ever put on a drawback this migration did not just create.
 
 A drawback that already has a moon-pull trigger is left entirely alone. An existing
-compulsion or trigger is never added to, and no existing row is edited. Every row made
-here carries no prose (empty descriptions). The "Required content" probes "Berserk has a
+compulsion or trigger is never added to, and no existing value is overwritten: the only
+write to an existing row fills the lycan grant's unset drawback. Every row made here
+carries no prose (empty descriptions), and no trait is ever created. The "Required content" probes "Berserk has a
 compulsion" and "a moon's-pull control-loss trigger exists" report anything this
 skipped. Idempotent, and a no-op on an empty database.
 """
@@ -39,15 +40,6 @@ CANONICAL_OUTCOME_LEVELS = {
     "Critical Success": 2,
 }
 OUTCOME_NAME_AT_LEVEL = {level: name for name, level in CANONICAL_OUTCOME_LEVELS.items()}
-# name -> (category, description) of the STAT traits the checks weigh, as
-# world.traits.constants.STAT_TRAIT_DEFAULTS holds them.
-STAT_TRAITS = {
-    "willpower": ("meta", "Mental fortitude and determination."),
-    "composure": (
-        "social",
-        "Social endurance. Poise under social pressure and resistance to embarrassment.",
-    ),
-}
 
 
 def _outcome(apps, success_level):
@@ -70,6 +62,8 @@ def _check_type(apps, name):
     """The willpower (1.0) plus composure (0.5) check type called *name*.
 
     Traits are attached only to a check type made here; an authored one is used as it is.
+    A trait that does not exist is skipped, never created: the "Required content" probes
+    report a check type left without its traits.
     """
     CheckCategory = apps.get_model("arxii", "CheckCategory")
     CheckType = apps.get_model("arxii", "CheckType")
@@ -85,16 +79,9 @@ def _check_type(apps, name):
     )
     check_type = CheckType.objects.create(name=name, category=category, description="")
     for trait_name, weight in (("willpower", "1.00"), ("composure", "0.50")):
-        trait_category, trait_description = STAT_TRAITS[trait_name]
-        trait, _ = Trait.objects.get_or_create(
-            name=trait_name,
-            defaults={
-                "trait_type": "stat",
-                "category": trait_category,
-                "description": trait_description,
-            },
-        )
-        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
+        trait = Trait.objects.filter(name=trait_name).first()
+        if trait is not None:
+            CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
     return check_type
 
 
