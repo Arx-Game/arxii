@@ -164,6 +164,22 @@ class DistinctionListSerializer(serializers.ModelSerializer):
             {"text": f"Comes with {item_grant.item_template.name}"}
             for item_grant in obj.cached_item_grants
         )
+        # The finalize-time grants of #4852 (slice 6 of #4813), each a reverse one-to-one
+        # the list viewset select_relates, so no extra query per row.
+        prestige = obj.prestige_grant_or_none
+        if prestige is not None:
+            result.append({"text": f"Starts with {prestige.amount:+d} prestige"})
+        membership = obj.organization_grant_or_none
+        if membership is not None:
+            where = (
+                membership.organization.name
+                if membership.organization_id
+                else "an organization of your realm, your pick at Final Touches"
+            )
+            result.append({"text": f"Opens a membership in {where}"})
+        path_aspect = obj.path_aspect_grant_or_none
+        if path_aspect is not None:
+            result.append({"text": f"{path_aspect.value:+d} to your Path's stronger Aspect"})
         return result
 
     def get_codex_entry_ids(self, obj: Distinction) -> list[int]:

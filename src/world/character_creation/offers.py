@@ -41,19 +41,25 @@ from world.character_creation.models import (
     TraditionStateLine,
 )
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
-from world.character_creation.types import BeatPoolEntry, ClosedDistinction, VisibleOffer
+from world.character_creation.types import (
+    BeatPoolEntry,
+    ClosedDistinction,
+    FinalTouchesCard,
+    VisibleOffer,
+)
 from world.character_sheets.types import EnemyDegree
+from world.classes.models import Aspect, Path
 from world.distinctions.models import Distinction, DistinctionEffect
 from world.distinctions.types import (
     DraftDistinctionEntry,
     build_distinction_entry,
     feature_of,
 )
+from world.societies.models import Organization
 
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
     from world.magic.models import Tradition
-    from world.societies.models import Organization
 
 
 #: Where the Appearance chapter's feature-rows lines (#3739) sort relative to its
@@ -455,22 +461,99 @@ def held_distinction_ids(draft: CharacterDraft) -> set[int]:
     return {entry["distinction_id"] for entry in draft.draft_data.get("distinctions", [])}
 
 
-def final_touches_prompts(draft: CharacterDraft) -> list[str]:
-    """The optional questions the draft's cards ask at Final Touches (#4846), in enum order.
+def held_cards(draft: CharacterDraft) -> list[Distinction]:
+    """The cards the draft holds, with their grant sidecars joined, by name (#4852).
 
-    Called by ``CharacterDraftSerializer`` (the leaf asks each one) and by finalize, which
-    writes an answer only while a held card still asks for it. Empty for most drafts: the
-    leaf hides the chapter when this and the chapter's offers are both empty.
+    Called by ``final_touches_cards`` and by finalize's grant writers, so one query serves
+    every ask and every grant a draft's cards raise.
     """
     held = held_distinction_ids(draft)
     if not held:
         return []
-    asked = set(
+    return list(
         Distinction.objects.filter(pk__in=held)
-        .exclude(final_touches_prompt="")
-        .values_list("final_touches_prompt", flat=True)
+        .select_related("prestige_grant", "organization_grant", "path_aspect_grant")
+        .order_by("name")
     )
-    return [prompt.value for prompt in FinalTouchesPrompt if prompt.value in asked]
+
+
+def strongest_path_aspect(path: Path | None) -> Aspect | None:
+    """The Aspect that weighs most on a Path, ties by name; ``None`` with no Path or rows.
+
+    The Path's own reading of "stronger" (``PathAspect.weight``): where Capable Mentor's
+    bonus lands (#4852). Called by ``final_touches_cards`` and finalize.
+    """
+    if path is None:
+        return None
+    rows = sorted(path.cached_path_aspects, key=lambda pa: (-pa.weight, pa.aspect.name))
+    return rows[0].aspect if rows else None
+
+
+def final_touches_cards(draft: CharacterDraft) -> list[FinalTouchesCard]:
+    """Every ask the draft's held cards raise at Final Touches, one per card and prompt.
+
+    A card asks what staff set on it (``Distinction.final_touches_prompt``, #4846) and what
+    its grant sidecars raise on their own (#4852): a prestige grant asks the story, an
+    organization grant with no fixed organization asks for the pick, a path aspect grant
+    shows the line naming the Path's stronger Aspect (``detail``, blank until a Path is
+    picked). Enum order, then card name. Called by ``CharacterDraftSerializer``.
+    """
+    cards = held_cards(draft)
+    if not cards:
+        return []
+    aspect = strongest_path_aspect(draft.selected_path)
+    asks: list[FinalTouchesCard] = []
+    for card in cards:
+        if card.final_touches_prompt:
+            asks.append(FinalTouchesCard(card.pk, card.name, card.final_touches_prompt, ""))
+        if card.prestige_grant_or_none is not None:
+            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PRESTIGE_STORY, ""))
+        org_grant = card.organization_grant_or_none
+        if org_grant is not None and org_grant.organization_id is None:
+            asks.append(FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.ORGANIZATION, ""))
+        if card.path_aspect_grant_or_none is not None:
+            detail = aspect.name if aspect is not None else ""
+            asks.append(
+                FinalTouchesCard(card.pk, card.name, FinalTouchesPrompt.PATH_ASPECT, detail)
+            )
+    order = {prompt.value: index for index, prompt in enumerate(FinalTouchesPrompt)}
+    asks.sort(key=lambda ask: (order[ask.prompt], ask.name))
+    return asks
+
+
+def final_touches_prompts(draft: CharacterDraft) -> list[str]:
+    """The optional questions the draft's cards ask at Final Touches (#4846), in enum order.
+
+    Called by ``CharacterDraftSerializer`` (the leaf's chapter gate) and by finalize, which
+    writes an answer only while a held card still asks for it. Empty for most drafts: the
+    leaf hides the chapter when this and the chapter's offers are both empty. The cards
+    behind each prompt are ``final_touches_cards``.
+    """
+    prompts: list[str] = []
+    for ask in final_touches_cards(draft):
+        if ask.prompt not in prompts:
+            prompts.append(ask.prompt)
+    return prompts
+
+
+def organization_choices(draft: CharacterDraft) -> list[Organization]:
+    """The organizations a card with an open organization grant may seat the character in.
+
+    The organizations of the draft's realm (the realm page's own reading, #3725: the
+    society's realm is the starting area's) that ``admits_player_characters``, covenants
+    excluded, by name. A covert organization is listed too: the parent's leak table has the
+    list shown to its own player only. Called by ``CharacterDraftSerializer`` and by the
+    draft's answer validation (#4852).
+    """
+    if draft.selected_area_id is None or draft.selected_area.realm_id is None:
+        return []
+    return list(
+        Organization.objects.filter(
+            society__realm_id=draft.selected_area.realm_id,
+            admits_player_characters=True,
+            covenant__isnull=True,
+        ).order_by("name")
+    )
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:

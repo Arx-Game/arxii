@@ -478,3 +478,15 @@ _Avoid_: appeal permission, resolver flag.
 **Day of Remembrance** (`OrganizationObservance`, #4206):
 A house's own recurring IC date (month and day, a name, the house's prose), the same shape as a god's feast day. One of the stylings, written by the founder beside the words and sigil (`HouseClaimObservance` on the claim until finalize), edited on the Almanach document, authorable in admin for staff-built houses. Free prose, no catalog, no mechanic on the day.
 _Avoid_: house feast day (that is a god's), founding aspect (an aspect is a catalog pick, ADR-0101), holiday (a realm's, #3638).
+
+**Prestige grant** (`DistinctionPrestigeGrant`, #4852, slice 6 of #4813):
+A card's starting prestige: a flat `amount`, positive or negative, paid once to the primary persona at character creation's finalize through `award_deed_prestige` (`renown.apply_starting_prestige`). No Legend row and no deed come of it. The story the player writes for it at Final Touches is the pick's notes.
+_Avoid_: starting fame (fame is the tier derived from prestige), prestige event (no ledger exists), prestige effect (it is a sidecar, not a `DistinctionEffect`).
+
+**Organization grant** (`DistinctionOrganizationGrant`, #4852):
+The membership a card opens: the grant's own organization, or the player's pick at Final Touches from the **organization choices**, seated once at finalize through `join_organization` at the grant's rank or the entry rank.
+_Avoid_: card membership, starting org, vacancy (a vacancy is a staff-authored opening on a family's org).
+
+**Admits player characters** (`Organization.admits_player_characters`, #4852):
+Staff's mark that a player character may join this organization from character creation. The organizations of a realm with it are the **organization choices** (`character_creation.offers.organization_choices`), listed at Final Touches for a card with an open organization grant; a covert organization may carry it, and the list is shown to its own player only.
+_Avoid_: joinable, open organization (covert ones admit too), public organization.

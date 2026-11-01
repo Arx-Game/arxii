@@ -9,6 +9,9 @@ Following Arx II design principles:
 - Clean separation between class definitions and character assignments
 """
 
+from typing import ClassVar
+
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -387,3 +390,40 @@ class PathAspect(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.character_path.name}: {self.aspect.name} (weight {self.weight})"
+
+
+class DistinctionPathAspectGrant(SharedMemoryModel):
+    """Config: a distinction whose bonus lands on the holder's Path's stronger Aspect (#4852).
+
+    Capable Mentor (slice 6 of #4813): +5 to whichever Aspect weighs more on the
+    character's starting Path, a thing the youth row cannot know, so character creation's
+    finalize resolves it (``PathAspect.weight``, the Path's own reading of "stronger"; ties
+    by aspect name) and writes one ``CharacterModifier`` on the Aspect's target
+    (``ensure_aspect_target``, #4827), sourced to the pick so losing the card cascades it.
+    Same sidecar pattern as ``currency.DistinctionStartingGrant`` (ADR-0010: the consumer
+    holds the FK pointing at the primitive).
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="path_aspect_grant",
+        help_text="The distinction whose new holders get the bonus on their Path's Aspect.",
+    )
+    value = models.IntegerField(
+        help_text="The modifier written on the Path's stronger Aspect at finalize; never zero.",
+    )
+
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class Meta:
+        verbose_name = "Distinction Path Aspect Grant"
+        verbose_name_plural = "Distinction Path Aspect Grants"
+
+    def __str__(self) -> str:
+        return f"PathAspectGrant({self.distinction_id}: {self.value:+d})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.value == 0:
+            raise ValidationError({"value": "A path aspect grant is never zero."})

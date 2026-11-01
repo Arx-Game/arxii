@@ -109,6 +109,30 @@ class ParseTableTest(PasteTestCase):
         assert missing.status == "error"
         assert "unknown card 'Nobody'" in " ".join(missing.notes)
 
+    def test_a_prestige_token_makes_the_starting_prestige_sidecar(self):
+        """#4852: ``+150 prestige`` / ``-300 prestige`` is a grant, not a modifier effect."""
+        (row,) = parse_table(
+            "Renowned | Personality | 5 | 1 | Broadly admired. | | +150 prestige | rules |"
+        )
+        assert row.status == "create", row.notes
+        assert row.prestige == 150
+        assert row.effects == []
+        assert "starts with +150 prestige" in row.will_create
+        (infamous,) = parse_table(
+            "Infamous | Personality | -10 | 1 | Wanted dead. | | -300 prestige; -Menace | rules |"
+        )
+        assert infamous.status == "create", infamous.notes
+        assert infamous.prestige == -300
+        assert len(infamous.effects) == 1
+        (bare,) = parse_table("Bare | Personality | 5 | 1 | | | +prestige | rules |")
+        assert bare.status == "error"
+        assert "needs an amount" in " ".join(bare.notes)
+        (twice,) = parse_table(
+            "Twice | Personality | 5 | 1 | | | +150 prestige; +10 prestige | rules |"
+        )
+        assert twice.status == "error"
+        assert "one starting prestige" in " ".join(twice.notes)
+
     def test_a_degree_opener_must_mark_and_arrives_bundled(self):
         (bad,) = parse_table("Marked | Personality | 0 | 1 | | | | degree:thwarted |")
         assert bad.status == "error"

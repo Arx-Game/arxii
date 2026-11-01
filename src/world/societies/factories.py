@@ -23,6 +23,8 @@ from world.societies.constants import (
 from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
+    DistinctionOrganizationGrant,
+    DistinctionPrestigeGrant,
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
@@ -472,3 +474,23 @@ class NamedOrganizationFactory(factory_django.DjangoModelFactory):
     organization = factory.SubFactory(OrganizationFactory)
     role = NamedOrganizationRole.HARMED
     only_if_exposed = False
+
+
+class DistinctionPrestigeGrantFactory(factory_django.DjangoModelFactory):
+    """A card's starting prestige (#4852); pass ``distinction`` and ``amount``."""
+
+    class Meta:
+        model = DistinctionPrestigeGrant
+
+    amount = 150
+
+
+class DistinctionOrganizationGrantFactory(factory_django.DjangoModelFactory):
+    """The membership a card opens (#4852); ``organization`` left ``None`` means the player
+    picks at Final Touches."""
+
+    class Meta:
+        model = DistinctionOrganizationGrant
+
+    organization = None
+    rank = None

@@ -686,6 +686,11 @@ class ModifierSource(SharedMemoryModel):
         """Human-readable source description."""
         if self.distinction_effect:
             return f"Distinction: {self.distinction_effect.distinction.name}"
+        if self.character_distinction_id:
+            # A card's finalize-time grant with no effect template (#4852): Capable
+            # Mentor's bonus lands on the Path's stronger Aspect, which no authored
+            # effect row can name.
+            return f"Distinction: {self.character_distinction.distinction.name}"
         if self.residence_comfort:
             return "Residence comfort"
         if self.form_combat_profile:

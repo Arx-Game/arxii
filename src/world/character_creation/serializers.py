@@ -19,12 +19,16 @@ from world.character_creation.constants import (
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
+    ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
+    PRESTIGE_STORIES_KEY,
+    PRESTIGE_STORY_MAX_LENGTH,
     RECENT_HISTORY_MAX_LENGTH,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     AnchorSource,
+    FinalTouchesPrompt,
     OfferChapter,
     QuestionKind,
     schooling_max_rank,
@@ -156,6 +160,23 @@ class CrimeKindSerializer(serializers.Serializer):
     slug = serializers.CharField()
     name = serializers.CharField()
     description = serializers.CharField()
+
+
+class FinalTouchesCardSerializer(serializers.Serializer):
+    """One ask a held card raises at Final Touches (#4852, slice 6 of #4813)."""
+
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    prompt = serializers.ChoiceField(choices=FinalTouchesPrompt.choices)
+    detail = serializers.CharField(allow_blank=True)
+
+
+class OrganizationChoiceSerializer(serializers.Serializer):
+    """One organization a card with an open organization grant may seat the character in."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    is_covert = serializers.BooleanField()
 
 
 class EnemyReasonSerializer(serializers.Serializer):
@@ -1425,6 +1446,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # the crime kinds the first of them picks from.
     final_touches_prompts = serializers.SerializerMethodField()
     crime_kinds = serializers.SerializerMethodField()
+    # The cards behind those prompts and the organizations an open organization grant
+    # picks from (#4852, slice 6 of #4813).
+    final_touches_cards = serializers.SerializerMethodField()
+    organization_choices = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
     derived_anchors = serializers.SerializerMethodField()
@@ -1497,6 +1522,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "introductions_offered",
             "final_touches_prompts",
             "crime_kinds",
+            "final_touches_cards",
+            "organization_choices",
         ]
         read_only_fields = [
             "id",
@@ -1510,6 +1537,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "introductions_offered",
             "final_touches_prompts",
             "crime_kinds",
+            "final_touches_cards",
+            "organization_choices",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1685,6 +1714,35 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return [
             {"id": k.pk, "slug": k.slug, "name": k.name, "description": k.description}
             for k in CrimeKind.objects.all()
+        ]
+
+    @extend_schema_field(FinalTouchesCardSerializer(many=True))
+    def get_final_touches_cards(self, obj: CharacterDraft) -> list[dict]:
+        """The held cards behind the Final Touches prompts, one entry per card and prompt
+        (#4852); ``detail`` names the Path's stronger Aspect for ``path_aspect``."""
+        from world.character_creation.offers import final_touches_cards  # noqa: PLC0415
+
+        return [
+            {
+                "distinction_id": ask.distinction_id,
+                "name": ask.name,
+                "prompt": ask.prompt,
+                "detail": ask.detail,
+            }
+            for ask in final_touches_cards(obj)
+        ]
+
+    @extend_schema_field(OrganizationChoiceSerializer(many=True))
+    def get_organization_choices(self, obj: CharacterDraft) -> list[dict]:
+        """The realm's organizations that admit player characters, for the organization
+        prompt (#4852); empty when no held card asks it, so the list is never sent idly."""
+        from world.character_creation.offers import organization_choices  # noqa: PLC0415
+
+        if FinalTouchesPrompt.ORGANIZATION not in self.get_final_touches_prompts(obj):
+            return []
+        return [
+            {"id": org.pk, "name": org.name, "is_covert": org.is_covert}
+            for org in organization_choices(obj)
         ]
 
     @extend_schema_field(IntroductionsOfferedSerializer())
@@ -2031,6 +2089,45 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_officially_dead(data["officially_dead"])
         if data.get(CRIME_KEY) is not None:
             self._validate_crime(data[CRIME_KEY])
+        if data.get(PRESTIGE_STORIES_KEY) is not None:
+            self._validate_prestige_stories(data[PRESTIGE_STORIES_KEY])
+        if data.get(ORGANIZATIONS_KEY) is not None:
+            self._validate_organizations(data[ORGANIZATIONS_KEY])
+
+    @staticmethod
+    def _card_keyed(answers: object, key: str) -> dict:
+        """A grants answer is an object keyed by the card's id (#4852); the keys are checked
+        as ids, not as held cards: an unpicked card keeps its answer for its return."""
+        if not isinstance(answers, dict):
+            raise serializers.ValidationError({key: "Must be an object keyed by card id."})
+        for card_id in answers:
+            if not str(card_id).isdigit():
+                raise serializers.ValidationError({key: "Keys must be card ids."})
+        return answers
+
+    def _validate_prestige_stories(self, stories: object) -> None:
+        """What people say happened, one text per prestige card (#4852)."""
+        for text in self._card_keyed(stories, PRESTIGE_STORIES_KEY).values():
+            if not isinstance(text, str):
+                raise serializers.ValidationError({PRESTIGE_STORIES_KEY: "Each story is text."})
+            if len(text) > PRESTIGE_STORY_MAX_LENGTH:
+                msg = f"A story can be at most {PRESTIGE_STORY_MAX_LENGTH} characters."
+                raise serializers.ValidationError({PRESTIGE_STORIES_KEY: msg})
+
+    def _validate_organizations(self, picks: object) -> None:
+        """The organization a card seats the character in: one of the draft's choices, or
+        null to take none (#4852)."""
+        from world.character_creation.offers import organization_choices  # noqa: PLC0415
+
+        picks = self._card_keyed(picks, ORGANIZATIONS_KEY)
+        wanted = [org_id for org_id in picks.values() if org_id is not None]
+        if not wanted:
+            return
+        allowed = {org.pk for org in organization_choices(self.instance)}
+        for org_id in wanted:
+            if not isinstance(org_id, int) or org_id not in allowed:
+                msg = "Pick an organization from the list."
+                raise serializers.ValidationError({ORGANIZATIONS_KEY: msg})
 
     @staticmethod
     def _validate_crime(crime: object) -> None:

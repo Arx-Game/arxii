@@ -480,8 +480,7 @@ characters; `_validate_crime` is not gated on the card being held, so unpicking 
 re-picking Jailbird keeps the text). Finalize (`_write_final_touches_doors`, both paths)
 writes one staff-only `justice.CharacterCrimeNote` (sheet, kind, the stripped line) only
 while a held card still asks the question; no `PersonaHeat`, no `DeedCrimeTag`, no Legend
-row come of it (decision 6 of #4813), and no serializer carries the note. The prestige
-blurb's prompt arrives with the starting prestige event (slice 6), whose text it is. The
+row come of it (decision 6 of #4813), and no serializer carries the note. The
 leaf (#4848, the frontend half of the slice) mounts the chapter between the Actor's Sheet
 questions and the goals in `FinalTouchesStage`: `ChapterOffers chapter="final_touches"` for the
 lines and, per prompt in `final_touches_prompts`, its block (`crime`: a select over
@@ -490,6 +489,43 @@ PATCH on leave, `null` when no kind is picked); the section is absent when nothi
 Copy keys `finaltouches_cards_heading` / `_intro`, `finaltouches_crime_prompt` / `_line_label` /
 `_help` / `_blank` (seeded, PLACEHOLDER for the maintainer's voice from the authoring plan's
 Final Touches copy table).
+
+**The grants reconciled at finalize (#4852, slice 6 of #4813).** Three sidecars in the
+`DistinctionStartingGrant` shape (ADR-0010: the consumer holds the one-to-one pointing at
+`Distinction`), each paid once by finalize and never by a reconcile, and each raising its
+own ask at Final Touches without a staff-set prompt: `held_cards(draft)` joins them in one
+query, `final_touches_cards(draft)` lists every ask as `FinalTouchesCard(distinction_id,
+name, prompt, detail)` in enum order then card name (`final_touches_prompts` is the same
+list's prompts once each; `CharacterDraftSerializer.final_touches_cards` carries it).
+*Starting prestige*: `societies.DistinctionPrestigeGrant` (`amount`, non-zero, negative
+valid by decision 3) asks `prestige_story`; `draft_data.prestige_stories` is
+`{"<card id>": text}` (each at most `PRESTIGE_STORY_MAX_LENGTH`, 500, validated like the
+crime, not gated on the card); `_create_distinction_modifiers_bulk` pays it through
+`renown.apply_starting_prestige` (the `award_deed_prestige` seam: no Legend row, decision
+6) and `_write_prestige_stories` makes the story the pick's `CharacterDistinction.notes`
+when those are blank. *The membership a card opens*: `societies.DistinctionOrganizationGrant`
+(`organization` nullable, `rank` nullable and that organization's) asks `organization`
+only when no organization is fixed; `organization_choices(draft)` is the realm's
+organizations (`society__realm` = the selected area's realm) with
+`Organization.admits_player_characters`, covenants excluded, carried as
+`organization_choices` only while the ask is open; `draft_data.organizations` is
+`{"<card id>": organization id}`, each one of the choices; `_join_card_organizations` seats
+the fixed or chosen organization through `join_organization` at the grant's rank or the
+entry rank, after `_bind_vacancy`, and logs and skips an `OrganizationMembershipError` (a
+vacancy already seated the same organization, a blocked pair) rather than failing the
+finalize. *Capable Mentor*: `classes.DistinctionPathAspectGrant` (`value`, non-zero) shows
+`path_aspect` with `detail` the name of `strongest_path_aspect(draft.selected_path)` (the
+heaviest `PathAspect`, ties by aspect name); `_grant_path_aspect_bonuses` writes one
+`CharacterModifier` on that Aspect's target (`ensure_aspect_target`, #4827) sourced to a
+`ModifierSource(character_distinction=pick)` with no effect template, so `source_display`
+reads "Distinction: Capable Mentor" and losing the card cascades it. All three run from
+`_write_final_touches_doors` on both finalize paths. The paste's `+150 prestige` /
+`-300 prestige` effect token makes the prestige sidecar; the other two are authored in the
+plain admin. The card's `effects_summary` prices each in words ("Starts with -300
+prestige", "Opens a membership in ...", "+5 to your Path's stronger Aspect"). The parent's
+"starting prestige event" is not built: no prestige ledger exists and the pick's notes
+already hold what the player says about a card. The leaf's three blocks are the frontend
+half.
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,

@@ -504,10 +504,43 @@ export interface CharacterDraft {
   final_touches_prompts: FinalTouchesPrompt[];
   /** The justice list the `crime` prompt picks from (#4846). */
   crime_kinds: CrimeKind[];
+  /**
+   * The held cards behind the Final Touches prompts (#4852), one entry per card and prompt,
+   * enum order then card name; `detail` names the Path's stronger Aspect for `path_aspect`.
+   */
+  final_touches_cards: FinalTouchesCard[];
+  /**
+   * The realm's organizations that admit player characters, for the `organization` prompt
+   * (#4852); empty unless a held card asks it.
+   */
+  organization_choices: OrganizationChoice[];
 }
 
-/** The optional question a card asks at Final Touches (#4846); `crime` is Jailbird's. */
-export type FinalTouchesPrompt = 'crime';
+/**
+ * The optional question a card asks at Final Touches (#4846); `crime` is Jailbird's. A grant
+ * sidecar raises its own (#4852): `prestige_story` (a prestige grant), `organization` (an
+ * organization grant with no fixed organization), `path_aspect` (a path aspect grant; nothing
+ * to answer, a line naming the Aspect).
+ */
+export type FinalTouchesPrompt = 'crime' | 'prestige_story' | 'organization' | 'path_aspect';
+
+/** One ask a held card raises at Final Touches (#4852). */
+export interface FinalTouchesCard {
+  distinction_id: number;
+  name: string;
+  prompt: FinalTouchesPrompt;
+  detail: string;
+}
+
+/** One organization a card with an open organization grant may seat the character in (#4852). */
+export interface OrganizationChoice {
+  id: number;
+  name: string;
+  is_covert: boolean;
+}
+
+/** The longest story a prestige card takes; mirrors the backend's `PRESTIGE_STORY_MAX_LENGTH`. */
+export const PRESTIGE_STORY_MAX_LENGTH = 500;
 
 /** One crime kind the Final Touches crime prompt picks from (#4846). */
 export interface CrimeKind {
@@ -1002,6 +1035,10 @@ export interface DraftData {
   officially_dead?: DraftOfficiallyDead | null;
   // Jailbird's crime (#4846): the kind and the line, or null; written only while a held card asks
   crime?: DraftCrime | null;
+  /** What people say happened, per prestige card (#4852), keyed by the card's id as text. */
+  prestige_stories?: Record<string, string>;
+  /** The organization a card seats the character in (#4852), keyed by the card's id as text. */
+  organizations?: Record<string, number | null>;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
