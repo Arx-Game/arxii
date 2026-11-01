@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from world.checks.types import CheckResult
+    from world.combat.models import CombatOpponent
+    from world.combat.types import CombatTechniqueResolution
     from world.magic.models import Technique
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -146,6 +148,27 @@ def _broadcast_cast_stopped(
     else:
         reason = "Something here stopped your cast before it left your hands."
     transaction.on_commit(lambda: character.msg(reason))
+
+
+def _maybe_record_miss(
+    participant: CombatParticipant,
+    target: CombatOpponent | None,
+    combat_result: CombatTechniqueResult | CombatTechniqueResolution,
+) -> None:
+    """An attack on an opponent that missed builds the attacker's intensity (#4858)."""
+    if target is None or not isinstance(combat_result, CombatTechniqueResult):
+        return
+    use = combat_result.technique_use_result
+    check = use.resolution_result.check_result if use.resolution_result else None
+    if check is None:
+        return
+    from world.combat.services.techniques.intensity import (  # noqa: PLC0415
+        is_miss,
+        record_miss_intensity,
+    )
+
+    if is_miss(check.success_level):
+        record_miss_intensity(participant)
 
 
 def _resolve_pc_action(
@@ -259,6 +282,7 @@ def resolve_pc_technique(
             _broadcast_cast_stopped(participant, action, technique, combat_result)
             return outcome
         outcome.damage_results.extend(combat_result.damage_results)
+        _maybe_record_miss(participant, target, combat_result)
         if action.from_entrance:
             _maybe_suggest_entrance_dramatic_moment(participant, combat_result)
         _maybe_produce_insight_for_cast(participant, combat_result, technique)

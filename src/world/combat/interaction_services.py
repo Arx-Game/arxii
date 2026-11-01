@@ -214,6 +214,11 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
     """
     technique = action.focused_action
     if technique is None:
+        from world.combat.constants import CombatManeuver  # noqa: PLC0415
+
+        if action.maneuver == CombatManeuver.STRIKE and action.focused_opponent_target_id:
+            # A basic Strike (#4858) carries no technique.
+            return f"Strike at {action.focused_opponent_target.name}"
         return "passives only"
 
     from world.magic.services.technique_personalization import (  # noqa: PLC0415

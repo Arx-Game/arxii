@@ -239,6 +239,10 @@ from world.combat.services.declarations.social_check import (
     _social_combat_difficulty,
     _social_verb_success_level,
 )
+from world.combat.services.declarations.strike import (
+    declare_strike,
+    strike_weapon_options,
+)
 from world.combat.services.declarations.succor import (
     declare_succor,
     dispatch_succor,
@@ -802,6 +806,7 @@ __all__ = [
     "declare_mark",
     "declare_parley",
     "declare_rally",
+    "declare_strike",
     "declare_succor",
     "declare_taunt",
     "declare_use_item",
@@ -850,6 +855,7 @@ __all__ = [
     "scan_round_combos",
     "select_npc_actions",
     "spawn_from_creature_template",
+    "strike_weapon_options",
     "swarm_attack_count",
     "swarm_kills",
     "toggle_action_ready",

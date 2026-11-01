@@ -47,7 +47,13 @@ if TYPE_CHECKING:
 
 
 def _pc_attack_defenders(action: CombatRoundAction) -> list[CombatOpponent]:
-    """The opponents a PC's declared attack is aimed at (the waiting-strike defenders)."""
+    """The opponents a PC's declared attack is aimed at (the waiting-strike defenders).
+
+    A Strike (#4858) is an attack with no technique: its one opponent is the defender.
+    """
+    if action.maneuver == CombatManeuver.STRIKE:
+        target = action.focused_opponent_target
+        return [target] if target is not None else []
     if action.maneuver in _STANDALONE_MANEUVER_RESOLVERS or action.focused_action is None:
         return []
     defenders = [t.opponent for t in action.extra_targets.select_related("opponent")]
