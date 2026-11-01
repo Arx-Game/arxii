@@ -231,6 +231,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.effecttype",
         "magic.facet",
         "magic.facetalias",
+        "magic.faceteffectbonus",  # a facet's bonus to a maneuver effect (#4815)
         "magic.gift",
         "magic.giftunlock",
         "magic.glimpsetag",

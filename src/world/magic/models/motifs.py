@@ -91,7 +91,7 @@ class FacetAlias(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.name} -> {self.facet.name}"
 
 
-class FacetEffectBonus(SharedMemoryModel):
+class FacetEffectBonus(NaturalKeyMixin, SharedMemoryModel):
     """A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783).
 
     The facet itself names the effect it boosts, whatever the thread's resonance
@@ -119,6 +119,8 @@ class FacetEffectBonus(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         ordering = ["facet__name", "target__name"]
         verbose_name = "Facet effect bonus"
@@ -128,6 +130,9 @@ class FacetEffectBonus(SharedMemoryModel):
                 fields=["facet", "target"], name="facet_effect_bonus_one_per_target"
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["facet", "target"]
 
     def __str__(self) -> str:
         return f"{self.facet.name}: {self.amount:+d} {self.target.name}"
