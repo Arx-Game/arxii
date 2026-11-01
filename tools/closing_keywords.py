@@ -31,9 +31,43 @@ _BRANCH_ISSUE = re.compile(r"(?:^|[-/])(\d{2,})(?:-|$)")
 _SCISSORS = "# ------------------------ >8 ------------------------"
 
 
+# What may sit beside closing references on a deliberate closing line: a list bullet,
+# separators, "and". Anything else on the line makes it prose.
+_CLOSING_LINE_FILLER = re.compile(r"^[\s,;.&*-]*(?:and[\s,;.&]*)*$", re.IGNORECASE)
+
+
+# A labelled close: "- Fixes #3679: hub models are blind ..." (colon straight after it).
+_LABELLED_CLOSE = re.compile(r"^\s*(?:[-*]\s+)?" + STRAY.pattern + r":\s", re.IGNORECASE)
+
+
+def _is_closing_line(line: str) -> bool:
+    """A deliberate close: a line of nothing but closing references, or a labelled one.
+
+    `Closes #1`, `Closes #1, closes #2`, `- Fixes #3679: what it fixes`. Not a sentence
+    that happens to hold a keyword: "Do not close #3751" closed #3751 (#3955).
+    """
+    if not STRAY.search(line):
+        return False
+    return bool(_CLOSING_LINE_FILLER.match(STRAY.sub("", line)) or _LABELLED_CLOSE.match(line))
+
+
 def stray_references(text: str, allowed: str | None) -> list[str]:
-    """Closing-keyword phrases in ``text`` that target anything but ``allowed``."""
-    return [m["phrase"] for m in STRAY.finditer(text) if m["number"] != allowed]
+    """Closing-keyword phrases in ``text`` that read as prose rather than a deliberate close.
+
+    A reference is deliberate when it names ``allowed`` (the PR's or branch's own issue)
+    or stands on a line of nothing but closing references, the way a PR closing several
+    SonarCloud issues lists them (#4772, #4492). It is prose otherwise, which is how both
+    accidents happened: "the bot ... #4866" closed an open PR (#4899), and "Close #4684
+    only after every current row ..." closed a Sentry issue the line said to keep open
+    (#4721).
+    """
+    return [
+        m["phrase"]
+        for line in text.splitlines()
+        if not _is_closing_line(line)
+        for m in STRAY.finditer(line)
+        if m["number"] != allowed
+    ]
 
 
 def message_text(raw: str) -> str:

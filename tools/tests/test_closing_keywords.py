@@ -25,8 +25,30 @@ def test_the_incident_sentence_is_caught():
     ["Closes #12", "fixes: #12", "RESOLVED #12", "closed Arx-Game/arxii#12",
      "fix https://github.com/Arx-Game/arxii/pull/12"],
 )  # fmt: skip
-def test_every_form_github_honours_is_caught(text: str):
-    assert stray_references(text, "99") == [text]
+def test_every_form_github_honours_is_caught_in_prose(text: str):
+    assert stray_references(f"Earlier work {text} for us.", "99") == [text]
+
+
+# Real PR-body lines that closed an issue they meant to keep open (all closed on merge).
+@pytest.mark.parametrize(
+    ("line", "own"),
+    [
+        ("Refs #3751. Do not close #3751.", "3948"),  # PR #3955
+        ("This PR delivers the recorder; it intentionally does not close #3934.", "4017"),
+        ("no recurrence is verified. Close #4684 only after every current row", "4719"),
+    ],
+)
+def test_prose_that_names_another_issue_is_caught(line: str, own: str):
+    assert len(stray_references(line, own)) == 1
+
+
+def test_deliberate_closing_lines_pass():
+    """A PR closing several SonarCloud issues lists them; that must keep working."""
+    body = (
+        "Closes #4685\nCloses #4686\n- Closes #4687\nCloses #1, closes #2 and fixes #3.\n"
+        "- Fixes #3679: several staff-authored hub models are blind to their relations\n"
+    )
+    assert stray_references(body, "4685") == []
 
 
 def test_the_work_s_own_issue_and_plain_mentions_pass():
