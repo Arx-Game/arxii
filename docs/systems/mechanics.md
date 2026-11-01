@@ -367,7 +367,9 @@ step; `derived_amount(sheet, row, per_step)` (`derived_amounts.py`) returns it t
 and `scaled_condition_effect_value`, never stored; readers that sum stored
 `CharacterModifier.value` (goals, AP regeneration, comfort) keep the flat amount, as for sizes. An
 input replaces the row's own scaling: a size, severity or stage never applies with it (`clean()`),
-and a check-rank input is refused on a stat or skill target, whose check would read it again. The
+and a check-rank input is refused on a stat or skill target (the stat category or any target with
+`target_trait`), whose check would read it again; a row written past `clean()` reads 0 inside its
+own rating instead of recursing (`_RATINGS_IN_PROGRESS`). The
 target's soak input is the next slice. A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
 "Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
