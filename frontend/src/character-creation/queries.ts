@@ -378,7 +378,9 @@ function useLifeMutation(draftId: number, call: (draftId: number) => Promise<Cha
   return useMutation({
     mutationFn: () => call(draftId),
     onSuccess: (draft) => {
-      queryClient.setQueryData(characterCreationKeys.draft(), draft);
+      // The action answers with the draft; a test double may answer with nothing, and an
+      // empty cache would unmount the stage, so only a real answer replaces it.
+      if (draft) queryClient.setQueryData(characterCreationKeys.draft(), draft);
       void queryClient.invalidateQueries({ queryKey: distinctionKeys.draftDistinctions(draftId) });
       void queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftBeats(draftId) });
       void queryClient.invalidateQueries({
