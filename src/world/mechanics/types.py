@@ -6,7 +6,7 @@ Dataclasses and type definitions for the mechanics service layer.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
@@ -237,8 +237,11 @@ class TechniqueEffectContext:
     ) -> TechniqueEffectContext:
         """This cast as it lands on an opponent carrying ``facts`` (#4823), with the hit's
         resolved ``damage_type_id`` for damage (a condition's context has none)."""
-        return replace(
-            self,
+        return TechniqueEffectContext(
+            technique_id=self.technique_id,
+            gift_ids=self.gift_ids,
+            functions=self.functions,
+            resonance_ids=self.resonance_ids,
             damage_type_id=damage_type_id,
             opponent_property_ids=facts.property_ids,
             opponent_condition_ids=facts.condition_ids,
