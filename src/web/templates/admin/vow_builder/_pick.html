@@ -19,13 +19,13 @@ limits formset and its payload lines. `entry` is a views._PickEntry.
     {% if f.non_field_errors %}<p class="errornote">{{ f.non_field_errors }}</p>{% endif %}
     <table class="tuning-table vb-table">
       <tbody>
-        <tr><th>{{ f.pick_level.label_tag }}</th><td>{{ f.pick_level.errors }}{{ f.pick_level }}</td>
-          <th>{{ f.value.label_tag }}</th><td>{{ f.value.errors }}{{ f.value }}</td></tr>
-        <tr><th>{{ f.name.label_tag }}</th><td colspan="3">{{ f.name.errors }}{{ f.name }}</td></tr>
-        <tr><th>{{ f.description.label_tag }}</th>
+        <tr><th scope="row">{{ f.pick_level.label_tag }}</th><td>{{ f.pick_level.errors }}{{ f.pick_level }}</td>
+          <th scope="row">{{ f.value.label_tag }}</th><td>{{ f.value.errors }}{{ f.value }}</td></tr>
+        <tr><th scope="row">{{ f.name.label_tag }}</th><td colspan="3">{{ f.name.errors }}{{ f.name }}</td></tr>
+        <tr><th scope="row">{{ f.description.label_tag }}</th>
           <td colspan="3">{{ f.description.errors }}{{ f.description }}</td></tr>
         {% if f.instance.pk %}
-        <tr><th>{{ f.DELETE.label_tag }}</th><td colspan="3">{{ f.DELETE }}</td></tr>
+        <tr><th scope="row">{{ f.DELETE.label_tag }}</th><td colspan="3">{{ f.DELETE }}</td></tr>
         {% endif %}
       </tbody>
     </table>
@@ -36,8 +36,8 @@ limits formset and its payload lines. `entry` is a views._PickEntry.
     {{ limits.management_form }}
     {% if limits.non_form_errors %}<p class="errornote">{{ limits.non_form_errors }}</p>{% endif %}
     <table class="tuning-table vb-table">
-      <thead><tr><th>Kind</th><th>How often met (tenths)</th><th>Reduction</th>
-        <th>Description</th><th>Remove</th></tr></thead>
+      <thead><tr><th scope="col">Kind</th><th scope="col">How often met (tenths)</th><th scope="col">Reduction</th>
+        <th scope="col">Description</th><th scope="col">Remove</th></tr></thead>
       <tbody id="limits-body-{{ limits.prefix }}">
         {% for lf in limits.forms %}
         <tr class="vb-limit-row">

@@ -414,6 +414,30 @@ def stored_picks(role: CovenantRole) -> dict[int, StoredPick]:
     }
 
 
+def _choices_of_holders_of(pick_ids: set[int]) -> list[CharacterVowFocusPick]:
+    """Every chosen pick of each live holder of any of ``pick_ids``, in one query."""
+    return list(
+        CharacterVowFocusPick.objects.filter(
+            character_role__left_at__isnull=True,
+            character_role__focus_picks__pick_id__in=pick_ids,
+        )
+        .distinct()
+        .select_related("character_role__character_sheet__character", "pick")
+        .order_by("character_role__character_sheet__character__db_key", "pick__pick_level")
+    )
+
+
+def _group_by_membership_level(
+    choices: list[CharacterVowFocusPick], stored: Mapping[int, StoredPick]
+) -> dict[tuple[int, int], list[CharacterVowFocusPick]]:
+    """Chosen picks grouped by (membership, level), the level read as stored."""
+    grouped: dict[tuple[int, int], list[CharacterVowFocusPick]] = {}
+    for choice in choices:
+        level = stored[choice.pick_id].level if choice.pick_id in stored else choice.pick.pick_level
+        grouped.setdefault((choice.character_role_id, level), []).append(choice)
+    return grouped
+
+
 def holder_impact(
     role: CovenantRole,
     new_prices: Mapping[int, int | None],
@@ -436,15 +460,7 @@ def holder_impact(
     }
     if not changed:
         return []
-    choices = list(
-        CharacterVowFocusPick.objects.filter(
-            character_role__left_at__isnull=True,
-            character_role__focus_picks__pick_id__in=changed,
-        )
-        .distinct()
-        .select_related("character_role__character_sheet__character", "pick")
-        .order_by("character_role__character_sheet__character__db_key", "pick__pick_level")
-    )
+    choices = _choices_of_holders_of(changed)
 
     def old_price(choice: CharacterVowFocusPick) -> int:
         if choice.pick_id in stored:
@@ -456,10 +472,7 @@ def holder_impact(
             return new_prices[choice.pick_id] or 0
         return old_price(choice)
 
-    by_membership_level: dict[tuple[int, int], list[CharacterVowFocusPick]] = {}
-    for choice in choices:
-        level = stored[choice.pick_id].level if choice.pick_id in stored else choice.pick.pick_level
-        by_membership_level.setdefault((choice.character_role_id, level), []).append(choice)
+    by_membership_level = _group_by_membership_level(choices, stored)
     budget = focus_pick_budget()
     impacts: list[HolderImpact] = []
     for (membership_id, level), level_choices in by_membership_level.items():

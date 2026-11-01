@@ -52,32 +52,32 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
           <table class="tuning-table vb-table">
             <tbody>
-              <tr><th>{{ form.name.label_tag }}</th><td>{{ form.name.errors }}{{ form.name }}</td>
-                <th>Slug</th><td>{{ role.slug }}</td></tr>
-              <tr><th>{{ form.covenant_type.label_tag }}</th>
+              <tr><th scope="row">{{ form.name.label_tag }}</th><td>{{ form.name.errors }}{{ form.name }}</td>
+                <th scope="row">Slug</th><td>{{ role.slug }}</td></tr>
+              <tr><th scope="row">{{ form.covenant_type.label_tag }}</th>
                 <td>{{ form.covenant_type.errors }}{{ form.covenant_type }}</td>
-                <th>{{ form.speed_rank.label_tag }}</th>
+                <th scope="row">{{ form.speed_rank.label_tag }}</th>
                 <td>{{ form.speed_rank.errors }}{{ form.speed_rank }}</td></tr>
-              <tr><th>{{ form.description.label_tag }}</th>
+              <tr><th scope="row">{{ form.description.label_tag }}</th>
                 <td colspan="3">{{ form.description.errors }}{{ form.description }}</td></tr>
-              <tr><th>Blend</th>
+              <tr><th scope="row">Blend</th>
                 <td colspan="3">{{ form.sword_weight.errors }}{{ form.shield_weight.errors }}{{ form.crown_weight.errors }}
                   {{ form.sword_weight.label_tag }} {{ form.sword_weight }}
                   {{ form.shield_weight.label_tag }} {{ form.shield_weight }}
                   {{ form.crown_weight.label_tag }} {{ form.crown_weight }}</td></tr>
-              <tr><th>{{ form.parent_role.label_tag }}</th>
+              <tr><th scope="row">{{ form.parent_role.label_tag }}</th>
                 <td>{{ form.parent_role.errors }}{{ form.parent_role }}</td>
-                <th>{{ form.resonance.label_tag }}</th>
+                <th scope="row">{{ form.resonance.label_tag }}</th>
                 <td>{{ form.resonance.errors }}{{ form.resonance }}</td></tr>
-              <tr><th>{{ form.command_tier.label_tag }}</th>
+              <tr><th scope="row">{{ form.command_tier.label_tag }}</th>
                 <td colspan="3">{{ form.command_tier.errors }}{{ form.command_tier }}</td></tr>
-              <tr><th>Flags</th>
+              <tr><th scope="row">Flags</th>
                 <td colspan="3"><div class="vb-flags">
                   {% for field in flag_fields %}
-                  <label>{{ field }} {{ field.label }}</label>{{ field.errors }}
+                  <label for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>{{ field.errors }}
                   {% endfor %}
                 </div></td></tr>
-              <tr><th>Sub-roles</th>
+              <tr><th scope="row">Sub-roles</th>
                 <td colspan="3">{{ sub_roles|length }} sub-role{{ sub_roles|length|pluralize }}{% if sub_roles %}:
                   {% for name, url in sub_roles %}<a href="{{ url }}">{{ name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}{% endif %}</td></tr>
             </tbody>
@@ -92,7 +92,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           {{ specialties.management_form }}
           {% if specialties.non_form_errors %}<p class="errornote">{{ specialties.non_form_errors }}</p>{% endif %}
           <table class="tuning-table vb-table">
-            <thead><tr><th>Function</th><th>Multiplier (tenths)</th><th>Rides</th><th>Remove</th></tr></thead>
+            <thead><tr><th scope="col">Function</th><th scope="col">Multiplier (tenths)</th><th scope="col">Rides</th><th scope="col">Remove</th></tr></thead>
             <tbody id="specialties-body">
               {% for sf, rides_count in specialty_rows %}
               <tr>
@@ -170,13 +170,13 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
                 {% for hidden in picks.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                 <table class="tuning-table vb-table">
                   <tbody>
-                    <tr><th>{{ picks.empty_form.pick_level.label_tag }}</th>
+                    <tr><th scope="row">{{ picks.empty_form.pick_level.label_tag }}</th>
                       <td>{{ picks.empty_form.pick_level }}</td>
-                      <th>{{ picks.empty_form.value.label_tag }}</th>
+                      <th scope="row">{{ picks.empty_form.value.label_tag }}</th>
                       <td>{{ picks.empty_form.value }}</td></tr>
-                    <tr><th>{{ picks.empty_form.name.label_tag }}</th>
+                    <tr><th scope="row">{{ picks.empty_form.name.label_tag }}</th>
                       <td colspan="3">{{ picks.empty_form.name }}</td></tr>
-                    <tr><th>{{ picks.empty_form.description.label_tag }}</th>
+                    <tr><th scope="row">{{ picks.empty_form.description.label_tag }}</th>
                       <td colspan="3">{{ picks.empty_form.description }}</td></tr>
                   </tbody>
                 </table>
@@ -247,16 +247,15 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
     var denominator = 1;
     var reductions = 0;
     var limitRows = row.querySelectorAll(".vb-limit-row");
-    for (var i = 0; i < limitRows.length; i++) {
-      var limit = limitRows[i];
+    for (var limit of limitRows) {
       var removed = limit.querySelector('input[name$="-DELETE"]');
       var kind = limit.querySelector('select[name$="-kind"]');
       if ((removed && removed.checked) || !kind || !kind.value) { continue; }
-      if (rules.frequency_kinds.indexOf(kind.value) !== -1) {
+      if (rules.frequency_kinds.includes(kind.value)) {
         var freq = limit.querySelector('input[name$="-frequency_tenths"]');
         numerator *= parseInt(freq.value || rules.full, 10);
         denominator *= rules.full;
-      } else if (rules.reduction_kinds.indexOf(kind.value) !== -1) {
+      } else if (rules.reduction_kinds.includes(kind.value)) {
         var reduction = limit.querySelector('input[name$="-reduction"]');
         reductions += parseInt(reduction.value || "0", 10);
       }
@@ -278,7 +277,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
   }
 
   var pickRows = document.querySelectorAll("[data-pick-row]");
-  for (var i = 0; i < pickRows.length; i++) { refreshPrice(pickRows[i]); }
+  for (var pickRow of pickRows) { refreshPrice(pickRow); }
 
   var dirty = false;
   function onEdit(evt) {

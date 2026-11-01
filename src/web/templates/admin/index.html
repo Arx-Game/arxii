@@ -23,11 +23,11 @@
                     <table>
                         {% for link in combat_roles_links %}
                             <tr>
-                                <th scope="row"><a href="{{ link.url }}">{{ link.label }}</a></th>
+                                <th scope="row"><a href="{{ link.url }}" id="combat-roles-link-{{ forloop.counter }}">{{ link.label }}</a></th>
                                 <td>{{ link.note }}
                                     {% if link.picker %}
                                     <form method="get" action="{{ link.picker.action }}" class="combat-roles-picker">
-                                        <select name="pk" aria-label="{{ link.label }}">
+                                        <select name="pk" aria-labelledby="combat-roles-link-{{ forloop.counter }}">
                                             {% for pk, name in link.picker.choices %}
                                             <option value="{{ pk }}">{{ name }}</option>
                                             {% endfor %}
