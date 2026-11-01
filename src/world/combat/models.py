@@ -1773,7 +1773,10 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         null=True,
         blank=True,
         related_name="+",
-        help_text="Item to use when maneuver == USE_ITEM.",
+        help_text=(
+            "Item to use when maneuver == USE_ITEM; the chosen weapon when maneuver == "
+            "STRIKE (empty means bare hands)."
+        ),
     )
     succor_resolution = models.FloatField(
         null=True,
