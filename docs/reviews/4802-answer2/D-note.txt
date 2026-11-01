@@ -1,0 +1,17 @@
+# D note. HEAD 72e6fad960038bf03f8dcf1a66eef9292a5529c0. DB rt_4802h (throwaway).
+GET /api/combat/1/ through the running server on :4001 after web login, twice:
+  D-tomas.json  as e2e_web (Tomas: seated, not owner of Garrick, not GM)
+  D-gm.json     as e2e_staff (Marn: staff; is_gm false, is_participant false)
+Ids: Garrick sheet 129, Garrick seat 2, mask persona 5 ("scarred sellsword"), Tomas sheet 6 / seat 1 / persona 2.
+Mira (sheet 5) has no seat in this encounter, so the roster has two rows.
+
+Tomas's response:
+  seat 2: character_name "scarred sellsword", character_sheet_id null, persona_id 5 (= mask persona id)   OK
+  seat 1: character_name "Tomas", character_sheet_id 6                                                    OK
+  scan of every value in the response for 129: 0 hits; no character_id key anywhere; "Garrick" 0 times    OK
+  clash contributor: {participant_id 2, character_name "scarred sellsword", FOCUSED, progress 2, anima 0}  OK
+Marn's response:
+  seat 2 character_sheet_id 129, seat 1 character_sheet_id 6 (every row carries its sheet id)              OK
+  scan for 129: one hit, $.participants[0].character_sheet_id (the roster row, as expected)
+  clash contributor identical to Tomas's (mask name, participant_id 2, no sheet id)
+RESULT: PASS (all five expectations met)
