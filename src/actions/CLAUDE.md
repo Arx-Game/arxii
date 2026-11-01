@@ -55,7 +55,7 @@ They do not use the command system, dispatchers, or handlers.
   `ChargeAction`/`JoustAction` (mounted, #1843)/`StrikeAction` (key `combat_strike`, #4858:
   wraps `declare_strike`; kwargs `opponent_id` and `weapon_id` (web) or `weapon_name` (telnet),
   neither meaning bare hands; telnet `strike <opp> [with <weapon>]` / `combat strike`, web
-  `StrikeControl`)/`AwaitOpeningAction` (key
+  Strike as the focused card's leading pick with `StrikeControl`)/`AwaitOpeningAction` (key
   `combat_await_opening`, #4608: the waiting strike, wraps `declare_await_opening`; kwargs
   `technique_id`, `confirm_soulfray_risk`; telnet `combat await <technique> [soulfray]`, web
   `WaitingStrikeControl`)/`EngageAction`/`DisengageAction`

@@ -8536,17 +8536,29 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
   draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
   with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
-  strongest equipped weapon); the strike skill per gear kind is
-  `STRIKE_CHECK_TYPE_BY_ARCHETYPE` (Melee, Ranged, Thrown, Unarmed Combat; `combat/constants.py`),
-  authored content with a Required content row (`strike-check-types`). If it lands, a damage roll
+  strongest equipped weapon); the check type per gear kind is
+  `STRIKE_CHECK_TYPE_BY_ARCHETYPE` (production's Melee, Ranged, Thrown and Unarmed Attack;
+  `combat/constants.py`), authored content with a Required content row (`strike-check-types`;
+  production has Melee and Ranged Attack only). The strike skill is whichever SKILL trait the
+  check type weights (Melee Combat for Melee Attack; production's Ranged Attack weights none).
+  If it lands, a damage roll
   of the same check (no difficulty, no modifiers) multiplies the weapon's damage by
   `get_damage_multiplier`, floored at "Strike: base damage", plus that effect's modifiers, then
   `scaled_outgoing_damage`, `apply_damage_to_opponent` and one point of weapon wear. Both rolls are
-  `ConsequenceOutcome` rows on the Strike's interaction (pool null), summaries naming the skill
-  and stat; the web Last Outcome card lists every roll of the latest action. Action
+  `ConsequenceOutcome` rows on the Strike's interaction (pool null), each summary its result line
+  ("Hit, good", "Miss", "11 damage"; `STRIKE_HIT_QUALITY`). `strike_roll_breakdowns(outcomes)`
+  lays them out at read time (`RollBreakdown`/`RollLine` in `world/checks/types.py`: heading,
+  the strike skill with the character's rating, the stat or stats, the weapon and its quality),
+  served as `roll_breakdown` on the consequence-outcomes API with the visible modifiers as rows
+  ("Intensity", "misses add to hit"); a pool-less, challenge-less row's `outcome_display` is
+  empty. The web Last Outcome card renders every roll of the latest action as those rows. The
+  room is told "Hobb strikes Bandit with a rapier. A good hit: 11 damage." and the striker's
+  telnet "You strike Bandit with your rapier. ..." instead (`broadcast_action_outcome`'s
+  `telnet_exclude`; `core.text.with_indefinite_article`). Action
   `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
-  <opp> [with <weapon>]` and `combat strike`, web `StrikeControl` fed by the own participant's
-  `strike_weapons`. **Misses build intensity:** a missed attack (Strike or technique, at an
+  <opp> [with <weapon>]` and `combat strike`, web: Strike is the first pick in the focused
+  `ActionDeclarationCard` row (`leadingPick`), its `StrikeControl` "With" row fed by the own
+  participant's `strike_weapons`, the target the card's own. **Misses build intensity:** a missed attack (Strike or technique, at an
   opponent) runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED
   `apply_dramatic_surge` once a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no
   outcome since 0347); every attack roll adds an "Intensity" contribution of engagement intensity

@@ -17,11 +17,11 @@ A special non-technique declaration a PC can make for a round (`CombatManeuver`:
 _Avoid_: special move, stance, command
 
 **Strike** (#4858):
-The basic attack any character makes with no technique: the STRIKE maneuver, with one of the character's equipped weapons or bare hands, at one opponent. A hit roll on the **strike skill** for the weapon's gear kind (Melee, Ranged, Thrown or Unarmed Combat) against the opponent, then, if it lands, a damage roll of the same skill that scales the weapon's damage and never deals less than the Strike's base damage. Bare hands are the weakest Unarmed weapon. It is the round's one action. A missed attack (Strike or technique) builds intensity, and intensity adds to every hit roll.
+The basic attack any character makes with no technique: the STRIKE maneuver, with one of the character's equipped weapons or bare hands, at one opponent. A hit roll on the attack check for the weapon's gear kind (its **strike skill** and stat) against the opponent, then, if it lands, a damage roll of the same skill that scales the weapon's damage and never deals less than the Strike's base damage. Bare hands are the weakest Unarmed weapon. It is the round's one action. A missed attack (Strike or technique) builds intensity, and intensity adds to every hit roll.
 _Avoid_: basic attack, auto-attack, melee attack (a Strike can be ranged), swing
 
 **Strike skill** (#4858):
-The skill a Strike's hit and damage rolls use, picked by the weapon's gear kind (`STRIKE_CHECK_TYPE_BY_ARCHETYPE`): one authored Skill and a CheckType of the same name per kind. Distinct from a combat style's skill (slice 2 of #4844), which stacks with it.
+The skill a Strike's hit and damage rolls use: Melee, Ranged, Thrown or Unarmed Combat, whichever skill the attack check type for the weapon's gear kind weights (`STRIKE_CHECK_TYPE_BY_ARCHETYPE` names the check types: Melee, Ranged, Thrown and Unarmed Attack). A check type that weights no skill (production's Ranged Attack) rolls on stats alone. Distinct from a combat style's skill (slice 2 of #4844), which stacks with it.
 _Avoid_: weapon skill, attack skill
 
 **Charge** (#1843):
