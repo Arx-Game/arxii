@@ -151,6 +151,7 @@ inventory reports for commands, API routes and frontend routes.
 | End-to-end pipeline test for the Audere offer surface (#873). | services / dispatch | `src/integration_tests/pipeline/test_audere_offer_pipeline.py` |
 | Telnet E2E: accept/decline surge and path crossing via CmdAccept/CmdDecline (#1344). | Cmd.func() by hand | `src/integration_tests/pipeline/test_audere_telnet_e2e.py` |
 | E2E (#4098, #4076): Audere unlocks ultimates, and Soulfray death waits for the encounter's end. | Cmd.func() by hand | `src/integration_tests/pipeline/test_audere_ultimates_e2e.py` |
+| A masked fighter on the battle roster (#4802): Hobb puts on a mask by telnet (`persona mask a hooded man`) and Ada, reading the battle over REST, sees "a hooded man" with no portrait (a bare mask never falls back to the real face), then the mask's own portrait once it has one; Hobb's name and real portrait never appear. | handler + REST read | `src/integration_tests/test_battle_roster_masks_journeys.py` |
 | Telnet E2E: battle Surrounded peril/rescue journey (#1733). | services / dispatch | `src/integration_tests/pipeline/test_battle_peril_rescue_e2e.py` |
 | Telnet E2E: GM battle-staging journey (#2010). | Cmd.func() by hand | `src/integration_tests/pipeline/test_battle_staging_telnet_e2e.py` |
 | Telnet E2E: battle declare subverbs — the coverage gap (#1328 Bucket C). | services / dispatch | `src/integration_tests/pipeline/test_battle_subverbs_telnet_e2e.py` |
