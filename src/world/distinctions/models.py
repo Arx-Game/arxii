@@ -314,6 +314,10 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     prestige_grant_or_none = ReverseOneToOneOrNone("prestige_grant")
     organization_grant_or_none = ReverseOneToOneOrNone("organization_grant")
     path_aspect_grant_or_none = ReverseOneToOneOrNone("path_aspect_grant")
+    # And #4856: a second face (``scenes.DistinctionPersonaGrant``) and a tie with an
+    # organization of the realm (``societies.DistinctionOrganizationTie``).
+    persona_grant_or_none = ReverseOneToOneOrNone("persona_grant")
+    organization_tie_or_none = ReverseOneToOneOrNone("organization_tie")
 
     @PrunedCachedProperty
     def cached_item_grants(self) -> list:

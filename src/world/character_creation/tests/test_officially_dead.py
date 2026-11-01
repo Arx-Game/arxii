@@ -1,4 +1,9 @@
-"""Officially dead at creation (#4396): the world meets an established face from day one."""
+"""Officially dead at creation (#4396): the world meets an established face from day one.
+
+Since #4856 (slice 6 of #4813) the door opens only to a draft holding a card with a worn
+persona grant (Presumed Dead); ``_held()`` puts that card on the draft, and one test
+finalizes without it.
+"""
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
@@ -7,7 +12,9 @@ from world.character_creation.models import CharacterDraft
 from world.character_creation.serializers import CharacterDraftSerializer
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.distinctions.factories import DistinctionFactory
 from world.scenes.constants import PersonaType
+from world.scenes.factories import DistinctionPersonaGrantFactory
 from world.scenes.models import Persona
 from world.scenes.services import active_persona_for_sheet
 
@@ -22,6 +29,19 @@ FACE = {
 }
 
 
+def _held(distinction) -> list[dict]:
+    """A draft entry holding ``distinction`` as a catalogue pick (no ``offer_ids`` key, which
+    the reconcile keeps as stored)."""
+    return [
+        {
+            "distinction_id": distinction.pk,
+            "distinction_name": distinction.name,
+            "rank": 1,
+            "cost": distinction.cost_per_rank,
+        }
+    ]
+
+
 class OfficiallyDeadFinalizeTests(FinalizationTestMixin, TestCase):
     def setUp(self) -> None:
         self._flush_common_caches()
@@ -29,9 +49,13 @@ class OfficiallyDeadFinalizeTests(FinalizationTestMixin, TestCase):
         self._setup_finalization_base(
             self, prefix="Officially Dead", height_min=700, height_max=800
         )
+        self.presumed_dead = DistinctionFactory(name="Presumed Dead", cost_per_rank=5, max_rank=1)
+        DistinctionPersonaGrantFactory(distinction=self.presumed_dead, worn=True)
 
     def test_the_face_is_worn_and_the_true_face_is_believed_dead(self) -> None:
-        draft = self._create_base_draft(first_name="Kima", officially_dead=FACE)
+        draft = self._create_base_draft(
+            first_name="Kima", officially_dead=FACE, distinctions=_held(self.presumed_dead)
+        )
 
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
@@ -58,14 +82,31 @@ class OfficiallyDeadFinalizeTests(FinalizationTestMixin, TestCase):
         assert sheet.kinsperson.believed_deceased is True
 
     def test_a_face_with_a_name_only_wears_an_empty_guise(self) -> None:
-        draft = self._create_base_draft(first_name="Kima", officially_dead={"face_name": "Cambria"})
+        draft = self._create_base_draft(
+            first_name="Kima",
+            officially_dead={"face_name": "Cambria"},
+            distinctions=_held(self.presumed_dead),
+        )
         character = finalize_character(draft, add_to_roster=True)
         worn = active_persona_for_sheet(character.sheet_data)
         assert worn.name == "Cambria"
         assert worn.profile is None
 
     def test_a_blank_face_name_takes_nothing(self) -> None:
-        draft = self._create_base_draft(first_name="Kima", officially_dead={"face_name": "  "})
+        draft = self._create_base_draft(
+            first_name="Kima",
+            officially_dead={"face_name": "  "},
+            distinctions=_held(self.presumed_dead),
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+        assert sheet.primary_persona.believed_deceased is False
+        assert active_persona_for_sheet(sheet).pk == sheet.primary_persona.pk
+        assert Persona.objects.filter(character_sheet=sheet).count() == 1
+
+    def test_without_the_card_the_door_is_shut(self) -> None:
+        """#4856: a face saved on a draft that holds no worn persona grant is ignored."""
+        draft = self._create_base_draft(first_name="Kima", officially_dead=FACE)
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
         assert sheet.primary_persona.believed_deceased is False

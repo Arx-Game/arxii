@@ -3990,6 +3990,47 @@ class DistinctionOrganizationGrant(SharedMemoryModel):
             raise ValidationError({"rank": "That rank belongs to another organization."})
 
 
+class DistinctionOrganizationTie(SharedMemoryModel):
+    """Config: a distinction that opens a tie with an organization of the realm (#4856).
+
+    The Catspaw's gang, Cloistered's temple (slice 6 of #4813; ruled 2026-10-28: a tie is
+    offered at Final Touches, optional, free, the unlocking card was the price). The player
+    picks one of the realm's organizations of ``org_type`` that ``admits_player_characters``
+    (``character_creation.offers.organization_choices``) and takes a membership at the entry
+    rank or starting renown at the Favored tier's floor (``FAVORED_FLOOR``, ruled 2026-11-01).
+    Written once, by character creation's finalize, through ``join_organization`` or
+    ``bump_organization_reputation``. Same sidecar pattern as ``DistinctionOrganizationGrant``.
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="organization_tie",
+        help_text="The distinction whose new holders may take a tie with an organization.",
+    )
+    org_type = models.ForeignKey(
+        OrganizationType,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="distinction_ties",
+        help_text=(
+            "The kind of organization the tie is with (a gang, a temple). Blank: any of the "
+            "realm's admitting organizations."
+        ),
+    )
+
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class Meta:
+        verbose_name = "Distinction Organization Tie"
+        verbose_name_plural = "Distinction Organization Ties"
+
+    def __str__(self) -> str:
+        kind = self.org_type.name if self.org_type_id else "any organization"
+        return f"OrganizationTie({self.distinction_id}: {kind})"
+
+
 # ---------------------------------------------------------------------------
 # Houses submodule (#1884) — import last so all models above register first
 # ---------------------------------------------------------------------------

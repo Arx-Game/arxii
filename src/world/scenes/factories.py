@@ -16,6 +16,7 @@ from world.scenes.constants import (
     SummaryAction,
 )
 from world.scenes.models import (
+    DistinctionPersonaGrant,
     Interaction,
     InteractionAction,
     InteractionFavorite,
@@ -271,3 +272,12 @@ class SceneClockFactory(factory_django.DjangoModelFactory):
     beat = factory.SubFactory("world.stories.factories.BeatFactory")
     size = 3
     filled = 0
+
+
+class DistinctionPersonaGrantFactory(factory_django.DjangoModelFactory):
+    """A card's second face (#4856); pass ``distinction`` and ``worn``."""
+
+    class Meta:
+        model = DistinctionPersonaGrant
+
+    worn = False
