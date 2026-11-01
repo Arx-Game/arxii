@@ -11,6 +11,7 @@ from django.urls import reverse
 
 from world.conditions.admin import PROPERTIES_HELP
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.conditions.models import ConditionStage
 from world.mechanics.factories import PropertyFactory
 
 
@@ -48,3 +49,29 @@ class ConditionPropertiesAdminTests(TestCase):
         resp = self.client.get(reverse("admin:arxii_conditionstage_change", args=[self.stage.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertIn("properties", resp.context["adminform"].form.fields)
+
+    def test_stage_inline_on_the_condition_page_offers_properties(self) -> None:
+        resp = self.client.get(
+            reverse("admin:arxii_conditiontemplate_change", args=[self.template.pk])
+        )
+        stage_formsets = [
+            inline.formset
+            for inline in resp.context["inline_admin_formsets"]
+            if inline.formset.model is ConditionStage
+        ]
+        self.assertEqual(len(stage_formsets), 1)
+        self.assertIn("properties", stage_formsets[0].forms[0].fields)
+
+    def test_stage_properties_picker_search_finds_the_property(self) -> None:
+        resp = self.client.get(
+            reverse("admin:autocomplete"),
+            {
+                "app_label": "arxii",
+                "model_name": "conditionstage",
+                "field_name": "properties",
+                "term": "indulgence",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        names = [row["text"] for row in resp.json()["results"]]
+        self.assertIn(str(self.prop), names)
