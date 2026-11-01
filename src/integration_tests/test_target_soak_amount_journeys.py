@@ -18,8 +18,16 @@ Expected values come from the ruling and the spec, not from running the code:
   soak 20 the bandit loses 100 + 5 + 4 - 20 = 89.
 * In a duel, Vex's mirror is hit through her worn armor, soak 10: +2, and she loses
   100 + 2 - 10 = 92. Reading her soak for the row wears no armor; only the hit does.
-* Read away from the damage step (the modifier breakdown on its own), the row reads 0.
-* Staff cannot give the input to a to-hit target or a check target.
+* A swarm has no soak, even with a ``soak_value`` authored on it: a 100 strike on a swarm of
+  2-damage bodies clears 50 of 100, as with no row (104 would clear 52).
+* In the duel the hit wears Vex's plate once, 30 to 29; reading her soak for the row adds no wear.
+* The same row that adds +4 on a strike reads 0 away from the damage step (the modifier
+  breakdown on its own).
+* Staff can give the input to technique damage and Charge damage, and cannot give it to a to-hit
+  target or a check target.
+
+The outcome checked is the health (or bodies) the opponent lost. The web dispatch path tells
+Hobb no text line in this harness, so there is no narration to pin here.
 """
 
 from __future__ import annotations
@@ -36,10 +44,9 @@ from integration_tests.test_technique_effect_damage_journeys import _DamageField
 from integration_tests.test_vow_added_effects_in_combat_journeys import every_check_succeeds
 from world.checks.factories import CheckTypeFactory
 from world.combat.duels import create_pvp_duel
-from world.combat.factories import CombatOpponentFactory
+from world.combat.factories import CombatOpponentFactory, SwarmOpponentFactory
 from world.combat.models import CombatOpponent, CombatParticipant
 from world.combat.services import resolve_round
-from world.combat.services.damage.soak import target_soak_of
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
@@ -150,8 +157,35 @@ class APlateBreakerStrikes(_DamageField):
 
     def test_away_from_the_damage_step_the_row_reads_nothing(self) -> None:
         _grant_plate_breaker(self.sheet, self.damage)
+        _set_soak(self.bandit, 20)
+        self.assertEqual(self.strike(self.blow), STRIKE + 4 - 20)
 
         self.assertEqual(get_modifier_breakdown(self.sheet, self.damage).total, 0)
+
+    def test_a_swarm_has_no_soak_even_with_one_authored(self) -> None:
+        _grant_plate_breaker(self.sheet, self.damage)
+        swarm = SwarmOpponentFactory(
+            encounter=self.encounter,
+            name="Rats",
+            soak_value=20,
+            swarm_count=100,
+            max_swarm_count=100,
+            body_toughness=2,
+        )
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT, technique_id=self.blow.pk, action_slot="focused"
+        )
+        declared = dispatch_player_action(
+            self.hobb,
+            ref,
+            {"effort_level": EffortLevel.MEDIUM, "focused_opponent_target_id": swarm.pk},
+        )
+        self.assertTrue(declared.deferred, declared)
+
+        with every_check_succeeds():
+            resolve_round(self.encounter)
+
+        self.assertEqual(CombatOpponent.objects.get(pk=swarm.pk).swarm_count, 100 - STRIKE // 2)
 
 
 class APlateBreakerCharges(_WolfFangField):
@@ -217,11 +251,8 @@ class APlateBreakerInADuel(_DamageField):
             resolve_round(self.duel)
 
         self.assertEqual(before - self.health_of(self.mirror), STRIKE + 2 - 10)
-
-    def test_reading_her_soak_wears_no_armor(self) -> None:
-        self.assertEqual(target_soak_of(self.mirror), 10)
-
-        self.assertEqual(ItemInstance.objects.get(pk=self.plate.pk).durability, 30)
+        # One hit wears the plate once; reading her soak for the row wore nothing more.
+        self.assertEqual(ItemInstance.objects.get(pk=self.plate.pk).durability, 29)
 
 
 class TheSoakInputOnTheEffectAdminPage(_WolfFangField):
@@ -265,6 +296,13 @@ class TheSoakInputOnTheEffectAdminPage(_WolfFangField):
             (effect.amount_input, effect.amount_per, effect.amount_cap),
             (AmountInput.TARGET_SOAK, PER, CAP),
         )
+
+    def test_technique_damage_takes_the_input(self) -> None:
+        response = self.save_effect(_technique_damage_target())
+
+        self.assertEqual(response.status_code, 302, response.content)
+        effect = DistinctionEffect.objects.get(distinction=self.distinction)
+        self.assertEqual(effect.amount_input, AmountInput.TARGET_SOAK)
 
     def test_a_to_hit_target_is_refused(self) -> None:
         to_hit = ModifierTargetFactory(
