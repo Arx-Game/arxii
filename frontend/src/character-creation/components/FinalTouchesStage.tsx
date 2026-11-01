@@ -359,7 +359,11 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // a question; `ChapterOffers` itself renders nothing for an empty chapter.
   const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
   const prompts = draft.final_touches_prompts ?? [];
-  const showCards = prompts.length > 0 || (cardOffers?.offers.length ?? 0) > 0;
+  // A route-closed line counts too: `ChapterOffers` prints the closed hint for it.
+  const showCards =
+    prompts.length > 0 ||
+    (cardOffers?.offers.length ?? 0) > 0 ||
+    (cardOffers?.closed.length ?? 0) > 0;
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
