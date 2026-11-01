@@ -22,7 +22,7 @@ ALLOWED_MIGRATIONS: set[str] = {
     # the new Compulsion / ControlLossTrigger rows on a populated database, plus a
     # nameplate "Lycan blood" condition with no prose. Every number mirrors one the code
     # already used; skips anything that already exists. No-op on empty databases.
-    "world/migrations/0346_control_loss_content.py",
+    "world/migrations/0347_control_loss_content.py",
     # #4681: row-keyed affinity backfill. Re-keys existing CharacterAura percent
     # columns into CharacterAuraShare rows (empty in production) and copies enum
     # values into _ref FKs; no authored content is invented.
