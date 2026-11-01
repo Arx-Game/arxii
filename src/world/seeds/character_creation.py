@@ -33,6 +33,12 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    FINAL_TOUCHES_CARDS_HEADING,
+    FINAL_TOUCHES_CARDS_INTRO,
+    FINAL_TOUCHES_CRIME_BLANK,
+    FINAL_TOUCHES_CRIME_HELP,
+    FINAL_TOUCHES_CRIME_LINE_LABEL,
+    FINAL_TOUCHES_CRIME_PROMPT,
     FIRST_JOURNAL_FRAME,
     FIRST_JOURNAL_INSTITUTION,
     FIRST_JOURNAL_QUESTIONS,
@@ -445,6 +451,13 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # Officially dead (#4396): the option's heading and frame.
     "officially_dead_heading": OFFICIALLY_DEAD_HEADING,
     "officially_dead_intro": OFFICIALLY_DEAD_INTRO,  # PLACEHOLDER: Apostate rewrite
+    # The Final Touches chapter (#4846): the card-unlocked section and the crime prompt.
+    "finaltouches_cards_heading": FINAL_TOUCHES_CARDS_HEADING,
+    "finaltouches_cards_intro": FINAL_TOUCHES_CARDS_INTRO,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_crime_prompt": FINAL_TOUCHES_CRIME_PROMPT,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_crime_line_label": FINAL_TOUCHES_CRIME_LINE_LABEL,  # PLACEHOLDER
+    "finaltouches_crime_help": FINAL_TOUCHES_CRIME_HELP,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_crime_blank": FINAL_TOUCHES_CRIME_BLANK,  # PLACEHOLDER: Apostate rewrite
     "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
     "first_journal_frame": FIRST_JOURNAL_FRAME,
     "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],
