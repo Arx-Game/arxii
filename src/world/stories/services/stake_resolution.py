@@ -887,6 +887,16 @@ def _write_item_forfeit(resolution: StakeResolution, stake: Stake) -> None:
             stake.pk,
         )
         return
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if is_natural_weapon(item):
+        # A natural weapon (#4898) is part of the body and cannot be lost on a stake.
+        logger.warning(
+            "StakeResolution %s: stake %s's subject_item is a natural weapon; skipping.",
+            resolution.pk,
+            stake.pk,
+        )
+        return
     forfeit_item_instance(
         item_instance=item,
         note=f"Forfeited — stake {stake.pk} resolved at {resolution.column}.",

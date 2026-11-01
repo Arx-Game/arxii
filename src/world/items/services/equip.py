@@ -79,7 +79,16 @@ def unequip_item(*, equipped_item: EquippedItem) -> None:
 
     Args:
         equipped_item: The row to delete.
+
+    Raises:
+        NaturalWeaponNotRemovable: The item is its wearer's natural weapon (#4898).
+            Every path that takes an item off a body (drop, give, a trade, a sale, a
+            vault, an offering, using it up) unequips through here, so this is the
+            backstop behind each path's own front-door check.
     """
+    from world.items.services.natural_weapons import require_removable  # noqa: PLC0415
+
+    require_removable(equipped_item.item_instance)
     sheet = equipped_item.character
     equipped_item.delete()
     sheet.character.equipped_items.invalidate()

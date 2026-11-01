@@ -42,6 +42,33 @@ def is_natural_weapon(item: ItemInstance) -> bool:
     ).exists()
 
 
+def require_removable(item: ItemInstance) -> None:
+    """Raise ``NaturalWeaponNotRemovable`` when ``item`` is its holder's natural weapon.
+
+    The front-door check every path that takes an item off its holder runs before it
+    changes anything, so the player sees the plain refusal.
+    """
+    if is_natural_weapon(item):
+        from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+
+        raise NaturalWeaponNotRemovable
+
+
+def natural_weapon_template_ids(sheet: CharacterSheet) -> set[int]:
+    """The item template pks that are natural weapons for ``sheet``, in one query.
+
+    For a path that walks many of a character's items at once (an estate's sweep), so it
+    can leave the natural weapons out without a query per item.
+    """
+    from world.magic.models import CharacterGift  # noqa: PLC0415
+
+    return set(
+        CharacterGift.objects.filter(
+            character=sheet, gift__natural_weapon_template__isnull=False
+        ).values_list("gift__natural_weapon_template_id", flat=True)
+    )
+
+
 @transaction.atomic
 def provision_natural_weapon(sheet: CharacterSheet, gift: Gift) -> ItemInstance | None:
     """Make and equip ``gift``'s natural weapon on ``sheet``, once. Idempotent.
