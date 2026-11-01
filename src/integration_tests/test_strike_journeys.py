@@ -32,6 +32,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    CombatRoundActionFactory,
 )
 from world.combat.models import CombatOpponent, CombatRoundAction
 from world.combat.services import begin_declaration_phase, resolve_round
@@ -409,6 +410,30 @@ class MissesBuildIntensity(_StrikeField):
         first_hit = self.shown_rolls()[0]["roll_breakdown"]
         self.assertEqual(first_hit["result"], "Miss")
         self.assertEqual(first_hit["result_note"], "")
+
+    def test_intensity_helps_attacks_only_never_a_heal_or_ward(self) -> None:
+        from world.combat.models import CombatParticipant
+        from world.combat.services.techniques.intensity import intensity_to_hit_contribution
+
+        sword = self.equip_sword()
+        self.strike_and_resolve("Failure", weapon_id=sword.pk)
+        self.assertEqual(self.intensity(), 1)
+        hobb = CombatParticipant.objects.get(encounter=self.encounter, character_sheet=self.sheet)
+        round_number = self.encounter.round_number + 1
+
+        at_the_bandit = CombatRoundActionFactory.build(
+            participant=hobb, round_number=round_number, focused_opponent_target=self.bandit
+        )
+        at_an_ally = CombatRoundActionFactory.build(
+            participant=hobb, round_number=round_number, focused_ally_target=hobb
+        )
+        at_nobody = CombatRoundActionFactory.build(participant=hobb, round_number=round_number)
+
+        attack = intensity_to_hit_contribution(hobb, at_the_bandit)
+        self.assertIsNotNone(attack)
+        self.assertEqual((attack.source_label, attack.value), ("Intensity", 1))
+        self.assertIsNone(intensity_to_hit_contribution(hobb, at_an_ally))
+        self.assertIsNone(intensity_to_hit_contribution(hobb, at_nobody))
 
 
 class StrikeThroughTelnet(_StrikeField):
