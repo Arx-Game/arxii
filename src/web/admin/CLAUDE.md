@@ -125,6 +125,18 @@ only admins left without it are plain-model ones (Django's `Group`, allauth's, `
   a refused rename on Evennia's object page). Decision record: ADR-4626. Reviewer:
   `tools/agents/idmapper-form-binding-reviewer.md`.
 
+### Combat roles panel on the front page (#4857, slice 1 of #4843)
+
+`ArxAdminSite.index` adds `combat_roles_links` (`web/admin/combat_roles.py`), and
+`templates/admin/index.html` draws it as the first app group, above Recent: Covenant roles,
+Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
+Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
+singleton's change page, or its list with the default before the row exists; a GET never
+creates it), and Required content (`admin_ops`). Every combat role authoring page belongs
+here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
+vow page, combo map, kit view and missing combat content rows. Tests:
+`tests/test_combat_roles_panel.py` follows every link.
+
 ### Save as new on every change form (#4094)
 
 `web/admin/apps.py:_enable_save_as_new` sets `save_as = True` on every registered
