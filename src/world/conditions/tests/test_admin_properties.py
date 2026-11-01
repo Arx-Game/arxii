@@ -5,6 +5,7 @@ Perk situations and prerequisites match a condition by the properties it carries
 and the "+" popup that technique, vow-effect and standoff forms open, must offer them.
 """
 
+from django.contrib.admin.widgets import AutocompleteSelectMultiple
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -45,10 +46,11 @@ class ConditionPropertiesAdminTests(TestCase):
         self.assertIn("properties", form.fields)
         self.assertEqual(list(form.initial["properties"]), [self.prop])
 
-    def test_stage_form_offers_properties(self) -> None:
+    def test_stage_form_offers_properties_as_a_searchable_picker(self) -> None:
         resp = self.client.get(reverse("admin:arxii_conditionstage_change", args=[self.stage.pk]))
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("properties", resp.context["adminform"].form.fields)
+        field = resp.context["adminform"].form.fields["properties"]
+        self.assertIsInstance(field.widget.widget, AutocompleteSelectMultiple)
 
     def test_stage_inline_on_the_condition_page_offers_properties(self) -> None:
         resp = self.client.get(
@@ -60,7 +62,8 @@ class ConditionPropertiesAdminTests(TestCase):
             if inline.formset.model is ConditionStage
         ]
         self.assertEqual(len(stage_formsets), 1)
-        self.assertIn("properties", stage_formsets[0].forms[0].fields)
+        field = stage_formsets[0].forms[0].fields["properties"]
+        self.assertIsInstance(field.widget.widget, AutocompleteSelectMultiple)
 
     def test_stage_properties_picker_search_finds_the_property(self) -> None:
         resp = self.client.get(
