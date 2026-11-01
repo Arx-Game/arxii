@@ -33,8 +33,11 @@ SEED_LYCAN_GIFT_NAME = "The Wolf's Fury"
 # Seed-only: the Moon-Bound distinction and its tag, stamped on the lycan grant at CG.
 SEED_MOON_BOUND_TAG = "moon-bound"
 SEED_MOON_BOUND_SLUG = "moon-bound"
-# Config row named by a code literal (ADR-0171), registered in config_prerequisites.
-MOON_CONTROL_CHECK_NAME = "moon_control"
+# Config row named by a code literal (ADR-0171), registered in config_prerequisites. The
+# literal is the name players read on the roll line; it only names a row this code
+# creates. Runtime finds the check through ``ControlLossTrigger.check_type``, never by name,
+# and an existing row (an older "moon_control" one included) is never renamed.
+MOON_CONTROL_CHECK_NAME = "Hold against the moon"
 
 BATTLE_FORM_NAME = "Battle Form"
 # PLACEHOLDER stat suite: (stat trait name, modifier value).
@@ -227,7 +230,7 @@ def ensure_moon_control_loss_trigger() -> ControlLossTrigger | None:
 
 
 def _ensure_moon_control_check_type() -> CheckType:
-    """Idempotently seed the ``moon_control`` CheckType (willpower + composure).
+    """Idempotently seed the "Hold against the moon" CheckType (willpower + composure).
 
     Config row named by a code literal (ADR-0171), also registered in
     ``world.seeds.config_prerequisites`` so it exists after a press.

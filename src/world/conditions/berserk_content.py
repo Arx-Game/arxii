@@ -152,7 +152,7 @@ def ensure_willpower_check_type(name: str) -> CheckType:
     """Idempotently seed a willpower-led check type called *name* (#4802).
 
     Willpower at full weight, composure at half, in the Species category: the shape of
-    both "Resist compulsion" and ``moon_control``. The row is found by name, so an
+    both "Resist compulsion" and "Hold against the moon". The row is found by name, so an
     authored one is reused; the weights are only written when the trait link is first
     made, so staff edits to an authored weight survive a re-run. A row made here carries
     no prose: its description, and the Species category's, are left for staff.

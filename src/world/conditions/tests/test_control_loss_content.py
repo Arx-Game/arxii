@@ -67,7 +67,7 @@ class MoonTriggerSeedTests(TestCase):
         self.assertEqual(ensure_moon_control_loss_trigger(), trigger)  # idempotent
         self.assertEqual(trigger.fires_on, ControlLossFiresOn.MOON_PULL)
         self.assertEqual(trigger.vulnerability.name, "Lycan blood")
-        self.assertEqual(trigger.check_type.name, "moon_control")
+        self.assertEqual(trigger.check_type.name, "Hold against the moon")
         self.assertEqual(trigger.min_moon_pull, 6)
         self.assertEqual(trigger.base_difficulty, 20)
         self.assertEqual(trigger.difficulty_per_pull, 5)
@@ -245,7 +245,7 @@ class ControlLossContentMigrationTests(TestCase):
 
         self._run()
 
-        for name in ("Resist compulsion", "moon_control"):
+        for name in ("Resist compulsion", "Hold against the moon"):
             self.assertEqual(CheckType.objects.get(name=name).description, "", name)
         self.assertEqual(CheckCategory.objects.get(name="Species").description, "")
         self.assertEqual(ConditionCategory.objects.get(name="Instinct").description, "")

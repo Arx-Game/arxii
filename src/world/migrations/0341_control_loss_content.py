@@ -7,7 +7,8 @@ Data-only, and only prose-free mechanics. On a populated database it:
 * for the lycan gift grant with no ``drawback_condition``: makes a "Lycan blood" nameplate
   condition (permanent, no prose), sets it as the grant's drawback, puts an instance of it
   on every sheet holding a distinction tagged ``moon-bound``, and seeds the moon-pull
-  trigger and its bands, with the ``moon_control`` CheckType, unless a moon-pull trigger
+  trigger and its bands, with the "Hold against the moon" CheckType (its player-facing
+  name; an existing row of that name is used as it is), unless a moon-pull trigger
   already exists;
 * for a grant whose drawback has no moon-pull trigger (a rollback and re-apply leaves
   exactly this): seeds the trigger and its bands on that drawback, and nothing else. No
@@ -190,7 +191,7 @@ def _moon_block(apps, berserk):
 
 
 def _moon_trigger(apps, blood, grant, berserk):
-    """The moon-pull trigger on *blood* and its bands, with the ``moon_control`` check."""
+    """The moon-pull trigger on *blood* and its bands, rolled on "Hold against the moon"."""
     ControlLossTrigger = apps.get_model("arxii", "ControlLossTrigger")
     ControlLossBand = apps.get_model("arxii", "ControlLossBand")
 
@@ -198,7 +199,7 @@ def _moon_trigger(apps, blood, grant, berserk):
         vulnerability=blood,
         fires_on="moon_pull",
         min_moon_pull=6,
-        check_type=_check_type(apps, "moon_control"),
+        check_type=_check_type(apps, "Hold against the moon"),
         base_difficulty=20,
         difficulty_per_pull=5,
         relief_per_level=10,
