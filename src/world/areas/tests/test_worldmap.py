@@ -293,6 +293,22 @@ class FootprintServiceTests(TestCase):
         assert county.seat == (2, 1)
         assert county.holder_org_id is None
 
+    def test_carve_reports_each_pips_prior_and_new_holder(self) -> None:
+        set_footprint(area=self.kingdom, add=[(3, 3)])
+        change = set_footprint(area=self.county, add=[(3, 3), (4, 3)])
+        assert sorted(change.changed) == [
+            (3, 3, self.kingdom.pk, self.county.pk),
+            (4, 3, None, self.county.pk),
+        ]
+        change = set_footprint(area=self.county, remove=[(3, 3)])
+        assert change.changed == ((3, 3, self.county.pk, self.kingdom.pk),)
+        change = set_footprint(area=self.kingdom, remove=[(3, 3)])
+        assert change.changed == ((3, 3, self.kingdom.pk, None),)
+        # a pip already inside and a skipped pip are not changes
+        other = AreaFactory(name="Other2", level=AreaLevel.COUNTY, parent=self.kingdom)
+        change = set_footprint(area=other, add=[(4, 3)])
+        assert change.changed == ()
+
 
 class RegionMapApiTests(TestCase):
     @classmethod
