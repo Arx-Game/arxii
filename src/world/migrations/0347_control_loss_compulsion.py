@@ -499,9 +499,7 @@ class Migration(migrations.Migration):
             constraint=models.CheckConstraint(
                 condition=models.Q(
                     models.Q(("fires_on", "moon_pull"), _negated=True),
-                    models.Q(
-                        ("health_below_percent__isnull", True), ("stage__isnull", True)
-                    ),
+                    models.Q(("health_below_percent__isnull", True), ("stage__isnull", True)),
                     _connector="OR",
                 ),
                 name="control_loss_moon_pull_columns",
