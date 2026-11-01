@@ -364,14 +364,18 @@ export function ChapterOffers({
   useEffect(() => {
     if (!openTerm) return;
     const close = () => setOpenTerm(null);
+    // A click inside the box keeps it; anything else closes it.
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target instanceof Element && e.target.closest('.popover'))) close();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
     };
-    document.addEventListener('click', close);
+    document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKey);
     window.addEventListener('scroll', close, { passive: true });
     return () => {
-      document.removeEventListener('click', close);
+      document.removeEventListener('click', onClick);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', close);
     };
@@ -669,16 +673,15 @@ export function ChapterOffers({
         // Through a portal (#4874): the life block is a size container, which would
         // otherwise anchor a fixed box to itself instead of the viewport.
         createPortal(
-          <div
+          <dialog
+            open
             className="interview popover"
-            role="dialog"
             aria-label={termDefinition.get(openTerm.name)?.label ?? openTerm.name}
             style={{ top: openTerm.top, left: openTerm.left }}
-            onClick={(e) => e.stopPropagation()}
           >
             <b>{termDefinition.get(openTerm.name)?.label ?? openTerm.name}</b>
             {termDefinition.get(openTerm.name)?.definition ?? ''}
-          </div>,
+          </dialog>,
           document.body
         )}
       {folded.length > 0 && (

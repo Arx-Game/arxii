@@ -1403,7 +1403,10 @@
   border-top: 1px solid var(--cg-hairline-strong);
   margin-top: 1.2rem;
 }
-.interview .stage-acc > .stage-sum {
+.interview .stage-acc > .stage-head {
+  margin: 0;
+}
+.interview .stage-acc .stage-sum {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1417,10 +1420,10 @@
   color: inherit;
   text-align: left;
 }
-.interview .stage-acc > .stage-sum .section-h {
+.interview .stage-acc .stage-sum .section-h {
   margin: 0;
 }
-.interview .stage-acc > .stage-sum .prog {
+.interview .stage-acc .stage-sum .prog {
   font-family: 'Cinzel', serif;
   font-size: 0.72rem;
   letter-spacing: 0.12em;
@@ -1428,13 +1431,13 @@
   color: var(--cg-muted);
   white-space: nowrap;
 }
-.interview .stage-acc > .stage-sum::before {
+.interview .stage-acc .stage-sum::before {
   content: '\25B8';
   color: var(--cg-accent);
   margin-right: 0.6rem;
   font-size: 1.35rem;
 }
-.interview .stage-acc[data-open='true'] > .stage-sum::before {
+.interview .stage-acc[data-open='true'] .stage-sum::before {
   content: '\25BE';
 }
 .interview .stage-body {
@@ -1567,6 +1570,7 @@
 .interview .popover {
   position: fixed;
   z-index: 30;
+  margin: 0;
   max-width: 22rem;
   background: var(--cg-bg);
   color: var(--cg-text);

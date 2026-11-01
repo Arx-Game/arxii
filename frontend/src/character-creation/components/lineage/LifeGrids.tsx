@@ -317,14 +317,12 @@ export function LifeGrids({ draft, copy }: Props) {
     .map((b) => summaryOf(b))
     .filter((s) => !s.none)
     .map((s) => s.text);
+  const stageLabel = (stage: string) =>
+    copy?.[`life_${stage}_heading`] ?? LIFE_GRID_LABELS[stage] ?? stage;
+  const unknownWord = (copy?.beats_unknown_word ?? 'Unknown').toLowerCase();
   const unknownStages = stages
     .filter((stage) => stageUnknown(byStage.get(stage) ?? []))
-    .map(
-      (stage) =>
-        `${copy?.[`life_${stage}_heading`] ?? LIFE_GRID_LABELS[stage] ?? stage}: ${(
-          copy?.beats_unknown_word ?? 'Unknown'
-        ).toLowerCase()}`
-    );
+    .map((stage) => `${stageLabel(stage)}: ${unknownWord}`);
   const testamentLines = [...unknownStages, ...told];
 
   const renderSection = (stage: string, beat: BeatPoolEntry) => {
@@ -490,18 +488,18 @@ export function LifeGrids({ draft, copy }: Props) {
           .replace('{total}', String(pool.length));
     return (
       <section key={stage} className="stage-acc" data-open={open} aria-label={label}>
-        <button
-          type="button"
-          className="stage-sum"
-          aria-expanded={open}
-          onClick={() => toggleStage(stage)}
-        >
-          {/* A heading inside a button is phrasing content, so a span carries the role. */}
-          <span className="section-h" role="heading" aria-level={3}>
-            {label}
-          </span>
-          <span className="prog">{prog}</span>
-        </button>
+        {/* The heading wraps the button: a heading may not sit inside a button. */}
+        <h3 className="stage-head">
+          <button
+            type="button"
+            className="stage-sum"
+            aria-expanded={open}
+            onClick={() => toggleStage(stage)}
+          >
+            <span className="section-h">{label}</span>
+            <span className="prog">{prog}</span>
+          </button>
+        </h3>
         {open && (
           <div className="stage-body">
             <div className="beat-foot">
