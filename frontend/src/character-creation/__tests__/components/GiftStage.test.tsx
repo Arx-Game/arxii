@@ -26,7 +26,7 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 
 let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
-let glimpseOffers: OffersResponse = { offers: [], closed: [] };
+let glimpseOffers: OffersResponse = { offers: [], closed: [], terms: [] };
 let cgExplanations = mockCGExplanations;
 
 vi.mock('../../queries', async (importOriginal) => ({
@@ -54,7 +54,7 @@ vi.mock('@/hooks/useDistinctions', () => ({
 beforeEach(() => {
   traditions = [mockTradition];
   draftDistinctions = [];
-  glimpseOffers = { offers: [], closed: [] };
+  glimpseOffers = { offers: [], closed: [], terms: [] };
   cgExplanations = mockCGExplanations;
 });
 
@@ -360,9 +360,13 @@ describe('GiftStage (folio)', () => {
           opens_feature: false,
           requires_feature_opened: false,
           cg_max_rank: 0,
+          group: '',
+          asks_figure_name: false,
+          effects: [],
         },
       ],
       closed: [],
+      terms: [],
     };
     draftDistinctions = [
       {
@@ -411,9 +415,13 @@ describe('GiftStage (folio)', () => {
           opens_feature: false,
           requires_feature_opened: false,
           cg_max_rank: 0,
+          group: '',
+          asks_figure_name: false,
+          effects: [],
         },
       ],
       closed: [],
+      terms: [],
     };
     draftDistinctions = [
       {

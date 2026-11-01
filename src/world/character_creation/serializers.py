@@ -12,11 +12,15 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     ALTER_EGO_KEY,
+    BEAT_COVER_OFFER_ID,
+    BEAT_FIGURES,
     BEAT_LINE_MAX_LENGTH,
+    BEAT_SECRET_OFFER_IDS,
     CRIME_KEY,
     CRIME_KIND_ID,
     CRIME_LINE,
     CRIME_LINE_MAX_LENGTH,
+    FIGURE_NAME_MAX_LENGTH,
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
@@ -26,6 +30,8 @@ from world.character_creation.constants import (
     PRESTIGE_STORIES_KEY,
     PRESTIGE_STORY_MAX_LENGTH,
     RECENT_HISTORY_MAX_LENGTH,
+    STAGE_DESCRIPTION_MAX_LENGTH,
+    STAGE_DESCRIPTIONS_KEY,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
@@ -34,6 +40,7 @@ from world.character_creation.constants import (
     TIES_KEY,
     AnchorSource,
     FinalTouchesPrompt,
+    LifeStage,
     OfferChapter,
     QuestionKind,
     TieKind,
@@ -1199,6 +1206,23 @@ class DraftMarkingSerializer(serializers.ModelSerializer):
         fields = ["id", "body_region", "kind", "name", "description"]
 
 
+class OfferEffectTermSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.OfferEffectTerm`` (#4872)."""
+
+    target = serializers.CharField()
+    label = serializers.CharField()
+    value = serializers.IntegerField(allow_null=True)
+    immune = serializers.BooleanField()
+
+
+class OfferTermSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.OfferTerm`` (#4872)."""
+
+    name = serializers.CharField()
+    label = serializers.CharField()
+    definition = serializers.CharField(allow_blank=True)
+
+
 class VisibleOfferSerializer(serializers.Serializer):
     """A ``world.character_creation.types.VisibleOffer`` (#3675)."""
 
@@ -1226,6 +1250,11 @@ class VisibleOfferSerializer(serializers.Serializer):
     opens_feature = serializers.BooleanField()
     requires_feature_opened = serializers.BooleanField()
     cg_max_rank = serializers.IntegerField()
+    #: The life page (#4872): the heading the answer sits under, whether the card
+    #: takes a figure's name, and the effects with their magnitudes.
+    group = serializers.CharField(allow_blank=True)
+    asks_figure_name = serializers.BooleanField()
+    effects = OfferEffectTermSerializer(many=True)
 
 
 class BeatPoolEntrySerializer(serializers.Serializer):
@@ -1259,6 +1288,8 @@ class OffersResponseSerializer(serializers.Serializer):
 
     offers = VisibleOfferSerializer(many=True)
     closed = ClosedDistinctionSerializer(many=True)
+    #: The terms on the offers' mechanics lines with their definitions (#4872).
+    terms = OfferTermSerializer(many=True)
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
@@ -1993,6 +2024,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_beats(value)
+        self._validate_stage_descriptions(value)
         self._validate_recent_history(value)
         self._validate_kin_rows(value)
         self._validate_parent_fates(value)
@@ -2301,6 +2333,56 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
                 msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
                 raise serializers.ValidationError({"beats": msg})
+            self._validate_beat_marks(state)
+
+    @staticmethod
+    def _validate_beat_marks(state: dict) -> None:
+        """The life page's marks on a beat (#4872): ``secret_offer_ids`` a list of offer
+        ids, ``cover_offer_id`` an offer id or null, ``figures`` a map of offer id to a
+        name. Shape only, like the rest of the map: the leaf sends the whole map on
+        every save, and finalize ignores a mark on an offer no longer picked."""
+        ids = state.get(BEAT_SECRET_OFFER_IDS, [])
+        if not isinstance(ids, list) or not all(
+            isinstance(x, int) and not isinstance(x, bool) for x in ids
+        ):
+            msg = f"beats.{BEAT_SECRET_OFFER_IDS} is a list of offer ids"
+            raise serializers.ValidationError({"beats": msg})
+        cover = state.get(BEAT_COVER_OFFER_ID)
+        if cover is not None and (not isinstance(cover, int) or isinstance(cover, bool)):
+            msg = f"beats.{BEAT_COVER_OFFER_ID} is an offer id or null"
+            raise serializers.ValidationError({"beats": msg})
+        figures = state.get(BEAT_FIGURES, {})
+        if not isinstance(figures, dict):
+            msg = f"beats.{BEAT_FIGURES} maps offer ids to names"
+            raise serializers.ValidationError({"beats": msg})
+        for key, name in figures.items():
+            if not (isinstance(key, str) and key.isdecimal()):
+                msg = f"beats.{BEAT_FIGURES} keys are offer ids as strings"
+                raise serializers.ValidationError({"beats": msg})
+            if not isinstance(name, str) or len(name) > FIGURE_NAME_MAX_LENGTH:
+                msg = f"a figure's name is text of at most {FIGURE_NAME_MAX_LENGTH} characters"
+                raise serializers.ValidationError({"beats": msg})
+
+    def _validate_stage_descriptions(self, data: dict) -> None:
+        """``stage_descriptions`` maps a life stage to the paragraph written for it
+        (#4872): text of at most ``STAGE_DESCRIPTION_MAX_LENGTH`` characters, written at
+        finalize as that stage's own paragraph of the told background."""
+        descriptions = data.get(STAGE_DESCRIPTIONS_KEY)
+        if descriptions is None:
+            return
+        if not isinstance(descriptions, dict):
+            msg = f"{STAGE_DESCRIPTIONS_KEY} must be a dictionary"
+            raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
+        for stage, text in descriptions.items():
+            if stage not in LifeStage.values:
+                msg = f"{STAGE_DESCRIPTIONS_KEY} keys are life stages"
+                raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
+            if not isinstance(text, str) or len(text) > STAGE_DESCRIPTION_MAX_LENGTH:
+                msg = (
+                    f"a stage's description is text of at most "
+                    f"{STAGE_DESCRIPTION_MAX_LENGTH} characters"
+                )
+                raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
 
     def _validate_recent_history(self, data: dict) -> None:
         """``recent_history`` is the optional text a life ends on (#4830): a string of at

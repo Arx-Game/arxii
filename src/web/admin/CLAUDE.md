@@ -995,7 +995,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   offered" row renders every opener widget (`schooling_line`, `glimpse_tag`,
   `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
   `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
-  Final Touches chapter's card) and `page.html`'s cascade shows the one(s) the row's
+  Final Touches chapter's card; since #4872 each row also carries `group`, the heading a
+  Backgrounds answer is listed under, and the "More" fieldset `asks_figure_name`) and
+  `page.html`'s cascade shows the one(s) the row's
   chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
   chapter lists two). `OfferForm.__init__` limits `enemy_degree` to the two
   marking degrees. A "First look for" column (`OfferForm.first_look`, a
@@ -1021,7 +1023,10 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   so a card made earlier in the same table is not found yet; an effect token whose
   target is `prestige` (`+150 prestige`, `-300 prestige`, #4852) makes the card's
   `societies.DistinctionPrestigeGrant` sidecar instead of a modifier effect, one per
-  card and never without an amount),
+  card and never without an amount; the effect token `figure` (#4872) sets
+  `Distinction.asks_figure_name`, a person card the player names; a `beat:` token's third
+  segment, `beat:childhood/Influences/Treatment`, is the `DistinctionOffer.group` heading
+  the answer is listed under on the life page),
   resolves every name against existing rows (`_one`: unknown or ambiguous is
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview
