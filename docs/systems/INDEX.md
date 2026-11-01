@@ -7162,14 +7162,16 @@ Unified modifier system — categories, types, sources, and per-character modifi
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
 - **Natural weapons (#4898, slice 4 of #4844):** `Gift.natural_weapon_template` (nullable FK
-  to an Unarmed `ItemTemplate`, SET_NULL). `world/items/services/natural_weapons.py`:
-  `provision_natural_weapon(sheet, gift)` (idempotent; called from `grant_gift_to_character`
-  and the covenant role grant), `is_natural_weapon(item)` (template is a held gift's natural
-  weapon template; no item field), `require_removable(item)`,
-  `natural_weapon_template_ids(sheet)`. Exceptions `NaturalWeaponNotRemovable`,
-  `NaturalWeaponInTheWay`. Every removal path refuses one (backstops in `unequip_item`,
-  `set_item_holder` and `destroy_consumed_item_instance`); `covered_regions` skips it;
-  Required content `natural-weapon-templates`. See docs/systems/items.md ("Natural weapons").
+  to an Unarmed `ItemTemplate`, PROTECT) and the marker `ItemInstance.natural_weapon_gift`
+  (nullable FK to `Gift`, PROTECT, `related_name="natural_weapon_items"`, readonly in admin).
+  `world/items/services/natural_weapons.py`: `provision_natural_weapon(sheet, gift)`
+  (idempotent, never adopts a plain copy; called from `grant_gift_to_character` and the
+  covenant role grant), `deprovision_natural_weapon(sheet, gift)` (losing the gift: NPC
+  copy, beta reset), `is_natural_weapon(item)` (the marker, no query), `require_removable`.
+  Exceptions `NaturalWeaponNotRemovable`, `NaturalWeaponInTheWay`. Every removal path refuses
+  one (backstops in `unequip_item`, `set_item_holder` and `destroy_consumed_item_instance`);
+  `covered_regions` skips it; Required content `natural-weapon-templates`. See
+  docs/systems/items.md ("Natural weapons").
 
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
   (template check-bonus + default-Property authoring; `checks/services.py`'s

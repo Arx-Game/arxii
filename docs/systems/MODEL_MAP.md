@@ -5064,6 +5064,7 @@
   - silhouette -> items.Silhouette [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - holding_event -> items.OwnershipEvent [FK] (nullable)
+  - natural_weapon_gift -> magic.Gift [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
@@ -6127,6 +6128,7 @@
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - granted_companions <- companions.Companion
   - species_grants <- species.SpeciesGiftGrant
+  - natural_weapon_items <- items.ItemInstance
   - capability_project_details <- societies.OrganizationCapabilityProjectDetails
 
 ### GiftAcquisitionConfig

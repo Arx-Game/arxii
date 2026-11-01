@@ -93,19 +93,21 @@ EquippedItem rows for torso, both arms, etc.). The unique constraint
 `(character, body_region, equipment_layer)` enforces one item per slot.
 
 ### Natural weapons (#4898, slice 4 of #4844) [BUILT & WIRED]
-A gift may name a natural weapon (`Gift.natural_weapon_template`, a nullable FK to an Unarmed
-`ItemTemplate`, edited on the gift's admin page). Gaining the gift makes one instance of the
+A gift may name a natural weapon (`Gift.natural_weapon_template`, a nullable PROTECT FK to an
+Unarmed `ItemTemplate`, edited on the gift's admin page). Gaining the gift makes one instance of the
 template, held by the character, placed on them (no room needed) and equipped at every
 `TemplateSlot` the template declares: `provision_natural_weapon(sheet, gift)`
 (`world/items/services/natural_weapons.py`), called from `grant_gift_to_character` (CG
 finalize, species gifts, path grants, training, NPC copy) and from the covenant role grant,
-which mints `CharacterGift` itself. It is idempotent: an in-play instance of the template the
-character already holds is kept and only its missing slots are filled. Staff author the
+which mints `CharacterGift` itself. The made item carries the marker
+`ItemInstance.natural_weapon_gift` (PROTECT FK to the gift, readonly in admin). It is
+idempotent: the character's in-play item marked with that gift is kept and only its missing
+slots are filled. A bought, crafted or traded copy of the template carries no marker, is never
+adopted, and is ordinary gear. Staff author the
 template at the skin layer of its region (claws: both hands; a bite: head), so a sword or
 gloves at the base layer equip beside it.
 
-Nothing on the item marks it. `is_natural_weapon(item)` is true when the item's holder holds a
-gift whose natural weapon template is the item's template. That one predicate gates every
+`is_natural_weapon(item)` reads the marker (no query). That one predicate gates every
 removal path, with the refusal `NaturalWeaponNotRemovable` ("That is part of the body and
 cannot be removed."):
 
@@ -125,7 +127,10 @@ cannot be removed."):
 | any use-up, offering, recycle, evidence disposal, material spend | `destroy_consumed_item_instance` refuses it first |
 | any other holder change or unequip | backstops in `set_item_holder` and `unequip_item` |
 
-Staff admin edits are not gated (staff power). A natural weapon covers no skin:
+Losing the gift is the one way it comes off: `deprovision_natural_weapon(sheet, gift)` clears
+the marker and hands the item to `destroy_consumed_item_instance`. It runs where
+`CharacterGift` rows are deleted: an NPC copy of Powers (`roster/services/npc_copy.py`) and the
+beta reset wipe of play-time gifts. Staff admin edits are not gated (staff power). A natural weapon covers no skin:
 `covered_regions` skips it, so claws do not shade the hands from the sun or hide a marking.
 Its quality, facets and fittings use the ordinary item paths; a faceted piece counts once
 however many slots it fills (`CharacterEquipmentHandler.item_facets_for`). It is struck like

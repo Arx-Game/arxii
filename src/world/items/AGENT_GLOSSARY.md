@@ -231,5 +231,5 @@ _Avoid_: mutual tier (that is `get_relationship_tier`, the Mentor/Student read)
   Crafting writes none (an ordinary masterwork risks nothing).
 
 **Natural weapon** (#4898):
-Claws, a bite or horns a gift gives its holder: an instance of the Unarmed item template the gift names (`Gift.natural_weapon_template`), made and equipped at the skin layer once when the gift is gained. It is part of the body, so nothing removes it (unequip, drop, give, steal, trade, sale, vault, offering, use-up), it covers no skin, and it is struck on the Unarmed strike skill like any Unarmed weapon, listed before bare hands. Nothing on the item marks it: it is one because its holder holds the gift (`is_natural_weapon`).
+Claws, a bite or horns a gift gives its holder: an instance of the Unarmed item template the gift names (`Gift.natural_weapon_template`), made and equipped at the skin layer once when the gift is gained. It is part of the body, so nothing removes it (unequip, drop, give, steal, trade, sale, vault, offering, use-up), it covers no skin, and it is struck on the Unarmed strike skill like any Unarmed weapon, listed before bare hands. It carries its gift as `ItemInstance.natural_weapon_gift` (`is_natural_weapon`); a plain copy of the same template is ordinary gear. Losing the gift takes it away.
 _Avoid_: bound item, innate weapon, body weapon, soulbound
