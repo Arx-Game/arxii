@@ -23,8 +23,8 @@ class DerivedInputs:
     """Inputs read for one sheet during one read of several rows, so a check rank that two
     rows name is worked out once. A caller looping over rows makes one and passes it in.
 
-    ``target_soak`` is the soak of the opponent a technique damage hit lands on (#4892), set
-    by the damage step, the one reader that has an opponent. Every other read leaves it 0.
+    ``target_soak`` is the soak of the opponent a hit lands on (#4892), set by the readers that
+    have one: the technique damage step and the basic Strike. Every other read leaves it 0.
     """
 
     check_ranks: dict[int, int] = field(default_factory=dict)

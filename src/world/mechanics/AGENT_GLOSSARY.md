@@ -17,7 +17,7 @@ One named part of a combat maneuver with one number, held as a row of the fixed 
 _Avoid_: maneuver stat, maneuver tuning, action scaling (the removed vow-only table)
 
 **Derived amount** (#4878):
-A modifier row's amount worked out at read time from an input the row picks (`AmountInput`: character level, the holder's thread on a named trait or facet, a named check's rank, or the soak of the opponent a technique damage hit lands on, #4892), one step per `amount_per` units of it, held at `amount_cap`. The row's own number is the amount per step. Carried by `DerivedAmountMixin`; computed by `derived_amount`. Distinction effects and condition modifier effects have it. An input replaces the row's own scaling (size, severity, stage).
+A modifier row's amount worked out at read time from an input the row picks (`AmountInput`: character level, the holder's thread on a named trait or facet, a named check's rank, or the soak of the opponent a technique damage hit or a basic Strike lands on, #4892), one step per `amount_per` units of it, held at `amount_cap`. The row's own number is the amount per step. Carried by `DerivedAmountMixin`; computed by `derived_amount`. Distinction effects and condition modifier effects have it. An input replaces the row's own scaling (size, severity, stage).
 _Avoid_: dynamic modifier, formula, scaling expression
 
 **Effect kind** (#4783):

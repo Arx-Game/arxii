@@ -379,7 +379,9 @@ soak of the opponent before each profile lands (`combat.services.damage.soak.tar
 `soak_value`, 0 while it is vulnerable or for a swarm; for a duel mirror, the mirrored player's
 worn-armor soak, `equipped_armor_soak`, read without wear) and carries it in
 `DerivedInputs.target_soak` through `technique_effect_total`, `effect_modifier_total` (Charge
-damage), `modifier_target_contributions` and `condition_target_contributions`. Every other read
+damage), `modifier_target_contributions` and `condition_target_contributions`. The basic Strike
+does the same (`declarations/strike.py`, `_strike_damage`, owner ruling): its base damage and bare
+hands damage reads get the struck opponent's soak. Every other read
 passes nothing and the row reads 0. `clean()` refuses the input on anything but a damage target
 ("Only a damage modifier can read the target's soak."). A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and

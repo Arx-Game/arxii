@@ -42,8 +42,8 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
   2026-11-01):* distinction effects and condition modifier effects can pick an input, a "per N"
   step and a cap through one shared mixin; an input replaces the row's own scaling.
   *Amended by #4892 (the same rulings):* the target's soak joins the inputs, read only on
-  technique damage (Charge included) against the opponent being hit; staff are refused it on any
-  other kind.
+  technique damage (Charge included) and, by a further ruling, the basic Strike, against the
+  opponent being hit; staff are refused it on any other kind.
 - **Targets keep holding their own scope links (decision 11).** `ModifierTarget` already carries
   seven specific-system links (`target_trait`, `target_being`, `target_damage_type` and others);
   the two new scope columns follow it rather than moving the link to a table on the specific side.

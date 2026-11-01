@@ -23,6 +23,11 @@ Expected values come from the ruling and the spec, not from running the code:
 * In the duel the hit wears Vex's plate once, 30 to 29; reading her soak for the row adds no wear.
 * The same row that adds +4 on a strike reads 0 away from the damage step (the modifier
   breakdown on its own).
+* The basic Strike reads it too (owner ruling on #4892): a 30-damage sword Strike on a soak 20
+  bandit with the row on any damage loses it 30 + 4 - 20 = 14, and the same with the row on
+  "Strike: base damage". Bare hands (2 damage) with "+1 per point of the target's soak, at most
+  +6" on "Strike: bare hands damage" against soak 4 lose it 2 + 4 - 4 = 2, where with no row the
+  soak stops the whole hit.
 * Staff can give the input to technique damage and Charge damage, and cannot give it to a to-hit
   target or a check target.
 
@@ -40,6 +45,7 @@ from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from integration_tests.test_charge_effect_journeys import DAMAGE
 from integration_tests.test_facet_effect_bonus_journeys import _WolfFangField
+from integration_tests.test_strike_journeys import _StrikeField
 from integration_tests.test_technique_effect_damage_journeys import _DamageField
 from integration_tests.test_vow_added_effects_in_combat_journeys import every_check_succeeds
 from world.checks.factories import CheckTypeFactory
@@ -47,6 +53,7 @@ from world.combat.duels import create_pvp_duel
 from world.combat.factories import CombatOpponentFactory, SwarmOpponentFactory
 from world.combat.models import CombatOpponent, CombatParticipant
 from world.combat.services import resolve_round
+from world.combat.tests.test_mounted_combat import _equip_weapon
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
@@ -80,11 +87,14 @@ def _soak_menu() -> dict[str, object]:
     return {"amount_input": AmountInput.TARGET_SOAK, "amount_per": PER, "amount_cap": CAP}
 
 
-def _grant_plate_breaker(sheet, target) -> None:
-    """``sheet`` holds "+1 damage per 5 of the target's soak, at most +6" on ``target``."""
+def _grant_plate_breaker(sheet, target, *, per: int = PER) -> None:
+    """``sheet`` holds "+1 damage per ``per`` of the target's soak, at most +6" on ``target``."""
     distinction = DistinctionFactory(name="Plate-breaker", slug="plate-breaker")
     DistinctionEffectFactory(
-        distinction=distinction, target=target, value_per_rank=1, **_soak_menu()
+        distinction=distinction,
+        target=target,
+        value_per_rank=1,
+        **{**_soak_menu(), "amount_per": per},
     )
     grant_distinction(sheet, distinction, origin=DistinctionOrigin.GM_AWARD)
 
@@ -201,6 +211,44 @@ class APlateBreakerCharges(_WolfFangField):
         _to_hit, damage = self.charge_and_resolve()
 
         self.assertEqual(damage, STRIKE + DAMAGE + 4 - 20)
+
+
+class APlateBreakerStrikesWithAWeapon(_StrikeField):
+    """Hobb's basic Strike reads the bandit's soak (owner ruling, 2026-11-01)."""
+
+    def strike_scoped(self, key: str):
+        return ModifierTargetFactory(
+            category=ModifierCategory.objects.get(name=MANEUVER_EFFECT_CATEGORY_NAME),
+            name=f"Strike: {key}",
+            scope_maneuver_effect=get_maneuver_effect(key),
+        )
+
+    def test_a_sword_strike_with_the_row_on_any_damage_adds_four(self) -> None:
+        sword = _equip_weapon(self.hobb, archetype=GearArchetype.MELEE_ONE_HAND, damage=30)
+        _grant_plate_breaker(self.sheet, _technique_damage_target())
+        _set_soak(self.bandit, 20)
+
+        damage, _rolled = self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+
+        self.assertEqual(damage, 30 + 4 - 20)
+
+    def test_a_sword_strike_with_the_row_on_strike_base_damage_adds_four(self) -> None:
+        sword = _equip_weapon(self.hobb, archetype=GearArchetype.MELEE_ONE_HAND, damage=30)
+        _grant_plate_breaker(self.sheet, self.strike_scoped(ManeuverEffectKey.STRIKE_BASE_DAMAGE))
+        _set_soak(self.bandit, 20)
+
+        damage, _rolled = self.strike_and_resolve("Success", "Success", weapon_id=sword.pk)
+
+        self.assertEqual(damage, 30 + 4 - 20)
+
+    def test_bare_hands_get_through_soak_four(self) -> None:
+        bare = self.strike_scoped(ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE)
+        _grant_plate_breaker(self.sheet, bare, per=1)
+        _set_soak(self.bandit, 4)
+
+        damage, _rolled = self.strike_and_resolve("Success", "Success")
+
+        self.assertEqual(damage, 2 + 4 - 4)
 
 
 class APlateBreakerInADuel(_DamageField):

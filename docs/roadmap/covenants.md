@@ -964,7 +964,8 @@ the vow-only action scaling table is gone. What was built:
 - **Derived amounts** (#4878): distinction effects and condition modifier effects can derive
   their amount from character level, a thread on a named trait or facet, or a named check's rank,
   with a "per N" step and a cap (the owner's shared menu, #4824). The target's soak input
-  (#4892) reads the soak of the opponent a technique damage hit lands on, Charge included; other
+  (#4892) reads the soak of the opponent a technique damage hit or a basic Strike lands on, Charge
+  included; other
   row kinds get the menu when one needs it. The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for

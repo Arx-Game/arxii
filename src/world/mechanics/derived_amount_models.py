@@ -85,8 +85,8 @@ class DerivedAmountMixin(models.Model):
         is blank, and a check rank never feeds a stat or skill target (the stat category, or
         any target linked to a trait, which is how a stat read finds it): a check's rating reads
         stats, which would read this row again. ``derived_amounts`` also guards the read. The
-        target's soak is read only at the technique damage step, so only a damage target takes
-        it (#4892).
+        target's soak is read only where a hit lands (a technique's damage, a Charge, a basic
+        Strike), so only a damage target takes it (#4892).
         """
         errors: dict[str, str] = {}
         allowed = AMOUNT_INPUT_ANCHOR_FIELDS.get(self.amount_input, ())
