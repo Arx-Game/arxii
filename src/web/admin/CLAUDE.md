@@ -1260,9 +1260,11 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   refused and warned saves leaving the cached pick as stored, `VowBuilderStylingTest`: in
   both states every class under `#vow-builder-root`, `<template>` contents included, has a
   rule reaching the page, no bare `<button>` in a `.submit-row`, one `<h1>` in `#content`)
-  and `test_vow_builder_live.py` (budget rows, holder impact, pick changes). Deliberate no-ADR: the page
-  layout and the warn-then-confirm save follow the approved #4843 spec and its 2026-11-01
-  rulings.
+  and `test_vow_builder_live.py` (budget rows, holder impact, pick changes).
+  `VowPageRestoreTests` checks each refusal shape and a save that raises through a fresh
+  read, a membership the handler loaded before the POST and a sub-role's `parent_role`.
+  Deliberate no-ADR: the page layout and the warn-then-confirm save follow the approved
+  #4843 spec and its 2026-11-01 rulings.
 
 ## Standoff Profile Builder (#4354)
 
