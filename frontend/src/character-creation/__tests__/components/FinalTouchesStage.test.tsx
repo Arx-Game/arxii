@@ -493,6 +493,31 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
     expect(screen.queryByLabelText(PROMPT)).not.toBeInTheDocument();
   });
 
+  it('ignores a route-closed row no held card would have opened, and counts one it would', () => {
+    const closedRow = {
+      distinction_id: 51,
+      name: 'Marked Hands',
+      reason: 'Not on this road.',
+      opener_labels: [] as string[],
+      opener_ids: [] as number[],
+    };
+    finalTouchesOffers = { offers: [], closed: [closedRow] };
+    const { unmount } = renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
+    unmount();
+    finalTouchesOffers = {
+      offers: [],
+      closed: [{ ...closedRow, opener_labels: ['Jailbird'], opener_ids: [401] }],
+    };
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText(HEADING)).toBeInTheDocument();
+    expect(screen.getByText(/Marked Hands/)).toBeInTheDocument();
+  });
+
   it('shows the lines a held card unlocks, with no crime prompt when no card asks', () => {
     finalTouchesOffers = { offers: [escapeArtist], closed: [] };
     renderWithCharacterCreationProviders(

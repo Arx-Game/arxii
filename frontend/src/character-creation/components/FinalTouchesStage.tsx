@@ -359,11 +359,13 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // a question; `ChapterOffers` itself renders nothing for an empty chapter.
   const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
   const prompts = draft.final_touches_prompts ?? [];
-  // A route-closed line counts too: `ChapterOffers` prints the closed hint for it.
+  // `closed` is the route's whole closed list; only a row this chapter's own satisfied
+  // opener would have shown (`opener_labels` non-empty) counts, since that is the one
+  // `ChapterOffers` prints a closed hint for.
   const showCards =
     prompts.length > 0 ||
     (cardOffers?.offers.length ?? 0) > 0 ||
-    (cardOffers?.closed.length ?? 0) > 0;
+    (cardOffers?.closed ?? []).some((row) => row.opener_labels.length > 0);
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
@@ -607,6 +609,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           <ChapterOffers
             draft={draft}
             chapter="final_touches"
+            closedFilter={(row) => row.opener_labels.length > 0}
             headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
             closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
             syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
