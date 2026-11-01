@@ -47,7 +47,7 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); eight fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
+| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); twelve fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
 | `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE), `residence_comfort` (bool), `form_combat_profile` (FK forms.FormCombatProfile, SET_NULL) |
 | `CharacterModifier` | Materialized modifier value on a character for fast lookup (SharedMemoryModel) | `character` (FK CharacterSheet), `value` (int, can be negative), `source` (FK ModifierSource, CASCADE), `expires_at` (nullable datetime), `created_at` |
 
@@ -277,10 +277,10 @@ code. `world/mechanics/maneuver_effects.py` holds the catalog's code side,
 `world/mechanics/effect_targets.py` the reader.
 
 **The catalog.** `ManeuverEffect` (`key` unique, a `ManeuverEffectKey`; `base_value`; staff-only
-`notes`) has exactly eight rows. The kind of each is derived from the key
+`notes`) has exactly twelve rows. The kind of each is derived from the key
 (`MANEUVER_EFFECT_KIND`), never stored. Code finds a row by `key`, never by name. The admin
 (`ManeuverEffectAdmin`) edits `base_value` and `notes`, with no add, no delete and a read-only key.
-Rows are written by migration `0334` in every migrated database, by `ensure_maneuver_effect_rows()`
+Rows are written by migrations `0334` and `0351` (the four #4858 rows) in every migrated database, by `ensure_maneuver_effect_rows()`
 on the Big Button combat cluster (`world/seeds/clusters.py`), and by `get_maneuver_effect` on a
 missing key; an edited base value is kept.
 
@@ -294,6 +294,10 @@ missing key; an edited base value is kept.
 | `interpose_partial_protection` | partial protection | 50 | `interpose_dispatch`, a partial block |
 | `rally_morale` | morale | 15 | `_resolve_rally`, per success level of a great success |
 | `rally_surge_intensity` | surge intensity | 100 | `_surge_rallied_ally`, as a percentage |
+| `strike_base_damage` | damage | 3 | `_resolve_strike` (#4858): a landed Strike's floor; its modifiers (kind-wide too) add to every landed Strike |
+| `strike_bare_hands_damage` | damage | 2 | `_resolve_strike`: bare hands' damage and floor; only modifiers scoped to it alone |
+| `miss_intensity` | intensity | 1 | `record_miss_intensity`: what a missed attack at an opponent (Strike, technique, lost joust pass) adds to the combat engagement |
+| `intensity_to_hit` | to hit | 1 | `intensity_to_hit_contribution`: to hit per point of the combat engagement's intensity, on an attack at an opponent only; only modifiers scoped to it alone |
 
 **Targets.** `ModifierTarget` gains `scope_maneuver_effect` (FK to one `ManeuverEffect`,
 `CASCADE`) and `scope_effect_kind` (an `EffectKind`). A database constraint
@@ -301,13 +305,15 @@ missing key; an edited base value is kept.
 (`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0334`, and by `ensure_maneuver_effects` for a schema built
 without migrations; the seeder never writes it, since a category is content,
 and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
-scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
+scaling row, a worn facet's `FacetEffectBonus` rows (#4815) and the crossing-choice conditions
+of worn facets and mantles; distinctions, crafted
 recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
 one of the two (a target with a technique scope names a kind instead, see "Technique effect scopes"); no other category may set either. A target with neither set matches nothing.
 Staff author targets after the catalog rows exist, then point a source at the target (an unsized
 distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
-crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
-reach an effect target: it needs a resonance on the target, and an effect target has none.
+crossing-choice condition, a facet effect bonus, or a vow stat scaling row). A facet's tier-0
+resonance flat bonus (`ThreadPullEffect`) does not reach an effect target: it needs a resonance on
+the target, and an effect target has none; the facet effect bonus is how a facet reaches one.
 
 **The reader.**
 - `effect_value(sheet, key)`: base value plus `effect_modifier_total`, floored at 0, and capped
@@ -334,12 +340,41 @@ reach an effect target: it needs a resonance on the target, and an effect target
   (stored // 10) x `bonus_per_level`; every other category keeps the stored level. Rows on an
   engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
   their scaling (`docs/systems/covenants.md`).
+- **Facets (#4815, slice 4 of #4783).** `FacetEffectBonus` (`world/magic/models/motifs.py`:
+  `facet`, `target` limited to the "maneuver_effect" category, non-zero `amount`; unique per
+  facet and target) is the facet naming the effect it boosts, whatever its thread's resonance
+  (owner ruling 2026-11-01). `passive_facet_bonuses` adds, for each FACET thread whose facet is
+  on a worn item, `amount x item quality multiplier x attachment quality multiplier x max(1,
+  SHOWN thread level)` per worn item facet, in one query for all the threads' facets. Staff
+  author rows in the Facet admin's "Facet effect bonuses" inline; `merge_facets` moves them,
+  keeping the winner's row where both facets boost one target.
 
-**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it. A
-modifier on an effect is a flat amount: a distinction effect with a size on a maneuver-effect
-target is refused by `DistinctionEffect.clean()` ("Maneuver effects take flat amounts only; clear
-the size."), as is a `DistinctionEffectRankSize` row on one. Derived amounts and sized modifiers
-on effects (#4824) are not built. A maneuver reads only the targets that carry no technique or
+**Rules and limits.** Each effect kind fixes the unit of every modifier that targets it.
+Damage, to-hit and partial protection take a size (#4876, the owner's "likely grants only"
+ruling on #4824): `EFFECT_KIND_LANE` (`constants.py`) maps each to a `ModifierLane` (damage
+points, check points, percentage points), and `ModifierTarget.value_lane` reads it from the
+target's kind (`ModifierTarget.effect_kind`). The effect readers' shared sum (`_modifier_total`
+in `effect_targets.py`) reads a laned target as the stat read does:
+`modifier_target_contributions` and `condition_target_contributions` in that lane, one
+`ModifierBreakdown` per lane tapered by its `ModifierTaper` rows, so a sized distinction effect
+counts the lane's value at its holder's level and held-rank size, and a sized technique buff at
+its own level and size. With no table row it keeps its flat amount. Every other kind takes flat
+amounts only: a size there is refused by `DistinctionEffect.clean()` ("Only damage, to-hit and
+partial protection effects take a size; clear the size."), as is a `DistinctionEffectRankSize`
+row on one. **Derived amounts (#4878):** a distinction effect or condition modifier effect can
+pick an input (`AmountInput`: character level, the holder's highest thread on a named trait or
+facet at its shown level, or the holder's rank on a named check from `compute_check_rating`),
+a "per N" step (`amount_per`) and a cap (`amount_cap`), the columns of the abstract
+`DerivedAmountMixin` (`derived_amount_models.py`). The row's own amount is then the amount per
+step; `derived_amount(sheet, row, per_step)` (`derived_amounts.py`) returns it times
+`input // amount_per`, held at the cap. It is read at evaluation time by `get_modifier_breakdown`
+and `scaled_condition_effect_value`, never stored; readers that sum stored
+`CharacterModifier.value` (goals, AP regeneration, comfort) keep the flat amount, as for sizes. An
+input replaces the row's own scaling: a size, severity or stage never applies with it (`clean()`),
+and a check-rank input is refused on a stat or skill target (the stat category or any target with
+`target_trait`), whose check would read it again; a row written past `clean()` reads 0 inside its
+own rating instead of recursing (`_RATINGS_IN_PROGRESS`). The
+target's soak input is the next slice. A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
 "Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
 damage of every technique hit, Charge included, and a Charge's own damage effect still counts only

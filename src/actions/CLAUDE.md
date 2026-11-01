@@ -52,7 +52,10 @@ They do not use the command system, dispatchers, or handlers.
   `UseItemManeuverAction`/`ReadyAction`/
   `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction`/
   `RallyAction`/`DemoralizeAction`/`TauntAction`/`ParleyAction` (social maneuvers, #1590/#1591)/
-  `ChargeAction`/`JoustAction` (mounted, #1843)/`AwaitOpeningAction` (key
+  `ChargeAction`/`JoustAction` (mounted, #1843)/`StrikeAction` (key `combat_strike`, #4858:
+  wraps `declare_strike`; kwargs `opponent_id` and `weapon_id` (web) or `weapon_name` (telnet),
+  neither meaning bare hands; telnet `strike <opp> [with <weapon>]` / `combat strike`, web
+  Strike as the focused card's leading pick with `StrikeControl`)/`AwaitOpeningAction` (key
   `combat_await_opening`, #4608: the waiting strike, wraps `declare_await_opening`; kwargs
   `technique_id`, `confirm_soulfray_risk`; telnet `combat await <technique> [soulfray]`, web
   `WaitingStrikeControl`)/`EngageAction`/`DisengageAction`
@@ -144,8 +147,9 @@ They do not use the command system, dispatchers, or handlers.
   (#1111 slice 4), REGISTRY backend, `target_type=SELF`; thin wrappers around
   `world.forms.services.assume_alternate_self` / `revert_alternate_self`. Shift validates that
   `alternate_self_id` belongs to the actor's sheet and is **not** `in_control`-gated
-  (forced/inadvertent shifts are the point). Revert **is** `in_control`-gated and surfaces
-  `RevertBlockedError.user_message` as a failure `ActionResult`. Shared by telnet and the web
+  (forced/inadvertent shifts are the point). Revert is a three-way rule (#4802): a compulsion rolls its `REVERT_FORM` resist check;
+  with none, a `TALKED_DOWN` self whose `emergence_condition` is active stays blocked
+  (`RevertBlockedError.user_message` as a failure `ActionResult`); anyone else reverts freely. Shared by telnet and the web
   dispatcher;
   `fatigue.py` — `RestAction`, key `"rest"` (#1491/#1524), REGISTRY backend, `target_type=SELF`;
   spend AP to gain `well_rested` for the next dawn reset. Gated by `CanRestPrerequisite`

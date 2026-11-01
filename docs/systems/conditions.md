@@ -216,7 +216,7 @@ from world.conditions.services import (
     aggro_priority_by_target,      # {ObjectDB pk: total} for many targets in one query (#4572)
     get_condition_modifier_vow_contributions, # Per-instance (source_vow_id, name, value) rows for a ModifierTarget (#2643)
     priced_percent_severity,       # Apply-time percent severity priced vs the landing target's level (#2643)
-    scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090)
+    scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090); a derived amount (#4878) on its bearer
     active_condition_instances_by_sheet, # Pure-read get_active_conditions sibling, many sheets at once (#4090)
     condition_modifier_totals_by_sheet, # Batched get_condition_modifier_total across many sheets (#4090)
 
@@ -779,6 +779,98 @@ stats. It is the consent signal used by cast targeting and by
 `CharacterSheet.in_control`. The canonical seeded behavior-altering category is
 `Control` (`alters_behavior=True`), and the `Berserk` condition created by the fury
 system belongs to it.
+
+## Losing control: vulnerabilities, triggers and compulsions (#4802, ADR-4802) [BUILT & WIRED]
+
+Involuntary control loss is one mechanism with authored rows, replacing the moon-only
+Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
+`world/conditions/models.py`; every number is a column staff edit in admin.
+
+- **Vulnerability.** An ordinary condition a character carries (Lycan blood, a curse).
+  Triggers hang off it. A character without it never rolls its triggers.
+- **`ControlLossTrigger`** (FK `vulnerability`; `fires_on` is `ControlLossFiresOn`:
+  `MOON_PULL`, `WOUND_THRESHOLD`, `CONDITION_STAGE`). Shared fields: `check_type`,
+  `base_difficulty`, `relief_per_level`. Moon-only fields: `min_moon_pull`,
+  `difficulty_per_pull`, `relief_gift`, `relief_per_thread_level`, `relief_cap`,
+  `exempt_from_level`, `impaired_willpower_drop` (the impaired threshold: condition-driven
+  willpower at or below minus this value rolls even past the exempt level). Wound:
+  `health_below_percent`.
+  Stage: `stage` (must belong to the vulnerability). A CheckConstraint per kind enforces
+  which columns each kind takes.
+- **`ControlLossBand`** (FK trigger and `CheckOutcome`, unique together): what a roll outcome
+  does: `intensity` and `control_change` on the engagement, `applies` (a condition, usually
+  Berserk) at `severity` for `duration_rounds`, and `forces_form` (moon triggers only). A
+  better outcome may never give a lower `control_change` or a higher `severity` or
+  `duration_rounds` (`control_loss_bands.py`, the same monotonic rule `validate_surge_bands`
+  uses; model `clean()` and the admin formsets both call it). `intensity` is exempt: losing
+  control trades control for power, so a worse roll may raise it.
+- **Engine** (`world/conditions/control_loss.py`): `fire_control_loss_triggers(character,
+  fires_on, *, moon_pull=0, stage=None)` rolls `perform_check_with_modifiers` (so authored
+  condition and equipment modifiers count) and applies the band. Callers: the moon sweep
+  (`world.species.moon_sensitivity.reconcile_moon_pull`, with `moon_pull=`),
+  `fire_wound_triggers(character, *, health_before, health_after, max_health)` from the
+  damage service (fires on each downward crossing of the threshold within one hit; a
+  killing hit and a character who cannot act (`can_act`) roll nothing; a hit into the
+  knockout band holds its triggers on `ParticipantDamageResult.pending_wound_crossing` until
+  the caller has rolled the knockout check, then `settle_wound_triggers` rolls them, so a
+  character that hit knocks out rolls nothing and one who stays standing rolls), and
+  `fire_stage_triggers(instance)` (with `stage=`) from
+  `world.conditions.services._fire_stage_entry_triggers`, the one call every stage-entry
+  path makes: the severity advance, the round tick (which drops the cached active list as
+  each expired instance is deleted, so a condition that ran out this tick never counts) and
+  the flow-driven
+  `advance_condition_stage`. Only player characters roll, and a character already under a
+  compulsion rolls no trigger of any kind (ruled 2026-10-31). Whenever a band applies a
+  condition or moves intensity or control, the character and the room are told, by persona
+  name (`display_name_of`). The line reads cause, roll, onset, every part from rows: the
+  cause from `fires_on` and its kind's column ("Garrick falls below 50% health.", "Hollow
+  curse reaches the Hollowing.", "The moon pulls at Wynn."), the roll as "<check> vs
+  <difficulty>: <outcome>.", and the band's onset ("Garrick loses control: Berserk,
+  severity 3, for 3 rounds · Control -6 · Intensity +4."; a zero or unset part is left
+  out). Inside a combat round (the character's encounter is
+  `RESOLVING`: a wound from a swing, a stage reached by the round tick) the line is one of
+  the round's narration rows (`broadcast_action_outcome`), so it persists in the scene log.
+  Round resolution wraps each fighter's slot in `trigger_lines_after_action`, which holds
+  the rows a slot's damage sets off until the slot's own lines are out, so a wound
+  trigger follows the hit that caused it on every damage path. Outside a round it goes
+  out as plain text once the transaction commits.
+- **`Compulsion`** (one-to-one with a `ConditionTemplate` whose category is
+  `alters_behavior`; `clean()` rejects any other): `wants` (`CompulsionWant`, today
+  `ATTACK_OPPONENT`), `check_type` (the roll to go against it; distinct from
+  `ConditionTemplate.resist_check_type`, which resists the condition being applied),
+  `base_difficulty`, `difficulty_per_severity`.
+  - **`CompulsionForbiddenAction`**: FLEE, PARLEY, LEAVE or REVERT_FORM, each with an
+    `extra_difficulty`. Unique per compulsion and action.
+  - **`CompulsionResistBand`**: per `CheckOutcome`, a `result` (`CompulsionResult`:
+    `ACTS_FREELY`, `ACTS_STRAINED`, `COMPULSION_ACTS`), an `action_penalty` and a
+    `control_change`, validated monotonic by `validate_compulsion_bands`. The penalty bites
+    only an action that rolls: taking cover and using an item have no roll, so a strained
+    cover or item use costs nothing (ruled 2026-10-31).
+  - `retry_wait_minutes`: how long a character who failed to change back outside a fight
+    waits before trying again (`ConditionInstance.compulsion_retry_after` holds the time).
+    In a fight the wait is the rest of the round (`CombatParticipant.compulsion_attempt_round`).
+  - Readers: `active_compulsion(character)` (the most severe when several apply),
+    `active_compulsions_for(characters)` (the same for many, one compulsion query),
+    `forbidden_rows_for(compulsions)`, `has_compulsion`, `compulsion_difficulty`,
+    `compulsion_summary_for` (the payload the declare screen shows). Resolution lives in `world/combat/compulsion.py`
+    (see `docs/roadmap/combat.md` and the combat entry in `docs/systems/INDEX.md`).
+- **Nothing is refused.** Any action stays declarable; anything other than what the
+  compulsion wants rolls the resist check at the round lock. `reject_leave_if_berserk` and the
+  revert refusal for a compulsion are gone: leaving and changing back roll
+  (`resist_compulsion_now`). A failed roll cannot be retried at once: in a fight the next
+  try is next round, outside one it waits `retry_wait_minutes`, and a try inside the wait
+  rolls nothing and says when to try again. Charmed and Calm (`alters_behavior`, no compulsion) revert
+  freely; a `TALKED_DOWN` alternate self held by its emergence condition stays blocked
+  (see `docs/systems/forms.md`).
+- **Seeded content.** `world/conditions/berserk_content.py` seeds Berserk's compulsion
+  (wants an attack; forbids flee, parley, leave and revert) and the "Resist compulsion"
+  check type. Migration `0348_control_loss_content` carries the moon's old constants into
+  one moon trigger row with its bands, creates Lycan blood (blank description) only where the
+  lycan grant has no drawback condition, and applies it to existing moon-bound characters.
+  Required content probes `berserk-compulsion` and `moon-control-loss-trigger` list a gap;
+  the moon probe also lists every holder of the lycan grant's `drawback_distinction` who
+  carries no live (unsuppressed, unresolved) instance of its `drawback_condition` (the
+  condition the trigger hangs on).
 
 ## Self-shakeable categories (#4732)
 

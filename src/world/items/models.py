@@ -641,6 +641,7 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                             GearArchetype.THROWN,
                             GearArchetype.SHIELD,
                             GearArchetype.LANCE,
+                            GearArchetype.UNARMED,
                         ]
                     )
                     | models.Q(base_weapon_damage=0)

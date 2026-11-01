@@ -411,7 +411,8 @@ class ResolveRoundDefenseCheckTests(TestCase):
         mock_result = MagicMock()
         mock_result.success_level = 1
         mock_check.return_value = mock_result
-        mock_check_type = MagicMock()
+        # A real check type: the defense roll is recorded against it (#4884).
+        mock_check_type = CheckTypeFactory()
 
         def mock_offense_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
             return MagicMock(success_level=2)

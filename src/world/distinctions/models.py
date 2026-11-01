@@ -36,6 +36,7 @@ from world.distinctions.types import (
     SheetUpdateRequestType,
 )
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME
+from world.mechanics.derived_amount_models import DerivedAmountMixin
 from world.secrets.constants import SecretLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -128,7 +129,12 @@ class DistinctionManager(NaturalKeyManager):
     """Manager for Distinction with natural key support."""
 
 
-MANEUVER_EFFECT_SIZE_REFUSAL = "Maneuver effects take flat amounts only; clear the size."
+DERIVED_AMOUNT_SIZE_REFUSAL = (
+    "An effect derives its amount or takes a size, not both; clear one of them."
+)
+MANEUVER_EFFECT_SIZE_REFUSAL = (
+    "Only damage, to-hit and partial protection effects take a size; clear the size."
+)
 
 
 class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -412,7 +418,7 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.mutually_exclusive_with.all()
 
 
-class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class DistinctionEffect(NaturalKeyMixin, CreditedContent, DerivedAmountMixin, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
@@ -477,7 +483,13 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "target"]
-        dependencies = [DISTINCTION_MODEL, "arxii.ModifierTarget"]
+        dependencies = [
+            DISTINCTION_MODEL,
+            "arxii.ModifierTarget",
+            "arxii.CheckType",
+            "arxii.Trait",
+            "arxii.Facet",
+        ]
 
     class Meta:
         unique_together = ["distinction", "target"]
@@ -489,14 +501,20 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         """Refuse Paramount (only a vow's size step reaches it, #4551 section 5.3) and a
-        size on a maneuver effect target (flat amounts only, #4783 decision 9)."""
+        size on a maneuver effect target whose kind has no value lane (#4783 decision 9;
+        damage, to-hit and partial protection have one since #4876)."""
         super().clean()
         if self.modifier_size == ModifierSize.PARAMOUNT:
             raise ValidationError(
                 {"modifier_size": "Paramount is reached only through a vow's size step."}
             )
-        if self.modifier_size is not None and self.targets_maneuver_effect:
+        if self.modifier_size is not None and self.takes_flat_amount_only:
             raise ValidationError({"modifier_size": MANEUVER_EFFECT_SIZE_REFUSAL})
+        errors = self.clean_derived_amount(self.target if self.target_id else None)
+        if self.has_amount_input and self.modifier_size is not None:
+            errors["modifier_size"] = DERIVED_AMOUNT_SIZE_REFUSAL
+        if errors:
+            raise ValidationError(errors)
 
     @property
     def targets_maneuver_effect(self) -> bool:
@@ -504,6 +522,12 @@ class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.target_id is not None and (
             self.target.category.name == MANEUVER_EFFECT_CATEGORY_NAME
         )
+
+    @property
+    def takes_flat_amount_only(self) -> bool:
+        """Whether a size is refused here: a maneuver effect target whose kind has no value
+        lane (reach, escape, morale, surge, condition severity and duration; #4876)."""
+        return self.targets_maneuver_effect and self.target.value_lane is None
 
     def get_value_at_rank(self, rank: int) -> int:
         """
@@ -613,7 +637,7 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
 
     def clean(self) -> None:
         """Refuse rank 1, Paramount, a rank past the maximum, an unsized effect and a
-        maneuver effect target (flat amounts only, #4783).
+        maneuver effect target whose kind has no value lane (#4783, #4876).
 
         Rank 1 and Paramount are also database constraints; refusing them here gives staff
         a sentence instead of the constraint's name.
@@ -632,8 +656,10 @@ class DistinctionEffectRankSize(NaturalKeyMixin, RelatedCacheClearingMixin, Shar
                 errors[NON_FIELD_ERRORS] = (
                     "This effect has no size, so it has no rank sizes. Give it a rank-1 size first."
                 )
-            elif effect.targets_maneuver_effect:
+            elif effect.takes_flat_amount_only:
                 errors[NON_FIELD_ERRORS] = MANEUVER_EFFECT_SIZE_REFUSAL
+            elif effect.has_amount_input:
+                errors[NON_FIELD_ERRORS] = DERIVED_AMOUNT_SIZE_REFUSAL
             max_rank = effect.distinction.max_rank
             if self.rank is not None and self.rank > max_rank:
                 errors["rank"] = f"This distinction's maximum rank is {max_rank}."

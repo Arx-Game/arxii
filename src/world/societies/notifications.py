@@ -161,13 +161,9 @@ def _build_tier_transition_body(persona: Persona) -> str:
 
 def _tier_with_article(tier_label: str) -> str:
     """Add the right indefinite article to the tier label."""
-    if not tier_label:
-        return tier_label
-    return (
-        f"an {tier_label}"
-        if tier_label[0].lower() in "aeiou"  # noqa: STRING_LITERAL — vowel set, not an identifier
-        else f"a {tier_label}"
-    )
+    from core.text import with_indefinite_article  # noqa: PLC0415
+
+    return with_indefinite_article(tier_label)
 
 
 def notify_reputation_tier_change(event: OrganizationReputationEvent) -> None:

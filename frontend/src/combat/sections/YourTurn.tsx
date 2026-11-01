@@ -17,7 +17,7 @@ import type { SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
-import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
+import { ActionDeclarationCard, type LeadingPick } from '@/actions/ActionDeclarationCard';
 import type {
   ActionContext,
   ActionSlot,
@@ -29,10 +29,19 @@ import type {
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { AreaAttackWarning } from '@/combat/components/AreaAttackWarning';
 import { DodgePlanPanel } from '@/combat/components/DodgePlanPanel';
+import {
+  CompulsionBanner,
+  CompulsionChosenLine,
+  CompulsionDeclareNote,
+  CompulsionMark,
+  NO_TARGET_TECHNIQUE_KEY,
+  type Compulsion,
+} from '@/combat/components/CompulsionBanner';
 import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
+import { StrikeControl, type StrikeWeaponOption } from '../components/StrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -261,6 +270,8 @@ interface RoundScopedState {
   chargeError: string | null;
   joustTechniqueId: string;
   joustError: string | null;
+  /** Strike is the focused pick this round (#4858), in place of a technique. */
+  strikePicked: boolean;
 }
 
 /** Everything a new round must wipe — reset WHOLESALE so a missed atom is impossible (#2423). */
@@ -298,6 +309,7 @@ function initialRoundState(): RoundScopedState {
     chargeTechniqueId: '',
     chargeError: null,
     joustTechniqueId: '',
+    strikePicked: false,
     joustError: null,
   };
 }
@@ -761,6 +773,33 @@ function submitBlockReason(args: {
   return null;
 }
 
+/**
+ * The compulsion key of a focused technique that names no opponent (a heal, a defend).
+ * A technique that takes a target and has none picked yet is still being set up, so it
+ * is not marked until she picks something other than an opponent.
+ */
+function noTargetTechniqueKey(
+  context: ActionContext,
+  descriptor: PlayerAction | undefined | null
+): string {
+  if (context.techniqueId === undefined || !descriptor) return '';
+  if (context.targetKind === 'opponent' && context.targetId !== undefined) return '';
+  if (descriptor.target_spec !== null && context.targetId === undefined) return '';
+  return NO_TARGET_TECHNIQUE_KEY;
+}
+
+/** The action her compulsion is judging right now: her declared maneuver, else the technique. */
+function chosenActionKey(
+  compulsion: Compulsion | null,
+  declaredManeuver: string | null,
+  noTargetKey: string
+): string {
+  if (declaredManeuver && compulsion?.against.some((c) => c.action_key === declaredManeuver)) {
+    return declaredManeuver;
+  }
+  return noTargetKey;
+}
+
 type Opponent = NonNullable<EncounterDetail['opponents']>[number];
 type InventoryItem = NonNullable<ReturnType<typeof useInventory>['data']>[number];
 
@@ -779,6 +818,7 @@ interface UseItemSectionProps {
   onInstanceChange: (value: string) => void;
   onTargetChange: (value: string) => void;
   onConfirm: () => void;
+  compulsion: Compulsion | null;
 }
 
 /**
@@ -799,76 +839,79 @@ function UseItemSection({
   onInstanceChange,
   onTargetChange,
   onConfirm,
+  compulsion,
 }: UseItemSectionProps) {
   if (usableItems.length === 0) return null;
   return (
-    <div
-      className="space-y-1.5 rounded border border-border bg-card/60 p-2"
-      data-testid="use-item-section"
-    >
-      <p
-        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-        title="Use a held item as your round action, optionally against an ally or opponent."
+    <CompulsionMark compulsion={compulsion} actionKey="use_item">
+      <div
+        className="space-y-1.5 rounded border border-border bg-card/60 p-2"
+        data-testid="use-item-section"
       >
-        Use Item
-      </p>
-      <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
-        <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
-          <SelectValue placeholder="Choose an item…" />
-        </SelectTrigger>
-        <SelectContent>
-          {usableItems.map((item) => (
-            <SelectItem key={item.id} value={String(item.id)}>
-              {item.display_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
-        <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
-          <SelectValue placeholder="Target" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
-          {coverableAllies.map((ally) => (
-            <SelectItem
-              key={`use-item-ally-${ally.id}`}
-              value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
-            >
-              {ally.character_name}
-            </SelectItem>
-          ))}
-          {activeOpponents.map((opponent) => (
-            <SelectItem
-              key={`use-item-opponent-${opponent.id}`}
-              value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
-            >
-              {opponent.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <button
-        type="button"
-        disabled={disabled || instanceId === ''}
-        onClick={onConfirm}
-        data-testid="use-item-confirm-btn"
-        className={cn(
-          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-          inactive || instanceId === ''
-            ? 'border-border bg-muted text-muted-foreground'
-            : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
-        )}
-      >
-        {pending ? 'Using item…' : 'Use Item'}
-      </button>
-      {error !== null && (
-        <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
-          {error}
+        <p
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          title="Use a held item as your round action, optionally against an ally or opponent."
+        >
+          Use Item
         </p>
-      )}
-    </div>
+        <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
+          <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
+            <SelectValue placeholder="Choose an item…" />
+          </SelectTrigger>
+          <SelectContent>
+            {usableItems.map((item) => (
+              <SelectItem key={item.id} value={String(item.id)}>
+                {item.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
+          <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
+            <SelectValue placeholder="Target" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
+            {coverableAllies.map((ally) => (
+              <SelectItem
+                key={`use-item-ally-${ally.id}`}
+                value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
+              >
+                {ally.character_name}
+              </SelectItem>
+            ))}
+            {activeOpponents.map((opponent) => (
+              <SelectItem
+                key={`use-item-opponent-${opponent.id}`}
+                value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
+              >
+                {opponent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={disabled || instanceId === ''}
+          onClick={onConfirm}
+          data-testid="use-item-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            inactive || instanceId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+          )}
+        >
+          {pending ? 'Using item…' : 'Use Item'}
+        </button>
+        {error !== null && (
+          <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
+            {error}
+          </p>
+        )}
+      </div>
+    </CompulsionMark>
   );
 }
 
@@ -1562,6 +1605,7 @@ interface ManeuverDeclarationSectionProps {
   isLocked: boolean;
   isDeclaringPhase: boolean;
   maneuverError: string | null;
+  compulsion: Compulsion | null;
   setCoverAllyId: (value: string) => void;
   setGuardAllyId: (value: string) => void;
   setGuardTechniqueId: (value: string) => void;
@@ -1602,6 +1646,7 @@ function ManeuverDeclarationSection({
   isLocked,
   isDeclaringPhase,
   maneuverError,
+  compulsion,
   setCoverAllyId,
   setGuardAllyId,
   setGuardTechniqueId,
@@ -1633,144 +1678,161 @@ function ManeuverDeclarationSection({
         animaCurrent={animaCurrent}
         guardSoulfrayAccepted={guardSoulfrayAccepted}
       />
+      {compulsion && declaredManeuver && (
+        <CompulsionChosenLine compulsion={compulsion} actionKey={declaredManeuver} />
+      )}
 
       {/* Flee button — only when not already declared a flee maneuver */}
       {declaredManeuver !== 'flee' && (
-        <button
-          type="button"
-          disabled={isLocked || !isDeclaringPhase || fleePending}
-          onClick={handleFlee}
-          data-testid="flee-btn"
-          className={cn(
-            'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            isLocked || !isDeclaringPhase
-              ? 'border-border bg-muted text-muted-foreground'
-              : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20'
-          )}
-        >
-          {fleePending ? 'Declaring flee…' : 'Flee'}
-        </button>
+        <CompulsionMark compulsion={compulsion} actionKey="flee">
+          <button
+            type="button"
+            disabled={isLocked || !isDeclaringPhase || fleePending}
+            onClick={handleFlee}
+            data-testid="flee-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-2 text-sm font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isLocked || !isDeclaringPhase
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20'
+            )}
+          >
+            {fleePending ? 'Declaring flee…' : 'Flee'}
+          </button>
+        </CompulsionMark>
       )}
 
-      <CoverControl
-        declaredManeuver={declaredManeuver}
-        coverableAllies={coverableAllies}
-        coverAllyId={coverAllyId}
-        coverPending={coverPending}
-        isLocked={isLocked}
-        isDeclaringPhase={isDeclaringPhase}
-        setCoverAllyId={setCoverAllyId}
-        handleCover={handleCover}
-      />
+      <CompulsionMark compulsion={compulsion} actionKey="cover">
+        <CoverControl
+          declaredManeuver={declaredManeuver}
+          coverableAllies={coverableAllies}
+          coverAllyId={coverAllyId}
+          coverPending={coverPending}
+          isLocked={isLocked}
+          isDeclaringPhase={isDeclaringPhase}
+          setCoverAllyId={setCoverAllyId}
+          handleCover={handleCover}
+        />
+      </CompulsionMark>
 
       {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
-      <GuardControl
-        declaredManeuver={declaredManeuver}
-        encounter={encounter}
-        guardControlRef={guardControlRef}
-        coverableAllies={coverableAllies}
-        protectiveTechniques={protectiveTechniques}
-        selectedGuardTechnique={selectedGuardTechnique}
-        isRedirectGuardTechnique={isRedirectGuardTechnique}
-        guardAllyId={guardAllyId}
-        guardTechniqueId={guardTechniqueId}
-        guardDestination={guardDestination}
-        guardSoulfrayAccepted={guardSoulfrayAccepted}
-        animaCurrent={animaCurrent}
-        guardPending={guardPending}
-        isLocked={isLocked}
-        isDeclaringPhase={isDeclaringPhase}
-        setGuardAllyId={setGuardAllyId}
-        setGuardTechniqueId={setGuardTechniqueId}
-        setGuardDestination={setGuardDestination}
-        setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
-        handleGuard={handleGuard}
-      />
+      <CompulsionMark compulsion={compulsion} actionKey="interpose">
+        <GuardControl
+          declaredManeuver={declaredManeuver}
+          encounter={encounter}
+          guardControlRef={guardControlRef}
+          coverableAllies={coverableAllies}
+          protectiveTechniques={protectiveTechniques}
+          selectedGuardTechnique={selectedGuardTechnique}
+          isRedirectGuardTechnique={isRedirectGuardTechnique}
+          guardAllyId={guardAllyId}
+          guardTechniqueId={guardTechniqueId}
+          guardDestination={guardDestination}
+          guardSoulfrayAccepted={guardSoulfrayAccepted}
+          animaCurrent={animaCurrent}
+          guardPending={guardPending}
+          isLocked={isLocked}
+          isDeclaringPhase={isDeclaringPhase}
+          setGuardAllyId={setGuardAllyId}
+          setGuardTechniqueId={setGuardTechniqueId}
+          setGuardDestination={setGuardDestination}
+          setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
+          handleGuard={handleGuard}
+        />
+      </CompulsionMark>
 
       {/* Rally control — ally picker + confirm button (#3381) */}
-      <div className="space-y-1.5" data-testid="rally-control">
-        <Select
-          value={rallyAllyId}
-          onValueChange={setRallyAllyId}
-          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-        >
-          <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
-            <SelectValue placeholder="Rally an ally…" />
-          </SelectTrigger>
-          <SelectContent>
-            {coverableAllies.map((ally) => (
-              <SelectItem key={ally.id} value={String(ally.id)}>
-                {ally.character_name}
-              </SelectItem>
-            ))}
-            {coverableAllies.length === 0 && (
-              <SelectItem value="__none__" disabled>
-                No allies available
-              </SelectItem>
+      <CompulsionMark compulsion={compulsion} actionKey="rally">
+        <div className="space-y-1.5" data-testid="rally-control">
+          <Select
+            value={rallyAllyId}
+            onValueChange={setRallyAllyId}
+            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          >
+            <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
+              <SelectValue placeholder="Rally an ally…" />
+            </SelectTrigger>
+            <SelectContent>
+              {coverableAllies.map((ally) => (
+                <SelectItem key={ally.id} value={String(ally.id)}>
+                  {ally.character_name}
+                </SelectItem>
+              ))}
+              {coverableAllies.length === 0 && (
+                <SelectItem value="__none__" disabled>
+                  No allies available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={
+              isLocked || !isDeclaringPhase || maneuverDispatchPending || rallyAllyId === ''
+            }
+            onClick={() => {
+              handleRally().catch(() => {});
+            }}
+            data-testid="rally-confirm-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isLocked || !isDeclaringPhase || rallyAllyId === ''
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
             )}
-          </SelectContent>
-        </Select>
-        <button
-          type="button"
-          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending || rallyAllyId === ''}
-          onClick={() => {
-            handleRally().catch(() => {});
-          }}
-          data-testid="rally-confirm-btn"
-          className={cn(
-            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            isLocked || !isDeclaringPhase || rallyAllyId === ''
-              ? 'border-border bg-muted text-muted-foreground'
-              : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-          )}
-        >
-          {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
-        </button>
-      </div>
+          >
+            {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
+          </button>
+        </div>
+      </CompulsionMark>
 
       {/* Succor control — shelter an ally from an environmental hazard (#3381, #1744) */}
-      <div className="space-y-1.5" data-testid="succor-control">
-        <Select
-          value={succorAllyId}
-          onValueChange={setSuccorAllyId}
-          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-        >
-          <SelectTrigger data-testid="succor-ally-select" className="h-8 text-xs">
-            <SelectValue placeholder="Shelter an ally…" />
-          </SelectTrigger>
-          <SelectContent>
-            {coverableAllies.map((ally) => (
-              <SelectItem key={ally.id} value={String(ally.id)}>
-                {ally.character_name}
-              </SelectItem>
-            ))}
-            {coverableAllies.length === 0 && (
-              <SelectItem value="__none__" disabled>
-                No allies available
-              </SelectItem>
+      <CompulsionMark compulsion={compulsion} actionKey="succor">
+        <div className="space-y-1.5" data-testid="succor-control">
+          <Select
+            value={succorAllyId}
+            onValueChange={setSuccorAllyId}
+            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          >
+            <SelectTrigger data-testid="succor-ally-select" className="h-8 text-xs">
+              <SelectValue placeholder="Shelter an ally…" />
+            </SelectTrigger>
+            <SelectContent>
+              {coverableAllies.map((ally) => (
+                <SelectItem key={ally.id} value={String(ally.id)}>
+                  {ally.character_name}
+                </SelectItem>
+              ))}
+              {coverableAllies.length === 0 && (
+                <SelectItem value="__none__" disabled>
+                  No allies available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={
+              isLocked || !isDeclaringPhase || maneuverDispatchPending || succorAllyId === ''
+            }
+            onClick={() => {
+              handleSuccor().catch(() => {});
+            }}
+            data-testid="succor-confirm-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isLocked || !isDeclaringPhase || succorAllyId === ''
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
             )}
-          </SelectContent>
-        </Select>
-        <button
-          type="button"
-          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending || succorAllyId === ''}
-          onClick={() => {
-            handleSuccor().catch(() => {});
-          }}
-          data-testid="succor-confirm-btn"
-          className={cn(
-            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            isLocked || !isDeclaringPhase || succorAllyId === ''
-              ? 'border-border bg-muted text-muted-foreground'
-              : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
-          )}
-        >
-          {maneuverDispatchPending ? 'Declaring succor…' : 'Succor'}
-        </button>
-      </div>
+          >
+            {maneuverDispatchPending ? 'Declaring succor…' : 'Succor'}
+          </button>
+        </div>
+      </CompulsionMark>
 
       {/* Maneuver error display */}
       {maneuverError !== null && (
@@ -1833,6 +1895,95 @@ function focusedActionFor(
 }
 
 // ---------------------------------------------------------------------------
+// The Strike pick (#4858)
+// ---------------------------------------------------------------------------
+
+/**
+ * A Strike already declared this round comes back on reload: the Strike pick and its
+ * target are read from the declaration, once per declaration. Returns the declared
+ * Strike (null when none), which also seeds the weapon and the declared badge.
+ */
+function useRestoreDeclaredStrike(
+  ownRoundAction: RoundActionTyped | null,
+  setStrikePicked: (value: boolean) => void,
+  setFocusedContext: React.Dispatch<React.SetStateAction<ActionContext>>
+): RoundActionTyped | null {
+  const restoredRef = useRef<number | null>(null);
+  const declaredStrike = ownRoundAction?.maneuver === 'strike' ? ownRoundAction : null;
+  useEffect(() => {
+    if (declaredStrike === null) return;
+    const declarationId = Number(declaredStrike.id);
+    if (restoredRef.current === declarationId) return;
+    restoredRef.current = declarationId;
+    setStrikePicked(true);
+    const opponentId = declaredStrike.focused_opponent_target ?? null;
+    setFocusedContext((prev) => ({
+      ...prev,
+      techniqueId: undefined,
+      ...(opponentId !== null ? { targetKind: 'opponent' as const, targetId: opponentId } : {}),
+    }));
+  }, [declaredStrike, setStrikePicked, setFocusedContext]);
+  return declaredStrike;
+}
+
+interface StrikePickArgs {
+  weapons: StrikeWeaponOption[];
+  picked: boolean;
+  declaredStrike: RoundActionTyped | null;
+  focusedContext: ActionContext;
+  activeOpponents: { id: number; name: string }[];
+  error: string | null;
+  disabled: boolean;
+  pending: boolean;
+  onPick: () => void;
+  onStrike: (opponentId: number, itemInstanceId: number | null) => void;
+}
+
+/** The weapon a declared Strike used (null: bare hands); undefined when none is declared. */
+function declaredStrikeWeapon(declaredStrike: RoundActionTyped | null): number | null | undefined {
+  if (declaredStrike === null) return undefined;
+  return declaredStrike.item_instance ?? null;
+}
+
+/** The opponent picked in the focused target selection, or null. */
+function focusedOpponentId(context: ActionContext): number | null {
+  if (context.targetKind !== 'opponent') return null;
+  return context.targetId ?? null;
+}
+
+/** The name of the opponent a declared Strike is aimed at, or null. */
+function declaredStrikeTargetName(
+  declaredStrike: RoundActionTyped | null,
+  opponents: { id: number; name: string }[]
+): string | null {
+  if (declaredStrike === null) return null;
+  const foe = opponents.find((o) => o.id === declaredStrike.focused_opponent_target);
+  return foe?.name ?? null;
+}
+
+/** Strike as the focused card's first pick, or undefined when there is nothing to strike with. */
+function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
+  if (args.weapons.length === 0) return undefined;
+  return {
+    label: 'Strike',
+    selected: args.picked,
+    onSelect: args.onPick,
+    panel: (
+      <StrikeControl
+        weapons={args.weapons}
+        declaredItemInstanceId={declaredStrikeWeapon(args.declaredStrike)}
+        targetOpponentId={focusedOpponentId(args.focusedContext)}
+        declaredTargetName={declaredStrikeTargetName(args.declaredStrike, args.activeOpponents)}
+        error={args.error}
+        disabled={args.disabled}
+        pending={args.pending}
+        onStrike={args.onStrike}
+      />
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
 
@@ -1887,6 +2038,7 @@ export function YourTurn({
     chargeError,
     joustTechniqueId,
     joustError,
+    strikePicked,
   } = roundState;
 
   // Per-field setter preserving React.SetStateAction semantics so every
@@ -1948,6 +2100,7 @@ export function YourTurn({
   const setChargeError = useMemo(() => makeFieldSetter('chargeError'), []);
   const setJoustTechniqueId = useMemo(() => makeFieldSetter('joustTechniqueId'), []);
   const setJoustError = useMemo(() => makeFieldSetter('joustError'), []);
+  const setStrikePicked = useMemo(() => makeFieldSetter('strikePicked'), []);
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
@@ -1956,6 +2109,7 @@ export function YourTurn({
   // NOT part of RoundScopedState — stays lifted/controlled exactly as before.
   const [localCastPosition, setLocalCastPosition] = useState<CastPosition>({});
   const [awaitError, setAwaitError] = useState<string | null>(null);
+  const [strikeError, setStrikeError] = useState<string | null>(null);
   const castPosition = castPositionProp ?? localCastPosition;
   const setCastPosition = onCastPositionChangeProp ?? setLocalCastPosition;
 
@@ -2068,6 +2222,12 @@ export function YourTurn({
   // ownRoundAction.is_ready (not just local state) survives that remount.
   const serverReady = ownRoundAction?.is_ready === true;
 
+  const declaredStrike = useRestoreDeclaredStrike(
+    ownRoundAction,
+    setStrikePicked,
+    setFocusedContext
+  );
+
   const participants: Participant[] = encounter?.participants ?? [];
 
   // All active participants except self count as allies until covenant sides land (mirrors backend serializers.py note).
@@ -2081,6 +2241,7 @@ export function YourTurn({
 
   // Actor's position — the viewer's own participant's current_position.
   const actorPositionId: number | null = myParticipantSelf?.current_position?.id ?? null;
+  const compulsion = myParticipantSelf?.compulsion ?? null;
 
   // Mounted Maneuvers gate (#3381 Decision 4): visibility keyed off the cheap,
   // already-serialized `active_conditions` signal — no client-side
@@ -2121,6 +2282,7 @@ export function YourTurn({
   // the reach constraint (#532), the position-targeting shape (#2206), and the
   // soulfray/fury descriptor (#1543) below.
   const focusedCastDescriptor = focusedActionFor(focusedContext, availableActions);
+  const focusedNoTargetKey = noTargetTechniqueKey(focusedContext, focusedCastDescriptor);
 
   // Reach constraint for the currently selected focused technique (#532).
   const focusedTechniqueReach: string | null = focusedCastDescriptor?.reach ?? null;
@@ -2161,6 +2323,7 @@ export function YourTurn({
 
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
+  const chosenCompulsionKey = chosenActionKey(compulsion, declaredManeuver, focusedNoTargetKey);
 
   // Resolve covered ally's name from participants list.
   const coveredAllyName = maneuverAllyName('cover', declaredManeuver, ownRoundAction, participants);
@@ -2567,6 +2730,20 @@ export function YourTurn({
     }
   }
 
+  async function handleStrike(opponentId: number, itemInstanceId: number | null) {
+    setStrikeError(null);
+    const kwargs: Record<string, number> = { opponent_id: opponentId };
+    if (itemInstanceId !== null) kwargs.weapon_id = itemInstanceId;
+    try {
+      const result = await dispatchManeuver({ registryKey: 'combat_strike', kwargs });
+      if (isDispatchFailure(result)) {
+        setStrikeError(result.message ?? 'Failed to strike.');
+      }
+    } catch (err) {
+      setStrikeError(err instanceof Error ? err.message : 'Failed to strike.');
+    }
+  }
+
   async function handleAwaitOpening(techniqueId: number, confirmSoulfrayRisk: boolean) {
     setAwaitError(null);
     try {
@@ -2627,6 +2804,9 @@ export function YourTurn({
         onStrike={readOnly ? undefined : handlePrefillStrike}
       />
 
+      {compulsion && <CompulsionBanner compulsion={compulsion} />}
+      {compulsion && <CompulsionDeclareNote />}
+
       {/* Submitted / ready badge */}
       <ReadyBadge submitted={submitted} serverReady={serverReady} />
 
@@ -2638,38 +2818,65 @@ export function YourTurn({
         >
           Focused Action
         </p>
-        <ActionDeclarationCard
-          characterId={characterId}
-          characterSheetId={characterSheetId}
-          actionContext={focusedContext}
-          onContextChange={(next) => {
-            setSubmitError(null);
-            // A burn is sized against the technique's ceiling; a new technique starts over.
-            if (next.techniqueId !== focusedContext.techniqueId) setPullBurn(0);
-            setFocusedContext(next);
-          }}
-          readOnly={isLocked}
-          targets={focusedTargets}
-          reach={focusedTechniqueReach}
-          actorPositionId={actorPositionId}
-          positionAdjacency={encounter?.position_adjacency ?? []}
-          positionTargetShape={focusedTechniquePositionShape}
-          positions={focusedPositions}
-          castPosition={castPosition}
-          onCastPositionChange={setCastPosition}
-          strainMax={strainMax}
-          strainPreview={focusedCastDescriptor?.strain}
-          strainBurn={
-            selectedPull !== null
-              ? {
-                  preview: burnPreview,
-                  value: burnToSend,
-                  onChange: setPullBurn,
-                  tier: selectedPull.tier,
-                }
-              : undefined
-          }
-        />
+        <CompulsionMark compulsion={compulsion} actionKey={focusedNoTargetKey}>
+          <ActionDeclarationCard
+            characterId={characterId}
+            characterSheetId={characterSheetId}
+            actionContext={focusedContext}
+            onContextChange={(next) => {
+              setSubmitError(null);
+              // A burn is sized against the technique's ceiling; a new technique starts over.
+              if (next.techniqueId !== focusedContext.techniqueId) setPullBurn(0);
+              // Picking a technique un-picks Strike: one focused action a round.
+              if (next.techniqueId !== undefined) setStrikePicked(false);
+              setFocusedContext(next);
+            }}
+            leadingPick={buildStrikePick({
+              weapons: myParticipantSelf?.strike_weapons ?? [],
+              picked: strikePicked,
+              declaredStrike,
+              focusedContext,
+              activeOpponents,
+              error: strikeError,
+              disabled: isLocked || !isDeclaringPhase || maneuverDispatchPending,
+              pending: maneuverDispatchPending,
+              onPick: () => {
+                setSubmitError(null);
+                setStrikePicked(true);
+                setFocusedContext({ ...focusedContext, techniqueId: undefined });
+              },
+              onStrike: (opponentId, itemInstanceId) => {
+                handleStrike(opponentId, itemInstanceId).catch(() => {});
+              },
+            })}
+            readOnly={isLocked}
+            targets={focusedTargets}
+            reach={focusedTechniqueReach}
+            actorPositionId={actorPositionId}
+            positionAdjacency={encounter?.position_adjacency ?? []}
+            positionTargetShape={focusedTechniquePositionShape}
+            positions={focusedPositions}
+            castPosition={castPosition}
+            onCastPositionChange={setCastPosition}
+            strainMax={strainMax}
+            strainPreview={focusedCastDescriptor?.strain}
+            strainBurn={
+              selectedPull !== null
+                ? {
+                    preview: burnPreview,
+                    value: burnToSend,
+                    onChange: setPullBurn,
+                    tier: selectedPull.tier,
+                  }
+                : undefined
+            }
+          />
+        </CompulsionMark>
+        {/* The amber box sits under the chosen action (#4802); a declared maneuver's
+            sits under its badge instead. */}
+        {compulsion && chosenCompulsionKey === focusedNoTargetKey && (
+          <CompulsionChosenLine compulsion={compulsion} actionKey={focusedNoTargetKey} />
+        )}
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate
             warning={soulfrayWarning}
@@ -2778,9 +2985,10 @@ export function YourTurn({
         dispatchAction={dispatchAction}
         onDispatched={refreshEncounter}
       />
-      {myParticipantSelf?.dodge_plan && (
+      {(myParticipantSelf?.dodge_plan || myParticipantSelf?.steady_plan) && (
         <DodgePlanPanel
           plan={myParticipantSelf.dodge_plan}
+          steadyPlan={myParticipantSelf.steady_plan}
           currentPositionId={actorPositionId}
           isLocked={isLocked}
           dispatchAction={dispatchAction}
@@ -2882,6 +3090,7 @@ export function YourTurn({
         onConfirm={() => {
           handleUseItem().catch(() => {});
         }}
+        compulsion={compulsion}
       />
 
       {isMounted && (
@@ -2957,6 +3166,7 @@ export function YourTurn({
           isLocked={isLocked}
           isDeclaringPhase={isDeclaringPhase}
           maneuverError={maneuverError}
+          compulsion={compulsion}
           setCoverAllyId={setCoverAllyId}
           setGuardAllyId={setGuardAllyId}
           setGuardTechniqueId={setGuardTechniqueId}

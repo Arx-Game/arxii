@@ -7,6 +7,7 @@ collapse checks, and rest mechanics.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -412,7 +413,7 @@ def _ensure_endurance_check_type(category: str) -> CheckType:
     # reinstate the undeclared-dependency bug #2724 exists to close.
     trait = ensure_stat_trait(endurance_stat_name)
     CheckTypeTrait.objects.get_or_create(
-        check_type=check_type, trait=trait, defaults={"weight": 1.0}
+        check_type=check_type, trait=trait, defaults={"weight": Decimal("1.0")}
     )
     return check_type
 
@@ -442,7 +443,7 @@ def _ensure_willpower_check_type() -> CheckType:
     # would reinstate the undeclared-dependency bug #2724 exists to close.
     trait = ensure_stat_trait(PrimaryStat.WILLPOWER.value)
     CheckTypeTrait.objects.get_or_create(
-        check_type=check_type, trait=trait, defaults={"weight": 1.0}
+        check_type=check_type, trait=trait, defaults={"weight": Decimal("1.0")}
     )
     return check_type
 

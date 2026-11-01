@@ -5,6 +5,8 @@ Provides read-only serialization of condition data for the character sheet
 conditions tab and other UI components.
 """
 
+from typing import Any
+
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
@@ -21,6 +23,7 @@ from world.conditions.models import (
     DamageType,
     TreatmentTemplate,
 )
+from world.conditions.types import CompulsionSummary
 from world.gm.models import GMProfile
 
 # =============================================================================
@@ -399,3 +402,52 @@ class TreatmentCandidateResponseSerializer(serializers.Serializer):
 
     candidates = TreatmentCandidateSerializer(many=True)
     scene_id = serializers.IntegerField()
+
+
+class CompulsionActionCostSerializer(serializers.Serializer):
+    """One action's cost under a compulsion (#4802). Schema-only."""
+
+    action_key = serializers.CharField(help_text="A maneuver value, or technique_no_target.")
+    label = serializers.CharField(
+        allow_null=True, help_text="The action's display label; null when it has none."
+    )
+    difficulty = serializers.IntegerField()
+    forbidden = serializers.BooleanField()
+    extra_difficulty = serializers.IntegerField(
+        help_text="What is added to the difficulty because the compulsion forbids the action."
+    )
+
+
+class CompulsionSerializer(serializers.Serializer):
+    """The viewer's own compulsion and what going against it costs (#4802). Schema-only."""
+
+    condition_name = serializers.CharField()
+    wants_label = serializers.CharField()
+    check_name = serializers.CharField()
+    attack_target_name = serializers.CharField(
+        allow_null=True,
+        help_text="Who the compulsion would strike as things stand; null when nobody.",
+    )
+    against = CompulsionActionCostSerializer(many=True)
+
+
+def serialize_compulsion_summary(summary: CompulsionSummary | None) -> dict[str, Any] | None:
+    """The wire shape of a compulsion summary (``CompulsionSerializer``); None stays None."""
+    if summary is None:
+        return None
+    return {
+        "condition_name": summary.condition_name,
+        "wants_label": summary.wants_label,
+        "check_name": summary.check_name,
+        "attack_target_name": summary.attack_target_name,
+        "against": [
+            {
+                "action_key": c.action_key,
+                "label": c.label,
+                "difficulty": c.difficulty,
+                "forbidden": c.forbidden,
+                "extra_difficulty": c.extra_difficulty,
+            }
+            for c in summary.against
+        ],
+    }

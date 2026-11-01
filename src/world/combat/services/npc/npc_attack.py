@@ -21,6 +21,7 @@ from world.combat.models import (
     ThreatPoolEntry,
 )
 from world.combat.services.combos.combo_outcome import _damage_multiplier_for_success
+from world.combat.services.npc.defense_roll import defense_result_line, record_defense_roll
 from world.combat.services.npc.npc_movement import strike_pool_key
 from world.combat.services.npc.npc_targeting import _set_npc_action_targets
 from world.combat.services.npc.windup import _declare_windup_attack
@@ -37,12 +38,14 @@ from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
 from world.covenants.constants import DefenseStyle
 from world.covenants.defense import NpcHitDefense, defense_style_for, npc_hit_defense
+from world.covenants.style_fit import style_fit_for_defense
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from world.checks.models import CheckType
-    from world.checks.types import CheckResult
+    from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.scenes.models import Interaction
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -130,6 +133,7 @@ def _npc_hit_defense(  # noqa: PLR0913
     target_difficulty: int,
     extra_modifiers: int,
     perform_check_fn: PerformCheckFn,
+    extra_traits: tuple[ExtraTraitTerm, ...] = (),
 ) -> NpcHitDefense | None:
     """The barrier or mitigation defense this blow meets, or None (#4759)."""
     character = participant.character_sheet.character
@@ -145,6 +149,31 @@ def _npc_hit_defense(  # noqa: PLR0913
         target_difficulty=target_difficulty,
         extra_modifiers=extra_modifiers,
         perform_check_fn=perform_check_fn,
+        extra_traits=extra_traits,
+    )
+
+
+def _missile_wind_contribution(
+    opponent_action: CombatOpponentAction, participant: CombatParticipant
+) -> ModifierContribution | None:
+    """The wind's penalty on a PC's defense against an NPC's missile, or None (#1555).
+
+    Only MISSILE-delivered threat entries with a defense roll are affected; flat
+    base_damage entries (no defense_check_type) never reach the defense roll.
+    """
+    room = participant.encounter.room
+    if opponent_action.threat_entry.delivery != StrikeDelivery.MISSILE or room is None:
+        return None
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import felt_exposure  # noqa: PLC0415
+
+    wind_mod = wind_penalty(felt_exposure(room, stat_key=StatKey.WIND))
+    if not wind_mod:
+        return None
+    return ModifierContribution(
+        source_kind=ModifierSourceKind.SCENE,
+        source_label="Wind",
+        value=-wind_mod,
     )
 
 
@@ -154,6 +183,7 @@ def resolve_npc_attack(
     check_type: CheckType,
     *,
     perform_check_fn: PerformCheckFn | None = None,
+    interaction_factory: Callable[[], Interaction] | None = None,
 ) -> DefenseResult:
     """Resolve one NPC attack against one PC via a defensive check.
 
@@ -173,6 +203,9 @@ def resolve_npc_attack(
         check_type: The CheckType matching the attack's category.
         perform_check_fn: Optional callable override for testing. Defaults
             to ``world.checks.services.perform_check``.
+        interaction_factory: The NPC action's Narrator ACTION interaction (#4884). Given,
+            the defender's roll is recorded on it as a ``ConsequenceOutcome`` with its
+            breakdown (``world.combat.services.npc.defense_roll``).
 
     Returns:
         A ``DefenseResult`` containing the check outcome and damage applied.
@@ -225,33 +258,22 @@ def resolve_npc_attack(
         participant.encounter,
     )
 
-    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's
-    # missile shot ruins an NPC's. Only MISSILE-delivered threat entries with
-    # a defense roll are affected — flat base_damage entries (no defense_check_type,
-    # never reaching this function) stay untouched.
-    if (
-        opponent_action.threat_entry.delivery == StrikeDelivery.MISSILE
-        and participant.encounter.room is not None
-    ):
-        from world.locations.constants import StatKey  # noqa: PLC0415
-        from world.locations.services import felt_exposure  # noqa: PLC0415
+    # Wind-as-mechanic (#1555) symmetry: the same gale that ruins a PC's missile shot
+    # ruins an NPC's.
+    wind = _missile_wind_contribution(opponent_action, participant)
+    if wind is not None:
+        bond_contributions = [*bond_contributions, wind]
 
-        wind_mod = wind_penalty(felt_exposure(participant.encounter.room, stat_key=StatKey.WIND))
-        if wind_mod:
-            bond_contributions = [
-                *bond_contributions,
-                ModifierContribution(
-                    source_kind=ModifierSourceKind.SCENE,
-                    source_label="Wind",
-                    value=-wind_mod,
-                ),
-            ]
-
+    # The defender's style skill (#4884) counts while every worn armor kind and every
+    # held vow is on their combat style. The defense type applies either way.
+    style_fit = style_fit_for_defense(character)
+    style_traits = tuple(style_fit.extra_traits(check_type))
     breakdown = _svc.collect_check_modifiers(
         participant.character_sheet,
         check_type,
         scene=participant.encounter.scene,
         extra_contributions=bond_contributions,
+        extra_traits=style_traits,
     )
 
     # #2536 slice 3 Task 6: thread the defense-side situation context so
@@ -302,6 +324,7 @@ def resolve_npc_attack(
         extra_modifiers=breakdown.extra_modifiers_total + dodge_modifier,
         situation_ctx=situation_ctx,
         stat_override=DEFENSE_STAT,
+        extra_traits=style_traits,
     )
     spend_contributing_conditions(breakdown)
     moved_out = dodge is not None and land_dodge(participant, dodge, result.success_level)
@@ -336,6 +359,7 @@ def resolve_npc_attack(
         target_difficulty=difficulty,
         extra_modifiers=breakdown.extra_modifiers_total,
         perform_check_fn=perform_check_fn,
+        extra_traits=style_traits,
     )
     with dodge_roll_active(), npc_hit_defense(hit_defense):
         damage_result = _svc.apply_damage_to_participant(
@@ -349,6 +373,19 @@ def resolve_npc_attack(
                 opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE
                 or covered is not None
             ),
+        )
+
+    if interaction_factory is not None:
+        record_defense_roll(
+            participant,
+            attacker_name=opponent_action.opponent.name,
+            check_type=check_type,
+            breakdown=breakdown,
+            style_fit=style_fit,
+            summary=defense_result_line(result, damage_result.damage_dealt),
+            interaction=interaction_factory(),
+            combat_round=opponent_action.round_number,
+            dodge_modifier=dodge_modifier,
         )
 
     return DefenseResult(

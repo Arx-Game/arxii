@@ -23,7 +23,7 @@ from django.db import models
 from django.db.models import Q
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import CombatRollKind, ModifierSourceKind
 
 
 class ConsequenceOutcome(SharedMemoryModel):
@@ -76,6 +76,92 @@ class ConsequenceOutcome(SharedMemoryModel):
     )
     modifier_total = models.IntegerField(default=0)
     summary = models.CharField(max_length=255, blank=True)
+    skill_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The character's rating in the skill the check weighted, as it was when the "
+            "roll was made (#4858), so a breakdown shows what was rolled. Null when the "
+            "writer records none or the check weights no skill."
+        ),
+    )
+    # What a Strike roll was made with, as its breakdown names it, kept at roll time so a
+    # weapon renamed, re-qualified or destroyed later does not rewrite the record (#4858).
+    weapon_label = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text="The weapon and its quality as the roll's breakdown names it, at roll time.",
+    )
+    weapon_kind = models.CharField(
+        max_length=60,
+        null=True,
+        blank=True,
+        help_text="The weapon's kind as the breakdown names it ('one-handed melee'), at roll time.",
+    )
+    stat_label = models.CharField(
+        max_length=60,
+        null=True,
+        blank=True,
+        help_text="The stat or stats the roll used, as the breakdown names them, at roll time.",
+    )
+    # The attacker's combat style on the roll, kept at roll time so renaming or retuning
+    # the style later does not rewrite the record (#4884).
+    style_name = models.CharField(
+        max_length=80,
+        null=True,
+        blank=True,
+        help_text="The combat style's name as it was when the roll was made. Null: no style.",
+    )
+    style_skill_rating = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="The style skill rating the roll added. Null when it lapsed or had none.",
+    )
+    style_lapse_note = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text=(
+            "Why the style skill did not count, as the breakdown says it ('two-handed "
+            "weapons are not this style's'). Null when it counted."
+        ),
+    )
+    stat_from_style = models.BooleanField(
+        default=False,
+        help_text="Whether the roll's stat was the style's hit stat.",
+    )
+    # A PC's defense roll against an NPC blow (#4884), kept at roll time. As long as the
+    # opponent's name can be (``CombatOpponent.name``).
+    combat_roll_kind = models.CharField(
+        max_length=10,
+        choices=CombatRollKind.choices,
+        null=True,
+        blank=True,
+        help_text="Which combat roll this records, for its breakdown. Null for any other roll.",
+    )
+    against_label = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text="Who a defense roll was against, as its breakdown names them, at roll time.",
+    )
+    combat_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The encounter round a combat roll was made in, so the turn panel can show every "
+            "roll of the last round. Null outside combat."
+        ),
+    )
+    armor_share_tenths = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "How much of the defender's armor counted, in tenths, from their combat style at "
+            "roll time. Null when the defender had no style."
+        ),
+    )
 
     # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite
@@ -150,6 +236,19 @@ class ConsequenceOutcome(SharedMemoryModel):
 
     class Meta:
         constraints = [
+            # The style snapshot (#4884): a lapse names its reason and records no rating; a
+            # counted style skill records its rating and no lapse; either needs the name.
+            models.CheckConstraint(
+                check=(
+                    Q(style_lapse_note__isnull=True)
+                    | (Q(style_name__isnull=False) & Q(style_skill_rating__isnull=True))
+                )
+                & (
+                    Q(style_skill_rating__isnull=True)
+                    | (Q(style_name__isnull=False) & Q(style_lapse_note__isnull=True))
+                ),
+                name="consequence_outcome_style_snapshot_shape",
+            ),
             # The source KIND is keyed on the timestamp companions, not the
             # Interaction FKs (#4464). A writer may delete their own pose within
             # DELETION_WINDOW_DAYS (scenes.interaction_services.delete_interaction);

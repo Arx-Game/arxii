@@ -180,6 +180,36 @@ class DefenseStyle(models.TextChoices):
     BARRIER = "barrier", "Barrier"  # force/warding is the defense
 
 
+class StyleLapse(models.TextChoices):
+    """Why a combat style's skill stopped counting on a roll (#4884).
+
+    An attack roll lapses on the weapon or a held vow; a defense roll on worn armor or a
+    held vow. The hit stat and the defense type still apply while lapsed.
+    """
+
+    WEAPON = "weapon", "Weapon"
+    ARMOR = "armor", "Armor"
+    VOW = "vow", "Vow"
+
+
+#: How a lapsed roll names a gear kind the style does not list, with its verb (#4884):
+#: "two-handed weapons are not this style's". Keyed by ``GearArchetype`` value.
+STYLE_LAPSE_GEAR_WORDS: dict[str, str] = {
+    "light_armor": "light armor is",
+    "medium_armor": "medium armor is",
+    "heavy_armor": "heavy armor is",
+    "robe": "robes are",
+    "melee_one_hand": "one-handed weapons are",
+    "melee_two_hand": "two-handed weapons are",
+    "ranged": "ranged weapons are",
+    "thrown": "thrown weapons are",
+    "shield": "shields are",
+    "lance": "lances are",
+    "unarmed": "unarmed strikes are",
+    "other": "other weapons are",
+}
+
+
 class SphinxTier(models.TextChoices):
     """The Sphinx of Black Quartz's three-tier vow-suitability verdict (#2640).
 

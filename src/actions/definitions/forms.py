@@ -25,6 +25,7 @@ _UNKNOWN_ALT_SELF_MSG = "You have no such alternate self."
 # ``_NO_ACTIVE_ALT_SELF_MSG`` but kept here so the action never reaches into the
 # service's private constant or — worse — leaks an exception's ``str()``.
 _NO_ACTIVE_ALT_SELF_ACTION_MSG = "You have no alternate self to revert."
+_REVERT_RESISTED_MSG = "You cannot change back."
 
 
 @dataclass
@@ -116,9 +117,10 @@ class ShiftFormAction(Action):
 @dataclass
 class RevertFormAction(Action):
     """Revert the active alternate self — restore return anchors, delete the
-    granted stat + ability suites. ``in_control``-gated: the wrapped service
-    raises ``RevertBlockedError`` while the character is not in control
-    (rage/possession/charm); the action surfaces it as a failure result.
+    granted stat + ability suites. A character under a compulsion (rage) rolls its
+    resist check to change back and stays as they are on a failed roll; a talked-down
+    self whose emergence condition still holds them stays blocked
+    (``RevertBlockedError``); anyone else, charmed or calmed, changes back freely (#4802).
     """
 
     key: str = "revert_form"
@@ -137,13 +139,13 @@ class RevertFormAction(Action):
             AlternateSelfActiveError,
             FormOwnershipError,
             RevertBlockedError,
-            revert_alternate_self,
+            attempt_revert_form,
         )
         from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
         sheet = actor.sheet_data
         try:
-            revert_alternate_self(sheet)
+            attempt = attempt_revert_form(sheet)
         except RevertBlockedError as exc:
             return ActionResult(success=False, message=exc.user_message)
         except ActivePersonaError:
@@ -163,4 +165,7 @@ class RevertFormAction(Action):
             # which would leak the exception's text (CLAUDE.md: never ``str(exc)``
             # in responses).
             return ActionResult(success=False, message=_NO_ACTIVE_ALT_SELF_ACTION_MSG)
+        if not attempt.allowed:
+            message = attempt.line if attempt.waiting else f"{attempt.line} {_REVERT_RESISTED_MSG}"
+            return ActionResult(success=False, message=message)
         return ActionResult(success=True, message="You revert to your true self.")

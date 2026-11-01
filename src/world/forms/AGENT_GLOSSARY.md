@@ -69,7 +69,8 @@ surface label shown to players. _Avoid_: activate, transform.
 
 **Revert**:
 To restore the return anchors captured at assume time and remove the granted stat/ability
-rows. Blocked while `not in_control` (`RevertBlockedError`). _Avoid_: shift back.
+rows. Under a compulsion it rolls; a talked-down self held by its emergence condition is
+blocked (`RevertBlockedError`); otherwise free. _Avoid_: shift back.
 
 **Revert Form**:
 Player-facing verb for the revert action (registry key `"revert_form"`,

@@ -944,6 +944,25 @@ until slices 2 to 7. What was built:
   admins for combat styles, the budget config and character picks.
 - See `docs/systems/covenants.md` "Vow focus picks and combat styles" and ADR-4759.
 
+### Styles complete (#4884, slice 2 of #4844) - SHIPPED
+
+- `CombatStyle.skill` (Magic skill, one per style), `hit_stat`, `taught_by` (Traditions),
+  `compatible_roles` (vows) and `CombatStyleGear` (weapon and armor kinds), all on the
+  style's admin page; four TUNING Required content rows (no skill, no hit stat, no weapon
+  kind, a Tradition teaching no style). Migrations `0356` (the style's fields and gear, weapon
+  and armor kinds only) and `0357` (the Strike and defense roll snapshot on
+  `ConsequenceOutcome`: style fields, `combat_roll_kind`, `against_label`,
+  `armor_share_tenths`, `combat_round`).
+- `world.covenants.style_fit`: the style skill adds to the Strike, a technique's hit roll and
+  the PC defense roll while the weapon, worn armor and every held vow are the style's, and
+  lapses otherwise; a Strike hits with the style's hit stat either way, a technique keeps
+  its own stat. The Strike breakdown shows the style skill, or the style struck through with
+  the reason. The PC defense roll is recorded too and shows on the
+  defender's Last Outcome card: "Defense against <attacker>", the defense skill, the style
+  skill or its lapse, "Armor, N of 10". Journeys:
+  `src/integration_tests/test_combat_style_journeys.py`.
+- Left for slice 3: `is_gear_compatible` still reads the vow's gear table.
+
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
 Vows scale combat maneuvers through the same `VowStatScaling` rows they use for stats, and
@@ -958,12 +977,20 @@ the vow-only action scaling table is gone. What was built:
 - **Sub-role fix**: `vow_stat_scaling_bonus` counts rows on an engaged role and on its anchor
   role, so a holder graduated to a sub-role keeps their scaling; this also changes existing
   stat rows for sub-role holders, as intended. The thread level always comes from the anchor.
-- **Not built**: sized (leveled) modifiers on effects and derived amounts (a source choosing
-  what its number scales from, #4824). The technique scopes
+- **Sized modifiers on effects** (#4876): damage, to-hit and partial protection take a size,
+  valued from their own `ModifierLane` at the holder's level (the owner's "likely grants only"
+  ruling on #4824); other kinds stay flat.
+- **Derived amounts** (#4878): distinction effects and condition modifier effects can derive
+  their amount from character level, a thread on a named trait or facet, or a named check's rank,
+  with a "per N" step and a cap (the owner's shared menu, #4824). Other row kinds and the target's
+  soak input are still to come. The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for
-  the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. See `docs/systems/mechanics.md` "Maneuver effects", "Technique
-  effect scopes" and "Opponent scopes".
+  the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. A gear
+  facet's own bonus to a maneuver effect it names (`FacetEffectBonus`, scaled by item and
+  attachment quality and the shown facet thread level) shipped in #4815. See
+  `docs/systems/mechanics.md` "Maneuver effects", "Technique effect scopes" and "Opponent
+  scopes".
 - **Focus picks**: `VowStatScaling` gained the nullable `focus_pick` #4805 gave action scaling,
   so a focus pick can still carry maneuver (and stat) scaling rows. As with the other payload
   tables, no reader filters by the chosen pick yet.

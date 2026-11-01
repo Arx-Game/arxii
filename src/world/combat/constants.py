@@ -17,6 +17,7 @@ from actions.constants import (
 )
 from world.areas.positioning.constants import CreatureTraversal
 from world.gm.constants import GMLevel
+from world.items.constants import GearArchetype
 
 # #2051 — the combo invariant: combos are never solo. A combo definition must
 # have at least this many slots, each filled by a distinct PC-controlled action.
@@ -110,6 +111,9 @@ class SurgeTriggerKind(models.TextChoices):
     ALLY_HURT = "ally_hurt", "Ally Hurt"
     CONDITION_FED = "condition_fed", "Emotional Condition"
     DUG_DEEP = "dug_deep", "Dug deep"
+    # A missed attack builds intensity (#4858): once a round, a fixed amount from the
+    # maneuver effect catalog ("Miss: intensity gained").
+    MISSED = "missed", "Missed"
 
 
 # Surge kinds resolved by a roll with degrees (#4737). Each has one SurgeTuning row
@@ -161,6 +165,73 @@ class CombatManeuver(models.TextChoices):
     # The waiting strike (#4608): a melee strike held for an enemy that comes into
     # reach or attacks. It is the PC's one action for the round and fires at most once.
     AWAIT_OPENING = "await_opening", "Wait for an opening"
+    # The basic Strike (#4858): an attack with an equipped weapon or bare hands and no
+    # technique. A hit roll on the strike skill, then a damage roll if it lands.
+    STRIKE = "strike", "Strike"
+
+
+# ---------------------------------------------------------------------------
+# The basic Strike (#4858)
+# ---------------------------------------------------------------------------
+
+# The check types a Strike's hit and damage rolls use, by name: production's attack
+# checks. Each is authored content, composed of stats and (usually) the strike skill, the
+# Melee, Ranged, Thrown or Unarmed Combat skill; the breakdown names the skill from the
+# check type's own skill trait. The Required content dashboard lists a missing one, and a
+# Strike that needs it is refused.
+MELEE_STRIKE_CHECK_TYPE_NAME = "Melee Attack"
+RANGED_STRIKE_CHECK_TYPE_NAME = "Ranged Attack"
+THROWN_STRIKE_CHECK_TYPE_NAME = "Thrown Attack"
+UNARMED_STRIKE_CHECK_TYPE_NAME = "Unarmed Attack"
+
+STRIKE_CHECK_TYPE_NAMES: tuple[str, ...] = (
+    MELEE_STRIKE_CHECK_TYPE_NAME,
+    RANGED_STRIKE_CHECK_TYPE_NAME,
+    THROWN_STRIKE_CHECK_TYPE_NAME,
+    UNARMED_STRIKE_CHECK_TYPE_NAME,
+)
+
+# A weapon's gear kind picks the strike skill its Strike rolls. Bare hands are Unarmed.
+STRIKE_CHECK_TYPE_BY_ARCHETYPE: dict[str, str] = {
+    GearArchetype.MELEE_ONE_HAND: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.MELEE_TWO_HAND: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.SHIELD: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.LANCE: MELEE_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.RANGED: RANGED_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.THROWN: THROWN_STRIKE_CHECK_TYPE_NAME,
+    GearArchetype.UNARMED: UNARMED_STRIKE_CHECK_TYPE_NAME,
+}
+
+
+# The source label of the to-hit contribution engagement intensity adds (#4858).
+INTENSITY_MODIFIER_LABEL = "Intensity"
+
+# How well a landed Strike hit, by the hit roll's success level (#4858): the word the
+# result line ("Hit, good") and the narration ("A good hit") use. A hit at or below 0 is
+# poor; above the highest listed level it is the last word.
+STRIKE_HIT_QUALITY: tuple[tuple[int, str], ...] = (
+    (0, "poor"),
+    (1, "fair"),
+    (2, "good"),
+    (3, "great"),
+)
+
+
+#: The declared maneuvers whose own roll takes a strained compulsion resist's action
+#: penalty (#4802, Ruling 22): the flee, social, rally, interpose and succor rolls read
+#: ``CombatRoundAction.compulsion_penalty``. A declared technique (no maneuver) takes it
+#: too, on its offense roll. Cover and Use Item make no roll for it to land on.
+COMPULSION_PENALISED_MANEUVERS: frozenset[str] = frozenset(
+    {
+        CombatManeuver.FLEE,
+        CombatManeuver.PARLEY,
+        CombatManeuver.TAUNT,
+        CombatManeuver.DEMORALIZE,
+        CombatManeuver.RALLY,
+        CombatManeuver.INTERPOSE,
+        CombatManeuver.SUCCOR,
+    }
+)
 
 
 # ---------------------------------------------------------------------------

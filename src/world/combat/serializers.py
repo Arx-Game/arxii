@@ -50,12 +50,16 @@ from world.combat.models import (
     SustainedAction,
     ThreatPool,
 )
-from world.conditions.serializers import ConditionInstanceSerializer
+from world.conditions.serializers import (
+    CompulsionSerializer,
+    ConditionInstanceSerializer,
+    serialize_compulsion_summary,
+)
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
-from world.scenes.constants import PersonaType, RoundStatus
+from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
     GMStandoffViewSerializer,
     StandoffSummarySerializer,
@@ -181,6 +185,11 @@ def _square_payload(
 
     square = square_of(objectdb) if objectdb is not None else None
     return {"x": square[0], "y": square[1]} if square is not None else None
+
+
+# Surges written with no room line (``narrate=False``): their beats render no narration
+# and never reach a bystander (#4739 emotional-condition feed, #4858 missed attack).
+_UNANNOUNCED_SURGE_KINDS = frozenset({SurgeTriggerKind.CONDITION_FED, SurgeTriggerKind.MISSED})
 
 
 class OpponentSerializer(serializers.ModelSerializer):
@@ -499,6 +508,28 @@ class DodgePlanSerializer(serializers.Serializer):
     cost_line = serializers.CharField()
 
 
+class StrikeWeaponOptionSerializer(serializers.Serializer):
+    """One thing the viewer's own character can Strike with (#4858); read-only."""
+
+    item_instance_id = serializers.IntegerField(
+        allow_null=True, help_text="The equipped weapon's item id; null for bare hands."
+    )
+    name = serializers.CharField(help_text="The weapon's name, or 'bare hands'.")
+    gear_kind = serializers.CharField(help_text="The weapon's gear kind, as players read it.")
+    strike_skill = serializers.CharField(
+        help_text="The strike skill its hit roll weights, or the check's name when it has none."
+    )
+
+
+class SteadyPlanSerializer(serializers.Serializer):
+    """The viewer's own steady plan (#4802). Schema-only."""
+
+    enabled = serializers.BooleanField()
+    cost_line = serializers.CharField()
+    bonus_hint = serializers.CharField()
+    capability_name = serializers.CharField()
+
+
 class DigDeepOfferSerializer(serializers.Serializer):
     """What digging deep costs the viewer's own character right now (#4738); read-only."""
 
@@ -516,6 +547,25 @@ class DigDeepOfferSerializer(serializers.Serializer):
     )
 
 
+class _ParticipantListSerializer(serializers.ListSerializer):
+    """Reads the face every listed participant presents in one batch (#4802).
+
+    The personas go to ``context["participant_personas"]`` for the name and the portrait,
+    so a roster of any size costs the same two queries.
+    """
+
+    def to_representation(self, data: Any) -> list[Any]:
+        from django.db.models.manager import BaseManager  # noqa: PLC0415
+
+        from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+        participants = list(data.all() if isinstance(data, BaseManager) else data)
+        self.context["participant_personas"] = personas_for_sheets(
+            [participant.character_sheet_id for participant in participants]
+        )
+        return super().to_representation(participants)
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -524,9 +574,17 @@ class ParticipantSerializer(serializers.ModelSerializer):
     character — same visibility rules as character sheets.
     """
 
-    character_name = serializers.CharField(
-        source="character_sheet.character.db_key",
-        read_only=True,
+    character_name = serializers.SerializerMethodField(
+        help_text="The persona name the room lines use, never the character key.",
+    )
+    character_sheet_id = serializers.SerializerMethodField(
+        help_text=(
+            "The fighter's character sheet, on the viewer's own row and for staff or the "
+            "encounter's GM; null on every other row, so a mask is never tied to a sheet."
+        ),
+    )
+    persona_id = serializers.SerializerMethodField(
+        help_text="The persona the fighter presents now (a mask when disguised), or null.",
     )
     health = serializers.SerializerMethodField()
     max_health = serializers.SerializerMethodField()
@@ -546,14 +604,19 @@ class ParticipantSerializer(serializers.ModelSerializer):
     aftermath = serializers.SerializerMethodField()
     reactions_used = serializers.SerializerMethodField(required=False)
     dodge_plan = serializers.SerializerMethodField()
+    compulsion = serializers.SerializerMethodField()
+    steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
+    strike_weapons = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
+        list_serializer_class = _ParticipantListSerializer
         fields = [
             "id",
             "character_sheet_id",
             "character_name",
+            "persona_id",
             "status",
             "health",
             "max_health",
@@ -573,8 +636,68 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "aftermath",
             "reactions_used",
             "dodge_plan",
+            "compulsion",
+            "steady_plan",
             "dig_deep",
+            "strike_weapons",
         ]
+
+    @extend_schema_field(StrikeWeaponOptionSerializer(many=True, allow_null=True))
+    def get_strike_weapons(self, obj: CombatParticipant) -> list[dict[str, Any]] | None:
+        """What the viewer's own character can Strike with (#4858); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.services import strike_weapon_options  # noqa: PLC0415
+        from world.combat.services.declarations.strike import (  # noqa: PLC0415
+            strike_skill_names,
+        )
+        from world.items.constants import GearArchetype  # noqa: PLC0415
+
+        weapons = strike_weapon_options(obj.character_sheet.character)
+        skills = strike_skill_names({weapon.check_type_name for weapon in weapons})
+        return [
+            {
+                "item_instance_id": (
+                    weapon.item_instance.pk if weapon.item_instance is not None else None
+                ),
+                "name": weapon.name,
+                "gear_kind": GearArchetype(weapon.gear_archetype).label,
+                "strike_skill": skills[weapon.check_type_name],
+            }
+            for weapon in weapons
+        ]
+
+    def get_character_name(self, obj: CombatParticipant) -> str:
+        """The persona name others know the fighter by: a disguise shows, the key never does."""
+        persona = self._presented_persona(obj)
+        return persona.name if persona is not None else obj.character_sheet.character.db_key
+
+    def get_character_sheet_id(self, obj: CombatParticipant) -> int | None:
+        """The sheet id, to its owner, staff and the GM only (#4802, Ruling 50).
+
+        A sheet id beside a mask name would tie the mask to the character behind it, so
+        every other viewer gets None; the same viewers who see the vitals see this.
+        """
+        return obj.character_sheet_id if self._can_view_vitals(obj) else None
+
+    def get_persona_id(self, obj: CombatParticipant) -> int | None:
+        """The presented persona's id: the face the room already sees, never the sheet."""
+        persona = self._presented_persona(obj)
+        return persona.pk if persona is not None else None
+
+    def _presented_persona(self, obj: CombatParticipant) -> Persona | None:
+        """The face the participant presents now (``active_persona_for_sheet``), or None.
+
+        A list of participants reads every face in one batch into
+        ``context["participant_personas"]`` (``_ParticipantListSerializer``); alone, this
+        reads the one sheet.
+        """
+        personas = self.context.get("participant_personas")
+        if personas is None:
+            from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+            personas = personas_for_sheets([obj.character_sheet_id])
+        return personas.get(obj.character_sheet_id)
 
     @extend_schema_field(DigDeepOfferSerializer(allow_null=True))
     def get_dig_deep(self, obj: CombatParticipant) -> dict[str, Any] | None:
@@ -633,6 +756,36 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "landing_id": obj.dodge_landing_id,
             "options": [{"id": p.pk, "name": p.name} for p in dodge_landing_options(obj)],
             "cost_line": dodge_cost_line(sources[0]),
+        }
+
+    @extend_schema_field(CompulsionSerializer(allow_null=True))
+    def get_compulsion(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What the viewer's compulsion wants and costs (#4802); None for anyone else."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.compulsion import compulsion_summary  # noqa: PLC0415
+
+        character = obj.character_sheet.character
+        summary = compulsion_summary(obj, _context_active_conditions(character, self.context))
+        return serialize_compulsion_summary(summary)
+
+    @extend_schema_field(SteadyPlanSerializer(allow_null=True))
+    def get_steady_plan(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """The viewer's own steady plan; None for anyone else or when nothing lets her steady."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.combat.models import MovementConfig  # noqa: PLC0415
+        from world.combat.services.reactions import steady_capability_value  # noqa: PLC0415
+
+        capability = steady_capability_value(obj)
+        if capability <= 0:
+            return None
+        config = MovementConfig.objects.cached_singleton()
+        return {
+            "enabled": obj.steady_enabled,
+            "cost_line": f"{config.steady_anima_cost} anima each",
+            "bonus_hint": f"+{capability}",
+            "capability_name": config.steadying_capability.name,
         }
 
     def _is_viewers_own(self, obj: CombatParticipant) -> bool:
@@ -859,50 +1012,28 @@ class ParticipantSerializer(serializers.ModelSerializer):
         engagement = self._any_engagement(obj)
         return engagement.fury_control_surrendered if engagement else None
 
-    def _primary_persona(self, obj: CombatParticipant) -> Persona | None:
-        """Resolve the participant's PRIMARY persona through the cached accessor.
-
-        Reads ``CharacterSheet.cached_payload_personas`` — a ``@cached_property``
-        the encounter queryset pre-fills (with ``select_related("thumbnail")``)
-        so serialization issues no per-row query; PRIMARY is found explicitly
-        rather than positionally. Portrait is public identity, so this is not
-        gated by ``_can_view_vitals`` (mirrors the opponent portrait, #554).
-        """
-        try:
-            character_sheet = obj.character_sheet
-        except ObjectDoesNotExist:
-            return None
-        if character_sheet is None:
-            return None
-        for persona in character_sheet.cached_payload_personas:
-            if persona.persona_type == PersonaType.PRIMARY:
-                return persona
-        return None
-
     def get_thumbnail_url(self, obj: CombatParticipant) -> str | None:
-        """Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+        """Direct portrait URL via the presented persona (mirrors OpponentSerializer).
 
-        The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
-        when the character has no primary persona.
+        The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
+        character has no persona. A mask shows its own portrait, never the true face
+        (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
         """
-        persona = self._primary_persona(obj)
+        persona = self._presented_persona(obj)
         return None if persona is None else persona.thumbnail_url
 
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
         """Media portrait URL, dynamically resolved (#2196).
 
-        Uses ``resolve_thumbnail()`` via the primary persona's character.
-        ``None`` when there is no primary persona.
+        Uses ``resolve_thumbnail()`` with the presented persona (#4802).
+        ``None`` when there is no persona.
         """
         from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
 
-        persona = self._primary_persona(obj)
+        persona = self._presented_persona(obj)
         if persona is None:
             return None
-        try:
-            character = persona.character_sheet.character
-        except AttributeError:
-            return None
+        character = obj.character_sheet.character
         # #2196: use the view's per-request conditions dict to avoid N+1 when
         # serializing multiple participants; None outside the viewset.
         cached_conditions = _context_active_conditions(character, self.context)
@@ -993,6 +1124,7 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "combo_upgrade",
             "is_ready",
             "maneuver",
+            "item_instance",
             "cast_destination",
             "cast_position_a",
             "cast_position_b",
@@ -1012,7 +1144,7 @@ class ClashContributorSerializer(serializers.Serializer):
     the frontend ``ClashContributor`` interface (combat/types.ts).
     """
 
-    character_id = serializers.IntegerField(allow_null=True)
+    participant_id = serializers.IntegerField(allow_null=True)
     character_name = serializers.CharField()
     action_slot = serializers.CharField()
     progress_delta = serializers.IntegerField()
@@ -1064,7 +1196,11 @@ class ClashStateSerializer(serializers.ModelSerializer):
 
         Sums each contributor's progress_delta + anima_committed. Returns
         a list of dicts shaped for the frontend ActiveState card:
-            {character_id, character_name, action_slot, progress_delta, anima}
+            {participant_id, character_name, action_slot, progress_delta, anima}
+
+        ``participant_id`` is the contributor's seat in the encounter, the id the roster
+        rows carry; the sheet id is never sent, since it would tie a mask to the real
+        character for every other viewer (#4802, Ruling 49).
 
         Reads through ``clash.rounds.cached_contributions`` when the
         EncounterCombatHandler prefetch is in play; falls back to a query
@@ -1074,7 +1210,7 @@ class ClashStateSerializer(serializers.ModelSerializer):
 
         totals: dict[int, dict[str, object]] = defaultdict(
             lambda: {
-                "character_id": None,
+                "participant_id": None,
                 "character_name": "",
                 "action_slot": "",
                 "progress_delta": 0,
@@ -1098,15 +1234,38 @@ class ClashStateSerializer(serializers.ModelSerializer):
                     ),
                 )
             )
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        contributions = []
         for clash_round in rounds:
             if hasattr(clash_round, "cached_contributions"):
-                contribs = clash_round.cached_contributions
+                contributions.append(clash_round.cached_contributions)
             else:
-                contribs = list(clash_round.contributions.select_related("character"))
+                contributions.append(list(clash_round.contributions.select_related("character")))
+        # The face each contributor wears, never the key (#4802): the encounter hands the
+        # roster's names over in context; alone, they are read once for the clash.
+        sheet_ids = {
+            c.character_id for contribs in contributions for c in contribs if c.character_id
+        }
+        names = self.context.get("participant_names")
+        if names is None:
+            names = persona_names_for_sheets(sheet_ids)
+        seats = self.context.get("participant_ids")
+        if seats is None:
+            seats = dict(
+                CombatParticipant.objects.filter(
+                    encounter_id=obj.encounter_id, character_sheet_id__in=sheet_ids
+                ).values_list("character_sheet_id", "pk")
+            )
+        for contribs in contributions:
             for c in contribs:
                 bucket = totals[c.character_id]
-                bucket["character_id"] = c.character_id
-                bucket["character_name"] = c.character.character.db_key if c.character_id else ""
+                bucket["participant_id"] = seats.get(c.character_id)
+                bucket["character_name"] = (
+                    names.get(c.character_id, c.character.character.db_key)
+                    if c.character_id
+                    else ""
+                )
                 # Most-recent action_slot wins (each round may use a different slot).
                 bucket["action_slot"] = c.action_slot
                 bucket["progress_delta"] = int(bucket["progress_delta"]) + c.progress_delta
@@ -1926,20 +2085,27 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         viewer_character_ids = self.context.get("viewer_character_ids", set())
 
         rolls = _surge_roll_fields(records)
+        personas = self._participant_personas(obj)
         beats: list[dict[str, Any]] = []
         for record in records:
+            persona = personas.get(record.participant.character_sheet_id)
+            name = (
+                persona.name
+                if persona is not None
+                else record.participant.character_sheet.character.db_key
+            )
             beat: dict[str, Any] = {
                 "id": record.pk,
-                "narration": self._render_surge_beat_narration(record),
+                "narration": self._render_surge_beat_narration(record, name),
             }
             character_id = record.participant.character_sheet.character_id
             sees_detail = is_gm_or_staff or character_id in viewer_character_ids
             if not sees_detail and (
-                not beat["narration"] or record.trigger_kind == SurgeTriggerKind.CONDITION_FED
+                not beat["narration"] or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS
             ):
                 # Nothing was announced to the room (a control-only or condition-only
-                # surge, or an emotional condition's feed, #4739, which is never
-                # announced), so a bystander has no beat to show.
+                # surge, an emotional condition's feed, #4739, or a missed attack's
+                # intensity, #4858, neither ever announced), so a bystander has no beat.
                 continue
             if sees_detail:
                 beat["trigger_kind"] = record.trigger_kind
@@ -1952,20 +2118,20 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         return beats
 
     @staticmethod
-    def _render_surge_beat_narration(record: DramaticSurgeRecord) -> str:
+    def _render_surge_beat_narration(record: DramaticSurgeRecord, character_name: str) -> str:
         """Re-render the generic narration line from the curve template.
 
         The record itself stores only trigger_kind/amount/subject (audit
         data) — narration is derived at read time from the encounter's
         current curve, same as the live broadcast at write time. A record that
         added no intensity (a control-only or condition-only surge) was never
-        announced, so it renders nothing.
+        announced, so it renders nothing. ``character_name`` is the face the fighter
+        wears now, never the key (#4802).
         """
         from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
 
         curve = record.encounter.escalation_curve
-        character_name = record.participant.character_sheet.character.db_key
-        if curve is None or record.amount == 0:
+        if curve is None or record.amount == 0 or record.trigger_kind in _UNANNOUNCED_SURGE_KINDS:
             return ""
         return _render_surge_narration(curve, character_name)
 
@@ -1980,7 +2146,29 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         Reads ``CombatEncounter.clashes_cached``, which the viewset's
         ``_base_queryset`` pre-fills so no extra query fires here.
         """
-        return ClashStateSerializer(obj.clashes_cached, many=True).data  # type: ignore[return-value]
+        names = {sheet_id: p.name for sheet_id, p in self._participant_personas(obj).items()}
+        seats = {p.character_sheet_id: p.pk for p in obj.participants_cached}
+        return ClashStateSerializer(  # type: ignore[return-value]
+            obj.clashes_cached,
+            many=True,
+            context={"participant_names": names, "participant_ids": seats},
+        ).data
+
+    def _participant_personas(self, obj: CombatEncounter) -> dict[int, Persona]:
+        """The face every participant presents, read once per payload (#4802).
+
+        The participant list fills ``context["participant_personas"]``; a field that
+        runs before it reads them here and leaves them for the rest.
+        """
+        personas = self.context.get("participant_personas")
+        if personas is None:
+            from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+            personas = personas_for_sheets(
+                [participant.character_sheet_id for participant in obj.participants_cached]
+            )
+            self.context["participant_personas"] = personas
+        return personas
 
     @extend_schema_field(EngagementLockSerializer(many=True))
     def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, Any]]:

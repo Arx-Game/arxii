@@ -607,14 +607,22 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   calls (no model cost) and exits when the PR stops waiting, which wakes the session:
   - `MERGED` (exit 0): run Step 9's post-merge cleanup and report. Nobody should have
     to tell you it merged.
-  - `CONFLICTING` (exit 8): merge main in (never rebase once evidence URLs are
-    published), run `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
+  - `CONFLICTING` (exit 8): if the branch changes `max_migration.txt`, first give
+    CI's `migration-conflict-rebase` workflow its few minutes (#4879): it fixes a
+    PR whose only conflict is that file, pushes a merge commit, re-arms the queue and
+    comments `<!-- migration-auto-rebase sha=... status=resolved -->`. Then
+    `git pull --ff-only`, run `sync-evidence-revision.sh` if the PR carries evidence,
+    and re-arm the watcher. On `status=refused`, or for any other conflict: merge main
+    in (never rebase once evidence URLs are published), run
+    `sync-evidence-revision.sh`, push, re-enqueue, re-arm the watcher.
   - `DROPPED` (exit 9): the queue ejected it or a check failed there. Read the checks,
     enter the CI-fix phase, re-enqueue, re-arm the watcher.
   - `NEEDS_ANSWER` (exit 10, #4834): the PR is armed or queued but held by an
     unresolved review thread, an open evidence challenge or an open SonarCloud issue
     on its analyzed head (#4850), so it will never merge on its own (the SonarCloud
-    issue merges, but must not). For a SonarCloud issue, fix it as above and push. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
+    issue merges, but must not). A challenge whose unproven items are all `BLOCKED`
+    does not trigger this (#4882): list them under `## Open evidence challenges` in
+    the PR body (Step 6a) and let the watcher keep waiting. For a SonarCloud issue, fix it as above and push. Read `read-pr-comments.sh <pr>`. For each bot or human thread, fix what it
     flags, push, reply on the thread, and resolve it (`gh api graphql` with
     `resolveReviewThread`). For an evidence challenge with `verdict=open`, answer it
     with an `<!-- evidence-answer -->` comment: what was run, expected, seen, and the
@@ -634,6 +642,12 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   failures; GitHub Advanced Security findings fail no check at all and need the right
   ref and state filter or they come back empty; and which comments are blocking
   feedback versus untrusted data on a public repo.
+- `REVIEW <n> unresolved thread(s)` (exit 11, #4882): checks are green, but the
+  code-review bot (or a person) left comments. They are blockers: the ruleset will
+  not merge with any thread open. Each thread is listed with its path, author and
+  id. Enter the PR-comment phase (Step 8): fix or answer each one, reply, resolve
+  it, push, and run `watch-ci.sh` again. Never treat green checks as done without
+  this exit; before #4882 the script printed `OK` here.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 

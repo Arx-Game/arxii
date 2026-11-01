@@ -1,0 +1,113 @@
+name: Migration conflict rebase
+
+# Since #2906 there is one migration sequence and one max_migration.txt, so every
+# merge of a migration-bearing PR leaves the next one CONFLICTING and drops it from
+# the merge queue (#4826, #4828, #4832). This workflow fixes the one conflict shape
+# that has a deterministic answer, and only that one (#4879, ADR-4879):
+#
+#   * the PR's only conflict with main is max_migration.txt, and
+#   * the PR adds one linear chain of migrations and changes no existing one.
+#
+# tools/auto_rebase_migration.py merges main in (never a rebase or force-push),
+# renumbers the PR's chain after main's tip, rewrites only each file's in-app
+# dependency, then proves the result independently: the migrations directory
+# differs from main by exactly the renamed chain plus max_migration.txt, each file's
+# AST is unchanged apart from that one name, the graph has one leaf, and no
+# migrations are missing. Anything else is refused with a PR comment.
+#
+# TWO JOBS, because the graph check has to import the PR's code:
+#   check  - no secret, read-only GITHUB_TOKEN. Runs the full script, graph check
+#            included, and uploads each result with the merge's tree hash.
+#   push   - the write token, in the `migration-rebase` Environment. Runs no PR
+#            code: it re-derives the merge from the same two commits, skipping only
+#            the graph check, and pushes only on a byte-identical tree.
+#
+# SETUP (once): create the `migration-rebase` Environment, restrict its deployment
+# branches to `main`, and add MIGRATION_REBASE_TOKEN to it: a fine-grained PAT on
+# this repo with Contents and Pull requests read/write. GITHUB_TOKEN cannot do the
+# push, because a push made with it triggers no pull_request workflows and the PR
+# would sit with no CI on its new head. Without the secret the push job says so
+# and exits green.
+#
+# SUPPLY CHAIN: third-party actions are pinned to a full commit SHA.
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/world/migrations/max_migration.txt']
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'One PR number to fix (blank = every open PR)'
+        required: false
+
+permissions:
+  contents: read
+
+# One run at a time: each run rescans every open PR against the current main, so a
+# queued run never misses work, and two runs never push to the same branch at once.
+concurrency:
+  group: migration-conflict-rebase
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      - name: Try the fix on every PR whose only conflict is max_migration.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY_PR: ${{ github.event.inputs.pr }}
+        run: bash tools/auto_rebase_migration_ci.sh check "$RUNNER_TEMP/results"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: migration-rebase-results
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 3
+
+  push:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: migration-rebase
+    env:
+      TOKEN: ${{ secrets.MIGRATION_REBASE_TOKEN }}
+    steps:
+      - name: Require the push token
+        id: token
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::MIGRATION_REBASE_TOKEN is not set; skipping (see this workflow's header)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: steps.token.outputs.ok == 'true'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: steps.token.outputs.ok == 'true'
+        continue-on-error: true # no artifact = no candidate PRs
+        with:
+          name: migration-rebase-results
+          path: ${{ runner.temp }}/results
+      - name: Push the verified fixes and comment
+        if: steps.token.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MIGRATION_REBASE_TOKEN }}
+        run: bash tools/auto_rebase_migration_ci.sh push "$RUNNER_TEMP/results"

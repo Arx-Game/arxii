@@ -53,6 +53,12 @@ class DistinctionEffectInline(admin.TabularInline):
         "value_per_rank",
         "scaling_values",
         "modifier_size",
+        "amount_input",
+        "amount_per",
+        "amount_cap",
+        "amount_check_type",
+        "amount_thread_trait",
+        "amount_thread_facet",
         "description",
     ]
     autocomplete_fields = ["target"]

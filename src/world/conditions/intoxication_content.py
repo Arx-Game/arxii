@@ -16,6 +16,8 @@ future content.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 INTOXICATED_CONDITION_NAME = "Intoxicated"
 HUNGOVER_CONDITION_NAME = "Hungover"
 DUSTED_CONDITION_NAME = "Dusted"
@@ -85,7 +87,7 @@ def ensure_intoxication_content() -> None:
                 "name": name,
                 "description": desc,
                 "severity_threshold": threshold,
-                "severity_multiplier": "1.00",
+                "severity_multiplier": Decimal("1.00"),
             },
         )
     hungover, _ = ConditionTemplate.objects.get_or_create(
@@ -145,7 +147,7 @@ def _ensure_drug_conditions(category) -> None:
                 "name": name,
                 "description": desc,
                 "severity_threshold": threshold,
-                "severity_multiplier": "1.00",
+                "severity_multiplier": Decimal("1.00"),
             },
         )
     hazed, _ = ConditionTemplate.objects.get_or_create(
@@ -174,7 +176,7 @@ def _ensure_drug_conditions(category) -> None:
                 "name": name,
                 "description": desc,
                 "severity_threshold": threshold,
-                "severity_multiplier": "1.00",
+                "severity_multiplier": Decimal("1.00"),
             },
         )
 

@@ -19,4 +19,13 @@ export interface CombatEncounterStatePayload {
  */
 export function handleCombatEncounterStatePayload(payload: CombatEncounterStatePayload) {
   void queryClient.invalidateQueries({ queryKey: combatKeys.encounter(payload.encounter_id) });
+  // The round's rolls (a Strike's hit and damage rolls, #4858) for this encounter: the
+  // turn panel's Last Outcome refetches whoever's ready-up or GM advance resolved it.
+  void queryClient.invalidateQueries({
+    queryKey: [...combatKeys.all, 'consequence-outcomes'],
+    predicate: (query) => {
+      const params = query.queryKey[2] as { encounter?: number } | undefined;
+      return params?.encounter === payload.encounter_id;
+    },
+  });
 }

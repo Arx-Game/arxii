@@ -104,6 +104,7 @@ from web.admin.views import (
     toggle_export_exclusion,
     toggle_pin_model,
 )
+from web.admin.vow_builder.views import vow_builder, vow_builder_pick, vow_builder_review
 
 urlpatterns = [
     path("_pin/", toggle_pin_model, name="admin_toggle_pin"),
@@ -262,6 +263,9 @@ urlpatterns = [
         distinction_builder_review,
         name="admin_distinction_builder_review",
     ),
+    path("_vow_builder/pick/", vow_builder_pick, name="admin_vow_builder_pick"),
+    path("_vow_builder/<int:pk>/", vow_builder, name="admin_vow_builder"),
+    path("_vow_builder/<int:pk>/review/", vow_builder_review, name="admin_vow_builder_review"),
     path(
         "_standoff_profile/<int:template_pk>/",
         standoff_profile,

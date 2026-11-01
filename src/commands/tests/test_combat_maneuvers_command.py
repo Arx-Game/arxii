@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from actions.constants import ActionBackend
-from actions.types import ActionResult, DispatchResult
 from commands.combat_maneuvers import CmdCombat
 from commands.exceptions import CommandError
 from world.combat.factories import (
@@ -92,20 +91,6 @@ class CmdCombatRoutingTests(TestCase):
             cmd.func()
         dispatch.assert_not_called()
         cmd.caller.msg.assert_called()
-
-    def test_flee_dispatches_registry_ref_through_func(self) -> None:
-        cmd = _make_cmd("flee")
-        result = DispatchResult(
-            backend=ActionBackend.REGISTRY,
-            deferred=False,
-            detail=ActionResult(success=True, message="You flee."),
-        )
-        with patch(_DISPATCH, return_value=result) as dispatch:
-            cmd.func()
-        dispatch.assert_called_once()
-        _, ref, kwargs = dispatch.call_args.args
-        self.assertEqual(ref.registry_key, "combat_flee")
-        self.assertEqual(kwargs, {})
 
     def test_bare_combat_shows_status_hub(self) -> None:
         cmd = _make_cmd("")

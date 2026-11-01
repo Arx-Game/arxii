@@ -212,9 +212,12 @@ The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled
   whose `ConditionCategory.alters_behavior` is True (rage / possession / charm /
   mind-control). It is **not** a stored flag and not a per-status name lookup.
 - **Revert** — `world.forms.services.revert_alternate_self(sheet)` restores the captured
-  form/persona anchors and deletes the granted modifier + technique rows. Revert is
-  **blocked** while `not sheet.in_control` and raises `RevertBlockedError`. Only
-  revert is blocked; assumption stays allowed.
+  form/persona anchors and deletes the granted modifier + technique rows. `revert_alternate_self`
+  is the system path (Audere end, TALKED_DOWN) and stays **blocked** while
+  `not sheet.in_control` (`RevertBlockedError`). A player reverts through
+  `attempt_revert_form`: a compulsion rolls its `REVERT_FORM` resist check; with none, a
+  `TALKED_DOWN` self whose `emergence_condition` is active stays blocked; anyone else
+  reverts freely. Assumption is never blocked.
 - **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
   re-derives `in_control=True`, which unblocks a later self-revert. The form persists
   after the condition clears. The canonical instance is the fury `Berserk` condition,
@@ -232,9 +235,9 @@ The two alternate-self verbs are real `actions.base.Action`s on the shared
   (moon madness, rage) use the same path. A foreign or unknown id returns a
   uniform failure message to avoid leaking repertoire information.
 - **`RevertFormAction`** (`actions/definitions/forms.py`, key `"revert_form"`) —
-  reverts the active alternate self. `target_type=SELF`, no kwargs. Catches
-  `RevertBlockedError` while `not sheet.in_control` and surfaces it as a failure
-  `ActionResult`. No active alt-self also returns a failure result.
+  reverts the active alternate self. `target_type=SELF`, no kwargs. Calls
+  `attempt_revert_form` (compulsion roll, talked-down block, or free revert) and surfaces
+  a refusal as a failure `ActionResult`. No active alt-self also returns a failure result.
 
 Both wrap `world.forms.services.assume_alternate_self` / `revert_alternate_self`;
   telnet and the web dispatcher converge on the same action path.

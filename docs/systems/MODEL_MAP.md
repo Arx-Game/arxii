@@ -2004,6 +2004,8 @@
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
+  - compulsions <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - modifier_target <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
   - detect_situation_traps <- mechanics.SituationTrapLink
@@ -2124,7 +2126,7 @@
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
-- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
+- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '', skill_rating: int | None = None, snapshot: 'RollSnapshot | None' = None) -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 - `resolve_standing(roller_points: 'int', target_points: 'int', *, ranks: 'Sequence[CheckRank] | None' = None) -> 'CheckStanding' - Band positions, the slide and the chart for one check, without rolling.`
 
 
@@ -2746,6 +2748,7 @@
 ### MovementConfig
 **Foreign Keys:**
   - held_ground_challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - steadying_capability -> conditions.CapabilityType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### NpcTacticsConfig
@@ -2902,6 +2905,7 @@
 - `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' - Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
+- `declare_strike(participant: 'CombatParticipant', opponent: 'CombatOpponent', item_instance: 'ItemInstance | None' = None) -> 'CombatRoundAction' - Declare a Strike at ``opponent`` with ``item_instance`` (None: bare hands).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', target: 'CombatOpponent | CombatParticipant') -> 'CombatRoundAction' - Declare a taunting maneuver, auto-ready (#2015, #4737).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
@@ -2948,7 +2952,9 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
+- `settle_wound_triggers(participant: 'CombatParticipant', result: 'ParticipantDamageResult') -> 'None' - Roll the wound triggers a knockout-band hit held back, once its knockout check landed.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None, line: 'OpponentLine | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
+- `strike_weapon_options(character: 'Character') -> 'list[StrikeWeapon]' - What ``character`` can Strike with: each equipped weapon, then bare hands.`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' - Flip the ready flag on a round action and persist it.`
@@ -3077,6 +3083,23 @@
   - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
 
+### Compulsion
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [OneToOne]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - forbidden <- conditions.CompulsionForbiddenAction
+  - bands <- conditions.CompulsionResistBand
+
+### CompulsionForbiddenAction
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+
+### CompulsionResistBand
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+  - outcome -> traits.CheckOutcome [FK]
+
 ### ConditionCapabilityEffect
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
@@ -3146,6 +3169,9 @@
 
 ### ConditionModifierEffect
 **Foreign Keys:**
+  - amount_check_type -> checks.CheckType [FK] (nullable)
+  - amount_thread_trait -> traits.Trait [FK] (nullable)
+  - amount_thread_facet -> magic.Facet [FK] (nullable)
   - condition -> conditions.ConditionTemplate [FK] (nullable)
   - stage -> conditions.ConditionStage [FK] (nullable)
   - modifier_target -> mechanics.ModifierTarget [FK]
@@ -3177,6 +3203,7 @@
   - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - auderethreshold_set <- magic.AudereThreshold
 
 ### ConditionStageOnEntry
@@ -3225,6 +3252,8 @@
   - conditioninstance_set <- conditions.ConditionInstance
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
+  - compulsion <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - opponent_modifier_targets <- mechanics.ModifierTarget
   - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
@@ -3250,6 +3279,21 @@
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
+
+### ControlLossBand
+**Foreign Keys:**
+  - trigger -> conditions.ControlLossTrigger [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - applies -> conditions.ConditionTemplate [FK] (nullable)
+
+### ControlLossTrigger
+**Foreign Keys:**
+  - vulnerability -> conditions.ConditionTemplate [FK]
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - check_type -> checks.CheckType [FK]
+  - relief_gift -> magic.Gift [FK] (nullable)
+**Pointed to by:**
+  - bands <- conditions.ControlLossBand
 
 ### DamageSuccessLevelMultiplier
 
@@ -3344,6 +3388,7 @@
 - `contributing_condition_ids(breakdown: world.checks.types.ModifierBreakdown) -> tuple[int, ...] - The condition instances whose nonzero term is in ``breakdown``, in pk order (#4584).`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary - Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
+- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int') -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `draws_aggro_target_ids(targets: collections.abc.Iterable['ObjectDB']) -> set[int] - ObjectDB pks among ``targets`` carrying an active draws_aggro condition (#4572).`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_conditions_content() -> None - Idempotently seed all core conditions content.`
@@ -3512,8 +3557,17 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - skill -> skills.Skill [OneToOne] (nullable)
+  - hit_stat -> traits.Trait [FK] (nullable)
+  - taught_by -> magic.Tradition [M2M]
+  - compatible_roles -> covenants.CovenantRole [M2M]
 **Pointed to by:**
   - character_sheets <- character_sheets.CharacterSheet
+  - gear <- covenants.CombatStyleGear
+
+### CombatStyleGear
+**Foreign Keys:**
+  - style -> covenants.CombatStyle [FK]
 
 ### CourtGrantConfig
 **Foreign Keys:**
@@ -3611,6 +3665,7 @@
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
   - defense_profile <- covenants.CovenantRoleDefenseProfile
   - focus_picks <- covenants.VowFocusPick
+  - combat_styles <- covenants.CombatStyle
   - gift_grants <- covenants.CovenantRoleGiftGrant
   - role_bonuses <- covenants.CovenantRoleBonus
   - situational_perks <- covenants.VowSituationalPerk
@@ -4053,6 +4108,9 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - amount_check_type -> checks.CheckType [FK] (nullable)
+  - amount_thread_trait -> traits.Trait [FK] (nullable)
+  - amount_thread_facet -> magic.Facet [FK] (nullable)
   - distinction -> distinctions.Distinction [FK]
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
@@ -4436,6 +4494,7 @@
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
 - `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
+- `attempt_revert_form(sheet: 'CharacterSheet') -> 'CompulsionAttempt' - The player's entry point for changing back (#4802).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
@@ -5978,10 +6037,13 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
+  - conditionmodifiereffect_amount_inputs <- conditions.ConditionModifierEffect
   - aliases <- magic.FacetAlias
+  - effect_bonuses <- magic.FacetEffectBonus
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
+  - distinctioneffect_amount_inputs <- distinctions.DistinctionEffect
   - inherent_on_templates <- items.ItemTemplate
   - item_attachments <- items.ItemFacet
   - vogue_momentum <- items.FacetVogueMomentum
@@ -5995,6 +6057,11 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - facet -> magic.Facet [FK]
+
+### FacetEffectBonus
+**Foreign Keys:**
+  - facet -> magic.Facet [FK]
+  - target -> mechanics.ModifierTarget [FK]
 
 ### FallRedemptionConfig
 
@@ -6880,6 +6947,7 @@
   - ghost_tutelages <- magic.GhostTutelage
   - gift_grants <- magic.TraditionGiftGrant
   - ritual_grants <- magic.TraditionRitualGrant
+  - combat_styles <- covenants.CombatStyle
   - teaching_npc_roles <- npc_services.NPCRole
 
 ### TraditionGiftGrant
@@ -7111,6 +7179,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - codex_entry <- codex.CodexEntry
+  - facet_effect_bonuses <- magic.FacetEffectBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
   - covenant_role_bonuses <- covenants.CovenantRoleBonus
@@ -7244,6 +7313,7 @@
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' - Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' - Delete all modifier records for a distinction.`
+- `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int') -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
@@ -9465,6 +9535,7 @@
 - `persona_discovery_between(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if`
 - `persona_for_character(character: 'Character') -> 'Persona' - Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `persona_names_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, str]' - Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).`
+- `personas_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, Persona]' - Batched ``active_persona_for_sheet``: the face each sheet presents, two queries.`
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
@@ -9651,6 +9722,7 @@
   - technique_skill_gifts <- magic.Gift
   - override_techniques <- magic.Technique
   - magic_activity_rows <- magic.MagicActivitySkill
+  - combat_style <- covenants.CombatStyle
   - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
   - character_values <- skills.CharacterSkillValue

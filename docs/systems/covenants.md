@@ -1136,6 +1136,14 @@ The other seams in the module:
   no cast-dependent filter (not unlock level, context, situation or frequency), and it does
   NOT filter by `beneficiary`, so a display tells a row riding the sheet's own casts from one
   riding its allies' by reading `beneficiary`. **[BUILT, NOT WIRED]** pending #4565.
+- `effect_rides_technique(effect, technique, technique_functions) -> bool` and
+  `techniques_ridden_by(effect) -> QuerySet[Technique]` (#4880) are the one catalog match
+  between a row and the techniques it rides: the row's `function` among the technique's
+  function tags, then the gift or technique narrowing when set. The cast path's
+  `_live_rows` and the static view call the predicate; the vow page's "Techniques this vow
+  rides" rail reads `techniques_by_function(functions)` (one query, every catalog technique
+  per function tag) and narrows it with the predicate. `payload_prefetches()` is the four payload prefetches
+  shared by the cast path and the vow page's summary lines.
 
 ### Where it runs
 
@@ -1233,13 +1241,25 @@ decides defense" under Combat Seams).
   `description`, `defense_style` (`DefenseStyle`), `armor_share_tenths` (0 to 10, default 10).
   A character's style is `CharacterSheet.combat_style` (nullable, PROTECT); it replaces the
   vow's `CovenantRoleDefenseProfile` (ADR-4759, read by `defense_style_for` since #4809).
+  Since #4884 (slice 2 of #4844) a style also has `skill` (nullable one-to-one to a
+  Magic-category `Skill`, PROTECT, one style per skill), `hit_stat` (nullable FK to a stat
+  `Trait`, PROTECT), `taught_by` (M2M `Tradition`, `related_name="combat_styles"`) and
+  `compatible_roles` (M2M `CovenantRole`, the vows it works with). **`CombatStyleGear`**
+  (NK `(style, gear_archetype)`, unique, in `CONTENT_MODELS`) lists the kinds it fights with:
+  weapon kinds (`WEAPON_ARCHETYPES`) are its attack profile, armor kinds
+  (`ARMOR_ARCHETYPES`) its defense profile; its choices are those two sets only
+  (`COMBAT_STYLE_GEAR_CHOICES`), never jewelry, clothing or other gear. The style admin page edits them all (gear kinds
+  as an inline). Required content (TUNING): a style with no skill, no hit stat or no weapon
+  kind, and an active Tradition that teaches no style.
 
 ### Price and choice rules (`world.covenants.focus_picks`)
 
 - `pick_price(pick) -> int` - `max(1, floor(value x product(frequency_tenths / 10)) - sum(reduction))`.
   The product runs over `SELF`/`TARGET`/`SETTING`/`TIMING` limits, the sum over
   `EXPOSURE`/`COST`. Integer arithmetic; never stored. Value 4 with no limit is 4; with one
-  `TARGET` limit at 5 it is 2.
+  `TARGET` limit at 5 it is 2. The formula itself is `price_for(value, limits)`, which the
+  vow page (#4880) calls with the value and limits an unsaved edit would leave, to warn
+  holders before the save.
 - `shown_vow_level(membership) -> int` - the shown COVENANT_ROLE thread level, read on the
   anchor role through `services._covenant_role_thread_level` and `shown_thread_level`.
 - `validate_character_focus_pick(choice)` - raises `ValidationError` naming the reason when
@@ -1278,6 +1298,13 @@ the added effect, situational perk and vow stat scaling admins, and `condition_p
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
 and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
 admins; `combat_style` is on the CharacterSheet admin.
+
+The vow page (`_vow_builder/<pk>/`, #4880, slice 2 of #4843) authors one vow's own fields,
+technique specialties, focus picks by level and each pick's limits in one save, shows every
+payload row as one line with its stock admin form in the popup, the budget per level and
+the techniques the vow rides, and warns before a save that changes what live holders spend.
+It is opened from a "Vow page" column and object tool on `CovenantRole` and the Combat
+roles panel's vow picker. See `src/web/admin/CLAUDE.md` "Vow page".
 
 ## Enums / Constants
 
@@ -1327,6 +1354,61 @@ shrinks; an elevated sidekick's bonus grows.
   `mitigation_leak_percent`, falling back to the field defaults when there is no row.
 
 The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles".
+
+### Style skill and hit stat on the rolls (#4884, slice 2 of #4844)
+
+`world.covenants.style_fit`:
+
+- `style_fit_for_attack(character, weapon_archetype) -> StyleFit` (a Strike always names
+  its kind, bare hands being `UNARMED`; None is a technique cast with no weapon in hand,
+  which skips the weapon test and keeps only the vow test) and
+  `style_fit_for_defense(character) -> StyleFit` (every worn armor kind,
+  `worn_armor_kinds`). `StyleFit(style, lapse: StyleLapse | None, lapse_note)` with
+  `counts`, `hit_stat_name` and `extra_traits(check_type, counted)` (the style skill as an
+  `ExtraTraitTerm`, weight 1, while it counts, and never when the roll already counts that
+  trait through the check type's rows or another term, such as a technique skill that is
+  also a style's skill).
+- The bonus lapses on an attack when the weapon kind is not one of the style's weapon
+  kinds, on a defense when any worn armor kind is not one of its armor kinds, and on both
+  when a held vow (each engaged PRIMARY role; a sub-role counts by itself or its anchor) is
+  not in `compatible_roles`. No vow held never lapses. `StyleLapse` (WEAPON, ARMOR, VOW)
+  and `STYLE_LAPSE_GEAR_WORDS` live in `world.covenants.constants`.
+- A lapse drops the style skill only: the hit stat and the defense type still apply, and
+  the style's armor share is unchanged (owner rulings, 2026-11-01). No style, or a style
+  with no active skill, adds no style term and no lapse line.
+- Readers: `CombatTechniqueResolver.roll_check_with_breakdown` (the shared attack-roll
+  seam: Strike, technique, joust) adds the term; a Strike also hits with `hit_stat`
+  (`_stat_override`), a technique keeps its weapon's stat. `resolve_npc_attack` adds it to
+  the PC defense roll and hands it to a barrier's re-roll (`NpcHitDefense.extra_traits`).
+  A combat cast's TRAIT thread pulls (`pull_helpers._with_style_skill`) see the style
+  skill's trait while it counts.
+- The Strike records the style at roll time on `ConsequenceOutcome` (`style_name`,
+  `style_skill_rating`, `style_lapse_note`, `stat_from_style`) and its hit-roll breakdown
+  shows "the style's hit stat" and a style row, "style skill" with the rating or struck
+  through (`RollLine.lapsed`) with the reason (`strike.style_roll_line`).
+- The PC defense roll (`world.combat.services.npc.defense_roll`): `resolve_npc_attack`,
+  handed the NPC action's `get_npc_action_interaction` factory, records one
+  `ConsequenceOutcome` for the defender on that Narrator ACTION interaction
+  (`record_defense_roll`), keeping `against_label` (the attacker), the defense skill rating,
+  the style fields and `armor_share_tenths` at roll time. `defense_roll_breakdowns` lays it
+  out ("Defense against <attacker>", defense skill, style skill or lapse, "Armor, N of 10",
+  then the result). `ConsequenceOutcome.combat_roll_kind` (`CombatRollKind`: HIT, DAMAGE,
+  DEFENSE, in `world.checks.constants`) says which roll a row is; both builders and the
+  bystander rule key on it, so they never claim each other's rows. A check constraint
+  (`consequence_outcome_style_snapshot_shape`) holds the style snapshot to no style, a
+  counted style (rating, no lapse) or a lapsed one (reason, no rating).
+  `combat_roll_breakdowns` (`world.checks.serializers`) serves both builders, defender and
+  staff only; any other viewer gets a combat roll row without its modifiers or their total,
+  and a defense row without its summary. An automatic dodge's bonus is recorded as a
+  "Dodge" contribution. The result line names the roll's outcome, then the damage
+  ("Partial Success, 8 damage"). A barrier's re-roll records no row. Every defended NPC
+  blow now mints the NPC action's interaction (before, only a survivability roll did), and
+  `create_npc_action_interaction` pushes it live, the way a PC's action row is.
+- Every combat roll row records `ConsequenceOutcome.combat_round` (the Strike and defense
+  recorders pass it; any other combat row reads it from the scene's encounter), and the
+  turn panel's Last Outcome card shows every roll of the newest round.
+- Not yet: `is_gear_compatible` still reads the vow's `GearArchetypeCompatibility` (slice
+  3 re-keys it with the data migration).
 
 ### Defense styles + gear substitution (#2533, ADR-0149 Layer 3)
 

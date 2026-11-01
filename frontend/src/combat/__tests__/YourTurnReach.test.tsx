@@ -252,6 +252,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100, // matches defaultProps.characterSheetId → this is the actor
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -272,7 +273,10 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -383,6 +387,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -403,7 +408,10 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -541,6 +549,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -561,7 +570,10 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -679,6 +691,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -699,11 +712,15 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
         {
           id: 7,
           character_sheet_id: 200,
+          persona_id: null,
           character_name: 'Ally',
           status: 'active' as const,
           health: null,
@@ -724,7 +741,10 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
       opponents: [
@@ -789,6 +809,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -809,7 +830,10 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         },
       ],
     });

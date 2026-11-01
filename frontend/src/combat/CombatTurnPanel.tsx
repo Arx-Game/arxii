@@ -11,6 +11,7 @@
  * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §2
  */
 
+import { CompulsionMark } from '@/combat/components/CompulsionBanner';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
@@ -39,6 +40,7 @@ import { ForcedEscapeBanner } from './components/ForcedEscapeBanner';
 import { SpecialistChoicePanel } from './components/SpecialistChoicePanel';
 import { CommitmentPanel } from './components/CommitmentPanel';
 import { OutcomeRoulette } from './OutcomeRoulette';
+import { RollBreakdownCard } from './components/RollBreakdownCard';
 import { StandoffCard } from './standoff/StandoffCard';
 import { StandoffSummaryCard } from './standoff/StandoffSummaryCard';
 import type { EncounterDetail } from './types';
@@ -97,6 +99,9 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
 // CombatTurnPanel
 // ---------------------------------------------------------------------------
 
+/** Enough rows for one round's rolls by one character (#4884). */
+const LAST_ROUND_PAGE_SIZE = 20;
+
 export function CombatTurnPanel({
   encounterId,
   characterId,
@@ -116,13 +121,29 @@ export function CombatTurnPanel({
   // Available COMBAT-backend actions for the character (includes clash refs) and its moves.
   const { data: combatActions } = useAvailableActions(characterId);
 
-  // Most recent consequence outcome for this character scoped to the current encounter.
+  // Every roll this character made in the most recent round of the current encounter
+  // (#4884): a Strike's hit and damage rolls, the defense roll against each NPC blow, and
+  // any knockout or wound rolls those blows caused. A page of 20 covers a round; rows with
+  // no round (older records) fall back to the rolls sharing the newest row's interaction.
+  // Shown oldest first.
   const { data: consequenceOutcomes } = useConsequenceOutcomes({
     character: characterId,
     encounter: encounterId,
-    page_size: 1,
+    page_size: LAST_ROUND_PAGE_SIZE,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
+  const latestOutcomes =
+    latestOutcome === null
+      ? []
+      : (consequenceOutcomes ?? [])
+          .filter((row) =>
+            latestOutcome.combat_round != null
+              ? row.combat_round === latestOutcome.combat_round
+              : row === latestOutcome ||
+                (latestOutcome.combat_interaction_id != null &&
+                  row.combat_interaction_id === latestOutcome.combat_interaction_id)
+          )
+          .reverse();
 
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
@@ -297,18 +318,6 @@ export function CombatTurnPanel({
           {isJoining ? 'Joining…' : 'Join Encounter'}
         </button>
       )}
-      {isOpenEncounter && isBetweenRounds && isParticipant && (
-        <button
-          type="button"
-          data-testid="open-encounter-leave-btn"
-          onClick={() => leaveEncounter()}
-          disabled={isLeaving}
-          className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
-        >
-          {isLeaving ? 'Leaving…' : 'Leave Encounter'}
-        </button>
-      )}
-
       {/* Standoff (#4145): the pre-round card, present only before round 1. */}
       {encounter.standoff ? (
         <StandoffCard
@@ -331,18 +340,34 @@ export function CombatTurnPanel({
 
           {/* 1. YourTurn — only for participants */}
           {isParticipant ? (
-            <YourTurn
-              encounterId={encounterId}
-              characterId={characterId}
-              characterSheetId={characterSheetId}
-              roundNumber={roundNumber}
-              availableActions={combatActions}
-              readOnly={false}
-              encounter={encounter}
-              castPosition={castPosition}
-              onCastPositionChange={onCastPositionChange}
-              onPositionShapeChange={onPositionShapeChange}
-            />
+            <>
+              <YourTurn
+                encounterId={encounterId}
+                characterId={characterId}
+                characterSheetId={characterSheetId}
+                roundNumber={roundNumber}
+                availableActions={combatActions}
+                readOnly={false}
+                encounter={encounter}
+                castPosition={castPosition}
+                onCastPositionChange={onCastPositionChange}
+                onPositionShapeChange={onPositionShapeChange}
+              />
+              {/* The compulsion banner (in YourTurn) sits above Leave (#4802). */}
+              {isOpenEncounter && isBetweenRounds && isParticipant && (
+                <CompulsionMark compulsion={viewerParticipant?.compulsion} actionKey="leave">
+                  <button
+                    type="button"
+                    data-testid="open-encounter-leave-btn"
+                    onClick={() => leaveEncounter()}
+                    disabled={isLeaving}
+                    className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
+                  >
+                    {isLeaving ? 'Leaving…' : 'Leave Encounter'}
+                  </button>
+                </CompulsionMark>
+              )}
+            </>
           ) : (
             <>
               <PendingAttacks
@@ -389,6 +414,7 @@ export function CombatTurnPanel({
             onToggleCollapse={() => toggleSection('combatantsList')}
             characterId={characterId}
             canDeclareManeuvers={isParticipant && encounter.status === 'declaring'}
+            compulsion={viewerParticipant?.compulsion ?? null}
             data-testid="section-combatants-list"
           />
 
@@ -446,13 +472,24 @@ export function CombatTurnPanel({
             </span>
           </button>
           {!collapsed.outcomeRoulette && (
-            <div className="border-t border-border px-3 py-2">
-              <OutcomeRoulette
-                outcomeDisplay={latestOutcome.outcome_display}
-                modifiers={latestOutcome.modifiers}
-                modifierTotal={latestOutcome.modifier_total}
-                summary={latestOutcome.summary}
-              />
+            <div className="space-y-3 border-t border-border px-3 py-2">
+              {latestOutcomes.map((row) =>
+                row.roll_breakdown ? (
+                  <RollBreakdownCard key={row.id} breakdown={row.roll_breakdown} />
+                ) : (
+                  <OutcomeRoulette
+                    key={row.id}
+                    // A roll with no pool and no challenge has no roulette: never show
+                    // the server's placeholder row as if it were a result.
+                    outcomeDisplay={
+                      !row.pool && !row.challenge_record_id ? [] : row.outcome_display
+                    }
+                    modifiers={row.modifiers}
+                    modifierTotal={row.modifier_total}
+                    summary={row.summary}
+                  />
+                )
+              )}
             </div>
           )}
         </div>

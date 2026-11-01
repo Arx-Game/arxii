@@ -203,6 +203,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
     character_sheet_id: 100,
+    persona_id: null,
     character_name: 'Aerande',
     status: 'active',
     health: 8,
@@ -223,7 +224,10 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
+    strike_weapons: null,
     ...overrides,
   };
 }
@@ -789,7 +793,10 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
+          strike_weapons: null,
         }),
       ],
     });
@@ -913,6 +920,20 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
     expect(screen.getByTestId('open-encounter-leave-btn')).toBeInTheDocument();
   });
 
+  it('puts Leave below the YourTurn section, where the compulsion banner sits', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'between_rounds',
+      is_participant: true,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    const yourTurn = screen.getByTestId('your-turn-stub');
+    const leave = screen.getByTestId('open-encounter-leave-btn');
+    expect(yourTurn.compareDocumentPosition(leave) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('hides both buttons for party_combat encounters', () => {
     mockEncounter({
       encounter_type: 'party_combat',
@@ -936,5 +957,212 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
       wrapper: createWrapper(),
     });
     expect(screen.queryByTestId('open-encounter-join-btn')).not.toBeInTheDocument();
+  });
+});
+
+describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4858)', () => {
+  // The two rows the consequence-outcomes API returns for one Strike, newest first, as
+  // the server writes them: no pool, no challenge, the roulette list empty.
+  const strikeRow = (id: number, rollBreakdown: Record<string, unknown>, summary: string) => ({
+    id,
+    character: 100,
+    check_type: 3,
+    pool: null,
+    selected_consequence: null,
+    modifier_total: 2,
+    summary,
+    outcome_display: [],
+    modifiers: [{ source_kind: 'character', source_label: 'Intensity', value: 2 }],
+    combat_interaction_id: 40,
+    challenge_record_id: null,
+    action_interaction_id: null,
+    roll_breakdown: rollBreakdown,
+    created_at: '2026-11-01T06:00:00Z',
+  });
+  const hit = strikeRow(
+    2,
+    {
+      heading: "Hit roll against Bandit's defense",
+      lines: [
+        {
+          label: 'Melee Combat',
+          value: '25',
+          detail: 'strike skill for one-handed melee',
+          lapsed: false,
+        },
+        { label: 'Agility', value: '', detail: 'stat for one-handed melee', lapsed: false },
+        { label: 'Intensity', value: '+2', detail: 'misses add to hit', lapsed: false },
+      ],
+      result: 'Hit, good',
+      result_note: 'then the damage roll',
+    },
+    'Hit, good'
+  );
+  const damage = strikeRow(
+    3,
+    {
+      heading: 'Damage roll',
+      lines: [
+        {
+          label: 'Rapier, fine quality',
+          value: '',
+          detail: 'weapon damage and quality',
+          lapsed: false,
+        },
+        { label: 'Melee Combat', value: '25', detail: 'strike skill', lapsed: false },
+      ],
+      result: '11 damage',
+      result_note: '',
+    },
+    '11 damage'
+  );
+
+  it('lays out both rolls as rows, hit roll first, with no placeholder roulette', () => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [damage, hit],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      "Hit roll against Bandit's defense",
+      'Damage roll',
+    ]);
+    expect(screen.getAllByTestId('roll-result').map((el) => el.textContent)).toEqual([
+      'Hit, good',
+      '11 damage',
+    ]);
+    expect(screen.getByText('misses add to hit')).toBeInTheDocument();
+    expect(screen.getAllByTestId('roll-result-note').map((el) => el.textContent)).toEqual([
+      'then the damage roll',
+    ]);
+    expect(screen.getByText('Rapier, fine quality')).toBeInTheDocument();
+    const section = screen.getByTestId('outcome-roulette-section');
+    expect(section).not.toHaveTextContent('Unknown');
+    expect(section).not.toHaveTextContent('Outcome Pool');
+  });
+
+  it('never shows the placeholder roulette for a pool-less row without a breakdown', () => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [
+        {
+          ...strikeRow(4, {}, 'A roll.'),
+          roll_breakdown: null,
+          outcome_display: [
+            { label: 'Unknown', tier_name: 'Unknown', weight: 1, is_selected: true },
+          ],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    const section = screen.getByTestId('outcome-roulette-section');
+    expect(section).toHaveTextContent('A roll.');
+    expect(section).not.toHaveTextContent('Unknown');
+    expect(section).not.toHaveTextContent('Outcome Pool');
+  });
+
+  it('shows only the latest roll when the one before it came from another action', () => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data: [
+        { ...strikeRow(5, {}, 'Fled.'), roll_breakdown: null, combat_interaction_id: 41 },
+        { ...strikeRow(4, {}, 'Older.'), roll_breakdown: null },
+      ],
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getAllByTestId('outcome-summary').map((el) => el.textContent)).toEqual(['Fled.']);
+  });
+});
+
+describe("CombatTurnPanel: the Last Outcome card shows the last round's rolls (#4884)", () => {
+  const row = (
+    id: number,
+    interaction: number,
+    round: number,
+    heading: string | null,
+    summary: string
+  ) => ({
+    id,
+    character: 100,
+    check_type: 3,
+    pool: heading === null ? 7 : null,
+    selected_consequence: null,
+    modifier_total: 0,
+    summary,
+    outcome_display:
+      heading === null
+        ? [{ label: summary, tier_name: 'Failure', weight: 1, is_selected: true }]
+        : [],
+    modifiers: [],
+    combat_interaction_id: interaction,
+    challenge_record_id: null,
+    action_interaction_id: null,
+    roll_breakdown:
+      heading === null ? null : { heading, lines: [], result: summary, result_note: '' },
+    combat_round: round,
+    created_at: '2026-11-01T06:00:00Z',
+  });
+
+  const show = (data: unknown[]) => {
+    mockEncounter({ is_participant: true });
+    vi.mocked(combatQueries.useConsequenceOutcomes).mockReturnValueOnce({
+      data,
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof combatQueries.useConsequenceOutcomes>);
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+  };
+
+  it('shows her Strike and the defense against the blow she took in the same round', () => {
+    show([
+      row(13, 51, 2, 'Defense against Blade', 'Hit, 8 damage'),
+      row(12, 50, 2, 'Damage roll', '6 damage'),
+      row(11, 50, 2, "Hit roll against Bandit's defense", 'Hit, fair'),
+      row(10, 49, 1, 'Defense against Blade', 'Defended, no damage'),
+    ]);
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      "Hit roll against Bandit's defense",
+      'Damage roll',
+      'Defense against Blade',
+    ]);
+  });
+
+  it('keeps the defense card beside the knockout and wound rolls the blow caused', () => {
+    show([
+      row(23, 60, 3, null, 'Wounded'),
+      row(22, 60, 3, null, 'Stays standing'),
+      row(21, 60, 3, 'Defense against Brute', 'Hit, 14 damage'),
+      row(20, 58, 2, "Hit roll against Brute's defense", 'Miss'),
+    ]);
+
+    expect(screen.getAllByTestId('roll-heading').map((el) => el.textContent)).toEqual([
+      'Defense against Brute',
+    ]);
+    expect(screen.getAllByTestId('roll-result').map((el) => el.textContent)).toEqual([
+      'Hit, 14 damage',
+    ]);
+    expect(screen.queryByText("Hit roll against Brute's defense")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('outcome-roulette-section')[0]).toHaveTextContent('Wounded');
   });
 });
