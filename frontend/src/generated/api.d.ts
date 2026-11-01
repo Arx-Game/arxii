@@ -44619,17 +44619,18 @@ export interface components {
         | (components['schemas']['AudereStateEnum'] | components['schemas']['NullEnum'])
         | null;
       /**
-       * @description Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+       * @description Direct portrait URL via the presented persona (mirrors OpponentSerializer).
        *
-       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
-       *     when the character has no primary persona.
+       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
+       *     character has no persona. A mask shows its own portrait, never the true face
+       *     (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
        */
       readonly thumbnail_url: string | null;
       /**
        * @description Media portrait URL, dynamically resolved (#2196).
        *
-       *     Uses ``resolve_thumbnail()`` via the primary persona's character.
-       *     ``None`` when there is no primary persona.
+       *     Uses ``resolve_thumbnail()`` with the presented persona (#4802).
+       *     ``None`` when there is no persona.
        */
       readonly thumbnail_media_url: string | null;
       /** @description Escalation pressure on this combatant — public dramatic state. */

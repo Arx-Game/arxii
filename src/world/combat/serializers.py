@@ -945,7 +945,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         return engagement.fury_control_surrendered if engagement else None
 
     def get_thumbnail_url(self, obj: CombatParticipant) -> str | None:
-        """Direct portrait URL via the persona she presents (mirrors OpponentSerializer).
+        """Direct portrait URL via the presented persona (mirrors OpponentSerializer).
 
         The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
         character has no persona. A mask shows its own portrait, never the true face
@@ -957,7 +957,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
         """Media portrait URL, dynamically resolved (#2196).
 
-        Uses ``resolve_thumbnail()`` with the persona she presents (#4802).
+        Uses ``resolve_thumbnail()`` with the presented persona (#4802).
         ``None`` when there is no persona.
         """
         from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
