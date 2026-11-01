@@ -111,4 +111,4 @@ class ACompulsionNeverRefuses(HypothesisTestCase, _CompelledMira):
         after = self.declared()
         kept = after is not None and (after.maneuver, after.focused_action_id) == declared_as
         if not kept:
-            self.assertTold(self.mira, "Berserk wins out:")
+            self.assertShownRow(self.mira, "Berserk wins out:")
