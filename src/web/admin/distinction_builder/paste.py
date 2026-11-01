@@ -86,6 +86,7 @@ _PROMPT_WORDS = {
 _KIND_DEGREE = "degree"
 _KIND_BEAT = "beat"
 _PRESTIGE_WORD = "prestige"
+_FIGURE_WORD = "figure"
 _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
 
 
@@ -107,6 +108,9 @@ class OfferSpec:
     opener_field: str
     opener_value: int | str
     label: str
+    #: The heading a Backgrounds answer is listed under on the life page (#4872), from
+    #: the beat token's third segment; blank for none.
+    group: str = ""
 
 
 @dataclass
@@ -126,6 +130,9 @@ class RowSpec:
     #: A starting prestige (#4852): the ``+150 prestige`` effect token makes the
     #: ``DistinctionPrestigeGrant`` sidecar, not a modifier effect.
     prestige: int | None = None
+    #: A person card (#4872): the ``figure`` effect token sets
+    #: ``Distinction.asks_figure_name``, so the player names the figure on the card.
+    asks_figure_name: bool = False
     status: str = STATUS_CREATE
     notes: list[str] = field(default_factory=list)
 
@@ -142,6 +149,8 @@ class RowSpec:
             parts.append(f"{len(self.effects)} effect(s): {effects}")
         if self.prestige is not None:
             parts.append(f"starts with {self.prestige:+d} prestige")
+        if self.asks_figure_name:
+            parts.append("asks for a figure's name")
         if self.offers:
             offers = "; ".join(o.label for o in self.offers)
             parts.append(f"{len(self.offers)} offer line(s): {offers}")
@@ -173,6 +182,10 @@ def _int(raw: str, default: int, what: str, row: RowSpec) -> int:
 
 def _parse_effect_token(token: str, row: RowSpec) -> None:
     """Parse and append one effect token, recording invalid input on ``row``."""
+    if token.lower() == _FIGURE_WORD:
+        # A person card (#4872): no modifier, the player names the figure on the card.
+        row.asks_figure_name = True
+        return
     immune = token.lower().startswith("immune:")
     if immune:
         target_raw, sign, magnitude = token[len("immune:") :].strip(), "", None
@@ -249,17 +262,21 @@ _NAMED_OPENERS: dict[str, tuple[str, str, type, str]] = {
 
 
 def _beat_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
-    """``beat:<stage>/<beat name>`` -> the Backgrounds answer on that beat (#4655).
+    """``beat:<stage>/<beat name>[/<group>]`` -> the Backgrounds answer on that beat
+    (#4655), listed under ``group`` on the life page when given (#4872).
 
     A beat's name is unique only within its stage (three Defining Moments beats share
     one), so the token carries both. The stage may be written as its value
     (``adulthood``) or its label (``Before the Glimpse``). The beat must already exist:
-    the paste never creates a referenced row.
+    the paste never creates a referenced row. The group is free text, a heading.
     """
-    stage_text, slash, beat_name = (part.strip() for part in value.partition("/"))
+    stage_text, slash, rest = (part.strip() for part in value.partition("/"))
+    beat_name, _, group = (part.strip() for part in rest.partition("/"))
     if not slash or not stage_text or not beat_name:
         example = "beat:childhood/Early Upbringing"
         return None, f"beat {value!r} needs a stage and a name, like {example}"
+    if len(group) > DistinctionOffer._meta.get_field("group").max_length:  # noqa: SLF001
+        return None, f"group {group!r} in {token!r} is too long"
     stage_key = stage_text.lower().replace(" ", "_")
     stages = [s for s in LifeStage if stage_key in (s.value, s.label.lower().replace(" ", "_"))]
     if not stages:
@@ -271,7 +288,10 @@ def _beat_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
     )
     if beat is None:
         return None, why
-    return OfferSpec(OfferChapter.BACKGROUNDS, OfferArrival.CHOICE, "beat_id", beat.pk, token), ""
+    spec = OfferSpec(
+        OfferChapter.BACKGROUNDS, OfferArrival.CHOICE, "beat_id", beat.pk, token, group=group
+    )
+    return spec, ""
 
 
 def _opener_spec(kind: str, value: str, token: str) -> tuple[OfferSpec | None, str]:
@@ -406,6 +426,7 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                 cost_per_rank=row.cost_per_rank,
                 max_rank=row.max_rank,
                 description=row.description,
+                asks_figure_name=row.asks_figure_name,
             )
             stamp_written(distinction, contributor)
             for fx in row.effects:
@@ -436,6 +457,7 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     chapter=spec.chapter,
                     arrives_as=spec.arrives_as,
                     player_line=row.player_line,
+                    group=spec.group,
                     **{spec.opener_field: spec.opener_value},
                 )
                 stamp_written(offer, contributor)

@@ -7,6 +7,7 @@ draft management and character finalization.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -38,6 +39,7 @@ from world.character_creation.constants import (
     FamilyPath,
     FinalTouchesPrompt,
     KinRowKind,
+    LifeStage,
     OriginStoryState,
     Parentage,
     QuestionKind,
@@ -52,9 +54,13 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.offers import (
+    BeatMarks,
+    beat_marks,
     final_touches_prompts,
     opened_feature_traits,
+    picked_offer_ids,
     reconcile_offer_picks,
+    stage_descriptions,
 )
 from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.services import create_character_with_sheet
@@ -1483,12 +1489,15 @@ def _finalize_origin_slots(
 
 
 def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
-    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124).
+    """Write one ``CharacterOriginSlot`` row per beat the draft took (#4124), and one
+    stage row per stage the player described (#4872).
 
     Called from ``_apply_sheet_demographics``. A taken beat becomes a beat row
     carrying its unknown state and the optional line; its answers are ordinary
     distinctions, written by ``_create_distinctions`` with the beat as their
-    source. Returns how many rows were written.
+    source. A stage's paragraph becomes a row with no slot and no beat, read by
+    ``assemble_origin_prose`` as that stage's own paragraph. Returns how many rows
+    were written.
     """
     from world.character_creation.offers import beats_for  # noqa: PLC0415
 
@@ -1500,6 +1509,13 @@ def _finalize_beats(sheet: CharacterSheet, draft: CharacterDraft) -> int:
             sheet=sheet,
             beat_id=entry.beat_id,
             defaults={"slot": None, "unknown": entry.unknown, "value": entry.line},
+        )
+        written += 1
+    for stage, text in stage_descriptions(draft).items():
+        CharacterOriginSlot.objects.update_or_create(
+            sheet=sheet,
+            life_stage=stage,
+            defaults={"slot": None, "beat": None, "value": text},
         )
         written += 1
     return written
@@ -2147,13 +2163,101 @@ def _create_distinctions(
     if not char_distinctions:
         return
 
+    marks = beat_marks(draft)
+    _name_figures(char_distinctions, entries_by_key, marks)
     asset_names = _connection_asset_names(draft, entries_by_key.values())
+    for char_dist in char_distinctions:
+        if char_dist.notes and char_dist.distinction.asks_figure_name:
+            asset_names.setdefault(char_dist.distinction_id, char_dist.notes)
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
     _create_distinction_modifiers_bulk(
         character.sheet_data, created_distinctions, asset_names=asset_names
     )
 
-    _mint_default_distinction_secrets(created_distinctions)
+    _mint_distinction_secrets(created_distinctions, _secret_distinction_ids(entries_by_key, marks))
+    _write_cover_stories(character.sheet_data, draft, marks, created_distinctions)
+
+
+def _name_figures(char_distinctions: list, entries_by_key: dict, marks: BeatMarks) -> None:
+    """Put the figure's name on a person card's pick (#4872), as its notes.
+
+    Called by ``_create_distinctions`` before the bulk write. A name is kept under the
+    beat's state by offer id; it reaches the pick whose entry names that offer, and
+    only on a card that asks for one. A note the entry already carries stands.
+    """
+    if not marks.figures:
+        return
+    figure_by_distinction: dict[int, str] = {}
+    for (distinction_id, _trait, _marking), entry in entries_by_key.items():
+        for offer_id in entry.get("offer_ids", []):
+            if isinstance(offer_id, int) and offer_id in marks.figures:
+                figure_by_distinction.setdefault(distinction_id, marks.figures[offer_id])
+    for char_dist in char_distinctions:
+        name = figure_by_distinction.get(char_dist.distinction_id)
+        if name and char_dist.distinction.asks_figure_name and not char_dist.notes:
+            char_dist.notes = name
+
+
+def _secret_distinction_ids(entries_by_key: dict, marks: BeatMarks) -> set[int]:
+    """The distinctions whose pick the player marked secret on a beat (#4872)."""
+    secret_offers = set().union(*marks.secret.values()) if marks.secret else set()
+    if not secret_offers:
+        return set()
+    return {
+        distinction_id
+        for (distinction_id, _trait, _marking), entry in entries_by_key.items()
+        if any(offer_id in secret_offers for offer_id in entry.get("offer_ids", []))
+    }
+
+
+def _write_cover_stories(
+    sheet: CharacterSheet, draft: CharacterDraft, marks: BeatMarks, created: list
+) -> None:
+    """Hold the cover story a secret answer hides behind (#4872).
+
+    Called by ``_create_distinctions`` after the real picks are written. A cover is a
+    ``CharacterDistinction`` with ``is_cover`` on: rank one, no modifiers, no price, no
+    sidecar grant, so it never goes through ``_create_distinction_modifiers_bulk``. It
+    is written only when the beat has a secret pick the draft still holds, the cover
+    offer is one of that beat's own answers, is not itself picked, and the card is not
+    already held; anything else is logged and skipped.
+    """
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    picked = picked_offer_ids(draft)
+    wanted = {
+        beat_id: cover_id
+        for beat_id, cover_id in marks.cover.items()
+        if marks.secret.get(beat_id, set()) & picked
+    }
+    if not wanted:
+        return
+    offers = DistinctionOffer.objects.filter(
+        pk__in=set(wanted.values()), beat_id__in=set(wanted), is_active=True
+    ).select_related("beat", "distinction")
+    by_id = {offer.pk: offer for offer in offers}
+    held = {cd.distinction_id for cd in created}
+    for beat_id, cover_id in wanted.items():
+        offer = by_id.get(cover_id)
+        if (
+            offer is None
+            or offer.beat_id != beat_id
+            or cover_id in picked
+            or offer.distinction_id in held
+        ):
+            logger.info("Cover %s on beat %s not written for %s", cover_id, beat_id, sheet.pk)
+            continue
+        CharacterDistinction.objects.create(
+            character=sheet,
+            distinction=offer.distinction,
+            rank=1,
+            is_cover=True,
+            origin=DistinctionOrigin.CHARACTER_CREATION,
+            source_description=f"cover on {offer.beat.name}",
+        )
+        held.add(offer.distinction_id)
 
 
 def _build_character_distinctions(  # noqa: PLR0913
@@ -2198,12 +2302,13 @@ def _build_character_distinctions(  # noqa: PLR0913
     return result
 
 
-def _mint_default_distinction_secrets(created_distinctions: list) -> None:
-    """Move secret-by-default distinctions into their Secret records."""
+def _mint_distinction_secrets(created_distinctions: list, marked: set[int]) -> None:
+    """Move secret-by-default distinctions, and the picks the player marked secret on a
+    beat (#4872), into their Secret records."""
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
 
     for distinction in created_distinctions:
-        if distinction.distinction.secret_by_default:
+        if distinction.distinction.secret_by_default or distinction.distinction_id in marked:
             mint_distinction_secret(distinction)
 
 
@@ -3505,8 +3610,9 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
         )
     )
     slots = [row for row in rows if row.slot_id is not None]
-    beats = [row for row in rows if row.beat_id is not None and not row.unknown]
-    if not slots and not beats:
+    beats = [row for row in rows if row.beat_id is not None]
+    stages = {row.life_stage: row.value for row in rows if row.life_stage}
+    if not slots and not beats and not stages:
         return ""
 
     lines: list[str] = []
@@ -3514,7 +3620,7 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     if template is not None:
         lines += [template.frame_narrative, ""]
     lines.extend(_origin_slot_lines(slots))
-    lines.extend(_origin_beat_lines(beats))
+    lines.extend(_origin_beat_lines(beats, stages))
     return "\n".join(lines).strip()
 
 
@@ -3530,19 +3636,39 @@ def _origin_slot_lines(slots: list[CharacterOriginSlot]) -> list[str]:
     return lines
 
 
-def _origin_beat_lines(beats: list[CharacterOriginSlot]) -> list[str]:
-    """Render non-unknown life beats in chronological order."""
-    # The beats, in the order of a life (#4124): the stage, the beat, the line the
-    # player wrote under it. An unknown beat says nothing here.
+def _origin_beat_lines(
+    beats: list[CharacterOriginSlot], stages: dict[str, str] | None = None
+) -> list[str]:
+    """Render the life by stage, in chronological order.
+
+    The beats in the order of a life (#4124): the stage, the beat, the line the player
+    wrote under it. The life page (#4872) adds the stage's own paragraph before its
+    beats, and a stage every one of whose beats is unknown reads "<Stage>: unknown"
+    and nothing more; an unknown beat under a stage otherwise told says nothing.
+    """
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 
+    stages = stages or {}
     beats.sort(key=lambda r: (LIFE_STAGE_ORDER.get(r.beat.life_stage, 99), r.beat.sort_order))
-    lines: list[str] = []
+    by_stage: dict[str, list[CharacterOriginSlot]] = defaultdict(list)
     for row in beats:
-        lines.append(f"{row.beat.get_life_stage_display()}: {row.beat.name}")
-        if row.value:
-            lines.append(row.value)
-        lines.append("")
+        by_stage[row.beat.life_stage].append(row)
+    lines: list[str] = []
+    for stage in sorted(set(by_stage) | set(stages), key=lambda v: LIFE_STAGE_ORDER.get(v, 99)):
+        rows = by_stage.get(stage, [])
+        label = LifeStage(stage).label if stage in LifeStage.values else stage
+        if rows and all(row.unknown for row in rows):
+            lines.extend((f"{label}: unknown", ""))
+            continue
+        if stages.get(stage):
+            lines.extend((label, stages[stage], ""))
+        for row in rows:
+            if row.unknown:
+                continue
+            lines.append(f"{label}: {row.beat.name}")
+            if row.value:
+                lines.append(row.value)
+            lines.append("")
     return lines
 
 

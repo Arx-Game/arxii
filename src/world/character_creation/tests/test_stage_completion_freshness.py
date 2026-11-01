@@ -36,7 +36,11 @@ class StageCompletionFreshnessTests(TestCase):
         self.client.force_authenticate(user=self.account)
 
     def test_origin_reads_complete_right_after_the_area_is_chosen(self):
-        draft = CharacterDraftFactory(account=self.account, selected_area=None)
+        # The first name is asked on the opening screen too (#4872); the draft carries one
+        # so the area pick is the only thing left for Origin.
+        draft = CharacterDraftFactory(
+            account=self.account, selected_area=None, draft_data={"first_name": "Marisol"}
+        )
         detail_url = f"{DRAFTS_URL}{draft.id}/"
 
         # The player lands on the wizard: Origin is genuinely incomplete.
@@ -51,7 +55,9 @@ class StageCompletionFreshnessTests(TestCase):
         assert patched.json()["stage_completion"][str(Stage.ORIGIN.value)] is True
 
     def test_origin_still_reads_complete_when_the_player_clicks_around(self):
-        draft = CharacterDraftFactory(account=self.account, selected_area=None)
+        draft = CharacterDraftFactory(
+            account=self.account, selected_area=None, draft_data={"first_name": "Marisol"}
+        )
         detail_url = f"{DRAFTS_URL}{draft.id}/"
 
         self.client.get(detail_url)

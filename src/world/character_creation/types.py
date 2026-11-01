@@ -12,6 +12,35 @@ type StageValidationErrors = dict[int, list[str]]
 
 
 @dataclass(frozen=True)
+class OfferEffectTerm:
+    """One effect of an offered card as the life page prints it (#4872).
+
+    ``target`` is the modifier target's name, the key into the response's ``terms``;
+    ``label`` the words on the card; ``value`` the per-rank magnitude, None when the
+    effect carries none (an immunity, a grant with no number).
+    """
+
+    target: str
+    label: str
+    value: int | None
+    immune: bool = False
+
+
+@dataclass(frozen=True)
+class OfferTerm:
+    """A term on a card's mechanics line and its definition (#4872).
+
+    Built by ``offers.terms_for`` once per offers response. The definition is read from
+    the row that owns the term: ``Trait.description`` for a target bound to a stat or
+    skill, ``Aspect.description`` for one bound to an aspect, else the target's own.
+    """
+
+    name: str
+    label: str
+    definition: str
+
+
+@dataclass(frozen=True)
 class VisibleOffer:
     """One priced choice a draft can see in a CG chapter (#3675).
 
@@ -60,6 +89,16 @@ class VisibleOffer:
     #: (#3739: the axes reach 5 in play but stop at 3 in CG). ``0`` means
     #: ``max_rank`` governs in CG too.
     cg_max_rank: int = 0
+    #: The heading this answer is listed under on the life page (#4872), blank for
+    #: none; ``DistinctionOffer.group``.
+    group: str = ""
+    #: The card is a person and takes a figure's name when picked (#4872);
+    #: ``Distinction.asks_figure_name``.
+    asks_figure_name: bool = False
+    #: The effect rows with their magnitudes (#4872), for a grid card that prints
+    #: ``+10 sailing`` and links each term to its definition. ``effect_line`` stays the
+    #: sign-and-name line the list layouts print.
+    effects: tuple[OfferEffectTerm, ...] = ()
 
 
 @dataclass(frozen=True)

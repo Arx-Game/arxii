@@ -898,6 +898,7 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             notes=cd.notes,
             is_secret=cd.is_secret,
             is_from_glimpse=cd.from_glimpse_id is not None,
+            is_cover=cd.is_cover,
             feature=_feature_name(cd),
         )
         for cd in sheet.cached_distinctions

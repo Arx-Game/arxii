@@ -18,8 +18,12 @@ from world.character_creation.constants import (
     AGE_PICKS_CAP_AGE,
     AGE_PICKS_FROM_AGE,
     AGE_PICKS_YEARS_PER_PICK,
+    BEAT_COVER_OFFER_ID,
+    BEAT_FIGURES,
+    BEAT_SECRET_OFFER_IDS,
     CG_MODIFIER_CATEGORY,
     MAGIC_TRAINING_POINTS_TARGET,
+    STAGE_DESCRIPTIONS_KEY,
     ActorSheetPrompt,
     BeatSelection,
     FinalTouchesPrompt,
@@ -45,6 +49,8 @@ from world.character_creation.types import (
     BeatPoolEntry,
     ClosedDistinction,
     FinalTouchesCard,
+    OfferEffectTerm,
+    OfferTerm,
     OrganizationChoice,
     VisibleOffer,
 )
@@ -159,7 +165,10 @@ def schooling_training_points(lines: Iterable[SchoolingLine]) -> dict[int, int]:
 LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage.values)}
 
 #: The ``draft_data`` key holding a draft's beats: ``{"<beat_id>": {"taken": bool,
-#: "unknown": bool, "line": str}}``. A beat absent from the map is not taken.
+#: "unknown": bool, "line": str, "secret_offer_ids": [int], "cover_offer_id": int | None,
+#: "figures": {"<offer_id>": str}}``. A beat absent from the map is not taken. The last
+#: three are the life page's (#4872): the picks on the beat marked secret, the answer
+#: shown in a secret's place, and the figure named on a person card.
 BEATS_KEY = "beats"
 
 
@@ -256,6 +265,51 @@ def _draft_beat_states(draft: CharacterDraft) -> dict[int, dict]:
         if isinstance(state, dict):
             out[beat_id] = state
     return out
+
+
+class BeatMarks(NamedTuple):
+    """What the life page marked on a draft's beats besides the picks (#4872).
+
+    Read off ``draft_data[BEATS_KEY]`` by ``beat_marks``. ``secret`` and ``cover`` are
+    keyed by beat id; ``figures`` by offer id. The validator checks shape only, so a
+    stale mark (an offer no longer picked) is simply ignored by every reader here.
+    """
+
+    secret: dict[int, set[int]]
+    cover: dict[int, int]
+    figures: dict[int, str]
+
+
+def beat_marks(draft: CharacterDraft) -> BeatMarks:
+    """The secret picks, covers and figure names on the draft's beats (#4872)."""
+    secret: dict[int, set[int]] = {}
+    cover: dict[int, int] = {}
+    figures: dict[int, str] = {}
+    for beat_id, state in _draft_beat_states(draft).items():
+        ids = state.get(BEAT_SECRET_OFFER_IDS) or []
+        if isinstance(ids, list):
+            secret[beat_id] = {x for x in ids if isinstance(x, int)}
+        cover_id = state.get(BEAT_COVER_OFFER_ID)
+        if isinstance(cover_id, int):
+            cover[beat_id] = cover_id
+        raw_figures = state.get(BEAT_FIGURES) or {}
+        if isinstance(raw_figures, dict):
+            for key, name in raw_figures.items():
+                if isinstance(name, str) and name.strip() and str(key).isdecimal():
+                    figures[int(key)] = name.strip()
+    return BeatMarks(secret=secret, cover=cover, figures=figures)
+
+
+def stage_descriptions(draft: CharacterDraft) -> dict[str, str]:
+    """Life stage value -> the paragraph the player wrote for it (#4872), blanks dropped."""
+    raw = draft.draft_data.get(STAGE_DESCRIPTIONS_KEY) or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        stage: text.strip()
+        for stage, text in raw.items()
+        if stage in LifeStage.values and isinstance(text, str) and text.strip()
+    }
 
 
 def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
@@ -731,20 +785,75 @@ def _mutual_exclusions(dist_ids: set[int]) -> dict[int, set[int]]:
     return exclusions
 
 
-def _effect_word(effect: DistinctionEffect) -> str:
-    """One effect as the leaf prints it: ``+Deception``, ``-Willpower``, ``Immune to X``."""
-    name = effect.target.name.replace("_", " ").strip().capitalize()
-    if effect.grants_immunity_to_negative:
-        return f"Immune to negative {name}"
+def _effect_value(effect: DistinctionEffect) -> int | None:
+    """The per-rank number an effect carries, or None when it has none."""
     value = effect.value_per_rank
     if value is None and effect.scaling_values:
         value = effect.scaling_values[0]
     if value is None and effect.amplifies_sources_by is not None:
         value = effect.amplifies_sources_by
+    return value
+
+
+def _effect_word(effect: DistinctionEffect) -> str:
+    """One effect as the leaf prints it: ``+Deception``, ``-Willpower``, ``Immune to X``."""
+    name = effect.target.name.replace("_", " ").strip().capitalize()
+    if effect.grants_immunity_to_negative:
+        return f"Immune to negative {name}"
+    value = _effect_value(effect)
     if value is None:
         return name
     sign = "-" if value < 0 else "+"
     return f"{sign}{name}"
+
+
+def term_label(target_name: str) -> str:
+    """A modifier target's name as a card prints it: ``physical_development`` -> ``physical
+    development``. Lowercase on purpose; the card's line reads ``+10 sailing``."""
+    return target_name.replace("_", " ").strip().lower()
+
+
+def effect_terms(effects: list[DistinctionEffect]) -> tuple[OfferEffectTerm, ...]:
+    """The effect rows with their magnitudes, for the life page's cards (#4872)."""
+    return tuple(
+        OfferEffectTerm(
+            target=effect.target.name,
+            label=term_label(effect.target.name),
+            value=None if effect.grants_immunity_to_negative else _effect_value(effect),
+            immune=effect.grants_immunity_to_negative,
+        )
+        for effect in effects
+    )
+
+
+def terms_for(offers: Iterable[VisibleOffer]) -> list[OfferTerm]:
+    """Every term the offers' effects name, each with its definition (#4872).
+
+    Called by the offers view, once per response. The definition comes from the row
+    that owns the term (ruled 2026-10-19): ``Trait.description`` for a target bound to
+    a stat or skill, ``Aspect.description`` for one bound to an aspect, otherwise the
+    target's own ``description``. One query over the targets, joined to both.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    names = {term.target for offer in offers for term in offer.effects}
+    if not names:
+        return []
+    targets = ModifierTarget.objects.filter(name__in=names).select_related(
+        "target_trait", "target_aspect"
+    )
+    out: list[OfferTerm] = []
+    for target in sorted(targets, key=lambda t: t.name):
+        if target.target_trait_id is not None:
+            definition = target.target_trait.description
+        elif target.target_aspect_id is not None:
+            definition = target.target_aspect.description
+        else:
+            definition = target.description
+        out.append(
+            OfferTerm(name=target.name, label=term_label(target.name), definition=definition)
+        )
+    return out
 
 
 def effect_line(effects: list[DistinctionEffect]) -> str:
@@ -833,6 +942,9 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 opens_feature=dist.opens_feature,
                 requires_feature_opened=dist.requires_feature_opened,
                 cg_max_rank=dist.cg_max_rank,
+                group=offer.group,
+                asks_figure_name=dist.asks_figure_name,
+                effects=effect_terms(effects.get(dist.id, [])),
             )
         )
     # Appearance groups by section, in the sections' own order; within a group the

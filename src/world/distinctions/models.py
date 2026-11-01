@@ -284,6 +284,13 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="The optional question this card asks at Final Touches, if any.",
     )
+    # A person card (#4872, slice 9 of #4813): Rival, Capable Mentor, Imaginary Friend.
+    # The card's whole mechanics are the figure, so the player names them on the card;
+    # the name lands in the pick's notes and, when the card grants an NPC asset, on it.
+    asks_figure_name = models.BooleanField(
+        default=False,
+        help_text="The card is a person: the player names them when picking it.",
+    )
 
     objects = DistinctionManager()
 
@@ -679,6 +686,13 @@ class CharacterDistinction(SharedMemoryModel):
     is_temporary = models.BooleanField(
         default=False,
         help_text="Whether this distinction is temporary (e.g., magical effect).",
+    )
+    # A cover story (#4872): the answer a character claims on a beat whose real answer
+    # is a Secret. Held like any card so a stranger's sheet lists it, but it grants
+    # nothing: no modifiers, no price, no sidecar grant. Written only at finalize.
+    is_cover = models.BooleanField(
+        default=False,
+        help_text="A cover story shown in a secret answer's place; grants nothing.",
     )
     # Privacy back-reference (#1334): when set, this distinction is *relocated* into the linked
     # Secret — it drops off the public distinctions list and is learned through the clue loop.

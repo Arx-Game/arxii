@@ -395,6 +395,20 @@ class LifeStage(models.TextChoices):
 
 #: The one optional line a player may write under a taken beat (#4124).
 BEAT_LINE_MAX_LENGTH = 200
+
+#: The life page (#4872, slice 9 of #4813). ``draft_data.stage_descriptions`` maps a
+#: ``LifeStage`` value to the one paragraph the player writes for that stage, written at
+#: finalize as a stage row on ``CharacterOriginSlot`` and read into the told background.
+STAGE_DESCRIPTIONS_KEY = "stage_descriptions"
+STAGE_DESCRIPTION_MAX_LENGTH = 1000
+#: A figure's name on a person card (``Distinction.asks_figure_name``), kept under the
+#: beat's state as ``figures`` (offer id to name) and written to the pick's notes.
+FIGURE_NAME_MAX_LENGTH = 60
+#: The keys a beat's state carries besides ``taken``, ``unknown`` and ``line``: the picks
+#: on the beat marked secret, the cover shown in a secret's place, the figures named.
+BEAT_SECRET_OFFER_IDS = "secret_offer_ids"  # noqa: S105  # a draft_data key, no credential
+BEAT_COVER_OFFER_ID = "cover_offer_id"
+BEAT_FIGURES = "figures"
 #: The optional Recent History a life ends on (#4830, ruled 2026-10-30 and 2026-10-31): free
 #: text the player writes for the hooks GMs and other players may pick up, public on the sheet,
 #: written at finalize as the lead-in paragraph of ``Profile.background``.
