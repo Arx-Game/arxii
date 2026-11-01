@@ -216,7 +216,7 @@ from world.conditions.services import (
     aggro_priority_by_target,      # {ObjectDB pk: total} for many targets in one query (#4572)
     get_condition_modifier_vow_contributions, # Per-instance (source_vow_id, name, value) rows for a ModifierTarget (#2643)
     priced_percent_severity,       # Apply-time percent severity priced vs the landing target's level (#2643)
-    scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090); a derived amount (#4878) on its bearer
+    scaled_condition_effect_value, # One ConditionModifierEffect's contribution on one active instance (#4090); a derived amount (#4878) on its bearer; `inputs` carries the soak of the opponent hit (#4892)
     active_condition_instances_by_sheet, # Pure-read get_active_conditions sibling, many sheets at once (#4090)
     condition_modifier_totals_by_sheet, # Batched get_condition_modifier_total across many sheets (#4090)
 
