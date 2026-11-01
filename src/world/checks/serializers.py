@@ -8,7 +8,7 @@ from django.db import models
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import CombatRollKind, ModifierSourceKind
 from world.checks.models import CheckCallTarget, CheckType
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
@@ -246,12 +246,10 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         summary, which says how much damage the defender took.
         """
         data = super().to_representation(instance)
-        if instance.pk in self._combat_breakdowns(instance) and not self._sees_roll_detail(
-            instance
-        ):
+        if instance.combat_roll_kind and not self._sees_roll_detail(instance):
             data["modifiers"] = []
             data["modifier_total"] = 0
-            if instance.against_label:
+            if instance.combat_roll_kind == CombatRollKind.DEFENSE:
                 data["summary"] = ""
         return data
 

@@ -13,14 +13,16 @@ reason it lapsed), "Armor, N of 10" with "the style's armor share" when the defe
 style, then the result. A barrier's re-roll of the same check is not recorded: one roll,
 one row.
 
-A row is a defense roll when ``against_label`` is set; nothing else writes it, so this
-builder and ``strike_roll_breakdowns`` (keyed on a Strike's round action) never claim the
-same row.
+A row is a defense roll when its ``combat_roll_kind`` is ``DEFENSE``; a Strike's rows are
+``HIT`` and ``DAMAGE``, so this builder and ``strike_roll_breakdowns`` never claim the same
+row.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from world.checks.constants import CombatRollKind
 
 #: The row an automatic dodge's bonus shows as on the defense roll.
 DODGE_LABEL = "Dodge"
@@ -147,6 +149,7 @@ def record_defense_roll(  # noqa: PLR0913 - one record, its parts
         skill_rating=_defense_skill_rating(participant, check_type),
         snapshot=snapshot,
         combat_round=combat_round,
+        combat_roll_kind=CombatRollKind.DEFENSE,
     )
 
 
@@ -161,7 +164,7 @@ def defense_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int,
         style_roll_line,
     )
 
-    defenses = [o for o in outcomes if o.against_label]
+    defenses = [o for o in outcomes if o.combat_roll_kind == CombatRollKind.DEFENSE]
     if not defenses:
         return {}
     traits = strike_check_traits({o.check_type_id for o in defenses})
@@ -180,6 +183,8 @@ def defense_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int,
                 RollLine(f"Armor, {o.armor_share_tenths} of 10", "", "the style's armor share")
             )
         breakdowns[o.pk] = RollBreakdown(
-            heading=f"Defense against {o.against_label}", lines=lines, result=o.summary
+            heading=f"Defense against {o.against_label}" if o.against_label else "Defense roll",
+            lines=lines,
+            result=o.summary,
         )
     return breakdowns

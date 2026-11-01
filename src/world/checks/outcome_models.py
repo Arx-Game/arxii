@@ -23,7 +23,7 @@ from django.db import models
 from django.db.models import Q
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.checks.constants import ModifierSourceKind
+from world.checks.constants import CombatRollKind, ModifierSourceKind
 
 
 class ConsequenceOutcome(SharedMemoryModel):
@@ -131,10 +131,17 @@ class ConsequenceOutcome(SharedMemoryModel):
         default=False,
         help_text="Whether the roll's stat was the style's hit stat.",
     )
-    # A PC's defense roll against an NPC blow (#4884), kept at roll time. ``against_label``
-    # set marks the row as a defense roll for its breakdown.
+    # A PC's defense roll against an NPC blow (#4884), kept at roll time. As long as the
+    # opponent's name can be (``CombatOpponent.name``).
+    combat_roll_kind = models.CharField(
+        max_length=10,
+        choices=CombatRollKind.choices,
+        null=True,
+        blank=True,
+        help_text="Which combat roll this records, for its breakdown. Null for any other roll.",
+    )
     against_label = models.CharField(
-        max_length=120,
+        max_length=200,
         null=True,
         blank=True,
         help_text="Who a defense roll was against, as its breakdown names them, at roll time.",
@@ -229,6 +236,19 @@ class ConsequenceOutcome(SharedMemoryModel):
 
     class Meta:
         constraints = [
+            # The style snapshot (#4884): a lapse names its reason and records no rating; a
+            # counted style skill records its rating and no lapse; either needs the name.
+            models.CheckConstraint(
+                check=(
+                    Q(style_lapse_note__isnull=True)
+                    | (Q(style_name__isnull=False) & Q(style_skill_rating__isnull=True))
+                )
+                & (
+                    Q(style_skill_rating__isnull=True)
+                    | (Q(style_name__isnull=False) & Q(style_lapse_note__isnull=True))
+                ),
+                name="consequence_outcome_style_snapshot_shape",
+            ),
             # The source KIND is keyed on the timestamp companions, not the
             # Interaction FKs (#4464). A writer may delete their own pose within
             # DELETION_WINDOW_DAYS (scenes.interaction_services.delete_interaction);

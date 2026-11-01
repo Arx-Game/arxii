@@ -1,1 +1,1 @@
-0358_outcome_combat_round
+0356_strike_and_defense_roll_snapshot

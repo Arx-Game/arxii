@@ -460,12 +460,17 @@ class ReadingTheDefenseRoll(_DefenseYard):
         CheckTypeTraitFactory(check_type=self.defense, trait=self.dodge, weight=1)
         StatTraitFactory(name="agility")
 
-    def defend(self, fighter) -> dict[str, Any]:
+    def defend(self, fighter, *, nameless: bool = False) -> dict[str, Any]:
         """Resolve one blade blow at ``fighter``; her real defence roll lands at Partial
-        Success (success level 0, the full-damage rung)."""
+        Success (success level 0, the full-damage rung). ``nameless`` blanks the
+        attacker's name first."""
         del fighter  # she is the only fighter in the yard, so the blow is hers
         partial = CheckOutcome.objects.get(name="Partial Success")
         self.blade()
+        if nameless:
+            attacker = CombatOpponent.objects.get(encounter=self.encounter)
+            attacker.name = ""
+            attacker.save(update_fields=["name"])
 
         def defence(character, check_type, *args, **kwargs) -> CheckResult:
             with force_check_outcome(partial):
@@ -561,6 +566,22 @@ class ReadingTheDefenseRoll(_DefenseYard):
         self.assertEqual(rows[0]["summary"], "")
         self.assertEqual(self.defense_row(mira)["summary"], "Partial Success, 8 damage")
         self.assertIsNotNone(self.defense_row(mira)["roll_breakdown"])
+
+    def test_a_nameless_attacker_still_gives_a_defense_row_kept_from_bystanders(self) -> None:
+        from world.scenes.factories import SceneParticipationFactory
+
+        mira, _style = self.mira(GearArchetype.LIGHT_ARMOR)
+        self.defend(mira, nameless=True)
+        wren = self.make_player("Wren", room=self.room)
+        SceneParticipationFactory(scene=self.encounter.scene, account=self.account_of(wren))
+
+        (seen,) = self.rows_for(wren, mira)
+        self.assertIsNone(seen["roll_breakdown"])
+        self.assertEqual((seen["modifiers"], seen["modifier_total"]), ([], 0))
+        self.assertEqual(seen["summary"], "")
+        own = self.defense_row(mira)["roll_breakdown"]
+        self.assertEqual(own["heading"], "Defense roll")
+        self.assertEqual(own["result"], "Partial Success, 8 damage")
 
     def test_renaming_the_style_later_does_not_rewrite_the_row(self) -> None:
         mira, style = self.mira(GearArchetype.LIGHT_ARMOR)

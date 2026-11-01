@@ -1489,6 +1489,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     skill_rating: int | None = None,
     snapshot: "RollSnapshot | None" = None,
     combat_round: int | None = None,
+    combat_roll_kind: str | None = None,
 ) -> ConsequenceOutcome:
     """Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.
 
@@ -1523,7 +1524,12 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         snapshot: What a breakdown names, kept at roll time (#4858): the weapon, its kind
             and the stat, and the combat style (#4884). None records none.
         combat_round: The encounter round a combat roll was made in (#4884). None with a
-            ``combat_interaction`` reads it from the scene's encounter.
+            ``combat_interaction`` reads it from the scene's encounter: the round only
+            advances in ``begin_declaration_phase``, never while a round resolves, so
+            every combat writer (survivability, flee, aftermath) reads the round it ran
+            in.
+        combat_roll_kind: ``CombatRollKind`` for a roll laid out as rows (a Strike's hit
+            or damage roll, a defense roll); None for any other.
 
     Returns:
         The newly created ConsequenceOutcome instance.
@@ -1556,6 +1562,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     outcome = ConsequenceOutcome.objects.create(
         character=character_sheet,
         combat_round=combat_round,
+        combat_roll_kind=combat_roll_kind,
         check_type=check_type,
         pool=pool,
         selected_consequence=selected_consequence,

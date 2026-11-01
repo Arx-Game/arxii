@@ -322,3 +322,41 @@ class ConsequenceOutcomeConstraintTests(TestCase):
                     combat_interaction_timestamp=self.interaction.timestamp,
                     challenge_record=record,
                 )
+
+
+class StyleSnapshotShapeTests(TestCase):
+    """A roll's combat style snapshot is one of three shapes (#4884): no style, a style
+    whose skill counted (its rating, no lapse) or a lapsed style (its reason, no rating)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.check_type = CheckTypeFactory()
+        cls.interaction = InteractionFactory()
+
+    def _row(self, **style: object) -> None:
+        from world.checks.outcome_models import ConsequenceOutcome
+
+        ConsequenceOutcome.objects.create(
+            character=self.sheet,
+            check_type=self.check_type,
+            combat_interaction=self.interaction,
+            combat_interaction_timestamp=self.interaction.timestamp,
+            **style,
+        )
+
+    def test_the_three_shapes_are_accepted(self) -> None:
+        self._row()
+        self._row(style_name="The Daring Dance", style_skill_rating=20)
+        self._row(style_name="The Daring Dance", style_lapse_note="heavy armor is not this style's")
+
+    def test_a_lapse_with_a_rating_or_no_name_is_refused(self) -> None:
+        from django.db import IntegrityError, transaction
+
+        for bad in (
+            {"style_name": "The Daring Dance", "style_skill_rating": 20, "style_lapse_note": "x"},
+            {"style_lapse_note": "heavy armor is not this style's"},
+            {"style_skill_rating": 20},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(IntegrityError), transaction.atomic():
+                self._row(**bad)

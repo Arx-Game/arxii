@@ -54,7 +54,7 @@ from world.covenants.perks.constants import (
     SituationOriginSide,
 )
 from world.covenants.perks.context import SituationParams
-from world.items.constants import GearArchetype
+from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
 from world.magic.constants import TechniqueFunction
 from world.magic.models.techniques import (
     MEND_CAP_FRACTION_HELP,
@@ -1612,6 +1612,15 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.name} ({self.get_defense_style_display()})"
 
 
+#: The kinds a combat style can fight with: weapons and armor, never jewelry, clothing or
+#: other gear (#4884). In ``GearArchetype`` order.
+COMBAT_STYLE_GEAR_CHOICES = [
+    (value, label)
+    for value, label in GearArchetype.choices
+    if value in WEAPON_ARCHETYPES | ARMOR_ARCHETYPES
+]
+
+
 class CombatStyleGearManager(NaturalKeyManager):
     """Manager for CombatStyleGear with natural key support."""
 
@@ -1633,7 +1642,7 @@ class CombatStyleGear(NaturalKeyMixin, SharedMemoryModel):
     )
     gear_archetype = models.CharField(
         max_length=20,
-        choices=GearArchetype.choices,
+        choices=COMBAT_STYLE_GEAR_CHOICES,
         help_text="A weapon or armor kind this style fights with. Unarmed is fists and wraps.",
     )
 

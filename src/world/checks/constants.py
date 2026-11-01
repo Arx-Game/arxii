@@ -29,6 +29,18 @@ CRITICAL_SUCCESS_TIER_MIN_LEVEL = 2
 FAILURE_TIER_MAX_LEVEL = -1
 
 
+class CombatRollKind(models.TextChoices):
+    """Which combat roll a ``ConsequenceOutcome`` records, for its breakdown (#4884).
+
+    Set by the writers that lay their rolls out as rows: a Strike's hit and damage rolls
+    and a PC's defense roll against an NPC blow. Null on every other outcome.
+    """
+
+    HIT = "hit", "Hit roll"
+    DAMAGE = "damage", "Damage roll"
+    DEFENSE = "defense", "Defense roll"
+
+
 class EffectType(models.TextChoices):
     """Type of mechanical effect applied by a consequence."""
 
