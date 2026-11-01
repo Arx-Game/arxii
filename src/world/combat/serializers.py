@@ -507,7 +507,9 @@ class StrikeWeaponOptionSerializer(serializers.Serializer):
     )
     name = serializers.CharField(help_text="The weapon's name, or 'bare hands'.")
     gear_kind = serializers.CharField(help_text="The weapon's gear kind, as players read it.")
-    strike_skill = serializers.CharField(help_text="The strike skill its hit roll uses.")
+    strike_skill = serializers.CharField(
+        help_text="The strike skill its hit roll weights, or the check's name when it has none."
+    )
 
 
 class DigDeepOfferSerializer(serializers.Serializer):
@@ -595,8 +597,13 @@ class ParticipantSerializer(serializers.ModelSerializer):
         if not self._is_viewers_own(obj):
             return None
         from world.combat.services import strike_weapon_options  # noqa: PLC0415
+        from world.combat.services.declarations.strike import (  # noqa: PLC0415
+            strike_skill_names,
+        )
         from world.items.constants import GearArchetype  # noqa: PLC0415
 
+        weapons = strike_weapon_options(obj.character_sheet.character)
+        skills = strike_skill_names({weapon.check_type_name for weapon in weapons})
         return [
             {
                 "item_instance_id": (
@@ -604,9 +611,9 @@ class ParticipantSerializer(serializers.ModelSerializer):
                 ),
                 "name": weapon.name,
                 "gear_kind": GearArchetype(weapon.gear_archetype).label,
-                "strike_skill": weapon.check_type_name,
+                "strike_skill": skills[weapon.check_type_name],
             }
-            for weapon in strike_weapon_options(obj.character_sheet.character)
+            for weapon in weapons
         ]
 
     @extend_schema_field(DigDeepOfferSerializer(allow_null=True))

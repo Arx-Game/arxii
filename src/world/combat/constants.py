@@ -174,13 +174,15 @@ class CombatManeuver(models.TextChoices):
 # The basic Strike (#4858)
 # ---------------------------------------------------------------------------
 
-# The strike skills' check types, by name. Each is authored content (a Skill, its Trait
-# and a CheckType of the same name); the Required content dashboard lists a missing one,
-# and a Strike that needs it is refused.
-MELEE_STRIKE_CHECK_TYPE_NAME = "Melee Combat"
-RANGED_STRIKE_CHECK_TYPE_NAME = "Ranged Combat"
-THROWN_STRIKE_CHECK_TYPE_NAME = "Thrown Combat"
-UNARMED_STRIKE_CHECK_TYPE_NAME = "Unarmed Combat"
+# The check types a Strike's hit and damage rolls use, by name: production's attack
+# checks. Each is authored content, composed of stats and (usually) the strike skill, the
+# Melee, Ranged, Thrown or Unarmed Combat skill; the breakdown names the skill from the
+# check type's own skill trait. The Required content dashboard lists a missing one, and a
+# Strike that needs it is refused.
+MELEE_STRIKE_CHECK_TYPE_NAME = "Melee Attack"
+RANGED_STRIKE_CHECK_TYPE_NAME = "Ranged Attack"
+THROWN_STRIKE_CHECK_TYPE_NAME = "Thrown Attack"
+UNARMED_STRIKE_CHECK_TYPE_NAME = "Unarmed Attack"
 
 STRIKE_CHECK_TYPE_NAMES: tuple[str, ...] = (
     MELEE_STRIKE_CHECK_TYPE_NAME,
@@ -199,6 +201,20 @@ STRIKE_CHECK_TYPE_BY_ARCHETYPE: dict[str, str] = {
     GearArchetype.THROWN: THROWN_STRIKE_CHECK_TYPE_NAME,
     GearArchetype.UNARMED: UNARMED_STRIKE_CHECK_TYPE_NAME,
 }
+
+
+# The source label of the to-hit contribution engagement intensity adds (#4858).
+INTENSITY_MODIFIER_LABEL = "Intensity"
+
+# How well a landed Strike hit, by the hit roll's success level (#4858): the word the
+# result line ("Hit, good") and the narration ("A good hit") use. A hit at or below 0 is
+# poor; above the highest listed level it is the last word.
+STRIKE_HIT_QUALITY: tuple[tuple[int, str], ...] = (
+    (0, "poor"),
+    (1, "fair"),
+    (2, "good"),
+    (3, "great"),
+)
 
 
 # ---------------------------------------------------------------------------

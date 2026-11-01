@@ -317,3 +317,23 @@ class PendingResolution:
 
     check_result: CheckResult
     selected_consequence: Consequence
+
+
+@dataclass(frozen=True)
+class RollLine:
+    """One source in a roll's breakdown as a player reads it (#4858): what it is, its
+    number when it has one, and why it counts."""
+
+    label: str
+    value: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class RollBreakdown:
+    """A recorded roll laid out as rows (#4858): a heading, one line per source, and the
+    result line. Built at read time for a roll whose system knows its sources (a Strike)."""
+
+    heading: str
+    lines: list[RollLine] = field(default_factory=list)
+    result: str = ""

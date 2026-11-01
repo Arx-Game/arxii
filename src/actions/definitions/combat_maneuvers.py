@@ -388,9 +388,9 @@ class StrikeAction(Action):
             declare_strike(participant, opponent, item)
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
-        weapon = item.display_name if item is not None else "your bare hands"
+        weapon = item.display_name if item is not None else "bare hands"
         return ActionResult(
-            success=True, message=f"You ready a strike at {opponent.name} with {weapon}."
+            success=True, message=f"You ready a strike at {opponent.name} with your {weapon}."
         )
 
 

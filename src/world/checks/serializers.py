@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
+from django.db import models
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -87,6 +88,39 @@ class OutcomeDisplayRowSerializer(serializers.Serializer):
     is_selected = serializers.BooleanField()
 
 
+class RollLineSerializer(serializers.Serializer):
+    """One source row in a roll breakdown (#4858); read-only, schema shape."""
+
+    label = serializers.CharField()
+    value = serializers.CharField(allow_blank=True)
+    detail = serializers.CharField(allow_blank=True)
+
+
+class RollBreakdownSerializer(serializers.Serializer):
+    """A roll laid out as a heading, source rows and a result line (#4858); read-only."""
+
+    heading = serializers.CharField()
+    lines = RollLineSerializer(many=True)
+    result = serializers.CharField(allow_blank=True)
+
+
+class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
+    """Builds every Strike roll breakdown on the page at once (#4858).
+
+    The breakdowns go to the child serializer through ``context["roll_breakdowns"]``, an
+    explicit argument built once for the page, so each row's field reads it with no query.
+    """
+
+    def to_representation(self, data: object) -> list:
+        from world.combat.services.declarations.strike import (  # noqa: PLC0415
+            strike_roll_breakdowns,
+        )
+
+        rows = list(data.all()) if isinstance(data, models.Manager) else list(data)
+        self.child.context["roll_breakdowns"] = strike_roll_breakdowns(rows)
+        return super().to_representation(rows)
+
+
 class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     """Read serializer for ConsequenceOutcome.
 
@@ -108,6 +142,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     combat_interaction_id = serializers.IntegerField(read_only=True)
     challenge_record_id = serializers.IntegerField(read_only=True)
     action_interaction_id = serializers.IntegerField(read_only=True, allow_null=True)
+    roll_breakdown = serializers.SerializerMethodField()
 
     def _visible_kinds_filter(self, rows: list) -> list:
         """Modifier rows visible to the requesting user (staff see all kinds)."""
@@ -145,9 +180,41 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             "combat_interaction_id",
             "challenge_record_id",
             "action_interaction_id",
+            "roll_breakdown",
             "created_at",
         ]
         read_only_fields = fields
+        list_serializer_class = ConsequenceOutcomeListSerializer
+
+    @extend_schema_field(RollBreakdownSerializer(allow_null=True))
+    def get_roll_breakdown(self, obj: ConsequenceOutcome) -> dict[str, object] | None:
+        """The roll as rows when its system lays it out (a Strike, #4858), else None.
+
+        The roll's modifiers a viewer may see follow the system's own rows, before the
+        result line.
+        """
+        breakdowns = self.context.get("roll_breakdowns")
+        if breakdowns is None:
+            from world.combat.services.declarations.strike import (  # noqa: PLC0415
+                strike_roll_breakdowns,
+            )
+
+            breakdowns = strike_roll_breakdowns([obj])
+        breakdown = breakdowns.get(obj.pk)
+        if breakdown is None:
+            return None
+        from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
+
+        lines = [asdict(line) for line in breakdown.lines]
+        for modifier in self._visible_kinds_filter(list(obj.modifiers.all())):
+            signed = f"+{modifier.value}" if modifier.value >= 0 else str(modifier.value)
+            detail = (
+                "misses add to hit"
+                if modifier.source_label == INTENSITY_MODIFIER_LABEL
+                else modifier.get_source_kind_display()
+            )
+            lines.append({"label": modifier.source_label, "value": signed, "detail": detail})
+        return {"heading": breakdown.heading, "lines": lines, "result": breakdown.result}
 
     @extend_schema_field(OutcomeDisplayRowSerializer(many=True))
     def get_outcome_display(self, obj: ConsequenceOutcome) -> list[dict]:
@@ -168,6 +235,10 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         Returns a list of plain dicts matching OutcomeDisplay's fields.
         """
         pool = obj.pool
+        if pool is None and obj.challenge_record_id is None:
+            # A roll with no roulette at all (a Strike's hit or damage roll, #4858): there
+            # is no pool to show, and the "Unknown" placeholder is not a result.
+            return []
         if pool is None:
             all_consequences = self._reconstruct_consequences_from_links(obj)
             display_items = build_outcome_display(all_consequences, obj.selected_consequence)

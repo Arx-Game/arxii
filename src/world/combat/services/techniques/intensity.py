@@ -70,6 +70,7 @@ def intensity_to_hit_contribution(participant: CombatParticipant) -> ModifierCon
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.types import ModifierContribution  # noqa: PLC0415
+    from world.combat.constants import INTENSITY_MODIFIER_LABEL  # noqa: PLC0415
     from world.combat.services.encounter.engagement import (  # noqa: PLC0415
         engagement_of_any_type_for,
     )
@@ -91,7 +92,7 @@ def intensity_to_hit_contribution(participant: CombatParticipant) -> ModifierCon
         return None
     return ModifierContribution(
         source_kind=ModifierSourceKind.CHARACTER,
-        source_label="Intensity",
+        source_label=INTENSITY_MODIFIER_LABEL,
         value=intensity * per_point,
     )
 

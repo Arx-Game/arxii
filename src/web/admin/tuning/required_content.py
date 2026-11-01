@@ -2814,7 +2814,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services/declarations/strike.py strike_check_type()",
             consequence=(
-                "A Strike with a weapon of that kind (or bare hands, for Unarmed Combat) "
+                "A Strike with a weapon of that kind (or bare hands, for Unarmed Attack) "
                 "is refused: the strike skill it rolls has no check type."
             ),
             probe=NamedRowsProbe(label="CheckType", names=STRIKE_CHECK_TYPE_NAMES),
