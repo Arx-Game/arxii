@@ -215,7 +215,8 @@ class ControlLossContentMigrationTests(TestCase):
         self.assertEqual(ControlLossBand.objects.filter(trigger=trigger).count(), 5)
         self.assertEqual(Compulsion.objects.count(), 1)
 
-    def test_staff_set_drawback_leaves_the_grant_entirely_alone(self) -> None:
+    def test_staff_set_drawback_without_a_trigger_gets_one_and_no_instances(self) -> None:
+        """F2: a rollback and re-apply leaves a drawback with no trigger; only it is made."""
         from world.conditions.models import ConditionInstance, ControlLossTrigger
 
         berserk, grant, _bearer = self._populated()
@@ -226,12 +227,84 @@ class ControlLossContentMigrationTests(TestCase):
         grant.save(update_fields=["drawback_condition"])
 
         self._run()
+        self._run()
 
         grant.refresh_from_db()
         self.assertEqual(grant.drawback_condition, staff_drawback)
-        self.assertFalse(ControlLossTrigger.objects.exists())
+        trigger = ControlLossTrigger.objects.get()
+        self.assertEqual(trigger.vulnerability, staff_drawback)
+        self.assertEqual(trigger.fires_on, ControlLossFiresOn.MOON_PULL)
+        self.assertEqual(trigger.bands.count(), 5)
         self.assertFalse(ConditionInstance.objects.exists())
         self.assertFalse(ConditionTemplate.objects.filter(name="Lycan blood").exists())
+
+    def test_a_drawback_that_has_its_moon_trigger_is_left_alone(self) -> None:
+        from world.conditions.factories import ControlLossTriggerFactory
+        from world.conditions.models import ConditionInstance, ControlLossTrigger
+
+        berserk, grant, _bearer = self._populated()
+        staff_drawback = ConditionTemplate.objects.create(
+            name="Moon curse", category=berserk.category
+        )
+        grant.drawback_condition = staff_drawback
+        grant.save(update_fields=["drawback_condition"])
+        authored = ControlLossTriggerFactory(vulnerability=staff_drawback)
+
+        self._run()
+
+        self.assertEqual(list(ControlLossTrigger.objects.all()), [authored])
+        self.assertFalse(authored.bands.exists())
+        self.assertFalse(ConditionInstance.objects.exists())
+
+    def test_rows_the_migration_makes_carry_no_prose(self) -> None:
+        """F1: the check types, their category and Instinct are made with no description."""
+        from world.checks.models import CheckCategory, CheckType
+        from world.conditions.models import ConditionCategory
+
+        self._populated()
+
+        self._run()
+
+        for name in ("Resist compulsion", "moon_control"):
+            self.assertEqual(CheckType.objects.get(name=name).description, "", name)
+        self.assertEqual(CheckCategory.objects.get(name="Species").description, "")
+        self.assertEqual(ConditionCategory.objects.get(name="Instinct").description, "")
+
+    def test_outcomes_are_found_by_canonical_name_not_by_level(self) -> None:
+        """F3: a decoy at Failure's level with a lower pk never takes Failure's band."""
+        from world.conditions.models import Compulsion, ControlLossBand
+        from world.traits.models import CheckOutcome
+
+        decoy = CheckOutcome.objects.create(name="flee_partial", success_level=-1)
+        berserk, _grant, _bearer = self._populated()
+
+        self._run()
+
+        compulsion = Compulsion.objects.get(condition=berserk)
+        names = set(compulsion.bands.values_list("outcome__name", flat=True))
+        self.assertEqual(
+            names, {"Critical Success", "Success", "Partial Success", "Failure", "Critical Failure"}
+        )
+        self.assertFalse(compulsion.bands.filter(outcome=decoy).exists())
+        self.assertFalse(ControlLossBand.objects.filter(outcome=decoy).exists())
+        failure = CheckOutcome.objects.get(name="Failure")
+        self.assertEqual(failure.success_level, -1)
+        self.assertLess(decoy.pk, failure.pk)
+
+    def test_a_canonical_name_at_another_level_is_not_edited_or_used(self) -> None:
+        from world.conditions.models import Compulsion
+        from world.traits.models import CheckOutcome
+
+        misfiled = CheckOutcome.objects.create(name="Failure", success_level=-3)
+        berserk, _grant, _bearer = self._populated()
+
+        self._run()
+
+        misfiled.refresh_from_db()
+        self.assertEqual(misfiled.success_level, -3)
+        compulsion = Compulsion.objects.get(condition=berserk)
+        self.assertFalse(compulsion.bands.filter(outcome=misfiled).exists())
+        self.assertEqual(compulsion.bands.count(), 4)
 
     def test_existing_compulsion_and_moon_trigger_are_never_added_to(self) -> None:
         from world.conditions.factories import CompulsionFactory, ControlLossTriggerFactory

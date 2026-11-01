@@ -8,12 +8,16 @@ Data-only, and only prose-free mechanics. On a populated database it:
   condition (permanent, no prose), sets it as the grant's drawback, puts an instance of it
   on every sheet holding a distinction tagged ``moon-bound``, and seeds the moon-pull
   trigger and its bands, with the ``moon_control`` CheckType, unless a moon-pull trigger
-  already exists.
+  already exists;
+* for a grant whose drawback has no moon-pull trigger (a rollback and re-apply leaves
+  exactly this): seeds the trigger and its bands on that drawback, and nothing else. No
+  instance is ever put on a drawback this migration did not just create.
 
-A grant staff already gave a drawback is left entirely alone: no trigger, no instances.
-An existing compulsion or trigger is never added to. The "Required content" probes
-"Berserk has a compulsion" and "a moon's-pull control-loss trigger exists" report anything
-this skipped. Idempotent, and a no-op on an empty database.
+A drawback that already has a moon-pull trigger is left entirely alone. An existing
+compulsion or trigger is never added to, and no existing row is edited. Every row made
+here carries no prose (empty descriptions). The "Required content" probes "Berserk has a
+compulsion" and "a moon's-pull control-loss trigger exists" report anything this
+skipped. Idempotent, and a no-op on an empty database.
 """
 
 from django.db import migrations
@@ -24,13 +28,16 @@ from django.db import migrations
 LYCAN_GIFT_NAME = "The Wolf's Fury"
 MOON_BOUND_TAG_SLUG = "moon-bound"
 
-CANONICAL_OUTCOMES = {
-    2: "Critical Success",
-    1: "Success",
-    0: "Partial Success",
-    -1: "Failure",
-    -2: "Critical Failure",
+# world.traits.constants.CANONICAL_OUTCOME_LEVELS, copied: a migration never imports live
+# code. Outcomes are found by these names; a level alone is not unique.
+CANONICAL_OUTCOME_LEVELS = {
+    "Critical Failure": -2,
+    "Failure": -1,
+    "Partial Success": 0,
+    "Success": 1,
+    "Critical Success": 2,
 }
+OUTCOME_NAME_AT_LEVEL = {level: name for name, level in CANONICAL_OUTCOME_LEVELS.items()}
 # name -> (category, description) of the STAT traits the checks weigh, as
 # world.traits.constants.STAT_TRAIT_DEFAULTS holds them.
 STAT_TRAITS = {
@@ -43,18 +50,22 @@ STAT_TRAITS = {
 
 
 def _outcome(apps, success_level):
-    """The CheckOutcome at *success_level*, found by level (created if the tier is missing)."""
+    """The canonical CheckOutcome for *success_level*, found by its canonical name.
+
+    Created at that level when the tier is missing, the way
+    ``ensure_canonical_check_outcome`` does. An existing row is never edited: when the
+    named row sits at another level, None comes back and no band is made for it.
+    """
     CheckOutcome = apps.get_model("arxii", "CheckOutcome")
-    existing = CheckOutcome.objects.filter(success_level=success_level).order_by("pk").first()
-    if existing is not None:
-        return existing
     outcome, _ = CheckOutcome.objects.get_or_create(
-        name=CANONICAL_OUTCOMES[success_level], defaults={"success_level": success_level}
+        name=OUTCOME_NAME_AT_LEVEL[success_level], defaults={"success_level": success_level}
     )
+    if outcome.success_level != success_level:
+        return None
     return outcome
 
 
-def _check_type(apps, name, description):
+def _check_type(apps, name):
     """The willpower (1.0) plus composure (0.5) check type called *name*.
 
     Traits are attached only to a check type made here; an authored one is used as it is.
@@ -69,9 +80,9 @@ def _check_type(apps, name, description):
         return check_type
     category, _ = CheckCategory.objects.get_or_create(
         name="Species",
-        defaults={"description": "Species instinct-control checks", "display_order": 97},
+        defaults={"description": "", "display_order": 97},
     )
-    check_type = CheckType.objects.create(name=name, category=category, description=description)
+    check_type = CheckType.objects.create(name=name, category=category, description="")
     for trait_name, weight in (("willpower", "1.00"), ("composure", "0.50")):
         trait_category, trait_description = STAT_TRAITS[trait_name]
         trait, _ = Trait.objects.get_or_create(
@@ -101,9 +112,7 @@ def _berserk_compulsion(apps):
     compulsion = Compulsion.objects.create(
         condition_id=config.berserk_condition_id,
         wants="attack_opponent",
-        check_type=_check_type(
-            apps, "Resist compulsion", "Holding the self against a compulsion (#4802)."
-        ),
+        check_type=_check_type(apps, "Resist compulsion"),
         base_difficulty=25,
         difficulty_per_severity=2,
         retry_wait_minutes=5,
@@ -117,9 +126,12 @@ def _berserk_compulsion(apps):
         (-1, "compulsion_acts", 4, -2),
         (-2, "compulsion_acts", 4, -4),
     ):
+        outcome = _outcome(apps, level)
+        if outcome is None:
+            continue
         ResistBand.objects.create(
             compulsion=compulsion,
-            outcome=_outcome(apps, level),
+            outcome=outcome,
             result=result,
             action_penalty=penalty,
             control_change=control,
@@ -128,23 +140,28 @@ def _berserk_compulsion(apps):
 
 
 def _moon_block(apps, berserk):
-    """Lycan blood, its bearers and the moon trigger, for a grant with no drawback."""
+    """Lycan blood, its bearers and the moon trigger, for a drawback with no moon trigger."""
     SpeciesGiftGrant = apps.get_model("arxii", "SpeciesGiftGrant")
     ControlLossTrigger = apps.get_model("arxii", "ControlLossTrigger")
-    ControlLossBand = apps.get_model("arxii", "ControlLossBand")
     ConditionCategory = apps.get_model("arxii", "ConditionCategory")
     ConditionTemplate = apps.get_model("arxii", "ConditionTemplate")
     CharacterDistinction = apps.get_model("arxii", "CharacterDistinction")
     ConditionInstance = apps.get_model("arxii", "ConditionInstance")
 
     grant = SpeciesGiftGrant.objects.filter(gift__name=LYCAN_GIFT_NAME).first()
-    if grant is None or berserk is None or grant.drawback_condition_id is not None:
+    if grant is None or berserk is None:
+        return
+    if grant.drawback_condition_id is not None:
+        # A drawback already set: only a missing trigger is made, on that drawback.
+        blood = grant.drawback_condition
+        if not blood.control_loss_triggers.filter(fires_on="moon_pull").exists():
+            _moon_trigger(apps, blood, grant, berserk)
         return
     if ControlLossTrigger.objects.filter(fires_on="moon_pull").exists():
         return
     category, _ = ConditionCategory.objects.get_or_create(
         name="Instinct",
-        defaults={"description": "Instinctive species states.", "is_negative": False},
+        defaults={"description": "", "is_negative": False},
     )
     # A nameplate with no prose. It is made here, so it is permanent and has no stages.
     blood, created = ConditionTemplate.objects.get_or_create(
@@ -168,13 +185,20 @@ def _moon_block(apps, berserk):
         ConditionInstance.objects.bulk_create(
             [ConditionInstance(target_id=pk, condition=blood) for pk in sorted(sheet_ids)]
         )
+    if not blood.control_loss_triggers.filter(fires_on="moon_pull").exists():
+        _moon_trigger(apps, blood, grant, berserk)
+
+
+def _moon_trigger(apps, blood, grant, berserk):
+    """The moon-pull trigger on *blood* and its bands, with the ``moon_control`` check."""
+    ControlLossTrigger = apps.get_model("arxii", "ControlLossTrigger")
+    ControlLossBand = apps.get_model("arxii", "ControlLossBand")
+
     trigger = ControlLossTrigger.objects.create(
         vulnerability=blood,
         fires_on="moon_pull",
         min_moon_pull=6,
-        check_type=_check_type(
-            apps, "moon_control", "Holding the self against the moon's pull (#2845)."
-        ),
+        check_type=_check_type(apps, "moon_control"),
         base_difficulty=20,
         difficulty_per_pull=5,
         relief_per_level=10,
@@ -185,12 +209,15 @@ def _moon_block(apps, berserk):
         impaired_willpower_drop=10,
     )
     for level in (2, 1, 0, -1, -2):
+        outcome = _outcome(apps, level)
+        if outcome is None:
+            continue
         extra = (
             {"applies": berserk, "severity": 3, "duration_rounds": 3, "forces_form": True}
             if level < 0
             else {}
         )
-        ControlLossBand.objects.create(trigger=trigger, outcome=_outcome(apps, level), **extra)
+        ControlLossBand.objects.create(trigger=trigger, outcome=outcome, **extra)
 
 
 def seed_control_loss_content(apps, schema_editor):

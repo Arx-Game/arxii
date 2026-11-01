@@ -145,28 +145,27 @@ def ensure_restore_to_sense_effect(berserk_template: ConditionTemplate) -> None:
 
 def ensure_compulsion_resist_check_type() -> CheckType:
     """Idempotently seed the "Resist compulsion" CheckType (#4802)."""
-    return ensure_willpower_check_type(
-        COMPULSION_RESIST_CHECK_NAME, "Holding the self against a compulsion (#4802)."
-    )
+    return ensure_willpower_check_type(COMPULSION_RESIST_CHECK_NAME)
 
 
-def ensure_willpower_check_type(name: str, description: str) -> CheckType:
+def ensure_willpower_check_type(name: str) -> CheckType:
     """Idempotently seed a willpower-led check type called *name* (#4802).
 
     Willpower at full weight, composure at half, in the Species category: the shape of
     both "Resist compulsion" and ``moon_control``. The row is found by name, so an
     authored one is reused; the weights are only written when the trait link is first
-    made, so staff edits to an authored weight survive a re-run.
+    made, so staff edits to an authored weight survive a re-run. A row made here carries
+    no prose: its description, and the Species category's, are left for staff.
     """
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.traits.services import ensure_stat_trait  # noqa: PLC0415
 
     category, _ = CheckCategory.objects.get_or_create(
         name="Species",
-        defaults={"description": "Species instinct-control checks", "display_order": 97},
+        defaults={"description": "", "display_order": 97},
     )
     check_type, _ = CheckType.objects.get_or_create(
-        name=name, defaults={"category": category, "description": description}
+        name=name, defaults={"category": category, "description": ""}
     )
     for trait_name, weight in (("willpower", "1.00"), ("composure", "0.50")):
         CheckTypeTrait.objects.get_or_create(

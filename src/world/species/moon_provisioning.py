@@ -156,7 +156,7 @@ def ensure_lycan_blood_condition() -> ConditionTemplate:
 
     category, _ = ConditionCategory.objects.get_or_create(
         name="Instinct",
-        defaults={"description": "Instinctive species states.", "is_negative": False},
+        defaults={"description": "", "is_negative": False},
     )
     template, _ = ConditionTemplate.objects.get_or_create(
         name=LYCAN_BLOOD_NAME,
@@ -234,6 +234,4 @@ def _ensure_moon_control_check_type() -> CheckType:
     """
     from world.conditions.berserk_content import ensure_willpower_check_type  # noqa: PLC0415
 
-    return ensure_willpower_check_type(
-        MOON_CONTROL_CHECK_NAME, "Holding the self against the moon's pull (#2845)."
-    )
+    return ensure_willpower_check_type(MOON_CONTROL_CHECK_NAME)
