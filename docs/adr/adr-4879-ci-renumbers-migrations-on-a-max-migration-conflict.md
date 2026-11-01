@@ -5,15 +5,26 @@
 **Decision.** When a push to `main` moves `max_migration.txt`, the
 `migration-conflict-rebase` workflow looks at every open same-repo PR that changes the
 file and is CONFLICTING. It runs `tools/auto_rebase_migration.py` on each. The script
-fixes one shape only: the PR adds a single linear chain of migrations, changes no
-existing one, and conflicts with main on `max_migration.txt` and nothing else. It
-merges main in, renames the chain to follow main's tip, and rewrites each file's one
+fixes one shape only. The PR must add a single linear chain of migrations, change no
+existing one, and conflict with main on `max_migration.txt` and nothing else. The new
+order must also be unable to matter. No model that main's interleaved migrations
+touch may be named anywhere in the chain, no model the chain touches may be named in
+them, and neither side may use `RunSQL`. Renumbering runs the PR's operations after
+main's. The graph check proves the final state but not what a backfill or a
+constraint sees along the way, so overlapping work stays with a person. Replayed
+over main's last 40 migration pairs, the gate passed 25. Several of the 15 it refused
+were pairs from one PR, which never collide. When the shape holds, the script merges
+main in, renames the chain to follow main's tip, and rewrites each file's one
 `arxii` dependency. Then it proves the result from the index, independently of the
 transform. The migrations directory must differ from main by exactly the renamed chain
 plus `max_migration.txt`. Each renamed file's AST must equal the PR's original apart from
-that one name. The graph must have one leaf and no missing migrations. On success it
-pushes the merge commit fast-forward with a PAT (`MIGRATION_REBASE_TOKEN`), so the PR's
-CI runs. If the queue had dropped the PR for this conflict, it re-arms auto-merge,
+that one name. A doc that names a chain migration gets exactly that name substituted.
+The graph must have one leaf and no missing migrations. The graph check has to import
+the PR's code, so the work is split across two jobs. A `check` job, with no secret,
+runs everything and records the merge's tree hash. A `push` job, holding a PAT
+(`MIGRATION_REBASE_TOKEN`) in the main-only `migration-rebase` Environment, runs no PR
+code. It re-derives the merge from the same two commits and pushes it fast-forward
+only if its tree is byte-identical, so the PR's CI runs. If the queue had dropped the PR for this conflict, it re-arms auto-merge,
 unless the PR carries review evidence. Anything else is refused with a PR comment, and
 nothing is pushed.
 
@@ -34,6 +45,9 @@ mechanical, so a person spending a turn on it is pure churn.
   screenshot URLs that point into it.
 - **Pushing with `GITHUB_TOKEN`.** Its pushes trigger no `pull_request` workflows, so the
   PR would sit with no required checks on its new head.
+- **One job holding the token.** Stripping the token from the graph check's
+  environment does not keep it from PR code running as the same user, which can read
+  the parent's environment or rewrite `.git/config`.
 - **Fixing every conflict.** A second conflicted file, an edited migration, or a branching
   set of migrations is a judgement call, and migrations are the riskiest change in the
   repo. Those stay with the author.

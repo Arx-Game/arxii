@@ -116,6 +116,22 @@ def test_single_migration_is_renumbered_after_mains_tip(repo: Path, tmp_path: Pa
         f"{MDIR}/max_migration.txt",
     ]
     assert sh(repo, "status", "--porcelain") == ""
+    assert result["tree"] == sh(repo, "rev-parse", "HEAD^{tree}").strip()
+
+
+def test_the_merge_tree_is_reproducible(repo: Path, tmp_path: Path):
+    """CI's push job re-derives the merge and pushes only on an identical tree."""
+    add_migration(repo, "0003_schema", "0002_second")
+    add_migration(repo, "0004_data", "0003_schema")
+    commit(repo, "pr chain")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    _, first = run_script(repo, tmp_path)
+    sh(repo, "checkout", "-q", "--detach", head)
+
+    _, second = run_script(repo, tmp_path)
+
+    assert second["status"] == "resolved"
+    assert second["tree"] == first["tree"]
 
 
 def test_a_chain_is_renumbered_link_by_link(repo: Path, tmp_path: Path):
@@ -185,15 +201,105 @@ def test_a_name_used_in_code_elsewhere_is_refused(repo: Path, tmp_path: Path):
     assert "named in code outside its own file" in refused(repo, tmp_path)
 
 
-def test_a_doc_mention_is_a_warning_not_a_refusal(repo: Path, tmp_path: Path):
+def test_a_doc_mention_is_renamed_with_the_migration(repo: Path, tmp_path: Path):
     add_migration(repo, "0003_pr_feature", "0002_second")
-    (repo / "notes.md").write_text("Shipped in 0003_pr_feature.\n")
+    (repo / "notes.md").write_text("Shipped in 0003_pr_feature, see above.\n")
     commit(repo, "doc mentions it")
 
     code, result = run_script(repo, tmp_path)
 
-    assert code == EXIT_RESOLVED
-    assert result["warnings"] == ["notes.md mentions 0003_pr_feature"]
+    assert code == EXIT_RESOLVED, result
+    assert result["doc_files"] == ["notes.md"]
+    assert (repo / "notes.md").read_text() == "Shipped in 0004_pr_feature, see above.\n"
+
+
+def test_the_result_names_what_the_chain_now_runs_after(repo: Path, tmp_path: Path):
+    add_migration(repo, "0003_pr_feature", "0002_second")
+    commit(repo, "pr")
+
+    _, result = run_script(repo, tmp_path)
+
+    assert result["base_tip"] == "0002_second"
+    assert result["interleaved"] == ["0003_main_change"]
+
+
+def main_adds(repo: Path, name: str, dep: str, body: str) -> None:
+    sh(repo, "checkout", "-q", "main")
+    add_migration(repo, name, dep, body)
+    commit(repo, f"main adds {name}")
+    sh(repo, "checkout", "-q", "pr")
+
+
+def test_a_model_both_sides_involve_is_refused(repo: Path, tmp_path: Path):
+    """Main reshapes Widget; the PR backfills it. The new order is a person's call."""
+    main_adds(
+        repo,
+        "0004_widget_colour",
+        "0003_main_change",
+        'operations = [migrations.AddField(model_name="widget", name="colour")]',
+    )
+    add_migration(
+        repo,
+        "0003_backfill",
+        "0002_second",
+        'operations = [migrations.RunPython(lambda a, s: a.get_model("arxii", "Widget"))]',
+    )
+    commit(repo, "pr backfills widget")
+
+    assert "both involve ['widget']" in refused(repo, tmp_path)
+
+
+def test_the_pr_touching_a_model_main_mentions_is_refused(repo: Path, tmp_path: Path):
+    main_adds(
+        repo,
+        "0004_backfill",
+        "0003_main_change",
+        'operations = [migrations.RunPython(lambda a, s: a.get_model("arxii", "Gadget"))]',
+    )
+    add_migration(
+        repo,
+        "0003_gadget",
+        "0002_second",
+        'operations = [migrations.RemoveField("gadget", "size")]',
+    )
+    commit(repo, "pr drops a gadget field")
+
+    assert "both involve ['gadget']" in refused(repo, tmp_path)
+
+
+def test_disjoint_models_are_fixed(repo: Path, tmp_path: Path):
+    main_adds(
+        repo,
+        "0004_widget_colour",
+        "0003_main_change",
+        'operations = [migrations.AddField(model_name="widget", name="colour")]',
+    )
+    add_migration(
+        repo,
+        "0003_gadget",
+        "0002_second",
+        'operations = [migrations.AddField(model_name="gadget", name="size")]',
+    )
+    commit(repo, "pr")
+
+    code, result = run_script(repo, tmp_path)
+
+    assert code == EXIT_RESOLVED, result
+    assert result["renames"] == [{"old": "0003_gadget", "new": "0005_gadget"}]
+
+
+def test_raw_sql_is_refused(repo: Path, tmp_path: Path):
+    add_migration(repo, "0003_raw", "0002_second", 'operations = [migrations.RunSQL("SELECT 1")]')
+    commit(repo, "pr uses raw sql")
+
+    assert "use RunSQL" in refused(repo, tmp_path)
+
+
+def test_a_stale_self_reference_is_refused(repo: Path, tmp_path: Path):
+    add_migration(repo, "0003_pr_feature", "0002_second", 'NOTE = "0003_pr_feature"')
+    commit(repo, "pr names itself")
+
+    assert "still named" in refused(repo, tmp_path)
 
 
 def test_no_conflict_is_nothing_to_do(tmp_path: Path, repo: Path):

@@ -46,10 +46,22 @@ its `arxii` dependency, one graph leaf, no missing migrations. The workflow then
 pushes the merge, re-arms auto-merge if the queue dropped the PR for the conflict,
 and comments `<!-- migration-auto-rebase sha=<sha> status=resolved -->`. So
 `git pull --ff-only` before your next push. A PR with review evidence is not
-re-armed: restate the evidence revision, then `enqueue-pr.sh`. It refuses, with a
-`status=refused` comment naming the reason, on any other conflict, an edited or
-deleted existing migration, a branching set of migrations, or a migration name
-pinned in code outside its own file. Only then use the manual recipe below. To
+re-armed: restate the evidence revision, then `enqueue-pr.sh`. If you ran `migrate`
+on the branch, first migrate back to the base tip the comment names, because the old
+names are gone after the pull. It refuses, with a `status=refused` comment naming
+the reason, in these cases:
+- any other conflict;
+- an edited or deleted existing migration;
+- a branching set of migrations;
+- a migration name pinned in code outside its own file;
+- `RunSQL` on either side;
+- a model that both main's new migrations and the PR's involve, because the new order
+  could change what a backfill or constraint sees.
+
+On a refusal, apply the manual recipe below, then have the reorder reviewed (the
+`migration-reviewer` agent). The workflow runs in two jobs. `check` holds no secret,
+runs the PR code and records the tree. `push` holds the PAT, runs no PR code, and
+pushes only an identical re-derived tree. To
 re-run it for one PR: `gh workflow run migration-conflict-rebase.yml -f pr=<N>`.
 
 **The manual fix is `rebase_migration`, not hand-renumbering.**

@@ -8,7 +8,13 @@ This is the deterministic fix CI applies (#4879), and it does nothing else:
    forming a single linear chain off the base's tip, changes ``max_migration.txt``
    to that chain's last name, and touches no other file in the migrations
    directory. No tracked ``.py`` file outside the chain names one of its
-   migrations. Main has moved its own tip since the merge base.
+   migrations. Main has moved its own tip since the merge base. **The new order
+   cannot matter**: no model that main's interleaved migrations touch is named
+   anywhere in the PR's chain, and no model the chain touches is named in main's
+   interleaved migrations, and neither side uses ``RunSQL``. The rename moves the
+   chain after main's migrations; the graph check proves the final state but not
+   what a backfill or constraint sees on the way, so overlapping work stays with a
+   person.
 2. **Merge.** ``git merge --no-commit <main>``. A merge, never a rebase, so the PR's
    published history (and the evidence URLs pointing into it) survives. Any
    conflicted path besides ``max_migration.txt`` is a refusal.
@@ -18,12 +24,14 @@ This is the deterministic fix CI applies (#4879), and it does nothing else:
    style kept. This is ``django-linear-migrations``' ``rebase_migration`` applied link
    by link: that tool handles one migration only (on a chain it re-points the tip and
    orphans the rest) and guesses the sides from ``MERGE_HEAD``; here both sides are
-   read explicitly from the two refs.
+   read explicitly from the two refs. A non-code file (a doc) naming a chain
+   migration gets the exact old name replaced by the new one.
 4. **Postconditions**, re-derived from the index independently of the transform: the
    migrations directory differs from main by exactly the renamed chain plus
    ``max_migration.txt``; each renamed file's AST equals the PR's original except for
-   that one dependency name; the graph has one ``arxii`` leaf and no migrations are
-   missing.
+   that one dependency name and still names no old chain name; the doc edits are
+   exactly those name substitutions; the graph has one ``arxii`` leaf and no
+   migrations are missing.
 
 On any refusal or failed check the merge is aborted and the tree is left as it was.
 Exit codes: 0 resolved (a merge commit was made), 3 nothing to do, 4 refused.
@@ -69,9 +77,11 @@ class Rename:
 
 @dataclass
 class Plan:
+    base_tip: str
     main_tip: str
     renames: list[Rename]
-    warnings: list[str] = field(default_factory=list)
+    interleaved: list[str]  # main's migrations the chain now runs after
+    doc_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -79,8 +89,13 @@ class Result:
     status: str
     reason: str = ""
     main_tip: str = ""
+    base_tip: str = ""
     renames: list[Rename] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    interleaved: list[str] = field(default_factory=list)
+    doc_files: list[str] = field(default_factory=list)
+    # The merge commit's tree. CI's push job re-derives the merge without running
+    # any PR code and pushes only when its tree is this one, byte for byte (#4879).
+    tree: str = ""
 
 
 # --------------------------------------------------------------------------- git
@@ -289,20 +304,117 @@ def _renames(repo: Path, chain: list[str], main_ref: str, main_tip: str, mdir: s
     return renames
 
 
+def grep_files(repo: Path, needle: str, where: str) -> list[str]:
+    """Paths under ``where`` (a rev, or ``--cached``) holding ``needle``. Errors raise."""
+    if where == "--cached":
+        argv = [GIT, "grep", "-l", "-F", "--cached", "-e", needle, "--", "."]
+    else:
+        argv = [GIT, "grep", "-l", "-F", "-e", needle, where, "--", "."]
+    proc = _run(argv, repo)
+    if proc.returncode not in {0, 1}:  # 1 = no match; anything else is a real failure
+        msg = f"git grep failed ({proc.returncode}): {proc.stderr.strip()}"
+        raise RuntimeError(msg)
+    return [line.removeprefix(f"{where}:") for line in proc.stdout.splitlines()]
+
+
 def _outside_mentions(repo: Path, chain: list[str], mdir: str) -> list[str]:
-    """Refuse a chain name used in code elsewhere; return non-code mentions as warnings."""
+    """Refuse a chain name used in code elsewhere; return the non-code files naming one."""
     chain_files = {f"{mdir}/{n}.py" for n in chain} | {f"{mdir}/{MAX_MIGRATION}"}
-    warnings = []
+    docs: set[str] = set()
     for name in chain:
-        out = git("grep", "-l", "-F", name, "HEAD", "--", ".", cwd=repo, check=False)
-        hits = [p.removeprefix("HEAD:") for p in out.splitlines()]
-        hits = [p for p in hits if p not in chain_files]
+        hits = [p for p in grep_files(repo, name, "HEAD") if p not in chain_files]
         code = [p for p in hits if p.endswith(".py")]
         if code:
             msg = f"{name} is named in code outside its own file, so a rename breaks it: {code}"
             raise RefusalError(msg)
-        warnings += [f"{p} mentions {name}" for p in hits]
-    return warnings
+        docs.update(hits)
+    return sorted(docs)
+
+
+MODEL_OPS = {
+    "CreateModel", "DeleteModel", "AlterModelOptions", "AlterModelTable",
+    "AlterModelTableComment", "AlterModelManagers", "AlterUniqueTogether",
+    "AlterIndexTogether", "AlterOrderWithRespectTo",
+}  # fmt: skip
+FIELD_OPS = {
+    "AddField", "RemoveField", "AlterField", "RenameField", "AddIndex", "RemoveIndex",
+    "RenameIndex", "AddConstraint", "RemoveConstraint",
+}  # fmt: skip
+
+
+def _str(node: ast.expr) -> str | None:
+    return (
+        node.value.lower()
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        else None
+    )
+
+
+def _call_name(node: ast.Call) -> str:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return node.func.id if isinstance(node.func, ast.Name) else ""
+
+
+def touched_models(source: str) -> set[str]:
+    """Lower-cased model names the migration's operations act on (precise)."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        op = _call_name(node)
+        wanted = {"name"} if op in MODEL_OPS else {"model_name"} if op in FIELD_OPS else set()
+        if op == "RenameModel":
+            wanted = {"old_name", "new_name"}
+        if op in MODEL_OPS | FIELD_OPS and node.args and (s := _str(node.args[0])):
+            names.add(s)
+        names.update(s for kw in node.keywords if kw.arg in wanted and (s := _str(kw.value)))
+    return names
+
+
+def mentioned_names(source: str) -> set[str]:
+    """Every string literal, lower-cased, plus the part after a dot (broad)."""
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if s := _str(node):  # type: ignore[arg-type]
+            found.update({s, s.rsplit(".", 1)[-1]})
+    return found
+
+
+def uses_raw_sql(source: str) -> bool:
+    return any(
+        isinstance(n, ast.Attribute) and n.attr == "RunSQL" for n in ast.walk(ast.parse(source))
+    )
+
+
+def _order_must_not_matter(
+    repo: Path, merge_base: str, main_ref: str, chain: list[str], mdir: str
+) -> list[str]:
+    """Refuse when the chain and main's interleaved migrations touch the same models."""
+    interleaved = sorted(
+        Path(p).stem
+        for status, p in name_status(merge_base, main_ref, mdir, repo)
+        if status == "A" and MIGRATION_FILE.match(Path(p).name)
+    )
+    main_src = {n: show(main_ref, f"{mdir}/{n}.py", repo) for n in interleaved}
+    pr_src = {n: show("HEAD", f"{mdir}/{n}.py", repo) for n in chain}
+    for side in (main_src, pr_src):
+        raw = [n for n, src in side.items() if uses_raw_sql(src)]
+        if raw:
+            msg = f"{raw} use RunSQL, so whether the new order matters cannot be checked"
+            raise RefusalError(msg)
+    main_touched = set().union(*map(touched_models, main_src.values()))
+    pr_touched = set().union(*map(touched_models, pr_src.values()))
+    main_named = set().union(*map(mentioned_names, main_src.values()))
+    pr_named = set().union(*map(mentioned_names, pr_src.values()))
+    overlap = sorted((main_touched & pr_named) | (pr_touched & main_named))
+    if overlap:
+        msg = (
+            f"main's new migrations {interleaved} and this PR's {chain} both involve "
+            f"{overlap}, so running the PR's after main's needs a person to check"
+        )
+        raise RefusalError(msg)
+    return interleaved
 
 
 def plan(repo: Path, main_ref: str, mdir: str) -> Plan:
@@ -322,9 +434,18 @@ def plan(repo: Path, main_ref: str, mdir: str) -> Plan:
     if int(main_tip.split("_", 1)[0]) <= int(base_tip.split("_", 1)[0]):
         msg = f"main's tip {main_tip} is not after the merge base's {base_tip}"
         raise RefusalError(msg)
-    renames = _renames(repo, chain, main_ref, main_tip, mdir)
-    warnings = _outside_mentions(repo, chain, mdir)
-    return Plan(main_tip=main_tip, renames=renames, warnings=warnings)
+    suffixes = [n.split("_", 1)[1] for n in chain]
+    if len(set(suffixes)) != len(suffixes):
+        msg = f"two of the PR's migrations share a name after the number: {chain}"
+        raise RefusalError(msg)
+    interleaved = _order_must_not_matter(repo, merge_base, main_ref, chain, mdir)
+    return Plan(
+        base_tip=base_tip,
+        main_tip=main_tip,
+        renames=_renames(repo, chain, main_ref, main_tip, mdir),
+        interleaved=interleaved,
+        doc_files=_outside_mentions(repo, chain, mdir),
+    )
 
 
 # ---------------------------------------------------------------------- applying
@@ -352,6 +473,38 @@ def apply_renames(repo: Path, the_plan: Plan, mdir: str) -> None:
         prev = rename.new
     (repo / mdir / MAX_MIGRATION).write_text(f"{prev}\n")
     git("add", "--", mdir, cwd=repo)
+
+
+def substitute(text: str, renames: list[Rename]) -> str:
+    for rename in renames:
+        text = text.replace(rename.old, rename.new)
+    return text
+
+
+def apply_doc_renames(repo: Path, the_plan: Plan) -> tuple[str, str]:
+    """Rename chain mentions in docs; return the index trees before and after."""
+    before = git("write-tree", cwd=repo).strip()
+    for path in the_plan.doc_files:
+        target = repo / path
+        target.write_text(substitute(target.read_text(), the_plan.renames))
+        git("add", "--", path, cwd=repo)
+    return before, git("write-tree", cwd=repo).strip()
+
+
+def verify_doc_renames(repo: Path, the_plan: Plan, before: str, after: str) -> None:
+    changed = sorted(git("diff", "--name-only", before, after, cwd=repo).split())
+    if changed != sorted(the_plan.doc_files):
+        msg = f"the doc rename changed {changed}, expected exactly {the_plan.doc_files}"
+        raise RefusalError(msg)
+    for path in changed:
+        if show(after, path, repo) != substitute(show(before, path, repo), the_plan.renames):
+            msg = f"{path}: the doc edit is more than the migration-name substitution"
+            raise RefusalError(msg)
+    for rename in the_plan.renames:
+        left = [p for p in grep_files(repo, rename.old, "--cached") if p]
+        if left:
+            msg = f"{rename.old} is still named in {left} after the rename"
+            raise RefusalError(msg)
 
 
 def verify_against_main(repo: Path, the_plan: Plan, main_ref: str, mdir: str) -> None:
@@ -407,6 +560,8 @@ def commit_message(the_plan: Plan, main_ref: str) -> str:
         "",
     ]
     lines += [f"  {r.old} -> {r.new}" for r in the_plan.renames]
+    if the_plan.doc_files:
+        lines += ["", "The same names were updated in: " + ", ".join(the_plan.doc_files)]
     return "\n".join(lines) + "\n"
 
 
@@ -423,6 +578,8 @@ def run(repo: Path, main_ref: str, mdir: str, *, check_graph: bool) -> Result:
         merge_main(repo, main_ref, f"{mdir}/{MAX_MIGRATION}")
         apply_renames(repo, the_plan, mdir)
         verify_against_main(repo, the_plan, main_ref, mdir)
+        before, after = apply_doc_renames(repo, the_plan)
+        verify_doc_renames(repo, the_plan, before, after)
         if check_graph:
             verify_graph(repo)
         # --no-verify: the hooks are the PR's own CI, which this push triggers.
@@ -447,8 +604,11 @@ def run(repo: Path, main_ref: str, mdir: str, *, check_graph: bool) -> Result:
     return Result(
         status="resolved",
         main_tip=the_plan.main_tip,
+        base_tip=the_plan.base_tip,
         renames=the_plan.renames,
-        warnings=the_plan.warnings,
+        interleaved=the_plan.interleaved,
+        doc_files=the_plan.doc_files,
+        tree=git("rev-parse", "HEAD^{tree}", cwd=repo).strip(),
     )
 
 
