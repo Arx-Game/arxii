@@ -127,6 +127,78 @@ class ClawsAtCreation(FinalizationTestMixin, JourneyCase):
         )
 
 
+class GainingTheGiftInPlay(JourneyCase):
+    """Hobb, clawless, gains the Khati Claws gift by being taught or by a staff species edit."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Academy Yard")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.sheet = self.hobb.sheet_data
+        self.gift = clawed_gift()
+
+    def test_learning_a_technique_from_the_gift_grants_the_claws_once(self) -> None:
+        from world.action_points.models import ActionPointPool
+        from world.magic.factories import (
+            GiftUnlockFactory,
+            TechniqueFactory,
+            TechniqueTeachingOfferFactory,
+        )
+        from world.progression.models.rewards import ExperiencePointsData
+        from world.roster.factories import RosterTenureFactory
+
+        ExperiencePointsData.objects.get_or_create(
+            account=self.account_of(self.hobb), defaults={"total_earned": 100, "total_spent": 0}
+        )
+        unlock = GiftUnlockFactory(gift=self.gift, xp_cost=10)
+        teacher = RosterTenureFactory()
+        for character in (self.hobb, teacher.character):
+            pool = ActionPointPool.get_or_create_for_character(character)
+            pool.current = 200
+            pool.save()
+        rake, swipe = (
+            TechniqueTeachingOfferFactory(
+                teacher=teacher,
+                technique=TechniqueFactory(gift=self.gift, name=name),
+                learn_ap_cost=5,
+                banked_ap=1,
+            )
+            for name in ("Rake", "Swipe")
+        )
+
+        self.telnet(self.hobb, f"learn gift {unlock.pk}")
+        self.assertEqual(claws_of(self.sheet), [])
+        self.telnet(self.hobb, f"learn technique {rake.pk}")
+
+        (claws,) = claws_of(self.sheet)
+        self.assertEqual(
+            worn_slots(self.sheet, claws), {(region, EquipmentLayer.SKIN) for region in HANDS}
+        )
+        self.telnet(self.hobb, f"learn technique {swipe.pk}")
+        self.assertEqual(claws_of(self.sheet), [claws])
+
+    def test_a_staff_species_edit_grants_the_claws_once(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.species.factories import SpeciesFactory
+
+        khati = SpeciesFactory(name="Khati")
+        SpeciesGiftGrantFactory(species=khati, gift=self.gift)
+        staff = self.api(AccountFactory(is_staff=True))
+        url = f"/api/character-sheets/{self.sheet.pk}/staff-edit/"
+
+        response = staff.patch(url, {"species": khati.pk}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        (claws,) = claws_of(self.sheet)
+        self.assertEqual(claws.game_object.location, self.hobb)
+        self.assertEqual(
+            worn_slots(self.sheet, claws), {(region, EquipmentLayer.SKIN) for region in HANDS}
+        )
+        again = staff.patch(url, {"species": khati.pk}, format="json")
+        self.assertEqual(again.status_code, 200, again.content)
+        self.assertEqual(claws_of(self.sheet), [claws])
+
+
 class _ClawedField(_StrikeField):
     """Hobb at the Steading gains the Khati Claws gift (a path or species grant in play)."""
 
@@ -188,9 +260,14 @@ class TheClawsNeverComeOff(_ClawedField):
         self.assert_still_clawed()
 
     def test_nobody_steals_them(self) -> None:
-        result = self.web(self.wren, "steal", target=self.claws.game_object.pk)
+        # Worn gear on a standing character is never on a thief's menu, so Wren is told
+        # the claws are not there to take; the natural weapon refusal sits behind that.
+        result = self.web(
+            self.wren, "steal", menu_target={"kind": "items", "target_id": self.claws.pk}
+        )
 
         self.assertFalse(result.detail.success)
+        self.assertEqual(result.detail.message, "That isn't available.")
         self.assert_still_clawed()
 
     def test_they_cannot_go_on_the_trade_table(self) -> None:
