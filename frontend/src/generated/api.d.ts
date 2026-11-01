@@ -49357,6 +49357,7 @@ export interface components {
       heading: string;
       lines: components['schemas']['RollLine'][];
       result: string;
+      result_note: string;
     };
     /** @description One source row in a roll breakdown (#4858); read-only, schema shape. */
     RollLine: {

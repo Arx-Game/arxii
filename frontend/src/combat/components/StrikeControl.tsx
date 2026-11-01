@@ -20,6 +20,11 @@ const BARE_HANDS_VALUE = 'bare';
 
 export interface StrikeControlProps {
   weapons: StrikeWeaponOption[];
+  /**
+   * The weapon this round's declared Strike uses (null: bare hands), so a reload shows
+   * what was declared; undefined when no Strike is declared.
+   */
+  declaredItemInstanceId?: number | null;
   /** The opponent picked in the Focused Action's target selection, if any. */
   targetOpponentId: number | null;
   /** The opponent this round's declared Strike is aimed at, when one is declared. */
@@ -35,6 +40,12 @@ function weaponValue(weapon: StrikeWeaponOption): string {
   return weapon.item_instance_id === null ? BARE_HANDS_VALUE : String(weapon.item_instance_id);
 }
 
+/** The pick for a declared Strike's weapon, or null when none is declared. */
+function declaredWeaponValue(itemInstanceId: number | null | undefined): string | null {
+  if (itemInstanceId === undefined) return null;
+  return itemInstanceId === null ? BARE_HANDS_VALUE : String(itemInstanceId);
+}
+
 /** "one-handed melee · Melee Combat": the kind in sentence case, then the skill. */
 function weaponChip(weapon: StrikeWeaponOption): string {
   return `${weapon.gear_kind.toLowerCase()} · ${weapon.strike_skill}`;
@@ -42,6 +53,7 @@ function weaponChip(weapon: StrikeWeaponOption): string {
 
 export function StrikeControl({
   weapons,
+  declaredItemInstanceId,
   targetOpponentId,
   declaredTargetName,
   error,
@@ -49,14 +61,19 @@ export function StrikeControl({
   pending,
   onStrike,
 }: StrikeControlProps) {
-  const [weapon, setWeapon] = useState(() => (weapons[0] ? weaponValue(weapons[0]) : ''));
+  const declaredValue = declaredWeaponValue(declaredItemInstanceId);
+  const [weapon, setWeapon] = useState(
+    () => declaredValue ?? (weapons[0] ? weaponValue(weapons[0]) : '')
+  );
 
   // The weapon list arrives with the encounter and changes when gear does: keep the
   // choice while it is still offered, otherwise fall back to the first weapon.
   useEffect(() => {
     if (weapons.some((option) => weaponValue(option) === weapon)) return;
-    setWeapon(weapons[0] ? weaponValue(weapons[0]) : '');
-  }, [weapons, weapon]);
+    const declared = weapons.find((option) => weaponValue(option) === declaredValue);
+    const fallback = declared ?? weapons[0];
+    setWeapon(fallback ? weaponValue(fallback) : '');
+  }, [weapons, weapon, declaredValue]);
 
   const blocked = targetOpponentId === null || weapon === '';
 

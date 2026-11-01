@@ -970,6 +970,7 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
         { label: 'Intensity', value: '+2', detail: 'misses add to hit' },
       ],
       result: 'Hit, good',
+      result_note: 'then the damage roll',
     },
     'Hit, good'
   );
@@ -982,6 +983,7 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
         { label: 'Melee Combat', value: '25', detail: 'strike skill' },
       ],
       result: '11 damage',
+      result_note: '',
     },
     '11 damage'
   );
@@ -1007,6 +1009,9 @@ describe('CombatTurnPanel: a Strike shows its hit roll, then its damage roll (#4
       '11 damage',
     ]);
     expect(screen.getByText('misses add to hit')).toBeInTheDocument();
+    expect(screen.getAllByTestId('roll-result-note').map((el) => el.textContent)).toEqual([
+      'then the damage roll',
+    ]);
     expect(screen.getByText('Rapier, fine quality')).toBeInTheDocument();
     const section = screen.getByTestId('outcome-roulette-section');
     expect(section).not.toHaveTextContent('Unknown');

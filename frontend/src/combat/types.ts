@@ -86,6 +86,8 @@ export interface RoundActionTyped extends RoundAction {
   focused_ally_target: number | null;
   /** CombatOpponent PK a taunt is aimed at (#4737); null for an ally target. */
   focused_opponent_target?: number | null;
+  /** The weapon a declared Strike is made with (#4858); null for bare hands. */
+  item_instance?: number | null;
   /** Technique PK of the declared focused action (the held strike for "await_opening"). */
   focused_action?: number | null;
   /** ComboDefinition PK when this round's action has been upgraded to a combo, else null (#3381). */

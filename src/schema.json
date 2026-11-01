@@ -87605,10 +87605,13 @@ components:
             $ref: '#/components/schemas/RollLine'
         result:
           type: string
+        result_note:
+          type: string
       required:
       - heading
       - lines
       - result
+      - result_note
     RollLine:
       type: object
       description: One source row in a roll breakdown (#4858); read-only, schema shape.

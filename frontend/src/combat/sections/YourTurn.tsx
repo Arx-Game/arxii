@@ -2075,6 +2075,23 @@ export function YourTurn({
   // ownRoundAction.is_ready (not just local state) survives that remount.
   const serverReady = ownRoundAction?.is_ready === true;
 
+  // A Strike already declared this round (#4858) comes back on reload: the Strike pick,
+  // its target and its weapon are read from the declaration, once per declaration.
+  const restoredStrikeRef = useRef<number | null>(null);
+  const declaredStrike = ownRoundAction?.maneuver === 'strike' ? ownRoundAction : null;
+  useEffect(() => {
+    const declarationId = declaredStrike === null ? null : Number(declaredStrike.id);
+    if (declaredStrike === null || restoredStrikeRef.current === declarationId) return;
+    restoredStrikeRef.current = declarationId;
+    setStrikePicked(true);
+    setFocusedContext((prev) => ({
+      ...prev,
+      techniqueId: undefined,
+      targetKind: declaredStrike.focused_opponent_target != null ? 'opponent' : prev.targetKind,
+      targetId: declaredStrike.focused_opponent_target ?? prev.targetId,
+    }));
+  }, [declaredStrike, setStrikePicked, setFocusedContext]);
+
   const participants: Participant[] = encounter?.participants ?? [];
 
   // All active participants except self count as allies until covenant sides land (mirrors backend serializers.py note).
@@ -2684,6 +2701,9 @@ export function YourTurn({
                   panel: (
                     <StrikeControl
                       weapons={myParticipantSelf?.strike_weapons ?? []}
+                      declaredItemInstanceId={
+                        declaredStrike !== null ? (declaredStrike.item_instance ?? null) : undefined
+                      }
                       targetOpponentId={
                         focusedContext.targetKind === 'opponent'
                           ? (focusedContext.targetId ?? null)

@@ -14,4 +14,16 @@ describe('handleCombatEncounterStatePayload', () => {
     expect(queryClient.getQueryState(combatKeys.encounter(17))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(combatKeys.encounter(18))?.isInvalidated).toBe(false);
   });
+
+  it("refetches that encounter's rolls for the Last Outcome card, and no other's (#4858)", () => {
+    const mine = combatKeys.consequenceOutcomes({ character: 10, encounter: 17, page_size: 2 });
+    const other = combatKeys.consequenceOutcomes({ character: 10, encounter: 18, page_size: 2 });
+    queryClient.setQueryData(mine, []);
+    queryClient.setQueryData(other, []);
+
+    handleCombatEncounterStatePayload({ encounter_id: 17, round_number: 4 });
+
+    expect(queryClient.getQueryState(mine)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(other)?.isInvalidated).toBe(false);
+  });
 });

@@ -32,8 +32,18 @@ export function RollBreakdownCard({ breakdown }: { breakdown: RollBreakdown }) {
             <span className="text-right text-[11px] text-muted-foreground">{line.detail}</span>
           </div>
         ))}
-        <div className="py-1 text-xs font-semibold text-foreground" data-testid="roll-result">
-          {breakdown.result}
+        <div className="flex items-baseline justify-between gap-3 py-1 text-xs">
+          <span className="font-semibold text-foreground" data-testid="roll-result">
+            {breakdown.result}
+          </span>
+          {breakdown.result_note !== '' && (
+            <span
+              className="text-right text-[11px] text-muted-foreground"
+              data-testid="roll-result-note"
+            >
+              {breakdown.result_note}
+            </span>
+          )}
         </div>
       </div>
     </div>

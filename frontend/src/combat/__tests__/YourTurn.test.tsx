@@ -2963,4 +2963,58 @@ describe('YourTurn: Strike as the first focused pick (#4858)', () => {
       kwargs: { opponent_id: 20, weapon_id: 9 },
     });
   });
+
+  it('restores a Strike declared before a reload: the pick, its target and its weapon', () => {
+    setupMocks();
+    mockActionDeclarationCard.mockImplementation((props: LeadingPickProps) => (
+      <div data-testid={`action-card-${props.actionContext.slot}`}>
+        {props.leadingPick?.selected && props.leadingPick.panel}
+        <span data-testid={`card-target-${props.actionContext.slot}`}>
+          {props.actionContext.targetKind ?? ''}:{props.actionContext.targetId ?? ''}
+        </span>
+      </div>
+    ));
+    const self = {
+      ...makeSelfParticipant(5),
+      strike_weapons: [
+        {
+          item_instance_id: 9,
+          name: 'Rapier',
+          gear_kind: 'One-Handed Melee',
+          strike_skill: 'Melee Combat',
+        },
+        {
+          item_instance_id: null,
+          name: 'bare hands',
+          gear_kind: 'Unarmed',
+          strike_skill: 'Unarmed Combat',
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [self],
+      opponents: [makeOpponentFixture({ id: 20, name: 'Bandit' })],
+      current_round_actions: [
+        {
+          id: 77,
+          participant: 5,
+          participant_name: 'Hero',
+          is_ready: false,
+          maneuver: 'strike',
+          focused_ally_target: null,
+          focused_opponent_target: 20,
+          item_instance: null,
+          combo_upgrade: null,
+        } as unknown as NonNullable<EncounterDetail['current_round_actions']>[number],
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('strike-control')).toBeInTheDocument();
+    expect(screen.getByTestId('card-target-focused')).toHaveTextContent('opponent:20');
+    expect(screen.getByTestId('strike-weapon-bare')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('strike-declared-badge')).toHaveTextContent('Striking Bandit');
+  });
 });

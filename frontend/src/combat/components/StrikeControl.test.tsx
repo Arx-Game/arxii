@@ -76,4 +76,9 @@ describe('StrikeControl', () => {
     expect(screen.getByTestId('strike-declared-badge')).toHaveTextContent('Striking Bandit');
     expect(screen.getByRole('alert')).toHaveTextContent('out of reach');
   });
+
+  it("starts on the weapon this round's Strike was declared with", () => {
+    render(<StrikeControl {...baseProps} declaredItemInstanceId={null} onStrike={vi.fn()} />);
+    expect(screen.getByTestId('strike-weapon-bare')).toHaveAttribute('aria-checked', 'true');
+  });
 });
