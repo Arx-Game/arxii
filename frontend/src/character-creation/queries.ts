@@ -3,7 +3,10 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { distinctionKeys } from '@/hooks/useDistinctions';
 import {
+  loadDefaultLife,
+  clearLife,
   getDraftBeats,
   addDraftComment,
   addToRoster,
@@ -364,6 +367,38 @@ export function useDraftCGPoints(draftId: number | undefined) {
  * calls this with its own `chapter` rather than reading a Distinctions stage.
  */
 /** The Backgrounds beat pool as the draft meets it (#4124). */
+/**
+ * The suggested life (#4865): `useLoadDefaultLife` loads the beginning's starred pins as
+ * picks (the server loads once per beginning), `useClearLife` is Start blank. Both answer
+ * with the draft, which replaces the cache, and refetch what a changed life moves: the
+ * draft's distinctions, its beats, the Backgrounds offers and the CG points.
+ */
+function useLifeMutation(draftId: number, call: (draftId: number) => Promise<CharacterDraft>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => call(draftId),
+    onSuccess: (draft) => {
+      queryClient.setQueryData(characterCreationKeys.draft(), draft);
+      void queryClient.invalidateQueries({ queryKey: distinctionKeys.draftDistinctions(draftId) });
+      void queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftBeats(draftId) });
+      void queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.draftOffers(draftId, 'backgrounds'),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.draftCGPoints(draftId),
+      });
+    },
+  });
+}
+
+export function useLoadDefaultLife(draftId: number) {
+  return useLifeMutation(draftId, loadDefaultLife);
+}
+
+export function useClearLife(draftId: number) {
+  return useLifeMutation(draftId, clearLife);
+}
+
 export function useDraftBeats(draftId: number | undefined) {
   return useQuery({
     queryKey: characterCreationKeys.draftBeats(draftId!),

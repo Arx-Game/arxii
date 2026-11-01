@@ -16,6 +16,8 @@ import type { BeatPoolEntry, OffersResponse, VisibleOffer } from '../../../types
 
 const mutateAsync = vi.fn().mockResolvedValue({});
 const syncMutate = vi.fn();
+const loadMutate = vi.fn();
+const clearMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
 let offersResponse: OffersResponse = { offers: [], closed: [] };
 let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals: string[] }[] = [];
@@ -23,6 +25,8 @@ let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals
 vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync }),
+  useLoadDefaultLife: () => ({ mutate: loadMutate, isPending: false }),
+  useClearLife: () => ({ mutate: clearMutate, isPending: false }),
   useDraftBeats: () => ({ data: pool, isLoading: false }),
   useDraftOffers: () => ({ data: offersResponse, isLoading: false }),
 }));
@@ -274,5 +278,59 @@ describe('LifeGrids', () => {
     expect(screen.getByLabelText('Recent History (Optional)')).toBeInTheDocument();
     expect(document.querySelector('.absent')).toBeNull();
     expect(screen.queryByText(/points spent$/)).toBeNull();
+  });
+});
+
+describe('LifeGrids (the suggested life, #4865)', () => {
+  beforeEach(() => {
+    loadMutate.mockClear();
+    clearMutate.mockClear();
+    pool = [beat({ beat_id: 1, name: 'The household' })];
+    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], closed: [] };
+    draftDistinctions = [];
+  });
+
+  it('loads the suggested life once when the grids open for a beginning the stamp does not name', () => {
+    const { rerender } = renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft({ selected_beginnings: mockBeginnings })} copy={{}} />
+    );
+    expect(loadMutate).toHaveBeenCalledTimes(1);
+    rerender(
+      <LifeGrids draft={createMockDraft({ selected_beginnings: mockBeginnings })} copy={{}} />
+    );
+    expect(loadMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads nothing when the stamp names the beginning, or there is no beginning', () => {
+    const { unmount } = renderWithCharacterCreationProviders(
+      <LifeGrids
+        draft={createMockDraft({
+          selected_beginnings: mockBeginnings,
+          draft_data: { life_loaded_for: mockBeginnings.id },
+        })}
+        copy={{}}
+      />
+    );
+    expect(loadMutate).not.toHaveBeenCalled();
+    unmount();
+    renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft({ selected_beginnings: null })} copy={{}} />
+    );
+    expect(loadMutate).not.toHaveBeenCalled();
+  });
+
+  it('Start blank clears the life', async () => {
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(
+      <LifeGrids
+        draft={createMockDraft({
+          selected_beginnings: mockBeginnings,
+          draft_data: { life_loaded_for: mockBeginnings.id },
+        })}
+        copy={{}}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Start blank' }));
+    expect(clearMutate).toHaveBeenCalledTimes(1);
   });
 });

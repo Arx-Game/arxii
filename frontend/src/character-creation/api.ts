@@ -341,6 +341,26 @@ export async function getDraftOffers(
 }
 
 /** The Backgrounds beat pool as this draft meets it (#4124). */
+/**
+ * POST /api/character-creation/drafts/{id}/load-default-life/ (#4865): the beginning's
+ * suggested life as picks, once per beginning (the server's `life_loaded_for` stamp guards
+ * a life the player edited or cleared). Answers with the draft.
+ */
+export async function loadDefaultLife(draftId: number): Promise<CharacterDraft> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/load-default-life/`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to load the suggested life');
+  return res.json();
+}
+
+/** POST /api/character-creation/drafts/{id}/clear-life/ (#4865): Start blank. Answers with the draft. */
+export async function clearLife(draftId: number): Promise<CharacterDraft> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/clear-life/`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to clear the life');
+  return res.json();
+}
+
 export async function getDraftBeats(draftId: number): Promise<BeatPoolEntry[]> {
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/beats/`);
   if (!res.ok) {
