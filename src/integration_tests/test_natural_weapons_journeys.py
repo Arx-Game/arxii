@@ -495,3 +495,57 @@ class AnNpcCopyTakesTheClawsWithTheGift(JourneyCase):
             {(region, EquipmentLayer.SKIN) for region in HANDS},
         )
         self.assertEqual(len(claws_of(self.vael.character_sheet)), 1)
+
+
+class OfferingTheClaws(JourneyCase):
+    """Ysmay, clawed, worships Ombrin at its shrine: her claws are not hers to give up."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.worship.factories import ShrineDetailsFactory, WorshippedBeingFactory
+        from world.worship.invocation_services import get_devotion_config
+        from world.worship.models import WorshipDeclaration
+
+        self.room = self.make_room("The Shrine of Ombrin")
+        profile = RoomProfileFactory(objectdb=self.room)
+        self.ysmay = self.make_player("Ysmay", room=self.room)
+        self.sheet = self.ysmay.sheet_data
+        self.ombrin = WorshippedBeingFactory(name="Ombrin", resonance_pool=100)
+        ShrineDetailsFactory(feature_instance__room_profile=profile, being=self.ombrin)
+        WorshipDeclaration.objects.create(character_sheet=self.sheet, public_being=self.ombrin)
+        config = get_devotion_config()
+        config.invocation_check_type = CheckTypeFactory()
+        config.save(update_fields=["invocation_check_type"])
+        grant_gift_to_character(self.sheet, clawed_gift())
+        (self.claws,) = claws_of(self.sheet)
+
+    def assert_claws_kept(self) -> None:
+        self.assertEqual(claws_of(self.sheet), [self.claws])
+        self.assertEqual(
+            worn_slots(self.sheet, self.claws),
+            {(region, EquipmentLayer.SKIN) for region in HANDS},
+        )
+        self.ombrin.refresh_from_db()
+        self.assertEqual(self.ombrin.resonance_pool, 100)
+
+    def test_sacrificing_them_at_the_shrine_is_refused(self) -> None:
+        told = self.telnet(self.ysmay, f"sacrifice {CLAWS}")
+
+        self.assertIn(REFUSED, told)
+        self.assert_claws_kept()
+
+    def test_offering_them_in_a_ceremony_is_refused(self) -> None:
+        from world.ceremonies.constants import CeremonyTypeKey
+        from world.ceremonies.factories import CeremonyTypeFactory
+        from world.ceremonies.models import CeremonyOffering
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.BLESSING, name="Blessing")
+        self.telnet(self.ysmay, "ceremony/blessing")
+
+        told = self.telnet(self.ysmay, f"ceremony/offering {CLAWS}")
+
+        self.assertIn(REFUSED, told)
+        self.assertFalse(CeremonyOffering.objects.exists())
+        self.assert_claws_kept()

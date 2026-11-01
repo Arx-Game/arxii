@@ -124,7 +124,11 @@ cannot be removed."):
 | confiscation sentence | `apply_confiscation` leaves it on the body |
 | stake forfeit | `_write_item_forfeit` logs and skips it |
 | worked into a new piece | `validate_worked_from` |
-| any use-up, offering, recycle, evidence disposal, material spend | `destroy_consumed_item_instance` refuses it first |
+| shrine sacrifice, ceremony offering, rite gift | `_validate_sacrifice_items` (`SacrificeRefused`), `record_offering` (`CeremonyError`), `read_rite_gifts` (`RiteGiftIsPartOfTheBody`) |
+| recycle | `recycle_item` refuses it before any salvage is made |
+| project item contribution | `add_contribution` refuses it; construction completion skips one |
+| material spend | `gather_consumable_pks` never picks one; `consume_materials` skips one |
+| any other use-up (evidence disposal, coin, gems) | `destroy_consumed_item_instance` refuses it first |
 | any other holder change or unequip | backstops in `set_item_holder` and `unequip_item` |
 
 Losing the gift is the one way it comes off: `deprovision_natural_weapon(sheet, gift)` clears
@@ -133,7 +137,9 @@ the marker and hands the item to `destroy_consumed_item_instance`. It runs where
 beta reset wipe of play-time gifts. Staff admin edits are not gated (staff power). A natural weapon covers no skin:
 `covered_regions` skips it, so claws do not shade the hands from the sun or hide a marking.
 Its quality, facets and fittings use the ordinary item paths; a faceted piece counts once
-however many slots it fills (`CharacterEquipmentHandler.item_facets_for`). It is struck like
+however many slots it fills (`CharacterEquipmentHandler.item_facets_for`), and so does a
+weapon's covenant role bonus for weapon damage (`covenant_role_bonus`; armor stays per slot,
+as its soak is summed per worn row). It is struck like
 any equipped Unarmed weapon (see the Strike in `docs/systems/INDEX.md`), listed before bare
 hands. The Required content row `natural-weapon-templates` lists a natural weapon template
 that is not Unarmed, has no slots, has a slot off the skin layer, or tracks durability.
