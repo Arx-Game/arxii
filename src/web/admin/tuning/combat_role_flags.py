@@ -305,6 +305,17 @@ def combat_role_declarations() -> tuple[ContentDependency, ...]:
     )
 
 
+#: What the Fix it link of each flagged row says on the Missing combat content page,
+#: by dependency key (demo screen 6: "vow page", "combo map").
+FIX_LABELS: dict[str, str] = {
+    "combat_vow_no_picks": "vow page",
+    "combat_holder_over_budget": "their picks",
+    "combat_condition_never_read": "combo map",
+    "combat_condition_set_by_nothing": "combo map",
+    "combat_pick_blank_payload": "vow page",
+}
+
+
 def collect_combat_role_flags() -> list[DependencyRow]:
     """The five flags resolved, in declaration order, for the Missing combat content page
     and the Combat roles panel. A clear flag is ``result.present``."""

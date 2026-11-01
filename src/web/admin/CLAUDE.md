@@ -1344,13 +1344,15 @@ path changes.
   `admin_combat_content`, superuser-only (`superuser_required`). Template
   `templates/admin/tuning/combat_content.html` (extends `base_site.html`, includes
   `_panel_css.html` for `tuning-panel`/`tuning-table`, its one own class styled inline):
-  breadcrumb Home > Ops > Required content > Combat roles, heading "Combat roles" noted
-  "flags only, nothing blocked", a Flag / What / Fix it table of the open flags, one link
-  per flagged row (the demo's single link per flag became one per row, since rows differ),
-  or "Nothing is flagged."
+  breadcrumb Home > Ops > Required content > Combat roles, an admin module headed "Combat
+  roles" with the tag "flags only, nothing blocked", then a Flag / What / Fix it table of
+  the open flags: one table row per flagged row, the flag's label spanning them, and a Fix it
+  link per row whose text is the flag's `FIX_LABELS` entry ("vow page", "their picks",
+  "combo map") and whose `aria-label` names the row. With nothing open, "Nothing is flagged."
 - **Panel** - `combat_roles._missing_combat_content_link` runs
   `collect_combat_role_flags()` on every front-page load for a superuser: a fixed 116
-  queries, whatever the catalog size.
+  queries, whatever the catalog size. The count is `CombatRolesLink.flag_count`, drawn as a
+  `.combat-roles-flagdot` pill (`arx_admin.css`) before the note.
 - **Queries** - fixed however many vows, picks, holders or conditions; pinned in
   `tests/test_combat_role_flags.py` `QueryCountTest`.
 - Tests: `tests/test_combat_role_flags.py` (each flag's positive and negative cases and

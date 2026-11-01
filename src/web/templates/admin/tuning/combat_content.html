@@ -1,6 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
@@ -13,16 +15,27 @@
 {% block content %}
 {% include "admin/tuning/_panel_css.html" %}
 <style>
+  #combat-content-root .combat-content-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
   #combat-content-root .combat-content-note {
-    margin-left: 0.5rem;
-    font-size: 0.8rem;
     font-weight: normal;
-    color: var(--body-quiet-color);
+    font-size: 0.72rem;
+    padding: 0 6px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+  }
+  #combat-content-root .combat-content-body {
+    padding: 8px 10px;
   }
 </style>
 <div id="combat-content-root">
-  <section class="tuning-panel">
-    <h2>{% translate "Combat roles" %}<span class="combat-content-note">{% translate "flags only, nothing blocked" %}</span></h2>
+  <div class="module">
+    <h2 class="combat-content-head">{% translate "Combat roles" %}<span class="combat-content-note">{% translate "flags only, nothing blocked" %}</span></h2>
     {% if open_flags %}
     <table class="tuning-table">
       <thead>
@@ -33,18 +46,18 @@
         </tr>
       </thead>
       <tbody>
-        {% for row in open_flags %}
+        {% for flag in open_flags %}{% for flagged in flag.rows %}
         <tr>
-          <td>{{ row.dependency.label }}</td>
-          <td>{{ row.result.missing|join:", " }}</td>
-          <td>{% for flagged in row.result.flagged %}{% if flagged.url %}<a href="{{ flagged.url }}">{{ flagged.text }}</a>{% else %}{{ flagged.text }}{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+          {% if forloop.first %}<td rowspan="{{ flag.rows|length }}">{{ flag.label }}</td>{% endif %}
+          <td>{{ flagged.text }}</td>
+          <td>{% if flagged.url %}<a href="{{ flagged.url }}" aria-label="{{ flag.fix_label }}: {{ flagged.text }}">{{ flag.fix_label }}</a>{% endif %}</td>
         </tr>
-        {% endfor %}
+        {% endfor %}{% endfor %}
       </tbody>
     </table>
     {% else %}
-    <p>{% translate "Nothing is flagged." %}</p>
+    <p class="combat-content-body">{% translate "Nothing is flagged." %}</p>
     {% endif %}
-  </section>
+  </div>
 </div>
 {% endblock %}

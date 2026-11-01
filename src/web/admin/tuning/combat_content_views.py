@@ -6,20 +6,40 @@ fix each flagged row. Read only, superuser-only like the Game Ops dashboard it s
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
-from web.admin.tuning.combat_role_flags import collect_combat_role_flags
+from web.admin.tuning.combat_role_flags import FIX_LABELS, collect_combat_role_flags
+from web.admin.tuning.required_content import FlaggedRow
 from web.admin.tuning.views import superuser_required
+
+
+@dataclass(frozen=True)
+class OpenFlag:
+    """One open flag as the page draws it: its label, its rows and their Fix it link text."""
+
+    label: str
+    rows: tuple[FlaggedRow, ...]
+    fix_label: str
 
 
 @superuser_required
 @require_GET
 def combat_content(request: HttpRequest) -> HttpResponse:
     """Every open missing combat content flag, each flagged row linked to its fix page."""
-    open_flags = [row for row in collect_combat_role_flags() if not row.result.present]
+    open_flags = [
+        OpenFlag(
+            label=row.dependency.label,
+            rows=row.result.flagged,
+            fix_label=FIX_LABELS[row.dependency.key],
+        )
+        for row in collect_combat_role_flags()
+        if not row.result.present
+    ]
     return render(
         request,
         "admin/tuning/combat_content.html",

@@ -66,17 +66,19 @@ class CombatRolesPanelTests(TestCase):
                     self.assertTrue(link.pickers, "a row with no page of its own needs a picker")
 
     def test_the_missing_combat_content_row_counts_the_open_flags(self) -> None:
-        def note() -> str:
+        def shown() -> tuple[int, str]:
             row = next(link for link in self._links() if link.label == "Missing combat content")
             self.assertEqual(row.url, reverse("admin_combat_content"))
-            return row.note
+            return row.flag_count, row.note
 
-        self.assertEqual(note(), "no open flags")
+        self.assertEqual(shown(), (0, "no open flags"))
         CovenantRoleFactory(name="Warden")
-        self.assertEqual(note(), "1 open flag")
+        self.assertEqual(shown(), (1, "open flag"))
         VowFocusPickFactory(covenant_role=CovenantRoleFactory(name="Aegis"), name="Bare")
         # Aegis now has a pick, but that pick has no payload; Warden still has none.
-        self.assertEqual(note(), "2 open flags")
+        self.assertEqual(shown(), (2, "open flags"))
+        body = self.client.get(reverse("admin:index")).content.decode()
+        self.assertIn('<span class="combat-roles-flagdot">2</span> open flags', body)
 
     def test_the_vow_picker_lists_every_vow_and_opens_its_vow_page(self) -> None:
         role = CovenantRoleFactory(name="Fulmination")

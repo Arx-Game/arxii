@@ -89,22 +89,24 @@ class CombatContentPageTest(CombatContentPageCase):
         self.assertEqual(
             self.flag_rows(body),
             [
-                "Vow with no picks Aegis, Warden Aegis Warden",
-                "Pick with a blank payload Under Open Sky (Fulmination) "
-                "Under Open Sky (Fulmination)",
+                "Vow with no picks Aegis vow page",
+                "Warden vow page",
+                "Pick with a blank payload Under Open Sky (Fulmination) vow page",
             ],
         )
         for role in (warden, aegis):
             self.assertIn(
-                f'<a href="{reverse("admin_vow_builder", args=[role.pk])}">{role.name}</a>', body
+                f'<a href="{reverse("admin_vow_builder", args=[role.pk])}" '
+                f'aria-label="vow page: {role.name}">vow page</a>',
+                body,
             )
         self.assertIn(
-            f'<a href="{reverse("admin_vow_builder", args=[fulmination.pk])}">'
-            "Under Open Sky (Fulmination)</a>",
+            f'<a href="{reverse("admin_vow_builder", args=[fulmination.pk])}" '
+            'aria-label="vow page: Under Open Sky (Fulmination)">vow page</a>',
             body,
         )
         # Every page a flagged row links to opens.
-        for href in re.findall(r'<td><a href="([^"]+)"', body):
+        for href in re.findall(r'<td><a href="([^"]+)" aria-label=', body):
             with self.subTest(href=href):
                 self.assertEqual(self.client.get(href).status_code, 200)
 

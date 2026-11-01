@@ -44,6 +44,8 @@ class CombatRolesLink:
     url: str
     note: str
     pickers: list[RowPicker] = field(default_factory=list)
+    #: An open count drawn as a pill before the note (the Missing combat content row).
+    flag_count: int = 0
 
 
 def _changelist(model_name: str) -> str:
@@ -131,9 +133,12 @@ def _missing_combat_content_link() -> CombatRolesLink:
     if count == 0:
         note = "no open flags"
     else:
-        note = f"{count} open flag{'' if count == 1 else 's'}"
+        note = f"open flag{'' if count == 1 else 's'}"
     return CombatRolesLink(
-        label="Missing combat content", url=reverse("admin_combat_content"), note=note
+        label="Missing combat content",
+        url=reverse("admin_combat_content"),
+        note=note,
+        flag_count=count,
     )
 
 
