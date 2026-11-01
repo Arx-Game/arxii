@@ -31091,7 +31091,7 @@ export interface components {
      *     the frontend ``ClashContributor`` interface (combat/types.ts).
      */
     ClashContributor: {
-      character_id: number | null;
+      participant_id: number | null;
       character_name: string;
       action_slot: string;
       progress_delta: number;

@@ -52194,7 +52194,7 @@ components:
         concrete component instead of {[key: string]: unknown} (#2423). Mirrors
         the frontend ``ClashContributor`` interface (combat/types.ts).
       properties:
-        character_id:
+        participant_id:
           type: integer
           nullable: true
         character_name:
@@ -52208,8 +52208,8 @@ components:
       required:
       - action_slot
       - anima
-      - character_id
       - character_name
+      - participant_id
       - progress_delta
     ClashState:
       type: object

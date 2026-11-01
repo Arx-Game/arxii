@@ -1075,7 +1075,7 @@ class ClashContributorSerializer(serializers.Serializer):
     the frontend ``ClashContributor`` interface (combat/types.ts).
     """
 
-    character_id = serializers.IntegerField(allow_null=True)
+    participant_id = serializers.IntegerField(allow_null=True)
     character_name = serializers.CharField()
     action_slot = serializers.CharField()
     progress_delta = serializers.IntegerField()
@@ -1127,7 +1127,11 @@ class ClashStateSerializer(serializers.ModelSerializer):
 
         Sums each contributor's progress_delta + anima_committed. Returns
         a list of dicts shaped for the frontend ActiveState card:
-            {character_id, character_name, action_slot, progress_delta, anima}
+            {participant_id, character_name, action_slot, progress_delta, anima}
+
+        ``participant_id`` is the contributor's seat in the encounter, the id the roster
+        rows carry; the sheet id is never sent, since it would tie a mask to the real
+        character for every other viewer (#4802, Ruling 49).
 
         Reads through ``clash.rounds.cached_contributions`` when the
         EncounterCombatHandler prefetch is in play; falls back to a query
@@ -1137,7 +1141,7 @@ class ClashStateSerializer(serializers.ModelSerializer):
 
         totals: dict[int, dict[str, object]] = defaultdict(
             lambda: {
-                "character_id": None,
+                "participant_id": None,
                 "character_name": "",
                 "action_slot": "",
                 "progress_delta": 0,
@@ -1171,15 +1175,23 @@ class ClashStateSerializer(serializers.ModelSerializer):
                 contributions.append(list(clash_round.contributions.select_related("character")))
         # The face each contributor wears, never the key (#4802): the encounter hands the
         # roster's names over in context; alone, they are read once for the clash.
+        sheet_ids = {
+            c.character_id for contribs in contributions for c in contribs if c.character_id
+        }
         names = self.context.get("participant_names")
         if names is None:
-            names = persona_names_for_sheets(
-                {c.character_id for contribs in contributions for c in contribs if c.character_id}
+            names = persona_names_for_sheets(sheet_ids)
+        seats = self.context.get("participant_ids")
+        if seats is None:
+            seats = dict(
+                CombatParticipant.objects.filter(
+                    encounter_id=obj.encounter_id, character_sheet_id__in=sheet_ids
+                ).values_list("character_sheet_id", "pk")
             )
         for contribs in contributions:
             for c in contribs:
                 bucket = totals[c.character_id]
-                bucket["character_id"] = c.character_id
+                bucket["participant_id"] = seats.get(c.character_id)
                 bucket["character_name"] = (
                     names.get(c.character_id, c.character.character.db_key)
                     if c.character_id
@@ -2066,8 +2078,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         ``_base_queryset`` pre-fills so no extra query fires here.
         """
         names = {sheet_id: p.name for sheet_id, p in self._participant_personas(obj).items()}
+        seats = {p.character_sheet_id: p.pk for p in obj.participants_cached}
         return ClashStateSerializer(  # type: ignore[return-value]
-            obj.clashes_cached, many=True, context={"participant_names": names}
+            obj.clashes_cached,
+            many=True,
+            context={"participant_names": names, "participant_ids": seats},
         ).data
 
     def _participant_personas(self, obj: CombatEncounter) -> dict[int, Persona]:

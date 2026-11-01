@@ -16,7 +16,7 @@ room, sheet or bestiary row the first read loaded.
 - Hobb takes a new face: his account payload lists it on the next read.
 - Hobb masks himself mid-fight: Ada's next read names him by the mask, never "Hobb", in
   the roster and in the clash he contributes to, and shows the mask's portrait, never his
-  own face (#4802).
+  own face; the clash row names his seat, never his sheet id (#4802).
 - Staff add a phase to a bestiary entry: the bestiary list says it has phases.
 - A wolf with one round left on its broken wall: once the round resolves Ada's read says
   the wall is no longer broken, the row holds 0, and the wolf's next save keeps 0.
@@ -189,6 +189,24 @@ class AMaskedFighterIsListedUnderTheMask(_AdaWatchesTheCauseway):
         self.assertEqual(
             [row["character_name"] for row in clash["contributors"]], ["a hooded man"], told
         )
+
+    def test_the_clash_never_hands_ada_hobbs_sheet_id(self) -> None:
+        """Ruling 49: the contributor row names Hobb's seat, never the sheet behind the mask."""
+        wolf = self.creature("Grey Wolf", at=self.tower)
+        clash_round = ClashRoundFactory(
+            clash=ClashFactory(encounter=self.encounter, npc_opponent=wolf)
+        )
+        ClashContributionFactory(clash_round=clash_round, character=self.hobb.sheet_data)
+        seat = self.participant(self.hobb)
+        sheet_id = self.hobb.sheet_data.pk
+        self.assertNotEqual(seat.pk, sheet_id, "the check below needs the two ids apart")
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        (clash,) = self.ada_reads()["clashes"]
+        (row,) = clash["contributors"]
+        self.assertEqual(row["participant_id"], seat.pk, told)
+        self.assertNotIn(sheet_id, row.values(), row)
 
     def test_ada_sees_the_mask_portrait_never_hobbs_face(self) -> None:
         face = MediaFactory()
