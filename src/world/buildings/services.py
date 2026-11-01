@@ -463,8 +463,12 @@ def complete_building_construction(
         source_project=project,
     )
 
+    # A natural weapon (#4898) is never built into anything; the sweep leaves one alone
+    # rather than raising mid-completion (add_contribution refuses one up front).
     contributions = list(
-        project.contributions.filter(kind=ContributionKind.ITEM).select_related(
+        project.contributions.filter(
+            kind=ContributionKind.ITEM, item_instance__natural_weapon_gift__isnull=True
+        ).select_related(
             "item_instance__template__minimum_quality_tier",
             "item_instance__quality_tier",
             "item_instance__holder_character_sheet",

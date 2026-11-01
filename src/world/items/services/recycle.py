@@ -22,6 +22,7 @@ from django.utils import timezone
 from world.items.constants import SALVAGE_FRACTION, RecycleRequestStatus
 from world.items.exceptions import AccentNotPresent, NotItemOwner, RecycleNeedsGMApproval
 from world.items.models import ItemInstance, RecycleRequest
+from world.items.services.natural_weapons import require_removable
 from world.items.services.usage import destroy_consumed_item_instance
 
 if TYPE_CHECKING:
@@ -143,6 +144,8 @@ def recycle_item(*, item_instance: ItemInstance, actor_sheet: CharacterSheet) ->
     """
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     _assert_owner(locked, actor_sheet)
+    # A natural weapon (#4898) is part of the body: refuse before any salvage is made.
+    require_removable(locked)
     if is_story_protected(locked):
         approved = RecycleRequest.objects.filter(
             item_instance=locked,

@@ -1019,7 +1019,8 @@ def covenant_role_bonus(
     "engaged" with the covenant where they hold the role. Multiple engaged
     roles (e.g., one Durance + one Battle) stack additively.
 
-    Per slot (marginal blend — combat already counts the gear's base stat directly):
+    Per slot for armor, per piece for a weapon (#4898), as a marginal blend (combat already
+    counts the gear's base stat directly):
     - Compatible gear (GearArchetypeCompatibility row exists): role_bonus stacks on top.
     - Incompatible gear (no row): max(0, role_bonus - gear_stat) — only the role's
       surplus beyond what the gear already provides; never negative.
@@ -1057,14 +1058,25 @@ def covenant_role_bonus(
     if not engaged_roles:
         return 0
 
+    from world.items.constants import WEAPON_DAMAGE_TARGET_NAME  # noqa: PLC0415
+
     character_level = level_override if level_override is not None else sheet.current_level
+    # A weapon counts once however many slots it fills (#4898): claws on both hands or a
+    # two-handed greatsword are one weapon. Armor stays per slot, as its soak is
+    # (``effective_soak_from_armor`` sums worn rows).
+    once_per_piece = target.name == WEAPON_DAMAGE_TARGET_NAME
     total = 0
     for role in engaged_roles:
         role_bonus = role_base_bonus_for_target(role, target, character_level)
+        seen: set[int] = set()
         for equipped in char.equipped_items:
             item = equipped.item_instance
             if not _carries_gear_stat(item, target):
                 continue  # a ring or cloak adds no weapon damage or soak: no repeat (#4757)
+            if once_per_piece:
+                if item.pk in seen:
+                    continue
+                seen.add(item.pk)
             gear_stat = item_mundane_stat_for_target(item, target)
             archetype = item.template.gear_archetype
             if is_gear_compatible(role, archetype):
