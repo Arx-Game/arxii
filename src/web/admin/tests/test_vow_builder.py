@@ -11,12 +11,15 @@ Built in ``setUp``: the holder memberships create Evennia objects, which
 
 from __future__ import annotations
 
+from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.admin.models import LogEntry
+from django.db import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -39,7 +42,12 @@ from world.covenants.factories import (
     VowFocusPickFactory,
     VowFocusPickLimitFactory,
 )
-from world.covenants.models import CharacterVowFocusPick, CovenantRole, VowFocusPick
+from world.covenants.models import (
+    CharacterVowFocusPick,
+    CovenantRole,
+    VowFocusPick,
+    VowFocusPickLimit,
+)
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
 
@@ -362,6 +370,91 @@ class VowPageSaveTests(VowPageCase):
         self.client.post(reverse("admin_vow_builder_review", args=[self.role.pk]))
         self.assertEqual(CovenantRole.objects.get(pk=self.role.pk).reviewed_by, self.writer)
         self.assertEqual(VowFocusPick.objects.get(pk=self.kneel.pk).reviewed_by, self.writer)
+
+
+class VowPageRestoreTests(VowPageCase):
+    """A POST that writes nothing puts the shared rows back in place (#4880 review).
+
+    Validating ``VowForm`` copies the posted values onto the identity-mapped vow, which
+    other cached objects hold too: a membership a character's covenant-role handler
+    loaded with ``select_related("covenant_role")``, a sub-role's ``parent_role``. So
+    each refusal shape is checked through those holders, loaded before the POST, as
+    well as through a fresh read.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.author)
+        character = self.ysolde.character_sheet.character
+        self.held_role = character.covenant_roles.currently_held_role_in(self.ysolde.covenant)
+        self.assertIs(self.held_role, CovenantRole.objects.get(pk=self.role.pk))
+        self.sub = SubroleCovenantRoleFactory(parent_role=self.role, name="Thunderhead")
+        self.sub_cached = CovenantRole.objects.get(pk=self.sub.pk)
+        self.assertEqual(self.sub_cached.parent_role.sword_weight, 0)
+
+    def _assert_stored_everywhere(self, sword: str = "0") -> None:
+        expected = Decimal(sword)
+        stored = CovenantRole.objects.filter(pk=self.role.pk).values_list("sword_weight", flat=True)
+        self.assertEqual(stored.get(), expected)
+        self.assertEqual(CovenantRole.objects.get(pk=self.role.pk).sword_weight, expected)
+        self.assertEqual(self.held_role.sword_weight, expected)
+        self.assertEqual(self.sub_cached.parent_role.sword_weight, expected)
+
+    def test_a_role_field_error_then_the_corrected_post(self) -> None:
+        refused = self.client.post(
+            self.url, self._payload(name="", sword_weight="0.5", crown_weight="0.5")
+        )
+        self.assertEqual(refused.status_code, 200)
+        self._assert_stored_everywhere()
+        saved = self.client.post(self.url, self._payload(sword_weight="0.5", crown_weight="0.5"))
+        self.assertRedirects(saved, self.url, fetch_redirect_response=False)
+        self._assert_stored_everywhere("0.5")
+
+    def test_a_limit_field_error_restores_the_role_and_the_limit(self) -> None:
+        key = f"l{self.kneel.pk}-0-frequency_tenths"
+        response = self.client.post(
+            self.url, self._payload(sword_weight="0.5", crown_weight="0.5", **{key: "99"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self._assert_stored_everywhere()
+        limit = VowFocusPickLimit.objects.get(pk=self.kneel_limit.pk)
+        self.assertEqual(limit.frequency_tenths, 5)
+        self.assertEqual(self.kneel_limit.frequency_tenths, 5)
+
+    def test_the_held_pick_warning_restores_the_role_and_the_pick(self) -> None:
+        response = self.client.post(
+            self.url,
+            self._payload(
+                sword_weight="0.5", crown_weight="0.5", **{self._pick_key(self.kneel, "value"): "6"}
+            ),
+        )
+        self.assertContains(response, "Before you save")
+        self._assert_stored_everywhere()
+        self.assertEqual(self.kneel.value, 4)
+
+    def test_a_save_that_raises_restores_and_evicts_what_it_created(self) -> None:
+        payload = self._payload(
+            sword_weight="0.5",
+            crown_weight="0.5",
+            **{
+                "picks-TOTAL_FORMS": "4",
+                "picks-3-covenant_role": str(self.role.pk),
+                "picks-3-pick_level": "2",
+                "picks-3-name": "Under Open Sky",
+                "picks-3-value": "4",
+                "picks-3-description": "",
+            },
+        )
+        with (
+            patch("web.admin.vow_builder.views.stamp_written", side_effect=DatabaseError("boom")),
+            self.assertRaises(DatabaseError),
+        ):
+            self.client.post(self.url, payload)
+        self._assert_stored_everywhere()
+        self.assertFalse(VowFocusPick.objects.filter(name="Under Open Sky").exists())
+        self.assertFalse(
+            any(pick.name == "Under Open Sky" for pick in VowFocusPick.get_all_cached_instances())
+        )
 
 
 class _ClassCollector(HTMLParser):

@@ -26,7 +26,7 @@ from django.views.decorators.http import require_POST
 
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
-from web.admin.authoring.identity_map import flush_refused_instances
+from web.admin.authoring.identity_map import CacheGuard
 from web.admin.tuning.views import superuser_required
 from web.admin.vow_builder import live
 from web.admin.vow_builder.forms import (
@@ -45,7 +45,12 @@ from world.covenants.constants import (
     VOW_FOCUS_PICK_MAX_LEVEL,
 )
 from world.covenants.focus_picks import MIN_PICK_PRICE, price_for
-from world.covenants.models import CovenantRole, VowFocusPick, VowFocusPickLimit
+from world.covenants.models import (
+    CovenantRole,
+    CovenantRoleTechniqueSpecialty,
+    VowFocusPick,
+    VowFocusPickLimit,
+)
 
 _DELETE = "DELETE"
 #: The POST field the "Save anyway" control sends in place of Save after the holder warning.
@@ -79,8 +84,22 @@ class _VowForms:
                 valid &= limits.is_valid()
         return bool(valid)
 
-    def bound(self) -> tuple:
-        return (self.vow, self.specialties, self.picks, *self.limits.values())
+    def cache_guard(self) -> CacheGuard:
+        """A guard over every cached row these forms validate onto. Take it before validating.
+
+        Validating a ModelForm copies the posted values onto its instance, and the vow,
+        its specialties, picks and limits are identity-mapped objects other readers hold
+        too (a membership's ``covenant_role``, a sub-role's ``parent_role``, a holder's
+        ``pick``). Dropping them from the map would leave those holders on the polluted
+        object, so a path that does not commit restores the kept values onto the same
+        objects instead, and evicts any row a rolled-back save created.
+        """
+        guard = CacheGuard()
+        guard.watch_created(CovenantRoleTechniqueSpecialty, VowFocusPick, VowFocusPickLimit)
+        guard.keep(self.vow.instance)
+        for formset in (self.specialties, self.picks, *self.limits.values()):
+            guard.keep(*(form.instance for form in formset.initial_forms))
+        return guard
 
 
 def _build_forms(request: HttpRequest, role: CovenantRole) -> _VowForms:
@@ -284,23 +303,6 @@ def _save(request: HttpRequest, forms: _VowForms, contributor: ContentContributo
         )
 
 
-def _render_refused(
-    request: HttpRequest,
-    role: CovenantRole,
-    forms: _VowForms,
-    changes: list[live.PickChange] | None = None,
-) -> HttpResponse:
-    """Re-render with the posted values, then drop every bound row from the identity map.
-
-    Nothing was saved, so the next reader has to load what the database holds, even
-    when the render itself raises.
-    """
-    try:
-        return _render_page(request, role, forms, changes=changes)
-    finally:
-        flush_refused_instances(*forms.bound())
-
-
 @superuser_required
 def vow_builder(request: HttpRequest, pk: int) -> HttpResponse:
     """GET renders the page; POST saves every layer in one transaction, warning holders first."""
@@ -310,22 +312,24 @@ def vow_builder(request: HttpRequest, pk: int) -> HttpResponse:
         forms = _build_forms(request, role)
         return _render_page(request, role, forms, needs_setup=contributor is None)
     forms = _build_forms(request, role)
-    if contributor is None:
-        return _render_page(request, role, forms, needs_setup=True)
-    if not forms.is_valid():
-        return _render_refused(request, role, forms)
-    changes = live.pick_changes(role, _new_prices(forms), forms.stored)
-    if changes and CONFIRM_FIELD not in request.POST:
-        return _render_refused(request, role, forms, changes)
-    saved = False
+    guard = forms.cache_guard()
+    committed = False
     try:
+        if contributor is None:
+            return _render_page(request, role, forms, needs_setup=True)
+        if not forms.is_valid():
+            return _render_page(request, role, forms)
+        changes = live.pick_changes(role, _new_prices(forms), forms.stored)
+        if changes and CONFIRM_FIELD not in request.POST:
+            return _render_page(request, role, forms, changes=changes)
         _save(request, forms, contributor)
-        saved = True
+        committed = True
     finally:
-        if not saved:
-            # The transaction rolled the database back; the shared rows still hold the
-            # posted values, so drop them as the error propagates.
-            flush_refused_instances(*forms.bound())
+        # A refusal, the held-pick warning, or anything raised before or inside the
+        # transaction: nothing was written, so every bound row gets its kept values
+        # back, after the page (which shows the posted values) has rendered.
+        if not committed:
+            guard.restore()
     messages.success(request, "Saved and credited to you.")
     return redirect(reverse("admin_vow_builder", args=[role.pk]))
 
