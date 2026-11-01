@@ -130,7 +130,8 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   produced the ~1.3x faster fresh `migrate`, and the collapse's real payoff is that the
   floor without it stays at 1,153 (46 of the 68 pre-collapse apps shared one dependency
   cycle). The single `max_migration.txt` sentinel also raises merge-collision odds rather
-  than lowering them, per CLAUDE.md's Git Workflow section. See ADR-0195 for the full
+  than lowering them, per CLAUDE.md's Git Workflow section; since #4879 CI renumbers a PR
+  whose only conflict is that sentinel (ADR-4879). See ADR-0195 for the full
   decision, the rejected alternatives, and the consequences (dev DBs must be rebuilt and
   reseeded; `core.app_domains.domain_of()` now supplies the authoring-domain grouping
   `app_label` used to carry, for the admin index, the lore repo's `fixtures/<domain>/`

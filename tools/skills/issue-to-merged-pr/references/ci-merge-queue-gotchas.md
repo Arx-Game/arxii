@@ -36,7 +36,35 @@ single PR pair got bounced three times in a row (#3013 took 0111, #3010 took
 0112, #3009 took 0113) — each a two-minute fix, but only if you know the
 recipe.
 
-**The fix is `rebase_migration`, not hand-renumbering.**
+**CI now does the routine case (#4879, ADR-4879).** Every push to main that moves
+`max_migration.txt` runs `.github/workflows/migration-conflict-rebase.yml`. It
+covers each open same-repo PR that changes the file and is CONFLICTING. When the
+PR's only conflict is `max_migration.txt` and its migrations are one linear chain,
+`tools/auto_rebase_migration.py` merges main in, renumbers the chain after main's
+tip and proves the result: main's files untouched, each file's AST unchanged except
+its `arxii` dependency, one graph leaf, no missing migrations. The workflow then
+pushes the merge, re-arms auto-merge if the queue dropped the PR for the conflict,
+and comments `<!-- migration-auto-rebase sha=<sha> status=resolved -->`. So
+`git pull --ff-only` before your next push. A PR with review evidence is not
+re-armed: restate the evidence revision, then `enqueue-pr.sh`. If you ran `migrate`
+on the branch, first migrate back to the base tip the comment names, because the old
+names are gone after the pull. It refuses, with a `status=refused` comment naming
+the reason, in these cases:
+- any other conflict;
+- an edited or deleted existing migration;
+- a branching set of migrations;
+- a migration name pinned in code outside its own file;
+- `RunSQL` on either side;
+- a model that both main's new migrations and the PR's involve, because the new order
+  could change what a backfill or constraint sees.
+
+On a refusal, apply the manual recipe below, then have the reorder reviewed (the
+`migration-reviewer` agent). The workflow runs in two jobs. `check` holds no secret,
+runs the PR code and records the tree. `push` holds the PAT, runs no PR code, and
+pushes only an identical re-derived tree. To
+re-run it for one PR: `gh workflow run migration-conflict-rebase.yml -f pr=<N>`.
+
+**The manual fix is `rebase_migration`, not hand-renumbering.**
 django-linear-migrations (the thing that makes `max_migration.txt` conflict
 loudly on purpose) ships the automation:
 
