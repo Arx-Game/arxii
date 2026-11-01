@@ -149,7 +149,7 @@ class ControlLossContentMigrationTests(TestCase):
 
         from django.apps import apps
 
-        import_module("world.migrations.0333_control_loss_content").seed_control_loss_content(
+        import_module("world.migrations.0341_control_loss_content").seed_control_loss_content(
             apps, None
         )
 
