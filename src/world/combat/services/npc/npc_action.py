@@ -197,6 +197,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
                 target_participant,
                 defense_check_type,
                 perform_check_fn=defense_check_fn,
+                interaction_factory=get_npc_action_interaction,
             )
             dmg_result = defense.damage_result
         else:

@@ -107,6 +107,19 @@ class RollBreakdownSerializer(serializers.Serializer):
     result_note = serializers.CharField(allow_blank=True)
 
 
+def combat_roll_breakdowns(rows: list[ConsequenceOutcome]) -> dict[int, object]:
+    """Every combat roll among ``rows`` laid out as rows: a Strike's hit and damage rolls
+    (#4858) and a PC's defense roll (#4884). The two builders claim disjoint rows."""
+    from world.combat.services.declarations.strike import (  # noqa: PLC0415
+        strike_roll_breakdowns,
+    )
+    from world.combat.services.npc.defense_roll import (  # noqa: PLC0415
+        defense_roll_breakdowns,
+    )
+
+    return {**strike_roll_breakdowns(rows), **defense_roll_breakdowns(rows)}
+
+
 class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
     """Builds every Strike roll breakdown on the page at once (#4858).
 
@@ -115,12 +128,8 @@ class ConsequenceOutcomeListSerializer(serializers.ListSerializer):
     """
 
     def to_representation(self, data: object) -> list:
-        from world.combat.services.declarations.strike import (  # noqa: PLC0415
-            strike_roll_breakdowns,
-        )
-
         rows = list(data.all()) if isinstance(data, models.Manager) else list(data)
-        self.child.context["roll_breakdowns"] = strike_roll_breakdowns(rows)
+        self.child.context["roll_breakdowns"] = combat_roll_breakdowns(rows)
         return super().to_representation(rows)
 
 
@@ -202,11 +211,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
             return None
         breakdowns = self.context.get("roll_breakdowns")
         if breakdowns is None:
-            from world.combat.services.declarations.strike import (  # noqa: PLC0415
-                strike_roll_breakdowns,
-            )
-
-            breakdowns = strike_roll_breakdowns([obj])
+            breakdowns = combat_roll_breakdowns([obj])
         breakdown = breakdowns.get(obj.pk)
         if breakdown is None:
             return None

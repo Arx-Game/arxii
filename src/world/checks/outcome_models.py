@@ -131,6 +131,22 @@ class ConsequenceOutcome(SharedMemoryModel):
         default=False,
         help_text="Whether the roll's stat was the style's hit stat.",
     )
+    # A PC's defense roll against an NPC blow (#4884), kept at roll time. ``against_label``
+    # set marks the row as a defense roll for its breakdown.
+    against_label = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text="Who a defense roll was against, as its breakdown names them, at roll time.",
+    )
+    armor_share_tenths = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "How much of the defender's armor counted, in tenths, from their combat style at "
+            "roll time. Null when the defender had no style."
+        ),
+    )
 
     # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite

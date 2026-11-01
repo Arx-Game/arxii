@@ -44,6 +44,7 @@ from world.combat.factories import (
     CombatOpponentFactory,
     CombatParticipantFactory,
 )
+from world.combat.models import CombatOpponent
 from world.combat.services import resolve_round
 from world.covenants.constants import CovenantType, DefenseStyle
 from world.covenants.factories import (
@@ -65,7 +66,7 @@ from world.magic.factories import (
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.constants import RoundStatus
 from world.skills.factories import MagicSkillFactory, SkillFactory
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import CharacterTraitValue, PointConversionRange, Trait, TraitType
 from world.vitals.models import CharacterVitals
 
@@ -349,7 +350,7 @@ class TechniquesInStyle(JourneyCase):
         self.assertIsNone(cast["stat_override"])
 
 
-class DefendingInStyle(_TheYard):
+class _DefenseYard(_TheYard):
     """Each fighter wears light armor with 4 soak; the evasion style counts half of it."""
 
     def defend(self, fighter) -> dict[str, Any]:
@@ -374,6 +375,8 @@ class DefendingInStyle(_TheYard):
     def styled(self, *gear: str):
         return _style(*gear, defense_style=DefenseStyle.EVASION, armor_share_tenths=5)
 
+
+class DefendingInStyle(_DefenseYard):
     def test_listed_armor_adds_the_style_skill(self) -> None:
         style = self.styled(GearArchetype.MELEE_ONE_HAND, GearArchetype.LIGHT_ARMOR)
         mira = self.fighter("Mira", style=style)
@@ -403,3 +406,106 @@ class DefendingInStyle(_TheYard):
         roll = self.defend(mira)
 
         self.assertEqual(tuple(roll["extra_traits"]), ())
+
+
+class ReadingTheDefenseRoll(_DefenseYard):
+    """Mira's defense roll, as her Last Outcome card reads it (demo screen 5, "Defending in
+    plate"). The Parry check weights Dodge, in which she has 15; she has 20 in the style
+    skill. The defense roll is a plain failure, so the 10 blow lands on her armor: 2 of the
+    4 soak counts (5 of 10), and 8 lands."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.dodge = SkillTraitFactory(name="Dodge")
+        CheckTypeTraitFactory(check_type=self.defense, trait=self.dodge, weight=1)
+
+    def mira(self, *gear: str):
+        style = self.styled(*gear)
+        mira = self.fighter("Mira", style=style)
+        CharacterTraitValue.objects.create(character=mira.sheet_data, trait=self.dodge, value=15)
+        CharacterTraitValue.objects.create(
+            character=mira.sheet_data, trait=style.skill.trait, value=STYLE_RATING
+        )
+        return mira, style
+
+    def rows_for(self, viewer, defender) -> list[dict[str, Any]]:
+        response = self.api(self.account_of(viewer)).get(
+            "/api/checks/consequence-outcomes/",
+            {"character": defender.sheet_data.pk, "encounter": self.encounter.pk},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["results"]
+
+    def defense_row(self, defender) -> dict[str, Any]:
+        rows = self.rows_for(defender, defender)
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def attacker(self) -> str:
+        return CombatOpponent.objects.get(encounter=self.encounter).name
+
+    def test_in_listed_armor_the_style_skill_counts(self) -> None:
+        mira, _style = self.mira(GearArchetype.LIGHT_ARMOR)
+        self.defend(mira)
+
+        self.assertEqual(
+            self.defense_row(mira)["roll_breakdown"],
+            {
+                "heading": f"Defense against {self.attacker()}",
+                "lines": [
+                    {"label": "Dodge", "value": "15", "detail": "defense skill", "lapsed": False},
+                    {"label": STYLE, "value": "20", "detail": "style skill", "lapsed": False},
+                    {
+                        "label": "Armor, 5 of 10",
+                        "value": "",
+                        "detail": "the style's armor share",
+                        "lapsed": False,
+                    },
+                ],
+                "result": "Hit, 8 damage",
+                "result_note": "",
+            },
+        )
+
+    def test_in_unlisted_armor_the_style_is_struck_through_and_the_share_unchanged(self) -> None:
+        mira, _style = self.mira(GearArchetype.HEAVY_ARMOR)
+        self.defend(mira)
+
+        lines = self.defense_row(mira)["roll_breakdown"]["lines"]
+        self.assertEqual(
+            lines[1],
+            {
+                "label": STYLE,
+                "value": "",
+                "detail": "light armor is not this style's",
+                "lapsed": True,
+            },
+        )
+        self.assertEqual(lines[2]["label"], "Armor, 5 of 10")
+        self.assertEqual(self.health(mira), 100 - (10 - 2))
+
+    def test_a_bystander_sees_no_breakdown(self) -> None:
+        from world.scenes.factories import SceneParticipationFactory
+
+        mira, _style = self.mira(GearArchetype.LIGHT_ARMOR)
+        self.defend(mira)
+        wren = self.make_player("Wren", room=self.room)
+        SceneParticipationFactory(scene=self.encounter.scene, account=self.account_of(wren))
+
+        rows = self.rows_for(wren, mira)
+
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]["roll_breakdown"])
+        self.assertIsNotNone(self.defense_row(mira)["roll_breakdown"])
+
+    def test_renaming_the_style_later_does_not_rewrite_the_row(self) -> None:
+        mira, style = self.mira(GearArchetype.LIGHT_ARMOR)
+        self.defend(mira)
+
+        style.name = "The Bold Dance"
+        style.armor_share_tenths = 9
+        style.save(update_fields=["name", "armor_share_tenths"])
+
+        lines = self.defense_row(mira)["roll_breakdown"]["lines"]
+        self.assertEqual(lines[1]["label"], STYLE)
+        self.assertEqual(lines[2]["label"], "Armor, 5 of 10")

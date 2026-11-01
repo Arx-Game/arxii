@@ -358,3 +358,7 @@ class RollSnapshot:
     style_skill_rating: int | None = None
     style_lapse_note: str = ""
     stat_from_style: bool = False
+    # A defense roll (#4884): who it was against, and the style's armor share (None: no
+    # style).
+    against_label: str = ""
+    armor_share_tenths: int | None = None

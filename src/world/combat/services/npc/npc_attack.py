@@ -21,6 +21,7 @@ from world.combat.models import (
     ThreatPoolEntry,
 )
 from world.combat.services.combos.combo_outcome import _damage_multiplier_for_success
+from world.combat.services.npc.defense_roll import defense_result_line, record_defense_roll
 from world.combat.services.npc.npc_movement import strike_pool_key
 from world.combat.services.npc.npc_targeting import _set_npc_action_targets
 from world.combat.services.npc.windup import _declare_windup_attack
@@ -37,12 +38,14 @@ from world.combat.types import DefenseResult, ParticipantDamageResult
 from world.conditions.services import spend_contributing_conditions
 from world.covenants.constants import DefenseStyle
 from world.covenants.defense import NpcHitDefense, defense_style_for, npc_hit_defense
+from world.covenants.style_fit import style_fit_for_defense
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.scenes.models import Interaction
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -156,6 +159,7 @@ def resolve_npc_attack(
     check_type: CheckType,
     *,
     perform_check_fn: PerformCheckFn | None = None,
+    interaction_factory: Callable[[], Interaction] | None = None,
 ) -> DefenseResult:
     """Resolve one NPC attack against one PC via a defensive check.
 
@@ -175,6 +179,9 @@ def resolve_npc_attack(
         check_type: The CheckType matching the attack's category.
         perform_check_fn: Optional callable override for testing. Defaults
             to ``world.checks.services.perform_check``.
+        interaction_factory: The NPC action's Narrator ACTION interaction (#4884). Given,
+            the defender's roll is recorded on it as a ``ConsequenceOutcome`` with its
+            breakdown (``world.combat.services.npc.defense_roll``).
 
     Returns:
         A ``DefenseResult`` containing the check outcome and damage applied.
@@ -251,9 +258,8 @@ def resolve_npc_attack(
 
     # The defender's style skill (#4884) counts while every worn armor kind and every
     # held vow is on their combat style. The defense type applies either way.
-    from world.covenants.style_fit import style_fit_for_defense  # noqa: PLC0415
-
-    style_traits = style_fit_for_defense(character).extra_traits()
+    style_fit = style_fit_for_defense(character)
+    style_traits = style_fit.extra_traits()
     breakdown = _svc.collect_check_modifiers(
         participant.character_sheet,
         check_type,
@@ -359,6 +365,17 @@ def resolve_npc_attack(
                 opponent_action.threat_entry.targeting_mode != TargetingMode.SINGLE
                 or covered is not None
             ),
+        )
+
+    if interaction_factory is not None:
+        record_defense_roll(
+            participant,
+            attacker_name=opponent_action.opponent.name,
+            check_type=check_type,
+            breakdown=breakdown,
+            style_fit=style_fit,
+            summary=defense_result_line(result.success_level, damage_result.damage_dealt),
+            interaction=interaction_factory(),
         )
 
     return DefenseResult(

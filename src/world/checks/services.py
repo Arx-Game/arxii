@@ -1549,13 +1549,15 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
         modifier_total=breakdown.total,
         summary=summary,
         skill_rating=skill_rating,
-        weapon_label=snapshot.weapon_label if snapshot is not None else None,
-        weapon_kind=snapshot.weapon_kind if snapshot is not None else None,
-        stat_label=snapshot.stat_label if snapshot is not None else None,
+        weapon_label=(snapshot.weapon_label or None) if snapshot is not None else None,
+        weapon_kind=(snapshot.weapon_kind or None) if snapshot is not None else None,
+        stat_label=(snapshot.stat_label or None) if snapshot is not None else None,
         style_name=(snapshot.style_name or None) if snapshot is not None else None,
         style_skill_rating=snapshot.style_skill_rating if snapshot is not None else None,
         style_lapse_note=(snapshot.style_lapse_note or None) if snapshot is not None else None,
         stat_from_style=snapshot.stat_from_style if snapshot is not None else False,
+        against_label=(snapshot.against_label or None) if snapshot is not None else None,
+        armor_share_tenths=snapshot.armor_share_tenths if snapshot is not None else None,
         combat_interaction=combat_interaction,
         combat_interaction_timestamp=(
             combat_interaction.timestamp if combat_interaction is not None else None
