@@ -1208,7 +1208,10 @@ Check resolution engine — converts trait values to ranks and rolls against res
   and tapers by the lane's rows. A size on any other kind is refused.
   Derived amounts (#4878): `DerivedAmountMixin` (`mechanics/derived_amount_models.py`) gives
   `DistinctionEffect` and `ConditionModifierEffect` an input (`AmountInput`), a "per N" step and
-  a cap; `mechanics.derived_amounts.derived_amount` computes it at read time.
+  a cap; `mechanics.derived_amounts.derived_amount` computes it at read time. The target's soak
+  input (#4892) is carried in `DerivedInputs.target_soak` from the technique damage step, which
+  reads the opponent's before each profile (`combat.services.damage.soak.target_soak_of`), and
+  from the basic Strike's damage (`_strike_damage`).
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
@@ -8089,7 +8092,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `1` with no profile); final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
   `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
-  covenant-level + mantle + motif-style). `_weapon_augmented_budget` adds
+  covenant-level + mantle + motif-style). The soak itself is the pure read
+  `equipped_armor_soak` (#4892), which wears nothing; `apply_equipped_armor_soak`
+  subtracts it and wears the contributing pieces. `_weapon_augmented_budget` adds
   `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget
   via `get_modifier_total` → `covenant_role_bonus`. In combat,
   `_combat_target_bonus(sheet)` passes `bond_adjusted_level(sheet)` as `level_override`

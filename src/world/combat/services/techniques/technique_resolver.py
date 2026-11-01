@@ -29,6 +29,7 @@ from world.combat.morale import (
     morale_state_for,
     tier_morale_map,
 )
+from world.combat.services.damage.soak import target_soak_of
 from world.combat.services.encounter.check_types import get_penetration_check_type
 from world.combat.services.equipment.equipped_weapon import (
     _equipped_weapon_archetype,
@@ -49,6 +50,7 @@ from world.conditions.services import spend_contributing_conditions
 from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.constants import EffectKind as MechanicsEffectKind, ManeuverEffectKey
+from world.mechanics.derived_amounts import DerivedInputs
 from world.mechanics.effect_targets import (
     TechniqueConditionBonus,
     effect_modifier_total,
@@ -84,16 +86,24 @@ if TYPE_CHECKING:
     PerformCheckFn = Callable[..., CheckResult]
 
 
-def _charge_effect(sheet: CharacterSheet, key: str, *, lance: bool, kind_wide: bool = True) -> int:
+def _charge_effect(
+    sheet: CharacterSheet,
+    key: str,
+    *,
+    lance: bool,
+    kind_wide: bool = True,
+    inputs: DerivedInputs | None = None,
+) -> int:
     """A charge's to-hit or damage for ``sheet`` (#4783): the catalog base, doubled by a
     lance, plus every modifier on top, floored at 0 once. A lance doubles only the base; a
-    +3 stays +3 and a -8 stays -8.
+    +3 stays +3 and a -8 stays -8. ``inputs`` carries the soak of the opponent the damage
+    lands on (#4892).
 
     ``kind_wide=False`` leaves out the modifiers that name only the kind of effect: for
     Charge damage those already reach the hit through the technique's own damage (#4822),
     so counting them here too would add them twice."""
     base = get_maneuver_effect(key).base_value
-    modifiers = effect_modifier_total(sheet, key, kind_wide=kind_wide)
+    modifiers = effect_modifier_total(sheet, key, kind_wide=kind_wide, inputs=inputs)
     return max(0, (base * 2 if lance else base) + modifiers)
 
 
@@ -110,7 +120,7 @@ class TechniqueDamageBonus:
     sheet: CharacterSheet | None
     context: TechniqueEffectContext | None
     targets: list[ModifierTarget]
-    totals: dict[tuple[int | None, int | None], int] = field(default_factory=dict)
+    totals: dict[tuple[int | None, int | None, int], int] = field(default_factory=dict)
     facts: dict[int | None, OpponentFacts] = field(default_factory=dict)
     # Whether any damage target is narrowed by the opponent (#4823), worked out once per cast.
     narrowed: bool = False
@@ -149,19 +159,23 @@ class TechniqueDamageBonus:
         self,
         damage_type_id: int | None,
         opponent: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
+        target_soak: int = 0,
     ) -> int:
         """The unclamped bonus on a hit of resolved damage type ``damage_type_id`` against
-        ``opponent``, worked out once per distinct type, or per (type, opponent) pair when a
-        damage target is narrowed by the opponent."""
+        ``opponent``, whose soak is ``target_soak`` (#4892), worked out once per distinct
+        type and soak, or per (type, opponent) pair when a damage target is narrowed by the
+        opponent."""
         context = self.context
         if context is None:
             return 0
-        # Without an opponent scope every opponent gets the same answer: one entry per type.
+        # Without an opponent scope every opponent with the same soak gets the same answer.
         opponent_key = opponent.pk if self.narrowed and opponent is not None else None
-        key = (damage_type_id, opponent_key)
+        key = (damage_type_id, opponent_key, target_soak)
         if key not in self.totals:
             hit = context.landing_on(self.read_opponent(opponent), damage_type_id)
-            self.totals[key] = technique_effect_total(self.sheet, hit, self.targets)
+            self.totals[key] = technique_effect_total(
+                self.sheet, hit, self.targets, DerivedInputs(target_soak=target_soak)
+            )
         return self.totals[key]
 
 
@@ -500,6 +514,8 @@ class CombatTechniqueResolver:
         # condition one profile consumes does not change the next profile's bonus.
         technique_bonus.read_opponent(target.objectdb)
         for profile, budget_bonus in profiles:
+            # The soak (#4892) is read per profile: it is what stands against this hit, and a
+            # duelist's armor an earlier profile broke no longer counts.
             scaled, profile_damage_type = self._profile_damage(
                 profile,
                 weapon,
@@ -509,6 +525,7 @@ class CombatTechniqueResolver:
                 eff_intensity=eff_intensity,
                 budget_bonus=budget_bonus,
                 technique_bonus=technique_bonus,
+                target_soak=target_soak_of(target),
             )
             if scaled <= 0:
                 continue
@@ -641,6 +658,7 @@ class CombatTechniqueResolver:
         eff_intensity: int,
         budget_bonus: int = 0,
         technique_bonus: TechniqueDamageBonus,
+        target_soak: int = 0,
     ) -> tuple[int, DamageType | None]:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
@@ -662,6 +680,10 @@ class CombatTechniqueResolver:
         per cast by ``_apply_damage``. A modifier counts when every scope it sets matches the
         cast and this profile's resolved damage type, once per profile, so a technique with two
         profiles gains it twice.
+
+        ``target_soak`` is ``target``'s soak (``target_soak_of``, #4892), read before each
+        profile by ``_apply_profiles_to_target``: a modifier with the target's soak input reads
+        it, in the technique's damage and in a Charge's.
         """
         from world.conditions.services import (  # noqa: PLC0415
             resolved_damage_type,
@@ -688,6 +710,7 @@ class CombatTechniqueResolver:
                 ManeuverEffectKey.CHARGE_DAMAGE,
                 lance=_equipped_weapon_archetype(character) == GearArchetype.LANCE,
                 kind_wide=False,
+                inputs=DerivedInputs(target_soak=target_soak),
             )
         # Untyped damage is Physical (#4742), for the bonus below and the attacker's
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
@@ -695,6 +718,7 @@ class CombatTechniqueResolver:
         technique_total = technique_bonus.for_type(
             profile_damage_type.pk if profile_damage_type is not None else None,
             target.objectdb,
+            target_soak,
         )
         budget = max(
             0,

@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0359_life_page_backend")]
+    dependencies = [("arxii", "0360_target_soak_amount_input")]
 
     operations = [
         migrations.AddField(

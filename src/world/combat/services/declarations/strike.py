@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
     from world.covenants.style_fit import StyleFit
     from world.items.models import ItemInstance
+    from world.mechanics.derived_amounts import DerivedInputs
 
     StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None, RollSnapshot, str]
 
@@ -250,8 +251,11 @@ def _stat_label(check_type: CheckType, stat_override: str | int | None) -> str:
     return stat.capitalize() if stat else "no stat"
 
 
-def _weapon_damage(participant: CombatParticipant, weapon: StrikeWeapon) -> tuple[int, int]:
-    """(the weapon's damage, the floor a landed Strike never drops below)."""
+def _weapon_damage(
+    participant: CombatParticipant, weapon: StrikeWeapon, inputs: DerivedInputs | None = None
+) -> tuple[int, int]:
+    """(the weapon's damage, the floor a landed Strike never drops below). ``inputs`` carries
+    the soak of the opponent hit (#4892)."""
     from world.combat.services.equipment.combat_target_bonus import (  # noqa: PLC0415
         _combat_target_bonus,
     )
@@ -268,7 +272,7 @@ def _weapon_damage(participant: CombatParticipant, weapon: StrikeWeapon) -> tupl
         damage = max(
             0,
             get_maneuver_effect(key).base_value
-            + effect_modifier_total(sheet, key, kind_wide=False),
+            + effect_modifier_total(sheet, key, kind_wide=False, inputs=inputs),
         )
         return damage, damage
     damage = weapon.item_instance.effective_weapon_damage + _combat_target_bonus(
@@ -280,25 +284,36 @@ def _weapon_damage(participant: CombatParticipant, weapon: StrikeWeapon) -> tupl
 
 
 def _strike_damage(
-    participant: CombatParticipant, weapon: StrikeWeapon, damage_roll: CheckResult
+    participant: CombatParticipant,
+    weapon: StrikeWeapon,
+    damage_roll: CheckResult,
+    target_soak: int = 0,
 ) -> tuple[int, int, DamageType | None]:
     """(the weapon's damage before the roll, what the landed Strike deals before soak, and
-    its damage type: the weapon's, untyped being Physical)."""
+    its damage type: the weapon's, untyped being Physical).
+
+    ``target_soak`` is the soak of the opponent hit (``target_soak_of``): a damage modifier
+    with the target's soak input reads it, as on a technique hit (#4892, owner ruling).
+    """
     from world.conditions.services import (  # noqa: PLC0415
         get_damage_multiplier,
         resolved_damage_type,
         scaled_outgoing_damage,
     )
     from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+    from world.mechanics.derived_amounts import DerivedInputs  # noqa: PLC0415
     from world.mechanics.effect_targets import effect_modifier_total  # noqa: PLC0415
 
-    weapon_damage, floor = _weapon_damage(participant, weapon)
+    inputs = DerivedInputs(target_soak=target_soak)
+    weapon_damage, floor = _weapon_damage(participant, weapon, inputs)
     multiplier = get_damage_multiplier(damage_roll.success_level or 0)
     rolled = max(floor, int(weapon_damage * multiplier))
     total = max(
         0,
         rolled
-        + effect_modifier_total(participant.character_sheet, ManeuverEffectKey.STRIKE_BASE_DAMAGE),
+        + effect_modifier_total(
+            participant.character_sheet, ManeuverEffectKey.STRIKE_BASE_DAMAGE, inputs=inputs
+        ),
     )
     damage_type = resolved_damage_type(
         weapon.item_instance.effective_weapon_damage_type
@@ -553,7 +568,11 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
             target_difficulty=0,
             stat_override=weapon_stat_for(weapon.item_instance),
         )
-        _weapon_damage_before, dealt, damage_type = _strike_damage(participant, weapon, damage_roll)
+        from world.combat.services.damage.soak import target_soak_of  # noqa: PLC0415
+
+        _weapon_damage_before, dealt, damage_type = _strike_damage(
+            participant, weapon, damage_roll, target_soak_of(target)
+        )
         damage = _svc.apply_damage_to_opponent(
             target, dealt, damage_type=damage_type, source_sheet=participant.character_sheet
         )

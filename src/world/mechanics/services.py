@@ -209,13 +209,14 @@ def _distinction_base_value(
     return (mod.value if sized is None else sized[0]), sized
 
 
-def _distinction_contributions(
+def _distinction_contributions(  # noqa: PLR0913 - one read's rows and its own inputs
     distinction_mods: list,
     amplifiers: list[tuple[int, int]],
     *,
     has_immunity: bool,
     value_table: ValueTable | None = None,
     sheet=None,
+    inputs: DerivedInputs | None = None,
 ) -> tuple[list[ModifierSourceDetail], int, int]:
     """Each distinction source's detail row, the running total, and the blocked count.
 
@@ -226,13 +227,15 @@ def _distinction_contributions(
     holder's level (``sheet.current_level``, ``_sized_distinction_value``); amplification
     and immunity then apply to it as they do to a flat value. An effect with a
     derived-amount input (#4878) takes its base value from ``derived_amount`` on ``sheet``,
-    the stored value being the amount per step; it is never sized.
+    the stored value being the amount per step; it is never sized. ``inputs`` carries what
+    only the caller knows, the soak of the opponent being hit (#4892); without it a soak row
+    reads 0.
     """
     sources: list[ModifierSourceDetail] = []
     total = 0
     negatives_blocked = 0
     level = (sheet.current_level or None) if value_table is not None else None
-    inputs = DerivedInputs()
+    inputs = inputs if inputs is not None else DerivedInputs()
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
         base_value, sized = _distinction_base_value(mod, value_table, level, sheet, inputs)
@@ -261,7 +264,11 @@ def _distinction_contributions(
 
 
 def get_modifier_breakdown(
-    character, modifier_target: ModifierTarget, *, value_lane: str | None = None
+    character,
+    modifier_target: ModifierTarget,
+    *,
+    value_lane: str | None = None,
+    inputs: DerivedInputs | None = None,
 ) -> ModifierBreakdown:
     """
     Get detailed breakdown of all modifiers for a target.
@@ -277,6 +284,8 @@ def get_modifier_breakdown(
             distinction effects at the holder's ``current_level``. The check seam
             passes the check lane; every other caller passes nothing and reads the
             flat authored values, as before. The table loads only when a row is sized.
+        inputs: (#4892) derived-amount inputs only the caller knows, the soak of the
+            opponent a technique damage hit lands on. Omitted, a soak row reads 0.
 
     Returns:
         ModifierBreakdown with sources, calculations, and total
@@ -333,6 +342,7 @@ def get_modifier_breakdown(
         has_immunity=has_immunity,
         value_table=value_table,
         sheet=character,
+        inputs=inputs,
     )
 
     # Non-distinction sources are flat addends (outside the amplification graph).

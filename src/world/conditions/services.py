@@ -96,7 +96,7 @@ from world.conditions.types import (
     TreatmentOutcome,
 )
 from world.game_clock.services import get_ic_now
-from world.mechanics.derived_amounts import derived_amount
+from world.mechanics.derived_amounts import DerivedInputs, derived_amount
 from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
@@ -2348,7 +2348,9 @@ def get_capability_status(
 
 
 def scaled_condition_effect_value(
-    effect: ConditionModifierEffect, instance: ConditionInstance
+    effect: ConditionModifierEffect,
+    instance: ConditionInstance,
+    inputs: DerivedInputs | None = None,
 ) -> int:
     """One ConditionModifierEffect's contribution on one active instance (#4090).
 
@@ -2356,10 +2358,11 @@ def scaled_condition_effect_value(
     multiplies by the instance's effective severity; otherwise a staged instance scales
     by its current stage's ``severity_multiplier``. An effect with a derived-amount input
     (#4878) is ``value`` per step of that input on the condition's bearer instead, and
-    neither severity nor stage scales it.
+    neither severity nor stage scales it. ``inputs`` carries what only the caller knows, the
+    soak of the opponent a technique damage hit lands on (#4892).
     """
     if effect.has_amount_input:
-        return derived_amount(_bearer_sheet(instance), effect, effect.value)
+        return derived_amount(_bearer_sheet(instance), effect, effect.value, inputs)
     if effect.scales_with_severity:
         return int(effect.value * instance.effective_severity)
     if instance.current_stage:
@@ -2495,6 +2498,7 @@ def condition_target_contributions(
     modifier_target: "ModifierTarget",
     *,
     lane: str,
+    inputs: DerivedInputs | None = None,
 ) -> list[ModifierContribution]:
     """One CONDITION contribution per active ConditionModifierEffect on a target (#4726).
 
@@ -2506,6 +2510,7 @@ def condition_target_contributions(
     keeps ``scaled_condition_effect_value``. The table loads only when a sized instance
     has a matching effect, so an ordinary read adds no query. A vow-stepped instance
     (#4747) adds the caster's size step as the contribution's untapered ``vow_part``.
+    ``inputs`` (#4892) reaches a derived amount, as on ``modifier_target_contributions``.
     """
     matched: list[tuple[ConditionInstance, ConditionModifierEffect]] = []
     for instance in get_active_conditions(character_sheet.character):
@@ -2523,13 +2528,17 @@ def condition_target_contributions(
     if any(_is_sized(instance) for instance, _effect in matched):
         value_table = load_value_table(lane)
 
-    return [_condition_contribution(instance, effect, value_table) for instance, effect in matched]
+    return [
+        _condition_contribution(instance, effect, value_table, inputs)
+        for instance, effect in matched
+    ]
 
 
 def _condition_contribution(
     instance: ConditionInstance,
     effect: ConditionModifierEffect,
     value_table: ValueTable | None,
+    inputs: DerivedInputs | None = None,
 ) -> ModifierContribution:
     """One effect on one instance as a CONDITION contribution (``condition_target_contributions``).
 
@@ -2545,7 +2554,7 @@ def _condition_contribution(
     if instance.current_stage is not None:
         label = f"{label} ({instance.current_stage.name})"
     if priced is None:
-        value, vow_part = scaled_condition_effect_value(effect, instance), 0
+        value, vow_part = scaled_condition_effect_value(effect, instance, inputs), 0
     else:
         value, vow_part = priced
     return ModifierContribution(

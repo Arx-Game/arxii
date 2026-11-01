@@ -32,6 +32,14 @@ def workbench_url(obj) -> str:
     return workbench_page_url(f"{domain_of(model)}.{model.__name__}", obj.pk)
 
 
+@register.filter
+def combo_map_url(obj) -> str:
+    """The combo map page for a property or condition on screen, or ``""`` (#4891)."""
+    from web.admin.authoring.links import combo_map_url as _combo_map_url  # noqa: PLC0415
+
+    return _combo_map_url(obj)
+
+
 @register.simple_tag
 def builder_link(obj: object) -> SafeString | str:
     """Render `<a href="...">label</a>` to ``obj``'s own Builder page (#3675 Task 10).

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Commit-msg hook: refuse a closing keyword aimed at any issue but this branch's (#4903).
+# GitHub closes what "fixed #N" names once the text lands on main, and our squash
+# commits copy every commit message. Rejecting it here costs a reword; after the
+# push, the only fix is rewriting history. Installed as a shim by install.sh.
+set -euo pipefail
+
+top="$(git rev-parse --show-toplevel)"
+exec python3 "$top/tools/closing_keywords.py" commit-msg "$1"
