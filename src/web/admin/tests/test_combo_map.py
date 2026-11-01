@@ -67,7 +67,9 @@ class PropertyPageTest(ComboMapPageCase):
             f'href="{self.condition_url(self.charmed.pk)}">Charmed</a> (stage 2 only)', body
         )
         technique_url = reverse("admin:arxii_technique_change", args=[self.unbound.pk])
-        self.assertIn(f'<a href="{technique_url}">Unbound</a>', body)
+        self.assertIn(f'<a href="{technique_url}">{self.unbound_label}</a>', body)
+        edit_url = reverse("admin:arxii_property_change", args=[self.indulgence.pk])
+        self.assertIn(f'<a href="{edit_url}">Edit property</a>', body)
         self.assertIn("Tipsy on self", body)
         self.assertIn("Charmed on the pressed group", body)
         prerequisite_url = reverse("admin:arxii_prerequisite_change", args=[self.prerequisite.pk])

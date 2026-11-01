@@ -47,6 +47,7 @@ class ComboMapLiveCase(TestCase):
         cls.signed = ConditionTemplateFactory(name="Signed")
 
         cls.unbound = TechniqueFactory(name="Unbound")
+        cls.unbound_label = f"Unbound ({cls.unbound.gift.name})"
         TechniqueAppliedConditionFactory(
             technique=cls.unbound, condition=cls.tipsy, target_kind="self"
         )
@@ -99,8 +100,8 @@ class SettersTest(ComboMapLiveCase):
             [(r.source.label, r.kind, r.lands) for r in rows],
             [
                 ("Keep the drinks coming", "standoff approach", "Charmed on the pressed group"),
-                ("Unbound", "technique", "Tipsy on self"),
-                ("Sage: Hold / Lock", "vow effect", "Tipsy on the target"),
+                (self.unbound_label, "technique", "Tipsy on self"),
+                ("Hold / Lock (Sage base vow)", "vow effect", "Tipsy on the target"),
             ],
         )
 
@@ -108,8 +109,8 @@ class SettersTest(ComboMapLiveCase):
         rows = {r.source.label: r.source.url for r in live.setters_for_conditions([self.tipsy])}
         technique_url = reverse("admin:arxii_technique_change", args=[self.unbound.pk])
         effect_url = reverse("admin:arxii_vowaddedeffect_change", args=[self.effect.pk])
-        self.assertEqual(rows["Unbound"], technique_url)
-        self.assertEqual(rows["Sage: Hold / Lock"], effect_url)
+        self.assertEqual(rows[self.unbound_label], technique_url)
+        self.assertEqual(rows["Hold / Lock (Sage base vow)"], effect_url)
 
 
 class ReadersTest(ComboMapLiveCase):

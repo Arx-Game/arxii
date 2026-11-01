@@ -25,13 +25,10 @@ for them itself (#3667).
 
 {% block content_title %}<h1>{{ combo.name }} <small class="cm-kind">{{ combo.kind }}</small></h1>{% endblock %}
 
-{% block object-tools %}
+{% block content %}
 <ul class="object-tools">
   <li><a href="{{ combo.edit_url }}">Edit {{ combo.kind }}</a></li>
 </ul>
-{% endblock %}
-
-{% block content %}
 {% include "admin/tuning/_panel_css.html" %}
 {% include "admin/combo_map/_css.html" %}
 <div id="combo-map-root">

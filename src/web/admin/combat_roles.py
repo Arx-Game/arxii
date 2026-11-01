@@ -119,7 +119,7 @@ def _combo_map_link(user: AbstractBaseUser | AnonymousUser) -> CombatRolesLink |
     if not pickers:
         return None
     return CombatRolesLink(
-        label="Combo map", url="", note="what sets and reads each one", pickers=pickers
+        label="Combo map", url="", note="by property or condition", pickers=pickers
     )
 
 

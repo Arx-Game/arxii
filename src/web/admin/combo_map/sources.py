@@ -163,6 +163,24 @@ def _variant_label(row: Any) -> str:
     return variant.name_override or f"Variant of {variant.parent_technique.name}"
 
 
+def _technique_label(row: Any) -> str:
+    """The technique and its gift, as the demo draws it: ``Unbound (Voice)``."""
+    technique = row.technique
+    return f"{technique.name} ({technique.gift.name})"
+
+
+def _vow_effect_label(row: Any) -> str:
+    """The effect's function, then whose it is: the base vow or a named pick at its level."""
+    effect = row.effect
+    pick = effect.focus_pick
+    where = (
+        f"{effect.covenant_role.name} pick {pick.name}, level {pick.pick_level}"
+        if pick is not None
+        else f"{effect.covenant_role.name} base vow"
+    )
+    return f"{effect.get_function_display()} ({where})"
+
+
 def _interaction_label(row: ConditionConditionInteraction) -> str:
     """Both conditions by name; ``__str__`` repeats what the Does column shows."""
     return f"{row.condition.name} and {row.other_condition.name}"
@@ -239,8 +257,8 @@ SETTER_SOURCES: tuple[SetterSource, ...] = (
         "condition",
         _by_target_kind,
         owner="technique",
-        label=_named("technique"),
-        related=("technique",),
+        label=_technique_label,
+        related=("technique__gift",),
     ),
     SetterSource(
         "technique variant",
@@ -257,7 +275,8 @@ SETTER_SOURCES: tuple[SetterSource, ...] = (
         "condition",
         _by_target_kind,
         owner="effect",
-        related=("effect__covenant_role",),
+        label=_vow_effect_label,
+        related=("effect__covenant_role", "effect__focus_pick"),
     ),
     SetterSource(
         "signature bonus",
