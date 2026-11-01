@@ -3386,6 +3386,9 @@ def _process_duration_and_progression(
                 result.expired_conditions.append(instance)
                 expired_condition = instance.condition
                 instance.delete()
+                # Drop the cached active list now, so what runs later in this tick (the
+                # stage triggers below read it) never counts a condition that just ran out.
+                _invalidate_condition_handler(target)
                 _clear_unseen_observer_if_concealing(target, expired_condition)
                 _breath_ran_out(target, expired_condition)
                 continue

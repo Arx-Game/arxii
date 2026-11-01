@@ -2092,8 +2092,19 @@ class TestDesignationProbes(TestCase):
         self.assertFalse(result.present)
         self.assertEqual(result.missing, ("Ysolde",))
 
-        apply_condition(ysolde, blood)
+        instance = apply_condition(ysolde, blood).instance
         self.assertTrue(self._present("moon-control-loss-trigger"))
+
+        # N5: only a live carrier counts. A resolved or suppressed instance lists her again.
+        from django.utils import timezone
+
+        instance.resolved_at = timezone.now()
+        instance.save(update_fields=["resolved_at"])
+        self.assertFalse(self._present("moon-control-loss-trigger"))
+        instance.resolved_at = None
+        instance.is_suppressed = True
+        instance.save(update_fields=["resolved_at", "is_suppressed"])
+        self.assertFalse(self._present("moon-control-loss-trigger"))
 
     def test_berserk_disengage_penalty(self) -> None:
         from world.combat.factories import SocialManeuverConfigFactory

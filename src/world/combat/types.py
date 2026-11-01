@@ -65,6 +65,19 @@ class OpponentDamageResult:
 
 
 @dataclass(frozen=True)
+class WoundCrossing:
+    """A hit's health before and after, held until its knockout check lands (#4802).
+
+    A hit into the knockout band rolls its wound control-loss triggers only once the
+    knockout consequence is decided, so a character it knocks out rolls nothing.
+    """
+
+    health_before: int
+    health_after: int
+    max_health: int
+
+
+@dataclass(frozen=True)
 class ParticipantDamageResult:
     """Result of applying damage to a PC."""
 
@@ -76,6 +89,8 @@ class ParticipantDamageResult:
     damage_interaction: DamageInteractionResult | None = (
         None  # condition-damage interaction result (#2018)
     )
+    # A knockout-band hit's wound triggers, waiting for ``settle_wound_triggers`` (#4802).
+    pending_wound_crossing: WoundCrossing | None = None
 
 
 @dataclass(frozen=True)

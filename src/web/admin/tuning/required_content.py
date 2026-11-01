@@ -1649,12 +1649,14 @@ def _probe_moon_control_loss_trigger() -> ProbeResult:
     so a character holding the distinction without an instance of the condition is a
     lycan the moon never takes (a character made before the condition existed, or an
     authored condition the content migration put no instances on). Those characters are
-    listed; the probe reports, it changes nothing.
+    listed; the probe reports, it changes nothing. A suppressed or resolved instance does
+    not count as carrying the condition.
     """
     from django.db.models import Exists, OuterRef, Q  # noqa: PLC0415
 
     from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
     from world.conditions.models import ConditionInstance, ControlLossTrigger  # noqa: PLC0415
+    from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
     from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
 
@@ -1670,9 +1672,16 @@ def _probe_moon_control_loss_trigger() -> ProbeResult:
     ).values_list("drawback_distinction_id", "drawback_condition_id")
     uncarried = Q(pk__in=[])
     for distinction_id, condition_id in grants:
-        # A character sheet shares its pk with the character's ObjectDB row.
+        # Only a live carrier counts: not suppressed (the active-condition filter the
+        # trigger engine reads) and not resolved. ``CharacterDistinction.character`` is a
+        # CharacterSheet, and a sheet's pk IS its character's ObjectDB pk (the sheet is a
+        # primary-key one-to-one onto ObjectDB), so the sheet id matches the instance's
+        # ``target_id`` with no join.
         carries = ConditionInstance.objects.filter(
-            condition_id=condition_id, target_id=OuterRef("character_id")
+            _not_suppressed_q(),
+            condition_id=condition_id,
+            target_id=OuterRef("character_id"),
+            resolved_at__isnull=True,
         )
         uncarried |= Q(distinction_id=distinction_id) & ~Exists(carries)
     missing = set(

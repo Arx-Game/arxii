@@ -218,6 +218,8 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
             combat_interaction_factory=get_npc_action_interaction,
             source_character=opponent.objectdb,
         )
+        # The knockout check has landed: a knockout-band hit's wound triggers roll now.
+        _svc.settle_wound_triggers(target_participant, dmg_result)
     outcome.damage_consequences.append(consequence)
 
     # Sent Flying trigger (#2638): a sends_flying attack that connects with

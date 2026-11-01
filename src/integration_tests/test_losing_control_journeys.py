@@ -24,10 +24,12 @@ from django.test import override_settings
 from django.utils import timezone
 
 from actions.constants import ActionTargetType
+from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckTypeFactory
+from world.checks.constants import EffectType
+from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
@@ -36,17 +38,25 @@ from world.combat.constants import (
     CombatManeuver,
     EncounterType,
     ParticipantStatus,
+    TargetingMode,
+    TargetSelection,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
+    CombatOpponentActionFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
     EscalationCurveFactory,
     SocialManeuverConfigFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
 )
 from world.combat.models import CombatParticipant, CombatRoundAction, FleeConfig, MovementConfig
 from world.combat.services import leave_encounter, resolve_round
-from world.combat.services.damage.damage import apply_damage_to_participant
+from world.combat.services.damage.damage import (
+    apply_damage_to_participant,
+    settle_wound_triggers,
+)
 from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
 from world.conditions.constants import (
     UNCONSCIOUS_CONDITION_NAME,
@@ -119,6 +129,7 @@ from world.species.tasks import moon_reconcile_tick
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
+from world.vitals.services import get_vitals_consequence_config
 
 
 def _berserk_of(character):
@@ -129,15 +140,25 @@ def _berserk_of(character):
 COMPELLED_READ_QUERIES = 26
 
 
-def knock_out(character) -> None:
-    """Make *character* unable to act: Unconscious zeroes awareness (``can_act`` False)."""
+def knock_out_condition():
+    """Unconscious, which zeroes awareness so its bearer cannot act (``can_act`` False)."""
     awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
     unconscious = ConditionTemplateFactory(
         name=UNCONSCIOUS_CONDITION_NAME, default_duration_type=DurationType.UNTIL_CURED
     )
     ConditionCapabilityEffectFactory(condition=unconscious, capability=awareness, value=-100)
-    ConditionInstanceFactory(target=character, condition=unconscious)
+    return unconscious
+
+
+def knock_out(character) -> None:
+    """Make *character* unable to act: Unconscious on them now."""
+    ConditionInstanceFactory(target=character, condition=knock_out_condition())
     character.conditions.invalidate()
+
+
+def _full_swing(*_args: object, **_kwargs: object) -> MagicMock:
+    """A defence roll fixed at success level 0, which takes the swing at full strength."""
+    return MagicMock(success_level=0)
 
 
 @contextmanager
@@ -183,8 +204,65 @@ class WoundTriggers(_ControlLossCase):
         self.seat = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
 
     def hit(self, damage: int) -> None:
+        """A hit that rolls no knockout check (a bounced blow): its wound triggers roll now."""
         with self.captureOnCommitCallbacks(execute=True):
-            apply_damage_to_participant(self.seat, damage)
+            settle_wound_triggers(self.seat, apply_damage_to_participant(self.seat, damage))
+
+    def brute_swings(self, damage: int, outcome) -> MagicMock:
+        """A brute's swing for *damage* through a real round, every roll landing on *outcome*.
+
+        The round rolls the hit's knockout check before any wound trigger. Returns a spy
+        on every roll, wherever it was made from.
+        """
+        encounter = self.seat.encounter
+        encounter.status = RoundStatus.DECLARING
+        encounter.round_number = 1
+        encounter.save(update_fields=["status", "round_number"])
+        pool = ThreatPoolFactory()
+        swing = ThreatPoolEntryFactory(
+            pool=pool,
+            name="Haymaker",
+            base_damage=damage,
+            targeting_mode=TargetingMode.SINGLE,
+            target_selection=TargetSelection.SPECIFIC_ROLE,
+        )
+        brute = CombatOpponentFactory(
+            encounter=encounter, threat_pool=pool, health=500, max_health=500, soak_value=0
+        )
+        action = CombatOpponentActionFactory(opponent=brute, threat_entry=swing, round_number=1)
+        action.targets.add(self.seat)
+        spy = MagicMock(wraps=perform_check)
+        with (
+            patch("world.checks.services.perform_check", spy),
+            patch("world.checks.consequence_resolution.perform_check", spy),
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(outcome),
+        ):
+            resolve_round(encounter, defense_check_fn=_full_swing, offense_check_fn=_land_the_swing)
+        return spy
+
+    def knockout_pool(self, unconscious) -> None:
+        """A failed knockout check applies Unconscious (the only entry in the pool)."""
+        consequence = ConsequenceFactory(outcome_tier=self.failure, character_loss=False)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=unconscious,
+            target="self",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        config = get_vitals_consequence_config()
+        config.knockout_pool = pool
+        config.save(update_fields=["knockout_pool"])
+
+    def trigger_rolls(self, spy) -> int:
+        return sum(
+            1
+            for call in spy.call_args_list
+            if (call.args[1] if len(call.args) > 1 else call.kwargs.get("check_type"))
+            == self.trigger.check_type
+        )
 
     def test_wound_below_threshold_rolls_and_failure_applies_berserk(self) -> None:
         self.watch(self.garrick)
@@ -228,6 +306,31 @@ class WoundTriggers(_ControlLossCase):
         self.assertEqual(capture.target_difficulty, 30)
         self.assertIsNotNone(_berserk_of(self.garrick))
         self.assertTold(self.garrick, "You lose control: Berserk.")
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)  # the Endurance check type gates on #2698
+    def test_a_hit_that_knocks_him_out_rolls_no_wound_trigger(self) -> None:
+        """N1: 100 to 15 is a knockout-band hit; the forced knockout lands first, so the
+        unconscious Garrick never rolls the trigger his 50 percent line would fire."""
+        unconscious = knock_out_condition()
+        self.knockout_pool(unconscious)
+
+        spy = self.brute_swings(85, self.failure)
+
+        self.assertEqual(self.vitals.__class__.objects.get(pk=self.vitals.pk).health, 15)
+        self.assertTrue(
+            any(i.condition_id == unconscious.pk for i in get_active_conditions(self.garrick))
+        )
+        self.assertEqual(self.trigger_rolls(spy), 0)
+        self.assertIsNone(_berserk_of(self.garrick))
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_a_hit_he_stays_standing_through_rolls_once_the_knockout_is_passed(self) -> None:
+        """N1, the other half: a passed knockout check leaves him able to act, so he rolls."""
+        self.knockout_pool(knock_out_condition())
+
+        spy = self.brute_swings(85, self.success)
+
+        self.assertEqual(self.trigger_rolls(spy), 1)
 
     def test_a_character_who_cannot_act_rolls_no_wound_trigger(self) -> None:
         knock_out(self.garrick)
@@ -379,6 +482,33 @@ class StageTriggers(_ControlLossCase):
         self.assertEqual(capture.target_difficulty, 25)
         self.assertIsNotNone(_berserk_of(maren))
         self.assertTold(maren, "You lose control: Berserk.")
+
+    def test_a_rage_that_runs_out_in_the_same_tick_does_not_suppress_the_trigger(self) -> None:
+        """N3: Maren's one-round Berserk runs out as the round ends, the same tick the curse
+        reaches its trigger stage. The expired rage no longer counts, so she rolls."""
+        room = self.make_room("The Chapel")
+        maren = self.make_player("Maren", room=room)
+        CharacterVitals.objects.create(
+            character_sheet=maren.sheet_data, health=100, max_health=100, base_max_health=100
+        )
+        apply_condition(maren, self._timed_curse())
+        apply_condition(maren, self.berserk, severity=1, duration_rounds=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1, room=room)
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=maren.sheet_data, status=ParticipantStatus.ACTIVE
+        )
+        CombatOpponentFactory(encounter=encounter, name="Shade", health=500, max_health=500)
+
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.failure) as capture,
+        ):
+            resolve_round(encounter, offense_check_fn=_land_the_swing)
+
+        self.assertEqual(capture.target_difficulty, 25)
+        berserk = _berserk_of(maren)
+        self.assertIsNotNone(berserk)
+        self.assertEqual(berserk.severity, 3)
 
     def test_a_stage_reached_by_a_flow_fires_its_trigger(self) -> None:
         """I1: a flow's advance_condition_stage step moves the curse on, and Maren rolls."""

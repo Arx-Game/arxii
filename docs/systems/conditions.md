@@ -808,11 +808,15 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   (`world.species.moon_sensitivity.reconcile_moon_pull`, with `moon_pull=`),
   `fire_wound_triggers(character, *, health_before, health_after, max_health)` from the
   damage service (fires on each downward crossing of the threshold within one hit; a
-  killing hit and a character who cannot act (`can_act`) roll nothing, while a hit into the
-  knockout band still rolls, since that hit's knockout check is rolled afterwards), and
+  killing hit and a character who cannot act (`can_act`) roll nothing; a hit into the
+  knockout band holds its triggers on `ParticipantDamageResult.pending_wound_crossing` until
+  the caller has rolled the knockout check, then `settle_wound_triggers` rolls them, so a
+  character that hit knocks out rolls nothing and one who stays standing rolls), and
   `fire_stage_triggers(instance)` (with `stage=`) from
   `world.conditions.services._fire_stage_entry_triggers`, the one call every stage-entry
-  path makes: the severity advance, the round tick and the flow-driven
+  path makes: the severity advance, the round tick (which drops the cached active list as
+  each expired instance is deleted, so a condition that ran out this tick never counts) and
+  the flow-driven
   `advance_condition_stage`. Only player characters roll, and a character already under a
   compulsion rolls no trigger of any kind (ruled 2026-10-31). Whenever a band applies a
   condition or moves intensity or control, the character and the room are told, by persona
@@ -852,7 +856,8 @@ Berserk of ADR-0183. Everything below is a `ConditionTemplate`-hung model in
   lycan grant has no drawback condition, and applies it to existing moon-bound characters.
   Required content probes `berserk-compulsion` and `moon-control-loss-trigger` list a gap;
   the moon probe also lists every holder of the lycan grant's `drawback_distinction` who
-  carries no instance of its `drawback_condition` (the condition the trigger hangs on).
+  carries no live (unsuppressed, unresolved) instance of its `drawback_condition` (the
+  condition the trigger hangs on).
 
 ## Self-shakeable categories (#4732)
 
