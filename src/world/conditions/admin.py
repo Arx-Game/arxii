@@ -81,7 +81,7 @@ class ConditionStageInline(admin.TabularInline):
     formset = OneRowPerFormSet
     extra = 0
     ordering = ["stage_order"]
-    autocomplete_fields = ["resist_check_type"]
+    autocomplete_fields = ["resist_check_type", "properties"]
 
 
 class ConditionCapabilityEffectInline(admin.TabularInline):
@@ -188,6 +188,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "allegiance_break_check_type",
         "settle_consequence_pool",
         "cure_check_type",
+        "properties",
     ]
     readonly_fields = ["get_mechanics_diagnostic"]
 
@@ -195,6 +196,17 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         (
             None,
             {"fields": ["name", "category", "description", "get_mechanics_diagnostic"]},
+        ),
+        (
+            "Properties",
+            {
+                "fields": ["properties"],
+                "description": (
+                    "Properties the bearer carries while this condition is active. A vow "
+                    "situation or prerequisite that names a property matches any condition "
+                    "carrying it."
+                ),
+            },
         ),
         (
             "Player Descriptions",
@@ -358,7 +370,7 @@ class ConditionStageAdmin(admin.ModelAdmin):
     ]
     list_filter = ["condition"]
     search_fields = ["name", "condition__name"]
-    autocomplete_fields = ["condition", "resist_check_type"]
+    autocomplete_fields = ["condition", "resist_check_type", "properties"]
 
     @admin.display(boolean=True, description="Has Thumbnail")
     def has_thumbnail(self, obj):
