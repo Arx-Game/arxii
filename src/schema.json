@@ -78406,11 +78406,20 @@ components:
           readOnly: true
         character_sheet_id:
           type: integer
-          description: The character this sheet belongs to
+          nullable: true
+          description: The fighter's character sheet, on the viewer's own row and
+            for staff or the encounter's GM; null on every other row, so a mask is
+            never tied to a sheet.
           readOnly: true
         character_name:
           type: string
           description: The persona name the room lines use, never the character key.
+          readOnly: true
+        persona_id:
+          type: integer
+          nullable: true
+          description: The persona the fighter presents now (a mask when disguised),
+            or null.
           readOnly: true
         status:
           $ref: '#/components/schemas/ParticipantStatusEnum'
@@ -78585,6 +78594,7 @@ components:
       - id
       - intensity_modifier
       - max_health
+      - persona_id
       - reactions_used
       - steady_plan
       - thumbnail_media_url

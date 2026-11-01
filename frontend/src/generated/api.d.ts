@@ -44589,10 +44589,12 @@ export interface components {
      */
     Participant: {
       readonly id: number;
-      /** @description The character this sheet belongs to */
-      readonly character_sheet_id: number;
+      /** @description The fighter's character sheet, on the viewer's own row and for staff or the encounter's GM; null on every other row, so a mask is never tied to a sheet. */
+      readonly character_sheet_id: number | null;
       /** @description The persona name the room lines use, never the character key. */
       readonly character_name: string;
+      /** @description The persona the fighter presents now (a mask when disguised), or null. */
+      readonly persona_id: number | null;
       status?: components['schemas']['ParticipantStatusEnum'];
       /** @description Return current health — only if viewer has permission. */
       readonly health: number | null;

@@ -53,6 +53,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
     character_sheet_id: 1001,
+    persona_id: null,
     character_name: 'TestChar',
     status: 'active',
     health: 8,

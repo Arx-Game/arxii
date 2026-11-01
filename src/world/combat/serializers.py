@@ -559,6 +559,15 @@ class ParticipantSerializer(serializers.ModelSerializer):
     character_name = serializers.SerializerMethodField(
         help_text="The persona name the room lines use, never the character key.",
     )
+    character_sheet_id = serializers.SerializerMethodField(
+        help_text=(
+            "The fighter's character sheet, on the viewer's own row and for staff or the "
+            "encounter's GM; null on every other row, so a mask is never tied to a sheet."
+        ),
+    )
+    persona_id = serializers.SerializerMethodField(
+        help_text="The persona the fighter presents now (a mask when disguised), or null.",
+    )
     health = serializers.SerializerMethodField()
     max_health = serializers.SerializerMethodField()
     character_status = serializers.SerializerMethodField()
@@ -588,6 +597,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "id",
             "character_sheet_id",
             "character_name",
+            "persona_id",
             "status",
             "health",
             "max_health",
@@ -616,6 +626,19 @@ class ParticipantSerializer(serializers.ModelSerializer):
         """The persona name others know the fighter by: a disguise shows, the key never does."""
         persona = self._presented_persona(obj)
         return persona.name if persona is not None else obj.character_sheet.character.db_key
+
+    def get_character_sheet_id(self, obj: CombatParticipant) -> int | None:
+        """The sheet id, to its owner, staff and the GM only (#4802, Ruling 50).
+
+        A sheet id beside a mask name would tie the mask to the character behind it, so
+        every other viewer gets None; the same viewers who see the vitals see this.
+        """
+        return obj.character_sheet_id if self._can_view_vitals(obj) else None
+
+    def get_persona_id(self, obj: CombatParticipant) -> int | None:
+        """The presented persona's id: the face the room already sees, never the sheet."""
+        persona = self._presented_persona(obj)
+        return persona.pk if persona is not None else None
 
     def _presented_persona(self, obj: CombatParticipant) -> Persona | None:
         """The face the participant presents now (``active_persona_for_sheet``), or None.

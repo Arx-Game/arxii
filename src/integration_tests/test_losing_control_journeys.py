@@ -117,7 +117,7 @@ from world.relationships.factories import (
     RelationshipTypeFactory,
 )
 from world.scenes.constants import PersonaType, RoundStatus
-from world.scenes.factories import PersonaFactory
+from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.species.moon_provisioning import (
     SEED_LYCAN_GIFT_NAME,
@@ -168,6 +168,25 @@ def minutes_later(minutes: int) -> Iterator[None]:
     later = timezone.now() + timedelta(minutes=minutes)
     with patch("django.utils.timezone.now", return_value=later):
         yield
+
+
+def _identity_values(payload: object) -> list[int]:
+    """Every number the payload files under a character or sheet key, at any depth.
+
+    Read by key, not by every number, so an unrelated row whose id happens to equal a
+    sheet id is not mistaken for one.
+    """
+    found: list[int] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(value, int) and ("character" in key or "sheet" in key):
+                found.append(value)
+            else:
+                found.extend(_identity_values(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            found.extend(_identity_values(item))
+    return found
 
 
 class _ControlLossCase(JourneyCase):
@@ -418,6 +437,46 @@ class WoundTriggers(_ControlLossCase):
         )
         self.assertTold(witness, "a hooded man loses control: Berserk, severity 3, for 3 rounds.")
         self.assertNotTold(witness, "Garrick")
+
+    def test_a_fellow_fighter_never_reads_the_masked_fighters_sheet(self) -> None:
+        """Ruling 50: Tomas reads the fight while Garrick wears a hood. Nothing in the
+        payload carries Garrick's sheet id, so the mask is never tied to Garrick; Tomas's
+        own row still carries his. The scene's GM still reads Garrick's sheet id (the GM
+        placement picker targets a fighter by it)."""
+        hood = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.TEMPORARY, name="a hooded man"
+        )
+        self.sheet.active_persona = hood
+        self.sheet.save(update_fields=["active_persona"])
+        encounter = self.seat.encounter
+        encounter.scene = SceneFactory()
+        encounter.save(update_fields=["scene"])
+        tomas = self.make_player("Tomas", room=self.field)
+        tomas_seat = CombatParticipantFactory(encounter=encounter, character_sheet=tomas.sheet_data)
+        warden = self.make_player("Warden", room=self.field)
+        SceneParticipationFactory(
+            scene=encounter.scene, account=self.account_of(warden), is_gm=True
+        )
+        url = f"/api/combat/{encounter.pk}/"
+
+        response = self.api(self.account_of(tomas)).get(url)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        rows = {row["id"]: row for row in payload["participants"]}
+        self.assertEqual(
+            (rows[self.seat.pk]["character_name"], rows[self.seat.pk]["persona_id"]),
+            ("a hooded man", hood.pk),
+        )
+        self.assertIsNone(rows[self.seat.pk]["character_sheet_id"])
+        self.assertEqual(rows[tomas_seat.pk]["character_sheet_id"], tomas.sheet_data.pk)
+        self.assertNotIn(self.sheet.pk, _identity_values(payload), payload)
+
+        gm_rows = self.api(self.account_of(warden)).get(url).json()["participants"]
+        self.assertEqual(
+            {row["id"]: row["character_sheet_id"] for row in gm_rows},
+            {self.seat.pk: self.sheet.pk, tomas_seat.pk: tomas.sheet_data.pk},
+        )
 
     def test_a_swing_in_a_round_writes_the_loss_of_control_as_a_round_line(self) -> None:
         """R1: a wound trigger fired inside a round is a narration row in the scene log, so

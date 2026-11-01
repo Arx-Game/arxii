@@ -267,6 +267,7 @@ function makeParticipant(
   return {
     id,
     character_sheet_id: characterSheetId,
+    persona_id: null,
     character_name: name,
     status: status as Participant['status'],
     health: null,

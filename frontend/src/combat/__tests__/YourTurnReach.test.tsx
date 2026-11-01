@@ -252,6 +252,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100, // matches defaultProps.characterSheetId → this is the actor
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -385,6 +386,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -545,6 +547,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -685,6 +688,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,
@@ -712,6 +716,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 7,
           character_sheet_id: 200,
+          persona_id: null,
           character_name: 'Ally',
           status: 'active' as const,
           health: null,
@@ -799,6 +804,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
         {
           id: 5,
           character_sheet_id: 100,
+          persona_id: null,
           character_name: 'Hero',
           status: 'active' as const,
           health: null,

@@ -36,6 +36,7 @@ function makeParticipant(id: number, name: string): Participant {
   return {
     id,
     character_sheet_id: id + 1000,
+    persona_id: null,
     character_name: name,
     status: 'active',
     health: 10,
