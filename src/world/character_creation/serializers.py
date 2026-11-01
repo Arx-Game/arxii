@@ -2240,28 +2240,21 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({key: "The face's name is too long."})
 
     def _validate_ties(self, ties: object) -> None:
-        """A card's organization tie (#4856): one of that card's choices and a ``TieKind``, or
-        null to take none. Checked against the live asks, since the choices differ per card."""
-        from world.character_creation.offers import final_touches_cards  # noqa: PLC0415
-
+        """A card's organization tie (#4856): an organization id and a ``TieKind``, or null to
+        take none. The shape only: like every other card answer this is not gated on the card
+        being held or the organization still offered (review on #4863: the leaf sends the whole
+        map back on every save, and a stale entry must not refuse the stage), and
+        ``_write_card_ties`` writes a tie only while it matches a live ask's choices."""
         ties = self._card_keyed(ties, TIES_KEY)
-        picks = {k: v for k, v in ties.items() if v is not None}
-        if not picks:
-            return
-        choices_by_card = {
-            str(ask.distinction_id): {c.id for c in ask.choices}
-            for ask in final_touches_cards(self.instance)
-            if ask.prompt == FinalTouchesPrompt.TIE
-        }
-        for card_id, tie in picks.items():
+        for tie in ties.values():
+            if tie is None:
+                continue
             if not isinstance(tie, dict) or set(tie) - {TIE_ORGANIZATION_ID, TIE_KIND}:
                 msg = "A tie names an organization and a kind."
                 raise serializers.ValidationError({TIES_KEY: msg})
             if tie.get(TIE_KIND) not in TieKind.values:
                 raise serializers.ValidationError({TIES_KEY: "Pick what the tie is."})
-            org_id = tie.get(TIE_ORGANIZATION_ID)
-            allowed = choices_by_card.get(str(card_id), set())
-            if not isinstance(org_id, int) or org_id not in allowed:
+            if not isinstance(tie.get(TIE_ORGANIZATION_ID), int):
                 raise serializers.ValidationError({TIES_KEY: "Pick an organization from the list."})
 
     def _validate_origin_choices(self, data: dict) -> None:
