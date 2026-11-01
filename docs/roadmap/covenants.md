@@ -944,6 +944,21 @@ until slices 2 to 7. What was built:
   admins for combat styles, the budget config and character picks.
 - See `docs/systems/covenants.md` "Vow focus picks and combat styles" and ADR-4759.
 
+### Styles complete (#4884, slice 2 of #4844) - SHIPPED
+
+- `CombatStyle.skill` (Magic skill, one per style), `hit_stat`, `taught_by` (Traditions),
+  `compatible_roles` (vows) and `CombatStyleGear` (weapon and armor kinds), all on the
+  style's admin page; four TUNING Required content rows (no skill, no hit stat, no weapon
+  kind, a Tradition teaching no style). Migrations `0355` (schema) and `0356` (the Strike's
+  style snapshot on `ConsequenceOutcome`).
+- `world.covenants.style_fit`: the style skill adds to the Strike, a technique's hit roll and
+  the PC defense roll while the weapon, worn armor and every held vow are the style's, and
+  lapses otherwise; a Strike hits with the style's hit stat either way, a technique keeps
+  its own stat. The Strike breakdown shows the style skill, or the style struck through with
+  the reason. Journeys: `src/integration_tests/test_combat_style_journeys.py`.
+- Left for slice 3: `is_gear_compatible` still reads the vow's gear table; the defense roll
+  breakdown card is not built yet.
+
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
 Vows scale combat maneuvers through the same `VowStatScaling` rows they use for stats, and

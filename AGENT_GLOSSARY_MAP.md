@@ -361,8 +361,14 @@ Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Combat style** (#4759, ADR-4759):
 How a character was taught to fight with magic (`CombatStyle` on `CharacterSheet.combat_style`):
-a Defense Style and an armor share that replace the vow's Defense Profile. _Avoid_: technique
+a Defense Style and an armor share that replace the vow's Defense Profile, and (#4884) a style
+skill, a hit stat, its Traditions, vows and gear kinds. _Avoid_: technique
 style (`TechniqueStyle`, how a Path or Gift casts).
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
+**Style lapse** (#4884):
+A combat style's skill not counting on one roll: a weapon, worn armor or held vow the style
+does not list. _Avoid_: style penalty.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Maneuver effect** (#4783):

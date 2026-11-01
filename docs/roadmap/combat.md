@@ -686,8 +686,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   hears it in the second person, the room in the third. A miss (Strike or
   technique) raises intensity, and intensity adds to every hit roll. Proven by
   `src/integration_tests/test_strike_journeys.py` and the `StrikeControl` / `CombatTurnPanel`
-  Vitest suites. **Known gaps (later #4844 slices):** no combat style (skill, hit stat,
-  lapsing bonus) on the roll yet (slice 2); natural weapons (slice 4); production has no
+  Vitest suites. **Combat style on the roll (#4884, slice 2) SHIPPED:** the style skill adds
+  to the Strike, technique hit and PC defense rolls while the weapon, worn armor and held vows
+  are the style's, a Strike hits with the style's hit stat, and the Strike breakdown shows the
+  style skill or strikes it through with the reason (`test_combat_style_journeys.py`).
+  **Known gaps (later #4844 slices):** the PC defense roll has no breakdown card; vow gear
+  compatibility still keyed to the vow (slice 3); natural weapons (slice 4); production has no
   Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
   a plain message until staff author them (Required content `strike-check-types`); the
   breakdown's skill rating is read when shown, not stored with the roll; a Strike's damage roll

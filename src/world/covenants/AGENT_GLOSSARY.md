@@ -124,8 +124,19 @@ specialization (that is the resonance sub-role).
 How a character was taught to fight with magic (`CombatStyle`, `CharacterSheet.combat_style`,
 #4759): a Defense Style plus `armor_share_tenths`, how much of their armor counts. It replaces the
 vow's Defense Profile for that character; a character with none keeps the profile (ADR-4759).
+Since #4884 it also has a **style skill** (its own Magic skill), a **hit stat** (the stat a
+Strike hits with), the Traditions that teach it, the vows it works with and its weapon and
+armor kinds (`CombatStyleGear`).
 _Avoid_: technique style (`TechniqueStyle` is how a Path or Gift casts, a different thing),
 fighting stance, defense profile (that is the vow's fallback row).
+
+**Style lapse**:
+A combat style's skill not counting on one roll because the character is not fighting its
+way (`StyleLapse`, `world.covenants.style_fit`, #4884): an attack with a weapon kind the
+style does not list, a defense in armor it does not list, or a held vow it does not list.
+The hit stat, defense type and armor share still apply; the breakdown strikes the style
+through and says why. Never a refusal.
+_Avoid_: style penalty (nothing is subtracted), off-style block.
 
 **Situation**:
 A code-defined label (`world.covenants.perks.constants.Situation`, a `TextChoices`) naming a precise, testable game-state condition a `VowSituationalPerk` can key on — e.g. `AT_RANGE`, `TARGET_DISTRACTED`, `ALLY_LOW_HEALTH`. Each value has exactly one registered evaluator (`world.covenants.perks.evaluators.SITUATION_EVALUATORS`, signature `(SituationContext) -> bool`). Adding a new Situation to the library is a code change (one enum value + one evaluator); attaching an existing Situation to a perk is a content edit forever after (#2536, ADR-0151, ruling 5).

@@ -1233,6 +1233,15 @@ decides defense" under Combat Seams).
   `description`, `defense_style` (`DefenseStyle`), `armor_share_tenths` (0 to 10, default 10).
   A character's style is `CharacterSheet.combat_style` (nullable, PROTECT); it replaces the
   vow's `CovenantRoleDefenseProfile` (ADR-4759, read by `defense_style_for` since #4809).
+  Since #4884 (slice 2 of #4844) a style also has `skill` (nullable one-to-one to a
+  Magic-category `Skill`, PROTECT, one style per skill), `hit_stat` (nullable FK to a stat
+  `Trait`, PROTECT), `taught_by` (M2M `Tradition`, `related_name="combat_styles"`) and
+  `compatible_roles` (M2M `CovenantRole`, the vows it works with). **`CombatStyleGear`**
+  (NK `(style, gear_archetype)`, unique, in `CONTENT_MODELS`) lists the kinds it fights with:
+  weapon kinds (`WEAPON_ARCHETYPES`) are its attack profile, armor kinds
+  (`ARMOR_ARCHETYPES`) its defense profile. The style admin page edits them all (gear kinds
+  as an inline). Required content (TUNING): a style with no skill, no hit stat or no weapon
+  kind, and an active Tradition that teaches no style.
 
 ### Price and choice rules (`world.covenants.focus_picks`)
 
@@ -1327,6 +1336,34 @@ shrinks; an elevated sidekick's bonus grows.
   `mitigation_leak_percent`, falling back to the field defaults when there is no row.
 
 The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles".
+
+### Style skill and hit stat on the rolls (#4884, slice 2 of #4844)
+
+`world.covenants.style_fit`:
+
+- `style_fit_for_attack(character, weapon_archetype) -> StyleFit` (None archetype is bare
+  hands, `UNARMED`) and `style_fit_for_defense(character) -> StyleFit` (every worn armor
+  kind, `worn_armor_kinds`). `StyleFit(style, lapse: StyleLapse | None, lapse_note)` with
+  `counts`, `hit_stat_name` and `extra_traits()` (the style skill as an `ExtraTraitTerm`,
+  weight 1, while it counts).
+- The bonus lapses on an attack when the weapon kind is not one of the style's weapon
+  kinds, on a defense when any worn armor kind is not one of its armor kinds, and on both
+  when a held vow (each engaged PRIMARY role; a sub-role counts by itself or its anchor) is
+  not in `compatible_roles`. No vow held never lapses. `StyleLapse` (WEAPON, ARMOR, VOW)
+  and `STYLE_LAPSE_GEAR_WORDS` live in `world.covenants.constants`.
+- A lapse drops the style skill only: the hit stat and the defense type still apply, and
+  the style's armor share is unchanged (owner rulings, 2026-11-01). No style, or a style
+  with no active skill, adds no style term and no lapse line.
+- Readers: `CombatTechniqueResolver.roll_check_with_breakdown` (the shared attack-roll
+  seam: Strike, technique, joust) adds the term; a Strike also hits with `hit_stat`
+  (`_stat_override`), a technique keeps its weapon's stat. `resolve_npc_attack` adds it to
+  the PC defense roll and hands it to a barrier's re-roll (`NpcHitDefense.extra_traits`).
+- The Strike records the style at roll time on `ConsequenceOutcome` (`style_name`,
+  `style_skill_rating`, `style_lapse_note`, `stat_from_style`) and its hit-roll breakdown
+  shows "the style's hit stat" and a style row, "style skill" with the rating or struck
+  through (`RollLine.lapsed`) with the reason (`strike.style_roll_line`).
+- Not yet: `is_gear_compatible` still reads the vow's `GearArchetypeCompatibility` (slice
+  3 re-keys it with the data migration), and the PC defense roll has no breakdown card yet.
 
 ### Defense styles + gear substitution (#2533, ADR-0149 Layer 3)
 
