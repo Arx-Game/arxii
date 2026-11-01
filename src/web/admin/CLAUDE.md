@@ -132,7 +132,7 @@ only admins left without it are plain-model ones (Django's `Group`, allauth's, `
 Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
 Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
 singleton's change page, or its list with the default before the row exists; a GET never
-creates it), and Required content (`admin_ops`). Every combat role authoring page belongs
+creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. Every combat role authoring page belongs
 here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
 vow page, combo map, kit view and missing combat content rows. Tests:
 `tests/test_combat_roles_panel.py` follows every link.
