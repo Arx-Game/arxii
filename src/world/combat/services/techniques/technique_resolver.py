@@ -484,11 +484,11 @@ class CombatTechniqueResolver:
         results: list[OpponentDamageResult] = []
         weapon_landed = False
         # What the target carries is read before its first profile lands (#4823), so a
-        # condition one profile consumes does not change the next profile's bonus. Its soak
-        # (#4892) is read once here too, for a modifier that grows with it.
+        # condition one profile consumes does not change the next profile's bonus.
         technique_bonus.read_opponent(target.objectdb)
-        target_soak = target_soak_of(target)
         for profile, budget_bonus in profiles:
+            # The soak (#4892) is read per profile: it is what stands against this hit, and a
+            # duelist's armor an earlier profile broke no longer counts.
             scaled, profile_damage_type = self._profile_damage(
                 profile,
                 weapon,
@@ -498,7 +498,7 @@ class CombatTechniqueResolver:
                 eff_intensity=eff_intensity,
                 budget_bonus=budget_bonus,
                 technique_bonus=technique_bonus,
-                target_soak=target_soak,
+                target_soak=target_soak_of(target),
             )
             if scaled <= 0:
                 continue
@@ -654,9 +654,9 @@ class CombatTechniqueResolver:
         cast and this profile's resolved damage type, once per profile, so a technique with two
         profiles gains it twice.
 
-        ``target_soak`` is ``target``'s soak (``target_soak_of``, #4892), read once per target
-        by ``_apply_profiles_to_target``: a modifier with the target's soak input reads it, in
-        the technique's damage and in a Charge's.
+        ``target_soak`` is ``target``'s soak (``target_soak_of``, #4892), read before each
+        profile by ``_apply_profiles_to_target``: a modifier with the target's soak input reads
+        it, in the technique's damage and in a Charge's.
         """
         from world.conditions.services import (  # noqa: PLC0415
             resolved_damage_type,

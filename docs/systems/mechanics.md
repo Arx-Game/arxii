@@ -375,7 +375,7 @@ and a check-rank input is refused on a stat or skill target (the stat category o
 `target_trait`), whose check would read it again; a row written past `clean()` reads 0 inside its
 own rating instead of recursing (`_RATINGS_IN_PROGRESS`). **The target's soak (#4892)** is the
 one input only a caller knows: the technique damage step (`_apply_profiles_to_target`) reads the
-soak of each opponent it hits once (`combat.services.damage.soak.target_soak_of`: the opponent's
+soak of the opponent before each profile lands (`combat.services.damage.soak.target_soak_of`: the opponent's
 `soak_value`, 0 while it is vulnerable or for a swarm; for a duel mirror, the mirrored player's
 worn-armor soak, `equipped_armor_soak`, read without wear) and carries it in
 `DerivedInputs.target_soak` through `technique_effect_total`, `effect_modifier_total` (Charge

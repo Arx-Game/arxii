@@ -1210,7 +1210,7 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `DistinctionEffect` and `ConditionModifierEffect` an input (`AmountInput`), a "per N" step and
   a cap; `mechanics.derived_amounts.derived_amount` computes it at read time. The target's soak
   input (#4892) is carried in `DerivedInputs.target_soak` from the technique damage step, which
-  reads each opponent's once (`combat.services.damage.soak.target_soak_of`).
+  reads the opponent's before each profile (`combat.services.damage.soak.target_soak_of`).
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
