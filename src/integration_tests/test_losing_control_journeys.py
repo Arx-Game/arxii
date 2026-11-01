@@ -722,6 +722,65 @@ class MoonTrigger(_ControlLossCase):
         self.assertIsNone(_berserk_of(self.wynn))
         self.assertFalse(ActiveAlternateSelf.objects.filter(character=self.sheet).exists())
 
+    def moon_rolls(self, spy) -> int:
+        """The spied rolls made on the moon trigger's check type."""
+        return sum(
+            1
+            for call in spy.call_args_list
+            if (call.args[1] if len(call.args) > 1 else call.kwargs.get("check_type"))
+            == self.trigger.check_type
+        )
+
+    def test_a_character_without_lycan_blood_never_rolls(self) -> None:
+        """Tam stands on the same hill under the same full moon, with no lycan blood."""
+        tam = self.make_player("Tam", room=self.wynn.location)
+        self.watch(tam)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            _night_full_moon(),
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+        ):
+            moon_reconcile_tick()
+
+        self.assertEqual(self.moon_rolls(rolled), 1)  # Wynn's roll, never Tam's
+        self.assertIsNone(_berserk_of(tam))
+        self.assertNotTold(tam, "You fight to keep control")
+
+    def test_a_weak_moon_never_rolls(self) -> None:
+        """A night moon at 0.4 pulls 4, short of the seeded trigger's minimum pull of 6."""
+        self.watch(self.wynn)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            patch.multiple(
+                "world.species.moon_pull",
+                get_ic_phase=lambda: TimePhase.NIGHT,
+                get_moon_illumination=lambda: 0.4,
+            ),
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+        ):
+            moon_reconcile_tick()
+
+        self.assertEqual(self.moon_rolls(rolled), 0)
+        self.assertIsNone(_berserk_of(self.wynn))
+        self.assertToldNothingOfControl(self.wynn)
+
+    def test_an_already_raging_lycan_rampages_instead_of_rolling(self) -> None:
+        """A Wynn already in a Berserk rage rolls no moon trigger; with nobody to fight,
+        the rage vents at the empty hill and the room sees it."""
+        apply_condition(self.wynn, self.berserk, severity=1, duration_rounds=3)
+        self.watch(self.wynn)
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            _night_full_moon(),
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+        ):
+            moon_reconcile_tick()
+
+        self.assertEqual(self.moon_rolls(rolled), 0)
+        self.assertEqual(_berserk_of(self.wynn).severity, 1)
+        self.assertTold(self.wynn, "Wynn rages at nothing and everything")
+        self.assertToldNothingOfControl(self.wynn)
+
     def test_moon_roll_counts_condition_modifiers(self) -> None:
         ConditionCheckModifierFactory(
             condition=self.trigger.vulnerability,
@@ -867,6 +926,8 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
 
         self.assertEqual(self.rolled_on(spy, self.berserk.compulsion.check_type), [])
         self.assertNoRoomRow("tries to")
+        # The rage keeps the attack she steered it into; it is never swapped for its own.
+        self.assertEqual(self.declared().maneuver, CombatManeuver.AWAIT_OPENING)
 
     def test_idle_compelled_pc_is_auto_declared(self) -> None:
         with self.resist_rolls() as spy:
@@ -1375,6 +1436,20 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
 
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertFalse(self.wearing_the_beast())
+
+    def test_a_failed_revert_through_the_rest_endpoint_is_refused(self) -> None:
+        """The web client's change-back button posts to the REST endpoint: a failed roll
+        there is a 400 that says so, and Mira still wears the Beast."""
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+
+        with force_check_outcome(self.failure):
+            response = self.api(self.account_of(self.mira)).post(
+                "/api/forms/alternate-selves/revert/", format="json"
+            )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("You cannot change back.", str(response.data))
+        self.assertTrue(self.wearing_the_beast())
 
     def test_a_failed_revert_waits_before_the_next_try(self) -> None:
         """Ruling 20: out of combat, Berserk's 5-minute wait follows a failed roll."""

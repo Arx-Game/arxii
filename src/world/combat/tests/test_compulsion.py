@@ -11,13 +11,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.compulsion import (
     berserk_rampage_window,
     compulsion_technique_for,
-    select_compelled_actions,
-)
-from world.combat.factories import (
-    CombatEncounterFactory,
-    CombatOpponentFactory,
-    CombatParticipantFactory,
-    CombatRoundActionFactory,
 )
 from world.magic.factories import EffectTypeFactory, TechniqueFactory
 from world.magic.models.techniques import CharacterTechnique
@@ -42,6 +35,13 @@ def _berserk_only(*characters):
 
 
 class CompulsionTechniqueTest(TestCase):
+    """Which technique the rage swings with, ranked over the whole technique list.
+
+    A journey sees only the one technique a compelled attack used; the ranking cases
+    (lighter over heavier, a harmless technique never chosen, none at all) are a pure
+    selection over rows that no single fight can show side by side.
+    """
+
     def test_picks_the_simplest_damaging_technique(self):
         sheet = CharacterSheetFactory()
         heavy = TechniqueFactory(effect_type=EffectTypeFactory(base_power=8), level=5)
@@ -58,50 +58,6 @@ class CompulsionTechniqueTest(TestCase):
             technique=TechniqueFactory(effect_type=EffectTypeFactory(base_power=None)),
         )
         self.assertIsNone(compulsion_technique_for(sheet))
-
-
-class SelectBerserkActionsTest(TestCase):
-    def setUp(self):
-        self.encounter = CombatEncounterFactory()
-        self.participant = CombatParticipantFactory(encounter=self.encounter)
-        self.opponent = CombatOpponentFactory(encounter=self.encounter)
-        self.character = self.participant.character_sheet.character
-        technique = TechniqueFactory(effect_type=EffectTypeFactory(base_power=3), level=1)
-        CharacterTechnique.objects.create(
-            character=self.participant.character_sheet, technique=technique
-        )
-        self.technique = technique
-
-    def test_non_berserk_participants_are_left_alone(self):
-        with (
-            _berserk_only(),
-            patch("world.combat.compulsion._declare_rage_attack") as declare,
-        ):
-            select_compelled_actions(self.encounter)
-        declare.assert_not_called()
-
-    def test_berserk_participant_gets_an_auto_attack(self):
-        with (
-            _berserk_only(self.character),
-            patch("world.combat.compulsion._declare_rage_attack") as declare,
-        ):
-            select_compelled_actions(self.encounter)
-        declare.assert_called_once()
-        _participant, technique, target = declare.call_args.args
-        self.assertEqual(technique, self.technique)
-        self.assertEqual(target, self.opponent)
-
-    def test_steered_rage_is_not_overridden(self):
-        """A berserk participant who declared their own attack keeps it."""
-        CombatRoundActionFactory(
-            participant=self.participant, round_number=self.encounter.round_number
-        )
-        with (
-            _berserk_only(self.character),
-            patch("world.combat.compulsion._declare_rage_attack") as declare,
-        ):
-            select_compelled_actions(self.encounter)
-        declare.assert_not_called()
 
 
 class RampageWindowTest(TestCase):

@@ -7,8 +7,6 @@ actions, so these tests prove the HTTP thin layer is wired correctly.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -195,20 +193,6 @@ class RevertFormEndpointTests(TestCase):
         self.assertIsNone(resp.data["active_alternate_self_id"])
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
-
-    def test_revert_refused_when_the_compulsion_roll_fails(self):
-        self._assume()
-        from world.combat.types import CompulsionAttempt
-
-        refused = CompulsionAttempt(
-            allowed=False, line="Mira tries to change back against Berserk.", check_result=None
-        )
-        with patch("world.forms.services.attempt_revert_form", return_value=refused):
-            resp = self._post(puppet=self.character)
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("You cannot change back.", str(resp.data))
-        active = ActiveAlternateSelf.objects.get(character=self.sheet)
-        self.assertEqual(active.alternate_self, self.alt)
 
     def test_no_played_character_400(self):
         resp = self._post(puppet=None)

@@ -114,15 +114,6 @@ class MoonReconcileTest(TestCase):
             new_callable=lambda: property(lambda _self: level),
         )
 
-    def test_unbound_character_never_checks(self):
-        self.assertFalse(is_moon_bound(self.sheet))
-        with (
-            _night_full_moon(),
-            patch("world.checks.services.perform_check_with_modifiers") as check,
-        ):
-            reconcile_moon_pull(self.character)
-        check.assert_not_called()
-
     def test_a_carrier_of_a_moon_trigger_condition_is_moon_bound(self):
         self._bind()
         self.assertTrue(is_moon_bound(self.sheet))
@@ -130,19 +121,6 @@ class MoonReconcileTest(TestCase):
             target=CharacterSheetFactory().character, condition=ConditionTemplateFactory()
         )
         self.assertFalse(is_moon_bound(other.target.character_sheet))
-
-    def test_weak_pull_never_checks(self):
-        self._bind()
-        with (
-            patch.multiple(
-                "world.species.moon_pull",
-                get_ic_phase=lambda: TimePhase.NIGHT,
-                get_moon_illumination=lambda: 0.4,
-            ),
-            patch("world.checks.services.perform_check_with_modifiers") as check,
-        ):
-            reconcile_moon_pull(self.character)
-        check.assert_not_called()
 
     def test_full_moon_rolls_the_trigger(self):
         self._bind()
@@ -179,18 +157,6 @@ class MoonReconcileTest(TestCase):
         ):
             reconcile_moon_pull(self.character)
         check.assert_called_once()
-
-    def test_already_compelled_gets_the_rampage_window_not_a_roll(self):
-        self._bind()
-        with (
-            _night_full_moon(),
-            patch("world.conditions.control_loss.has_compulsion", return_value=True),
-            patch("world.combat.compulsion.berserk_rampage_window") as rampage,
-            patch("world.checks.services.perform_check_with_modifiers") as check,
-        ):
-            reconcile_moon_pull(self.character)
-        rampage.assert_called_once_with(self.character)
-        check.assert_not_called()
 
 
 class BerserkContentTest(TestCase):
