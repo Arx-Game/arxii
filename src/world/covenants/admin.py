@@ -530,6 +530,7 @@ class CombatStyleGearInline(admin.TabularInline):
     """The weapon and armor kinds a style fights with (#4884)."""
 
     model = CombatStyleGear
+    formset = OneRowPerFormSet
     extra = 0
     verbose_name = "gear kind"
     verbose_name_plural = "Gear kinds"
