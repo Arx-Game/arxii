@@ -30713,6 +30713,8 @@ export interface components {
       };
       readonly enemy_reasons: components['schemas']['EnemyReason'][];
       readonly introductions_offered: components['schemas']['IntroductionsOffered'];
+      readonly final_touches_prompts: string[];
+      readonly crime_kinds: components['schemas']['CrimeKind'][];
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -32155,6 +32157,13 @@ export interface components {
       readonly description: string;
       readonly has_phases: boolean;
       readonly threat_pool_name: string | null;
+    };
+    /** @description One crime kind the Final Touches crime prompt picks from (#4846). */
+    CrimeKind: {
+      id: number;
+      slug: string;
+      name: string;
+      description: string;
     };
     /** @description A look's 4:5 frame in the file's own pixels; height is width x 5/4. */
     Crop: {

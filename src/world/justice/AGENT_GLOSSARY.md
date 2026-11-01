@@ -9,6 +9,10 @@
 - **Crime kind** — a `CrimeKind` row; the normalized vocabulary laws reference.
   **CONTENT RULE (user-ratified): no sexual crimes of any nature are ever
   represented — no rape/sexual-assault kinds, in seeds, admin, or fixtures.**
+- **Crime note** — a `CharacterCrimeNote` row (#4846): a crime a character is said to
+  have committed, named by the player at Final Touches when Jailbird's card asked, for a
+  GM to pick up or never. Staff-only; it mints no heat and tags no deed. _Avoid_:
+  record, charge, conviction (nothing was adjudicated), starting heat.
 - **Law** — an `AreaLaw` row; most-specific-wins up the area tree; `exempts`
   short-circuits. The winning row carries the local posture (`heat_weight`).
 - **Enforcing society** — nearest `Area.dominant_society` above the *winning

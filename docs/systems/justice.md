@@ -36,6 +36,13 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
   someone who didn't do it → robust, because refuting it means proving innocence,
   not disproving the crime). Lives justice-side (FK into `secrets.Secret`) so
   `secrets` stays dependency-free (ADR-0010).
+- **`CharacterCrimeNote`** (#4846) — `(sheet FK → CharacterSheet, crime_kind FK → CrimeKind
+  (PROTECT), note, created_at)`. The crime a character is said to have committed, for a GM to
+  pick up or never. First writer: character creation's finalize, when Jailbird's card asked the
+  player to name it at Final Touches (`FinalTouchesPrompt.CRIME`). A note and nothing more: no
+  `PersonaHeat`, no `DeedCrimeTag`, no Legend row. Admin-registered (`CharacterCrimeNoteAdmin`),
+  on no serializer and no API. An FK rather than a one-to-one so a GM can add a second note by
+  hand later. Lives here beside `CrimeKind` so `character_sheets` stays free of justice.
 
 ## Services (`world/justice/services.py`)
 
@@ -154,6 +161,8 @@ deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
   validated via `for_account`, scoped via `active_persona_for_sheet`, tiers only).
   `PersonaHeatSerializer` also exposes `society` (id) so the web Reputation tab
   can join heat against its own org/society standing rows client-side (#1446).
+- `CharacterCrimeNote` (#4846) has no player surface at all: staff and GMs read it in the
+  admin, and the character sheet payload never carries it (leak table of #4813).
 
 ## Constants
 
