@@ -1,0 +1,191 @@
+# Item 12: production migration record at HEAD b8ac97bdba5ec93362d460113bf86391c4e4ab06
+# Run from /workspaces/arxii/.claude/worktrees/feature-4802-involuntary-control-loss-one-mechanism-m, 2026-11-01
+
+===== flag syntax
+$ just prod-migration-check --help
+bash tools/prod_migration_check.sh --help
+
+prod_migration_check.sh - prove a migration (or a data check) against the
+NEWEST production dump, in a throwaway scratch database. Wrapped by
+`just prod-migration-check` (#4390).
+
+Usage:
+  tools/prod_migration_check.sh [target_migration] [--tables a,b,c] [--keep]
+
+  target_migration  Migration to step back to (number prefix such as 0234, or
+                    the full name). Default: main's tip, read from
+                    origin/main's max_migration.txt.
+  --tables a,b,c    Tables to count before and after (arxii_ prefix optional).
+  --keep            Leave the scratch database in place and print how to drop
+                    it. Without it, the database and the dump are removed on
+                    every exit path.
+  --database NAME   Name the scratch database. Accepted ONLY if it matches
+                    scratch_pmc_<UTC timestamp>_<pid> and does not exist yet;
+                    anything else (arxiidev, a name from src/.env) is refused.
+                    This exists so the refusal can be demonstrated.
+
+What it does: fetch the newest dump with the read-only dev_reader key, create
+a fresh scratch database, restore, migrate forward to this branch's head,
+back to the target, forward again, count rows, list pending migrations. The
+report on stdout is meant to be pasted as evidence. Exit status is non-zero
+on any failure.
+
+Safety, enforced below and not by convention:
+  - the database it creates, restores into, migrates and drops must match
+    the scratch prefix, must not exist beforehand, and must not be named in
+    src/.env (assert_scratch, called before every use);
+  - the only credential for the bucket is the dev_reader key; it issues
+    `s3 ls` and `s3 cp` and nothing else;
+  - the migrate runs with DATABASE_URL pointed at the scratch database, and
+    the database Django actually connected to is read back and compared
+    before any migration is applied (src/.env cannot silently win: this
+    calls `evennia` directly, not `arx manage`, which loads src/.env with
+    override=True);
+  - the whole run holds /tmp/claude-1000/arx-heavy.lock (override with
+    ARX_HEAVY_LOCK) for at most 20 minutes.
+
+===== $ just prod-migration-check 0344 --tables arxii_furyconfig,arxii_speciesgiftgrant,arxii_compulsion,arxii_controllosstrigger,arxii_conditiontemplate --keep
+# (run bare; the script takes its own flock/timeout internally; full stdout+stderr follows)
+bash tools/prod_migration_check.sh 0344 --tables arxii_furyconfig,arxii_speciesgiftgrant,arxii_compulsion,arxii_controllosstrigger,arxii_conditiontemplate --keep
+[prod-migration-check] listing the backups bucket
+[prod-migration-check] downloading arxii-20261101T033001Z.sql.gz
+[prod-migration-check] restoring into scratch_pmc_20261101T062854Z_85368
+== prod-migration-check report
+head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (feature-4802-involuntary-control-loss-one-mechanism-m)
+dump: arxii-20261101T033001Z.sql.gz
+scratch database: scratch_pmc_20261101T062854Z_85368 (django connected to: scratch_pmc_20261101T062854Z_85368)
+production tip: 0313_set_physical_damage_type | branch head: 0346_control_loss_content | main tip: 0345_persona_grants_and_organization_ties | step back to: 0344_card_grants_at_finalize
+== rows before (dump as restored)
+  arxii_furyconfig=0
+  arxii_speciesgiftgrant=13
+  arxii_compulsion=(table absent)
+  arxii_controllosstrigger=(table absent)
+  arxii_conditiontemplate=141
+== forward to branch head
+  Applying arxii.0314_surgedegreeband_surgetuning_and_more... OK
+  Applying arxii.0315_dramaticsurgerecord_surge_repeat_round_is_round_number_and_more... OK
+  Applying arxii.0316_driftconversioncap_driftconversionoffer_and_more... OK
+  Applying arxii.0317_ritual_requirement_item_meaning_mode... OK
+  Applying arxii.0318_audere_control_and_soulfray_anima_zero... OK
+  Applying arxii.0319_affinityinteraction_conflict_weight_and_more... OK
+  Applying arxii.0320_affinity_burn_value_combatpull_resonance_burned_and_more... OK
+  Applying arxii.0321_sceneactionpulldeclaration_burn... OK
+  Applying arxii.0322_held_breath... OK
+  Applying arxii.0323_remove_thread_uniq_thread_trait_and_more... OK
+  Applying arxii.0324_characterengagement_dig_deep_and_more... OK
+  Applying arxii.0325_alternate_self_corruption_leak... OK
+  Applying arxii.0326_emotional_conditions_designations... OK
+  Applying arxii.0327_fury_surrenders_control... OK
+  Applying arxii.0328_vow_focus_picks_and_combat_styles... OK
+  Applying arxii.0329_movementconfig_defense_and_healing_tuning... OK
+  Applying arxii.0330_alter_combatparticipant_status... OK
+  Applying arxii.0331_modifiertarget_target_aspect... OK
+  Applying arxii.0332_maneuver_effects... OK
+  Applying arxii.0333_modifier_target_one_scope... OK
+  Applying arxii.0334_cover_escape_bonus_carry... OK
+  Applying arxii.0335_drop_action_scaling... OK
+  Applying arxii.0336_vow_stat_scaling_focus_pick... OK
+  Applying arxii.0337_beginnings_struck_stages_text_and_beat_mode... OK
+  Applying arxii.0338_modifier_target_technique_scopes... OK
+  Applying arxii.0339_modifier_target_technique_scope_rules... OK
+  Applying arxii.0340_final_touches_chapter_and_crime_notes... OK
+  Applying arxii.0341_distinctionoffer_opener_constraint_names_unlocked_by... OK
+  Applying arxii.0342_modifier_target_opponent_scopes... OK
+  Applying arxii.0343_modifier_target_opponent_scope_rules... OK
+  Applying arxii.0344_card_grants_at_finalize... OK
+  Applying arxii.0345_control_loss_compulsion... OK
+  Applying arxii.0346_control_loss_content... OK
+== back to 0344_card_grants_at_finalize
+  Unapplying arxii.0346_control_loss_content... OK
+  Unapplying arxii.0345_control_loss_compulsion... OK
+== forward again
+  Applying arxii.0345_control_loss_compulsion... OK
+  Applying arxii.0346_control_loss_content... OK
+== rows after
+  arxii_furyconfig=0
+  arxii_speciesgiftgrant=13
+  arxii_compulsion=0
+  arxii_controllosstrigger=0
+  arxii_conditiontemplate=141
+== pending migrations
+  none
+== done
+cleanup: KEPT scratch_pmc_20261101T062854Z_85368 (--keep); dump deleted. Drop it with: dropdb -h db -p 5432 -U arxii scratch_pmc_20261101T062854Z_85368
+RESULT: PASS
+
+===== dump: arxii-20261101T033001Z.sql.gz (filename timestamp 2026-11-01 03:30:01 UTC), newest in the backups bucket
+
+===== $ DATABASE_URL=.../scratch_pmc_20261101T062854Z_85368 uv run arx manage showmigrations arxii | tail -5
+ [X] 0342_modifier_target_opponent_scopes
+ [X] 0343_modifier_target_opponent_scope_rules
+ [X] 0344_card_grants_at_finalize
+ [X] 0345_control_loss_compulsion
+ [X] 0346_control_loss_content
+
+===== applied tip as recorded in django_migrations
+0346_control_loss_content|2026-11-01 06:40:06.878485+00
+0345_control_loss_compulsion|2026-11-01 06:40:03.374179+00
+0344_card_grants_at_finalize|2026-11-01 06:37:29.523819+00
+
+===== queries against scratch_pmc_20261101T062854Z_85368 (after migrate)
+sql> select count(*) from arxii_furyconfig
+0
+sql> select count(*) from arxii_furyconfig where berserk_condition_id is not null
+0
+sql> select id, name from arxii_conditiontemplate where name ilike '%berserk%'
+3|Berserk
+sql> select count(*) from arxii_gift where name = 'The Wolf''s Fury'
+0
+sql> select count(*) from arxii_speciesgiftgrant sg join arxii_gift g on g.id = sg.gift_id where g.name = 'The Wolf''s Fury'
+0
+sql> select sg.id, g.name from arxii_speciesgiftgrant sg join arxii_gift g on g.id = sg.gift_id order by sg.id
+1|Brimstone
+2|Savage's Gift
+3|Fox's Grift
+4|The Choosing
+5|Backbone
+6|Eyrie
+7|Reprieve
+8|Vermin's Gift
+9|Warren
+10|Trickster's Dance
+11|Hoardless
+12|Undertow
+13|Talon
+sql> select count(*) from arxii_conditiontemplate where name = 'Lycan blood'
+0
+sql> select count(*) from arxii_compulsion
+0
+sql> select count(*) from arxii_controllosstrigger
+0
+
+===== Required content probes (web.admin.tuning.required_content.collect_required_content) against scratch_pmc_20261101T062854Z_85368
+$ DATABASE_URL=postgres://arxii:arxii@db:5432/scratch_pmc_20261101T062854Z_85368 uv run arx manage shell -c "$(cat a12probe.py)"
+--- script ---
+from django.db import connection
+print("database:", connection.settings_dict["NAME"])
+from web.admin.tuning.required_content import collect_required_content
+snap = collect_required_content()
+groups = {"missing_required": snap.missing_required, "present_required": snap.present_required,
+          "missing_tuning": snap.missing_tuning, "present_tuning": snap.present_tuning}
+print("totals:", {k: len(v) for k, v in groups.items()})
+keys = {"berserk-condition", "berserk-compulsion", "moon-control-loss-trigger"}
+for group, rows in groups.items():
+    for row in rows:
+        d = row.dependency
+        if d.key in keys or "berserk" in d.key or "moon" in d.key:
+            r = row.result
+            print(f"[{group}] key={d.key} label={d.label!r} present={r.present} missing={r.missing} detail={r.detail!r}")
+--- output ---
+1301 objects imported automatically (use -v 2 for details).
+
+database: scratch_pmc_20261101T062854Z_85368
+totals: {'missing_required': 76, 'present_required': 56, 'missing_tuning': 74, 'present_tuning': 43}
+[missing_required] key=berserk-condition label='Berserk condition set on the Fury configuration' present=False missing=() detail='No Fury configuration row exists.'
+[missing_required] key=berserk-compulsion label='Berserk has a compulsion' present=False missing=() detail='Berserk cannot be found, so it cannot carry a compulsion.'
+[missing_required] key=moon-control-loss-trigger label="A moon's-pull control-loss trigger exists and every lycan carries it" present=False missing=() detail=''
+[missing_required] key=berserk-disengage-penalty label='Berserk carries a check modifier against fleeing and against parley' present=False missing=() detail='Berserk cannot be found, so it cannot carry a flee or parley penalty.'
+===== cleanup
+$ dropdb -h db -p 5432 -U arxii scratch_pmc_20261101T062854Z_85368
+dropdb exit=0
+(no rows above = all three gone)

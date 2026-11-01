@@ -1,0 +1,49 @@
+$ cd /workspaces/arxii/.claude/worktrees/feature-4802-involuntary-control-loss-one-mechanism-m; DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4802_new uv run arx manage shell -c "$(cat a11a.py)"
+--- script ---
+import subprocess, traceback
+print("code SHA:", subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True).stdout.strip())
+from django.db import connection
+print("database:", connection.settings_dict["NAME"])
+from world.conditions.berserk_content import ensure_berserk_content
+from world.conditions.models import ConditionStage, ConditionInstance
+from world.magic.services.fury import get_berserk_template
+from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.services import apply_condition
+print("step 1: ensure_berserk_content()")
+ensure_berserk_content()
+template = get_berserk_template()
+print("step 2: get_berserk_template() ->", repr(template), "pk", template.pk)
+stage = ConditionStage.objects.filter(condition=template).order_by("stage_order").first()
+print("        first stage ->", repr(stage), "pk", stage.pk)
+print("step 3: type(stage.severity_multiplier) =", type(stage.severity_multiplier), "value", repr(stage.severity_multiplier))
+sheet = CharacterSheetFactory()
+print("step 4: sheet", sheet.pk, "character", sheet.character)
+result = apply_condition(sheet.character, template, severity=3)
+inst = result.instance
+print("        apply_condition success=", result.success, "instance pk", inst.pk, "severity", inst.severity)
+print("        instance.current_stage is the cached stage object:", inst.current_stage is stage)
+print("        type(instance.current_stage.severity_multiplier) =", type(inst.current_stage.severity_multiplier))
+try:
+    print("        instance.effective_severity =", repr(inst.effective_severity))
+except Exception:
+    traceback.print_exc()
+print("        DB row for the stage:", list(ConditionStage.objects.filter(pk=stage.pk).values_list("severity_multiplier", flat=True)))
+--- output ---
+
+Create a superuser below. The superuser is Account #1, the 'owner' account of the server. Email is optional and can be empty.
+
+1299 objects imported automatically (use -v 2 for details).
+
+code SHA: b8ac97bdba5ec93362d460113bf86391c4e4ab06
+database: rt_4802_new
+step 1: ensure_berserk_content()
+step 2: get_berserk_template() -> <ConditionTemplate: Berserk> pk 1
+        first stage -> <ConditionStage: Berserk - Uncontrolled Rage> pk 1
+step 3: type(stage.severity_multiplier) = <class 'decimal.Decimal'> value Decimal('1.00')
+step 4: sheet 1 character TestChar_1
+        apply_condition success= True instance pk 1 severity 3
+        instance.current_stage is the cached stage object: True
+        type(instance.current_stage.severity_multiplier) = <class 'decimal.Decimal'>
+        instance.effective_severity = 3
+        DB row for the stage: [Decimal('1.00')]
+exit=0

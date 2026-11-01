@@ -1,0 +1,33 @@
+# Ruling 16: a talked-down self whose emergence condition holds, no compulsion
+# Head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (branch feature-4802-involuntary-control-loss-one-mechanism-m)
+# Database: throwaway rt_4802f; server: this worktree's own `just start` (telnet :4000, web :4001).
+# Times are UTC. Expected results: B-expectations.md (written before the run).
+# Sela wears 'the Mourner' (revert kind TALKED_DOWN, emergence condition Grief-stricken, active).
+
+## Before
+NOW 2026-11-01T06:51:33.382589+00:00
+CONDITIONS Sela: [(7, 'Grief-stricken', 1, 99, None)]
+WORN Sela: the Mourner
+
+## Telnet
+# transcript r16r20; UTC start 2026-11-01T06:56:52.765972+00:00
+06:57:00 [Sela] >>> connect e2e_sela (login)
+06:57:00 [Sela]     You become Sela.
+06:57:00 [Sela]     The Quiet Room
+06:57:00 [Sela]     This is a room.
+06:57:00 [Sela]     Characters: the Mourner and the Red Hound
+06:57:00 [Sela]     Now controlling Sela.
+06:57:08 [Vela] >>> connect e2e_vela (login)
+06:57:08 [Vela]     You become Vela.
+06:57:08 [Vela]     The Quiet Room
+06:57:08 [Vela]     This is a room.
+06:57:08 [Vela]     Characters: the Mourner and the Red Hound
+06:57:08 [Vela]     Now controlling Vela.
+--- RULING 16: Sela (no compulsion) wears the talked-down Mourner; Grief-stricken is active
+06:57:14 [Sela] >>> form revert
+06:57:14 [Sela]     You can't revert while not in control of yourself.
+
+## After (still wearing the Mourner; no compulsion anywhere on her)
+NOW 2026-11-01T06:57:47.003218+00:00
+CONDITIONS Sela: [(7, 'Grief-stricken', 1, 99, None)]
+WORN Sela: the Mourner

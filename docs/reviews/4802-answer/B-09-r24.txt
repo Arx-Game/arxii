@@ -1,0 +1,42 @@
+# Ruling 24: a character already under Berserk rolls no wound trigger
+# Head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (branch feature-4802-involuntary-control-loss-one-mechanism-m)
+# Database: throwaway rt_4802f; server: this worktree's own `just start` (telnet :4000, web :4001).
+# Times are UTC. Expected results: B-expectations.md (written before the run).
+# Kael carries Berserk 3 and Wound rage (50% trigger), staged to fail Hold the rage. Troll's Haymaker 60 on him.
+
+## Before
+NOW 2026-11-01T06:51:33.382589+00:00
+SEAT Kael: status=active compulsion_attempt_round=None health=100/100 engagement=intensity_modifier=0 control_modifier=0
+CONDITIONS Kael: [(2, 'Berserk', 3, 50, None), (5, 'Wound rage', 1, 99, None), (10, 'Rt staging nerves', 1, 99, None)]
+
+## Round 1 lines as Kael received them (no 'Kael falls below' / 'Hold the rage' line)
+06:52:37 [Kael] >>> connect e2e_kael (login)
+06:52:37 [Kael]     You become Kael.
+06:52:37 [Kael]     The Pit
+06:52:37 [Kael]     This is a room.
+06:52:37 [Kael]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:37 [Kael]     Now controlling Kael.
+06:53:42 [Kael] (received)
+06:53:42 [Kael]     scarred sellsword's power surges with sudden, dramatic force.
+06:54:10 [Kael] (received)
+06:54:10 [Kael]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:10 [Kael]     Berserk wins out: Mira attacks Gorr.
+06:54:10 [Kael]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:10 [Kael]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:10 [Kael]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:10 [Kael]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:10 [Kael]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:10 [Kael]     Mira’s Rend misses Gorr.
+06:54:10 [Kael]     Kael’s Cleave misses Gorr.
+06:54:10 [Kael]     Tomas holds back.
+06:54:10 [Kael]     scarred sellsword holds back.
+06:54:10 [Kael]     Brann holds back.
+06:54:10 [Kael]     Doran holds back.
+06:54:10 [Kael]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:21 [Kael] (received)
+06:54:21 [Kael]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+
+## After (health 40, same Berserk instance pk 2 at severity 3, intensity 0)
+NOW 2026-11-01T06:55:28.636775+00:00
+SEAT Kael: status=active compulsion_attempt_round=None health=40/100 engagement=intensity_modifier=0 control_modifier=0
+CONDITIONS Kael: [(2, 'Berserk', 3, 49, None), (5, 'Wound rage', 1, 98, None), (10, 'Rt staging nerves', 1, 98, None)]

@@ -1,0 +1,223 @@
+# Item 4: telnet session, round 1 and the between-rounds leave (full, every session)
+# Head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (branch feature-4802-involuntary-control-loss-one-mechanism-m)
+# Database: throwaway rt_4802f; server: this worktree's own `just start` (telnet :4000, web :4001).
+# Times are UTC. Expected results: B-expectations.md (written before the run).
+# Seven telnet sessions logged in at once; each '>>>' is typed, indented lines are what that session received.
+
+Staging (staff levers, written with the server stopped before the round): rollmod -200 on
+Mira, Brann, Vela, Doran, Kael (every roll lands on face 1); 'Rt staging nerves' (+50 on Hold
+the rage) on Brann, Doran, Kael so face 1 lands Failure. Before round 2 only: 'Rt staging
+focus' (+250 on Resist compulsion) on Mira so her cover roll at 31 lands Partial Success.
+
+# transcript r1; UTC start 2026-11-01T06:51:42.635674+00:00
+06:51:50 [Mira] >>> connect e2e_test_account (login)
+06:51:50 [Mira]     You become Mira.
+06:51:50 [Mira]     The Pit
+06:51:50 [Mira]     This is a room.
+06:51:50 [Mira]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:51:50 [Mira]     Now controlling Mira.
+06:51:58 [Tomas] >>> connect e2e_web (login)
+06:51:58 [Tomas]     You become Tomas.
+06:51:58 [Tomas]     The Pit
+06:51:58 [Tomas]     This is a room.
+06:51:58 [Tomas]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:51:58 [Tomas]     Now controlling Tomas.
+06:52:06 [Garrick] >>> connect e2e_garrick (login)
+06:52:06 [Garrick]     You become Garrick.
+06:52:06 [Garrick]     The Pit
+06:52:06 [Garrick]     This is a room.
+06:52:06 [Garrick]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:06 [Garrick]     Now controlling Garrick.
+06:52:13 [Marn] >>> connect e2e_staff (login)
+06:52:13 [Marn]     You become Marn.
+06:52:13 [Marn]     The Pit
+06:52:13 [Marn]     This is a room.
+06:52:13 [Marn]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:13 [Marn]     Now controlling Marn.
+06:52:21 [Brann] >>> connect e2e_brann (login)
+06:52:21 [Brann]     You become Brann.
+06:52:21 [Brann]     The Pit
+06:52:21 [Brann]     This is a room.
+06:52:21 [Brann]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:21 [Brann]     Now controlling Brann.
+06:52:29 [Doran] >>> connect e2e_doran (login)
+06:52:29 [Doran]     You become Doran.
+06:52:29 [Doran]     The Pit
+06:52:29 [Doran]     This is a room.
+06:52:29 [Doran]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:29 [Doran]     Now controlling Doran.
+06:52:37 [Kael] >>> connect e2e_kael (login)
+06:52:37 [Kael]     You become Kael.
+06:52:37 [Kael]     The Pit
+06:52:37 [Kael]     This is a room.
+06:52:37 [Kael]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:37 [Kael]     Now controlling Kael.
+--- Garrick puts on a mask; Tomas looks
+06:52:48 [Garrick] >>> persona mask scarred sellsword
+06:52:48 [Garrick]     You don a mask: 'scarred sellsword'. You are now presenting as it.
+06:53:00 [Tomas] >>> look
+06:53:00 [Tomas]     The Pit
+06:53:00 [Tomas]     This is a room.
+06:53:00 [Tomas]     Characters: Mira, Tomas, a person wearing a scarred sellsword, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+--- staff begins round 1
+06:53:11 [Marn] >>> encounter begin
+06:53:11 [Marn]     Round begins.
+--- ITEM 4: compelled Mira declares flee
+06:53:23 [Mira] >>> combat flee
+06:53:23 [Mira]     Against Berserk: Resist compulsion check, difficulty 36. If it fails, you attack instead.
+06:53:23 [Mira]     You declare a desperate flee.
+--- ITEM 10: staff spotlights Garrick (surge)
+06:53:35 [Marn] >>> gm dramatic Garrick reason=the stand at the gate
+06:53:35 [Marn]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:35 [Marn]     The dramatic spotlight turns to Garrick.
+06:53:36 [Mira] (received)
+06:53:36 [Mira]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:37 [Tomas] (received)
+06:53:37 [Tomas]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:38 [Garrick] (received)
+06:53:38 [Garrick]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:39 [Brann] (received)
+06:53:39 [Brann]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:41 [Doran] (received)
+06:53:41 [Doran]     scarred sellsword's power surges with sudden, dramatic force.
+06:53:42 [Kael] (received)
+06:53:42 [Kael]     scarred sellsword's power surges with sudden, dramatic force.
+--- ITEM 10: masked Garrick commits to the clash on Gorr (declares no round action)
+06:53:46 [Garrick] >>> clash Gorr with Maul
+06:53:46 [Garrick]     You ready your action for this round.
+--- staff resolves round 1
+06:54:03 [Marn] >>> encounter resolve
+06:54:03 [Marn]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:03 [Marn]     Berserk wins out: Mira attacks Gorr.
+06:54:03 [Marn]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:03 [Marn]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:03 [Marn]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:03 [Marn]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:03 [Marn]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:03 [Marn]     Mira’s Rend misses Gorr.
+06:54:03 [Marn]     Kael’s Cleave misses Gorr.
+06:54:03 [Marn]     Tomas holds back.
+06:54:03 [Marn]     scarred sellsword holds back.
+06:54:03 [Marn]     Brann holds back.
+06:54:03 [Marn]     Doran holds back.
+06:54:03 [Marn]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:03 [Marn]     The round resolves.
+06:54:04 [Mira] (received)
+06:54:04 [Mira]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:04 [Mira]     Berserk wins out: Mira attacks Gorr.
+06:54:04 [Mira]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:04 [Mira]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:04 [Mira]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:04 [Mira]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:04 [Mira]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:04 [Mira]     Mira’s Rend misses Gorr.
+06:54:04 [Mira]     Kael’s Cleave misses Gorr.
+06:54:04 [Mira]     Tomas holds back.
+06:54:04 [Mira]     scarred sellsword holds back.
+06:54:04 [Mira]     Brann holds back.
+06:54:04 [Mira]     Doran holds back.
+06:54:04 [Mira]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:05 [Tomas] (received)
+06:54:05 [Tomas]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:05 [Tomas]     Berserk wins out: Mira attacks Gorr.
+06:54:05 [Tomas]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:05 [Tomas]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:05 [Tomas]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:05 [Tomas]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:05 [Tomas]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:05 [Tomas]     Mira’s Rend misses Gorr.
+06:54:05 [Tomas]     Kael’s Cleave misses Gorr.
+06:54:05 [Tomas]     Tomas holds back.
+06:54:05 [Tomas]     scarred sellsword holds back.
+06:54:05 [Tomas]     Brann holds back.
+06:54:05 [Tomas]     Doran holds back.
+06:54:05 [Tomas]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:06 [Garrick] (received)
+06:54:06 [Garrick]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:06 [Garrick]     Berserk wins out: Mira attacks Gorr.
+06:54:06 [Garrick]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:06 [Garrick]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:06 [Garrick]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:06 [Garrick]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:06 [Garrick]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:06 [Garrick]     Mira’s Rend misses Gorr.
+06:54:06 [Garrick]     Kael’s Cleave misses Gorr.
+06:54:06 [Garrick]     Tomas holds back.
+06:54:06 [Garrick]     scarred sellsword holds back.
+06:54:06 [Garrick]     Brann holds back.
+06:54:06 [Garrick]     Doran holds back.
+06:54:06 [Garrick]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:07 [Brann] (received)
+06:54:07 [Brann]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:07 [Brann]     Berserk wins out: Mira attacks Gorr.
+06:54:07 [Brann]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:07 [Brann]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:07 [Brann]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:07 [Brann]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:07 [Brann]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:07 [Brann]     Mira’s Rend misses Gorr.
+06:54:07 [Brann]     Kael’s Cleave misses Gorr.
+06:54:07 [Brann]     Tomas holds back.
+06:54:07 [Brann]     scarred sellsword holds back.
+06:54:07 [Brann]     Brann holds back.
+06:54:07 [Brann]     Doran holds back.
+06:54:07 [Brann]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:09 [Doran] (received)
+06:54:09 [Doran]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:09 [Doran]     Berserk wins out: Mira attacks Gorr.
+06:54:09 [Doran]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:09 [Doran]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:09 [Doran]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:09 [Doran]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:09 [Doran]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:09 [Doran]     Mira’s Rend misses Gorr.
+06:54:09 [Doran]     Kael’s Cleave misses Gorr.
+06:54:09 [Doran]     Tomas holds back.
+06:54:09 [Doran]     scarred sellsword holds back.
+06:54:09 [Doran]     Brann holds back.
+06:54:09 [Doran]     Doran holds back.
+06:54:09 [Doran]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:10 [Kael] (received)
+06:54:10 [Kael]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:10 [Kael]     Berserk wins out: Mira attacks Gorr.
+06:54:10 [Kael]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:10 [Kael]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:10 [Kael]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:10 [Kael]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:10 [Kael]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:10 [Kael]     Mira’s Rend misses Gorr.
+06:54:10 [Kael]     Kael’s Cleave misses Gorr.
+06:54:10 [Kael]     Tomas holds back.
+06:54:10 [Kael]     scarred sellsword holds back.
+06:54:10 [Kael]     Brann holds back.
+06:54:10 [Kael]     Doran holds back.
+06:54:10 [Kael]     The Clash with Gorr resolves narrowly in Gorr's favor.
+--- ITEM 4: between rounds, Mira tries to leave (roll staged to fail)
+06:54:14 [Mira] >>> combat leave
+06:54:14 [Mira]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure. You cannot break away.
+06:54:15 [Tomas] (received)
+06:54:15 [Tomas]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+06:54:16 [Garrick] (received)
+06:54:16 [Garrick]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+06:54:17 [Marn] (received)
+06:54:17 [Marn]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+06:54:19 [Brann] (received)
+06:54:19 [Brann]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+06:54:20 [Doran] (received)
+06:54:20 [Doran]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+06:54:21 [Kael] (received)
+06:54:21 [Kael]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+--- ITEM 4: and again, same window
+06:54:25 [Mira] >>> combat leave
+06:54:25 [Mira]     Berserk still holds you. You can try again next round.
+06:54:36 [Tomas] >>> look
+06:54:36 [Tomas]     The Pit
+06:54:36 [Tomas]     This is a room.
+06:54:36 [Tomas]     Characters: Mira, Tomas, a person wearing a scarred sellsword, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+DRIVER DONE
+
+# DB read-back right after (seat of Mira):
+NOW 2026-11-01T06:55:28.636775+00:00
+ENCOUNTER 1 between_rounds round 1
+SEAT Mira: status=active compulsion_attempt_round=1 health=100/100 engagement=intensity_modifier=0 control_modifier=-8
+CONDITIONS Mira: [(1, 'Berserk', 3, 49, None)]

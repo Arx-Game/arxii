@@ -1,0 +1,49 @@
+# Ruling 21: a killing hit rolls no wound trigger
+# Head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (branch feature-4802-involuntary-control-loss-one-mechanism-m)
+# Database: throwaway rt_4802f; server: this worktree's own `just start` (telnet :4000, web :4001).
+# Times are UTC. Expected results: B-expectations.md (written before the run).
+# Doran carries Wound rage (50% trigger; Failure applies Berserk 3) and is staged to fail Hold the rage. Ogre's Crusher 150 on him.
+
+## Before
+NOW 2026-11-01T06:51:33.382589+00:00
+SEAT Doran: status=active compulsion_attempt_round=None health=100/100 engagement=intensity_modifier=0 control_modifier=0
+CONDITIONS Doran: [(4, 'Wound rage', 1, 99, None), (9, 'Rt staging nerves', 1, 99, None)]
+TRIGGER 1 Wound rage wound_threshold 50 Hold the rage 20
+   BAND Failure intensity 4 control -6 applies Berserk 3 3
+   BAND Critical Failure intensity 4 control -6 applies Berserk 3 3
+
+## Round 1 lines as Doran received them (no 'falls below' / 'Hold the rage' line for Doran)
+06:52:29 [Doran] >>> connect e2e_doran (login)
+06:52:29 [Doran]     You become Doran.
+06:52:29 [Doran]     The Pit
+06:52:29 [Doran]     This is a room.
+06:52:29 [Doran]     Characters: Mira, Tomas, Garrick, Marn, Brann, Doran, Kael, Gorr, Brute, Ogre, Troll, and Vash
+06:52:29 [Doran]     Now controlling Doran.
+06:53:41 [Doran] (received)
+06:53:41 [Doran]     scarred sellsword's power surges with sudden, dramatic force.
+06:54:09 [Doran] (received)
+06:54:09 [Doran]     Mira tries to flee against Berserk. Resist compulsion vs 36: Critical Failure.
+06:54:09 [Doran]     Berserk wins out: Mira attacks Gorr.
+06:54:09 [Doran]     Brute’s Haymaker strikes Brann for 60 damage.
+06:54:09 [Doran]     Brann falls below 50% health. Brann fights to keep control. Hold the rage vs 20: Failure. Control -2 · Intensity +4.
+06:54:09 [Doran]     Ogre’s Crusher strikes Doran for 150 damage.
+06:54:09 [Doran]     Troll’s Haymaker strikes Kael for 60 damage.
+06:54:09 [Doran]     Vash’s Slap strikes scarred sellsword for 10 damage.
+06:54:09 [Doran]     Mira’s Rend misses Gorr.
+06:54:09 [Doran]     Kael’s Cleave misses Gorr.
+06:54:09 [Doran]     Tomas holds back.
+06:54:09 [Doran]     scarred sellsword holds back.
+06:54:09 [Doran]     Brann holds back.
+06:54:09 [Doran]     Doran holds back.
+06:54:09 [Doran]     The Clash with Gorr resolves narrowly in Gorr's favor.
+06:54:20 [Doran] (received)
+06:54:20 [Doran]     Mira tries to leave the encounter against Berserk. Resist compulsion vs 41: Critical Failure.
+
+## After (health -50, no Berserk instance)
+NOW 2026-11-01T06:55:28.636775+00:00
+SEAT Doran: status=active compulsion_attempt_round=None health=-50/100 engagement=intensity_modifier=0 control_modifier=0
+CONDITIONS Doran: [(4, 'Wound rage', 1, 98, None), (9, 'Rt staging nerves', 1, 98, None)]
+
+## Interactions API (scene feed) rows naming Doran
+15: Doran holds back.
+5: Ogre’s Crusher strikes Doran for 150 damage.

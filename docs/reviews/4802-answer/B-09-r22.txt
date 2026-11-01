@@ -1,0 +1,116 @@
+# Ruling 22: compelled Mira covers under strain
+# Head: b8ac97bdba5ec93362d460113bf86391c4e4ab06 (branch feature-4802-involuntary-control-loss-one-mechanism-m)
+# Database: throwaway rt_4802f; server: this worktree's own `just start` (telnet :4000, web :4001).
+# Times are UTC. Expected results: B-expectations.md (written before the run).
+# Mira (Berserk 3) declares cover on Tomas; Tomas declares flee. Mira's resist staged to Partial Success (+250 focus).
+
+Staging (staff levers, written with the server stopped before the round): rollmod -200 on
+Mira, Brann, Vela, Doran, Kael (every roll lands on face 1); 'Rt staging nerves' (+50 on Hold
+the rage) on Brann, Doran, Kael so face 1 lands Failure. Before round 2 only: 'Rt staging
+focus' (+250 on Resist compulsion) on Mira so her cover roll at 31 lands Partial Success.
+
+## Telnet, round 2 (full)
+# transcript r2; UTC start 2026-11-01T06:59:12.488456+00:00
+06:59:20 [Mira] >>> connect e2e_test_account (login)
+06:59:20 [Mira]     You become Mira.
+06:59:20 [Mira]     The Pit
+06:59:20 [Mira]     This is a room.
+06:59:20 [Mira]     Characters: Mira, Gorr, Brute, Ogre, Troll, and Vash
+06:59:20 [Mira]     Now controlling Mira.
+06:59:28 [Tomas] >>> connect e2e_web (login)
+06:59:28 [Tomas]     You become Tomas.
+06:59:28 [Tomas]     The Pit
+06:59:28 [Tomas]     This is a room.
+06:59:28 [Tomas]     Characters: Mira, Gorr, Brute, Ogre, Troll, Vash, and Tomas
+06:59:28 [Tomas]     Now controlling Tomas.
+06:59:35 [Garrick] >>> connect e2e_garrick (login)
+06:59:35 [Garrick]     You become Garrick.
+06:59:35 [Garrick]     The Pit
+06:59:35 [Garrick]     This is a room.
+06:59:35 [Garrick]     Characters: Mira, Gorr, Brute, Ogre, Troll, Vash, Tomas, and scarred sellsword
+06:59:35 [Garrick]     Now controlling Garrick.
+06:59:43 [Marn] >>> connect e2e_staff (login)
+06:59:43 [Marn]     You become Marn.
+06:59:43 [Marn]     The Pit
+06:59:43 [Marn]     This is a room.
+06:59:43 [Marn]     Characters: Mira, Gorr, Brute, Ogre, Troll, Vash, Tomas, scarred sellsword (Garrick), and Marn
+06:59:43 [Marn]     Now controlling Marn.
+--- staff begins round 2
+06:59:51 [Marn] >>> encounter begin
+06:59:51 [Marn]     Round begins.
+--- RULING 22: compelled Mira covers Tomas (resist staged to Partial Success)
+06:59:59 [Mira] >>> combat cover Tomas
+06:59:59 [Mira]     Against Berserk: Resist compulsion check, difficulty 31. If it fails, you attack instead.
+06:59:59 [Mira]     You move to cover your ally.
+--- RULING 22: Tomas declares flee, so Mira's cover has something to add to
+07:00:06 [Tomas] >>> combat flee
+07:00:06 [Tomas]     You declare a desperate flee.
+--- ITEM 10: masked Garrick commits to the (long) clash on Gorr
+07:00:14 [Garrick] >>> clash Gorr with Maul
+07:00:14 [Garrick]     You ready your action for this round.
+--- staff resolves round 2
+07:00:27 [Marn] >>> encounter resolve
+07:00:27 [Marn]     Mira tries to cover against Berserk. Resist compulsion vs 31: Partial Success.
+07:00:27 [Marn]     Berserk drags at Mira: -4 to this action, Control -2.
+07:00:27 [Marn]     Brute’s Haymaker strikes Mira for 60 damage.
+07:00:27 [Marn]     Ogre’s Crusher strikes Mira for 150 damage.
+07:00:27 [Marn]     Troll’s Haymaker strikes Mira for 60 damage.
+07:00:27 [Marn]     Vash’s Slap strikes Mira for 10 damage.
+07:00:27 [Marn]     Tomas breaks away and escapes the fight.
+07:00:27 [Marn]     Kael’s Cleave misses Gorr.
+07:00:27 [Marn]     scarred sellsword holds back.
+07:00:27 [Marn]     Brann holds back.
+07:00:27 [Marn]     Doran holds back.
+07:00:27 [Marn]     The round resolves.
+07:00:28 [Mira] (received)
+07:00:28 [Mira]     Mira tries to cover against Berserk. Resist compulsion vs 31: Partial Success.
+07:00:28 [Mira]     Berserk drags at Mira: -4 to this action, Control -2.
+07:00:28 [Mira]     Brute’s Haymaker strikes Mira for 60 damage.
+07:00:28 [Mira]     Ogre’s Crusher strikes Mira for 150 damage.
+07:00:28 [Mira]     Troll’s Haymaker strikes Mira for 60 damage.
+07:00:28 [Mira]     Vash’s Slap strikes Mira for 10 damage.
+07:00:28 [Mira]     Tomas breaks away and escapes the fight.
+07:00:28 [Mira]     Kael’s Cleave misses Gorr.
+07:00:28 [Mira]     scarred sellsword holds back.
+07:00:28 [Mira]     Brann holds back.
+07:00:28 [Mira]     Doran holds back.
+07:00:29 [Tomas] (received)
+07:00:29 [Tomas]     Mira tries to cover against Berserk. Resist compulsion vs 31: Partial Success.
+07:00:29 [Tomas]     Berserk drags at Mira: -4 to this action, Control -2.
+07:00:29 [Tomas]     Brute’s Haymaker strikes Mira for 60 damage.
+07:00:29 [Tomas]     Ogre’s Crusher strikes Mira for 150 damage.
+07:00:29 [Tomas]     Troll’s Haymaker strikes Mira for 60 damage.
+07:00:29 [Tomas]     Vash’s Slap strikes Mira for 10 damage.
+07:00:29 [Tomas]     Tomas breaks away and escapes the fight.
+07:00:29 [Tomas]     Kael’s Cleave misses Gorr.
+07:00:29 [Tomas]     scarred sellsword holds back.
+07:00:29 [Tomas]     Brann holds back.
+07:00:29 [Tomas]     Doran holds back.
+07:00:30 [Garrick] (received)
+07:00:30 [Garrick]     Mira tries to cover against Berserk. Resist compulsion vs 31: Partial Success.
+07:00:30 [Garrick]     Berserk drags at Mira: -4 to this action, Control -2.
+07:00:30 [Garrick]     Brute’s Haymaker strikes Mira for 60 damage.
+07:00:30 [Garrick]     Ogre’s Crusher strikes Mira for 150 damage.
+07:00:30 [Garrick]     Troll’s Haymaker strikes Mira for 60 damage.
+07:00:30 [Garrick]     Vash’s Slap strikes Mira for 10 damage.
+07:00:30 [Garrick]     Tomas breaks away and escapes the fight.
+07:00:30 [Garrick]     Kael’s Cleave misses Gorr.
+07:00:30 [Garrick]     scarred sellsword holds back.
+07:00:30 [Garrick]     Brann holds back.
+07:00:30 [Garrick]     Doran holds back.
+07:00:34 [Tomas] >>> look
+07:00:34 [Tomas]     The Pit
+07:00:34 [Tomas]     This is a room.
+07:00:34 [Tomas]     Characters: Mira, Gorr, Brute, Ogre, Troll, Vash, Tomas, a person wearing a scarred sellsword, and Marn
+DRIVER DONE
+
+## DB read-back after round 2
+NOW 2026-11-01T07:01:33.431159+00:00
+SEAT Mira: status=active compulsion_attempt_round=1 health=-180/100 engagement=intensity_modifier=0 control_modifier=-10
+SEAT Tomas: status=fled compulsion_attempt_round=None health=100/100 engagement=none
+CONDITIONS Mira: [(1, 'Berserk', 3, 48, None), (11, 'Rt staging focus', 1, 98, None)]
+ACTION r2 Mira: maneuver='cover' technique=None opp=None ally=Tomas compulsion_penalty=4 declared_by_compulsion=False
+ACTION r2 Tomas: maneuver='flee' technique=None opp=None ally=None compulsion_penalty=0 declared_by_compulsion=False
+
+Mira's control before round 2 (after round 1 and the leave): SEAT Mira: status=active compulsion_attempt_round=1 health=100/100 engagement=intensity_modifier=0 control_modifier=-8
+cover_escape_bonus catalog row after the flee resolved: 10 (base), Mira has no modifiers on it.
