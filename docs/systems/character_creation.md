@@ -524,8 +524,15 @@ reads "Distinction: Capable Mentor" and losing the card cascades it. All three r
 plain admin. The card's `effects_summary` prices each in words ("Starts with -300
 prestige", "Opens a membership in ...", "+5 to your Path's stronger Aspect"). The parent's
 "starting prestige event" is not built: no prestige ledger exists and the pick's notes
-already hold what the player says about a card. The leaf's three blocks are the frontend
-half.
+already hold what the player says about a card. On the leaf (#4854, the frontend half)
+each entry of `final_touches_cards` gets a block under the card's name in the chapter
+section: the story as a 500-character input (`draft_data.prestige_stories`, a blank one
+dropped on save), the organization as a select over `organization_choices` with "None"
+first (`draft_data.organizations`, null for None), the mentor line with the Aspect from
+`detail` or a generic phrase before a Path is picked; all saved in the stage's one PATCH
+on leave. Copy keys `finaltouches_prestige_prompt` / `_help`,
+`finaltouches_organization_prompt` / `_help` / `_none`, `finaltouches_aspect_prompt` /
+`_help` / `_unknown` (seeded, PLACEHOLDER for the maintainer's voice).
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
