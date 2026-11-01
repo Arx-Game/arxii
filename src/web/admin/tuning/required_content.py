@@ -1642,12 +1642,53 @@ def _probe_berserk_compulsion() -> ProbeResult:
 
 
 def _probe_moon_control_loss_trigger() -> ProbeResult:
-    """A control-loss trigger fires on the moon's pull (#4802)."""
-    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
-    from world.conditions.models import ControlLossTrigger  # noqa: PLC0415
+    """A control-loss trigger fires on the moon's pull, and every lycan carries it (#4802).
 
+    The trigger hangs on a vulnerability condition. A species grant that carries both
+    that condition (``drawback_condition``) and a drawback distinction stamps both at CG,
+    so a character holding the distinction without an instance of the condition is a
+    lycan the moon never takes (a character made before the condition existed, or an
+    authored condition the content migration put no instances on). Those characters are
+    listed; the probe reports, it changes nothing.
+    """
+    from django.db.models import Exists, OuterRef, Q  # noqa: PLC0415
+
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ControlLossTrigger  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+
+    vulnerabilities = set(
+        ControlLossTrigger.objects.filter(fires_on=ControlLossFiresOn.MOON_PULL).values_list(
+            "vulnerability_id", flat=True
+        )
+    )
+    if not vulnerabilities:
+        return ProbeResult(present=False)
+    grants = SpeciesGiftGrant.objects.filter(
+        drawback_condition_id__in=vulnerabilities, drawback_distinction__isnull=False
+    ).values_list("drawback_distinction_id", "drawback_condition_id")
+    uncarried = Q(pk__in=[])
+    for distinction_id, condition_id in grants:
+        # A character sheet shares its pk with the character's ObjectDB row.
+        carries = ConditionInstance.objects.filter(
+            condition_id=condition_id, target_id=OuterRef("character_id")
+        )
+        uncarried |= Q(distinction_id=distinction_id) & ~Exists(carries)
+    missing = set(
+        CharacterDistinction.objects.filter(uncarried).values_list(
+            "character__character__db_key", flat=True
+        )
+    )
+    if not missing:
+        return ProbeResult(present=True)
     return ProbeResult(
-        present=ControlLossTrigger.objects.filter(fires_on=ControlLossFiresOn.MOON_PULL).exists()
+        present=False,
+        missing=tuple(sorted(missing)),
+        detail=(
+            "These characters hold the moon drawback distinction but not the condition the "
+            "moon trigger hangs on, so the moon never takes them. Give each the condition."
+        ),
     )
 
 
@@ -2738,14 +2779,16 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="moon-control-loss-trigger",
-            label="A moon's-pull control-loss trigger exists",
+            label="A moon's-pull control-loss trigger exists and every lycan carries it",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/species/moon_sensitivity.py; world/conditions/models.py ControlLossTrigger"
             ),
             consequence=(
-                "The moon never takes anyone: a lycan under a full moon rolls no control "
-                "check and is never forced into the battle form."
+                "The moon never takes anyone (no trigger), or never takes the lycans listed "
+                "(they hold the drawback distinction but not the condition the trigger "
+                "hangs on): under a full moon they roll no control check and are never "
+                "forced into the battle form."
             ),
             probe=CustomProbe(fn=_probe_moon_control_loss_trigger),
             admin_model="ControlLossTrigger",

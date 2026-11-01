@@ -648,9 +648,9 @@ actions, backends, and service functions.
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
   `steady [on|off]` (#4802) sets the caller's steady plan beside `dodge`: it dispatches
-  `SteadyPlanAction` (key `combat_steady`), which turns the plan on (or off) only when the
-  caller holds the steadying capability above its baseline, and answers "Nothing you have lets
-  you steady an ally." otherwise. A stray word prints "Usage: combat steady [on|off]." and
+  `SteadyPlanAction` (key `combat_steady`). Turning it on needs the steadying capability
+  above its baseline and otherwise answers "Nothing you have lets you steady an ally.";
+  turning it off needs nothing. The plan holds for the rest of the fight until turned off. A stray word prints "Usage: combat steady [on|off]." and
   changes nothing. **Compulsion warning (#4802):** when a declare command (`_CombatCommandMixin`
   in `commands/combat.py`) lands a round action that goes against the caller's compulsion, it
   prints one line before the usual confirmation: `Against <condition>: <check> check,

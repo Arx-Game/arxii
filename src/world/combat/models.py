@@ -1555,9 +1555,19 @@ class CombatParticipant(EncounterPayloadRowMixin, SharedMemoryModel):
     steady_enabled = models.BooleanField(
         default=False,
         help_text=(
-            "Steady an ally who fails a compulsion resist this round, when she has the "
-            "steadying capability and the anima (#4802). The player sets it with the "
-            "reaction plan; combat resolution reads it."
+            "Steady an ally who fails a compulsion resist, when she can act and has the "
+            "steadying capability and the anima (#4802). The plan holds for the rest of "
+            "the fight until she turns it off. The player sets it with the reaction plan; "
+            "combat resolution reads it."
+        ),
+    )
+    compulsion_attempt_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The round in which she last failed to leave or change back against a "
+            "compulsion (#4802). She may try again from the next round. Written by the "
+            "leave and revert roll; nobody edits it."
         ),
     )
     dodge_landing = models.ForeignKey(

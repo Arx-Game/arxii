@@ -323,7 +323,8 @@ def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
     """The allies who could steady a compelled *participant* now, best first (#4802).
 
     An ally steadies when she is active in the same encounter, is not the steadied
-    fighter, has the steady plan on, carries no compulsion of her own, holds the steadying
+    fighter, has the steady plan on, can act (``can_act``: a knocked-out ally stays ACTIVE
+    but steadies nobody), carries no compulsion of her own, holds the steadying
     capability above its baseline, and has the anima to pay. Her bonus is that capability
     plus the steady bonus per point of her bond depth to the steadied fighter (0 with no
     qualifying bond), less her reaction penalty. The biggest bonus comes first; ties go to
@@ -332,8 +333,9 @@ def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
     from world.combat.constants import ParticipantStatus  # noqa: PLC0415
     from world.combat.escalation import qualifying_bond_depths  # noqa: PLC0415
     from world.combat.models import CombatParticipant as _Participant  # noqa: PLC0415
-    from world.conditions.control_loss import has_compulsion  # noqa: PLC0415
+    from world.conditions.control_loss import active_compulsions_for  # noqa: PLC0415
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     config = MovementConfig.objects.cached_singleton()
     if config is None or config.steadying_capability_id is None:
@@ -348,11 +350,17 @@ def steadiers_for(participant: CombatParticipant) -> list[Steadier]:
         .select_related("character_sheet__character")
         .order_by("pk")
     )
+    # The capability and can_act are per-character oracles with no batch form; the
+    # compulsion rows are read once for every ally.
+    allies = [ally for ally in allies if can_act(ally.character_sheet)]
     capability_by_pk = {ally.pk: steady_capability_value(ally) for ally in allies}
+    compelled = active_compulsions_for(
+        [ally.character_sheet.character for ally in allies if capability_by_pk[ally.pk] > 0]
+    )
     allies = [
         ally
         for ally in allies
-        if capability_by_pk[ally.pk] > 0 and not has_compulsion(ally.character_sheet.character)
+        if capability_by_pk[ally.pk] > 0 and ally.character_sheet.character.pk not in compelled
     ]
     if not allies:
         return []

@@ -156,7 +156,8 @@ def leave_encounter(participant: CombatParticipant) -> None:
     - the encounter is not in BETWEEN_ROUNDS status,
     - the encounter type is not OPEN_ENCOUNTER,
     - the participant is not ACTIVE, or
-    - the participant is compelled and fails the resist roll.
+    - the participant is compelled and fails the resist roll, or already failed it this
+      round (one try a round; the message says to try again next round).
     """
     from world.combat.compulsion import resist_compulsion_now  # noqa: PLC0415
 
@@ -168,7 +169,7 @@ def leave_encounter(participant: CombatParticipant) -> None:
             participant.character_sheet.character, CompulsionForbidden.LEAVE
         )
         if not attempt.allowed:
-            msg = f"{attempt.line} {LEAVE_RESISTED_MESSAGE}"
+            msg = attempt.line if attempt.waiting else f"{attempt.line} {LEAVE_RESISTED_MESSAGE}"
             raise ValueError(msg)
     _leave_encounter(participant)
 

@@ -52,7 +52,6 @@ _SUBVERBS: dict[str, str] = {
     "disengage": "combat_disengage",
 }
 
-# subverbs that take a single name argument.
 # subverbs that set a reaction plan for the round.
 _PLAN_SUBVERBS = {"dodge", "steady"}
 # subverbs that declare the round's focused action (#4802), so a compulsion may warn.
@@ -72,6 +71,7 @@ _DECLARING_SUBVERBS = frozenset(
         "joust",
     }
 )
+# subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
 _OPPONENT_SUBVERBS = {"demoralize", "parley", "engage", "mark"}
 

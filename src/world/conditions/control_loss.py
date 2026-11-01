@@ -50,19 +50,78 @@ def active_compulsion(
     rows of those conditions. A caller that already holds the character's active
     instances (the encounter read preloads them) passes them as ``active_instances``.
     """
-    from world.conditions.models import Compulsion  # noqa: PLC0415
-
     if active_instances is None:
         active_instances = character.conditions.active()
-    instances = {inst.condition_id: inst for inst in active_instances}
-    if not instances:
+    if not active_instances:
         return None
+    return _strongest(active_instances, _compulsions_by_condition(active_instances))
+
+
+def active_compulsions_for(
+    characters: Sequence[ObjectDB],
+) -> dict[int, tuple[Compulsion, ConditionInstance]]:
+    """``active_compulsion`` for many characters, keyed by character pk, in one query.
+
+    Each character's active instances come from its condition handler's cache; the
+    compulsion rows of every carried condition are read together. A character with no
+    compulsion is left out.
+    """
+    instances_by_character = {
+        character.pk: character.conditions.active() for character in characters
+    }
+    every = [inst for insts in instances_by_character.values() for inst in insts]
+    if not every:
+        return {}
+    by_condition = _compulsions_by_condition(every)
+    found = {}
+    for pk, instances in instances_by_character.items():
+        best = _strongest(instances, by_condition)
+        if best is not None:
+            found[pk] = best
+    return found
+
+
+def _compulsions_by_condition(
+    instances: Sequence[ConditionInstance],
+) -> dict[int, Compulsion]:
+    """The compulsion rows of the instances' conditions, keyed by condition id (one query)."""
+    from world.conditions.models import Compulsion  # noqa: PLC0415
+
+    return {
+        compulsion.condition_id: compulsion
+        for compulsion in Compulsion.objects.filter(
+            condition_id__in={inst.condition_id for inst in instances}
+        ).select_related("condition", "check_type")
+    }
+
+
+def _strongest(
+    instances: Sequence[ConditionInstance],
+    by_condition: dict[int, Compulsion],
+) -> tuple[Compulsion, ConditionInstance] | None:
+    """The compelling instance with the highest severity; ties go to the lowest pk."""
     best: tuple[Compulsion, ConditionInstance] | None = None
-    for compulsion in Compulsion.objects.filter(condition_id__in=instances):
-        instance = instances[compulsion.condition_id]
+    for instance in instances:
+        compulsion = by_condition.get(instance.condition_id)
+        if compulsion is None:
+            continue
         if best is None or (instance.severity, -instance.pk) > (best[1].severity, -best[1].pk):
             best = (compulsion, instance)
     return best
+
+
+def forbidden_rows_for(
+    compulsions: Sequence[Compulsion],
+) -> dict[int, dict[str, CompulsionForbiddenAction]]:
+    """Each compulsion's forbidden rows by action, keyed by compulsion pk (one query)."""
+    from world.conditions.models import CompulsionForbiddenAction  # noqa: PLC0415
+
+    rows: dict[int, dict[str, CompulsionForbiddenAction]] = {c.pk: {} for c in compulsions}
+    for row in CompulsionForbiddenAction.objects.filter(compulsion_id__in=list(rows)).order_by(
+        "pk"
+    ):
+        rows[row.compulsion_id].setdefault(row.action, row)
+    return rows
 
 
 def forbidden_row(compulsion: Compulsion, forbidden: str) -> CompulsionForbiddenAction | None:
@@ -96,15 +155,19 @@ def compulsion_summary_for(
     options: Sequence[CompulsionOption],
     active_instances: Sequence[ConditionInstance] | None = None,
     attack_target_name: str | None = None,
+    *,
+    found: tuple[Compulsion, ConditionInstance] | None = None,
 ) -> CompulsionSummary | None:
     """The character's compulsion and what each of *options* costs under it.
 
     The compulsion and its forbidden rows are read once; each option's cost is derived
-    from them, so the number of options adds no queries.
+    from them, so the number of options adds no queries. A caller that already found the
+    compulsion (``active_compulsion``) passes it as ``found`` and it is not looked up again.
     """
     if character is None:
         return None
-    found = active_compulsion(character, active_instances)
+    if found is None:
+        found = active_compulsion(character, active_instances)
     if found is None:
         return None
     compulsion, instance = found
@@ -153,7 +216,7 @@ def fire_control_loss_triggers(
     sheet = _roller_sheet(character)
     if sheet is None:
         return []
-    carried = {inst.condition_id for inst in character.conditions.active()}
+    carried = _carried_vulnerabilities(character)
     if not carried:
         return []
     triggers = ControlLossTrigger.objects.filter(
@@ -179,17 +242,21 @@ def fire_wound_triggers(
     """Fire each WOUND_THRESHOLD trigger whose threshold this hit crossed downward.
 
     A threshold of N percent is crossed when ``health_before >= N% of max_health >
-    health_after``. Nothing is stored between hits: each downward crossing fires.
+    health_after``. Nothing is stored between hits: each downward crossing fires. A
+    character who cannot act (``can_act``) rolls nothing; the damage service already
+    leaves out a killing hit. A hit into the knockout band rolls while the character can
+    still act: the knockout check for that hit is rolled afterwards by its caller.
     """
     if max_health <= 0 or health_after >= health_before:
         return []
     from world.conditions.models import ControlLossTrigger  # noqa: PLC0415
+    from world.vitals.services import can_act  # noqa: PLC0415
 
     sheet = _roller_sheet(character)
     if sheet is None:
         return []
-    carried = {inst.condition_id for inst in character.conditions.active()}
-    if not carried:
+    carried = _carried_vulnerabilities(character)
+    if not carried or not can_act(sheet):
         return []
     outcomes: list[ControlLossOutcome] = []
     for trigger in ControlLossTrigger.objects.filter(
@@ -212,6 +279,29 @@ def fire_stage_triggers(instance: ConditionInstance) -> list[ControlLossOutcome]
         ControlLossFiresOn.CONDITION_STAGE,
         stage=instance.current_stage,
     )
+
+
+def _carried_vulnerabilities(character: ObjectDB) -> set[int]:  # noqa: OBJECTDB_PARAM
+    """The condition ids *character* carries, or none when a compulsion already drives them.
+
+    Every trigger path (moon, wound, stage) skips a character who is already compelled
+    (ruled 2026-10-31): a raging character does not re-roll on each crossing, and the
+    compulsion they are under runs its course.
+    """
+    instances = character.conditions.active()
+    if not instances or active_compulsion(character, instances) is not None:
+        return set()
+    return {inst.condition_id for inst in instances}
+
+
+def display_name_of(character: ObjectDB) -> str:  # noqa: OBJECTDB_PARAM
+    """The persona name others know *character* by; the key when there is no sheet."""
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None:
+        return character.key
+    return persona_names_for_sheets([sheet.pk]).get(sheet.pk, character.key)
 
 
 def _roller_sheet(character: ObjectDB) -> CharacterSheet | None:  # noqa: OBJECTDB_PARAM
@@ -376,18 +466,27 @@ def _announce(
     result: CheckResult,
     applied: ConditionInstance | None,
 ) -> None:
-    """Tell the character and the room a roll moved their control or applied a condition."""
+    """Tell the character and the room a roll moved their control or applied a condition.
+
+    The room hears the persona name the rest of combat uses, never the character key,
+    and both lines go out once the surrounding transaction commits (a round that rolls
+    back tells nobody about a roll that never happened).
+    """
+    from django.db import transaction  # noqa: PLC0415
+
     outcome = result.outcome.name
     check = trigger.check_type.name
-    lost = f" {{who}} lose control: {applied.condition.name}." if applied is not None else ""
-    base = f"{{who}} fight to keep control. {check}: {outcome}."
-    character.msg("|r" + (base + lost).format(who="You") + "|n")
+    own = f"You fight to keep control. {check}: {outcome}." + (
+        f" You lose control: {applied.condition.name}." if applied is not None else ""
+    )
+    name = display_name_of(character)
+    seen = f"{name} fights to keep control. {check}: {outcome}." + (
+        f" {name} loses control: {applied.condition.name}." if applied is not None else ""
+    )
     room = character.location
+    transaction.on_commit(lambda: character.msg("|r" + own + "|n"))
     if room is not None:
-        text = f"{character.key} fights to keep control. {check}: {outcome}." + (
-            f" {character.key} loses control: {applied.condition.name}." if applied else ""
-        )
-        room.msg_contents("|r" + text + "|n", exclude=[character])
+        transaction.on_commit(lambda: room.msg_contents("|r" + seen + "|n", exclude=[character]))
 
 
 def _force_battle_form_shift(character: ObjectDB, sheet: CharacterSheet) -> None:  # noqa: OBJECTDB_PARAM

@@ -19,7 +19,9 @@ These seams make the drive real, for every compulsion staff author:
   acknowledgement, hostile-cast entry), so targeting them raises no new consent question.
 - **Walking away and changing back** (`resist_compulsion_now`): leaving an encounter and
   reverting an alternate self roll the same check, at once, with no declaration to replace
-  and no ally to steady it (there is no round to spend a reaction in).
+  and no ally to steady it (there is no round to spend a reaction in). A failed roll
+  cannot be retried at once: in combat the next try is next round, out of combat it
+  waits ``Compulsion.retry_wait_minutes``.
 - **Out of combat** (`berserk_rampage_window`): at each reconcile window a compelled
   character auto-engages the nearest NPC in the room through the same hostile-cast
   seeding a deliberate attack uses; with nobody to grab, they rage harmlessly. PC targets
@@ -34,6 +36,7 @@ to the first swing, and bystanders get rounds to talk the beast down.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -43,15 +46,16 @@ from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
 from world.conditions.control_loss import (
     active_compulsion,
+    active_compulsions_for,
     compulsion_difficulty,
     compulsion_summary_for,
-    forbidden_row,
-    has_compulsion,
+    display_name_of,
+    forbidden_rows_for,
 )
 from world.conditions.types import CompulsionOption, CompulsionSummary
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from evennia.objects.models import ObjectDB
 
@@ -65,6 +69,7 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import (
         Compulsion,
+        CompulsionForbiddenAction,
         CompulsionResistBand,
         ConditionInstance,
     )
@@ -96,11 +101,30 @@ _FORBIDDEN_BY_MANEUVER: dict[str, str] = {
 def compulsion_band(
     compulsion: Compulsion,
     outcome: CheckOutcome | None,
+    bands: Mapping[int, CompulsionResistBand] | None = None,
 ) -> CompulsionResistBand | None:
-    """The compulsion's band for a roll outcome, or None when staff authored none."""
+    """The compulsion's band for a roll outcome, or None when staff authored none.
+
+    A caller that already read the compulsion's bands passes them, keyed by outcome id
+    (``bands_by_outcome``), and no query is made.
+    """
     if outcome is None:
         return None
+    if bands is not None:
+        return bands.get(outcome.pk)
     return compulsion.bands.filter(outcome_id=outcome.pk).order_by("pk").first()
+
+
+def bands_by_outcome(
+    compulsions: Sequence[Compulsion],
+) -> dict[int, dict[int, CompulsionResistBand]]:
+    """Each compulsion's bands by outcome id, keyed by compulsion pk (one query)."""
+    from world.conditions.models import CompulsionResistBand  # noqa: PLC0415
+
+    bands: dict[int, dict[int, CompulsionResistBand]] = {c.pk: {} for c in compulsions}
+    for band in CompulsionResistBand.objects.filter(compulsion_id__in=list(bands)).order_by("pk"):
+        bands[band.compulsion_id].setdefault(band.outcome_id, band)
+    return bands
 
 
 #: The verb phrase the roll line uses for each action resolved outside the round.
@@ -118,6 +142,12 @@ def resist_compulsion_now(character: ObjectDB, forbidden: str) -> CompulsionAtte
     The difficulty and the band come from the same helpers the round lock uses; there is
     no steadying here. The band's ``control_change`` lands whatever the result.
 
+    A failed roll cannot be retried at once (ruled 2026-10-31): a fighter in an
+    uncompleted encounter tries again next round (``compulsion_attempt_round``); anyone
+    else waits the compulsion's ``retry_wait_minutes`` (``compulsion_retry_after`` on the
+    condition instance). A try inside that window rolls nothing and comes back with
+    ``waiting`` set and a line saying when to try again.
+
     ACTS_STRAINED lets the action happen: leaving and changing back have no roll of
     their own, so the band's action penalty has nothing to reduce.
 
@@ -132,12 +162,16 @@ def resist_compulsion_now(character: ObjectDB, forbidden: str) -> CompulsionAtte
     if found is None or sheet is None or not is_player_character(sheet):
         return CompulsionAttempt(allowed=True, line="", check_result=None)
     compulsion, instance = found
+    seat = _fighting_seat(sheet)
+    wait = _retry_wait_line(compulsion, instance, seat)
+    if wait is not None:
+        return CompulsionAttempt(allowed=False, line=wait, check_result=None, waiting=True)
     difficulty = compulsion_difficulty(compulsion, instance, forbidden)
     result = perform_check_with_modifiers(
         character, compulsion.check_type, target_difficulty=difficulty
     )
     line = (
-        f"{_persona_name(character)} tries to {_OUTSIDE_ROUND_LABEL[forbidden]} against "
+        f"{display_name_of(character)} tries to {_OUTSIDE_ROUND_LABEL[forbidden]} against "
         f"{compulsion.condition.name}. {compulsion.check_type.name} vs {difficulty}: "
         f"{_outcome_name(result)}."
     )
@@ -145,11 +179,72 @@ def resist_compulsion_now(character: ObjectDB, forbidden: str) -> CompulsionAtte
     allowed = band is None or band.result != CompulsionResult.COMPULSION_ACTS
     if band is not None and band.control_change:
         _shift_character_control(character, band.control_change)
+    if not allowed:
+        _start_retry_wait(compulsion, instance, seat)
     if character.location is not None:
         character.location.msg_contents(line, exclude=[character])
     if allowed:
         character.msg(line)
     return CompulsionAttempt(allowed=allowed, line=line, check_result=result)
+
+
+def _fighting_seat(sheet: CharacterSheet) -> CombatParticipant | None:
+    """The sheet's active seat in an uncompleted encounter, if they are in a fight."""
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    return (
+        CombatParticipant.objects.filter(
+            character_sheet=sheet,
+            status=ParticipantStatus.ACTIVE,
+            encounter__completed_at__isnull=True,
+        )
+        .select_related("encounter")
+        .order_by("pk")
+        .first()
+    )
+
+
+def _retry_wait_line(
+    compulsion: Compulsion,
+    instance: ConditionInstance,
+    seat: CombatParticipant | None,
+) -> str | None:
+    """The line refusing a retry inside the wait after a failed roll, or None to roll."""
+    from django.utils import timezone  # noqa: PLC0415
+
+    name = compulsion.condition.name
+    if seat is not None:
+        if seat.compulsion_attempt_round == seat.encounter.round_number:
+            return f"{name} still holds you. You can try again next round."
+        return None
+    retry_after = instance.compulsion_retry_after
+    now = timezone.now()
+    if retry_after is None or retry_after <= now:
+        return None
+    minutes = max(1, math.ceil((retry_after - now).total_seconds() / 60))
+    unit = "minute" if minutes == 1 else "minutes"
+    return f"{name} still holds you. You can try again in {minutes} {unit}."
+
+
+def _start_retry_wait(
+    compulsion: Compulsion,
+    instance: ConditionInstance,
+    seat: CombatParticipant | None,
+) -> None:
+    """Record a failed roll so the next try waits: the round in a fight, minutes outside."""
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
+    if seat is not None:
+        seat.compulsion_attempt_round = seat.encounter.round_number
+        seat.save(update_fields=["compulsion_attempt_round"])
+        return
+    instance.compulsion_retry_after = timezone.now() + timedelta(
+        minutes=compulsion.retry_wait_minutes
+    )
+    instance.save(update_fields=["compulsion_retry_after"])
 
 
 def _is_compelled_attack(action: CombatRoundAction) -> bool:
@@ -177,12 +272,16 @@ def _cost(
     compulsion: Compulsion,
     instance: ConditionInstance,
     action: CombatRoundAction,
+    forbidden: Mapping[str, CompulsionForbiddenAction],
 ) -> CompulsionCost | None:
-    """What *action* costs under this compulsion; None when it is what the compulsion wants."""
+    """What *action* costs under this compulsion; None when it is what the compulsion wants.
+
+    ``forbidden`` is the compulsion's forbidden rows by action (``forbidden_rows_for``).
+    """
     if _is_compelled_attack(action):
         return None
     key = _forbidden_key(action)
-    row = forbidden_row(compulsion, key) if key is not None else None
+    row = forbidden.get(key) if key is not None else None
     return CompulsionCost(
         difficulty=compulsion_difficulty(compulsion, instance, key, row=row),
         forbidden=row is not None,
@@ -205,7 +304,7 @@ def compulsion_against(
     if found is None:
         return None
     compulsion, instance = found
-    return _cost(compulsion, instance, action)
+    return _cost(compulsion, instance, action, forbidden_rows_for([compulsion])[compulsion.pk])
 
 
 #: The panel key for a technique that names no opponent (a defend, a heal).
@@ -252,12 +351,17 @@ def compulsion_summary(
     there is a technique to swing), looked up once for the viewer, not once per option.
     """
     character = participant.character_sheet.character
-    if character is None or active_compulsion(character, active_instances) is None:
+    if character is None:
+        return None
+    found = active_compulsion(character, active_instances)
+    if found is None:
         return None
     opponent = _first_active_opponent(participant)
     technique = compulsion_technique_for(participant.character_sheet)
     target = opponent.name if opponent is not None and technique is not None else None
-    return compulsion_summary_for(character, _summary_options(), active_instances, target)
+    return compulsion_summary_for(
+        character, _summary_options(), found=found, attack_target_name=target
+    )
 
 
 def compulsion_warning(participant: CombatParticipant, action: CombatRoundAction) -> str | None:
@@ -267,7 +371,7 @@ def compulsion_warning(participant: CombatParticipant, action: CombatRoundAction
     if found is None:
         return None
     compulsion, instance = found
-    cost = _cost(compulsion, instance, action)
+    cost = _cost(compulsion, instance, action, forbidden_rows_for([compulsion])[compulsion.pk])
     if cost is None:
         return None
     return (
@@ -298,20 +402,31 @@ def resolve_compulsions(encounter: CombatEncounter) -> list[CompulsionRoll]:
         "focused_action",
         "focused_opponent_target",
     )
+    actions = list(actions.order_by("participant_id"))
+    characters = [
+        a.participant.character_sheet.character
+        for a in actions
+        if a.participant.character_sheet.character is not None
+    ]
+    # Every compulsion row this round needs is read once, not once per action.
+    found_by_character = active_compulsions_for(characters)
+    compulsions = list({c.pk: c for c, _ in found_by_character.values()}.values())
+    forbidden = forbidden_rows_for(compulsions)
+    bands = bands_by_outcome(compulsions)
     rolls: list[CompulsionRoll] = []
-    for action in actions.order_by("participant_id"):
+    for action in actions:
         participant = action.participant
         character = participant.character_sheet.character
-        if character is None:
-            continue
-        found = active_compulsion(character)
+        found = found_by_character.get(character.pk) if character is not None else None
         if found is None or not is_player_character(participant.character_sheet):
             continue
         compulsion, instance = found
-        cost = _cost(compulsion, instance, action)
+        cost = _cost(compulsion, instance, action, forbidden[compulsion.pk])
         if cost is None:
             continue
-        rolls.append(_resist(participant, action, compulsion, cost.difficulty))
+        rolls.append(
+            _resist(participant, action, compulsion, cost.difficulty, bands[compulsion.pk])
+        )
     return rolls
 
 
@@ -320,8 +435,12 @@ def _resist(
     action: CombatRoundAction,
     compulsion: Compulsion,
     difficulty: int,
+    bands: Mapping[int, CompulsionResistBand],
 ) -> CompulsionRoll:
-    """One resist roll, its steadying pass, and its band applied."""
+    """One resist roll, its steadying pass, and its band applied.
+
+    ``bands`` is the compulsion's bands by outcome id (``bands_by_outcome``).
+    """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.combat.services.reactions import try_steady  # noqa: PLC0415
 
@@ -336,14 +455,14 @@ def _resist(
         f"{compulsion.condition.name}. {compulsion.check_type.name} vs {difficulty}: "
         f"{_outcome_name(first)}.",
     )
-    band = compulsion_band(compulsion, first.outcome)
+    band = compulsion_band(compulsion, first.outcome, bands)
     steadied_by = None
     if band is not None and band.result == CompulsionResult.COMPULSION_ACTS:
         steady = try_steady(participant, compulsion, difficulty)
         if steady is not None:
             steadied_by = steady.steadier
             _tell_room(participant, f"{_name(steadied_by)} steadies {name}.")
-            band = compulsion_band(compulsion, steady.check_result.outcome)
+            band = compulsion_band(compulsion, steady.check_result.outcome, bands)
     _apply_band(participant, action, compulsion, band, name=name)
     return CompulsionRoll(
         participant=participant,
@@ -503,13 +622,18 @@ def select_compelled_actions(encounter: CombatEncounter) -> list[CombatRoundActi
     from world.combat.models import CombatParticipant, CombatRoundAction  # noqa: PLC0415
 
     declared: list[CombatRoundAction] = []
-    participants = CombatParticipant.objects.filter(
-        encounter=encounter,
-        status=ParticipantStatus.ACTIVE,
-    ).select_related("character_sheet")
+    participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).select_related("character_sheet__character")
+    )
+    compelled = active_compulsions_for(
+        [p.character_sheet.character for p in participants if p.character_sheet.character]
+    )
     for participant in participants:
         character = participant.character_sheet.character
-        if character is None or not has_compulsion(character):
+        if character is None or character.pk not in compelled:
             continue
         already = CombatRoundAction.objects.filter(
             participant=participant,
@@ -574,7 +698,7 @@ def berserk_rampage_window(character: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
     """
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-    if not has_compulsion(character):
+    if active_compulsion(character) is None:
         return
     if _in_uncompleted_encounter(character):
         return
@@ -586,7 +710,7 @@ def berserk_rampage_window(character: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
     victim_sheet = _nearest_npc_sheet(character, room)
     scene = get_active_scene(room)
     if sheet is None or technique is None or victim_sheet is None or scene is None:
-        room.msg_contents(RAMPAGE_EMIT.format(name=_persona_name(character)))
+        room.msg_contents(RAMPAGE_EMIT.format(name=display_name_of(character)))
         return
     _seed_rampage_encounter(sheet, victim_sheet, technique, scene, room)
 
@@ -611,17 +735,7 @@ def _seed_rampage_encounter(
         )
     except ValueError as exc:
         logger.info("Berserk rampage could not seed encounter: %s", exc)
-        room.msg_contents(RAMPAGE_EMIT.format(name=_persona_name(sheet.character)))
-
-
-def _persona_name(character: ObjectDB) -> str:  # noqa: OBJECTDB_PARAM - the rampage holds characters
-    """The persona name others know *character* by; the key when there is no sheet."""
-    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
-
-    sheet = character.character_sheet
-    if sheet is None:
-        return character.key
-    return persona_names_for_sheets([sheet.pk]).get(sheet.pk, character.key)
+        room.msg_contents(RAMPAGE_EMIT.format(name=display_name_of(sheet.character)))
 
 
 def _nearest_npc_sheet(character: ObjectDB, room: ObjectDB) -> CharacterSheet | None:

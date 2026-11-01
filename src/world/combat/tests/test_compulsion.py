@@ -1,7 +1,8 @@
 """Berserk compulsion (#2845). SQLite tier — condition state is patched via
-``has_compulsion`` (apply_condition is PG-only); declaration plumbing is observed
+the compulsion lookups (apply_condition is PG-only); declaration plumbing is observed
 at the ``_declare_rage_attack`` seam where full validation isn't the subject."""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -22,13 +23,22 @@ from world.magic.factories import EffectTypeFactory, TechniqueFactory
 from world.magic.models.techniques import CharacterTechnique
 
 
+@contextmanager
 def _berserk_only(*characters):
-    """Patch has_compulsion to be True only for the given characters."""
+    """Patch the compulsion lookups to find one only for the given characters."""
     pks = {c.pk for c in characters}
-    return patch(
-        "world.combat.compulsion.has_compulsion",
-        side_effect=lambda c: c is not None and c.pk in pks,
-    )
+
+    def one(character, *_args):
+        return (MagicMock(), MagicMock()) if character.pk in pks else None
+
+    def many(found):
+        return {c.pk: (MagicMock(), MagicMock()) for c in found if c.pk in pks}
+
+    with (
+        patch("world.combat.compulsion.active_compulsion", side_effect=one),
+        patch("world.combat.compulsion.active_compulsions_for", side_effect=many),
+    ):
+        yield
 
 
 class CompulsionTechniqueTest(TestCase):

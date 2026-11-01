@@ -106,6 +106,7 @@ def _berserk_compulsion(apps):
         ),
         base_difficulty=25,
         difficulty_per_severity=2,
+        retry_wait_minutes=5,
     )
     for action, extra in (("flee", 5), ("parley", 5), ("leave", 10), ("revert_form", 10)):
         ForbiddenAction.objects.create(compulsion=compulsion, action=action, extra_difficulty=extra)

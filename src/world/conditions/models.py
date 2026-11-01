@@ -1660,6 +1660,15 @@ class ConditionInstance(SharedMemoryModel):
             "one per round-equivalent (SECONDS_PER_ROUND)."
         ),
     )
+    compulsion_retry_after = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Out of combat, when the bearer may next try to change back against this "
+            "condition's compulsion after a failed roll (#4802). Set from "
+            "Compulsion.retry_wait_minutes; the revert roll reads it."
+        ),
+    )
     stage_rounds_remaining = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -2353,6 +2362,14 @@ class Compulsion(SharedMemoryModel):
             "resolution reads it."
         ),
     )
+    retry_wait_minutes = models.PositiveSmallIntegerField(
+        default=5,
+        help_text=(
+            "Out of combat, how many minutes a character who failed to change back against "
+            "this compulsion waits before trying again (in combat the wait is the rest of "
+            "the round). Staff set it; the revert roll reads it."
+        ),
+    )
 
     class Meta:
         verbose_name = "Compulsion"
@@ -2442,7 +2459,9 @@ class CompulsionResistBand(SharedMemoryModel):
         default=0,
         help_text=(
             "Penalty on the strained action's roll when the result is Acts, strained. "
-            "Staff set it; combat resolution applies it."
+            "Only an action that rolls takes it: taking cover and using an item have no "
+            "roll, so a strained cover or item use costs nothing. Staff set it; combat "
+            "resolution applies it."
         ),
     )
     control_change = models.SmallIntegerField(
@@ -2595,8 +2614,9 @@ class ControlLossTrigger(SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "Moon pull only: willpower lost while the character is impaired. Staff set it; "
-            "the engine reads it."
+            "Moon pull only: the impaired threshold. A character whose willpower from "
+            "conditions is at or below minus this value counts as impaired and rolls even "
+            "past the exempt level. Staff set it; the engine reads it."
         ),
     )
 

@@ -753,11 +753,14 @@ class CompulsionAttempt:
     Leaving an encounter and changing back roll at once, with no declaration to replace.
     ``allowed`` is whether the action goes ahead; ``line`` is the roll as the player is
     told it (empty when nothing was rolled); ``check_result`` is None when nothing rolled.
+    ``waiting`` is set when a failed roll's wait has not run out: nothing rolled, and
+    ``line`` tells the player when they can try again.
     """
 
     allowed: bool
     line: str
     check_result: CheckResult | None
+    waiting: bool = False
 
 
 @dataclass(frozen=True)

@@ -166,5 +166,6 @@ class RevertFormAction(Action):
             # in responses).
             return ActionResult(success=False, message=_NO_ACTIVE_ALT_SELF_ACTION_MSG)
         if not attempt.allowed:
-            return ActionResult(success=False, message=f"{attempt.line} {_REVERT_RESISTED_MSG}")
+            message = attempt.line if attempt.waiting else f"{attempt.line} {_REVERT_RESISTED_MSG}"
+            return ActionResult(success=False, message=message)
         return ActionResult(success=True, message="You revert to your true self.")

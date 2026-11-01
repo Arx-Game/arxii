@@ -8,16 +8,20 @@ Three people each carry a vulnerability and meet its trigger:
   level 2, so the seeded moon trigger's difficulty is hand-worked:
   20 base + 5 x 10 pull - 10 x 1 level - min(30, 5 x 2 thread) = 50.
 Every roll is forced to the outcome a journey wants (``force_check_outcome``), which also
-records the difficulty the roll was made at.
+records the difficulty the roll was made at. The trigger lines go out on commit, so each
+journey that reads them runs its trigger inside ``captureOnCommitCallbacks``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
+from django.utils import timezone
 
 from actions.constants import ActionTargetType
 from evennia_extensions.factories import CharacterFactory
@@ -44,13 +48,21 @@ from world.combat.models import CombatParticipant, CombatRoundAction, FleeConfig
 from world.combat.services import leave_encounter, resolve_round
 from world.combat.services.damage.damage import apply_damage_to_participant
 from world.conditions.berserk_content import ensure_berserk_content, outcome_at_level
-from world.conditions.constants import CompulsionResult, ControlLossFiresOn
+from world.conditions.constants import (
+    UNCONSCIOUS_CONDITION_NAME,
+    CompulsionResult,
+    ControlLossFiresOn,
+    DurationType,
+    FoundationalCapability,
+)
 from world.conditions.factories import (
     CapabilityTypeFactory,
     CompulsionFactory,
     CompulsionResistBandFactory,
+    ConditionCapabilityEffectFactory,
     ConditionCategoryFactory,
     ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
     ControlLossBandFactory,
@@ -58,6 +70,7 @@ from world.conditions.factories import (
 )
 from world.conditions.services import (
     advance_condition_severity,
+    advance_condition_stage,
     apply_condition,
     get_active_conditions,
 )
@@ -113,7 +126,26 @@ def _berserk_of(character):
     return next((i for i in get_active_conditions(character) if i.condition_id == berserk.pk), None)
 
 
-COMPELLED_READ_QUERIES = 27
+COMPELLED_READ_QUERIES = 26
+
+
+def knock_out(character) -> None:
+    """Make *character* unable to act: Unconscious zeroes awareness (``can_act`` False)."""
+    awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
+    unconscious = ConditionTemplateFactory(
+        name=UNCONSCIOUS_CONDITION_NAME, default_duration_type=DurationType.UNTIL_CURED
+    )
+    ConditionCapabilityEffectFactory(condition=unconscious, capability=awareness, value=-100)
+    ConditionInstanceFactory(target=character, condition=unconscious)
+    character.conditions.invalidate()
+
+
+@contextmanager
+def minutes_later(minutes: int) -> Iterator[None]:
+    """The clock *minutes* ahead, for a wait that runs on real time."""
+    later = timezone.now() + timedelta(minutes=minutes)
+    with patch("django.utils.timezone.now", return_value=later):
+        yield
 
 
 class _ControlLossCase(JourneyCase):
@@ -151,7 +183,8 @@ class WoundTriggers(_ControlLossCase):
         self.seat = CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
 
     def hit(self, damage: int) -> None:
-        apply_damage_to_participant(self.seat, damage)
+        with self.captureOnCommitCallbacks(execute=True):
+            apply_damage_to_participant(self.seat, damage)
 
     def test_wound_below_threshold_rolls_and_failure_applies_berserk(self) -> None:
         self.watch(self.garrick)
@@ -173,15 +206,63 @@ class WoundTriggers(_ControlLossCase):
 
         self.assertTold(witness, "Garrick loses control: Berserk.")
 
-    def test_a_hit_that_knocks_the_character_out_rolls_no_wound_trigger(self) -> None:
+    def test_a_killing_hit_rolls_no_wound_trigger(self) -> None:
         with (
             patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
             force_check_outcome(self.failure),
         ):
-            self.hit(90)
+            self.hit(100)
 
         self.assertEqual(rolled.call_count, 0)
         self.assertIsNone(_berserk_of(self.garrick))
+
+    def test_a_hit_into_the_knockout_band_still_rolls(self) -> None:
+        """Ruling 21: 60 to 15 is in the knockout band, but Garrick can still act."""
+        self.vitals.health = 60
+        self.vitals.save(update_fields=["health"])
+        self.watch(self.garrick)
+
+        with force_check_outcome(self.failure) as capture:
+            self.hit(45)
+
+        self.assertEqual(capture.target_difficulty, 30)
+        self.assertIsNotNone(_berserk_of(self.garrick))
+        self.assertTold(self.garrick, "You lose control: Berserk.")
+
+    def test_a_character_who_cannot_act_rolls_no_wound_trigger(self) -> None:
+        knock_out(self.garrick)
+        with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
+            self.hit(60)
+
+        self.assertEqual(rolled.call_count, 0)
+        self.assertIsNone(_berserk_of(self.garrick))
+
+    def test_the_room_hears_the_persona_not_the_character(self) -> None:
+        """A disguised Garrick is named by the face he wears, never his own name."""
+        hood = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.TEMPORARY, name="a hooded man"
+        )
+        self.sheet.active_persona = hood
+        self.sheet.save(update_fields=["active_persona"])
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(witness)
+        with force_check_outcome(self.failure):
+            self.hit(60)
+
+        self.assertTold(witness, "a hooded man loses control: Berserk.")
+        self.assertNotTold(witness, "Garrick")
+
+    def test_nothing_is_told_until_the_hit_commits(self) -> None:
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(witness)
+        with (
+            self.captureOnCommitCallbacks(execute=False) as pending,
+            force_check_outcome(self.failure),
+        ):
+            apply_damage_to_participant(self.seat, 60)
+
+        self.assertNotTold(witness, "loses control")
+        self.assertTrue(pending)
 
     def test_a_held_roll_applies_nothing(self) -> None:
         with force_check_outcome(self.success):
@@ -206,14 +287,18 @@ class WoundTriggers(_ControlLossCase):
         self.assertEqual(rolled.call_count, 1)
         self.assertIsNotNone(_berserk_of(self.garrick))
 
-    def test_trigger_on_already_berserk_character_raises_severity(self) -> None:
+    def test_an_already_compelled_character_rolls_nothing(self) -> None:
+        """Ruling 24: a raging Garrick does not re-roll on each crossing."""
         apply_condition(self.garrick, self.berserk, severity=1, duration_rounds=3)
-        self.assertEqual(_berserk_of(self.garrick).severity, 1)
 
-        with force_check_outcome(self.failure):
+        with (
+            patch("world.checks.services.perform_check", wraps=perform_check) as rolled,
+            force_check_outcome(self.failure),
+        ):
             self.hit(60)
 
-        self.assertEqual(_berserk_of(self.garrick).severity, 3)
+        self.assertEqual(rolled.call_count, 0)
+        self.assertEqual(_berserk_of(self.garrick).severity, 1)
 
     def test_a_character_without_the_vulnerability_never_rolls(self) -> None:
         safe = self.make_player("Safe", room=self.field)
@@ -248,12 +333,69 @@ class StageTriggers(_ControlLossCase):
         with patch("world.checks.services.perform_check", wraps=perform_check) as rolled:
             advance_condition_severity(instance, 5)
             self.assertEqual(rolled.call_count, 0)
-            with force_check_outcome(self.failure) as capture:
+            with (
+                self.captureOnCommitCallbacks(execute=True),
+                force_check_outcome(self.failure) as capture,
+            ):
                 advance_condition_severity(instance, 5)
 
         self.assertEqual(capture.target_difficulty, 25)
         self.assertEqual(_berserk_of(maren).severity, 3)
         self.assertTold(maren, "You lose control: Berserk.")
+
+    def _timed_curse(self):
+        """A curse that moves from stage 1 to stage 2 after one round; stage 2 triggers."""
+        curse = ConditionTemplateFactory(name="Creeping curse", has_progression=True)
+        ConditionStageFactory(condition=curse, stage_order=1, rounds_to_next=1)
+        second = ConditionStageFactory(condition=curse, stage_order=2, rounds_to_next=None)
+        trigger = ControlLossTriggerFactory(
+            vulnerability=curse, fires_on=ControlLossFiresOn.CONDITION_STAGE, stage=second,
+            base_difficulty=25,
+        )  # fmt: skip
+        self.band(trigger, self.failure, applies=self.berserk)
+        return curse
+
+    def test_a_stage_reached_by_the_round_tick_fires_its_trigger(self) -> None:
+        """I1: the curse reaches its last stage as a combat round ends, and Maren rolls."""
+        room = self.make_room("The Chapel")
+        maren = self.make_player("Maren", room=room)
+        CharacterVitals.objects.create(
+            character_sheet=maren.sheet_data, health=100, max_health=100, base_max_health=100
+        )
+        apply_condition(maren, self._timed_curse())
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1, room=room)
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=maren.sheet_data, status=ParticipantStatus.ACTIVE
+        )
+        CombatOpponentFactory(encounter=encounter, name="Shade", health=500, max_health=500)
+        self.watch(maren)
+
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.failure) as capture,
+        ):
+            resolve_round(encounter, offense_check_fn=_land_the_swing)
+
+        self.assertEqual(capture.target_difficulty, 25)
+        self.assertIsNotNone(_berserk_of(maren))
+        self.assertTold(maren, "You lose control: Berserk.")
+
+    def test_a_stage_reached_by_a_flow_fires_its_trigger(self) -> None:
+        """I1: a flow's advance_condition_stage step moves the curse on, and Maren rolls."""
+        room = self.make_room("The Chapel")
+        maren = self.make_player("Maren", room=room)
+        curse = self._timed_curse()
+        apply_condition(maren, curse)
+
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.failure),
+        ):
+            advance_condition_stage(
+                payload=SimpleNamespace(character=maren), condition_name=curse.name
+            )
+
+        self.assertIsNotNone(_berserk_of(maren))
 
     def test_an_npc_carrying_the_curse_never_rolls(self) -> None:
         from evennia_extensions.factories import CharacterFactory
@@ -314,7 +456,11 @@ class MoonTrigger(_ControlLossCase):
 
     def test_moon_trigger_reproduces_todays_roll_from_rows(self) -> None:
         self.watch(self.wynn)
-        with _night_full_moon(), force_check_outcome(self.failure) as capture:
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            _night_full_moon(),
+            force_check_outcome(self.failure) as capture,
+        ):
             moon_reconcile_tick()
 
         # 20 + 5 x 10 - 10 x level 1 - min(30, 5 x thread level 2) = 50
@@ -748,6 +894,19 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         self.assertNotTold(self.mira, "steadies Mira")
         self.assertEqual(self.anima(cade), 20)
 
+    def test_an_ally_who_cannot_act_does_not_steady(self) -> None:
+        """I4: Tomas turned the plan on, then was knocked out; he steadies nobody."""
+        tomas = self.ally("Tomas", capability=4)
+        self.web(tomas, "combat_steady", steady=True)
+        knock_out(tomas)
+        self.telnet(self.mira, "combat flee")
+
+        calls = self.resolve_with_rolls(self.failure, self.success)
+
+        self.assertEqual(len(calls), 1)
+        self.assertNotTold(self.mira, "steadies Mira")
+        self.assertEqual(self.anima(tomas), 20)
+
     def test_an_ally_short_of_anima_cannot_steady(self) -> None:
         brann = self.ally("Brann", capability=4)
         self.web(brann, "combat_steady", steady=True)
@@ -853,6 +1012,26 @@ class ACompelledFighterWhoWalksAway(_CompelledMira):
         self.seat.refresh_from_db()
         self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
 
+    def test_a_failed_leave_waits_for_the_next_round(self) -> None:
+        """Ruling 20: in a fight, one try a round; the next round she may roll again."""
+        with force_check_outcome(self.failure):
+            self.telnet(self.mira, "combat leave")
+
+        with self.resist_rolls() as spy:
+            told = self.telnet(self.mira, "combat leave")
+        self.assertIn("Berserk still holds you. You can try again next round.", told)
+        self.assertNotIn("You cannot break away.", told)
+        self.assertEqual(spy.call_count, 0)
+
+        self.encounter.round_number = 2
+        self.encounter.save(update_fields=["round_number"])
+        with force_check_outcome(self.success):
+            result = self.web(self.mira, "combat_leave")
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.status, ParticipantStatus.REMOVED)
+
     def test_an_npc_with_the_compulsion_leaves_with_no_roll(self) -> None:
         npc = CharacterFactory(db_key="Grub", location=self.road)
         npc_sheet = CharacterSheetFactory(character=npc)
@@ -910,10 +1089,35 @@ class ACompelledFighterWhoChangesBack(_AltSelfMira):
         self.assertIn("You cannot change back.", told)
         self.assertTrue(self.wearing_the_beast())
 
-        with force_check_outcome(self.success):
+        with minutes_later(6), force_check_outcome(self.success):
             result = self.web(self.mira, "revert_form")
 
         self.assertTrue(result.detail.success, result.detail.message)
+        self.assertFalse(self.wearing_the_beast())
+
+    def test_a_failed_revert_waits_before_the_next_try(self) -> None:
+        """Ruling 20: out of combat, Berserk's 5-minute wait follows a failed roll."""
+        apply_condition(self.mira, self.berserk, severity=3, duration_rounds=3)
+        with force_check_outcome(self.failure):
+            self.telnet(self.mira, "form revert")
+
+        with self.resist_rolls() as spy:
+            told = self.telnet(self.mira, "form revert")
+            later = self.web(self.mira, "revert_form")
+
+        self.assertIn("Berserk still holds you. You can try again in 5 minutes.", told)
+        self.assertNotIn("Resist compulsion", told)
+        self.assertFalse(later.detail.success)
+        self.assertEqual(spy.call_count, 0)
+        self.assertTrue(self.wearing_the_beast())
+
+        with minutes_later(4), self.resist_rolls() as spy:
+            told = self.telnet(self.mira, "form revert")
+        self.assertIn("You can try again in 1 minute.", told)
+        self.assertEqual(spy.call_count, 0)
+
+        with minutes_later(6), force_check_outcome(self.success):
+            self.telnet(self.mira, "form revert")
         self.assertFalse(self.wearing_the_beast())
 
     def test_the_worn_self_lists_what_changing_back_costs(self) -> None:
@@ -992,7 +1196,7 @@ class ATalkedDownSelfWhoseConditionCompels(_ATalkedDownBeast):
         self.assertNotIn("not in control", told)
         self.assertTrue(self.wearing_the_beast())
 
-        with force_check_outcome(self.success):
+        with minutes_later(6), force_check_outcome(self.success):
             self.telnet(self.mira, "form revert")
 
         self.assertFalse(self.wearing_the_beast())

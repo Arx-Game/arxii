@@ -35,8 +35,6 @@ SEED_MOON_BOUND_TAG = "moon-bound"
 SEED_MOON_BOUND_SLUG = "moon-bound"
 # Config row named by a code literal (ADR-0171), registered in config_prerequisites.
 MOON_CONTROL_CHECK_NAME = "moon_control"
-MOON_CONTROL_WILLPOWER_WEIGHT = "1.00"
-MOON_CONTROL_COMPOSURE_WEIGHT = "0.50"
 
 BATTLE_FORM_NAME = "Battle Form"
 # PLACEHOLDER stat suite: (stat trait name, modifier value).
@@ -234,27 +232,8 @@ def _ensure_moon_control_check_type() -> CheckType:
     Config row named by a code literal (ADR-0171), also registered in
     ``world.seeds.config_prerequisites`` so it exists after a press.
     """
-    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
-    from world.traits.services import ensure_stat_trait  # noqa: PLC0415
+    from world.conditions.berserk_content import ensure_willpower_check_type  # noqa: PLC0415
 
-    category, _ = CheckCategory.objects.get_or_create(
-        name="Species",
-        defaults={"description": "Species instinct-control checks", "display_order": 97},
+    return ensure_willpower_check_type(
+        MOON_CONTROL_CHECK_NAME, "Holding the self against the moon's pull (#2845)."
     )
-    check_type, _ = CheckType.objects.get_or_create(
-        name=MOON_CONTROL_CHECK_NAME,
-        defaults={
-            "category": category,
-            "description": "Holding the self against the moon's pull (#2845).",
-        },
-    )
-    for trait_name, weight in (
-        ("willpower", MOON_CONTROL_WILLPOWER_WEIGHT),
-        ("composure", MOON_CONTROL_COMPOSURE_WEIGHT),
-    ):
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type,
-            trait=ensure_stat_trait(trait_name),
-            defaults={"weight": weight},
-        )
-    return check_type

@@ -144,11 +144,19 @@ def ensure_restore_to_sense_effect(berserk_template: ConditionTemplate) -> None:
 
 
 def ensure_compulsion_resist_check_type() -> CheckType:
-    """Idempotently seed the "Resist compulsion" CheckType (#4802).
+    """Idempotently seed the "Resist compulsion" CheckType (#4802)."""
+    return ensure_willpower_check_type(
+        COMPULSION_RESIST_CHECK_NAME, "Holding the self against a compulsion (#4802)."
+    )
 
-    Willpower-led, with composure at half weight, the same shape as ``moon_control``.
-    The weights are only written when the trait link is first made, so staff edits
-    to an authored weight survive a re-run.
+
+def ensure_willpower_check_type(name: str, description: str) -> CheckType:
+    """Idempotently seed a willpower-led check type called *name* (#4802).
+
+    Willpower at full weight, composure at half, in the Species category: the shape of
+    both "Resist compulsion" and ``moon_control``. The row is found by name, so an
+    authored one is reused; the weights are only written when the trait link is first
+    made, so staff edits to an authored weight survive a re-run.
     """
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.traits.services import ensure_stat_trait  # noqa: PLC0415
@@ -158,9 +166,7 @@ def ensure_compulsion_resist_check_type() -> CheckType:
         defaults={"description": "Species instinct-control checks", "display_order": 97},
     )
     check_type, _ = CheckType.objects.get_or_create(
-        name=COMPULSION_RESIST_CHECK_NAME,
-        category=category,
-        defaults={"description": "Holding the self against a compulsion (#4802)."},
+        name=name, defaults={"category": category, "description": description}
     )
     for trait_name, weight in (("willpower", "1.00"), ("composure", "0.50")):
         CheckTypeTrait.objects.get_or_create(
@@ -212,6 +218,7 @@ def ensure_berserk_compulsion(template: ConditionTemplate) -> Compulsion:
             "check_type": ensure_compulsion_resist_check_type(),
             "base_difficulty": 25,
             "difficulty_per_severity": 2,
+            "retry_wait_minutes": 5,
         },
     )
     if not created:
