@@ -1078,6 +1078,9 @@ export interface DraftData {
   // The optional text a life ends on (#4830), up to RECENT_HISTORY_MAX_LENGTH characters;
   // finalize writes it as the lead-in paragraph of the background.
   recent_history?: string;
+  // One paragraph per life stage (#4874), up to STAGE_DESCRIPTION_MAX_LENGTH characters
+  // each; finalize prints it under the stage's name in the told background.
+  stage_descriptions?: Record<string, string>;
   // The people seated beside the parents (#4395); the whole list is sent on every save.
   kin_rows?: KinRow[];
   // The name given to a newly founded family on the 'named' family path (#3617)
@@ -1658,7 +1661,20 @@ export interface DraftBeatState {
   taken?: boolean;
   unknown?: boolean;
   line?: string;
+  /** The life page's marks (#4874, slice 9 of #4813): the picks on this beat marked
+   * secret, the same row's answer shown in a secret's place (null means
+   * Unremarkable, the row's no-cost card), and the figure named on a person card by
+   * offer id. Shape-checked by the server; a mark on an unpicked offer is ignored at
+   * finalize. */
+  secret_offer_ids?: number[];
+  cover_offer_id?: number | null;
+  figures?: Record<string, string>;
 }
+
+/** The server's `STAGE_DESCRIPTION_MAX_LENGTH` (#4874): one paragraph per stage. */
+export const STAGE_DESCRIPTION_MAX_LENGTH = 1000;
+/** The server's `FIGURE_NAME_MAX_LENGTH` (#4874): a figure's name on a person card. */
+export const FIGURE_NAME_MAX_LENGTH = 60;
 
 /** The stages of a life in the order a life has them (#4124); the values sort
  * alphabetically, which is not that order. */
@@ -1734,3 +1750,8 @@ export type ClosedDistinction = components['schemas']['ClosedDistinction'];
 
 /** The `offers`/`closed` payload `GET .../offers/?chapter=` returns (#3675). */
 export type OffersResponse = components['schemas']['OffersResponse'];
+
+/** A term on a card's mechanics line with its definition (#4874). */
+export type OfferTerm = components['schemas']['OfferTerm'];
+/** One effect of an offered card with its magnitude (#4874). */
+export type OfferEffectTerm = components['schemas']['OfferEffectTerm'];

@@ -6,7 +6,8 @@
  * the realm enters when the player chooses (never on hover, Decision 6), and
  * choosing a different realm asks first when it would clear a stage that
  * depended on it (#4022: no dependent choice, no question). The record rail lists the choice; it says nothing else
- * (Decision 8).
+ * (Decision 8). The first name is asked here too (#4874, ruled 2026-10-19): the rail and
+ * the life then read "Marisol was born" instead of "you"; it saves on blur by itself.
  */
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
@@ -18,6 +19,7 @@ import {
   Entry,
   EntryDoors,
   EntryList,
+  Field,
   Marginalia,
   Note,
   PageTurn,
@@ -43,6 +45,11 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
   const [pending, setPending] = useState<StartingArea | null>(null);
 
   const chosen = draft.selected_area;
+  const firstName = draft.draft_data.first_name ?? '';
+  const saveFirstName = (value: string) => {
+    if (value.trim() === firstName) return;
+    updateDraft.mutate({ draftId: draft.id, data: { draft_data: { first_name: value.trim() } } });
+  };
 
   const apply = (area: StartingArea | null) => {
     if (area) setRealmTheme(getRealmTheme(area));
@@ -91,7 +98,11 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         aside={
           <>
             <RecordRail
-              rows={[{ label: 'Origin', value: chosen?.name }]}
+              rows={[
+                // Absent (not "not yet chosen") until a first name exists (#3630).
+                ...(firstName ? [{ label: 'Name', value: firstName }] : []),
+                { label: 'Origin', value: chosen?.name },
+              ]}
               ledger={stageEyebrow(draft.current_stage)}
             />
             <Marginalia id="note-change">
@@ -102,6 +113,19 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
           </>
         }
       >
+        <Field
+          id="first_name"
+          label={copy?.origin_first_name_label ?? 'First name'}
+          hint={copy?.origin_first_name_hint ?? '2-20 characters, letters only.'}
+        >
+          <input
+            id="first_name"
+            type="text"
+            maxLength={20}
+            defaultValue={firstName}
+            onBlur={(e) => saveFirstName(e.target.value)}
+          />
+        </Field>
         <EntryList label="Starting realms">
           {areas?.map((area) => {
             const isChosen = chosen?.id === area.id;

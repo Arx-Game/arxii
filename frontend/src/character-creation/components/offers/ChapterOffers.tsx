@@ -21,12 +21,19 @@
  * never wraps this component in a second div of its own.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import { cn } from '@/lib/utils';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
-import type { CharacterDraft, ClosedDistinction, OfferChapter, VisibleOffer } from '../../types';
+import type {
+  CharacterDraft,
+  ClosedDistinction,
+  OfferChapter,
+  OfferTerm,
+  VisibleOffer,
+} from '../../types';
 import { RankControl } from './RankControl';
 import { choiceEntries, sameFeature } from './syncHelpers';
 
@@ -150,6 +157,28 @@ interface ChapterOffersProps {
    * pips past the points left are dimmed) instead of the +/- stepper.
    */
   pointsPicks?: boolean;
+  /**
+   * The life page (#4874, slice 9 of #4813). `groupBy` splits a grid under `.group-h`
+   * headings, "Group (count)", in first-seen order, the ungrouped cards last with no
+   * heading. `pricing="signed"` prints a grid card's price as a bare signed number in
+   * its corner, `-N` in ink when you pay and `+N` in green when the world pays you,
+   * nothing at all for a free card (Unremarkable); the default keeps the words the
+   * list layouts print. `terms` turns the mechanics line into `+10 sailing; -5 martial`
+   * built from `offer.effects`, each term a click that opens its definition.
+   * `interceptPick` runs before a card click changes a pick; returning true means the
+   * caller handled it (the cover-story flow: the next click after a secret mark sets
+   * the cover instead of swapping). `coverOfferId` draws that card dashed.
+   */
+  groupBy?: (offer: VisibleOffer) => string;
+  pricing?: 'words' | 'signed';
+  terms?: OfferTerm[];
+  interceptPick?: (offer: VisibleOffer, selected: boolean) => boolean;
+  coverOfferId?: number | null;
+  /** The picks on this block marked secret (#4874): each wears `wordSecret`; the cover
+   * card wears `wordCover`. */
+  secretOfferIds?: number[];
+  wordSecret?: string;
+  wordCover?: string;
 }
 
 interface PriceWords {
@@ -162,6 +191,70 @@ interface PriceWords {
 const FIRST_LOOK_FALLBACK = 3;
 /** A block shorter than this never folds (#3709 fork e). */
 const FOLD_UNDER = 5;
+
+/** A signed price (#4874): the number a life card wears in its corner. `-N` when you
+ * pay, `+N` when the world pays you, nothing for a free card. */
+function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
+  const total = cost * Math.max(rank, 1);
+  if (total === 0) return null;
+  return total < 0 ? (
+    <span className="award">{`+${-total}`}</span>
+  ) : (
+    <span className="cost">{`\u2212${total}`}</span>
+  );
+}
+
+/** What stands before a term on the mechanics line: the signed magnitude, the
+ * immunity's words, or nothing for an effect with no number. */
+function effectPrefix(effect: VisibleOffer['effects'][number]): string {
+  if (effect.immune) return 'Immune to negative ';
+  if (effect.value === null) return '';
+  return `${effect.value < 0 ? '\u2212' : '+'}${Math.abs(effect.value)} `;
+}
+
+/** The mechanics line built from the effect rows (#4874): `+10 sailing; -5 martial`,
+ * each term a button that opens its definition. An immunity reads as the list layouts
+ * print it. */
+function EffectTerms({
+  offer,
+  onTerm,
+}: {
+  offer: VisibleOffer;
+  onTerm: (target: HTMLElement, name: string) => void;
+}) {
+  if (offer.effects.length === 0) return null;
+  return (
+    <span className="fx">
+      {offer.effects.map((effect, i) => (
+        <span key={`${effect.target}-${i}`}>
+          {i > 0 && '; '}
+          {effectPrefix(effect)}
+          {/* A span with the button role: the card around it is already a button, and a
+              button may not nest one. */}
+          <span
+            role="button"
+            tabIndex={0}
+            className="term"
+            aria-label={`${effect.label}, definition`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTerm(e.currentTarget, effect.target);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onTerm(e.currentTarget, effect.target);
+              }
+            }}
+          >
+            {effect.label}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
  * ranked offer, a refund, or the flat cost for an unranked one. */
@@ -252,10 +345,50 @@ export function ChapterOffers({
   layout = 'list',
   maxPicks = null,
   pointsPicks = false,
+  groupBy,
+  pricing = 'words',
+  terms,
+  interceptPick,
+  coverOfferId = null,
+  secretOfferIds = [],
+  wordSecret,
+  wordCover,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
+  // The one open term popover (#4874): which term, and where its button sits.
+  const [openTerm, setOpenTerm] = useState<{ name: string; top: number; left: number } | null>(
+    null
+  );
+  useEffect(() => {
+    if (!openTerm) return;
+    const close = () => setOpenTerm(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, { passive: true });
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close);
+    };
+  }, [openTerm]);
+  const showTerm = useCallback((target: HTMLElement, name: string) => {
+    // Viewport coordinates, clamped so the box stays on screen (the demo's rule).
+    const rect = target.getBoundingClientRect();
+    const width = Math.min(352, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const top = rect.bottom + 180 > window.innerHeight ? rect.top - 180 : rect.bottom + 6;
+    setOpenTerm((current) => (current?.name === name ? null : { name, top, left }));
+  }, []);
+  const termDefinition = useMemo(() => {
+    const map = new Map<string, OfferTerm>();
+    for (const term of terms ?? []) map.set(term.name, term);
+    return map;
+  }, [terms]);
   const priceWords: PriceWords = {
     perRank: wordPerRank ?? 'per rank',
     spent: wordSpent ?? 'spent',
@@ -351,6 +484,20 @@ export function ChapterOffers({
       pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(FIRST_LOOK_FALLBACK);
   }
   const seeMore = (wordSeeMore ?? 'See {count} more').replace('{count}', String(folded.length));
+  // The groups (#4874): headings in first-seen order, the ungrouped cards last under
+  // none; without `groupBy` one unnamed group holds every card at rest.
+  const grouped = new Map<string, VisibleOffer[]>();
+  for (const offer of atRest) {
+    const key = groupBy ? groupBy(offer) : '';
+    const list = grouped.get(key) ?? [];
+    list.push(offer);
+    grouped.set(key, list);
+  }
+  const groups: [string, VisibleOffer[]][] = [
+    ...[...grouped.entries()].filter(([key]) => key !== ''),
+    ...[...grouped.entries()].filter(([key]) => key === ''),
+  ];
+  if (groups.length === 0) groups.push(['', []]);
 
   const renderOffer = (offer: VisibleOffer) => {
     const entry = entryByOfferId.get(offer.offer_id);
@@ -370,6 +517,12 @@ export function ChapterOffers({
     const reach = pointsLeft === null ? offer.max_rank : rank + pointsLeft;
     const showsDistinction =
       layout === 'grid' && offer.distinction_name && offer.distinction_name !== offer.name;
+    const isCover = coverOfferId !== null && coverOfferId === offer.offer_id;
+    const isSecret = secretOfferIds.includes(offer.offer_id);
+    const toggle = () => {
+      if (interceptPick?.(offer, selected)) return;
+      applyRank(offer, selected ? 0 : 1);
+    };
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
@@ -391,12 +544,24 @@ export function ChapterOffers({
             {offer.player_line}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
-          {offer.effect_line && <span className="fx">{offer.effect_line}</span>}
+          {terms ? (
+            <EffectTerms offer={offer} onTerm={showTerm} />
+          ) : (
+            offer.effect_line && <span className="fx">{offer.effect_line}</span>
+          )}
           {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
+          {isSecret && (
+            <span className="secret">{wordSecret ?? 'Secret: select a cover story below'}</span>
+          )}
+          {isCover && <span className="secret">{wordCover ?? 'Cover story'}</span>}
         </span>
         <span className="price">
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
-          <PriceLine offer={offer} rank={rank} words={priceWords} />
+          {pricing === 'signed' ? (
+            <SignedPrice cost={offer.cost_per_rank} rank={rank} />
+          ) : (
+            <PriceLine offer={offer} rank={rank} words={priceWords} />
+          )}
         </span>
         {pips && (
           <span
@@ -441,7 +606,7 @@ export function ChapterOffers({
       <li key={offer.offer_id}>
         {ranked ? (
           <div
-            className={cn('stance', pips && 'ranked')}
+            className={cn('stance', pips && 'ranked', isCover && 'cover')}
             role="group"
             aria-label={offer.name}
             aria-disabled={busy || undefined}
@@ -451,11 +616,11 @@ export function ChapterOffers({
         ) : (
           <button
             type="button"
-            className="stance"
+            className={cn('stance', isCover && 'cover')}
             aria-pressed={selected}
             aria-disabled={busy || undefined}
-            disabled={busy}
-            onClick={() => applyRank(offer, selected ? 0 : 1)}
+            disabled={busy && !interceptPick}
+            onClick={toggle}
           >
             {body}
           </button>
@@ -476,24 +641,46 @@ export function ChapterOffers({
           )}
         </label>
       )}
-      <ul className={cn('stances', exclusive && 'oneof', layout === 'grid' && 'grid')}>
-        {bundled.map((item) => (
-          <li key={item.offer_id}>
-            <div className="stance" aria-pressed="true" aria-disabled="true">
-              <span className="dot sq" />
-              <span>
-                <b>{item.name}</b>
-                {item.player_line && <span className="g">{item.player_line}</span>}
-              </span>
-              <span className="price">
-                <span className="locked">{wordBundled ?? 'bundled'}</span>
-                <BundledPriceLine item={item} words={priceWords} />
-              </span>
-            </div>
-          </li>
-        ))}
-        {atRest.map(renderOffer)}
-      </ul>
+      {groups.map(([group, members]) => (
+        <div key={group || '\u0000'} className="offer-group">
+          {group && <div className="group-h">{`${group} (${members.length})`}</div>}
+          <ul className={cn('stances', exclusive && 'oneof', layout === 'grid' && 'grid')}>
+            {group === groups[0][0] &&
+              bundled.map((item) => (
+                <li key={item.offer_id}>
+                  <div className="stance" aria-pressed="true" aria-disabled="true">
+                    <span className="dot sq" />
+                    <span>
+                      <b>{item.name}</b>
+                      {item.player_line && <span className="g">{item.player_line}</span>}
+                    </span>
+                    <span className="price">
+                      <span className="locked">{wordBundled ?? 'bundled'}</span>
+                      <BundledPriceLine item={item} words={priceWords} />
+                    </span>
+                  </div>
+                </li>
+              ))}
+            {members.map(renderOffer)}
+          </ul>
+        </div>
+      ))}
+      {openTerm &&
+        // Through a portal (#4874): the life block is a size container, which would
+        // otherwise anchor a fixed box to itself instead of the viewport.
+        createPortal(
+          <div
+            className="interview popover"
+            role="dialog"
+            aria-label={termDefinition.get(openTerm.name)?.label ?? openTerm.name}
+            style={{ top: openTerm.top, left: openTerm.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <b>{termDefinition.get(openTerm.name)?.label ?? openTerm.name}</b>
+            {termDefinition.get(openTerm.name)?.definition ?? ''}
+          </div>,
+          document.body
+        )}
       {folded.length > 0 && (
         <details className="more">
           <summary>{seeMore}</summary>

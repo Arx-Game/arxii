@@ -87,6 +87,19 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4874: the life page, leaf; slice 9 of #4813, the last)
+
+The accordion on the real leaf, demo-fidelity reviewed against
+https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28: stages fold to a heading and a count with
+one open at a time; sections fold to their answers with signed points or the beat's prompt
+with the first name; Next walks down; Unknown is a mark on the stage; a secret pick opens the
+Cover story box with the no-cost card standing as the cover until another is chosen; a cover
+select on an any row; a figure's name on a person card; Description (Optional) per stage;
+group headings with counts; a bare signed price in each card's corner and none on a free
+card; every term on a mechanics line opens its definition; the ledger rail beside the life
+with the grids widening by container width; the life so far in one paragraph; the first name
+asked on the Origin leaf and shown on Identity. This closes the nine slices of #4813.
+
 ## Built (2026-11-01, #4872: the life page, backend; slice 9 of #4813)
 
 What the approved accordion (demo https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28) needs

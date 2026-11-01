@@ -945,6 +945,43 @@ query. *The first name first:* `get_origin_errors` asks for `draft_data.first_na
 `get_identity_errors` no longer does (ruled 2026-10-19). Journeys:
 `integration_tests/test_life_page_journeys.py`.
 
+**The life page, leaf (#4874, slice 9 of #4813; demo-fidelity reviewed against the
+accordion demo).** `LifeGrids` is the accordion: one `.stage-acc` per stage the beginning
+offers, folded to its heading and "N of M" (copy `life_stage_progress`) or Unknown, one
+open at a time (a click on the open one folds it); inside it one `.sec` per beat, one open
+at a time, a closed one reading its answers with their signed points or the beat's prompt
+in plain text with `{name}` read from `draft_data.first_name`; Next closes a section and
+opens the next, the last Next the next stage. Fold state is local. The stage's Unknown mark
+sets `unknown` on every beat of the stage in one PATCH (copy `life_stage_unknown_help`,
+Dan's words). A one-of row says no "pick one". Each section's grid is `ChapterOffers`
+(`layout="grid"`) with the leaf's new props: `groupBy` (`.group-h` headings "Group
+(count)", the ungrouped last), `pricing="signed"` (a bare `−N` or `+N` in the card's
+bottom-left corner, nothing on a free card), `terms` (the mechanics line built from
+`offer.effects`, each term a `.term` whose click opens one `.popover` through a portal with
+its definition from the response's `terms`), `interceptPick` and `coverOfferId` (the cover
+flow), `secretOfferIds` with `wordSecret`/`wordCover` (the labels on the cards). Under the
+grid one `entry-mark secret-mark` per pick ("Secret: {card}", `secret_offer_ids`); on a
+one-of row a secret pick opens the Cover story box (`.cover-box`, copy `life_cover_label`,
+`life_cover_help`, the demo's words) and the row's no-cost card stands as the cover, drawn
+dashed, until the next click on another card sets it (`cover_offer_id`); clicking the real
+pick again drops the secret and the cover; on an any row the cover is a select with "Nothing
+shown" first. A picked card with `asks_figure_name` shows a name input (copy
+`life_figure_label`, `FIGURE_NAME_MAX_LENGTH`) saved into the beat's `figures`. Every
+open stage ends on Description (Optional) (`life_stage_description_label`,
+`STAGE_DESCRIPTION_MAX_LENGTH`), saved on blur to `draft_data.stage_descriptions` whole.
+The per-beat line input is gone from the leaf (the model field stays for the sheet). The
+life block is `.leafwrap`: the life on the left as a size container (the grids two across,
+three at 46rem, four at 64rem by container query; prose at 68ch), the sticky `aside.ledger`
+beside it (Starting, Spent and Gained as the demo reads the net points, Remaining; every
+pick under its stage with a signed price, "(secret)" and "(rank N)"; "Nothing chosen yet.").
+The life ends on the Recent History box, the footer and the `.testament` paragraph (every
+answered beat's answers in bold, "Nothing written yet."). The first name is asked on the
+Origin leaf (`OriginStage`, a `Field` saved on blur, listed first in the rail; copy
+`origin_first_name_label`/`origin_first_name_hint`) and `IdentityStage` shows the name as a
+line (`identity_name_missing` when none). Copy keys carry in-code fallbacks; the demo's
+own words are Dan's. Component tests: `LifeGrids.test.tsx`, `OriginStage.test.tsx`,
+`IdentityStage.test.tsx`.
+
 **Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
 offered template, else `draft_data.family_template_id`), name the family (checked
 against `HouseTemplate.name_pattern`, a full-match regex; a malformed pattern is a

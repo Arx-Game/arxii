@@ -1235,19 +1235,26 @@
 .interview .life-beat + .life-beat {
   margin-top: 1rem;
 }
-.interview .life-beat .beat-prompt {
+.interview .life-beat .beat-prompt,
+.interview .sec-body .beat-prompt {
   margin: 0.4rem 0 0;
   color: var(--cg-text-soft);
   font-style: italic;
 }
-.interview .life-beat .field {
+.interview .life-beat .field,
+.interview .sec-body .field {
   margin-top: 0.8rem;
 }
-.interview .life-beat .beat-foot {
+.interview .beat-foot {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
   margin-top: 0.6rem;
+}
+.interview .beat-foot .hint {
+  display: block;
+  margin: 0;
 }
 /* Every stage struck (#4830): the beginning's text where the stage rows would be. */
 .interview .life .absent {
@@ -1277,6 +1284,8 @@
 }
 .interview .stances.grid > li .stance {
   grid-template-columns: 1.1rem 1fr;
+  grid-template-rows: 1fr auto;
+  align-items: start;
   border: 1px solid var(--cg-hairline-strong);
   border-radius: 0.6rem;
   padding: 0.7rem 0.8rem;
@@ -1291,6 +1300,9 @@
 }
 .interview .stances.grid .stance .price {
   grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  align-items: flex-start;
   text-align: left;
   margin-top: 0.3rem;
 }
@@ -1332,6 +1344,335 @@
   .interview .stances.grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+/* The life as an accordion (#4874, slice 9 of #4813), built against the demo: the life on
+   the left is its own container, the ledger rail beside it; the grids widen with the
+   container while the prose keeps reading width. */
+.interview .leafwrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
+  gap: 1.25rem;
+  align-items: start;
+}
+.interview .leafwrap > .life {
+  container-type: inline-size;
+  min-width: 0;
+}
+@media (max-width: 52rem) {
+  .interview .leafwrap {
+    grid-template-columns: 1fr;
+  }
+}
+.interview .life .section-h.first {
+  margin-top: 0;
+}
+.interview .offer-group {
+  min-width: 0;
+}
+.interview .offer-group + .offer-group {
+  margin-top: 0.6rem;
+}
+.interview .life .helper {
+  margin: 0.3rem 0 0;
+  font-size: 0.95rem;
+  color: var(--cg-text-soft);
+  max-width: 68ch;
+}
+.interview .life .beat-prompt,
+.interview .life .stage-description,
+.interview .life .cover-box,
+.interview .life .figure,
+.interview .life .testament {
+  max-width: 68ch;
+}
+.interview .life .stances.grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container (min-width: 46rem) {
+  .interview .life .stances.grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (min-width: 64rem) {
+  .interview .life .stances.grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+/* A stage folds to its heading and a count; the open one shows its sections. */
+.interview .stage-acc {
+  border-top: 1px solid var(--cg-hairline-strong);
+  margin-top: 1.2rem;
+}
+.interview .stage-acc > .stage-sum {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0.9rem 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.interview .stage-acc > .stage-sum .section-h {
+  margin: 0;
+}
+.interview .stage-acc > .stage-sum .prog {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  white-space: nowrap;
+}
+.interview .stage-acc > .stage-sum::before {
+  content: '\25B8';
+  color: var(--cg-accent);
+  margin-right: 0.6rem;
+  font-size: 1.35rem;
+}
+.interview .stage-acc[data-open='true'] > .stage-sum::before {
+  content: '\25BE';
+}
+.interview .stage-body {
+  padding: 0 0 1rem 1.4rem;
+  border-left: 2px solid var(--cg-hairline);
+}
+/* A section folds to the beat's name and its answer; the open one shows the grid. */
+.interview .sec {
+  border-top: 1px solid var(--cg-hairline);
+}
+.interview .sec > .sec-sum {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem 1rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0.7rem 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  align-items: baseline;
+}
+.interview .sec > .sec-sum .nm {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+  color: var(--cg-accent);
+}
+.interview .sec > .sec-sum .nm::before {
+  content: '\25B8';
+  display: inline-block;
+  width: 1.4rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--cg-accent);
+}
+.interview .sec[data-open='true'] > .sec-sum .nm::before {
+  content: '\25BE';
+}
+.interview .sec > .sec-sum .ans {
+  grid-column: 1;
+  padding-left: 1.4rem;
+  color: var(--cg-text);
+  font-size: 1.02rem;
+}
+.interview .sec > .sec-sum .ans.none {
+  color: var(--cg-text);
+  font-style: normal;
+}
+.interview .sec > .sec-sum .pts {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  white-space: nowrap;
+  align-self: start;
+  padding-top: 0.25rem;
+}
+.interview .sec > .sec-sum .pts .award,
+.interview .ledger .row .award {
+  color: var(--cg-award);
+}
+.interview .sec > .sec-sum .pts .cost,
+.interview .ledger .row .cost {
+  color: var(--cg-cost);
+}
+.interview .sec-body {
+  padding: 0 0 1rem;
+}
+.interview .sec-body > .pick {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--cg-text-soft);
+}
+.interview .group-h {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  margin: 1rem 0 0.2rem;
+}
+/* The cover story: the card standing in for a secret is drawn dashed in the ornament. */
+.interview .stances.grid .stance.cover {
+  border-color: var(--cg-orn);
+  border-style: dashed;
+}
+.interview .cover-box {
+  border-left: 3px solid var(--cg-orn);
+  padding-left: 0.8rem;
+}
+.interview .cover-box .cover-val {
+  font-size: 1.05rem;
+}
+.interview .stance .secret {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-orn);
+  margin-top: 0.25rem;
+}
+.interview .entry-mark.secret-mark[aria-pressed='true'] {
+  color: var(--cg-orn);
+}
+.interview .entry-mark.secret-mark[aria-pressed='true'] .mark-box {
+  background: var(--cg-orn);
+  border-color: var(--cg-orn);
+}
+/* A term on a card's mechanics line opens its definition. */
+.interview .term {
+  display: inline;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--cg-accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.interview .popover {
+  position: fixed;
+  z-index: 30;
+  max-width: 22rem;
+  background: var(--cg-bg);
+  color: var(--cg-text);
+  border: 1px solid var(--cg-hairline);
+  padding: 0.7rem 0.9rem;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+}
+.interview .popover b {
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.interview .next {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+.interview .next button {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--cg-accent);
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+.interview .testament {
+  margin: 1.2rem 0 0;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--cg-hairline);
+  font-style: italic;
+  color: var(--cg-text-soft);
+}
+.interview .testament b {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--cg-text);
+}
+/* The ledger rail: the purse, then every pick under its stage with its signed price. */
+.interview .ledger {
+  position: sticky;
+  top: 0.75rem;
+  background: var(--cg-bg);
+  color: var(--cg-text);
+  border: 1px solid var(--cg-hairline);
+  padding: 1rem 1.1rem;
+}
+.interview .ledger h3 {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  margin: 0 0 0.5rem;
+}
+.interview .ledger .tot {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--cg-hairline);
+}
+.interview .ledger .tot b {
+  font-variant-numeric: tabular-nums;
+}
+.interview .ledger .st {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  margin: 0.7rem 0 0.15rem;
+}
+.interview .ledger .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.98rem;
+  padding: 0.15rem 0;
+}
+.interview .ledger .row span:last-child {
+  font-family: 'Cinzel', serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.interview .ledger .empty {
+  color: var(--cg-muted);
+  font-style: italic;
+  font-size: 0.95rem;
+  margin: 0.7rem 0 0;
 }
 /* The frame a beginning shares (#4395), under its description at the pick. */
 .interview .frame p {
