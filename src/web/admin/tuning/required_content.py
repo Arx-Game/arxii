@@ -2532,6 +2532,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     function runs rather than as a silently stale string literal.
     """
     from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME  # noqa: PLC0415
+    from web.admin.tuning.combat_role_flags import combat_role_declarations  # noqa: PLC0415
     from world.areas.positioning.constants import (  # noqa: PLC0415
         AERIAL_PROPERTY_NAME,
         CATCH_THE_FALLER_NAME,
@@ -5751,6 +5752,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Standoffs offer no terms; players can only fight.",
             probe=AnyRowProbe(label="StandoffTerms"),
         ),
+        # --- Missing combat content flags (#4906) ----------------------------------------
+        *combat_role_declarations(),
     )
 
 
