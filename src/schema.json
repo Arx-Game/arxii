@@ -78331,6 +78331,7 @@ components:
           readOnly: true
         character_name:
           type: string
+          description: The persona name the room lines use, never the character key.
           readOnly: true
         status:
           $ref: '#/components/schemas/ParticipantStatusEnum'

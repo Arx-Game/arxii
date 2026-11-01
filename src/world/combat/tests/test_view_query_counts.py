@@ -156,7 +156,9 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # The viewer's own compulsion (#4802) adds one: the movement config the steady
         # plan reads (her active conditions come from the preloaded context). Own row
         # only, so it does not scale with the participant count.
-        with self.assertNumQueries(18):
+        # The roster's persona names (#4802) add two: the sheets' worn personas and the
+        # persona rows, read once for every participant.
+        with self.assertNumQueries(20):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

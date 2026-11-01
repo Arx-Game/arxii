@@ -529,6 +529,25 @@ class DigDeepOfferSerializer(serializers.Serializer):
     )
 
 
+class _ParticipantListSerializer(serializers.ListSerializer):
+    """Reads every listed participant's persona name in one batch (#4802).
+
+    The names go to ``context["participant_names"]`` for ``get_character_name``, so a
+    roster of any size costs the same two queries.
+    """
+
+    def to_representation(self, data: Any) -> list[Any]:
+        from django.db.models.manager import BaseManager  # noqa: PLC0415
+
+        from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+        participants = list(data.all() if isinstance(data, BaseManager) else data)
+        self.context["participant_names"] = persona_names_for_sheets(
+            [participant.character_sheet_id for participant in participants]
+        )
+        return super().to_representation(participants)
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -537,9 +556,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     character — same visibility rules as character sheets.
     """
 
-    character_name = serializers.CharField(
-        source="character_sheet.character.db_key",
-        read_only=True,
+    character_name = serializers.SerializerMethodField(
+        help_text="The persona name the room lines use, never the character key.",
     )
     health = serializers.SerializerMethodField()
     max_health = serializers.SerializerMethodField()
@@ -565,6 +583,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CombatParticipant
+        list_serializer_class = _ParticipantListSerializer
         fields = [
             "id",
             "character_sheet_id",
@@ -592,6 +611,20 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "steady_plan",
             "dig_deep",
         ]
+
+    def get_character_name(self, obj: CombatParticipant) -> str:
+        """The persona name others know the fighter by: a disguise shows, the key never does.
+
+        A list of participants reads every name in one batch into
+        ``context["participant_names"]`` (``_ParticipantListSerializer``); alone, this
+        reads the one sheet.
+        """
+        names = self.context.get("participant_names")
+        if names is None:
+            from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+            names = persona_names_for_sheets([obj.character_sheet_id])
+        return names.get(obj.character_sheet_id, obj.character_sheet.character.db_key)
 
     @extend_schema_field(DigDeepOfferSerializer(allow_null=True))
     def get_dig_deep(self, obj: CombatParticipant) -> dict[str, Any] | None:

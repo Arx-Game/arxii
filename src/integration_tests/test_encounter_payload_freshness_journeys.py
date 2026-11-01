@@ -14,6 +14,7 @@ room, sheet or bestiary row the first read loaded.
 - Hobb flees a fight that then ends: while it runs he is not listed; once it is over the
   aftermath lists him again, so he can reach his own digest.
 - Hobb takes a new face: his account payload lists it on the next read.
+- Hobb masks himself mid-fight: Ada's next read names him by the mask, never "Hobb" (#4802).
 - Staff add a phase to a bestiary entry: the bestiary list says it has phases.
 - A wolf with one round left on its broken wall: once the round resolves Ada's read says
   the wall is no longer broken, the row holds 0, and the wolf's next save keeps 0.
@@ -151,6 +152,18 @@ class ANewFaceOnTheAccount(_AdaWatchesTheCauseway):
         )
 
         self.assertIn("The Grey Hood", self.faces())
+
+
+class AMaskedFighterIsListedUnderTheMask(_AdaWatchesTheCauseway):
+    def test_ada_reads_the_mask_hobb_wears_never_his_name(self) -> None:
+        """Ruling 39: the roster and ally pickers name the face the room lines use."""
+        self.assertEqual(self.fighters(self.ada_reads()), ["Ada", "Hobb"])
+
+        told = self.telnet(self.hobb, "persona mask a hooded man")
+
+        body = self.ada_reads()
+        self.assertEqual(self.fighters(body), ["Ada", "a hooded man"], told)
+        self.assertNotIn("Hobb", str(body["participants"]))
 
 
 class ABrokenWallClosesOnTime(_AdaWatchesTheCauseway):

@@ -44564,6 +44564,7 @@ export interface components {
       readonly id: number;
       /** @description The character this sheet belongs to */
       readonly character_sheet_id: number;
+      /** @description The persona name the room lines use, never the character key. */
       readonly character_name: string;
       status?: components['schemas']['ParticipantStatusEnum'];
       /** @description Return current health — only if viewer has permission. */
