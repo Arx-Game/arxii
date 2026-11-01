@@ -36,19 +36,18 @@ function lowerFirst(text: string): string {
 
 export function CompulsionBanner({ compulsion }: { compulsion: Compulsion }) {
   return (
-    <div
-      role="status"
+    <output
       data-testid="compulsion-banner"
-      className="space-y-0.5 rounded-md border border-red-500/60 bg-red-50 px-3 py-2 text-sm dark:bg-red-950/40"
+      className="block space-y-0.5 rounded-md border border-red-500/60 bg-red-50 px-3 py-2 text-sm dark:bg-red-950/40"
     >
-      <p className="font-semibold text-red-800 dark:text-red-300">
+      <span className="block font-semibold text-red-800 dark:text-red-300">
         {compulsion.condition_name} compels: {lowerFirst(compulsion.wants_label)}.
-      </p>
-      <p className="text-red-900 dark:text-red-200">
+      </span>
+      <span className="block text-red-900 dark:text-red-200">
         Attacking is free. Any other action needs a {compulsion.check_name} check this round. If the
         check fails, you attack instead.
-      </p>
-    </div>
+      </span>
+    </output>
   );
 }
 
