@@ -134,12 +134,13 @@ superusers only, #4880), Covenant roles,
 Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
 Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
 singleton's change page, or its list with the default before the row exists; a GET never
-creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
+creates it), and Missing combat content (`admin_combat_content`, superusers only, its note
+"N open flags", #4906). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
 `RowPicker`s (`CombatRolesLink.pickers`); the Combo map row (#4891) has no page of its own (blank
 `url`) and holds a property picker and a condition picker, each shown only to staff who can view
 that model (`combat_roles.can_view`). Every combat role authoring page belongs
-here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
-kit view and missing combat content rows. Tests:
+here, so staff never hunt for one (owner ruling 2026-11-01); a later #4843 slice adds the
+kit view. Tests:
 `tests/test_combat_roles_panel.py` follows every link.
 
 ### Save as new on every change form (#4094)
@@ -1319,6 +1320,43 @@ Demo screen 3 of the #4843 spec.
   change-form links, a query-count pin, and the styling test: every class under
   `#combo-map-root` has a rule reaching the page, with and without gap marks).
   Deliberate no-ADR: the page follows the approved #4843 spec.
+- **Batched reads (#4906)** - `properties_carried_by(templates)` and
+  `readers_for_conditions(templates)` answer for many conditions at once, keyed by pk;
+  `properties_carried` and `readers_for_condition` call them. `SetterRow.condition_pk`
+  carries the landed template, so nothing joins setters to conditions by name.
+
+## Missing combat content (#4906, slice 4 of #4843)
+
+**Purpose:** demo screen 6. Five Required content flags on a vow's combat kit, on their
+own page with a link to fix each flagged row. Flags only: nothing is blocked, no save
+path changes.
+
+- **Flags** - `web/admin/tuning/combat_role_flags.py`, each a `CustomProbe` on a `TUNING`
+  `ContentDependency` in `combat_role_declarations()` (also in the Ops Required content
+  panel): Vow with no picks (none of its own, nor on its anchor for a sub-role; vow page),
+  Holder over budget (live primary memberships only, priced with `price_for`, against
+  `vow_builder.live.focus_pick_budget()`; the `CharacterVowFocusPick` changelist `?q=` the
+  character), Condition set, never read and Condition carrying a read property, set by
+  nothing (both through the combo map's batched reads; the condition's combo map), Pick
+  with a blank payload (vow page). Each names its rows in `ProbeResult.flagged`
+  (`FlaggedRow(text, url)`) as well as `missing`.
+- **Page** - `tuning/combat_content_views.py` `combat_content`, `_combat_content/` ->
+  `admin_combat_content`, superuser-only (`superuser_required`). Template
+  `templates/admin/tuning/combat_content.html` (extends `base_site.html`, includes
+  `_panel_css.html` for `tuning-panel`/`tuning-table`, its one own class styled inline):
+  breadcrumb Home > Ops > Required content > Combat roles, heading "Combat roles" noted
+  "flags only, nothing blocked", a Flag / What / Fix it table of the open flags, one link
+  per flagged row (the demo's single link per flag became one per row, since rows differ),
+  or "Nothing is flagged."
+- **Panel** - `combat_roles._missing_combat_content_link` runs
+  `collect_combat_role_flags()` on every front-page load for a superuser: a fixed 116
+  queries, whatever the catalog size.
+- **Queries** - fixed however many vows, picks, holders or conditions; pinned in
+  `tests/test_combat_role_flags.py` `QueryCountTest`.
+- Tests: `tests/test_combat_role_flags.py` (each flag's positive and negative cases and
+  links), `tests/test_combat_content_page.py` (the page through the client, the gate, the
+  links opening, and the styling test), `tests/test_combat_roles_panel.py` (the row's
+  count). Deliberate no-ADR: the page follows the approved #4843 spec.
 
 ## Standoff Profile Builder (#4354)
 

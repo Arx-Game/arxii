@@ -427,6 +427,9 @@ Health panel from `tech_health.py`, and a Required-Content sentinel panel from
 | Technical Health | `ops_tech_fragment` | `admin_ops_tech` |
 | Required content | `ops_required_content_fragment` | `admin_ops_required_content` |
 
+The Missing combat content page (`_combat_content/`, `admin_combat_content`, #4906) is a
+full page under Ops, not a panel; see the sentinel section below.
+
 Views live in `src/web/admin/tuning/ops_views.py`.
 
 ### `src/web/admin/tuning/metrics.py`
@@ -535,6 +538,29 @@ when the row is absent.
   query, for `AnyRowProbe`/`FilteredRowProbe`/`CustomProbe`). `RequiredContentSnapshot`
   sorts the result into `missing_required`, `present_required`, `missing_tuning`,
   `present_tuning`.
+- **Per-row links (#4906).** A probe that names rows can link each one to its own fix
+  page: `ProbeResult.flagged` is a tuple of `FlaggedRow(text, url)`, filled alongside
+  `missing` (the same texts in the same order, so every reader of `missing` is
+  unchanged). The panel draws `flagged` as links when present, else `missing` as text.
+- **Missing combat content flags (#4906, slice 4 of #4843)** - five `TUNING` rows from
+  `web/admin/tuning/combat_role_flags.py` (`combat_role_declarations()`, folded into
+  `_declarations()`): `combat_vow_no_picks` (a vow with no focus pick of its own, nor on
+  its anchor for a sub-role; links its vow page), `combat_holder_over_budget` (a live
+  primary membership whose chosen picks at one level cost more than
+  `focus_pick_budget()`, priced through `price_for`; links the `CharacterVowFocusPick`
+  changelist searched by the character), `combat_condition_never_read` (a condition
+  carrying a property, landed by something, with no reader of any property it carries and
+  none naming it), `combat_condition_set_by_nothing` (a condition carrying a property some
+  row reads, landed by nothing; both condition flags link the condition's combo map and
+  read the combo map's own batched lists in `web/admin/combo_map/live.py`, so the two
+  cannot disagree), and `combat_pick_blank_payload` (a pick with no stat scaling,
+  situational perk or added effect; links its vow page). Flags only: nothing is blocked
+  and no save refuses for them. The run is a fixed number of queries however many rows
+  there are (116 today, pinned in `tests/test_combat_role_flags.py`).
+  `collect_combat_role_flags()` resolves just these five for the **Missing combat
+  content** page (`_combat_content/`, `admin_combat_content`, superuser-only,
+  `combat_content_views.py`: Flag / What / Fix it, one row per open flag, each flagged
+  row linked) and the Combat roles panel's row of the same name ("N open flags").
 
 The panel probes the live database because no repo artifact can answer the
 question: seeds under `world/seeds/` are clone-bootstrap and E2E scaffolding only,
