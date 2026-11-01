@@ -1206,6 +1206,9 @@ Check resolution engine — converts trait values to ranks and rolls against res
   value a sized modifier on those effect kinds (`EFFECT_KIND_LANE`, `ModifierTarget.value_lane`);
   `mechanics.effect_targets._modifier_total` reads a laned target through the same two builders
   and tapers by the lane's rows. A size on any other kind is refused.
+  Derived amounts (#4878): `DerivedAmountMixin` (`mechanics/derived_amount_models.py`) gives
+  `DistinctionEffect` and `ConditionModifierEffect` an input (`AmountInput`), a "per N" step and
+  a cap; `mechanics.derived_amounts.derived_amount` computes it at read time.
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up

@@ -961,7 +961,10 @@ the vow-only action scaling table is gone. What was built:
 - **Sized modifiers on effects** (#4876): damage, to-hit and partial protection take a size,
   valued from their own `ModifierLane` at the holder's level (the owner's "likely grants only"
   ruling on #4824); other kinds stay flat.
-- **Not built**: derived amounts (a source choosing what its number scales from, #4824). The technique scopes
+- **Derived amounts** (#4878): distinction effects and condition modifier effects can derive
+  their amount from character level, a thread on a named trait or facet, or a named check's rank,
+  with a "per N" step and a cap (the owner's shared menu, #4824). Other row kinds and the target's
+  soak input are still to come. The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for
   the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. A gear
