@@ -1341,11 +1341,15 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
 
 `world.covenants.style_fit`:
 
-- `style_fit_for_attack(character, weapon_archetype) -> StyleFit` (None archetype is bare
-  hands, `UNARMED`) and `style_fit_for_defense(character) -> StyleFit` (every worn armor
-  kind, `worn_armor_kinds`). `StyleFit(style, lapse: StyleLapse | None, lapse_note)` with
-  `counts`, `hit_stat_name` and `extra_traits()` (the style skill as an `ExtraTraitTerm`,
-  weight 1, while it counts).
+- `style_fit_for_attack(character, weapon_archetype) -> StyleFit` (a Strike always names
+  its kind, bare hands being `UNARMED`; None is a technique cast with no weapon in hand,
+  which skips the weapon test and keeps only the vow test) and
+  `style_fit_for_defense(character) -> StyleFit` (every worn armor kind,
+  `worn_armor_kinds`). `StyleFit(style, lapse: StyleLapse | None, lapse_note)` with
+  `counts`, `hit_stat_name` and `extra_traits(check_type, counted)` (the style skill as an
+  `ExtraTraitTerm`, weight 1, while it counts, and never when the roll already counts that
+  trait through the check type's rows or another term, such as a technique skill that is
+  also a style's skill).
 - The bonus lapses on an attack when the weapon kind is not one of the style's weapon
   kinds, on a defense when any worn armor kind is not one of its armor kinds, and on both
   when a held vow (each engaged PRIMARY role; a sub-role counts by itself or its anchor) is
@@ -1358,6 +1362,8 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
   seam: Strike, technique, joust) adds the term; a Strike also hits with `hit_stat`
   (`_stat_override`), a technique keeps its weapon's stat. `resolve_npc_attack` adds it to
   the PC defense roll and hands it to a barrier's re-roll (`NpcHitDefense.extra_traits`).
+  A combat cast's TRAIT thread pulls (`pull_helpers._with_style_skill`) see the style
+  skill's trait while it counts.
 - The Strike records the style at roll time on `ConsequenceOutcome` (`style_name`,
   `style_skill_rating`, `style_lapse_note`, `stat_from_style`) and its hit-roll breakdown
   shows "the style's hit stat" and a style row, "style skill" with the rating or struck
@@ -1370,8 +1376,15 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
   out ("Defense against <attacker>", defense skill, style skill or lapse, "Armor, N of 10",
   then the result); `against_label` set is its key, so it never claims a Strike row.
   `combat_roll_breakdowns` (`world.checks.serializers`) serves both builders, defender and
-  staff only. A barrier's re-roll records no row. Since this, every defended NPC blow mints
-  the NPC action's interaction (before, only a survivability roll did).
+  staff only; any other viewer gets a combat roll row without its modifiers or their total,
+  and a defense row without its summary. An automatic dodge's bonus is recorded as a
+  "Dodge" contribution. The result line names the roll's outcome, then the damage
+  ("Partial Success, 8 damage"). A barrier's re-roll records no row. Every defended NPC
+  blow now mints the NPC action's interaction (before, only a survivability roll did), and
+  `create_npc_action_interaction` pushes it live, the way a PC's action row is.
+- Every combat roll row records `ConsequenceOutcome.combat_round` (the Strike and defense
+  recorders pass it; any other combat row reads it from the scene's encounter), and the
+  turn panel's Last Outcome card shows every roll of the newest round.
 - Not yet: `is_gear_compatible` still reads the vow's `GearArchetypeCompatibility` (slice
   3 re-keys it with the data migration).
 
