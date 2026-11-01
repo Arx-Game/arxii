@@ -646,7 +646,6 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     from django.db.models import Count, Min  # noqa: PLC0415
 
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
-    from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
 
     interaction_ids = {o.combat_interaction_id for o in outcomes if o.combat_interaction_id}
     if not interaction_ids:
@@ -670,37 +669,58 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
 
     breakdowns: dict[int, RollBreakdown] = {}
     for o in strike_outcomes:
-        action = actions[o.combat_interaction_id]
         first_pk, roll_count = rolls_per_strike[o.combat_interaction_id]
         skill, _stats = traits[o.check_type_id]
-        kind = o.weapon_kind or ""
-        skill_value = str(o.skill_rating) if o.skill_rating is not None else ""
         if o.pk == first_pk:
-            lines: list[RollLine] = []
-            if skill is not None:
-                lines.append(RollLine(skill, skill_value, f"strike skill for {kind}".strip()))
-            lines.extend(
-                RollLine(stat, "", f"stat for {kind}".strip())
-                for stat in (o.stat_label or "").split(", ")
-                if stat
+            target = actions[o.combat_interaction_id].focused_opponent_target
+            breakdowns[o.pk] = _hit_roll_breakdown(
+                o, skill, target, went_on_to_damage=roll_count > 1
             )
-            target = action.focused_opponent_target
-            heading = (
-                f"Hit roll against {target.name}'s defense" if target is not None else "Hit roll"
-            )
-            note = "then the damage roll" if roll_count > 1 else ""
         else:
-            heading = "Damage roll"
-            detail = (
-                "the weakest Unarmed weapon"
-                if kind == "bare hands"
-                else "weapon damage and quality"
-            )
-            lines = [RollLine(o.weapon_label or "", "", detail)]
-            if skill is not None:
-                lines.append(RollLine(skill, skill_value, "strike skill"))
-            note = ""
-        breakdowns[o.pk] = RollBreakdown(
-            heading=heading, lines=lines, result=o.summary, result_note=note
-        )
+            breakdowns[o.pk] = _damage_roll_breakdown(o, skill)
     return breakdowns
+
+
+def _skill_value(outcome: ConsequenceOutcome) -> str:
+    """The skill rating the roll stored, as the row shows it ("" when none)."""
+    return str(outcome.skill_rating) if outcome.skill_rating is not None else ""
+
+
+def _hit_roll_breakdown(
+    outcome: ConsequenceOutcome,
+    skill: str | None,
+    target: CombatOpponent | None,
+    *,
+    went_on_to_damage: bool,
+) -> RollBreakdown:
+    """A Strike's hit roll as rows: the strike skill, each stat, then the result."""
+    from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
+
+    kind = outcome.weapon_kind or ""
+    lines: list[RollLine] = []
+    if skill is not None:
+        lines.append(RollLine(skill, _skill_value(outcome), f"strike skill for {kind}".strip()))
+    lines.extend(
+        RollLine(stat, "", f"stat for {kind}".strip())
+        for stat in (outcome.stat_label or "").split(", ")
+        if stat
+    )
+    heading = f"Hit roll against {target.name}'s defense" if target is not None else "Hit roll"
+    return RollBreakdown(
+        heading=heading,
+        lines=lines,
+        result=outcome.summary,
+        result_note="then the damage roll" if went_on_to_damage else "",
+    )
+
+
+def _damage_roll_breakdown(outcome: ConsequenceOutcome, skill: str | None) -> RollBreakdown:
+    """A Strike's damage roll as rows: the weapon and its quality, the skill, the result."""
+    from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
+
+    bare = outcome.weapon_kind == "bare hands"
+    detail = "the weakest Unarmed weapon" if bare else "weapon damage and quality"
+    lines = [RollLine(outcome.weapon_label or "", "", detail)]
+    if skill is not None:
+        lines.append(RollLine(skill, _skill_value(outcome), "strike skill"))
+    return RollBreakdown(heading="Damage roll", lines=lines, result=outcome.summary)

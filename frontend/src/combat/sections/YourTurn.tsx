@@ -17,7 +17,7 @@ import type { SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
-import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
+import { ActionDeclarationCard, type LeadingPick } from '@/actions/ActionDeclarationCard';
 import type {
   ActionContext,
   ActionSlot,
@@ -33,7 +33,7 @@ import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
-import { StrikeControl } from '../components/StrikeControl';
+import { StrikeControl, type StrikeWeaponOption } from '../components/StrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -1837,6 +1837,95 @@ function focusedActionFor(
 }
 
 // ---------------------------------------------------------------------------
+// The Strike pick (#4858)
+// ---------------------------------------------------------------------------
+
+/**
+ * A Strike already declared this round comes back on reload: the Strike pick and its
+ * target are read from the declaration, once per declaration. Returns the declared
+ * Strike (null when none), which also seeds the weapon and the declared badge.
+ */
+function useRestoreDeclaredStrike(
+  ownRoundAction: RoundActionTyped | null,
+  setStrikePicked: (value: boolean) => void,
+  setFocusedContext: React.Dispatch<React.SetStateAction<ActionContext>>
+): RoundActionTyped | null {
+  const restoredRef = useRef<number | null>(null);
+  const declaredStrike = ownRoundAction?.maneuver === 'strike' ? ownRoundAction : null;
+  useEffect(() => {
+    if (declaredStrike === null) return;
+    const declarationId = Number(declaredStrike.id);
+    if (restoredRef.current === declarationId) return;
+    restoredRef.current = declarationId;
+    setStrikePicked(true);
+    const opponentId = declaredStrike.focused_opponent_target ?? null;
+    setFocusedContext((prev) => ({
+      ...prev,
+      techniqueId: undefined,
+      ...(opponentId !== null ? { targetKind: 'opponent' as const, targetId: opponentId } : {}),
+    }));
+  }, [declaredStrike, setStrikePicked, setFocusedContext]);
+  return declaredStrike;
+}
+
+interface StrikePickArgs {
+  weapons: StrikeWeaponOption[];
+  picked: boolean;
+  declaredStrike: RoundActionTyped | null;
+  focusedContext: ActionContext;
+  activeOpponents: { id: number; name: string }[];
+  error: string | null;
+  disabled: boolean;
+  pending: boolean;
+  onPick: () => void;
+  onStrike: (opponentId: number, itemInstanceId: number | null) => void;
+}
+
+/** The weapon a declared Strike used (null: bare hands); undefined when none is declared. */
+function declaredStrikeWeapon(declaredStrike: RoundActionTyped | null): number | null | undefined {
+  if (declaredStrike === null) return undefined;
+  return declaredStrike.item_instance ?? null;
+}
+
+/** The opponent picked in the focused target selection, or null. */
+function focusedOpponentId(context: ActionContext): number | null {
+  if (context.targetKind !== 'opponent') return null;
+  return context.targetId ?? null;
+}
+
+/** The name of the opponent a declared Strike is aimed at, or null. */
+function declaredStrikeTargetName(
+  declaredStrike: RoundActionTyped | null,
+  opponents: { id: number; name: string }[]
+): string | null {
+  if (declaredStrike === null) return null;
+  const foe = opponents.find((o) => o.id === declaredStrike.focused_opponent_target);
+  return foe?.name ?? null;
+}
+
+/** Strike as the focused card's first pick, or undefined when there is nothing to strike with. */
+function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
+  if (args.weapons.length === 0) return undefined;
+  return {
+    label: 'Strike',
+    selected: args.picked,
+    onSelect: args.onPick,
+    panel: (
+      <StrikeControl
+        weapons={args.weapons}
+        declaredItemInstanceId={declaredStrikeWeapon(args.declaredStrike)}
+        targetOpponentId={focusedOpponentId(args.focusedContext)}
+        declaredTargetName={declaredStrikeTargetName(args.declaredStrike, args.activeOpponents)}
+        error={args.error}
+        disabled={args.disabled}
+        pending={args.pending}
+        onStrike={args.onStrike}
+      />
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
 
@@ -2075,22 +2164,11 @@ export function YourTurn({
   // ownRoundAction.is_ready (not just local state) survives that remount.
   const serverReady = ownRoundAction?.is_ready === true;
 
-  // A Strike already declared this round (#4858) comes back on reload: the Strike pick,
-  // its target and its weapon are read from the declaration, once per declaration.
-  const restoredStrikeRef = useRef<number | null>(null);
-  const declaredStrike = ownRoundAction?.maneuver === 'strike' ? ownRoundAction : null;
-  useEffect(() => {
-    const declarationId = declaredStrike === null ? null : Number(declaredStrike.id);
-    if (declaredStrike === null || restoredStrikeRef.current === declarationId) return;
-    restoredStrikeRef.current = declarationId;
-    setStrikePicked(true);
-    setFocusedContext((prev) => ({
-      ...prev,
-      techniqueId: undefined,
-      targetKind: declaredStrike.focused_opponent_target != null ? 'opponent' : prev.targetKind,
-      targetId: declaredStrike.focused_opponent_target ?? prev.targetId,
-    }));
-  }, [declaredStrike, setStrikePicked, setFocusedContext]);
+  const declaredStrike = useRestoreDeclaredStrike(
+    ownRoundAction,
+    setStrikePicked,
+    setFocusedContext
+  );
 
   const participants: Participant[] = encounter?.participants ?? [];
 
@@ -2688,45 +2766,24 @@ export function YourTurn({
             if (next.techniqueId !== undefined) setStrikePicked(false);
             setFocusedContext(next);
           }}
-          leadingPick={
-            (myParticipantSelf?.strike_weapons ?? []).length > 0
-              ? {
-                  label: 'Strike',
-                  selected: strikePicked,
-                  onSelect: () => {
-                    setSubmitError(null);
-                    setStrikePicked(true);
-                    setFocusedContext({ ...focusedContext, techniqueId: undefined });
-                  },
-                  panel: (
-                    <StrikeControl
-                      weapons={myParticipantSelf?.strike_weapons ?? []}
-                      declaredItemInstanceId={
-                        declaredStrike !== null ? (declaredStrike.item_instance ?? null) : undefined
-                      }
-                      targetOpponentId={
-                        focusedContext.targetKind === 'opponent'
-                          ? (focusedContext.targetId ?? null)
-                          : null
-                      }
-                      declaredTargetName={
-                        declaredManeuver === 'strike'
-                          ? (activeOpponents.find(
-                              (o) => o.id === ownRoundAction?.focused_opponent_target
-                            )?.name ?? null)
-                          : null
-                      }
-                      error={strikeError}
-                      disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-                      pending={maneuverDispatchPending}
-                      onStrike={(opponentId, itemInstanceId) => {
-                        handleStrike(opponentId, itemInstanceId).catch(() => {});
-                      }}
-                    />
-                  ),
-                }
-              : undefined
-          }
+          leadingPick={buildStrikePick({
+            weapons: myParticipantSelf?.strike_weapons ?? [],
+            picked: strikePicked,
+            declaredStrike,
+            focusedContext,
+            activeOpponents,
+            error: strikeError,
+            disabled: isLocked || !isDeclaringPhase || maneuverDispatchPending,
+            pending: maneuverDispatchPending,
+            onPick: () => {
+              setSubmitError(null);
+              setStrikePicked(true);
+              setFocusedContext({ ...focusedContext, techniqueId: undefined });
+            },
+            onStrike: (opponentId, itemInstanceId) => {
+              handleStrike(opponentId, itemInstanceId).catch(() => {});
+            },
+          })}
           readOnly={isLocked}
           targets={focusedTargets}
           reach={focusedTechniqueReach}
