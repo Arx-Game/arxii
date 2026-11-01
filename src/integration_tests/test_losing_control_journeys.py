@@ -137,7 +137,8 @@ def _berserk_of(character):
     return next((i for i in get_active_conditions(character) if i.condition_id == berserk.pk), None)
 
 
-COMPELLED_READ_QUERIES = 26
+# Two of these name the roster by persona (ruling 39), once for every participant.
+COMPELLED_READ_QUERIES = 28
 
 
 def knock_out_condition():
