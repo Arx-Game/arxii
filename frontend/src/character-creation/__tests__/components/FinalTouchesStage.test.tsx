@@ -41,7 +41,7 @@ const EMPTY_FACE_FOR_TEST = {
 };
 let offersResponse: OffersResponse;
 // The card-unlocked chapter's own response (#4846); empty unless a test fills it.
-let finalTouchesOffers: OffersResponse = { offers: [], closed: [] };
+let finalTouchesOffers: OffersResponse = { offers: [], closed: [], terms: [] };
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: mockCGExplanations }),
@@ -77,6 +77,9 @@ const hedonistic: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 const voracious: VisibleOffer = {
@@ -100,6 +103,9 @@ const voracious: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 const rouault: EnemyOffer = {
@@ -125,7 +131,7 @@ const republic: EnemyOffer = {
 
 describe("FinalTouchesStage (Actor's Sheet)", () => {
   beforeEach(() => {
-    offersResponse = { offers: [hedonistic, voracious], closed: [] };
+    offersResponse = { offers: [hedonistic, voracious], closed: [], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 
@@ -265,7 +271,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       requires_feature_opened: false,
       cg_max_rank: 0,
     };
-    offersResponse = { offers: [hedonistic, voracious, lightSleeper], closed: [] };
+    offersResponse = { offers: [hedonistic, voracious, lightSleeper], closed: [], terms: [] };
     let leave: (() => Promise<boolean>) | null = null;
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
@@ -325,6 +331,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
           opener_ids: [],
         },
       ],
+      terms: [],
     };
     renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
@@ -479,10 +486,10 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
   const PROMPT = 'The crime, if you care to name it.';
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [] };
+    offersResponse = { offers: [], closed: [], terms: [] };
   });
   afterEach(() => {
-    finalTouchesOffers = { offers: [], closed: [] };
+    finalTouchesOffers = { offers: [], closed: [], terms: [] };
     mutateAsync.mockClear();
   });
 
@@ -502,7 +509,7 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
       opener_labels: [] as string[],
       opener_ids: [] as number[],
     };
-    finalTouchesOffers = { offers: [], closed: [closedRow] };
+    finalTouchesOffers = { offers: [], closed: [closedRow], terms: [] };
     const { unmount } = renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
     );
@@ -511,6 +518,7 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
     finalTouchesOffers = {
       offers: [],
       closed: [{ ...closedRow, opener_labels: ['Jailbird'], opener_ids: [401] }],
+      terms: [],
     };
     renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
@@ -520,7 +528,11 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
   });
 
   it('shows the lines a held card unlocks, with no crime prompt when no card asks', () => {
-    finalTouchesOffers = { offers: [escapeArtist], closed: [] };
+    finalTouchesOffers = {
+      offers: [escapeArtist],
+      closed: [],
+      terms: [],
+    };
     renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
     );
@@ -621,7 +633,7 @@ describe('FinalTouchesStage (the grants the cards reconcile, #4852)', () => {
   const lodge = { id: 7, name: 'The Honor Lodge', is_covert: false };
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [] };
+    offersResponse = { offers: [], closed: [], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 
@@ -764,7 +776,7 @@ describe('FinalTouchesStage (the second face and the tie, #4856)', () => {
   };
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [] };
+    offersResponse = { offers: [], closed: [], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 

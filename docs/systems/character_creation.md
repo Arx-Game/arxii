@@ -76,7 +76,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `selected_origin_template` (FK `OriginTemplate`, the chosen Upbringing, #3617), `family_path` (`FamilyPath`: claimed/named/none, #3617), `family`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
-| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
+| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt, a beat taken, or a stage's paragraph (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`, nullable), `beat` (FK `LifeBeat`, nullable, #4124) + `unknown`, `life_stage` (a stage description row, #4872; a row is exactly one of slot, beat or stage), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
 
 **Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
@@ -898,6 +898,41 @@ is no longer unknown. Age is experience through beats, not banked stat points:
 `CharacterSheet.maturation_floor` is the creation age and milestones at or below it never
 bank (`progression/services/maturation.py`); an eternal-youth species prices its long
 life through `Species.cg_point_cost` on the purse's species line.
+
+**The life page, backend (#4872, slice 9 of #4813).** What the accordion needs under it
+(demo https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28; the leaf is the next slice).
+*Grouped answers:* `DistinctionOffer.group` is the heading a beat's answer sits under
+("Treatment"), serialized as `VisibleOffer.group`; the paste's beat token takes it as a third
+segment, `beat:<stage>/<beat name>/<group>`. *A paragraph per stage:*
+`draft_data.stage_descriptions` maps a `LifeStage` value to text of at most
+`STAGE_DESCRIPTION_MAX_LENGTH` (1000) characters (`_validate_stage_descriptions`);
+`_finalize_beats` writes each as a `CharacterOriginSlot` row with `life_stage` set and no
+slot or beat (a row is exactly one of the three, one stage row per sheet), and
+`assemble_origin_prose` prints the life by stage: the stage's name and paragraph, then its
+beats; a stage every one of whose beat rows is unknown reads "<Stage>: unknown" (the leaf
+marks Unknown per stage by setting every beat in it). *A secret with a cover:* the beat's
+state at `draft_data.beats[<beat_id>]` also carries `secret_offer_ids` (the picks on the
+beat marked secret), `cover_offer_id` (the same row's answer shown in the secret's place;
+null means Unremarkable, the row's no-cost card) and `figures` (offer id to the figure's
+name, `FIGURE_NAME_MAX_LENGTH` 60), all shape-checked by `_validate_beat_marks` and read by
+`offers.beat_marks`. At finalize a pick whose offer is marked secret is minted a Secret
+(`_mint_distinction_secrets`, the `secret_by_default` path); the cover becomes a
+`CharacterDistinction` with `is_cover` on (`_write_cover_stories`: rank 1, no modifiers, no
+price, no sidecar grant), written only when the beat has a secret pick the draft holds, the
+cover is one of the beat's own answers, is not itself picked and the card is not already
+held. A stranger's sheet lists the cover like any held card and not the secret; the owner
+and staff see `DistinctionEntry.is_cover`. *A figure's name:* `Distinction.asks_figure_name`
+(paste effect token `figure`; `VisibleOffer.asks_figure_name`) marks a person card; the name
+in `figures` lands in the pick's `notes` (`_name_figures`) and, for a card that grants an NPC
+asset, names the asset through the `asset_names` seam lineage person questions use.
+*Magnitudes and terms:* `VisibleOffer.effects` lists each effect as `{target, label, value,
+immune}` (`offers.effect_terms`; `effect_line` is unchanged for the list layouts) and the
+offers response carries `terms`, one `{name, label, definition}` per modifier target the
+effects name (`offers.terms_for`): `Trait.description` for a target bound to a trait,
+`Aspect.description` for one bound to an aspect, else `ModifierTarget.description`, read in one
+query. *The first name first:* `get_origin_errors` asks for `draft_data.first_name` and
+`get_identity_errors` no longer does (ruled 2026-10-19). Journeys:
+`integration_tests/test_life_page_journeys.py`.
 
 **Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
 offered template, else `draft_data.family_template_id`), name the family (checked

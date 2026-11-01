@@ -27,7 +27,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('calls /drafts/{id}/offers/?chapter=glimpse', async () => {
-    const data: OffersResponse = { offers: [], closed: [] };
+    const data: OffersResponse = { offers: [], closed: [], terms: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     const result = await getDraftOffers(7, 'glimpse');
@@ -39,7 +39,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('hits a different chapter query for tradition_step', async () => {
-    const data: OffersResponse = { offers: [], closed: [] };
+    const data: OffersResponse = { offers: [], closed: [], terms: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     await getDraftOffers(7, 'tradition_step');
@@ -73,6 +73,9 @@ describe('character-creation/api getDraftOffers', () => {
           opens_feature: false,
           requires_feature_opened: false,
           cg_max_rank: 0,
+          group: '',
+          asks_figure_name: false,
+          effects: [],
         },
       ],
       closed: [
@@ -84,6 +87,7 @@ describe('character-creation/api getDraftOffers', () => {
           opener_ids: [],
         },
       ],
+      terms: [],
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 

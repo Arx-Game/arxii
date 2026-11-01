@@ -43,7 +43,7 @@ from world.distinctions.types import (
 |-------|---------|------------|
 | `DistinctionCategory` | Categories like Physical, Mental, Social | `name`, `slug`, `description`, `display_order` |
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
-| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level`, `final_touches_prompt` (#4846: the optional question the card asks at Final Touches, `FinalTouchesPrompt`) |
+| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level`, `final_touches_prompt` (#4846: the optional question the card asks at Final Touches, `FinalTouchesPrompt`), `asks_figure_name` (#4872: a person card; the player names the figure when picking it, the name lands in the pick's `notes`) |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `modifier_size` (#4638, check lane: on a check-scoped target the effect counts as the check value table's number at the holder's level and the size its held rank names; this field is the rank-1 size; blank keeps the flat per-rank value; Paramount refused; a size on a maneuver-effect target is refused too, #4783: those take flat amounts only; see `docs/systems/checks.md`, ADR-4638-A and ADR-4660-A), `description` |
 | `DistinctionEffectRankSize` | The size a sized effect has from one rank up (#4660, ADR-4660-A) | `effect` (FK `DistinctionEffect`, CASCADE, related_name `rank_sizes`), `rank` (2 or more, at most the distinction's `max_rank`), `size` (`ModifierSize`, Paramount refused). Unique (effect, rank). `DistinctionEffect.size_at_rank(rank)` takes the highest row at or below the rank, else `modifier_size`; a sized effect with no rows is the same size at every rank. Rank never multiplies a sized effect on checks. Edited as an inline on the standalone `DistinctionEffect` admin page (Django cannot nest it under the distinction page's effect inline). |
 
@@ -70,7 +70,7 @@ branches on `target.category.name`:
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`), `feature_trait` / `feature_marking` (the one feature a per-feature distinction names, #3739 — at most one is ever set) |
+| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`), `feature_trait` / `feature_marking` (the one feature a per-feature distinction names, #3739 — at most one is ever set), `is_cover` (#4872: a cover story held in a secret answer's place; grants nothing) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character` (FK → `character_sheets.CharacterSheet`), `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
 
 Both `character` FKs point at **`CharacterSheet`**, not `ObjectDB` (#2608 — the first
@@ -454,6 +454,14 @@ so the owner's gate UI can show which are relocated. A relocated distinction sur
 *learner* on the **secret tab** (via the ordinary `SecretKnowledge` loop), not back on this list.
 The old `DistinctionVisibility` enum / `default_visibility` / `visibility_override` /
 `effective_visibility` / `is_publicly_visible` are removed.
+
+- **A cover story (#4872)** — a beat answer the player marks secret at creation may hide
+  behind another answer of the same row. The cover is a `CharacterDistinction` with
+  `is_cover` on, written only by `character_creation.services._write_cover_stories` at
+  finalize: rank 1, no modifiers, no price, no sidecar grant. It is what a stranger's
+  sheet lists where the secret is absent; the owner and staff see it flagged
+  (`DistinctionEntry.is_cover`). A cover is held like any card, so a post-CG exclusion
+  check may treat it as held: the character claims it, so that is the point.
 
 `DistinctionEntry` also carries `is_from_glimpse` (#2427) — `True` when
 `CharacterDistinction.from_glimpse` points at the character's `CharacterAura` (the

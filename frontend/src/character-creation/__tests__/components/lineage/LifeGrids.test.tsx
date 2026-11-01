@@ -17,7 +17,7 @@ import type { BeatPoolEntry, OffersResponse, VisibleOffer } from '../../../types
 const mutateAsync = vi.fn().mockResolvedValue({});
 const syncMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
-let offersResponse: OffersResponse = { offers: [], closed: [] };
+let offersResponse: OffersResponse = { offers: [], closed: [], terms: [] };
 let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals: string[] }[] = [];
 
 vi.mock('../../../queries', async (importOriginal) => ({
@@ -69,6 +69,9 @@ function offer(over: Partial<VisibleOffer>): VisibleOffer {
     opens_feature: false,
     requires_feature_opened: false,
     cg_max_rank: 0,
+    group: '',
+    asks_figure_name: false,
+    effects: [],
     ...over,
   };
 }
@@ -117,6 +120,7 @@ describe('LifeGrids', () => {
         offer({ offer_id: 32, distinction_id: 302, name: 'Kept a shop', opener_key: 'beat:3' }),
       ],
       closed: [],
+      terms: [],
     };
   });
 

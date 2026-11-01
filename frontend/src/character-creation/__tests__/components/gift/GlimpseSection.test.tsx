@@ -143,6 +143,9 @@ function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = 
     opens_feature: false,
     requires_feature_opened: false,
     cg_max_rank: 0,
+    group: '',
+    asks_figure_name: false,
+    effects: [],
     ...overrides,
   };
 }
@@ -156,6 +159,7 @@ const OFFERS_RESPONSE: OffersResponse = {
     visibleOffer(WITNESS_ALONE),
   ],
   closed: [],
+  terms: [],
 };
 
 const DRAFT_DISTINCTION: DraftDistinctionEntry = {
@@ -365,6 +369,7 @@ describe('GlimpseSection', () => {
           opener_ids: [601],
         },
       ],
+      terms: [],
     };
     const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [6] } });
     const queryClient = createTestQueryClient();
@@ -424,6 +429,7 @@ describe('GlimpseSection', () => {
           opener_ids: [601],
         },
       ],
+      terms: [],
     };
     const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [6] } });
     const queryClient = createTestQueryClient();
@@ -479,6 +485,7 @@ describe('GlimpseSection', () => {
           opener_ids: [601],
         },
       ],
+      terms: [],
     };
     // Public is never chosen here.
     const draft = createMockDraft({ id: 1, draft_data: {} });

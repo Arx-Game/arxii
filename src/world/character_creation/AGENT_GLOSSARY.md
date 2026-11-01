@@ -61,6 +61,29 @@ What the life page shows in place of the stage rows when a beginning strikes eve
 **Recent History** (`draft_data["recent_history"]`, `RECENT_HISTORY_MAX_LENGTH`, #4830):
 The optional free text a life ends on, the hooks a player wants picked up; written at finalize as the lead-in paragraph of `Profile.background`, public. _Avoid_: since the Glimpse (the cut stage), hooks (those are GM-seeded, #4397).
 
+**Stage description** (`draft_data["stage_descriptions"]`, `CharacterOriginSlot.life_stage`, #4872):
+The one paragraph a player writes for a whole stage of the life, printed under the stage's
+name in the told background before its beats. A row with a stage and no slot or beat.
+_Avoid_: beat line (the per-beat sentence), stage note.
+
+**Cover story** (`draft_data.beats[<id>].cover_offer_id`, `CharacterDistinction.is_cover`, #4872):
+The answer on the same row a secret pick hides behind; held at finalize as a card that grants
+nothing, listed on a stranger's sheet where the secret is absent. Null means Unremarkable,
+the row's no-cost card. _Avoid_: fake answer, alias (a second face is a persona).
+
+**Secret mark** (`draft_data.beats[<id>].secret_offer_ids`, #4872):
+A pick on a beat the player marks secret at creation; minted a Secret at finalize the way a
+`secret_by_default` card is. _Avoid_: hidden pick, private distinction.
+
+**Figure's name** (`draft_data.beats[<id>].figures`, `Distinction.asks_figure_name`, #4872):
+The name a player gives the person a person card is about (Rival, Capable Mentor); in the
+pick's notes and on a granted NPC asset. _Avoid_: NPC name field, companion.
+
+**Term** (`OffersResponse.terms`, `VisibleOffer.effects`, #4872):
+A lever named on a card's mechanics line, with its definition read from the row that owns
+it: `Trait.description`, `Aspect.description` or `ModifierTarget.description`.
+_Avoid_: tooltip text (a copy key), glossary entry.
+
 **Kept beat** (`Beginnings.beat_mode = ONE_KEPT`, #4124; retired #4830, the Sleeper strikes every stage instead):
 The one beat a blank-slate Beginning (the Sleeper) takes by itself; every other beat
 stands unknown and nothing is addable. _Avoid_: forced beat, default beat.
