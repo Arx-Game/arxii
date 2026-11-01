@@ -24,8 +24,16 @@ _Avoid_: effect type, effect category (a `ModifierCategory` is the registry grou
 A narrowing on a "maneuver_effect" `ModifierTarget` that names the technique it changes: `scope_technique`, `scope_gift`, `scope_technique_function`, `scope_damage_type` or `scope_resonance`. Scopes combine (every one set must match), an unset scope means any, and a technique scope needs `scope_effect_kind` and no `scope_maneuver_effect`; the damage type scope is for the damage kind only. A gift scope matches the technique's gift and that gift's parent, so an umbrella gift reaches its child gifts' techniques. The kinds a technique scope narrows are damage, condition severity and condition duration (rounds), all flat. A technique-scoped target never reaches a maneuver. Matching uses the technique as authored, not the caster's specialized variant.
 _Avoid_: technique filter, technique modifier (the modifier is the source's; the scope is the target's), effect scope (a maneuver scope is `scope_maneuver_effect`)
 
+**Opponent scope** (#4823):
+A narrowing on a "maneuver_effect" `ModifierTarget` to who the effect lands on: `scope_opponent_property` (the opponent has this property) or `scope_opponent_condition` (the opponent is under this condition). It follows the technique scope rules: it combines with every other scope, an unset scope means any, and it needs `scope_effect_kind` and no `scope_maneuver_effect`. It narrows damage, condition severity and condition duration, all flat; a maneuver never matches an opponent-scoped target. For a condition, "the opponent" is whoever the condition lands on, which can be the caster or an ally.
+_Avoid_: target filter, enemy scope (the condition can land on an ally), defender modifier (that is `PropertyDamageModifier`, a row on the property, not on a modifier target)
+
+**Opponent facts** (#4823):
+The frozen `OpponentFacts` that `opponent_facts(target)` returns: `property_ids` (a stored `ObjectProperty`, a property an active condition's template or current stage grants, a player character's primary persona tag) and `condition_ids` (the templates of its active, unsuppressed conditions). Read only when an opponent-scoped target exists, once per opponent for damage and once per target for conditions, in four bounded queries.
+_Avoid_: opponent snapshot
+
 **Technique effect context** (#4822):
-The frozen `TechniqueEffectContext` that `technique_effect_context(sheet, technique, damage_type_id=None)` builds for one cast: the technique id, its gift and parent gift ids, its function set, the resonance ids its gift manifests as for the caster and the resolved damage type id. `technique_effect_total(sheet, context, targets)` sums the modifiers of the targets whose technique scopes all match it. Built once per cast, and the damage type slot is filled per damage profile.
+The frozen `TechniqueEffectContext` that `technique_effect_context(sheet, technique, damage_type_id=None)` builds for one cast: the technique id, its gift and parent gift ids, its function set, the resonance ids its gift manifests as for the caster and the resolved damage type id. `technique_effect_total(sheet, context, targets)` sums the modifiers of the targets whose technique scopes all match it. Built once per cast, and the damage type slot is filled per damage profile. It also carries the opponent's property and condition ids (#4823), filled per opponent or target.
 _Avoid_: technique snapshot
 
 **ModifierSource**:

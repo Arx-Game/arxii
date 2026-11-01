@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -50,16 +50,21 @@ from world.fatigue.services import get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.constants import EffectKind as MechanicsEffectKind, ManeuverEffectKey
 from world.mechanics.effect_targets import (
+    TechniqueConditionBonus,
     effect_modifier_total,
-    technique_condition_bonuses,
+    opponent_facts,
+    opponent_targets_exist,
     technique_effect_context,
     technique_effect_targets,
     technique_effect_total,
 )
 from world.mechanics.maneuver_effects import get_maneuver_effect
+from world.mechanics.types import OpponentFacts
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+
+    from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
@@ -103,7 +108,10 @@ class TechniqueDamageBonus:
     sheet: CharacterSheet | None
     context: TechniqueEffectContext | None
     targets: list[ModifierTarget]
-    totals: dict[int | None, int] = field(default_factory=dict)
+    totals: dict[tuple[int | None, int | None], int] = field(default_factory=dict)
+    facts: dict[int | None, OpponentFacts] = field(default_factory=dict)
+    # Whether any damage target is narrowed by the opponent (#4823), worked out once per cast.
+    narrowed: bool = False
 
     @classmethod
     def none(cls) -> TechniqueDamageBonus:
@@ -116,18 +124,43 @@ class TechniqueDamageBonus:
         targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
         if not targets:
             return cls.none()
-        return cls(sheet=sheet, context=technique_effect_context(sheet, technique), targets=targets)
+        return cls(
+            sheet=sheet,
+            context=technique_effect_context(sheet, technique),
+            targets=targets,
+            narrowed=opponent_targets_exist(targets),
+        )
 
-    def for_type(self, damage_type_id: int | None) -> int:
-        """The unclamped bonus on a hit of resolved damage type ``damage_type_id``."""
+    def read_opponent(
+        self,
+        opponent: ObjectDB | None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
+    ) -> OpponentFacts:
+        """What ``opponent`` carries (#4823), read once per opponent per cast and only when
+        a damage target is narrowed by it. Call before an opponent's first profile lands, so a
+        condition one profile consumes still counts for the rest of the same hit."""
+        key = opponent.pk if opponent is not None else None
+        if key not in self.facts:
+            self.facts[key] = opponent_facts(opponent) if self.narrowed else OpponentFacts()
+        return self.facts[key]
+
+    def for_type(
+        self,
+        damage_type_id: int | None,
+        opponent: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - an opponent may have no object
+    ) -> int:
+        """The unclamped bonus on a hit of resolved damage type ``damage_type_id`` against
+        ``opponent``, worked out once per distinct type, or per (type, opponent) pair when a
+        damage target is narrowed by the opponent."""
         context = self.context
         if context is None:
             return 0
-        if damage_type_id not in self.totals:
-            self.totals[damage_type_id] = technique_effect_total(
-                self.sheet, replace(context, damage_type_id=damage_type_id), self.targets
-            )
-        return self.totals[damage_type_id]
+        # Without an opponent scope every opponent gets the same answer: one entry per type.
+        opponent_key = opponent.pk if self.narrowed and opponent is not None else None
+        key = (damage_type_id, opponent_key)
+        if key not in self.totals:
+            hit = context.landing_on(self.read_opponent(opponent), damage_type_id)
+            self.totals[key] = technique_effect_total(self.sheet, hit, self.targets)
+        return self.totals[key]
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +435,9 @@ class CombatTechniqueResolver:
         """
         results: list[OpponentDamageResult] = []
         weapon_landed = False
+        # What the target carries is read before its first profile lands (#4823), so a
+        # condition one profile consumes does not change the next profile's bonus.
+        technique_bonus.read_opponent(target.objectdb)
         for profile, budget_bonus in profiles:
             scaled, profile_damage_type = self._profile_damage(
                 profile,
@@ -596,7 +632,8 @@ class CombatTechniqueResolver:
         # own damage-dealt rows (a smoke form's Physical -75 leaves Fire untouched).
         profile_damage_type = resolved_damage_type(profile_damage_type)
         technique_total = technique_bonus.for_type(
-            profile_damage_type.pk if profile_damage_type is not None else None
+            profile_damage_type.pk if profile_damage_type is not None else None,
+            target.objectdb,
         )
         budget = max(
             0,
@@ -672,9 +709,10 @@ class CombatTechniqueResolver:
             position_params["position_a_id"] = self.action.cast_position_a_id
             position_params["position_b_id"] = self.action.cast_position_b_id
 
-        # The caster's condition severity and duration modifiers (#4822) ride the
+        # The caster's condition severity and duration modifiers (#4822), worked out per
+        # target so an opponent scope reads who each condition lands on (#4823), ride the
         # technique's own rows only; the signature and vow rows below keep their own sources.
-        severity_bonus, duration_bonus = technique_condition_bonuses(
+        condition_bonus = TechniqueConditionBonus.for_cast(
             self.participant.character_sheet, technique
         )
         applied = apply_technique_conditions(
@@ -685,8 +723,7 @@ class CombatTechniqueResolver:
             source_character=caster_od,
             position_params=position_params or None,
             soulfray_consented=self.action.confirm_soulfray_risk,
-            severity_bonus=severity_bonus,
-            duration_bonus=duration_bonus,
+            target_bonus=condition_bonus.for_target,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the

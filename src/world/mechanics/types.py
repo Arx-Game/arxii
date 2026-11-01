@@ -219,7 +219,9 @@ class TechniqueEffectContext:
     so a target scoped to the umbrella reaches every child gift's techniques.
     ``functions`` holds ``TechniqueFunction`` values, ``resonance_ids`` the resonances
     the gift manifests as for this caster, and ``damage_type_id`` the resolved damage
-    type (damage effects only).
+    type (damage effects only). ``opponent_property_ids`` and ``opponent_condition_ids``
+    (#4823) are who the effect lands on: the properties and the active conditions the
+    opponent carries, read only when an opponent-scoped target is in the game.
     """
 
     technique_id: int
@@ -227,3 +229,34 @@ class TechniqueEffectContext:
     functions: frozenset[str]
     resonance_ids: frozenset[int]
     damage_type_id: int | None = None
+    opponent_property_ids: frozenset[int] = frozenset()
+    opponent_condition_ids: frozenset[int] = frozenset()
+
+    def landing_on(
+        self, facts: OpponentFacts, damage_type_id: int | None = None
+    ) -> TechniqueEffectContext:
+        """This cast as it lands on an opponent carrying ``facts`` (#4823), with the hit's
+        resolved ``damage_type_id`` for damage (a condition's context has none)."""
+        return TechniqueEffectContext(
+            technique_id=self.technique_id,
+            gift_ids=self.gift_ids,
+            functions=self.functions,
+            resonance_ids=self.resonance_ids,
+            damage_type_id=damage_type_id,
+            opponent_property_ids=facts.property_ids,
+            opponent_condition_ids=facts.condition_ids,
+        )
+
+
+@dataclass(frozen=True)
+class OpponentFacts:
+    """What an opponent carries, as an opponent-scoped modifier target sees it (#4823).
+
+    ``property_ids`` is every property the opponent has by any of the game's three routes
+    (a stored ``ObjectProperty``, a property an active condition's template or current stage
+    grants, a persona-authored tag); ``condition_ids`` the templates of its active,
+    unsuppressed conditions.
+    """
+
+    property_ids: frozenset[int] = frozenset()
+    condition_ids: frozenset[int] = frozenset()
