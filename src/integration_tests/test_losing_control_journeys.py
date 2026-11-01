@@ -355,6 +355,40 @@ class WoundTriggers(_ControlLossCase):
         self.assertTold(witness, "a hooded man loses control: Berserk.")
         self.assertNotTold(witness, "Garrick")
 
+    def test_a_swing_in_a_round_writes_the_loss_of_control_as_a_round_line(self) -> None:
+        """R1: a wound trigger fired inside a round is a narration row in the scene log, so
+        a reload still shows it. The row names the face Garrick wears, never his own name.
+
+        It lands where the round resolves it: the damage rolls the trigger before the
+        swing's own summary line goes out, so it is pushed ahead of that line, as every
+        effect of an action is.
+        """
+        from world.scenes.models import Interaction
+
+        hood = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.TEMPORARY, name="a hooded man"
+        )
+        self.sheet.active_persona = hood
+        self.sheet.save(update_fields=["active_persona"])
+        witness = self.make_player("Witness", room=self.field)
+        self.watch(witness)
+
+        self.brute_swings(60, self.failure)
+
+        self.assertIsNotNone(_berserk_of(self.garrick))
+        line = "a hooded man fights to keep control."
+        persisted = Interaction.objects.filter(
+            scene=self.seat.encounter.scene, content__contains=line
+        )
+        self.assertEqual(persisted.count(), 1)
+        self.assertIn("a hooded man loses control: Berserk.", persisted.get().content)
+        self.assertShownRow(witness, line)
+        self.assertNotTold(witness, "Garrick")
+        rows = self.mailbox(witness).rows
+        control = next(i for i, row in enumerate(rows) if line in row)
+        swing = next(i for i, row in enumerate(rows) if "Haymaker strikes a hooded man" in row)
+        self.assertEqual(control + 1, swing, rows)
+
     def test_nothing_is_told_until_the_hit_commits(self) -> None:
         witness = self.make_player("Witness", room=self.field)
         self.watch(witness)
@@ -481,7 +515,9 @@ class StageTriggers(_ControlLossCase):
 
         self.assertEqual(capture.target_difficulty, 25)
         self.assertIsNotNone(_berserk_of(maren))
-        self.assertTold(maren, "You lose control: Berserk.")
+        # Inside the round the line is one of the round's narration rows (R1).
+        self.assertShownRow(maren, "Maren loses control: Berserk.")
+        self.assertNotTold(maren, "You lose control")
 
     def test_a_rage_that_runs_out_in_the_same_tick_does_not_suppress_the_trigger(self) -> None:
         """N3: Maren's one-round Berserk runs out as the round ends, the same tick the curse

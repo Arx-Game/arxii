@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.combat.models import CombatEncounter
     from world.conditions.models import (
         Compulsion,
         CompulsionForbiddenAction,
@@ -468,25 +469,69 @@ def _announce(
 ) -> None:
     """Tell the character and the room a roll moved their control or applied a condition.
 
-    The room hears the persona name the rest of combat uses, never the character key,
-    and both lines go out once the surrounding transaction commits (a round that rolls
-    back tells nobody about a roll that never happened).
+    The room hears the persona name the rest of combat uses, never the character key.
+    Inside a combat round (the character's encounter is RESOLVING: a wound from a swing,
+    a stage reached by the round tick) the line goes out as one of the round's narration
+    rows, so it persists in the scene log and keeps its place among the round's lines;
+    the character reads the same row. Outside a round both lines go out once the
+    surrounding transaction commits (a hit that rolls back tells nobody about a roll
+    that never happened).
     """
     from django.db import transaction  # noqa: PLC0415
 
     outcome = result.outcome.name
     check = trigger.check_type.name
-    own = f"You fight to keep control. {check}: {outcome}." + (
-        f" You lose control: {applied.condition.name}." if applied is not None else ""
-    )
     name = display_name_of(character)
     seen = f"{name} fights to keep control. {check}: {outcome}." + (
         f" {name} loses control: {applied.condition.name}." if applied is not None else ""
+    )
+    encounter = _resolving_encounter_of(character)
+    if encounter is not None:
+        _narrate_in_round(encounter, character, seen)
+        return
+    own = f"You fight to keep control. {check}: {outcome}." + (
+        f" You lose control: {applied.condition.name}." if applied is not None else ""
     )
     room = character.location
     transaction.on_commit(lambda: character.msg("|r" + own + "|n"))
     if room is not None:
         transaction.on_commit(lambda: room.msg_contents("|r" + seen + "|n", exclude=[character]))
+
+
+def _resolving_encounter_of(character: ObjectDB) -> CombatEncounter | None:  # noqa: OBJECTDB_PARAM
+    """The encounter *character* sits in whose round is resolving now, if any."""
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None:
+        return None
+    seat = (
+        CombatParticipant.objects.filter(
+            character_sheet=sheet,
+            encounter__status=RoundStatus.RESOLVING,
+        )
+        .select_related("encounter")
+        .order_by("pk")
+        .first()
+    )
+    return seat.encounter if seat is not None else None
+
+
+def _narrate_in_round(
+    encounter: CombatEncounter,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    line: str,
+) -> None:
+    """Send a trigger line as a round narration row, the seam the compulsion lines use.
+
+    With no room the row is still kept in the scene log and the character is told directly.
+    """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    broadcast_action_outcome(encounter=encounter, narration=line, target_personas=[])
+    if encounter.room is None:
+        character.msg(line)
 
 
 def _force_battle_form_shift(character: ObjectDB, sheet: CharacterSheet) -> None:  # noqa: OBJECTDB_PARAM
