@@ -8740,8 +8740,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `CompulsionBanner`, an amber `CompulsionChosenLine` under the chosen action (the focused
   card, or the declared maneuver's badge), and telnet declares print an
   `Against <condition>: ...` line. `ParticipantSerializer.character_name` is the persona
-  name the room lines use (batched per roster by `_ParticipantListSerializer`), never the
-  key, so a disguise holds in the roster and the ally pickers. Out of combat
+  name the room lines use (batched per roster by `_ParticipantListSerializer` through
+  `scenes.services.personas_for_sheets`), never the key, so a disguise holds in the roster
+  and the ally pickers; the participant portrait, the surge line and surge beats, and the
+  clash contributor rollup use the same presented persona. `resolve_thumbnail` never falls
+  back to the character's own display image for a non-PRIMARY persona, so a bare mask
+  shows no portrait rather than the face behind it. Out of combat
   the NPC rampage (`berserk_rampage_window`) is unchanged. Models and trigger engine:
   `docs/systems/conditions.md`. Journeys: `integration_tests/test_losing_control_journeys.py`.
 - **Social maneuver designations (#4739) [BUILT & WIRED]:**
