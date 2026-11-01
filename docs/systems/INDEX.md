@@ -3389,7 +3389,7 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815; `believed_deceased` — the public record's
   belief about a death, independent of `is_deceased` the private truth,
-  #3983; `is_missing` and `obituary`, the record's two further facts, #4239), `FamilyMembership`, `UnionKind`/`Union`,
+  #3983; `is_missing` and `obituary`, the record's two further facts, #4239), `FamilyMembership`, `UnionKind`/`Union` (`is_betrothal` on the kind and `separated_at` on the union, #4870, with `kinship.betrothal_union_kind` and `separate_union`),
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
   colors), `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
