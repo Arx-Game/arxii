@@ -87,6 +87,22 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4872: the life page, backend; slice 9 of #4813)
+
+What the approved accordion (demo https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28) needs
+under it, with the leaf itself the next slice: a heading per beat answer
+(`DistinctionOffer.group`, the paste's `beat:<stage>/<beat>/<group>`); one paragraph per stage
+(`draft_data.stage_descriptions`, a `CharacterOriginSlot` stage row, printed under the stage's
+name in the told background; a stage all of whose beats are unknown reads "<Stage>: unknown");
+a secret mark and a cover story on a beat's answer (`secret_offer_ids`, `cover_offer_id`; the
+secret pick is minted a Secret, the cover a held `CharacterDistinction.is_cover` row that grants
+nothing and that a stranger's sheet lists in the secret's place); a figure's name on a person
+card (`Distinction.asks_figure_name`, the paste's `figure`; the name in the pick's notes and on
+a granted NPC asset); the magnitudes and term definitions a card's mechanics line prints
+(`VisibleOffer.effects`, `OffersResponse.terms` from `Trait`/`Aspect`/`ModifierTarget.description`);
+the first name asked on the Origin stage. Unremarkable is content: a no-cost card attached to
+each one-of beat.
+
 ## Built (2026-11-01, #4870: kin-row states; slice 8 of #4813)
 
 A fate on each named parent (alive, dead, missing; `ParentFate` on the invented parents),

@@ -70770,6 +70770,24 @@ components:
       - available_at
       - offer
       - persona
+    OfferEffectTerm:
+      type: object
+      description: A ``world.character_creation.types.OfferEffectTerm`` (#4872).
+      properties:
+        target:
+          type: string
+        label:
+          type: string
+        value:
+          type: integer
+          nullable: true
+        immune:
+          type: boolean
+      required:
+      - immune
+      - label
+      - target
+      - value
     OfferPrice:
       type: object
       description: What accepting an Academy offer costs (#4457); ``display`` is the
@@ -70936,6 +70954,20 @@ components:
         * `accepted` - Accepted
         * `declined` - Declined
         * `expired` - Expired
+    OfferTerm:
+      type: object
+      description: A ``world.character_creation.types.OfferTerm`` (#4872).
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        definition:
+          type: string
+      required:
+      - definition
+      - label
+      - name
     OffersResponse:
       type: object
       description: The ``offers``/``closed`` payload the offers action returns (#3675).
@@ -70948,9 +70980,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ClosedDistinction'
+        terms:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferTerm'
       required:
       - closed
       - offers
+      - terms
     OldLevelEnum:
       enum:
       - starting
@@ -98799,15 +98836,26 @@ components:
           type: boolean
         cg_max_rank:
           type: integer
+        group:
+          type: string
+        asks_figure_name:
+          type: boolean
+        effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferEffectTerm'
       required:
       - arrives_as
+      - asks_figure_name
       - cg_max_rank
       - chapter
       - cost_per_rank
       - distinction_id
       - distinction_name
       - effect_line
+      - effects
       - first_look
+      - group
       - held
       - is_locked
       - lock_reason

@@ -54,6 +54,9 @@ const silverTongue: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 const magicalScar: VisibleOffer = {
@@ -77,6 +80,9 @@ const magicalScar: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 const highborn: VisibleOffer = {
@@ -100,6 +106,9 @@ const highborn: VisibleOffer = {
   opens_feature: false,
   requires_feature_opened: false,
   cg_max_rank: 0,
+  group: '',
+  asks_figure_name: false,
+  effects: [],
 };
 
 /** A CHOICE entry from a different chapter's offer, to prove a toggle never drops it. */
@@ -133,6 +142,7 @@ beforeEach(() => {
         opener_ids: [],
       },
     ],
+    terms: [],
   };
   draftDistinctions = [otherChapterEntry];
 });
@@ -397,6 +407,9 @@ describe('ChapterOffers', () => {
       opens_feature: false,
       requires_feature_opened: false,
       cg_max_rank: 0,
+      group: '',
+      asks_figure_name: false,
+      effects: [],
     };
     offersResponse = { ...offersResponse, offers: [...offersResponse.offers, refundRanked] };
     draftDistinctions = [
@@ -557,7 +570,7 @@ describe('ChapterOffers', () => {
   });
 
   it('bundled rows alone (no offers, no closed) still render the block', () => {
-    offersResponse = { offers: [], closed: [] };
+    offersResponse = { offers: [], closed: [], terms: [] };
     renderWithCharacterCreationProviders(
       <ChapterOffers
         draft={createMockDraft()}
@@ -596,7 +609,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     }));
 
   it('a block of five or more shows the pinned lines at rest and folds the rest', () => {
-    offersResponse = { offers: many(6, [203, 205]), closed: [] };
+    offersResponse = { offers: many(6, [203, 205]), closed: [], terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -611,7 +624,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('with nothing pinned the first three stand in for the first look', () => {
-    offersResponse = { offers: many(7), closed: [] };
+    offersResponse = { offers: many(7), closed: [], terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordSeeMore="{count} further" />
     );
@@ -622,7 +635,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('a block under five never folds', () => {
-    offersResponse = { offers: many(4), closed: [] };
+    offersResponse = { offers: many(4), closed: [], terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -631,7 +644,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('firstLook={false} shows everything at rest', () => {
-    offersResponse = { offers: many(6, [200]), closed: [] };
+    offersResponse = { offers: many(6, [200]), closed: [], terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" firstLook={false} />
     );
@@ -644,6 +657,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     offersResponse = {
       offers: [{ ...magicalScar, held: true }, silverTongue],
       closed: [],
+      terms: [],
     };
     renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordHeld="yours already" />
@@ -661,6 +675,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     offersResponse = {
       offers: [{ ...silverTongue, effect_line: '+Deception; -Willpower' }],
       closed: [],
+      terms: [],
     };
     const { container } = renderWithCharacterCreationProviders(
       <div className="interview">

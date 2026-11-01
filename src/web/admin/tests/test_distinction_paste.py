@@ -156,6 +156,20 @@ class ParseTableTest(PasteTestCase):
         flags = dict(offer.pins.values_list("beginning_id", "preselected"))
         assert flags == {self.beginning.pk: True, underworld.pk: False}
 
+    def test_a_figure_token_marks_a_person_card_the_player_names(self):
+        """#4872: ``figure`` is no modifier; it sets ``asks_figure_name`` on the card."""
+        (row,) = parse_table(
+            "Rival | Personality | 5 | 1 | Someone wants you to lose. | | figure | rules |"
+        )
+        assert row.status == "create", row.notes
+        assert row.asks_figure_name is True
+        assert row.effects == []
+        assert "asks for a figure's name" in row.will_create
+        (mixed,) = parse_table("Patron | Personality | 5 | 1 | | | figure; -Menace | rules |")
+        assert mixed.status == "create", mixed.notes
+        assert mixed.asks_figure_name is True
+        assert len(mixed.effects) == 1
+
     def test_a_degree_opener_must_mark_and_arrives_bundled(self):
         (bad,) = parse_table("Marked | Personality | 0 | 1 | | | | degree:thwarted |")
         assert bad.status == "error"
@@ -359,6 +373,18 @@ class BeatOpenerTest(PasteTestCase):
         assert row.status == "create"
         assert row.offers[0].opener_value == self.before.pk
 
+    def test_a_third_segment_is_the_heading_the_answer_is_listed_under(self):
+        """#4872: ``beat:<stage>/<beat>/<group>`` carries the life page's heading."""
+        row = self._offer("beat:childhood/Defining Moments/Treatment")
+        assert row.status == "create", row.notes
+        (spec,) = row.offers
+        assert spec.opener_value == self.child_moments.pk
+        assert spec.group == "Treatment"
+        assert self._offer("beat:childhood/Defining Moments").offers[0].group == ""
+        long = self._offer("beat:childhood/Defining Moments/" + "x" * 61)
+        assert long.status == "error"
+        assert "too long" in long.notes[0]
+
     def test_a_beat_that_does_not_exist_is_an_error_and_is_not_created(self):
         row = self._offer("beat:childhood/Nowhere")
         assert row.status == "error"
@@ -390,6 +416,21 @@ class BeatOpenerTest(PasteTestCase):
             assert offer.player_line == "A great house."
             assert offer.written_by == self.writer
         assert [o.distinction for o in self.early.answers] == [card]
+
+    def test_create_writes_the_group_and_the_figure_flag(self):
+        """#4872: the heading lands on the offer, the person mark on the card."""
+        self.client.force_login(self.author)
+        text = (
+            "Rival | Personality | 5 | 1 | Someone wants you to lose. | | figure | "
+            "beat:youth/Defining Moments/Rivals |"
+        )
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        card = Distinction.objects.get(slug="rival")
+        assert card.asks_figure_name is True
+        offer = DistinctionOffer.objects.get(distinction=card)
+        assert (offer.beat, offer.group) == (self.youth_moments, "Rivals")
 
 
 class PasteStylingTest(PasteTestCase):
