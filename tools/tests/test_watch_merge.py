@@ -87,6 +87,13 @@ _CHALLENGE = (
 )
 _ANSWER = "<!-- evidence-answer -->\nHere it is."
 _RESOLVED = "<!-- evidence-challenge round=2 verdict=satisfied -->\nThanks."
+# The challenger's real item format: each unproven claim ends `**: OPEN` or `**: BLOCKED`.
+_ALL_BLOCKED = (
+    "<!-- evidence-challenge round=2 verdict=open -->\n"
+    "1. ✅ **Renames the chain**: PROVEN\n"
+    "2. ❌ **Re-arms against the live queue**: BLOCKED\n   Needs the secret.\n"
+)
+_ONE_OPEN = _ALL_BLOCKED + "3. ❌ **Pushes only an identical tree**: OPEN\n   Show it.\n"
 
 
 def _run(
@@ -164,6 +171,16 @@ class WatchMergeTests(unittest.TestCase):
 
     def test_an_open_evidence_challenge_needs_an_answer(self) -> None:
         result = _run([_pr(queue=True, comments=[_CHALLENGE])])
+        self.assertEqual(result.returncode, 10, result.stderr)
+        self.assertIn("evidence challenge open", result.stdout)
+
+    def test_a_challenge_with_only_blocked_items_keeps_waiting(self) -> None:
+        """Nothing to answer: the skill lists BLOCKED items in the PR body instead (#4882)."""
+        result = _run([_pr(armed=True, comments=[_ANSWER, _ALL_BLOCKED]), _pr(state="MERGED")])
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_challenge_with_an_open_item_needs_an_answer(self) -> None:
+        result = _run([_pr(armed=True, comments=[_ANSWER, _ONE_OPEN])])
         self.assertEqual(result.returncode, 10, result.stderr)
         self.assertIn("evidence challenge open", result.stdout)
 

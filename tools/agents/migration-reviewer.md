@@ -81,8 +81,12 @@ body does not say which, that is a finding. Play-state tables are exempt;
 `RenameField` is not data loss.
 
 **6. A `max_migration.txt` collision.** One sentinel repo-wide since #2906, so any
-two migration-bearing PRs collide. Fix is `arx manage rebase_migration arxii`,
-never hand-renumbering.
+two migration-bearing PRs collide. CI renumbers a PR whose only conflict is the
+sentinel and whose migrations are one linear chain (#4879,
+`tools/auto_rebase_migration.py`). Anything it refuses is fixed with
+`arx manage rebase_migration arxii`, never by hand-renumbering. A migration whose name
+is pinned in code outside its own file (a test's `migrate_to`) blocks the automatic
+fix, so flag it.
 
 **7. Old code against new schema.** Deploy migrates before it swaps the release, so
 a dropped or narrowed column breaks the still-running old code. Flag anything the
