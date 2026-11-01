@@ -99,23 +99,24 @@ class DerivedAmountMixin(models.Model):
             chosen = [name for name in allowed if getattr(self, f"{name}_id") is not None]
             if len(chosen) != 1:
                 errors["amount_thread_trait"] = "Name one trait or one facet whose thread is read."
-        if (
-            self.amount_input == AmountInput.CHECK_RANK
-            and target is not None
-            and (target.category.name == STAT_CATEGORY_NAME or target.target_trait_id is not None)
-        ):
-            errors["amount_input"] = (
-                "A stat or skill cannot take a check rank input: the check reads the stat."
-            )
-        if (
-            self.amount_input == AmountInput.TARGET_SOAK
-            and target is not None
-            and target.effect_kind != EffectKind.DAMAGE
-        ):
-            errors["amount_input"] = "Only a damage modifier can read the target's soak."
+        target_refusal = self._target_refusal(target)
+        if target_refusal:
+            errors["amount_input"] = target_refusal
         if not self.has_amount_input and self.amount_cap is not None:
             errors["amount_cap"] = "A cap needs an input."
         return errors
+
+    def _target_refusal(self, target) -> str:
+        """Why the chosen input cannot feed ``target``, or "" when it can (or no target)."""
+        if target is None:
+            return ""
+        if self.amount_input == AmountInput.CHECK_RANK and (
+            target.category.name == STAT_CATEGORY_NAME or target.target_trait_id is not None
+        ):
+            return "A stat or skill cannot take a check rank input: the check reads the stat."
+        if self.amount_input == AmountInput.TARGET_SOAK and target.effect_kind != EffectKind.DAMAGE:
+            return "Only a damage modifier can read the target's soak."
+        return ""
 
     def raise_derived_amount_errors(self, target) -> None:
         errors = self.clean_derived_amount(target)
