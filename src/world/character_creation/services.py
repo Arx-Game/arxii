@@ -31,9 +31,12 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     KIN_ROWS_KEY,
+    LINE_PARENT_FATE_KEY,
+    OTHER_PARENT_FATE_KEY,
     STAT_DISPLAY_DIVISOR,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     ApplicationStatus,
+    BetrothedFate,
     ChildFate,
     CommentType,
     FamilyPath,
@@ -42,9 +45,11 @@ from world.character_creation.constants import (
     LifeStage,
     OriginStoryState,
     Parentage,
+    ParentFate,
     QuestionKind,
     SpouseFate,
     StartingAreaAccessLevel,
+    TwinFate,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -1096,10 +1101,12 @@ def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Seat the draft's kin rows in the kinship graph (#4395).
 
-    A twin is a node sharing every parent edge the new PC has (and its family); a
-    spouse is a wedlock union, ended by death or divorce, the spouse marked missing
-    when fled; a child is a parentage edge from the PC, raised in the PC's family,
-    fostered away into none, lost when dead. Called after ``_bind_kinship_node`` so
+    A twin is a node sharing every parent edge the new PC has (and its family), dead
+    when its fate says so (#4870); a spouse is a wedlock union, ended by death or
+    divorce, separated with the union standing, the spouse marked missing when fled; a
+    betrothed is a union of the betrothal kind (#4870), ended when broken off; a child
+    is a parentage edge from the PC, raised in the PC's family, fostered away into none,
+    lost when dead. Called after ``_bind_kinship_node`` so
     the PC's node and parents exist. Best-effort like the bind: a kinship refusal
     (no law of marriage seeded) logs and skips that row.
     """
@@ -1116,6 +1123,7 @@ def _bind_kin_rows(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         KinRowKind.TWIN: _seat_twin,
         KinRowKind.SPOUSE: _seat_spouse,
         KinRowKind.CHILD: _seat_child,
+        KinRowKind.BETROTHED: _seat_betrothed,
     }
     for row in rows:
         seat_row = seat.get(row.get("kind"))
@@ -1136,6 +1144,7 @@ def _seat_twin(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
         family=node.family,
         gender=_resolve_draft_gender(row.get("gender_id")),
         age=draft.age,
+        is_deceased=row.get("fate") == TwinFate.DEAD,
         created_by=draft.account,
     )
     for edge in ParentageEdge.objects.filter(child=node):
@@ -1148,6 +1157,7 @@ def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
         create_person,
         end_union,
         record_union,
+        separate_union,
         wedlock_union_kind,
     )
 
@@ -1161,9 +1171,34 @@ def _seat_spouse(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
     union = record_union(kind=wedlock_union_kind(), members=[node, spouse])
     if fate in (SpouseFate.DEAD, SpouseFate.DIVORCED):
         end_union(union)
-    elif fate == SpouseFate.FLED:
-        spouse.is_missing = True
-        spouse.save(update_fields=["is_missing"])
+    elif fate == SpouseFate.SEPARATED:
+        separate_union(union)
+    _mark_missing(spouse, fate == SpouseFate.FLED)
+
+
+def _seat_betrothed(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
+    """A betrothed is a union of the betrothal kind (#4870): the promise stands, the person
+    is dead or missing, or the match was broken off (the union ended). Without a betrothal
+    kind authored, ``betrothal_union_kind`` refuses and the caller logs and skips."""
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        betrothal_union_kind,
+        create_person,
+        end_union,
+        record_union,
+    )
+
+    fate = row.get("fate", "")
+    kind = betrothal_union_kind()
+    betrothed = create_person(
+        name=str(row.get("name", "")).strip(),
+        gender=_resolve_draft_gender(row.get("gender_id")),
+        is_deceased=fate == BetrothedFate.DEAD,
+        created_by=draft.account,
+    )
+    union = record_union(kind=kind, members=[node, betrothed])
+    if fate in (BetrothedFate.BROKEN, BetrothedFate.DEAD):
+        end_union(union)
+    _mark_missing(betrothed, fate == BetrothedFate.MISSING)
 
 
 def _seat_child(draft: CharacterDraft, node: Kinsperson, row: dict) -> None:
@@ -1243,14 +1278,19 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
     same_gender = line_gender is not None and line_gender == other_gender
     kind = ParentageKind.TREE_OF_SOULS if same_gender else ParentageKind.BIOLOGICAL
 
+    # A fate on each named parent (#4870): dead or missing, else alive.
+    line_fate = draft.draft_data.get(LINE_PARENT_FATE_KEY) or ParentFate.ALIVE
+    other_fate = draft.draft_data.get(OTHER_PARENT_FATE_KEY) or ParentFate.ALIVE
     line_parent = None
     if line_name:
         line_parent = create_person(
             name=line_name,
             family=draft.family,
             gender=line_gender,
+            is_deceased=line_fate == ParentFate.DEAD,
             created_by=draft.account,
         )
+        _mark_missing(line_parent, line_fate == ParentFate.MISSING)
         line_edge = record_parentage(child=child_node, parent=line_parent, kind=kind)
         if same_gender:
             line_edge.is_ritual_invoker = True
@@ -1259,12 +1299,21 @@ def _bind_invented_parents(draft: CharacterDraft, child_node: Kinsperson) -> Non
         other_parent = create_person(
             name=other_name,
             gender=other_gender,
+            is_deceased=other_fate == ParentFate.DEAD,
             created_by=draft.account,
         )
+        _mark_missing(other_parent, other_fate == ParentFate.MISSING)
         if draft.second_parent_species is not None:
             other_parent.species = draft.second_parent_species
             other_parent.save(update_fields=["species"])
         record_parentage(child=child_node, parent=other_parent, kind=kind)
+
+
+def _mark_missing(person: Kinsperson, missing: bool) -> None:
+    """Set ``is_missing`` on a freshly made node when its fate says so (#4870)."""
+    if missing:
+        person.is_missing = True
+        person.save(update_fields=["is_missing"])
 
 
 def _pin_heredity_back_inference(draft: CharacterDraft, child_node: Kinsperson) -> None:

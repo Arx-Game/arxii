@@ -176,6 +176,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantroletechniquespecialty",
         # #4759: a vow's focus pick catalog and its limits, and combat styles.
         "covenants.combatstyle",
+        # #4884: the weapon and armor kinds a style fights with.
+        "covenants.combatstylegear",
         "covenants.vowfocuspick",
         "covenants.vowfocuspicklimit",
         "covenants.geararchetypecompatibility",
@@ -231,6 +233,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.effecttype",
         "magic.facet",
         "magic.facetalias",
+        "magic.faceteffectbonus",  # a facet's bonus to a maneuver effect (#4815)
         "magic.gift",
         "magic.giftunlock",
         "magic.glimpsetag",

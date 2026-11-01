@@ -1058,6 +1058,91 @@ def _probe_path_technique_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_combat_style_skills() -> ProbeResult:
+    """Every `CombatStyle` names its own skill (#4884).
+
+    Consumer: `world/covenants/style_fit.py` `style_fit_for_attack()` and
+    `style_fit_for_defense()`. A style with no skill, or an inactive one, adds nothing
+    to a Strike, a technique's hit roll or the defense roll.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.filter(Q(skill__isnull=True) | Q(skill__is_active=False))
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} combat style(s) have no skill: their rolls add none."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_combat_style_hit_stats() -> ProbeResult:
+    """Every `CombatStyle` names the stat a Strike hits with (#4884).
+
+    Consumer: `world/combat/services/strike.py` `_roll_hit()`. A style with no hit stat
+    leaves its Strikes on the weapon's own stat.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.filter(hit_stat__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} combat style(s) have no hit stat: a Strike uses the weapon's."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_combat_style_weapon_kinds() -> ProbeResult:
+    """Every `CombatStyle` lists at least one weapon kind (#4884).
+
+    Consumer: `world/covenants/style_fit.py` `style_fit_for_attack()`. A style with no
+    weapon kind lapses on every attack, so its skill never counts on a Strike or a
+    technique's hit roll.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+    from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+    missing = tuple(
+        CombatStyle.objects.exclude(gear__gear_archetype__in=WEAPON_ARCHETYPES)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} combat style(s) list no weapon kind: their skill never counts on "
+        "an attack."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_traditions_teach_a_style() -> ProbeResult:
+    """Every active `Tradition` teaches at least one `CombatStyle` (#4884).
+
+    Consumer: `CombatStyle.taught_by`, read by the creation style step (#4844 slice 5).
+    A Tradition that teaches no style gives its students no style to learn.
+    """
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    missing = tuple(
+        Tradition.objects.filter(is_active=True, combat_styles__isnull=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} active Tradition(s) teach no combat style."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_minor_gift_technique_skills() -> ProbeResult:
     """Every Minor `Gift` names the skill its techniques add (#4450).
 
@@ -1624,6 +1709,80 @@ def _probe_berserk_condition() -> ProbeResult:
         None if config is None else config.berserk_condition_id,
         config_label="Fury configuration",
         field_label="Berserk condition",
+    )
+
+
+def _probe_berserk_compulsion() -> ProbeResult:
+    """The designated Berserk template carries a Compulsion (#4802)."""
+    from world.conditions.models import Compulsion  # noqa: PLC0415
+    from world.magic.services.fury import get_berserk_template  # noqa: PLC0415
+
+    berserk = get_berserk_template()
+    if berserk is None:
+        return ProbeResult(
+            present=False,
+            detail="Berserk cannot be found, so it cannot carry a compulsion.",
+        )
+    return ProbeResult(present=Compulsion.objects.filter(condition=berserk).exists())
+
+
+def _probe_moon_control_loss_trigger() -> ProbeResult:
+    """A control-loss trigger fires on the moon's pull, and every lycan carries it (#4802).
+
+    The trigger hangs on a vulnerability condition. A species grant that carries both
+    that condition (``drawback_condition``) and a drawback distinction stamps both at CG,
+    so a character holding the distinction without an instance of the condition is a
+    lycan the moon never takes (a character made before the condition existed, or an
+    authored condition the content migration put no instances on). Those characters are
+    listed; the probe reports, it changes nothing. A suppressed or resolved instance does
+    not count as carrying the condition.
+    """
+    from django.db.models import Exists, OuterRef, Q  # noqa: PLC0415
+
+    from world.conditions.constants import ControlLossFiresOn  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance, ControlLossTrigger  # noqa: PLC0415
+    from world.conditions.services import _not_suppressed_q  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+
+    vulnerabilities = set(
+        ControlLossTrigger.objects.filter(fires_on=ControlLossFiresOn.MOON_PULL).values_list(
+            "vulnerability_id", flat=True
+        )
+    )
+    if not vulnerabilities:
+        return ProbeResult(present=False)
+    grants = SpeciesGiftGrant.objects.filter(
+        drawback_condition_id__in=vulnerabilities, drawback_distinction__isnull=False
+    ).values_list("drawback_distinction_id", "drawback_condition_id")
+    uncarried = Q(pk__in=[])
+    for distinction_id, condition_id in grants:
+        # Only a live carrier counts: not suppressed (the active-condition filter the
+        # trigger engine reads) and not resolved. ``CharacterDistinction.character`` is a
+        # CharacterSheet, and a sheet's pk IS its character's ObjectDB pk (the sheet is a
+        # primary-key one-to-one onto ObjectDB), so the sheet id matches the instance's
+        # ``target_id`` with no join.
+        carries = ConditionInstance.objects.filter(
+            _not_suppressed_q(),
+            condition_id=condition_id,
+            target_id=OuterRef("character_id"),
+            resolved_at__isnull=True,
+        )
+        uncarried |= Q(distinction_id=distinction_id) & ~Exists(carries)
+    missing = set(
+        CharacterDistinction.objects.filter(uncarried).values_list(
+            "character__character__db_key", flat=True
+        )
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        missing=tuple(sorted(missing)),
+        detail=(
+            "These characters hold the moon drawback distinction but not the condition the "
+            "moon trigger hangs on, so the moon never takes them. Give each the condition."
+        ),
     )
 
 
@@ -2364,6 +2523,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.combat.constants import (  # noqa: PLC0415
         CONCENTRATION_CHECK_TYPE_NAME,
         PENETRATION_CHECK_TYPE_NAME,
+        STRIKE_CHECK_TYPE_NAMES,
     )
     from world.combat.defend_content import SHIELDED_CONDITION_NAME  # noqa: PLC0415
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
@@ -2690,7 +2850,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/fury.py get_berserk_template(); "
-                "world/species/moon_sensitivity.py; world/combat/berserk_compulsion.py"
+                "world/species/moon_sensitivity.py; world/combat/compulsion.py"
             ),
             consequence=(
                 "Berserk cannot be found: choosing a Berserk Fury tier or losing control to "
@@ -2699,6 +2859,34 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_berserk_condition),
             admin_model="FuryConfig",
+        ),
+        ContentDependency(
+            key="berserk-compulsion",
+            label="Berserk has a compulsion",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/compulsion.py; world/conditions/models.py Compulsion",
+            consequence=(
+                "A raging character is not compelled to attack: Berserk takes no action "
+                "from them and refuses nothing."
+            ),
+            probe=CustomProbe(fn=_probe_berserk_compulsion),
+            admin_model="Compulsion",
+        ),
+        ContentDependency(
+            key="moon-control-loss-trigger",
+            label="A moon's-pull control-loss trigger exists and every lycan carries it",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/species/moon_sensitivity.py; world/conditions/models.py ControlLossTrigger"
+            ),
+            consequence=(
+                "The moon never takes anyone (no trigger), or never takes the lycans listed "
+                "(they hold the drawback distinction but not the condition the trigger "
+                "hangs on): under a full moon they roll no control check and are never "
+                "forced into the battle form."
+            ),
+            probe=CustomProbe(fn=_probe_moon_control_loss_trigger),
+            admin_model="ControlLossTrigger",
         ),
         ContentDependency(
             key="berserk-disengage-penalty",
@@ -2806,6 +2994,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "CheckType.DoesNotExist instead of rolling the check."
             ),
             probe=NamedRowsProbe(label="CheckType", names=(PENETRATION_CHECK_TYPE_NAME,)),
+        ),
+        ContentDependency(
+            key="strike-check-types",
+            label="Strike skill check types",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services/declarations/strike.py strike_check_type()",
+            consequence=(
+                "A Strike with a weapon of that kind (or bare hands, for Unarmed Attack) "
+                "is refused: the strike skill it rolls has no check type."
+            ),
+            probe=NamedRowsProbe(label="CheckType", names=STRIKE_CHECK_TYPE_NAMES),
         ),
         ContentDependency(
             key="concentration-check-type",
@@ -4640,6 +4839,48 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "would tune has no authored row behind it."
             ),
             probe=AnyRowProbe(label="DreamPerilConfig"),
+        ),
+        ContentDependency(
+            key="combat-style-skills",
+            label="Skill on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/style_fit.py style_fit_for_attack()",
+            consequence=(
+                "A character with that style adds no style skill to a Strike, a technique's "
+                "hit roll or their defense roll."
+            ),
+            probe=CustomProbe(fn=_probe_combat_style_skills),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="combat-style-hit-stats",
+            label="Hit stat on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/services/strike.py _roll_hit()",
+            consequence="A Strike by a character with that style hits with the weapon's stat.",
+            probe=CustomProbe(fn=_probe_combat_style_hit_stats),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="combat-style-weapon-kinds",
+            label="Weapon kinds on each combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/style_fit.py style_fit_for_attack()",
+            consequence=(
+                "Every attack by a character with that style lapses the style, so its skill "
+                "never counts on a Strike or a technique's hit roll."
+            ),
+            probe=CustomProbe(fn=_probe_combat_style_weapon_kinds),
+            admin_model="CombatStyle",
+        ),
+        ContentDependency(
+            key="traditions-teach-a-combat-style",
+            label="Each Tradition teaches a combat style",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/models.py CombatStyle.taught_by",
+            consequence="A student of that Tradition has no combat style to learn.",
+            probe=CustomProbe(fn=_probe_traditions_teach_a_style),
+            admin_model="Tradition",
         ),
         ContentDependency(
             key="gear-archetype-compatibility",

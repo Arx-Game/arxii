@@ -12,6 +12,7 @@ from world.combat.services.declarations.flee import _resolve_flee
 from world.combat.services.declarations.joust import _resolve_joust
 from world.combat.services.declarations.parley import _resolve_parley
 from world.combat.services.declarations.rally import _resolve_rally
+from world.combat.services.declarations.strike import _resolve_strike
 from world.combat.services.declarations.taunt import _resolve_taunt
 from world.combat.services.declarations.use_item import _resolve_use_item
 from world.combat.types import ActionOutcome
@@ -41,4 +42,7 @@ _STANDALONE_MANEUVER_RESOLVERS: dict[
     # The waiting strike (#4608) fires from fire_waiting_strikes when an enemy
     # arrives in reach or attacks; its own slot is a no-op.
     CombatManeuver.AWAIT_OPENING: _resolve_await_opening,
+    # The basic Strike (#4858): a hit roll and a damage roll with a chosen weapon or bare
+    # hands, no technique. Its attack still draws waiting strikes (_pc_attack_defenders).
+    CombatManeuver.STRIKE: _resolve_strike,
 }

@@ -54,7 +54,7 @@ from world.covenants.perks.constants import (
     SituationOriginSide,
 )
 from world.covenants.perks.context import SituationParams
-from world.items.constants import GearArchetype
+from world.items.constants import ARMOR_ARCHETYPES, WEAPON_ARCHETYPES, GearArchetype
 from world.magic.constants import TechniqueFunction
 from world.magic.models.techniques import (
     MEND_CAP_FRACTION_HELP,
@@ -65,7 +65,13 @@ from world.magic.models.techniques import (
     ConditionTargetKind,
     validate_inert_removal_knobs,
 )
+from world.magic.skill_choices import (
+    MAGIC_SKILL_CHOICES,
+    MAGIC_SKILL_ERROR_MESSAGES,
+    MAGIC_SKILL_HELP,
+)
 from world.magic.specialization.models import AbstractSpecializedVariant
+from world.traits.models import TraitType
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
 if TYPE_CHECKING:
@@ -1552,6 +1558,47 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "of it; an evasion style usually counts less."
         ),
     )
+    skill = models.OneToOneField(
+        "arxii.Skill",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="combat_style",
+        limit_choices_to=MAGIC_SKILL_CHOICES,
+        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
+        help_text=(
+            "The style's own skill, added to Strike, technique hit and defense rolls while "
+            f"the character fights this style's way. One style per skill. {MAGIC_SKILL_HELP}"
+        ),
+    )
+    taught_by = models.ManyToManyField(
+        "arxii.Tradition",
+        blank=True,
+        related_name="combat_styles",
+        help_text="The Traditions that teach this style.",
+    )
+    hit_stat = models.ForeignKey(
+        "arxii.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        limit_choices_to={"trait_type": TraitType.STAT},
+        help_text=(
+            "The stat a Strike hits with, even while the style's bonus is off. Blank: the "
+            "weapon's stat."
+        ),
+    )
+    compatible_roles = models.ManyToManyField(
+        COVENANT_ROLE_MODEL,
+        blank=True,
+        related_name="combat_styles",
+        verbose_name="Works with vows",
+        help_text=(
+            "The vows this style can be used with. A vow not listed turns the style's "
+            "benefits off while it is active."
+        ),
+    )
 
     objects = CombatStyleManager()
 
@@ -1563,6 +1610,59 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_defense_style_display()})"
+
+
+#: The kinds a combat style can fight with: weapons and armor, never jewelry, clothing or
+#: other gear (#4884). In ``GearArchetype`` order.
+COMBAT_STYLE_GEAR_CHOICES = [
+    (value, label)
+    for value, label in GearArchetype.choices
+    if value in WEAPON_ARCHETYPES | ARMOR_ARCHETYPES
+]
+
+
+class CombatStyleGearManager(NaturalKeyManager):
+    """Manager for CombatStyleGear with natural key support."""
+
+
+class CombatStyleGear(NaturalKeyMixin, SharedMemoryModel):
+    """One weapon or armor kind a combat style fights with (#4884).
+
+    Existence-only, the same shape as ``GearArchetypeCompatibility``. The style's
+    weapon kinds (``WEAPON_ARCHETYPES``) are its attack profile and its armor kinds
+    (``ARMOR_ARCHETYPES``) its defense profile: attacking with a weapon kind not
+    listed, or wearing an armor kind not listed, lapses the style skill
+    (``world.covenants.style_fit``).
+    """
+
+    style = models.ForeignKey(
+        "arxii.CombatStyle",
+        on_delete=models.CASCADE,
+        related_name="gear",
+    )
+    gear_archetype = models.CharField(
+        max_length=20,
+        choices=COMBAT_STYLE_GEAR_CHOICES,
+        help_text="A weapon or armor kind this style fights with. Unarmed is fists and wraps.",
+    )
+
+    objects = CombatStyleGearManager()
+
+    class Meta:
+        ordering = ["style", "gear_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["style", "gear_archetype"],
+                name="covenants_unique_style_gear_archetype",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["style", "gear_archetype"]
+        dependencies = ["arxii.CombatStyle"]
+
+    def __str__(self) -> str:
+        return f"{self.style.name} fights with {self.get_gear_archetype_display()}"
 
 
 class CovenantRoleGiftGrantManager(NaturalKeyManager):

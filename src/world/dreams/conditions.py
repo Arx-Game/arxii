@@ -3,6 +3,8 @@
 Seeded idempotently by ``ensure_dream_conditions()``.
 """
 
+from decimal import Decimal
+
 from world.conditions.constants import DurationType
 from world.conditions.models import (
     CapabilityType,
@@ -230,7 +232,7 @@ def _ensure_dream_peril_config() -> None:
     # populates the STAT Trait fixtures.
     stability = ensure_stat_trait(PrimaryStat.STABILITY.value)
     CheckTypeTrait.objects.get_or_create(
-        check_type=check_type, trait=stability, defaults={"weight": 1.0}
+        check_type=check_type, trait=stability, defaults={"weight": Decimal("1.0")}
     )
 
     config.resist_check_type = check_type

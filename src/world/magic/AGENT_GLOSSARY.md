@@ -223,6 +223,13 @@ the pickers' search and by `POST /api/magic/facets/`, never shown to a player. T
 itself is `merge_facets` (`services/facets.py`); the spelling rule both share is `facet_key`.
 _Avoid_: synonym (an alias is a spelling of the same facet, not a related one); tag.
 
+**Facet effect bonus**:
+A facet's always-on bonus to one maneuver effect (`FacetEffectBonus`, #4815): "Wolf: +2 Charge:
+damage". The facet names the effect, whatever its thread's resonance, and it counts while the
+character wears an item carrying the facet and has a facet thread on it.
+_Avoid_: facet passive (that is the resonance-keyed tier-0 `ThreadPullEffect` bonus, a different
+row); facet buff.
+
 **Mantle**:
 A specific, storied, attunable ItemInstance in the world (a particular sword, amulet, banner) with authored progression levels. A character attunes by weaving a MANTLE-kind Thread anchored on the Mantle, gated on having cleared at least its first level; the Thread's level cannot exceed the character's max-cleared mantle level.
 

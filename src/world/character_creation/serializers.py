@@ -2027,6 +2027,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_stage_descriptions(value)
         self._validate_recent_history(value)
         self._validate_kin_rows(value)
+        self._validate_parent_fates(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
         self._validate_new_family_name(value)
@@ -2400,14 +2401,17 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def _validate_kin_rows(self, data: dict) -> None:
         """``kin_rows`` is the list of people seated beside the parents (#4395).
 
-        Each row is ``{kind, name, gender_id, fate}``: a twin (one at most, no fate), a
-        spouse (alive, dead, divorced, fled) or a child (raised, fostered away, lost).
-        The whole list is replaced on each PATCH.
+        Each row is ``{kind, name, gender_id, fate}``: a twin (one at most; alive or dead,
+        or no fate, #4870), a spouse (alive, dead, divorced, separated, missing), a
+        betrothed (promised, dead, missing, broken off; #4870) or a child (raised, fostered
+        away, lost). The whole list is replaced on each PATCH.
         """
         from world.character_creation.constants import (  # noqa: PLC0415
+            BetrothedFate,
             ChildFate,
             KinRowKind,
             SpouseFate,
+            TwinFate,
         )
 
         rows = data.get(KIN_ROWS_KEY)
@@ -2417,9 +2421,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = f"{KIN_ROWS_KEY} is a list of at most {KIN_ROWS_MAX} people"
             raise serializers.ValidationError({KIN_ROWS_KEY: msg})
         fates = {
-            KinRowKind.TWIN: {""},
+            KinRowKind.TWIN: {"", *TwinFate.values},
             KinRowKind.SPOUSE: set(SpouseFate.values),
             KinRowKind.CHILD: set(ChildFate.values),
+            KinRowKind.BETROTHED: set(BetrothedFate.values),
         }
         twins = 0
         for row in rows:
@@ -2429,10 +2434,26 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = "one twin at most"
             raise serializers.ValidationError({KIN_ROWS_KEY: msg})
 
+    @staticmethod
+    def _validate_parent_fates(data: dict) -> None:
+        """The named parents' fates (#4870): blank, alive, dead or missing, each."""
+        from world.character_creation.constants import (  # noqa: PLC0415
+            LINE_PARENT_FATE_KEY,
+            OTHER_PARENT_FATE_KEY,
+            ParentFate,
+        )
+
+        for key in (LINE_PARENT_FATE_KEY, OTHER_PARENT_FATE_KEY):
+            fate = data.get(key)
+            if fate is None or fate == "":
+                continue
+            if fate not in ParentFate.values:
+                raise serializers.ValidationError({key: "A parent is alive, dead or missing."})
+
     def _validate_kin_row(self, row: object, fates: dict[str, set[str]]) -> None:
         """Validate one person's shape and the fates allowed for their kin role."""
         if not isinstance(row, dict) or row.get("kind") not in fates:
-            msg = "each person is a twin, a spouse or a child"
+            msg = "each person is a twin, a spouse, a betrothed or a child"
             raise serializers.ValidationError({KIN_ROWS_KEY: msg})
         name = row.get("name", "")
         if not isinstance(name, str) or len(name) > KIN_ROW_NAME_MAX_LENGTH:

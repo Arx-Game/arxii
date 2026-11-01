@@ -1801,10 +1801,12 @@ def _seed_moon_content() -> None:
     from world.magic.models.gifts import Gift  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
-    from world.species.moon_constants import (  # noqa: PLC0415
-        MOON_BOUND_SLUG,
-        MOON_BOUND_TAG,
-        WOLFS_FURY_GIFT_NAME,
+    from world.species.moon_provisioning import (  # noqa: PLC0415
+        SEED_LYCAN_GIFT_NAME,
+        SEED_MOON_BOUND_SLUG,
+        SEED_MOON_BOUND_TAG,
+        ensure_lycan_blood_condition,
+        ensure_moon_control_loss_trigger,
     )
 
     category = authored_or_sample(
@@ -1817,7 +1819,7 @@ def _seed_moon_content() -> None:
     )
     if category is None:
         return
-    tag_row = authored_or_sample(DistinctionTag, {"name": "Moon-Bound"}, slug=MOON_BOUND_TAG)
+    tag_row = authored_or_sample(DistinctionTag, {"name": "Moon-Bound"}, slug=SEED_MOON_BOUND_TAG)
     distinction = authored_or_sample(
         Distinction,
         {
@@ -1830,7 +1832,7 @@ def _seed_moon_content() -> None:
             "cost_per_rank": 0,
             "max_rank": 1,
         },
-        slug=MOON_BOUND_SLUG,
+        slug=SEED_MOON_BOUND_SLUG,
     )
     if distinction is not None and tag_row is not None:
         distinction.tags.add(tag_row)
@@ -1846,16 +1848,24 @@ def _seed_moon_content() -> None:
                 "mastery over the moon's pull as it is threaded up."
             ),
         },
-        name=WOLFS_FURY_GIFT_NAME,
+        name=SEED_LYCAN_GIFT_NAME,
     )
     if gift is None:
         return
-    authored_or_sample(
+    grant = authored_or_sample(
         SpeciesGiftGrant,
         {"drawback_distinction": distinction, "cg_point_cost": 0},
         species=lycan,
         gift=gift,
     )
+    if grant is None:
+        return
+    # Lycan blood (#4802): the vulnerability the moon trigger hangs on. It is made only
+    # for a grant with no drawback; the trigger hangs on whatever the grant carries.
+    if grant.drawback_condition_id is None:
+        grant.drawback_condition = ensure_lycan_blood_condition()
+        grant.save(update_fields=["drawback_condition"])
+    ensure_moon_control_loss_trigger()
 
 
 def _seed_cg_explanations() -> None:

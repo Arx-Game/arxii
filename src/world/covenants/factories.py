@@ -24,6 +24,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     CharacterVowFocusPick,
     CombatStyle,
+    CombatStyleGear,
     CourtPact,
     Covenant,
     CovenantLevelBonus,
@@ -1583,3 +1584,14 @@ class CombatStyleFactory(factory_django.DjangoModelFactory):
     description = ""
     defense_style = DefenseStyle.EVASION
     armor_share_tenths = 5
+
+
+class CombatStyleGearFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatStyleGear (#4884): one weapon or armor kind on a style."""
+
+    class Meta:
+        model = CombatStyleGear
+        django_get_or_create = ("style", "gear_archetype")
+
+    style = factory.SubFactory(CombatStyleFactory)
+    gear_archetype = GearArchetype.MELEE_ONE_HAND

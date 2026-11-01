@@ -404,6 +404,7 @@ class StaffSizeDistinctionsAndSurroundings(JourneyCase):
             f"{prefix}-0-target": str(self.target.pk),
             f"{prefix}-0-value_per_rank": "5",
             f"{prefix}-0-modifier_size": str(ModifierSize.PARAMOUNT),
+            f"{prefix}-0-amount_per": "1",  # the form's pre-filled step (#4878)
             f"{prefix}-0-description": "Talks a price down.",
         }
         refused = formset_class(posted, instance=distinction, prefix=prefix)

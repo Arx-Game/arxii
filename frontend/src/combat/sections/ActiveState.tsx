@@ -115,7 +115,7 @@ export function ClashCard({ clash, opponentName }: ClashCardProps) {
           data-testid={`clash-contributors-${clash.id}`}
         >
           {clash.contributors.map((c) => (
-            <li key={c.character_id ?? c.character_name} className="flex justify-between">
+            <li key={c.participant_id ?? c.character_name} className="flex justify-between">
               <span className="truncate">
                 {c.character_name} ({c.action_slot.toLowerCase()})
               </span>

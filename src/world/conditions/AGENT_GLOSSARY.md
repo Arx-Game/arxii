@@ -189,3 +189,29 @@ rename the row freely; unset means the mechanic does nothing and the Required co
 dashboard lists it. Seeds make the row under a `*_SEED_TEMPLATE_NAME` and fill only an unset
 designation. _Avoid_: canonical name, magic name, the "Berserk row" (say the designated
 Berserk condition).
+
+**Vulnerability** (#4802):
+A condition a character carries that control-loss triggers hang off, such as Lycan blood on every
+lycan or a curse. A character without it never rolls its triggers. It is an ordinary
+`ConditionTemplate`, not a new model. _Avoid_: weakness, trigger condition, curse (a curse is one
+kind of vulnerability).
+
+**Control-loss trigger** (`ControlLossTrigger`, #4802):
+An authored row on a vulnerability that rolls a check when something fires it (the moon's pull,
+a wound crossing a health threshold, the condition entering a stage) and applies the
+`ControlLossBand` for the outcome: an engagement shift, a condition such as Berserk, a forced
+form. The moon is one trigger row, never a special case. _Avoid_: moon check, rage trigger,
+loss-of-control event.
+
+**Compulsion** (`Compulsion`, #4802):
+An authored block on a condition in an `alters_behavior` category: what it wants (today,
+attacking an opponent), the roll to go against it, the actions it forbids with each one's extra
+difficulty, and a `CompulsionResistBand` per roll outcome (acts freely, acts strained, the
+compulsion acts). It never refuses an action: anything other than what it wants rolls the
+resist check. NPCs never roll. _Avoid_: lock, forced action, declaration lock, mind control
+(that is the condition, not the compulsion).
+
+**Band** (`ControlLossBand`, `CompulsionResistBand`, #4802):
+One row per check outcome saying what that outcome does. A better outcome may never be worse for
+the character. Same idea as the surge `DegreeBand` in the combat glossary. _Avoid_: tier,
+result table.

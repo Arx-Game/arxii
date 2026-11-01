@@ -52,6 +52,18 @@ describe('ConditionBadge', () => {
     expect(screen.getByText('🩸')).toBeInTheDocument();
   });
 
+  it('shows the name initial, never an empty circle, when no icon is authored', () => {
+    render(
+      <Wrapper>
+        <ConditionBadge condition={makeCondition({ name: 'Berserk', icon: '' })} />
+      </Wrapper>
+    );
+
+    const button = screen.getByRole('button', { name: /Berserk/i });
+    expect(button).toHaveTextContent('B');
+    expect(button.textContent?.trim()).not.toBe('');
+  });
+
   it('exposes an accessible name / tooltip with the condition name', () => {
     render(
       <Wrapper>

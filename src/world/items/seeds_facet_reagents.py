@@ -8,6 +8,7 @@ CraftingRecipeKind (world/items/crafting/cost.py: stage_and_assert_affordable
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.items.models import CraftingMaterialRequirement, ItemTemplate
@@ -22,7 +23,7 @@ def ensure_facet_attach_reagent_requirement(recipe: CraftingRecipe) -> ItemTempl
         name="Enchanter's Binding Thread",
         defaults={
             "description": "A fine thread used to bind a facet's meaning into an item.",
-            "weight": 0.05,
+            "weight": Decimal("0.05"),
             "size": 1,
             "value": 0,
         },

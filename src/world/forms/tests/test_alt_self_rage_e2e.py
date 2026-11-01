@@ -21,6 +21,9 @@ from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.conditions.constants import CompulsionResult
+from world.conditions.factories import CompulsionFactory, CompulsionResistBandFactory
 from world.conditions.services import apply_condition, has_condition
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -33,8 +36,10 @@ from world.magic.factories import (
     BerserkConditionTemplateFactory,
     RestoreToSenseActionTemplateFactory,
 )
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.traits.services import ensure_canonical_check_outcome
 
 
 def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution:
@@ -56,7 +61,7 @@ def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution
 
 @tag("postgres")
 class AltSelfRageEndToEndTests(TestCase):
-    """shift -> rage -> revert blocked -> calm-down -> revert unblocked."""
+    """shift -> rage -> a failed revert roll holds -> calm-down -> revert goes free."""
 
     @classmethod
     def setUpTestData(cls):
@@ -83,7 +88,17 @@ class AltSelfRageEndToEndTests(TestCase):
         cls.alt_self = AlternateSelfFactory(character=cls.sheet, persona=cls.alt_persona)
 
         # REAL Berserk condition + Restore-to-Sense calm-down action.
+        # Only a player character rolls against a compulsion; an NPC changes back freely.
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=cls.sheet), end_date=None
+        )
         cls.berserk = BerserkConditionTemplateFactory()
+        cls.failure = ensure_canonical_check_outcome("Failure")
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=cls.berserk),
+            outcome=cls.failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
         cls.check_cat = CheckCategoryFactory(name="Social")
         cls.check_type = CheckTypeFactory(name="Willpower", category=cls.check_cat)
         RestoreToSenseActionTemplateFactory(check_type=cls.check_type)
@@ -95,7 +110,7 @@ class AltSelfRageEndToEndTests(TestCase):
 
     @patch("actions.effects.conditions.perform_check")
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_revert_blocked_while_raging_unblocked_after_calm_down(
+    def test_a_failed_revert_roll_holds_while_raging_and_calm_down_frees_it(
         self,
         mock_resolve: MagicMock,
         mock_check: MagicMock,
@@ -124,9 +139,11 @@ class AltSelfRageEndToEndTests(TestCase):
         self.assertTrue(has_condition(self.character, self.berserk))
         self.assertFalse(self.character.sheet_data.in_control)
 
-        # 3. Revert is BLOCKED while raging (the headline invariant).
-        revert = RevertFormAction().run(self.character)
-        self.assertFalse(revert.success, "revert_form must be blocked while raging.")
+        # 3. The rage is a compulsion (#4802): changing back is a resist roll, never a
+        # refusal, and a failed roll holds the shape.
+        with force_check_outcome(self.failure):
+            revert = RevertFormAction().run(self.character)
+        self.assertFalse(revert.success, "a failed resist roll must hold the shape.")
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt_self)
 
@@ -148,7 +165,7 @@ class AltSelfRageEndToEndTests(TestCase):
         assert_sheet = self.character.sheet_data
         self.assertTrue(assert_sheet.in_control)
 
-        # 5. Revert now SUCCEEDS (unblocked after the alters_behavior condition cleared).
+        # 5. Revert now goes ahead with no roll: the compulsion went with Berserk.
         revert2 = RevertFormAction().run(self.character)
         self.assertTrue(revert2.success, revert2.message)
 

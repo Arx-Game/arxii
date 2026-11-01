@@ -3,7 +3,7 @@
 from django.db import models
 
 # Re-export from checks app for backwards compatibility
-from world.checks.constants import EffectTarget, EffectType  # noqa: F401
+from world.checks.constants import EffectTarget, EffectType, ModifierLane  # noqa: F401
 
 # ModifierCategory name constants (must match fixture data)
 STAT_CATEGORY_NAME = "stat"
@@ -152,10 +152,11 @@ EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
         "favor_earning",
         # #4783: listing this lets the equipment walk reach a maneuver-effect target:
         # the vow stat scaling part and the crossing-choice conditions of worn facets and
-        # mantles. Distinctions, crafted recipe modifiers and active conditions reach it
-        # without this entry. A facet's own tier-0 FLAT_BONUS pull does not (it needs a
-        # resonance on the target). This set matches categories by name, the existing
-        # practice for it, accepted knowingly here.
+        # mantles, and a worn facet's own FacetEffectBonus rows (#4815). Distinctions,
+        # crafted recipe modifiers and active conditions reach it without this entry. A
+        # facet's tier-0 FLAT_BONUS pull does not (it needs a resonance on the target).
+        # This set matches categories by name, the existing practice for it, accepted
+        # knowingly here.
         "maneuver_effect",
         # Add more as PR3 lands combat stats and ItemCapabilityGrants.
     }
@@ -188,6 +189,26 @@ class ManeuverEffectKey(models.TextChoices):
     )
     RALLY_MORALE = "rally_morale", "Rally: morale"
     RALLY_SURGE_INTENSITY = "rally_surge_intensity", "Rally: surge intensity"
+    # The basic Strike (#4858).
+    STRIKE_BASE_DAMAGE = "strike_base_damage", "Strike: base damage"
+    STRIKE_BARE_HANDS_DAMAGE = "strike_bare_hands_damage", "Strike: bare-hands damage"
+    # A missed attack builds intensity, and intensity adds to hit (#4858).
+    MISS_INTENSITY = "miss_intensity", "Miss: intensity gained"
+    INTENSITY_TO_HIT = "intensity_to_hit", "Intensity: to hit per point"
+
+
+class AmountInput(models.TextChoices):
+    """What a modifier row's amount is derived from (#4878, the owner's shared menu on #4824).
+
+    The row's own amount is the amount per step; the total is that amount times the input
+    divided by the row's "per N" step, held at its cap. Blank means no input: the row keeps
+    its own fixed scaling (rank, severity, size). The target's soak joins in a later slice.
+    """
+
+    NONE = "", "No input"
+    CHARACTER_LEVEL = "character_level", "Character level"
+    THREAD_LEVEL = "thread_level", "Thread level"
+    CHECK_RANK = "check_rank", "Check rank"
 
 
 class EffectKind(models.TextChoices):
@@ -203,6 +224,8 @@ class EffectKind(models.TextChoices):
     PARTIAL_PROTECTION = "partial_protection", "Partial protection"
     MORALE = "morale", "Morale"
     SURGE_INTENSITY = "surge_intensity", "Surge intensity"
+    # Points added to an engagement's intensity (#4858). Surge intensity is a percentage.
+    INTENSITY = "intensity", "Intensity"
     CONDITION_SEVERITY = "condition_severity", "Condition severity"
     CONDITION_DURATION = "condition_duration", "Condition duration"
 
@@ -214,6 +237,14 @@ TECHNIQUE_SCOPE_KINDS: tuple[str, ...] = (
     EffectKind.CONDITION_DURATION,
 )
 
+# The kinds a sized modifier can target, and the lane each is valued in (#4876, the owner's
+# "likely grants only" ruling on #4824). A kind missing here takes flat amounts only.
+EFFECT_KIND_LANE: dict[str, str] = {
+    EffectKind.DAMAGE: ModifierLane.DAMAGE,
+    EffectKind.TO_HIT: ModifierLane.TO_HIT,
+    EffectKind.PARTIAL_PROTECTION: ModifierLane.PARTIAL_PROTECTION,
+}
+
 MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.CHARGE_TO_HIT: EffectKind.TO_HIT,
     ManeuverEffectKey.CHARGE_DAMAGE: EffectKind.DAMAGE,
@@ -223,11 +254,17 @@ MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: EffectKind.PARTIAL_PROTECTION,
     ManeuverEffectKey.RALLY_MORALE: EffectKind.MORALE,
     ManeuverEffectKey.RALLY_SURGE_INTENSITY: EffectKind.SURGE_INTENSITY,
+    ManeuverEffectKey.STRIKE_BASE_DAMAGE: EffectKind.DAMAGE,
+    ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: EffectKind.DAMAGE,
+    ManeuverEffectKey.MISS_INTENSITY: EffectKind.INTENSITY,
+    ManeuverEffectKey.INTENSITY_TO_HIT: EffectKind.TO_HIT,
 }
 
 # Today's number for each effect: what a maneuver gives with no modifier anywhere.
 # Charge hops, Cover per coverer, partial protection and surge intensity are
-# percentages or counts as their kind says; morale is per success level.
+# percentages or counts as their kind says; morale is per success level. A Strike's base
+# damage is the least a landed Strike deals; bare hands are the weakest Unarmed weapon and
+# their own floor. Intensity to hit is check points per point of engagement intensity.
 MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
     ManeuverEffectKey.CHARGE_TO_HIT: 10,
     ManeuverEffectKey.CHARGE_DAMAGE: 5,
@@ -237,4 +274,8 @@ MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
     ManeuverEffectKey.INTERPOSE_PARTIAL_PROTECTION: 50,
     ManeuverEffectKey.RALLY_MORALE: 15,
     ManeuverEffectKey.RALLY_SURGE_INTENSITY: 100,
+    ManeuverEffectKey.STRIKE_BASE_DAMAGE: 3,
+    ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: 2,
+    ManeuverEffectKey.MISS_INTENSITY: 1,
+    ManeuverEffectKey.INTENSITY_TO_HIT: 1,
 }

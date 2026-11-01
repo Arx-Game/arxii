@@ -47,6 +47,7 @@ from world.roster.services.kinship import (
     end_union,
     open_wedlock_union_among,
     record_union,
+    separate_union,
     wedlock_union_kind,
 )
 from world.secrets.models import Secret
@@ -184,6 +185,9 @@ class SpouseForm(ModelForm):
     )
     kind = forms.ModelChoiceField(queryset=UnionKind.objects.all())
     started_at = forms.DateTimeField(required=False)
+    separated_at = forms.DateTimeField(
+        required=False, help_text="Set when they live apart; the marriage stands (#4870)."
+    )
     ended_at = forms.DateTimeField(required=False, help_text="Set to end the marriage.")
     is_public_record = forms.BooleanField(required=False, initial=True)
     is_true = forms.BooleanField(required=False, initial=True)
@@ -204,6 +208,7 @@ class SpouseForm(ModelForm):
             self.initial.update(
                 kind=union.kind_id,
                 started_at=union.started_at,
+                separated_at=union.separated_at,
                 ended_at=union.ended_at,
                 is_public_record=union.is_public_record,
                 is_true=union.is_true,
@@ -284,6 +289,7 @@ class SpouseInline(admin.TabularInline):
         "partner",
         "kind",
         "started_at",
+        "separated_at",
         "ended_at",
         "is_public_record",
         "is_true",
@@ -379,6 +385,8 @@ class KinspersonAdmin(admin.ModelAdmin):
                 is_true=data.get("is_true", False),
                 secret=data.get("secret"),
             )
+            if data.get("separated_at"):
+                separate_union(union, separated_at=data["separated_at"])
             if data.get("ended_at"):
                 end_union(union, ended_at=data["ended_at"])
             formset.new_objects.append(union)
@@ -391,9 +399,24 @@ def _write_union(union: Union, data: dict) -> None:
     union.is_public_record = data.get("is_public_record", False)
     union.is_true = data.get("is_true", False)
     union.secret = data.get("secret")
+    # A separation newly dated goes through ``separate_union``; a cleared one is lifted.
+    separated_at = data.get("separated_at")
+    if union.separated_at is None and separated_at:
+        separate_union(union, separated_at=separated_at)
+    else:
+        union.separated_at = separated_at
     ended_at = data.get("ended_at")
     if union.ended_at is None and ended_at:
-        union.save(update_fields=["kind", "started_at", "is_public_record", "is_true", "secret"])
+        union.save(
+            update_fields=[
+                "kind",
+                "started_at",
+                "separated_at",
+                "is_public_record",
+                "is_true",
+                "secret",
+            ]
+        )
         end_union(union, ended_at=ended_at)
         return
     union.ended_at = ended_at
@@ -749,8 +772,20 @@ class NPCLoanAdmin(admin.ModelAdmin):
 class UnionKindAdmin(admin.ModelAdmin):
     """#3831 - authorable union vocabulary (marriage, consortium, concubinage...)."""
 
-    list_display = ["name", "realm", "confers_wedlock", "stature_share_pct", "max_concurrent"]
-    list_filter = ["confers_wedlock", "contributes_to_origin_house", "requires_landed_title"]
+    list_display = [
+        "name",
+        "realm",
+        "confers_wedlock",
+        "is_betrothal",
+        "stature_share_pct",
+        "max_concurrent",
+    ]
+    list_filter = [
+        "confers_wedlock",
+        "is_betrothal",
+        "contributes_to_origin_house",
+        "requires_landed_title",
+    ]
     search_fields = ["name"]
     list_select_related = ["realm"]
     autocomplete_fields = ["realm"]

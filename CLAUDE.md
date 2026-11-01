@@ -101,8 +101,12 @@ back from the creating command's own stdout.
   re-tests the PR on top of the latest main and merges in order; a human
   approval is the only remaining gate. **Since the single-app collapse
   (#2906), any two migration-bearing PRs always collide** (one number
-  sequence, one `max_migration.txt`) — check main's tip migration BEFORE
-  enqueueing, and fix a collision with `arx manage rebase_migration arxii`
+  sequence, one `max_migration.txt`). CI fixes the routine case: when the PR's only
+  conflict is `max_migration.txt` and its migrations are one linear chain, the
+  `migration-conflict-rebase` workflow renumbers them after main's tip, proves it,
+  pushes and re-arms the queue (#4879, ADR-4879). Pull its commit. When it
+  refuses (its PR comment says why), fix the collision with
+  `arx manage rebase_migration arxii`
   (leave `max_migration.txt`'s conflict markers IN - the tool reads them, and it
   renames YOUR side: it reads `MERGE_HEAD` to tell a merge from a rebase and
   swaps the sides itself, so never swap them by hand; a hand swap double-flips

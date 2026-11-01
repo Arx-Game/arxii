@@ -1,20 +1,21 @@
 /**
- * The people seated beside the parents (#4395): a twin, a spouse, children. Each row
- * is a name, a gender and, for a spouse or a child, a fate; the whole list is sent on
- * every change (`draft_data.kin_rows`), and finalize seats them in the kinship graph.
+ * The people seated beside the parents (#4395): a twin, a spouse, children, and since
+ * #4870 a betrothed. Each row is a name, a gender and a fate for its kind (a twin's may be
+ * left unsaid); the whole list is sent on every change (`draft_data.kin_rows`), and
+ * finalize seats them in the kinship graph.
  */
 
 import { useGenders, useUpdateDraft } from '../../queries';
 import { ChoiceRow } from '../../folio';
 import {
+  BETROTHED_FATES,
   CHILD_FATES,
   SPOUSE_FATES,
+  TWIN_FATES,
   type CGExplanations,
   type CharacterDraft,
-  type ChildFate,
   type KinRow,
   type KinRowKind,
-  type SpouseFate,
 } from '../../types';
 
 interface Props {
@@ -26,12 +27,19 @@ const KIND_LABELS: Record<KinRowKind, string> = {
   twin: 'A twin',
   spouse: 'A spouse',
   child: 'A child',
+  betrothed: 'A betrothed',
+};
+
+/** Each kind's fates and the one a fresh row starts with. */
+const FATES: Record<KinRowKind, { options: { value: string; label: string }[]; fresh: string }> = {
+  twin: { options: TWIN_FATES, fresh: 'alive' },
+  spouse: { options: SPOUSE_FATES, fresh: 'alive' },
+  child: { options: CHILD_FATES, fresh: 'raised' },
+  betrothed: { options: BETROTHED_FATES, fresh: 'promised' },
 };
 
 function freshRow(kind: KinRowKind): KinRow {
-  if (kind === 'spouse') return { kind, name: '', gender_id: null, fate: 'alive' };
-  if (kind === 'child') return { kind, name: '', gender_id: null, fate: 'raised' };
-  return { kind, name: '', gender_id: null, fate: '' };
+  return { kind, name: '', gender_id: null, fate: FATES[kind].fresh as KinRow['fate'] };
 }
 
 export function KinRows({ draft, copy }: Props) {
@@ -76,26 +84,14 @@ export function KinRows({ draft, copy }: Props) {
                   value={row.gender_id}
                   onChange={(id) => patch(index, { gender_id: id })}
                 />
-                {row.kind === 'spouse' && (
-                  <ChoiceRow<SpouseFate>
-                    label={copy?.kin_fate_label ?? 'Fate'}
-                    options={SPOUSE_FATES}
-                    value={(row.fate as SpouseFate) || null}
-                    onChange={(fate) => {
-                      if (fate !== null) patch(index, { fate });
-                    }}
-                  />
-                )}
-                {row.kind === 'child' && (
-                  <ChoiceRow<ChildFate>
-                    label={copy?.kin_fate_label ?? 'Fate'}
-                    options={CHILD_FATES}
-                    value={(row.fate as ChildFate) || null}
-                    onChange={(fate) => {
-                      if (fate !== null) patch(index, { fate });
-                    }}
-                  />
-                )}
+                <ChoiceRow<string>
+                  label={copy?.kin_fate_label ?? 'Fate'}
+                  options={FATES[row.kind].options}
+                  value={row.fate || null}
+                  onChange={(fate) => {
+                    if (fate !== null) patch(index, { fate: fate as KinRow['fate'] });
+                  }}
+                />
               </div>
               <button
                 type="button"
@@ -120,6 +116,9 @@ export function KinRows({ draft, copy }: Props) {
         </button>
         <button type="button" onClick={() => add('child')}>
           {KIND_LABELS.child}
+        </button>
+        <button type="button" onClick={() => add('betrothed')}>
+          {KIND_LABELS.betrothed}
         </button>
       </div>
     </section>

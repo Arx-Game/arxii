@@ -11781,6 +11781,7 @@ paths:
           - robe
           - shield
           - thrown
+          - unarmed
         description: |-
           * `light_armor` - Light Armor
           * `medium_armor` - Medium Armor
@@ -11792,6 +11793,7 @@ paths:
           * `thrown` - Thrown
           * `shield` - Shield
           * `lance` - Lance
+          * `unarmed` - Unarmed
           * `jewelry` - Jewelry
           * `clothing` - Clothing
           * `other` - Other
@@ -15874,8 +15876,7 @@ paths:
   /api/forms/alternate-selves/revert/:
     post:
       operationId: forms_alternate_selves_revert_create
-      description: '#1111 — revert the active alternate self (blocked while not in
-        control).'
+      description: '#1111 — revert the active alternate self (rolls against a compulsion).'
       tags:
       - alternate-selves
       requestBody:
@@ -46031,7 +46032,13 @@ components:
           description: Whether this is the alternate self the character is currently
             wearing.
           readOnly: true
+        compulsion:
+          allOf:
+          - $ref: '#/components/schemas/Compulsion'
+          nullable: true
+          readOnly: true
       required:
+      - compulsion
       - form_name
       - has_combat_profile
       - has_techniques
@@ -46915,10 +46922,9 @@ components:
             Public persona identity only — id/name/thumbnail(s), never account/username.
 
             ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-            ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
-            already ``select_related``'d by the view's Prefetch (world/battles/views.py),
-            so this never issues a query. ``thumbnail_url`` is the legacy URLField,
-            kept alongside for callers still on it.
+            ``get_thumbnail_media_url``: the presented persona's uploaded-portrait ``Media``
+            FK, joined by ``personas_for_sheets``, so this never issues a query.
+            ``thumbnail_url`` is the legacy URLField, kept alongside for callers still on it.
           readOnly: true
         character_sheet_id:
           type: integer
@@ -52190,7 +52196,7 @@ components:
         concrete component instead of {[key: string]: unknown} (#2423). Mirrors
         the frontend ``ClashContributor`` interface (combat/types.ts).
       properties:
-        character_id:
+        participant_id:
           type: integer
           nullable: true
         character_name:
@@ -52204,8 +52210,8 @@ components:
       required:
       - action_slot
       - anima
-      - character_id
       - character_name
+      - participant_id
       - progress_delta
     ClashState:
       type: object
@@ -52966,6 +52972,57 @@ components:
       - label
       - name
       - when
+    Compulsion:
+      type: object
+      description: The viewer's own compulsion and what going against it costs (#4802).
+        Schema-only.
+      properties:
+        condition_name:
+          type: string
+        wants_label:
+          type: string
+        check_name:
+          type: string
+        attack_target_name:
+          type: string
+          nullable: true
+          description: Who the compulsion would strike as things stand; null when
+            nobody.
+        against:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompulsionActionCost'
+      required:
+      - against
+      - attack_target_name
+      - check_name
+      - condition_name
+      - wants_label
+    CompulsionActionCost:
+      type: object
+      description: One action's cost under a compulsion (#4802). Schema-only.
+      properties:
+        action_key:
+          type: string
+          description: A maneuver value, or technique_no_target.
+        label:
+          type: string
+          nullable: true
+          description: The action's display label; null when it has none.
+        difficulty:
+          type: integer
+        forbidden:
+          type: boolean
+        extra_difficulty:
+          type: integer
+          description: What is added to the difficulty because the compulsion forbids
+            the action.
+      required:
+      - action_key
+      - difficulty
+      - extra_difficulty
+      - forbidden
+      - label
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -53565,6 +53622,17 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        roll_breakdown:
+          allOf:
+          - $ref: '#/components/schemas/RollBreakdown'
+          nullable: true
+          readOnly: true
+        combat_round:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The encounter round a combat roll was made in, so the turn
+            panel can show every roll of the last round. Null outside combat.
         created_at:
           type: string
           format: date-time
@@ -53575,12 +53643,14 @@ components:
       - character
       - check_type
       - combat_interaction_id
+      - combat_round
       - created_at
       - id
       - modifier_total
       - modifiers
       - outcome_display
       - pool
+      - roll_breakdown
       - selected_consequence
       - summary
     ConsequenceOutcomeModifier:
@@ -61390,6 +61460,7 @@ components:
       - thrown
       - shield
       - lance
+      - unarmed
       - jewelry
       - clothing
       - other
@@ -61405,6 +61476,7 @@ components:
         * `thrown` - Thrown
         * `shield` - Shield
         * `lance` - Lance
+        * `unarmed` - Unarmed
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
@@ -78388,10 +78460,20 @@ components:
           readOnly: true
         character_sheet_id:
           type: integer
-          description: The character this sheet belongs to
+          nullable: true
+          description: The fighter's character sheet, on the viewer's own row and
+            for staff or the encounter's GM; null on every other row, so a mask is
+            never tied to a sheet.
           readOnly: true
         character_name:
           type: string
+          description: The persona name the room lines use, never the character key.
+          readOnly: true
+        persona_id:
+          type: integer
+          nullable: true
+          description: The persona the fighter presents now (a mask when disguised),
+            or null.
           readOnly: true
         status:
           $ref: '#/components/schemas/ParticipantStatusEnum'
@@ -78467,10 +78549,11 @@ components:
           type: string
           nullable: true
           description: |-
-            Direct portrait URL via the primary persona (mirrors OpponentSerializer).
+            Direct portrait URL via the presented persona (mirrors OpponentSerializer).
 
-            The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None``
-            when the character has no primary persona.
+            The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
+            character has no persona. A mask shows its own portrait, never the true face
+            (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
           readOnly: true
         thumbnail_media_url:
           type: string
@@ -78478,8 +78561,8 @@ components:
           description: |-
             Media portrait URL, dynamically resolved (#2196).
 
-            Uses ``resolve_thumbnail()`` via the primary persona's character.
-            ``None`` when there is no primary persona.
+            Uses ``resolve_thumbnail()`` with the presented persona (#4802).
+            ``None`` when there is no persona.
           readOnly: true
         escalation_level:
           type: integer
@@ -78529,9 +78612,25 @@ components:
           - $ref: '#/components/schemas/DodgePlan'
           nullable: true
           readOnly: true
+        compulsion:
+          allOf:
+          - $ref: '#/components/schemas/Compulsion'
+          nullable: true
+          readOnly: true
+        steady_plan:
+          allOf:
+          - $ref: '#/components/schemas/SteadyPlan'
+          nullable: true
+          readOnly: true
         dig_deep:
           allOf:
           - $ref: '#/components/schemas/DigDeepOffer'
+          nullable: true
+          readOnly: true
+        strike_weapons:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrikeWeaponOption'
           nullable: true
           readOnly: true
       required:
@@ -78542,6 +78641,7 @@ components:
       - character_name
       - character_sheet_id
       - character_status
+      - compulsion
       - control_modifier
       - current_position
       - current_square
@@ -78554,7 +78654,10 @@ components:
       - id
       - intensity_modifier
       - max_health
+      - persona_id
       - reactions_used
+      - steady_plan
+      - strike_weapons
       - thumbnail_media_url
       - thumbnail_url
     ParticipantRequest:
@@ -87612,6 +87715,43 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    RollBreakdown:
+      type: object
+      description: A roll laid out as a heading, source rows and a result line (#4858);
+        read-only.
+      properties:
+        heading:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RollLine'
+        result:
+          type: string
+        result_note:
+          type: string
+      required:
+      - heading
+      - lines
+      - result
+      - result_note
+    RollLine:
+      type: object
+      description: One source row in a roll breakdown (#4858); read-only, schema shape.
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        detail:
+          type: string
+        lapsed:
+          type: boolean
+      required:
+      - detail
+      - label
+      - lapsed
+      - value
     RoomAlarmDetails:
       type: object
       properties:
@@ -92791,6 +92931,23 @@ components:
         * `inactive` - Inactive
         * `completed` - Completed
         * `cancelled` - Cancelled
+    SteadyPlan:
+      type: object
+      description: The viewer's own steady plan (#4802). Schema-only.
+      properties:
+        enabled:
+          type: boolean
+        cost_line:
+          type: string
+        bonus_hint:
+          type: string
+        capability_name:
+          type: string
+      required:
+      - bonus_hint
+      - capability_name
+      - cost_line
+      - enabled
     StewardActionResult:
       type: object
       description: What the panel's send or dismiss reports back.
@@ -94103,6 +94260,29 @@ components:
         * `1` - Minor
         * `2` - Major
         * `3` - Defining
+    StrikeWeaponOption:
+      type: object
+      description: One thing the viewer's own character can Strike with (#4858); read-only.
+      properties:
+        item_instance_id:
+          type: integer
+          nullable: true
+          description: The equipped weapon's item id; null for bare hands.
+        name:
+          type: string
+          description: The weapon's name, or 'bare hands'.
+        gear_kind:
+          type: string
+          description: The weapon's gear kind, as players read it.
+        strike_skill:
+          type: string
+          description: The strike skill its hit roll weights, or the check's name
+            when it has none.
+      required:
+      - gear_kind
+      - item_instance_id
+      - name
+      - strike_skill
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).

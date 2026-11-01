@@ -166,6 +166,12 @@ def _resolve_joust_pass(
 
     winner, loser = (participant, other) if gap > 0 else (other, participant)
     margin = abs(gap)
+    # A lost pass is a missed attack (#4858): it builds the loser's intensity, as any miss.
+    from world.combat.services.techniques.intensity import (  # noqa: PLC0415
+        record_miss_intensity,
+    )
+
+    record_miss_intensity(loser)
 
     weapon = effective_weapon_profile(winner.character_sheet.character)
     base_damage = weapon.damage if weapon is not None else 0

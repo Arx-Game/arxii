@@ -659,6 +659,7 @@ a character's Motif bindings buffs that resonance's magic through the modifier p
 - `Motif` - Character-level magical aesthetic (container for resonances + facets)
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Flat vocabulary of imagery/symbolism, name globally unique (2026-09-11 ruling, #3776 — no longer a Category > Subcategory > Specific tree)
+- `FacetEffectBonus` - A facet's always-on bonus to one maneuver effect (#4815): the facet names the effect, whatever its thread's resonance; `passive_facet_bonuses` counts it for a worn, threaded facet, scaled by item and attachment quality and the SHOWN thread level. Inline on `FacetAdmin`; `merge_facets` moves it
 - `MotifResonanceLink` - Abstract base for per-resonance attachments. Declares
   NO fields; each concrete subclass declares its own `motif_resonance` FK.
   Provides `clean()`/`save()` cap-enforcement logic (Python-layer count check
