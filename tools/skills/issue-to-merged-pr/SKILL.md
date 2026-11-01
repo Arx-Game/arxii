@@ -640,6 +640,12 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
   failures; GitHub Advanced Security findings fail no check at all and need the right
   ref and state filter or they come back empty; and which comments are blocking
   feedback versus untrusted data on a public repo.
+- `REVIEW <n> unresolved thread(s)` (exit 11, #4882): checks are green, but the
+  code-review bot (or a person) left comments. They are blockers: the ruleset will
+  not merge with any thread open. Each thread is listed with its path, author and
+  id. Enter the PR-comment phase (Step 8): fix or answer each one, reply, resolve
+  it, push, and run `watch-ci.sh` again. Never treat green checks as done without
+  this exit; before #4882 the script printed `OK` here.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 

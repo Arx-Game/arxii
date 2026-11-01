@@ -19,6 +19,9 @@
 #
 # Env: GH_TOKEN (read-only in check, the push PAT in push), ONLY_PR (optional).
 set -euo pipefail
+# Never pipe `gh --paginate` straight into grep: grep stops at its first match (with
+# -q, and also when its output is /dev/null), gh dies of SIGPIPE writing the next
+# page, and pipefail turns the match into a miss. Capture the output, then grep it.
 
 MODE="${1:?usage: auto_rebase_migration_ci.sh check|push <dir>}"
 DIR="${2:?usage: auto_rebase_migration_ci.sh check|push <dir>}"
@@ -51,7 +54,9 @@ mergeable_state() {
 }
 
 touches_max_migration() {
-  gh api "repos/$REPO/pulls/$1/files" --paginate --jq '.[].filename' | grep -qx "$MAX_PATH"
+  local files
+  files="$(gh api "repos/$REPO/pulls/$1/files" --paginate --jq '.[].filename')" || return 1
+  grep -qx "$MAX_PATH" <<< "$files"
 }
 
 # Text that came from a PR (paths, the graph check's output) goes into a comment
@@ -101,9 +106,10 @@ check_pr() {
 live_pr_matches() {
   local pr="$1" json="$2" live
   live="$(gh pr view "$pr" --repo "$REPO" \
-    --json state,isCrossRepository,baseRefName,headRefName \
-    --jq '"\(.state) \(.isCrossRepository) \(.baseRefName) \(.headRefName)"')" || return 1
-  [ "$live" = "OPEN false main $(jq -r .head_ref "$json")" ]
+    --json state,isCrossRepository,baseRefName,headRefName,headRefOid \
+    --jq '"\(.state) \(.isCrossRepository) \(.baseRefName) \(.headRefName) \(.headRefOid)"')" \
+    || return 1
+  [ "$live" = "OPEN false main $(jq -r '"\(.head_ref) \(.head_sha)"' "$json")" ]
 }
 
 dropped_for_conflict() {
@@ -122,13 +128,16 @@ evidence_required() {
   local issue
   issue="$(pr_field "$1" body \
     | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"
-  [ -n "$issue" ] && gh api "repos/$REPO/issues/$issue/labels" --jq '.[].name' \
-    | grep -qx "review:evidence-required"
+  [ -n "$issue" ] || return 1
+  local labels
+  labels="$(gh api "repos/$REPO/issues/$issue/labels" --paginate --jq '.[].name')" || return 1
+  grep -qx "review:evidence-required" <<< "$labels"
 }
 
 already_commented() {
-  gh api "repos/$REPO/issues/$1/comments" --paginate --jq '.[].body' \
-    | grep -qF "$MARKER sha=$2 "
+  local bodies
+  bodies="$(gh api "repos/$REPO/issues/$1/comments" --paginate --jq '.[].body')" || return 1
+  grep -qF "$MARKER sha=$2 " <<< "$bodies"
 }
 
 push_resolved() {
@@ -152,6 +161,9 @@ push_resolved() {
     return 1
   fi
   got_tree="$(git rev-parse 'HEAD^{tree}')" || return 1
+  # Everything the comment says comes from this re-derivation (no PR code ran),
+  # never from the check job's file, which PR code could have rewritten.
+  local mine="$SCRATCH/again.json"
   if [ "$got_tree" != "$want_tree" ]; then
     echo "::error::#$pr: re-derived tree $got_tree is not the checked $want_tree; not pushing"
     return 1
@@ -178,15 +190,15 @@ push_resolved() {
     echo "$MARKER sha=$(git rev-parse HEAD) status=resolved -->"
     echo "Main moved past this PR's migrations, and \`max_migration.txt\` was the only conflict, so CI merged main in and renumbered them (\`tools/auto_rebase_migration.py\`, #4879):"
     echo
-    jq -r '.renames[] | "- `\(.old)` -> `\(.new)`"' "$json"
+    jq -r '.renames[] | "- `\(.old)` -> `\(.new)`"' "$mine"
     echo
-    echo "They now run after main's $(jq -r '[.interleaved[] | "`\(.)`"] | join(", ")' "$json"). No model those touch is named in this PR's migrations, and no model this PR's touch is named in them, so the new order changes nothing. Only each file's \`arxii\` dependency changed. The script checked that against the AST, checked that main's migrations are untouched, and loaded the graph (one leaf, no missing migrations)."
-    if [ "$(jq '.doc_files | length' "$json")" != "0" ]; then
+    echo "They now run after main's $(jq -r '[.interleaved[] | "`\(.)`"] | join(", ")' "$mine"). No model those touch is named in this PR's migrations, and no model this PR's touch is named in them, so the new order changes nothing. Only each file's \`arxii\` dependency changed. The script checked that against the AST, checked that main's migrations are untouched, and loaded the graph (one leaf, no missing migrations)."
+    if [ "$(jq '.doc_files | length' "$mine")" != "0" ]; then
       echo
-      echo "The same names were updated in: $(jq -r '.doc_files | join(", ")' "$json" | sanitize)"
+      echo "The same names were updated in: $(jq -r '.doc_files | join(", ")' "$mine" | sanitize)"
     fi
     echo
-    echo "Pull before your next push: \`git pull --ff-only\`. If you ran \`migrate\` on this branch, first run \`arx manage migrate arxii $(jq -r .base_tip "$json")\`, because the old migration names will be gone after the pull."
+    echo "Pull before your next push: \`git pull --ff-only\`. If you ran \`migrate\` on this branch, first run \`arx manage migrate arxii $(jq -r .base_tip "$mine")\`, because the old migration names will be gone after the pull."
     if [ -n "$rearm" ]; then echo; echo "$rearm"; fi
   } > "$SCRATCH/body.md"
   gh pr comment "$pr" --repo "$REPO" --body-file "$SCRATCH/body.md" || return 1
