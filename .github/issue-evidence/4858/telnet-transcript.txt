@@ -1,0 +1,6 @@
+> strike bandit with Rapier
+You ready a strike at Bandit with your Rapier.
+(round resolves, hit roll forced to Critical Success, damage roll to Success)
+You strike Bandit with your Rapier. A good hit: 6 damage.
+(another round, hit roll forced to Failure)
+You strike at Bandit with your Rapier and miss.
