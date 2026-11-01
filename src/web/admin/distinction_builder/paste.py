@@ -221,6 +221,9 @@ _NAMED_OPENERS: dict[str, tuple[str, str, type, str]] = {
         SchoolingLine,
         "schooling line",
     ),
+    # The Final Touches chapter (#4846): the card a draft must hold for the line to show.
+    # The card must already exist; a card earlier in the same table is not found yet.
+    "unlocked": (OfferChapter.FINAL_TOUCHES, "unlocked_by_id", Distinction, "card"),
 }
 
 

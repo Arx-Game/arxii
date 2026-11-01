@@ -41,10 +41,14 @@ A free-text question asked on every family path with nothing to pick: retired fr
 creation, never shown, left out of the route payload. _Avoid_: lore question, prompt
 (the kept kind).
 
-**Age allowance** (`LifeBeat.picks_scale_with_age`, `offers.age_pick_allowance`, #4395):
-How many answers an age-scaled beat allows: one at or under twenty, one more for every
-ten years lived past it (`AGE_PICKS_FROM_AGE`, `AGE_PICKS_YEARS_PER_PICK`); `beat_allowance`
-reads it, one-of or any otherwise. _Avoid_: age slots, experience picks.
+**Career points** (`LifeBeat.picks_scale_with_age`, `offers.age_pick_allowance`, #4395, #4829):
+What an age-scaled beat allows: one point at or under nineteen, one more for every five
+full years lived past it, none past fifty-nine (`AGE_PICKS_FROM_AGE`,
+`AGE_PICKS_YEARS_PER_PICK`, `AGE_PICKS_CAP_AGE`). A point buys a card on the beat or a rank
+on one, so the beat counts ranks (`beat_pick_conflicts`, `BeatPoolEntry.allowance_is_points`);
+the age floor (`youngest_age_for_points`) keeps the age at or above the points held.
+`beat_allowance` reads it, one-of or any otherwise. _Avoid_: age allowance (the old name),
+age slots, experience picks, career slots.
 
 **Kin row** (`draft_data["kin_rows"]`, `KinRowKind`, #4395):
 A person seated beside the parents in the Lineage step: a twin, a spouse with a fate
@@ -69,3 +73,16 @@ _Avoid_: bio, backstory flag, public beats.
 **Maturation floor** (`CharacterSheet.maturation_floor`, #4124):
 The matured years a character arrived with; milestones at or below it never bank.
 _Avoid_: starting milestones, CG bank.
+
+**Final Touches chapter** (`OfferChapter.FINAL_TOUCHES`, #4846):
+The offers chapter whose lines a held card unlocks, by the chapter rule of 2026-10-29:
+optional, each answerable or skippable, hidden when nothing is unlocked. Its one opener is
+the **unlocking card** (`DistinctionOffer.unlocked_by`). _Avoid_: card-gated offers (the
+mechanism, not the name), Final Touches stage (the stage holds more than this chapter),
+unlock requirement.
+
+**Final Touches prompt** (`Distinction.final_touches_prompt`, `FinalTouchesPrompt`, #4846):
+The optional question a card asks at Final Touches; `crime` is Jailbird's, answered in
+`draft_data.crime` and written as a staff-only crime note (`justice.CharacterCrimeNote`) at
+finalize. _Avoid_: lingering question, door (the officially-dead door is a different shape),
+card effect.

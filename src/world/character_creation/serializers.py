@@ -12,6 +12,10 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     BEAT_LINE_MAX_LENGTH,
+    CRIME_KEY,
+    CRIME_KIND_ID,
+    CRIME_LINE,
+    CRIME_LINE_MAX_LENGTH,
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
@@ -46,7 +50,13 @@ from world.character_creation.models import (
     StartingArea,
     TraditionStateLine,
 )
-from world.character_creation.offers import RECENT_HISTORY_KEY, schooling_training_points
+from world.character_creation.offers import (
+    RECENT_HISTORY_KEY,
+    age_pick_allowance,
+    age_scaled_points_spent,
+    schooling_training_points,
+    youngest_age_for_points,
+)
 from world.character_creation.services import (
     age_bounds,
     assign_route,
@@ -137,6 +147,15 @@ class EnemyOfferSerializer(serializers.Serializer):
     why = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
     reason_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class CrimeKindSerializer(serializers.Serializer):
+    """One crime kind the Final Touches crime prompt picks from (#4846)."""
+
+    id = serializers.IntegerField()
+    slug = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField()
 
 
 class EnemyReasonSerializer(serializers.Serializer):
@@ -1193,6 +1212,7 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     line = serializers.CharField(allow_blank=True)
     answer_offer_ids = serializers.ListField(child=serializers.IntegerField())
     allowance = serializers.IntegerField(allow_null=True)
+    allowance_is_points = serializers.BooleanField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):
@@ -1401,6 +1421,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     enemy_degree_grants = serializers.SerializerMethodField()
     enemy_reasons = serializers.SerializerMethodField()
     introductions_offered = serializers.SerializerMethodField()
+    # The Final Touches chapter (#4846): the optional questions the held cards ask, and
+    # the crime kinds the first of them picks from.
+    final_touches_prompts = serializers.SerializerMethodField()
+    crime_kinds = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
     derived_anchors = serializers.SerializerMethodField()
@@ -1471,6 +1495,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_degree_grants",
             "enemy_reasons",
             "introductions_offered",
+            "final_touches_prompts",
+            "crime_kinds",
         ]
         read_only_fields = [
             "id",
@@ -1482,6 +1508,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_degree_grants",
             "enemy_reasons",
             "introductions_offered",
+            "final_touches_prompts",
+            "crime_kinds",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1641,6 +1669,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             for r in EnemyReason.objects.filter(is_active=True)
         ]
 
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_final_touches_prompts(self, obj: CharacterDraft) -> list[str]:
+        """The questions the draft's cards ask at Final Touches (#4846), ``FinalTouchesPrompt``
+        values in enum order; empty for a draft holding no card that asks one."""
+        from world.character_creation.offers import final_touches_prompts  # noqa: PLC0415
+
+        return final_touches_prompts(obj)
+
+    @extend_schema_field(CrimeKindSerializer(many=True))
+    def get_crime_kinds(self, obj: CharacterDraft) -> list[dict]:  # noqa: ARG002
+        """The justice list the crime prompt picks from (#4846)."""
+        from world.justice.models import CrimeKind  # noqa: PLC0415
+
+        return [
+            {"id": k.pk, "slug": k.slug, "name": k.name, "description": k.description}
+            for k in CrimeKind.objects.all()
+        ]
+
     @extend_schema_field(IntroductionsOfferedSerializer())
     def get_introductions_offered(self, obj: CharacterDraft) -> dict[str, bool]:
         """Which Introductions this draft is offered (the First Journal needs an Arx start)."""
@@ -1747,6 +1793,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if value < AGE_MIN or value > AGE_MAX:
             msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
             raise serializers.ValidationError(msg)
+        self._refuse_age_under_career_points(value)
         if value <= bounds.maximum:
             return value
         # Name the cap that bound: eternal youth when it set the ceiling, else
@@ -1766,6 +1813,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         msg = (
             f"{heritage_name} can be at most {bounds.maximum} years old: "
             f"the first were born in {bounds.heritage_first_year} AS."
+        )
+        raise serializers.ValidationError(msg)
+
+    def _refuse_age_under_career_points(self, age: int) -> None:
+        """The age floor (#4829): an age whose career points are fewer than the ranks the
+        draft already holds on a career-point beat is refused, naming the youngest age
+        that fits, so a player unpicks a career or a rank before growing younger.
+        """
+        if self.instance is None:
+            return
+        spent = age_scaled_points_spent(self.instance)
+        total = sum(rank for _, rank in spent)
+        if total <= age_pick_allowance(age):
+            return
+        held = " and ".join(f"{name} at rank {rank}" for name, rank in spent)
+        points = "career point" if total == 1 else "career points"
+        msg = (
+            f"{held} need {total} {points}; the youngest age with {total} is "
+            f"{youngest_age_for_points(total)}. Unpick a career or a rank first."
         )
         raise serializers.ValidationError(msg)
 
@@ -1963,6 +2029,32 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_introductions(data["introductions"])
         if data.get("officially_dead") is not None:
             self._validate_officially_dead(data["officially_dead"])
+        if data.get(CRIME_KEY) is not None:
+            self._validate_crime(data[CRIME_KEY])
+
+    @staticmethod
+    def _validate_crime(crime: object) -> None:
+        """Jailbird's crime (#4846): a crime kind from the justice list and an optional line.
+
+        Not gated on the card being held: the leaf shows the prompt only while a held card
+        asks it, and finalize writes the answer only then, so a player who unpicks Jailbird
+        and picks it back keeps what they wrote.
+        """
+        from world.justice.models import CrimeKind  # noqa: PLC0415
+
+        if not isinstance(crime, dict):
+            raise serializers.ValidationError({CRIME_KEY: "Must be an object."})
+        if set(crime) - {CRIME_KIND_ID, CRIME_LINE}:
+            raise serializers.ValidationError({CRIME_KEY: "Unknown field."})
+        kind_id = crime.get(CRIME_KIND_ID)
+        if not isinstance(kind_id, int) or not CrimeKind.objects.filter(pk=kind_id).exists():
+            raise serializers.ValidationError({CRIME_KEY: "Pick a crime from the list."})
+        line = crime.get(CRIME_LINE, "")
+        if not isinstance(line, str):
+            raise serializers.ValidationError({CRIME_KEY: "The line must be text."})
+        if len(line) > CRIME_LINE_MAX_LENGTH:
+            msg = f"The line can be at most {CRIME_LINE_MAX_LENGTH} characters."
+            raise serializers.ValidationError({CRIME_KEY: msg})
 
     @staticmethod
     def _validate_enemy_pick(enemy: object) -> None:

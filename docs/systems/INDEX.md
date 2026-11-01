@@ -2120,9 +2120,12 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   nothing free; open while the beat is pooled and not unknown, `open_beat_ids`),
   `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat),
   `draft_data["beats"]`, `GET drafts/<id>/beats/` (`offers.beats_for`,
-  `BeatPoolEntry` with `allowance`: `beat_allowance`, `age_pick_allowance`,
-  `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`), `beat_pick_conflicts` in the
-  distinctions sync, `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
+  `BeatPoolEntry` with `allowance` and `allowance_is_points`: `beat_allowance`,
+  `age_pick_allowance` (#4829: career points, 19 / every 5 years / cap 59,
+  `AGE_PICKS_FROM_AGE`/`AGE_PICKS_YEARS_PER_PICK`/`AGE_PICKS_CAP_AGE`),
+  `youngest_age_for_points` and `age_scaled_points_spent` behind the serializer's age
+  floor), `beat_pick_conflicts(offers, age=, ranks=) -> list[BeatConflict]` in the
+  distinctions sync (ranks summed on a career-point beat), `draft_data["kin_rows"]` (`KinRowKind`/`SpouseFate`/`ChildFate`,
   `_bind_kin_rows` at finalize),
   `_finalize_beats`, the background drafted from answers and beats
   (`assemble_origin_prose`), the sheet's private block (`_build_beats`, `BeatEntry`),
@@ -2630,7 +2633,9 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
-  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society;
+  (→ `LegendEntry`), `CharacterCrimeNote` (→ `CharacterSheet` × `CrimeKind` + a note: the
+  crime Jailbird's card asked the player to name at Final Touches, written by creation's
+  finalize, staff-only, no heat and no deed tag, #4846), `PersonaHeat` (persona × area × enforcing society;
   `pinned_until` — decay-exempt exile-pin hold, #2378), `HeatSource`
   (allegation provenance — false accusations are emergent, never flagged),
   `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
@@ -3108,10 +3113,10 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   error: the create step makes the target, #4820).
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
-  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet/enemy/backgrounds/final_touches],
   `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, exactly one opener
   of its chapter's kind [`schooling_line`/`glimpse_tag`/`origin_choice`/`prompt`/`enemy_reason`/
-  `enemy_degree`/`appearance_section`, #3709], `first_look` [M2M `Beginnings` through
+  `enemy_degree`/`appearance_section`/`feature_rows`/`beat`/`unlocked_by` (#4846: the Final Touches chapter, the card a draft must hold for the line to show; `Distinction.final_touches_prompt` is the optional question a held card asks there, `final_touches_prompts`), #3709], `first_look` [M2M `Beginnings` through
   `OfferFirstLook`, #3709]) is the one row that says where a distinction is shown, what opens
   it there and how it arrives, read by `world.character_creation
   .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A

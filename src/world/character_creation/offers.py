@@ -9,18 +9,20 @@ offers and removes picks whose offer has gone.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.db.models import Q
 
 from world.character_creation.constants import (
+    AGE_PICKS_CAP_AGE,
     AGE_PICKS_FROM_AGE,
     AGE_PICKS_YEARS_PER_PICK,
     CG_MODIFIER_CATEGORY,
     MAGIC_TRAINING_POINTS_TARGET,
     ActorSheetPrompt,
     BeatSelection,
+    FinalTouchesPrompt,
     LifeStage,
     OfferArrival,
     OfferChapter,
@@ -186,15 +188,30 @@ def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
 
 
 def age_pick_allowance(age: int | None) -> int:
-    """How many answers an age-scaled beat allows (#4395).
+    """How many career points an age-scaled beat allows (#4395, re-ruled #4829).
 
-    One pick at or under ``AGE_PICKS_FROM_AGE``, one more for every
-    ``AGE_PICKS_YEARS_PER_PICK`` years lived past it: nineteen is one "known for"
-    pick, fifty is four. No age yet reads as the floor.
+    One point at or under ``AGE_PICKS_FROM_AGE``, one more for every
+    ``AGE_PICKS_YEARS_PER_PICK`` full years lived past it, and no more past
+    ``AGE_PICKS_CAP_AGE``: nineteen is one, twenty-four two, fifty seven, fifty-nine and
+    older nine. A point buys a card on the beat or a rank on one, so the beat counts
+    ranks (``beat_pick_conflicts``). No age yet reads as the floor.
     """
     if age is None or age <= AGE_PICKS_FROM_AGE:
         return 1
-    return 1 + (age - AGE_PICKS_FROM_AGE) // AGE_PICKS_YEARS_PER_PICK
+    counted = min(age, AGE_PICKS_CAP_AGE)
+    return 1 + (counted - AGE_PICKS_FROM_AGE) // AGE_PICKS_YEARS_PER_PICK
+
+
+def youngest_age_for_points(points: int) -> int:
+    """The youngest age whose allowance is at least ``points`` (#4829), for the age floor.
+
+    The inverse of ``age_pick_allowance``: one point at nineteen, each further point
+    five years later. ``AGE_PICKS_CAP_AGE`` bounds it: no age holds more than the cap's
+    allowance, so a count past that reads as the cap.
+    """
+    if points <= 1:
+        return AGE_PICKS_FROM_AGE
+    return min(AGE_PICKS_FROM_AGE + (points - 1) * AGE_PICKS_YEARS_PER_PICK, AGE_PICKS_CAP_AGE)
 
 
 def beat_allowance(beat: LifeBeat, age: int | None) -> int | None:
@@ -271,6 +288,7 @@ def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:
                 line=line,
                 answer_offer_ids=answer_ids,
                 allowance=beat_allowance(beat, draft.age),
+                allowance_is_points=bool(beat.picks_scale_with_age),
             )
         )
     return out
@@ -287,14 +305,28 @@ def open_beat_ids(draft: CharacterDraft) -> set[int]:
     return {e.beat_id for e in beats_for(draft) if not e.unknown}
 
 
+class BeatConflict(NamedTuple):
+    """One beat answered past its allowance (``beat_pick_conflicts``)."""
+
+    name: str
+    allowance: int
+    #: True when the beat spends career points, so ``allowance`` counts ranks (#4829).
+    points: bool
+
+
 def beat_pick_conflicts(
-    offers: Iterable[DistinctionOffer], *, age: int | None
-) -> list[tuple[str, int]]:
-    """``(beat name, allowance)`` for each beat ``offers`` would answer past its allowance.
+    offers: Iterable[DistinctionOffer],
+    *,
+    age: int | None,
+    ranks: Mapping[int, int] | None = None,
+) -> list[BeatConflict]:
+    """Each beat ``offers`` would answer past its allowance.
 
     Called by the distinctions sync view before it saves (#4124, #4395): a one-of beat
-    takes one answer and an age-scaled beat ``age_pick_allowance(age)``, so more of its
-    offers in one payload is a refused pick, not a reconcile. Offers on an unbounded
+    takes one answer, so two distinct cards on it conflict; an age-scaled beat allows
+    ``age_pick_allowance(age)`` career points, and a point buys a card or a rank
+    (#4829), so the ranks of its cards are summed (``ranks`` maps a distinction id to the
+    rank the payload asks for; a missing entry is rank one). Offers on an unbounded
     any-that-apply beat never conflict.
     """
     by_beat: dict[int, set[int]] = defaultdict(set)
@@ -304,12 +336,51 @@ def beat_pick_conflicts(
             continue
         by_beat[offer.beat_id].add(offer.distinction_id)
         beats[offer.beat_id] = offer.beat
-    out: list[tuple[str, int]] = []
+    out: list[BeatConflict] = []
     for beat_id, dists in by_beat.items():
-        allowance = beat_allowance(beats[beat_id], age)
-        if allowance is not None and len(dists) > allowance:
-            out.append((beats[beat_id].name, allowance))
+        beat = beats[beat_id]
+        allowance = beat_allowance(beat, age)
+        if allowance is None:
+            continue
+        if beat.picks_scale_with_age:
+            spent = sum(max(1, (ranks or {}).get(dist_id, 1)) for dist_id in dists)
+        else:
+            spent = len(dists)
+        if spent > allowance:
+            out.append(BeatConflict(beat.name, allowance, bool(beat.picks_scale_with_age)))
     return out
+
+
+def age_scaled_points_spent(draft: CharacterDraft) -> list[tuple[str, int]]:
+    """``(card name, rank)`` for each pick the draft holds on a beat that spends career
+    points (#4829), read the way the leaf and finalize read a pick: its entry's rank.
+
+    Called by the draft serializer's age validation, so lowering the age under the points
+    already spent is refused and names what to unpick.
+    """
+    entries = [
+        e
+        for e in draft.draft_data.get("distinctions", [])
+        if isinstance(e, dict) and isinstance(e.get("rank"), int)
+    ]
+    offer_ids = {
+        offer_id
+        for entry in entries
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
+    if not offer_ids:
+        return []
+    scaled = set(
+        DistinctionOffer.objects.filter(
+            pk__in=offer_ids, beat__picks_scale_with_age=True
+        ).values_list("pk", flat=True)
+    )
+    return [
+        (str(entry.get("distinction_name") or entry.get("distinction_id")), int(entry["rank"]))
+        for entry in entries
+        if any(offer_id in scaled for offer_id in entry.get("offer_ids", []))
+    ]
 
 
 def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
@@ -347,6 +418,10 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
         return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
+    if chapter == OfferChapter.FINAL_TOUCHES:
+        # A card the draft holds unlocks the line (#4846); unpicking the card hides it
+        # again, and ``reconcile_offer_picks`` drops whatever it had opened.
+        return offer.unlocked_by_id is not None and offer.unlocked_by_id in ctx["held_ids"]
     return False
 
 
@@ -367,7 +442,35 @@ def _context(draft: CharacterDraft) -> dict:
         "enemy_degree": enemy.get("degree", ""),
         # The Backgrounds chapter's opener (#4124, #4395): the beats open to the draft.
         "open_beat_ids": open_beat_ids(draft),
+        # The Final Touches chapter's opener (#4846): the cards the draft holds.
+        "held_ids": held_distinction_ids(draft),
     }
+
+
+def held_distinction_ids(draft: CharacterDraft) -> set[int]:
+    """The distinctions the draft holds right now, from any line or grant.
+
+    Called by ``_context`` (the Final Touches opener) and ``final_touches_prompts``.
+    """
+    return {entry["distinction_id"] for entry in draft.draft_data.get("distinctions", [])}
+
+
+def final_touches_prompts(draft: CharacterDraft) -> list[str]:
+    """The optional questions the draft's cards ask at Final Touches (#4846), in enum order.
+
+    Called by ``CharacterDraftSerializer`` (the leaf asks each one) and by finalize, which
+    writes an answer only while a held card still asks for it. Empty for most drafts: the
+    leaf hides the chapter when this and the chapter's offers are both empty.
+    """
+    held = held_distinction_ids(draft)
+    if not held:
+        return []
+    asked = set(
+        Distinction.objects.filter(pk__in=held)
+        .exclude(final_touches_prompt="")
+        .values_list("final_touches_prompt", flat=True)
+    )
+    return [prompt.value for prompt in FinalTouchesPrompt if prompt.value in asked]
 
 
 def _closed_ids(draft: CharacterDraft) -> set[int]:
@@ -402,6 +505,7 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
         "enemy_reason",
         "appearance_section",
         "beat",
+        "unlocked_by",
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -454,14 +558,13 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
         # rather than the generic word; this is the fallback for a caller that has
         # no feature in hand (the picker, a closed-distinction hint).
         return "a feature"
-    if offer.glimpse_tag_id:
-        return offer.glimpse_tag.name
     if offer.origin_choice_id:
         return _origin_opener_label(offer, draft)
-    if offer.schooling_line_id:
-        return offer.schooling_line.name
-    if offer.beat_id:
-        return offer.beat.name
+    # The openers that are a named row: a Glimpse tag, a schooling line, a beat, the
+    # card that unlocks a Final Touches line (#4846).
+    for field in ("glimpse_tag", "schooling_line", "beat", "unlocked_by"):
+        if getattr(offer, f"{field}_id"):
+            return getattr(offer, field).name
     return ""
 
 
@@ -673,7 +776,12 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
         arrives_as=OfferArrival.CHOICE,
         distinction_id__in=closed_ids,
     ).select_related(
-        "glimpse_tag", "origin_choice", "schooling_line", "enemy_reason", "appearance_section"
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+        "enemy_reason",
+        "appearance_section",
+        "unlocked_by",
     )
     openers: dict[int, list[str]] = defaultdict(list)
     opener_ids: dict[int, list[int]] = defaultdict(list)

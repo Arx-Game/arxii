@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0339_modifier_target_technique_scope_rules"),
+        ("arxii", "0341_distinctionoffer_opener_constraint_names_unlocked_by"),
     ]
 
     operations = [

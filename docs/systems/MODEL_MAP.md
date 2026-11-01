@@ -1491,6 +1491,7 @@
   - enemy_reason -> character_creation.EnemyReason [FK] (nullable)
   - appearance_section -> character_creation.AppearanceSection [FK] (nullable)
   - beat -> character_creation.LifeBeat [FK] (nullable)
+  - unlocked_by -> distinctions.Distinction [FK] (nullable)
   - first_look -> character_creation.Beginnings [M2M]
 **Pointed to by:**
   - pins <- character_creation.OfferFirstLook
@@ -1849,6 +1850,7 @@
   - journal_bequests_granted <- journals.JournalBequestGrant
   - frame_jobs_against <- justice.FrameJobDetails
   - denouncements_made <- justice.DenounceRecord
+  - crime_notes <- justice.CharacterCrimeNote
   - commanded_military_units <- military.MilitaryUnit
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
@@ -4011,6 +4013,7 @@
   - carried_by_state_lines <- character_creation.TraditionStateLine
   - granted_by_schooling_lines <- character_creation.SchoolingLine
   - offers <- character_creation.DistinctionOffer
+  - unlocked_offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
   - ritual_grants <- magic.DistinctionRitualGrant
@@ -5458,6 +5461,11 @@
   - area -> areas.Area [FK]
   - crime_kind -> justice.CrimeKind [FK]
 
+### CharacterCrimeNote
+**Foreign Keys:**
+  - sheet -> character_sheets.CharacterSheet [FK]
+  - crime_kind -> justice.CrimeKind [FK]
+
 ### CrimeEvidence
 **Foreign Keys:**
   - deed -> societies.LegendEntry [OneToOne]
@@ -5473,6 +5481,7 @@
   - deed_tags <- justice.DeedCrimeTag
   - accusation_claims <- justice.AccusationCrimeClaim
   - frame_jobs <- justice.FrameJobDetails
+  - character_notes <- justice.CharacterCrimeNote
 
 ### DeedCrimeTag
 **Foreign Keys:**

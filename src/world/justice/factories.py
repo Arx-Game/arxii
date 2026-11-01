@@ -9,6 +9,7 @@ from world.justice.constants import DEFAULT_HEAT_WEIGHT, SentenceKind
 from world.justice.models import (
     AccusationCrimeClaim,
     AreaLaw,
+    CharacterCrimeNote,
     CrimeEvidence,
     CrimeKind,
     ExileDecree,
@@ -28,6 +29,15 @@ class CrimeKindFactory(factory.django.DjangoModelFactory):
     slug = factory.Sequence(lambda n: f"crime-{n}")
     name = factory.Sequence(lambda n: f"Crime {n}")
     description = ""
+
+
+class CharacterCrimeNoteFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterCrimeNote
+
+    sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    crime_kind = factory.SubFactory(CrimeKindFactory)
+    note = ""
 
 
 class AreaLawFactory(factory.django.DjangoModelFactory):

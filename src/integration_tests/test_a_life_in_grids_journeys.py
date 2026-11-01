@@ -128,12 +128,12 @@ class ALifeInGrids(FinalizationTestMixin, JourneyCase):
 
         response = self._sync(draft, [self.spied, self.killed])
         self.assertEqual(response.status_code, 400, response.content)
-        self.assertIn("one answer on What you were known for", response.json()["detail"])
+        self.assertIn("1 career point on What you were known for", response.json()["detail"])
 
         response = self.client.patch(self._draft_url(draft), {"age": 50}, format="json")
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
-            {b["name"]: b["allowance"] for b in self._beats(draft)}["What you were known for"], 4
+            {b["name"]: b["allowance"] for b in self._beats(draft)}["What you were known for"], 7
         )
         response = self._sync(draft, [self.spied, self.killed])
         self.assertEqual(response.status_code, 200, response.content)

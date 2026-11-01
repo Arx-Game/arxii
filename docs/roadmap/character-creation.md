@@ -87,6 +87,18 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4846: the Final Touches chapter, backend; slice 5 of #4813)
+
+Final Touches gained the card-gated chapter the rulings of 2026-10-29 describe. A distinction
+line in the new `final_touches` offer chapter shows only while the draft holds the card that
+unlocks it (`DistinctionOffer.unlocked_by`, the chapter's one opener, authored on the
+Distinction Builder or by the paste's `unlocked:<card>` token), and a card can carry an optional
+prompt the chapter asks (`Distinction.final_touches_prompt`). The first prompt is Jailbird's:
+the player may name the crime, a kind from the justice list and a sentence, and finalize records
+it as a staff-only `justice.CharacterCrimeNote` with no heat and no deed tag. The leaf that
+renders the chapter (hidden when nothing is unlocked) is the frontend half; the prestige blurb's
+prompt arrives with the starting prestige event of slice 6.
+
 ## Built (2026-10-17, #4396: faces)
 
 A character can start officially dead: the Final Touches door names the established face the

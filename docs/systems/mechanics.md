@@ -433,7 +433,7 @@ same "maneuver_effect" category, reached by every source a technique-scoped targ
 **Scopes.** `scope_opponent_property` (FK `Property`) and `scope_opponent_condition` (FK
 `ConditionTemplate`), both `CASCADE`, since clearing one would widen the target to every opponent.
 They follow the technique scope rules: they need `scope_effect_kind` and no `scope_maneuver_effect`
-(the `modifier_target_technique_scope_needs_kind` constraint, extended in migration `0341`), they
+(the `modifier_target_technique_scope_needs_kind` constraint, extended in migration `0343`), they
 combine with each other and with the technique scopes (every scope set must match), and an unset
 scope means any. `ModifierTarget.has_opponent_scope` is true when either is set;
 `has_technique_scope` is true for any narrowing scope, opponent side included. They narrow damage,

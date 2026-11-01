@@ -63,6 +63,8 @@ class DistinctionForm(forms.ModelForm):
             "opens_feature",
             "requires_feature_opened",
             "cg_max_rank",
+            # The Final Touches chapter (#4846): the optional question this card asks there.
+            "final_touches_prompt",
         ]
         labels = {"max_rank": "Ranks", "mutually_exclusive_with": "Distinctions"}
         help_texts = {
@@ -108,6 +110,7 @@ DISTINCTION_MORE_FIELDS = (
     "opens_feature",
     "requires_feature_opened",
     "cg_max_rank",
+    "final_touches_prompt",
 )
 
 
@@ -161,6 +164,8 @@ class OfferForm(forms.ModelForm):
             "feature_rows",
             # The Backgrounds chapter's opener (#4124): the beat this line answers.
             "beat",
+            # The Final Touches chapter's opener (#4846): the card that unlocks this line.
+            "unlocked_by",
             "sort_order",
         ]
         widgets = {
@@ -184,6 +189,10 @@ class OfferForm(forms.ModelForm):
                 DistinctionOffer._meta.get_field("beat"),  # noqa: SLF001
                 admin.site,
             ),
+            "unlocked_by": AutocompleteSelect(
+                DistinctionOffer._meta.get_field("unlocked_by"),  # noqa: SLF001
+                admin.site,
+            ),
         }
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -202,6 +211,14 @@ class OfferForm(forms.ModelForm):
 DistinctionEffectFormSet = inlineformset_factory(
     Distinction, DistinctionEffect, form=EffectForm, extra=1, can_delete=True
 )
+# ``fk_name`` since #4846: ``unlocked_by`` is a second FK from an offer to a Distinction
+# (the card that unlocks a Final Touches line), and this page edits the lines a
+# distinction is offered on, not the lines it unlocks.
 DistinctionOfferFormSet = inlineformset_factory(
-    Distinction, DistinctionOffer, form=OfferForm, extra=1, can_delete=True
+    Distinction,
+    DistinctionOffer,
+    form=OfferForm,
+    fk_name="distinction",
+    extra=1,
+    can_delete=True,
 )

@@ -66,7 +66,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
 | `SchoolingLine` | One stance under a tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1, #4457) and what it grants (#3675); the Magic-skill training points it gives are its `grants` distinction's `magic_training_points` effect at its rank (#4659; the `magic_skill_floor` column was dropped) | `rank`, `name`, `player_line`, `grants` |
-| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
+| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`, `backgrounds` and `final_touches`, #4846), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section)/`beat` (#4124)/`unlocked_by` (#4846, Final Touches: the card a draft must hold for the line to show; never the line's own distinction); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
 | `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
 | `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709) | `offer`, `beginning` (unique together) |
@@ -101,7 +101,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
-| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
+| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396), the card-unlocked chapter (#4846) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
 | 11 | Review | Never "complete" -- final submission step |
 
 ---
@@ -247,7 +247,9 @@ The only reader of `DistinctionOffer` rows. Every chapter's picker (`ChapterOffe
 `GlimpseAxes`, the schooling stances, the Upbringing answer block, the beats block)
 goes through this module, never the model directly. `BACKGROUNDS` (#4124) is the
 chapter a beat's answers live in; `beat_pool` / `beats_for` / `taken_beat_ids` /
-`one_of_beat_conflicts` are its beat-side readers.
+`one_of_beat_conflicts` are its beat-side readers. `FINAL_TOUCHES` (#4846) is the chapter
+a held card unlocks lines in; `held_distinction_ids` / `final_touches_prompts` are its
+readers (see "The Final Touches chapter" below).
 
 ```python
 from world.character_creation.offers import (
@@ -459,6 +461,29 @@ becomes a Level-1 `PLAYER_FLAVOR` Secret about the character with a `SecretGossi
 it is overhearable at a hub from day one (#1572). The sheet API's `actor_sheet` section
 carries the answers, the enemy's public line (full row when privileged) and the
 Introductions by kind.
+
+**The Final Touches chapter (#4846, slice 5 of #4813).** The chapter rule of 2026-10-29:
+optional prompts a card unlocks, each answerable or skippable, and the chapter does not
+show to a character with nothing to tie up. Two kinds of content hang off a held card. A
+**line** is a `DistinctionOffer` in `OfferChapter.FINAL_TOUCHES` whose one opener is
+`unlocked_by` (an FK to the card); `_opener_satisfied` shows it while the card's id is in
+`held_distinction_ids(draft)` (the draft's `distinctions` entries), `opener_key` is
+`unlocked:<card id>`, `opener_label` the card's name, and `reconcile_offer_picks` drops the
+pick when the card goes. `clean()` refuses a line unlocked by its own distinction. Staff
+author it on the Distinction Builder or the paste's `unlocked:<card>` token. A **prompt** is
+`Distinction.final_touches_prompt` (`FinalTouchesPrompt`; `crime` today), and
+`final_touches_prompts(draft)` lists the prompts of the held cards once each in enum order;
+`CharacterDraftSerializer.final_touches_prompts` carries it beside `crime_kinds` (the
+justice list). Jailbird's crime: `draft_data.crime` is null or `{kind_id, line}`
+(`CRIME_KEY`; the kind must exist, the line at most `CRIME_LINE_MAX_LENGTH` (500)
+characters; `_validate_crime` is not gated on the card being held, so unpicking and
+re-picking Jailbird keeps the text). Finalize (`_write_final_touches_doors`, both paths)
+writes one staff-only `justice.CharacterCrimeNote` (sheet, kind, the stripped line) only
+while a held card still asks the question; no `PersonaHeat`, no `DeedCrimeTag`, no Legend
+row come of it (decision 6 of #4813), and no serializer carries the note. The prestige
+blurb's prompt arrives with the starting prestige event (slice 6), whose text it is. The
+leaf's rendering of the chapter is the frontend half; the prompt and helper copy are
+placeholders for the maintainer's voice (the authoring plan's Final Touches copy table).
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
@@ -749,13 +774,25 @@ The draft's state lives at `draft_data["beats"]`: `{"<beat_id>": {"taken", "unkn
 #4395 `allowance`). A beat's answers are open while it is in the pool and not unknown
 (`open_beat_ids`, `_opener_satisfied`); a pick under it, a line, or the unknown mark is
 what takes it (the grids never ask the player to add a beat first), and marking it
-unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395):**
+unknown drops its picks through `reconcile_offer_picks`. **Allowance (#4395, career points since #4829):**
 `beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
-beat whose `picks_scale_with_age` is on `age_pick_allowance(age)`: one at or under
-`AGE_PICKS_FROM_AGE` (20) and one more per `AGE_PICKS_YEARS_PER_PICK` (10) years lived
-past it, so nineteen is one "known for" pick and fifty four. The distinctions sync
-refuses more picks than the allowance (`beat_pick_conflicts`); the leaf disables the
-rest at it. `Beginnings.beat_mode`
+beat whose `picks_scale_with_age` is on `age_pick_allowance(age)` career points: one at or
+under `AGE_PICKS_FROM_AGE` (19), one more per `AGE_PICKS_YEARS_PER_PICK` (5) full years
+lived past it, none past `AGE_PICKS_CAP_AGE` (59), so nineteen is one point, fifty seven,
+fifty-nine and older nine. A point buys a card on the beat or a rank on one, so the beat
+counts ranks: `beat_pick_conflicts(offers, age=, ranks=)` sums the ranks the payload asks
+for on such a beat (a one-of beat still counts cards) and returns `BeatConflict(name,
+allowance, points)`; the sync's refusal reads "At most 7 career points on Past Careers".
+`BeatPoolEntry.allowance_is_points` tells the leaf which it is. **The age floor:**
+`CharacterDraftSerializer.validate_age` refuses an age whose points are fewer than the
+ranks already held on such a beat (`age_scaled_points_spent`) and names the youngest age
+that fits (`youngest_age_for_points`): "Sailor at rank 4 and Soldier at rank 3 need 7
+career points; the youngest age with 7 is 49. Unpick a career or a rank first." On the
+leaf a ranked card in a career-point grid shows its ranks as pips in its top right
+(`ChapterOffers` `pointsPicks`; a pip sets the rank, the pips past the points left are
+dimmed) and the pick line reads copy key `beats_pick_points`. Finalize writes the entry's
+rank (`_create_distinctions`), so a rank-four career lands as rank four. Journeys:
+`integration_tests/test_career_points_journeys.py`. `Beginnings.beat_mode`
 has one value, `POOL`, since #4830: the one-kept mode (the Sleeper's one unexcluded beat
 as the whole stage) is retired, because the Sleeper strikes every stage and shows its
 `struck_stages_text` instead. **Recent History (#4830):** `draft_data["recent_history"]`,
@@ -763,7 +800,15 @@ free text of at most `RECENT_HISTORY_MAX_LENGTH` (2000) characters, validated wi
 beats; at finalize it becomes the lead-in paragraph of `Profile.background`, a blank line,
 then the told prose (`assemble_origin_prose`), or the whole background when nothing else
 was told. Public by ruling (2026-10-30, 2026-10-31). Journeys:
-`integration_tests/test_struck_life_journeys.py`. Apart from an age-scaled beat's allowance,
+`integration_tests/test_struck_life_journeys.py`. **On the leaf (#4831):** `LifeGrids` ends
+every life on the Recent History box (a textarea under the last stage, before the footer;
+copy keys `life_recent_history_label` and `life_recent_history_help`; `maxLength` from the
+frontend's mirror of `RECENT_HISTORY_MAX_LENGTH`), saved on blur to
+`draft_data.recent_history` by itself. When the pool is empty and the draft's beginning
+strikes all three stages, the beginning's `struck_stages_text` stands where the stage rows
+would be (a `.absent` paragraph over the box; copy key `life_struck_fallback` stands in until
+the text is authored), with no pick lines and no footer; an empty pool on a beginning that
+keeps its stages shows the box alone. Apart from an age-scaled beat's allowance,
 nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with

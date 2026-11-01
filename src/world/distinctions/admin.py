@@ -114,6 +114,17 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         ),
         ("Status", {"fields": ("is_active",)}),
         (
+            "Final Touches",
+            {
+                "fields": ("final_touches_prompt",),
+                "description": (
+                    "The optional question this card asks at Final Touches (#4846); the "
+                    "lines a card unlocks there are offers on the Distinction Builder."
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
             "Resonance Wiring",
             {
                 "fields": ("get_resonance_grants",),

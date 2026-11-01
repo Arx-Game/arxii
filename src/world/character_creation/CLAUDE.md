@@ -20,7 +20,9 @@ Character creation is a multi-stage process that guides players through creating
    creates the nodes and pins back-inference). Then the kin rows (a twin, spouses,
    children: `draft_data.kin_rows`, seated by `_bind_kin_rows`) and the life as grids by
    stage (#4124 beats, #4395 grids: a beginning strikes stages out, an age-scaled beat
-   allows one more pick per decade, a general write-in prompt never shows)
+   allows career points, one at 19 and one more every five years to 59, spent by rank
+   (#4829: pips on the card, the age cannot drop under the points held), a general
+   write-in prompt never shows)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
@@ -33,8 +35,13 @@ Character creation is a multi-stage process that guides players through creating
 10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
-    reason and degree open offers, The Introductions; all optional (see
-    `docs/systems/character_creation.md`'s "The Actor's Sheet", ADR-0279, ADR-0282)
+    reason and degree open offers, the Officially dead door (#4396), the card-unlocked
+    chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the
+    prompt a held card asks, `Distinction.final_touches_prompt`; Jailbird's crime in
+    `draft_data.crime` becomes a staff-only `justice.CharacterCrimeNote` at finalize, no
+    heat, no deed), The Introductions; all optional (see
+    `docs/systems/character_creation.md`'s "The Actor's Sheet" and "The Final Touches
+    chapter", ADR-0279, ADR-0282)
 11. **Review** - Final review and submission
 
 ## Key Models

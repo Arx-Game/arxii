@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0340_modifier_target_opponent_scopes"),
+        ("arxii", "0342_modifier_target_opponent_scopes"),
     ]
 
     operations = [

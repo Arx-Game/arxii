@@ -56,6 +56,9 @@ export interface Beginnings {
   strikes_childhood: boolean;
   strikes_youth: boolean;
   strikes_adulthood: boolean;
+  /** What the life page shows in place of the stage rows when every stage is struck
+   * (#4830, the Sleeper's); blank on a beginning that keeps its stages. */
+  struck_stages_text: string;
   art_image: string | null;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
@@ -493,7 +496,35 @@ export interface CharacterDraft {
   enemy_reasons: EnemyReason[];
   /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
   introductions_offered: { first_journal: boolean };
+  /**
+   * The optional questions the held cards ask at Final Touches (#4846), `FinalTouchesPrompt`
+   * values in enum order; empty when no held card asks one. The leaf hides the chapter when
+   * this and its `final_touches` offers are both empty.
+   */
+  final_touches_prompts: FinalTouchesPrompt[];
+  /** The justice list the `crime` prompt picks from (#4846). */
+  crime_kinds: CrimeKind[];
 }
+
+/** The optional question a card asks at Final Touches (#4846); `crime` is Jailbird's. */
+export type FinalTouchesPrompt = 'crime';
+
+/** One crime kind the Final Touches crime prompt picks from (#4846). */
+export interface CrimeKind {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+}
+
+/** Jailbird's crime (#4846): a kind from `crime_kinds` and an optional line, saved on the draft. */
+export interface DraftCrime {
+  kind_id: number;
+  line: string;
+}
+
+/** The longest line the crime prompt takes; mirrors the backend's `CRIME_LINE_MAX_LENGTH`. */
+export const CRIME_LINE_MAX_LENGTH = 500;
 
 export interface Stats {
   // Physical
@@ -969,6 +1000,8 @@ export interface DraftData {
   introductions?: DraftIntroductions;
   // Officially dead (#4396): the established face worn from day one, or null
   officially_dead?: DraftOfficiallyDead | null;
+  // Jailbird's crime (#4846): the kind and the line, or null; written only while a held card asks
+  crime?: DraftCrime | null;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
@@ -981,6 +1014,9 @@ export interface DraftData {
   // The beats of the life (#4124): beat id -> taken / unknown / the optional line.
   // The whole map is sent on every save; a beat absent from it is not taken.
   beats?: Record<string, DraftBeatState>;
+  // The optional text a life ends on (#4830), up to RECENT_HISTORY_MAX_LENGTH characters;
+  // finalize writes it as the lead-in paragraph of the background.
+  recent_history?: string;
   // The people seated beside the parents (#4395); the whole list is sent on every save.
   kin_rows?: KinRow[];
   // The name given to a newly founded family on the 'named' family path (#3617)
@@ -1525,7 +1561,8 @@ export type OfferChapter =
   | 'appearance'
   | 'actors_sheet'
   | 'enemy'
-  | 'backgrounds';
+  | 'backgrounds'
+  | 'final_touches';
 
 /** One beat of the Backgrounds library as this draft meets it (#4124):
  * `GET /api/character-creation/drafts/{id}/beats/`. Its answers are the
@@ -1543,7 +1580,14 @@ export interface BeatPoolEntry {
   /** How many answers the beat allows this draft (#4395): one, more with the years
    * lived on an age-scaled beat, or null for any number. */
   allowance: number | null;
+  /** True when `allowance` is career points spent by rank (#4829): a rank-four card
+   * spends four. False when it counts cards. */
+  allowance_is_points: boolean;
 }
+
+/** The most a Recent History may run (#4830); mirrors the backend's
+ * `RECENT_HISTORY_MAX_LENGTH`, which refuses a longer one naming this number. */
+export const RECENT_HISTORY_MAX_LENGTH = 2000;
 
 /** The draft's own state on one beat, under `draft_data.beats[<beat_id>]` (#4124). */
 export interface DraftBeatState {
