@@ -339,17 +339,19 @@ def _fire(
         and not _is_impaired(sheet, trigger)
     ):
         return None
+    difficulty = _difficulty(sheet, trigger, moon_pull=moon_pull, level=level)
     result = perform_check_with_modifiers(
         character,
         trigger.check_type,
-        target_difficulty=_difficulty(sheet, trigger, moon_pull=moon_pull, level=level),
+        target_difficulty=difficulty,
         extra_traits=_skill_terms(trigger),
     )
     band = _band_for(trigger, result)
     applied = _apply_band(character, sheet, band) if band is not None else None
+    outcome = ControlLossOutcome(trigger=trigger, check_result=result, band=band, applied=applied)
     if band is not None and (applied is not None or band.control_change or band.intensity):
-        _announce(character, trigger, result, applied)
-    return ControlLossOutcome(trigger=trigger, check_result=result, band=band, applied=applied)
+        _announce(character, outcome, band, difficulty=difficulty)
+    return outcome
 
 
 def _difficulty(
@@ -463,11 +465,16 @@ def _shift_engagement_of(character: ObjectDB, band: ControlLossBand) -> None:  #
 
 def _announce(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM
-    trigger: ControlLossTrigger,
-    result: CheckResult,
-    applied: ConditionInstance | None,
+    outcome: ControlLossOutcome,
+    band: ControlLossBand,
+    *,
+    difficulty: int,
 ) -> None:
     """Tell the character and the room a roll moved their control or applied a condition.
+
+    The line reads cause, roll, then onset, every part from rows: "Garrick falls below
+    50% health. Garrick fights to keep control. Hold the rage vs 30: Failure. Garrick
+    loses control: Berserk, severity 3, for 3 rounds · Control -6 · Intensity +4."
 
     The room hears the persona name the rest of combat uses, never the character key.
     Inside a combat round (the character's encounter is RESOLVING: a wound from a swing,
@@ -479,23 +486,77 @@ def _announce(
     """
     from django.db import transaction  # noqa: PLC0415
 
-    outcome = result.outcome.name
-    check = trigger.check_type.name
+    trigger, applied = outcome.trigger, outcome.applied
+    roll = f"{trigger.check_type.name} vs {difficulty}: {outcome.check_result.outcome.name}."
+    onset = _onset_summary(band, applied)
     name = display_name_of(character)
-    seen = f"{name} fights to keep control. {check}: {outcome}." + (
-        f" {name} loses control: {applied.condition.name}." if applied is not None else ""
+    seen = " ".join(
+        part
+        for part in (
+            _cause(trigger, name, own=False),
+            f"{name} fights to keep control. {roll}",
+            f"{name} loses control: {onset}" if applied is not None else onset,
+        )
+        if part
     )
     encounter = _resolving_encounter_of(character)
     if encounter is not None:
         _narrate_in_round(encounter, character, seen)
         return
-    own = f"You fight to keep control. {check}: {outcome}." + (
-        f" You lose control: {applied.condition.name}." if applied is not None else ""
+    own = " ".join(
+        part
+        for part in (
+            _cause(trigger, name, own=True),
+            f"You fight to keep control. {roll}",
+            f"You lose control: {onset}" if applied is not None else onset,
+        )
+        if part
     )
     room = character.location
     transaction.on_commit(lambda: character.msg("|r" + own + "|n"))
     if room is not None:
         transaction.on_commit(lambda: room.msg_contents("|r" + seen + "|n", exclude=[character]))
+
+
+def _cause(trigger: ControlLossTrigger, name: str, *, own: bool) -> str:
+    """What set the character off, from the trigger's kind and its own column.
+
+    Empty when the kind's column is unset, so no part of the line is guessed.
+    """
+    if trigger.fires_on == ControlLossFiresOn.WOUND_THRESHOLD:
+        if trigger.health_below_percent is None:
+            return ""
+        who = "You fall" if own else f"{name} falls"
+        return f"{who} below {trigger.health_below_percent}% health."
+    if trigger.fires_on == ControlLossFiresOn.CONDITION_STAGE:
+        if trigger.stage is None:
+            return ""
+        return f"{trigger.stage.condition.name} reaches {trigger.stage.name}."
+    if trigger.fires_on == ControlLossFiresOn.MOON_PULL:
+        return f"The moon pulls at {'you' if own else name}."
+    return ""
+
+
+def _onset_summary(band: ControlLossBand, applied: ConditionInstance | None) -> str:
+    """The band's onset as told: the condition it applied, then its control and intensity.
+
+    "Berserk, severity 3, for 3 rounds · Control -6 · Intensity +4." A part whose band
+    value is zero is left out; empty when nothing is left.
+    """
+    parts: list[str] = []
+    if applied is not None:
+        condition = [applied.condition.name]
+        if band.severity:
+            condition.append(f"severity {band.severity}")
+        if band.duration_rounds:
+            rounds = "round" if band.duration_rounds == 1 else "rounds"
+            condition.append(f"for {band.duration_rounds} {rounds}")
+        parts.append(", ".join(condition))
+    if band.control_change:
+        parts.append(f"Control {band.control_change:+d}")
+    if band.intensity:
+        parts.append(f"Intensity +{band.intensity}")
+    return " · ".join(parts) + "." if parts else ""
 
 
 def _resolving_encounter_of(character: ObjectDB) -> CombatEncounter | None:  # noqa: OBJECTDB_PARAM

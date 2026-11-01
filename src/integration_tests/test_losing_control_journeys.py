@@ -207,6 +207,7 @@ class WoundTriggers(_ControlLossCase):
         self.trigger = ControlLossTriggerFactory(
             vulnerability=self.rage, fires_on=ControlLossFiresOn.WOUND_THRESHOLD,
             health_below_percent=50, base_difficulty=30,
+            check_type=CheckTypeFactory(name="Hold the rage"),
         )  # fmt: skip
         self.band(self.trigger, self.failure, applies=self.berserk)
         self.band(self.trigger, self.success)
@@ -283,8 +284,12 @@ class WoundTriggers(_ControlLossCase):
         self.assertIsNotNone(berserk)
         self.assertEqual(berserk.severity, 3)
         self.assertEqual(capture.target_difficulty, 30)
-        self.assertTold(self.garrick, "You fight to keep control.")
-        self.assertTold(self.garrick, "You lose control: Berserk.")
+        # Ruling 35: cause, roll with its difficulty, then the onset, all from rows.
+        self.assertTold(
+            self.garrick,
+            "You fall below 50% health. You fight to keep control. Hold the rage vs 30: "
+            "Failure. You lose control: Berserk, severity 3, for 3 rounds.",
+        )
 
     def test_the_room_sees_the_loss_of_control(self) -> None:
         witness = self.make_player("Witness", room=self.field)
@@ -292,7 +297,42 @@ class WoundTriggers(_ControlLossCase):
         with force_check_outcome(self.failure):
             self.hit(60)
 
-        self.assertTold(witness, "Garrick loses control: Berserk.")
+        self.assertTold(
+            witness,
+            "Garrick falls below 50% health. Garrick fights to keep control. Hold the rage "
+            "vs 30: Failure. Garrick loses control: Berserk, severity 3, for 3 rounds.",
+        )
+
+    def test_the_onset_names_the_bands_control_and_intensity_shift(self) -> None:
+        """Ruling 35: a band that also moves control and intensity says so after the onset."""
+        band = self.trigger.bands.get(outcome=self.failure)
+        band.control_change = -6
+        band.intensity = 4
+        band.save(update_fields=["control_change", "intensity"])
+        self.watch(self.garrick)
+        with force_check_outcome(self.failure):
+            self.hit(60)
+
+        self.assertTold(
+            self.garrick,
+            "You lose control: Berserk, severity 3, for 3 rounds · Control -6 · Intensity +4.",
+        )
+
+    def test_a_band_that_only_moves_control_says_so_without_an_onset(self) -> None:
+        """Ruling 35: with no condition applied, only the shifts the band holds are told."""
+        partial = ensure_canonical_check_outcome("Partial Success")
+        ControlLossBandFactory(trigger=self.trigger, outcome=partial, control_change=-2)
+        self.watch(self.garrick)
+        with force_check_outcome(partial):
+            self.hit(60)
+
+        self.assertTold(
+            self.garrick,
+            "You fall below 50% health. You fight to keep control. Hold the rage vs 30: "
+            "Partial Success. Control -2.",
+        )
+        self.assertNotTold(self.garrick, "lose control")
+        self.assertNotTold(self.garrick, "Intensity")
 
     def test_a_killing_hit_rolls_no_wound_trigger(self) -> None:
         witness = self.make_player("Witness", room=self.field)
@@ -318,7 +358,7 @@ class WoundTriggers(_ControlLossCase):
 
         self.assertEqual(capture.target_difficulty, 30)
         self.assertIsNotNone(_berserk_of(self.garrick))
-        self.assertTold(self.garrick, "You lose control: Berserk.")
+        self.assertTold(self.garrick, "You lose control: Berserk, severity 3, for 3 rounds.")
 
     @override_settings(SEED_SAMPLE_CONTENT=True)  # the Endurance check type gates on #2698
     def test_a_hit_that_knocks_him_out_rolls_no_wound_trigger(self) -> None:
@@ -371,7 +411,11 @@ class WoundTriggers(_ControlLossCase):
         with force_check_outcome(self.failure):
             self.hit(60)
 
-        self.assertTold(witness, "a hooded man loses control: Berserk.")
+        self.assertTold(
+            witness,
+            "a hooded man falls below 50% health. a hooded man fights to keep control.",
+        )
+        self.assertTold(witness, "a hooded man loses control: Berserk, severity 3, for 3 rounds.")
         self.assertNotTold(witness, "Garrick")
 
     def test_a_swing_in_a_round_writes_the_loss_of_control_as_a_round_line(self) -> None:
@@ -400,7 +444,12 @@ class WoundTriggers(_ControlLossCase):
             scene=self.seat.encounter.scene, content__contains=line
         )
         self.assertEqual(persisted.count(), 1)
-        self.assertIn("a hooded man loses control: Berserk.", persisted.get().content)
+        self.assertEqual(
+            persisted.get().content,
+            "a hooded man falls below 50% health. a hooded man fights to keep control. Hold "
+            "the rage vs 30: Failure. a hooded man loses control: Berserk, severity 3, for 3 "
+            "rounds.",
+        )
         self.assertShownRow(witness, line)
         self.assertNotTold(witness, "Garrick")
         rows = self.mailbox(witness).rows
@@ -512,10 +561,12 @@ class StageTriggers(_ControlLossCase):
         curse = ConditionTemplateFactory(name="Hollow curse", has_progression=True)
         ConditionStageFactory(condition=curse, stage_order=1, severity_threshold=1)
         ConditionStageFactory(condition=curse, stage_order=2, severity_threshold=5)
-        third = ConditionStageFactory(condition=curse, stage_order=3, severity_threshold=10)
+        third = ConditionStageFactory(
+            condition=curse, stage_order=3, severity_threshold=10, name="the Hollowing"
+        )
         trigger = ControlLossTriggerFactory(
             vulnerability=curse, fires_on=ControlLossFiresOn.CONDITION_STAGE, stage=third,
-            base_difficulty=25,
+            base_difficulty=25, check_type=CheckTypeFactory(name="Hold fast"),
         )  # fmt: skip
         self.band(trigger, self.failure, applies=self.berserk)
         instance = apply_condition(maren, curse).instance
@@ -534,7 +585,11 @@ class StageTriggers(_ControlLossCase):
 
         self.assertEqual(capture.target_difficulty, 25)
         self.assertEqual(_berserk_of(maren).severity, 3)
-        self.assertTold(maren, "You lose control: Berserk.")
+        self.assertTold(
+            maren,
+            "Hollow curse reaches the Hollowing. You fight to keep control. Hold fast vs 25: "
+            "Failure. You lose control: Berserk, severity 3, for 3 rounds.",
+        )
 
     def _timed_curse(self):
         """A curse that moves from stage 1 to stage 2 after one round; stage 2 triggers."""
@@ -572,7 +627,7 @@ class StageTriggers(_ControlLossCase):
         self.assertEqual(capture.target_difficulty, 25)
         self.assertIsNotNone(_berserk_of(maren))
         # Inside the round the line is one of the round's narration rows (R1).
-        self.assertShownRow(maren, "Maren loses control: Berserk.")
+        self.assertShownRow(maren, "Maren loses control: Berserk, severity 3, for 3 rounds.")
         self.assertNotTold(maren, "You lose control")
 
     def test_a_rage_that_runs_out_in_the_same_tick_does_not_suppress_the_trigger(self) -> None:
@@ -694,7 +749,12 @@ class MoonTrigger(_ControlLossCase):
         # 20 + 5 x 10 - 10 x level 1 - min(30, 5 x thread level 2) = 50
         self.assertEqual(capture.target_difficulty, 50)
         self.assertEqual(_berserk_of(self.wynn).severity, 3)
-        self.assertTold(self.wynn, "You lose control: Berserk.")
+        check = self.trigger.check_type.name
+        self.assertTold(
+            self.wynn,
+            f"The moon pulls at you. You fight to keep control. {check} vs 50: Failure. "
+            "You lose control: Berserk, severity 3, for 3 rounds.",
+        )
 
     def test_a_held_roll_leaves_the_lycan_themself(self) -> None:
         """The seeded Success band applies nothing and moves no control, so the game says
