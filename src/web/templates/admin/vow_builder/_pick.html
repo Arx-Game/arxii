@@ -6,12 +6,13 @@ limits formset and its payload lines. `entry` is a views._PickEntry.
 {% with f=entry.form %}
 <details class="vb-pick" data-pick-row{% if f.errors or entry.limits.total_error_count %} open{% endif %}>
   <summary class="vb-pick-summary">
-    <span><b>{{ f.instance.name|default:"New pick" }}</b></span>
-    <span>value {{ f.value.value|default:"" }}</span>
+    <span>{{ entry.level }}</span>
+    <span class="vb-pick-name"><b>{{ f.instance.name|default:"New pick" }}</b></span>
+    <span data-pick-value>{{ f.value.value|default:"" }}</span>
     <span>{{ entry.limits_text }}</span>
-    <span>price <span class="vb-price" data-pick-price>{{ entry.price|default_if_none:"" }}</span></span>
-    <span>{% if entry.payload %}{{ entry.payload|length }} payload row{{ entry.payload|length|pluralize }}{% else %}<span class="vb-muted">no payload</span>{% endif %}</span>
-    <span>held by {{ entry.held_by }}</span>
+    <span class="vb-price" data-pick-price data-stored-price="{{ entry.price|default_if_none:'' }}">{{ entry.price|default_if_none:"" }}</span>
+    <span>{% with first=entry.payload.0 %}{% if first %}{{ first.kind }}: {{ first.summary }}{% if entry.payload|length > 1 %} <span class="vb-muted">+{{ entry.payload|length|add:"-1" }} more</span>{% endif %}{% else %}<span class="vb-muted">no payload</span>{% endif %}{% endwith %}</span>
+    <span>{{ entry.held_by }}</span>
   </summary>
   <div class="vb-pickbody">
     {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}

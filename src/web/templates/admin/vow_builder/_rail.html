@@ -16,11 +16,11 @@ techniques the vow's added effects ride, and credit. Outside the main form, sinc
   <h2>Techniques this vow rides</h2>
   {% for row in rides %}
   <div class="vb-stat"><span>{{ row.label }}</span><b>{{ row.count }}</b></div>
-  {% if row.names %}
-  <p>{{ row.names|join:" · " }}{% if row.more %} · {{ row.more }} more{% endif %}</p>
+  {% if row.techniques %}
+  <p>{% for technique in row.techniques %}<a href="{{ technique.url }}">{{ technique.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}{% if row.more %} · {{ row.more }} more{% endif %}</p>
   {% endif %}
   {% empty %}
-  <p>No added effects yet.</p>
+  <p>No specialties or added effects yet.</p>
   {% endfor %}
 </div>
 

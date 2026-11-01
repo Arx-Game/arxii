@@ -44,11 +44,11 @@ from world.covenants.constants import (
     FOCUS_PICK_REDUCTION_LIMIT_KINDS,
     VOW_FOCUS_PICK_MAX_LEVEL,
 )
-from world.covenants.focus_picks import MIN_PICK_PRICE, pick_price, price_for
+from world.covenants.focus_picks import MIN_PICK_PRICE, price_for
 from world.covenants.models import CovenantRole, VowFocusPick, VowFocusPickLimit
 
 _DELETE = "DELETE"
-#: The POST field the "Save anyway" button in the holder warning sends.
+#: The POST field the "Save anyway" control sends in place of Save after the holder warning.
 CONFIRM_FIELD = "confirm_holders"
 
 
@@ -60,6 +60,9 @@ class _VowForms:
     specialties: SpecialtyFormSet
     picks: PickFormSet
     limits: dict[int, LimitFormSet]
+    #: The vow's picks as stored, read before any form bound (validation writes the
+    #: posted values onto the shared rows).
+    stored: dict[int, live.StoredPick]
 
     def deleted_pick_ids(self) -> set[int]:
         return {
@@ -82,6 +85,7 @@ class _VowForms:
 
 def _build_forms(request: HttpRequest, role: CovenantRole) -> _VowForms:
     data = request.POST if request.method == "POST" else None
+    stored = live.stored_picks(role)
     picks = PickFormSet(
         data,
         instance=role,
@@ -98,6 +102,7 @@ def _build_forms(request: HttpRequest, role: CovenantRole) -> _VowForms:
         specialties=SpecialtyFormSet(data, instance=role, prefix="specialties"),
         picks=picks,
         limits=limits,
+        stored=stored,
     )
 
 
@@ -138,6 +143,7 @@ class _PickEntry:
     """One pick row on the page: its form, its limits formset, and what it reads now."""
 
     form: object
+    level: int
     limits: LimitFormSet | None
     price: int | None
     held_by: int
@@ -168,9 +174,13 @@ def _form_level(form: object) -> int:
         return 1
 
 
-def _level_sections(role: CovenantRole, forms: _VowForms) -> list[_LevelSection]:
+def _level_sections(
+    role: CovenantRole,
+    forms: _VowForms,
+    stored: dict[int, live.StoredPick],
+    payload: dict[int | None, list[live.PayloadLine]],
+) -> list[_LevelSection]:
     held = live.holders_by_pick(role)
-    payload = live.payload_summaries(role)
     sections = {
         level: _LevelSection(level=level) for level in range(1, VOW_FOCUS_PICK_MAX_LEVEL + 1)
     }
@@ -182,8 +192,9 @@ def _level_sections(role: CovenantRole, forms: _VowForms) -> list[_LevelSection]
         section.entries.append(
             _PickEntry(
                 form=form,
+                level=level,
                 limits=forms.limits.get(pick.pk) if saved else None,
-                price=pick_price(pick) if saved else None,
+                price=stored[pick.pk].price if pick.pk in stored else None,
                 held_by=held.get(pick.pk, 0) if saved else 0,
                 limits_text=live.limits_text(pick.cached_limits) if saved else "none",
                 payload=payload.get(pick.pk, []) if saved else [],
@@ -209,9 +220,12 @@ def _render_page(
     forms: _VowForms,
     *,
     needs_setup: bool = False,
-    impacts: list[live.HolderImpact] | None = None,
+    changes: list[live.PickChange] | None = None,
 ) -> HttpResponse:
     payload = live.payload_summaries(role)
+    rides = live.rides_summary(role)
+    sub_roles = list(role.sub_roles.order_by("name"))
+    clause = live.description_clause(role.description)
     return render(
         request,
         "admin/vow_builder/page.html",
@@ -222,20 +236,24 @@ def _render_page(
             "role": role,
             "form": forms.vow,
             "flag_fields": [forms.vow[name] for name in VOW_FLAG_FIELDS],
+            "chip": " · ".join(filter(None, [role.get_covenant_type_display(), clause])),
             "specialties": forms.specialties,
+            "specialty_rows": [
+                (sf, rides.specialty_counts.get(sf.instance.function) if sf.instance.pk else None)
+                for sf in forms.specialties.forms
+            ],
             "picks": forms.picks,
-            "level_sections": _level_sections(role, forms),
+            "level_sections": _level_sections(role, forms, forms.stored, payload),
             "base_payload": payload.get(None, []),
             "base_add_links": _payload_add_links(role, None),
-            "sub_role_count": role.sub_roles.count(),
-            "sub_roles_url": (
-                f"{reverse('admin:arxii_covenantrole_changelist')}?parent_role__id__exact={role.pk}"
-            ),
+            "sub_roles": [
+                (sub.name, reverse("admin_vow_builder", args=[sub.pk])) for sub in sub_roles
+            ],
             "budget_rows": live.budget_rows(role),
             "budget": live.focus_pick_budget(),
-            "rides": live.rides_summary(role),
+            "rides": rides.rows,
             "price_rules": _price_rules(),
-            "impacts": impacts or [],
+            "changes": changes or [],
             "confirm_field": CONFIRM_FIELD,
             "needs_setup": needs_setup,
         },
@@ -270,7 +288,7 @@ def _render_refused(
     request: HttpRequest,
     role: CovenantRole,
     forms: _VowForms,
-    impacts: list[live.HolderImpact] | None = None,
+    changes: list[live.PickChange] | None = None,
 ) -> HttpResponse:
     """Re-render with the posted values, then drop every bound row from the identity map.
 
@@ -278,7 +296,7 @@ def _render_refused(
     when the render itself raises.
     """
     try:
-        return _render_page(request, role, forms, impacts=impacts)
+        return _render_page(request, role, forms, changes=changes)
     finally:
         flush_refused_instances(*forms.bound())
 
@@ -291,16 +309,14 @@ def vow_builder(request: HttpRequest, pk: int) -> HttpResponse:
     if request.method != "POST":
         forms = _build_forms(request, role)
         return _render_page(request, role, forms, needs_setup=contributor is None)
-    # Read before any form binds: validation writes the posted values onto the shared rows.
-    stored = live.stored_picks(role)
     forms = _build_forms(request, role)
     if contributor is None:
         return _render_page(request, role, forms, needs_setup=True)
     if not forms.is_valid():
         return _render_refused(request, role, forms)
-    impacts = live.holder_impact(role, _new_prices(forms), stored)
-    if impacts and request.POST.get(CONFIRM_FIELD) != "1":
-        return _render_refused(request, role, forms, impacts)
+    changes = live.pick_changes(role, _new_prices(forms), forms.stored)
+    if changes and CONFIRM_FIELD not in request.POST:
+        return _render_refused(request, role, forms, changes)
     saved = False
     try:
         _save(request, forms, contributor)

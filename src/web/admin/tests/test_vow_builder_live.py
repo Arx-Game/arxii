@@ -50,7 +50,7 @@ class BudgetRowsTests(TestCase):
         self.assertEqual({r.budget for r in live.budget_rows(self.role)}, {6})
 
 
-class HolderImpactTests(TestCase):
+class _HolderCase(TestCase):
     def setUp(self) -> None:
         self.role = CovenantRoleFactory(name="Fulmination")
         self.kneel = VowFocusPickFactory(
@@ -72,6 +72,8 @@ class HolderImpactTests(TestCase):
         CharacterVowFocusPickFactory(character_role=self.corvin, pick=self.kneel)
         CharacterVowFocusPickFactory(character_role=self.corvin, pick=self.halo)
 
+
+class HolderImpactTests(_HolderCase):
     def _by_name(self, impacts: list[live.HolderImpact]) -> dict[str, live.HolderImpact]:
         return {impact.holder_name: impact for impact in impacts}
 
@@ -96,3 +98,31 @@ class HolderImpactTests(TestCase):
         self.ysolde.save(update_fields=["left_at"])
         impacts = self._by_name(live.holder_impact(self.role, {self.kneel.pk: 3}))
         self.assertEqual(set(impacts), {"Corvin"})
+
+
+class PickChangesTests(_HolderCase):
+    def test_a_raise_names_the_pick_and_the_other_picks_behind_a_total(self) -> None:
+        (change,) = live.pick_changes(self.role, {self.kneel.pk: 3, self.halo.pk: 2})
+        self.assertEqual(change.headline, "Kneel's price goes from 2 to 3. Two characters hold it.")
+        lines = {line.impact.holder_name: line.text for line in change.holders}
+        self.assertEqual(lines["Ysolde"], "stays within level 3's budget (3 of 4).")
+        self.assertEqual(
+            lines["Corvin"], "also holds Static Halo and goes over level 3's budget (5 of 4)."
+        )
+
+    def test_a_delete_returns_the_price(self) -> None:
+        (change,) = live.pick_changes(self.role, {self.kneel.pk: None})
+        self.assertEqual(change.headline, "Deleting Kneel returns its price to 2 holders.")
+
+
+class DescriptionClauseTests(TestCase):
+    def test_first_clause_lower_cased(self) -> None:
+        self.assertEqual(live.description_clause("Ranged damage. Strikes far."), "ranged damage")
+
+    def test_a_long_clause_is_cut_at_a_word(self) -> None:
+        clause = live.description_clause("A" + " very" * 20)
+        self.assertTrue(clause.endswith("..."))
+        self.assertLessEqual(len(clause), live.CLAUSE_LENGTH + 3)
+
+    def test_blank_stays_blank(self) -> None:
+        self.assertEqual(live.description_clause(""), "")

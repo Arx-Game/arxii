@@ -11,6 +11,7 @@ Built in ``setUp``: the holder memberships create Evennia objects, which
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 
@@ -33,12 +34,14 @@ from world.covenants.factories import (
     CharacterVowFocusPickFactory,
     CovenantRoleFactory,
     CovenantRoleTechniqueSpecialtyFactory,
+    SubroleCovenantRoleFactory,
     VowAddedEffectFactory,
     VowFocusPickFactory,
     VowFocusPickLimitFactory,
 )
 from world.covenants.models import CharacterVowFocusPick, CovenantRole, VowFocusPick
 from world.magic.constants import TechniqueFunction
+from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
 
 
 def _superuser(name: str) -> AccountDB:
@@ -152,7 +155,26 @@ class VowPageGetTests(VowPageCase):
             self.assertIn(text, body)
         self.assertIn("Budget by level", body)
         self.assertIn("Techniques this vow rides", body)
-        self.assertIn("held by 2", body)  # Kneel
+        for header in ("Level", "Pick", "Value", "Limits", "Price", "Payload", "Held by"):
+            self.assertIn(f"<span>{header}</span>", body)
+        self.assertIn('data-stored-price="2"', body)  # Kneel, the price the script compares to
+        self.assertIn('href="/admin/_vow_builder/', body)
+
+    def test_header_chip_sub_roles_and_specialty_rides(self) -> None:
+        self.role.description = "Ranged damage. Strikes from afar."
+        self.role.save()
+        sub = SubroleCovenantRoleFactory(parent_role=self.role, name="Thunderhead")
+        bolt = TechniqueFactory(name="Bolt")
+        TechniqueFunctionTagFactory(technique=bolt, function=TechniqueFunction.BARRIER)
+        self.client.force_login(self.author)
+        body = self._get()
+        self.assertIn("Covenant of the Durance · ranged damage", body)
+        self.assertRegex(
+            body, r"1 sub-role:\s+<a href=\"" + reverse("admin_vow_builder", args=[sub.pk])
+        )
+        self.assertIn("1 technique</td>", body)
+        self.assertIn("Barrier specialty", body)
+        self.assertIn(reverse("admin:arxii_technique_change", args=[bolt.pk]), body)
 
     def test_payload_lines_and_prefilled_add_links(self) -> None:
         VowAddedEffectFactory(
@@ -226,7 +248,7 @@ class VowPageSaveTests(VowPageCase):
         self.assertEqual(charge.written_by, self.writer)
         self.assertEqual(CovenantRole.objects.get(pk=self.role.pk).written_by, self.writer)
         self.assertTrue(LogEntry.objects.filter(object_id=str(self.role.pk)).exists())
-        self.assertIn("value 5", self._get())
+        self.assertIn("<span data-pick-value>5</span>", self._get())
 
     def test_raising_a_held_pick_warns_with_each_holder_and_saves_nothing(self) -> None:
         self.client.force_login(self.author)
@@ -236,10 +258,18 @@ class VowPageSaveTests(VowPageCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         self.assertIn("Before you save", body)
-        self.assertRegex(body, r"Ysolde Marrow</a>, level 3:\s+2 to 3 of 4")
+        self.assertIn("unsaved changes: 1", body)
+        self.assertIn("Kneel&#x27;s price goes from 2 to 3. Two characters hold it.", body)
         self.assertRegex(
-            body, r"Corvin Ashe</a>, level 3:\s+4 to 5 of 4\s+<span class=\"vb-over\">"
+            body, r"Ysolde Marrow</a>\s+stays within level 3&#x27;s budget \(3 of 4\)\."
         )
+        self.assertRegex(
+            body,
+            r"Corvin Ashe</a>\s+<span class=\"vb-over\">also holds Static Halo and goes over "
+            r"level 3&#x27;s budget \(5 of 4\)\.",
+        )
+        self.assertIn('name="confirm_holders" value="Save anyway"', body)
+        self.assertNotIn('name="save" value="Save"', body)
         self.assertEqual(self._stored_value(self.kneel), 4)
         self.assertEqual(VowFocusPick.objects.get(pk=self.kneel.pk).value, 4)
 
@@ -256,7 +286,12 @@ class VowPageSaveTests(VowPageCase):
         self.client.force_login(self.author)
         key = self._pick_key(self.kneel, "DELETE")
         body = self.client.post(self.url, self._payload(**{key: "on"})).content.decode()
-        self.assertRegex(body, r"Corvin Ashe</a>, level 3:\s+4 to 2 of 4")
+        self.assertIn("Deleting Kneel returns its price to 2 holders.", body)
+        self.assertRegex(
+            body,
+            r"Corvin Ashe</a>\s+also holds Static Halo and stays within level 3&#x27;s budget "
+            r"\(2 of 4\)",
+        )
         self.assertTrue(VowFocusPick.objects.filter(pk=self.kneel.pk).exists())
         response = self.client.post(self.url, self._payload(**{key: "on", "confirm_holders": "1"}))
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
@@ -295,7 +330,8 @@ class VowPageSaveTests(VowPageCase):
         self.client.force_login(self.author)
         key = f"l{self.kneel.pk}-0-frequency_tenths"
         body = self.client.post(self.url, self._payload(**{key: "3"})).content.decode()
-        self.assertRegex(body, r"Ysolde Marrow</a>, level 3:\s+2 to 1 of 4")
+        self.assertIn("Kneel&#x27;s price goes from 2 to 1.", body)
+        self.assertRegex(body, r"Ysolde Marrow</a>\s+stays within level 3&#x27;s budget \(1 of 4\)")
 
     def test_a_refused_edit_leaves_the_cached_pick_as_stored(self) -> None:
         self.client.force_login(self.author)
@@ -328,22 +364,65 @@ class VowPageSaveTests(VowPageCase):
         self.assertEqual(VowFocusPick.objects.get(pk=self.kneel.pk).reviewed_by, self.writer)
 
 
+class _ClassCollector(HTMLParser):
+    """Collects what the styling test reads off a rendered page.
+
+    Every class token inside ``#vow-builder-root`` (``<template>`` contents included: the
+    parser reads them as ordinary tags), every ``<button>`` inside a ``.submit-row`` and
+    whether it carries ``.button``, and how many ``<h1>`` sit inside ``#content``.
+    """
+
+    VOID = frozenset({"input", "br", "hr", "img", "link", "meta", "col", "source", "wbr"})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stack: list[tuple[str, str, set[str]]] = []
+        self.classes: set[str] = set()
+        self.bare_submit_buttons = 0
+        self.content_h1 = 0
+
+    def _inside(self, *, element_id: str = "", css_class: str = "") -> bool:
+        return any(
+            (element_id and tag_id == element_id) or (css_class and css_class in tokens)
+            for _, tag_id, tokens in self.stack
+        )
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        tokens = set((attributes.get("class") or "").split())
+        element_id = attributes.get("id") or ""
+        if element_id == "vow-builder-root" or self._inside(element_id="vow-builder-root"):
+            self.classes |= tokens
+        if tag == "button" and self._inside(css_class="submit-row") and "button" not in tokens:
+            self.bare_submit_buttons += 1
+        if tag == "h1" and self._inside(element_id="content"):
+            self.content_h1 += 1
+        if tag not in self.VOID:
+            self.stack.append((tag, element_id, tokens))
+
+    def handle_endtag(self, tag: str) -> None:
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                return
+
+
 class VowBuilderStylingTest(VowPageCase):
-    """Every rule the page's layout needs reaches the page (#3667's rule, for #4880)."""
+    """Every rule the page's layout needs reaches the page (#3667's rule, for #4880).
+
+    Read off the rendered page in both its states, at rest and showing the held-pick
+    warning, so a class only the warning emits is checked too.
+    """
 
     REQUIRED_STYLESHEETS = ("admin/css/base.css", "admin/css/forms.css", "admin/css/widgets.css")
-    ADMIN_PROVIDED_CLASSES = frozenset(
-        {
-            "module",
-            "help",
-            "errornote",
-            "breadcrumbs",
-            "submit-row",
-            "button",
-            "default",
-            "tuning-table",
-        }
-    )
+
+    def _states(self) -> dict[str, str]:
+        self.client.force_login(self.author)
+        warned = self.client.post(
+            self.url, self._payload(**{self._pick_key(self.kneel, "value"): "6"})
+        ).content.decode()
+        self.assertIn("Before you save", warned)
+        return {"at rest": self._get(), "warning": warned}
 
     def test_the_page_links_forms_css_and_widgets_css(self) -> None:
         self.client.force_login(self.author)
@@ -351,16 +430,39 @@ class VowBuilderStylingTest(VowPageCase):
         missing = [s for s in self.REQUIRED_STYLESHEETS if not any(h.endswith(s) for h in linked)]
         self.assertEqual(missing, [], f"Linked: {linked}")
 
+    def test_every_class_under_the_root_has_a_rule_reaching_the_page(self) -> None:
+        for state, body in self._states().items():
+            with self.subTest(state=state):
+                collector = _ClassCollector()
+                collector.feed(body)
+                css = reachable_css(body)
+                undefined = sorted(
+                    token
+                    for token in collector.classes
+                    if not re.search(rf"\.{re.escape(token)}\b", css)
+                )
+                self.assertEqual(undefined, [], "class hooks with no CSS rule reaching the page")
+
     def test_every_class_the_templates_emit_has_a_rule_reaching_the_page(self) -> None:
-        self.client.force_login(self.author)
-        css = reachable_css(self._get())
+        css = reachable_css(self._get_logged_in())
         template_dir = Path(__file__).resolve().parents[2] / "templates/admin/vow_builder"
         emitted: set[str] = set()
         for path in sorted(template_dir.glob("*.html")):
             emitted |= emitted_classes(path)
         undefined = sorted(
-            token
-            for token in emitted - self.ADMIN_PROVIDED_CLASSES
-            if not re.search(rf"\.{re.escape(token)}\b", css)
+            token for token in emitted if not re.search(rf"\.{re.escape(token)}\b", css)
         )
         self.assertEqual(undefined, [], "class hooks with no CSS rule reaching the page")
+
+    def test_submit_controls_are_admin_styled_and_there_is_one_heading(self) -> None:
+        for state, body in self._states().items():
+            with self.subTest(state=state):
+                collector = _ClassCollector()
+                collector.feed(body)
+                self.assertEqual(collector.bare_submit_buttons, 0)
+                self.assertEqual(collector.content_h1, 1)
+                self.assertEqual(body.count('class="submit-row"'), 2)  # the form's and the rail's
+
+    def _get_logged_in(self) -> str:
+        self.client.force_login(self.author)
+        return self._get()

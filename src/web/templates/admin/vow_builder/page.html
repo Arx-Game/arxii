@@ -31,8 +31,8 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
 {% block content %}
 {% include "admin/tuning/_panel_css.html" %}
 {% include "admin/vow_builder/_css.html" %}
+{% comment %}The vow's name is admin's own content title (base.html), so no heading here.{% endcomment %}
 <div id="vow-builder-root">
-  <h1>{{ role.name }}</h1>
 
   {% if needs_setup %}
     {% include "admin/upbringing_builder/_setup.html" %}
@@ -47,7 +47,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
 
         <div class="module" id="vow-module">
           <h2>The vow
-            <span class="vb-chips"><span class="vb-chip">{{ role.get_covenant_type_display }}</span></span>
+            <span class="vb-chips"><span class="vb-chip">{{ chip }}</span></span>
           </h2>
           {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
           <table class="tuning-table vb-table">
@@ -78,7 +78,8 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
                   {% endfor %}
                 </div></td></tr>
               <tr><th>Sub-roles</th>
-                <td colspan="3"><a href="{{ sub_roles_url }}">{{ sub_role_count }} sub-role{{ sub_role_count|pluralize }}</a></td></tr>
+                <td colspan="3">{{ sub_roles|length }} sub-role{{ sub_roles|length|pluralize }}{% if sub_roles %}:
+                  {% for name, url in sub_roles %}<a href="{{ url }}">{{ name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}{% endif %}</td></tr>
             </tbody>
           </table>
         </div>
@@ -91,16 +92,17 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           {{ specialties.management_form }}
           {% if specialties.non_form_errors %}<p class="errornote">{{ specialties.non_form_errors }}</p>{% endif %}
           <table class="tuning-table vb-table">
-            <thead><tr><th>Function</th><th>Multiplier (tenths)</th><th>Remove</th></tr></thead>
+            <thead><tr><th>Function</th><th>Multiplier (tenths)</th><th>Rides</th><th>Remove</th></tr></thead>
             <tbody id="specialties-body">
-              {% for sf in specialties.forms %}
+              {% for sf, rides_count in specialty_rows %}
               <tr>
                 {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
                 <td>{{ sf.function.errors }}{{ sf.function }}</td>
                 <td>{{ sf.multiplier_tenths.errors }}{{ sf.multiplier_tenths }}</td>
+                <td>{% if rides_count is not None %}{{ rides_count }} technique{{ rides_count|pluralize }}{% endif %}</td>
                 <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
               </tr>
-              {% if sf.non_field_errors %}<tr><td colspan="3">{{ sf.non_field_errors }}</td></tr>{% endif %}
+              {% if sf.non_field_errors %}<tr><td colspan="4">{{ sf.non_field_errors }}</td></tr>{% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -109,6 +111,7 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               {% for hidden in specialties.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
               <td>{{ specialties.empty_form.function }}</td>
               <td>{{ specialties.empty_form.multiplier_tenths }}</td>
+              <td></td>
               <td></td>
             </tr>
           </template>
@@ -141,6 +144,10 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           </h2>
           {{ picks.management_form }}
           {% if picks.non_form_errors %}<p class="errornote">{{ picks.non_form_errors }}</p>{% endif %}
+          <div class="vb-pick-head">
+            <span>Level</span><span>Pick</span><span>Value</span><span>Limits</span>
+            <span>Price</span><span>Payload</span><span>Held by</span>
+          </div>
           {% for section in level_sections %}
           <div class="vb-level">Level {{ section.level }}</div>
           <div id="picks-level-{{ section.level }}">
@@ -154,8 +161,9 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           <template id="empty-pick-template">
             <details class="vb-pick" data-pick-row open>
               <summary class="vb-pick-summary">
-                <span><b>New pick</b></span><span></span><span>none</span>
-                <span>price <span class="vb-price" data-pick-price></span></span>
+                <span></span><span class="vb-pick-name"><b>New pick</b></span>
+                <span data-pick-value></span><span>none</span>
+                <span class="vb-price" data-pick-price data-stored-price=""></span>
                 <span></span><span></span>
               </summary>
               <div class="vb-pickbody">
@@ -184,27 +192,32 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           </div>
         </div>
 
-        {% if impacts %}
+        {% if changes %}
         <div class="module" id="holders-module">
-          <h2>Before you save</h2>
+          <h2>Before you save
+            <span class="vb-chips"><span class="vb-chip">unsaved changes: {{ changes|length }}</span></span>
+          </h2>
+          {% for change in changes %}
           <div class="vb-warn">
-            This save changes what characters holding these picks spend:
+            {{ change.headline }}
             <ul>
-              {% for impact in impacts %}
-              <li><a href="{{ impact.picks_url }}">{{ impact.holder_name }}</a>, level {{ impact.level }}:
-                {{ impact.old_total }} to {{ impact.new_total }} of {{ impact.budget }}{% if impact.over %}
-                <span class="vb-over">over budget</span>{% endif %}</li>
+              {% for line in change.holders %}
+              <li><a href="{{ line.impact.picks_url }}">{{ line.impact.holder_name }}</a>
+                {% if line.impact.over %}<span class="vb-over">{{ line.text }}</span>{% else %}{{ line.text }}{% endif %}</li>
               {% endfor %}
             </ul>
           </div>
-          <div class="submit-row">
-            <button type="submit" name="{{ confirm_field }}" value="1" class="default">Save anyway</button>
-          </div>
+          {% endfor %}
         </div>
         {% endif %}
 
         <div class="submit-row">
-          <input type="submit" name="save" value="Save" {% if not impacts %}class="default"{% endif %}>
+          <a href="{% url 'admin_vow_builder' role.pk %}" class="closelink">Discard changes</a>
+          {% if changes %}
+          <input type="submit" name="{{ confirm_field }}" value="Save anyway" class="default">
+          {% else %}
+          <input type="submit" name="save" value="Save" class="default">
+          {% endif %}
         </div>
       </form>
     </div>
@@ -251,9 +264,17 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
     return Math.max(rules.min_price, Math.floor(numerator / denominator) - reductions);
   }
 
+  // The collapsed row shows the live value and price; a price that differs from the
+  // stored one reads "3 (was 2)".
   function refreshPrice(row) {
+    var valueInput = row.querySelector('.vb-pickbody input[name$="-value"]');
+    var valueCell = row.querySelector("[data-pick-value]");
+    if (valueCell && valueInput) { valueCell.textContent = valueInput.value; }
     var cell = row.querySelector("[data-pick-price]");
-    if (cell) { cell.textContent = String(priceFor(row)); }
+    if (!cell) { return; }
+    var price = String(priceFor(row));
+    var stored = cell.dataset.storedPrice;
+    cell.textContent = stored && stored !== price ? price + " (was " + stored + ")" : price;
   }
 
   var pickRows = document.querySelectorAll("[data-pick-row]");

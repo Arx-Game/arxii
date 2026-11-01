@@ -66,6 +66,7 @@ against admin's light and dark selectors, so the page follows the theme toggle.
   /* Payload lines: one plain sentence each, with its edit link in the popup. */
   #vow-builder-root .vb-payload { margin: 0; padding: 0 10px; list-style: none; }
   #vow-builder-root .vb-payload li {
+    list-style: none;
     padding: 0.3rem 0;
     border-bottom: 1px solid var(--hairline-color);
     font-size: 0.8125rem;
@@ -87,14 +88,30 @@ against admin's light and dark selectors, so the page follows the theme toggle.
     border: 1px solid var(--hairline-color);
     border-radius: 3px;
   }
+  /* The header row and every collapsed pick share one grid, so the columns line up:
+     Level, Pick, Value, Limits, Price, Payload, Held by. */
+  #vow-builder-root .vb-pick-head,
   #vow-builder-root .vb-pick-summary {
     display: grid;
-    grid-template-columns: minmax(8rem, 1.4fr) 4rem minmax(6rem, 1fr) 5rem minmax(8rem, 2fr) 5rem;
+    grid-template-columns: 3rem minmax(8rem, 1.3fr) 3.5rem minmax(6rem, 1fr) 6rem minmax(10rem, 2.6fr) 4rem;
     gap: 0.6rem;
     padding: 0.45rem 0.6rem;
-    cursor: pointer;
     font-size: 0.8125rem;
   }
+  #vow-builder-root .vb-pick-head {
+    margin: 0.5rem 10px 0;
+    padding-top: 0;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--body-quiet-color);
+  }
+  #vow-builder-root .vb-pick-summary { cursor: pointer; list-style: none; }
+  #vow-builder-root .vb-pick-summary::-webkit-details-marker { display: none; }
+  #vow-builder-root .vb-pick-name::before { content: "\25B8  "; color: var(--body-quiet-color); }
+  #vow-builder-root .vb-pick[open] .vb-pick-name::before { content: "\25BE  "; }
   #vow-builder-root .vb-pick-summary b { font-weight: 600; }
   #vow-builder-root .vb-pickbody { padding: 0.25rem 0.6rem 0.6rem; }
   #vow-builder-root .vb-sub {

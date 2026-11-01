@@ -87,7 +87,7 @@ row is limited.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
@@ -113,7 +113,7 @@ from world.covenants.perks.services import (
     vow_holder_thread_levels,
 )
 from world.covenants.types import FiredVowEffect
-from world.magic.models.techniques import ConditionTargetKind, Technique
+from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueFunctionTag
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -155,6 +155,27 @@ def effect_rides_technique(
         and effect.gift_id in (None, technique.gift_id)
         and effect.technique_id in (None, technique.pk)
     )
+
+
+def techniques_by_function(functions: Iterable[str]) -> dict[str, list[Technique]]:
+    """Every catalog technique carrying each of ``functions``, by name: one query (#4880).
+
+    The function-tag half of the match, for a reader that needs many groups at once (the
+    vow page's rail and its specialty rows); narrow each list with
+    ``effect_rides_technique`` for an added effect.
+    """
+    wanted = set(functions)
+    by_function: dict[str, list[Technique]] = {function: [] for function in wanted}
+    if not wanted:
+        return by_function
+    tags = (
+        TechniqueFunctionTag.objects.filter(function__in=wanted)
+        .select_related("technique")
+        .order_by("technique__name")
+    )
+    for tag in tags:
+        by_function[tag.function].append(tag.technique)
+    return by_function
 
 
 def techniques_ridden_by(effect: VowAddedEffect) -> QuerySet[Technique]:
