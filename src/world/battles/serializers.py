@@ -2,16 +2,18 @@
 
 ``BattleDetailSerializer`` is the single aggregate payload the strategic
 battle-map page consumes: sides, places (with fortifications + any embedded
-vehicle), units, and participants, all nested under one Battle. Persona
-resolution follows ``world/combat/serializers.py``'s ``_primary_persona``
-pattern — reads ``CharacterSheet.cached_payload_personas`` and exposes only
-id/name/thumbnail_url/thumbnail_media_url (never account/username — see the
+vehicle), units, and participants, all nested under one Battle. A participant's
+persona is the face they present (``personas_for_sheets``, read once per roster, the
+same as the combat roster, #4802) and exposes only
+id/name/thumbnail_url/thumbnail_media_url (never account/username: see the
 leak rule that motivated #1932).
 """
 
 from __future__ import annotations
 
-from django.core.exceptions import ObjectDoesNotExist
+from typing import Any
+
+from django.db.models.manager import BaseManager
 from rest_framework import serializers
 
 from world.battles.models import (
@@ -29,7 +31,6 @@ from world.battles.models import (
     Fortification,
 )
 from world.mechanics.models import Property
-from world.scenes.constants import PersonaType
 from world.societies.models import LegendEntry
 
 
@@ -170,6 +171,19 @@ class BattleUnitSerializer(serializers.ModelSerializer):
         ]
 
 
+class _BattleParticipantListSerializer(serializers.ListSerializer):
+    """Reads the face every listed participant presents in one batch (#4802)."""
+
+    def to_representation(self, data: Any) -> list[Any]:
+        from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+        participants = list(data.all() if isinstance(data, BaseManager) else data)
+        self.context["participant_personas"] = personas_for_sheets(
+            [participant.character_sheet_id for participant in participants]
+        )
+        return super().to_representation(participants)
+
+
 class BattleParticipantSerializer(serializers.ModelSerializer):
     """A player character enlisted in the battle, with their public persona face."""
 
@@ -184,6 +198,7 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BattleParticipant
+        list_serializer_class = _BattleParticipantListSerializer
         fields = [
             "id",
             "status",
@@ -195,39 +210,33 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             "declared_this_round",
         ]
 
-    def _primary_persona(self, obj: BattleParticipant):
-        """Resolve the participant's PRIMARY persona through the cached accessor.
+    def _presented_persona(self, obj: BattleParticipant):
+        """The face the participant presents now (``active_persona_for_sheet``), or None.
 
-        Mirrors ``world/combat/serializers.py``'s ``_primary_persona`` — reads
-        ``CharacterSheet.cached_payload_personas`` so serialization issues no
-        per-row query when the view prefetches it.
+        A list of participants reads every face in one batch into
+        ``context["participant_personas"]``; alone, this reads the one sheet. A mask
+        is shown as the mask, never the PRIMARY face behind it (#4802).
         """
-        try:
-            character_sheet = obj.character_sheet
-        except ObjectDoesNotExist:
-            return None
-        for persona in character_sheet.cached_payload_personas:
-            if persona.persona_type == PersonaType.PRIMARY:
-                return persona
-        return None
+        personas = self.context.get("participant_personas")
+        if personas is None:
+            from world.scenes.services import personas_for_sheets  # noqa: PLC0415
+
+            personas = personas_for_sheets([obj.character_sheet_id])
+        return personas.get(obj.character_sheet_id)
 
     def get_persona(self, obj: BattleParticipant) -> dict | None:
         """Public persona identity only — id/name/thumbnail(s), never account/username.
 
         ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
-        ``get_thumbnail_media_url`` — the uploaded-portrait ``Media`` FK,
-        already ``select_related``'d by the view's Prefetch (world/battles/views.py),
-        so this never issues a query. ``thumbnail_url`` is the legacy URLField,
-        kept alongside for callers still on it.
+        ``get_thumbnail_media_url``: the presented persona's uploaded-portrait ``Media``
+        FK, joined by ``personas_for_sheets``, so this never issues a query.
+        ``thumbnail_url`` is the legacy URLField, kept alongside for callers still on it.
         """
-        persona = self._primary_persona(obj)
+        persona = self._presented_persona(obj)
         if persona is None:
             return None
 
-        try:
-            character = persona.character_sheet.character
-        except AttributeError:
-            character = None
+        character = obj.character_sheet.character
         # #2196: use prefetched conditions if available (battles view prefetches
         # them on the character to avoid per-participant N+1).
         cached_conditions = (

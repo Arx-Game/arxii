@@ -31,8 +31,7 @@ from world.battles.serializers import (
 from world.conditions.models import ConditionInstance
 from world.gm.permissions import HasGMTrust
 from world.mechanics.models import Property
-from world.scenes.constants import PersonaType
-from world.scenes.models import Persona, Scene
+from world.scenes.models import Scene
 from world.societies.models import LegendEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -97,22 +96,6 @@ class BattleViewSet(ReadOnlyModelViewSet):
                     "character_sheet__active_alternate_self",
                     "character_sheet__active_alternate_self__alternate_self",
                 ).prefetch_related(
-                    # Pre-fill CharacterSheet.cached_payload_personas (a
-                    # @cached_property doubling as this to_attr target) so
-                    # BattleParticipantSerializer resolves the PRIMARY persona
-                    # with zero per-row queries. Queryset shape mirrors
-                    # world/combat/views.py's identical Prefetch (#630) and the
-                    # property's own documented fallback (must match exactly, or
-                    # prefetched vs. non-prefetched rows diverge).
-                    Prefetch(
-                        "character_sheet__personas",
-                        queryset=Persona.objects.filter(
-                            persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
-                        )
-                        .order_by("-persona_type", "created_at", "id")
-                        .select_related("thumbnail"),
-                        to_attr="cached_payload_personas",
-                    ),
                     # #2196: prefetch the character's active condition instances so
                     # resolve_thumbnail() doesn't fire per-participant queries.
                     Prefetch(
