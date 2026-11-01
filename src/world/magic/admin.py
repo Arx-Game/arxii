@@ -938,6 +938,7 @@ class GiftAdminForm(forms.ModelForm):
             "codex_entry",
             "style",
             "technique_skill",
+            "natural_weapon_template",
             "resonances",
             "ultimate_techniques",
             "written_by",

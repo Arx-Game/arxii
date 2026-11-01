@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.items.constants import GearArchetype
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 from world.magic.skill_choices import (
@@ -128,6 +129,22 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "techniques. A technique's own skill, if set, wins. A Major Gift's "
             "techniques take the caster's Path technique skill instead. Blank = this "
             f"Gift adds no skill. {MAGIC_SKILL_HELP}"
+        ),
+    )
+    # The gift points at the item primitive (ADR-0010), so world.items never imports
+    # world.magic for this. A natural weapon is not marked on the item: it is an
+    # instance of this template held by a character who holds this gift (#4898).
+    natural_weapon_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="natural_weapon_gifts",
+        limit_choices_to={"gear_archetype": GearArchetype.UNARMED},
+        help_text=(
+            "Claws, a bite or horns this gift gives its holder: an Unarmed item template "
+            "worn at the skin layer. Made and equipped once when the gift is gained, and "
+            "it can never be removed. Blank = no natural weapon."
         ),
     )
     ultimate_techniques = models.ManyToManyField(
