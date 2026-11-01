@@ -33,12 +33,20 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    FINAL_TOUCHES_ASPECT_HELP,
+    FINAL_TOUCHES_ASPECT_PROMPT,
+    FINAL_TOUCHES_ASPECT_UNKNOWN,
     FINAL_TOUCHES_CARDS_HEADING,
     FINAL_TOUCHES_CARDS_INTRO,
     FINAL_TOUCHES_CRIME_BLANK,
     FINAL_TOUCHES_CRIME_HELP,
     FINAL_TOUCHES_CRIME_LINE_LABEL,
     FINAL_TOUCHES_CRIME_PROMPT,
+    FINAL_TOUCHES_ORGANIZATION_HELP,
+    FINAL_TOUCHES_ORGANIZATION_NONE,
+    FINAL_TOUCHES_ORGANIZATION_PROMPT,
+    FINAL_TOUCHES_PRESTIGE_HELP,
+    FINAL_TOUCHES_PRESTIGE_PROMPT,
     FIRST_JOURNAL_FRAME,
     FIRST_JOURNAL_INSTITUTION,
     FIRST_JOURNAL_QUESTIONS,
@@ -458,6 +466,15 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "finaltouches_crime_line_label": FINAL_TOUCHES_CRIME_LINE_LABEL,  # PLACEHOLDER
     "finaltouches_crime_help": FINAL_TOUCHES_CRIME_HELP,  # PLACEHOLDER: Apostate rewrite
     "finaltouches_crime_blank": FINAL_TOUCHES_CRIME_BLANK,  # PLACEHOLDER: Apostate rewrite
+    # The grants' asks (#4852): the prestige story, the organization pick, the mentor line.
+    "finaltouches_prestige_prompt": FINAL_TOUCHES_PRESTIGE_PROMPT,  # PLACEHOLDER
+    "finaltouches_prestige_help": FINAL_TOUCHES_PRESTIGE_HELP,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_organization_prompt": FINAL_TOUCHES_ORGANIZATION_PROMPT,  # PLACEHOLDER
+    "finaltouches_organization_help": FINAL_TOUCHES_ORGANIZATION_HELP,  # PLACEHOLDER
+    "finaltouches_organization_none": FINAL_TOUCHES_ORGANIZATION_NONE,  # PLACEHOLDER
+    "finaltouches_aspect_prompt": FINAL_TOUCHES_ASPECT_PROMPT,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_aspect_help": FINAL_TOUCHES_ASPECT_HELP,  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_aspect_unknown": FINAL_TOUCHES_ASPECT_UNKNOWN,  # PLACEHOLDER
     "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
     "first_journal_frame": FIRST_JOURNAL_FRAME,
     "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],

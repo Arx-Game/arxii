@@ -35,7 +35,8 @@ Character creation is a multi-stage process that guides players through creating
 10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
-    reason and degree open offers, the Officially dead door (#4396), the card-unlocked
+    reason and degree open offers, the Officially dead door (#4396, opened by a held
+    Presumed Dead since #4856), the card-unlocked
     chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the
     prompt a held card asks, `Distinction.final_touches_prompt`; Jailbird's crime in
     `draft_data.crime` becomes a staff-only `justice.CharacterCrimeNote` at finalize, no
@@ -44,7 +45,11 @@ Character creation is a multi-stage process that guides players through creating
     (the pick's notes at finalize), an organization grant's pick in
     `draft_data.organizations` from `offers.organization_choices` (seated through
     `join_organization`), a path aspect grant's line naming the Path's stronger Aspect (a
-    `CharacterModifier` at finalize)), The Introductions; all optional (see
+    `CharacterModifier` at finalize); #4856: a worn persona grant gates the Officially dead
+    door (`officially_dead`), a hidden one asks for a second unworn face
+    (`draft_data.alter_ego`, `_write_alter_ego`), an organization tie asks `tie` with the
+    ask's `choices` and a `TieKind` in `draft_data.ties`, seated or bumped to
+    `FAVORED_FLOOR` by `_write_card_ties`), The Introductions; all optional (see
     `docs/systems/character_creation.md`'s "The Actor's Sheet", "The Final Touches
     chapter" and "The grants reconciled at finalize", ADR-0279, ADR-0282)
 11. **Review** - Final review and submission

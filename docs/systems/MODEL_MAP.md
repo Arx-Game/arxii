@@ -1621,6 +1621,7 @@
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
 - `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
+- `final_touches_prompts(draft: 'CharacterDraft') -> 'list[str]' - The optional questions the draft's cards ask at Final Touches (#4846), in enum order.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Give the new character its magic from the draft's picks (``provision_magic``, #4224).`
@@ -4061,6 +4062,7 @@
   - codex_grants <- codex.DistinctionCodexGrant
   - prestige_grant <- societies.DistinctionPrestigeGrant
   - organization_grant <- societies.DistinctionOrganizationGrant
+  - organization_tie <- societies.DistinctionOrganizationTie
   - appetite_upkeep <- magic.AppetiteUpkeep
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
@@ -4077,6 +4079,7 @@
   - table_update_request_details <- gm.DistinctionChangeRequestDetails
   - npc_regard_seeds <- npc_services.DistinctionRegardSeed
   - item_grants <- items.DistinctionItemGrant
+  - persona_grant <- scenes.DistinctionPersonaGrant
 
 ### DistinctionCategory
 **Foreign Keys:**
@@ -9009,6 +9012,10 @@
   - created_by -> evennia.AccountDB [FK] (nullable)
   - resolved_outcome_tier -> traits.CheckOutcome [FK] (nullable)
 
+### DistinctionPersonaGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
 ### Friendship
 **Foreign Keys:**
   - friender_tenure -> roster.RosterTenure [FK]
@@ -9813,6 +9820,11 @@
   - organization -> societies.Organization [FK] (nullable)
   - rank -> societies.OrganizationRank [FK] (nullable)
 
+### DistinctionOrganizationTie
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+  - org_type -> societies.OrganizationType [FK] (nullable)
+
 ### DistinctionPrestigeGrant
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [OneToOne]
@@ -10373,6 +10385,7 @@
 **Pointed to by:**
   - anchor_pool_prompts <- character_creation.OriginTemplateSlot
   - organizations <- societies.Organization
+  - distinction_ties <- societies.DistinctionOrganizationTie
   - house_templates <- societies.HouseTemplate
 
 ### PactCommitment

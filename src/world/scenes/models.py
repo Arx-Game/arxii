@@ -2138,6 +2138,44 @@ class DecisiveCheckMarker(SharedMemoryModel):
         return f"DecisiveCheckMarker(scene={self.scene_id}, beat={self.beat_id}, {self.status})"
 
 
+class DistinctionPersonaGrant(SharedMemoryModel):
+    """Config: a distinction that starts its holder with a second face (#4856, slice 6 of #4813).
+
+    The maintainer's ruling of 2026-11-01: Presumed Dead and Shady Alter Ego are the price of
+    starting with another persona. ``worn`` tells them apart. Worn (Presumed Dead): the card
+    opens the Officially dead door (#4396), the face the world meets while the true one is
+    believed dead, and the door shows only to a draft holding such a card. Not worn (Shady
+    Alter Ego): a second ESTABLISHED face with its own guise that the character is not
+    wearing, named at Final Touches. Same sidecar pattern as ``currency.DistinctionStartingGrant``
+    (ADR-0010: the consumer holds the FK pointing at the primitive); written once, by character
+    creation's finalize, through ``create_persona``.
+    """
+
+    distinction = models.OneToOneField(
+        "arxii.Distinction",
+        on_delete=models.CASCADE,
+        related_name="persona_grant",
+        help_text="The distinction whose new holders start with a second face.",
+    )
+    worn = models.BooleanField(
+        default=False,
+        help_text=(
+            "On: the face is worn from the first day and the true one is believed dead (the "
+            "Officially dead door; Presumed Dead). Off: a second face the character is not "
+            "wearing (Shady Alter Ego)."
+        ),
+    )
+
+    related_cache_fields: ClassVar[list[str]] = ["distinction"]
+
+    class Meta:
+        verbose_name = "Distinction Persona Grant"
+        verbose_name_plural = "Distinction Persona Grants"
+
+    def __str__(self) -> str:
+        return f"PersonaGrant({self.distinction_id}: {'worn' if self.worn else 'hidden'})"
+
+
 # Import place_models, action_models, and reaction_models for Django model discovery
 from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.boon_models import Boon  # noqa: E402, F401

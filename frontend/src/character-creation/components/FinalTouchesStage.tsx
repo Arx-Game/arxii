@@ -14,7 +14,10 @@
  * questions and the goals, the card-unlocked chapter (#4846): the lines a held card
  * unlocks (`ChapterOffers chapter="final_touches"`) and the prompt a held card asks,
  * today Jailbird's crime (a kind from the justice list and a sentence, saved as
- * `draft_data.crime`); the whole section is absent when nothing is unlocked. Nothing
+ * `draft_data.crime`), and the asks the grant sidecars raise (#4852, slice 6 of #4813:
+ * `draft.final_touches_cards`; a prestige card's story in `draft_data.prestige_stories`,
+ * an organization pick in `draft_data.organizations`, Capable Mentor's line); the whole
+ * section is absent when nothing is unlocked. Nothing
  * here blocks finalize. Everything is held locally and saved in one PATCH when
  * the player leaves the stage. Copy comes from CG explanation rows; the
  * in-code twins below are the fallbacks and must stay identical to the seeds
@@ -47,9 +50,10 @@ import type {
   DraftIntroductions,
   DraftOfficiallyDead,
   EnemyOffer,
+  FinalTouchesCard,
   GoalHorizon,
 } from '../types';
-import { CRIME_LINE_MAX_LENGTH, Stage } from '../types';
+import { CRIME_LINE_MAX_LENGTH, PRESTIGE_STORY_MAX_LENGTH, Stage } from '../types';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
@@ -263,6 +267,26 @@ function crimeFromDraft(crime: DraftCrime | null | undefined): CrimeDraft {
   return { kind_id: crime?.kind_id ?? null, line: crime?.line ?? '' };
 }
 
+/** The grants' asks (#4852); every line PLACEHOLDER for ApostateCD's rewrite, twins of the
+ * `finaltouches_*` copy rows seeded in `world/seeds/character_creation.py`. */
+const GRANTS = {
+  prestigePrompt: 'What people say happened.',
+  prestigeHelp: 'A sentence or two. This is the story attached to your name, not the truth of it.',
+  organizationPrompt: 'The body that marked your coming of age takes you in.',
+  organizationHelp:
+    'Any organization of your realm that admits player characters, secret societies ' +
+    'included. Skipped, the ritual stays a line in your story and no membership is made.',
+  organizationNone: 'None',
+  aspectPrompt: "Your mentor's lessons settle on {aspect}, the stronger Aspect of your Path.",
+  aspectHelp: 'Applied for you.',
+  aspectUnknown: "your Path's stronger Aspect",
+};
+
+/** The stories as the draft stores them: a blank one is no story, so its key is dropped. */
+function storiesToSave(stories: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(stories).filter(([, text]) => text.trim() !== ''));
+}
+
 const EMPTY_FACE: DraftOfficiallyDead = {
   face_name: '',
   concept: '',
@@ -355,6 +379,14 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     (draftData.officially_dead?.face_name ?? '').trim() !== ''
   );
   const [crime, setCrime] = useState<CrimeDraft>(() => crimeFromDraft(draftData.crime));
+  // The grants' answers (#4852), each keyed by the card's id as the draft stores them.
+  const [stories, setStories] = useState<Record<string, string>>(() => ({
+    ...(draftData.prestige_stories ?? {}),
+  }));
+  const [orgPicks, setOrgPicks] = useState<Record<string, number | null>>(() => ({
+    ...(draftData.organizations ?? {}),
+  }));
+  const cards: FinalTouchesCard[] = draft.final_touches_cards ?? [];
   // The card-unlocked chapter (#4846): shown only when a held card unlocks a line or asks
   // a question; `ChapterOffers` itself renders nothing for an empty chapter.
   const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
@@ -378,11 +410,14 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const remaining = BASE_GOAL_POINTS - usedPoints;
 
   // --- save on leave -------------------------------------------------------------
-  const payloadRef = useRef({ answers, goals, enemy, intros, face, crime });
-  payloadRef.current = { answers, goals, enemy, intros, face, crime };
+  const payloadRef = useRef({ answers, goals, enemy, intros, face, crime, stories, orgPicks });
+  payloadRef.current = { answers, goals, enemy, intros, face, crime, stories, orgPicks };
   const hasChangesRef = useRef(false);
   useEffect(() => {
-    const current = JSON.stringify(payloadRef.current);
+    const current = JSON.stringify({
+      ...payloadRef.current,
+      stories: storiesToSave(payloadRef.current.stories),
+    });
     const server = JSON.stringify({
       answers: {
         never_do: draftData.never_do ?? '',
@@ -394,13 +429,24 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       intros: { ...EMPTY_INTRODUCTIONS, ...(draftData.introductions ?? {}) },
       face: { ...EMPTY_FACE, ...(draftData.officially_dead ?? {}) },
       crime: crimeFromDraft(draftData.crime),
+      stories: storiesToSave(draftData.prestige_stories ?? {}),
+      orgPicks: draftData.organizations ?? {},
     });
     hasChangesRef.current = current !== server;
-  }, [answers, goals, enemy, intros, face, crime, draftData]);
+  }, [answers, goals, enemy, intros, face, crime, stories, orgPicks, draftData]);
 
   const save = useCallback(async () => {
     if (!hasChangesRef.current) return true;
-    const { answers: a, goals: g, enemy: e, intros: i, face: f, crime: c } = payloadRef.current;
+    const {
+      answers: a,
+      goals: g,
+      enemy: e,
+      intros: i,
+      face: f,
+      crime: c,
+      stories: s,
+      orgPicks: o,
+    } = payloadRef.current;
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
@@ -412,6 +458,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             introductions: i,
             officially_dead: faceToSave(f),
             crime: crimeToSave(c),
+            prestige_stories: storiesToSave(s),
+            organizations: o,
           },
         },
       });
@@ -657,6 +705,84 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
               </Field>
             </div>
           )}
+          {cards.map((card) => {
+            const key = String(card.distinction_id);
+            if (card.prompt === 'prestige_story') {
+              return (
+                <div key={`${key}-story`} className="conditional">
+                  <p>
+                    <b>{card.name}</b>
+                  </p>
+                  <Field
+                    id={`prestige-story-${key}`}
+                    label={copy?.finaltouches_prestige_prompt ?? GRANTS.prestigePrompt}
+                    hint={copy?.finaltouches_prestige_help ?? GRANTS.prestigeHelp}
+                  >
+                    <input
+                      id={`prestige-story-${key}`}
+                      type="text"
+                      maxLength={PRESTIGE_STORY_MAX_LENGTH}
+                      value={stories[key] ?? ''}
+                      onChange={(e) => setStories((prev) => ({ ...prev, [key]: e.target.value }))}
+                    />
+                  </Field>
+                </div>
+              );
+            }
+            if (card.prompt === 'organization') {
+              return (
+                <div key={`${key}-organization`} className="conditional">
+                  <p>
+                    <b>{card.name}</b>
+                  </p>
+                  <Field
+                    id={`organization-${key}`}
+                    label={copy?.finaltouches_organization_prompt ?? GRANTS.organizationPrompt}
+                    hint={copy?.finaltouches_organization_help ?? GRANTS.organizationHelp}
+                  >
+                    <select
+                      id={`organization-${key}`}
+                      value={orgPicks[key] ?? ''}
+                      onChange={(e) =>
+                        setOrgPicks((prev) => ({
+                          ...prev,
+                          [key]: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copy?.finaltouches_organization_none ?? GRANTS.organizationNone}
+                      </option>
+                      {(draft.organization_choices ?? []).map((org) => (
+                        <option key={org.id} value={org.id}>
+                          {org.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              );
+            }
+            if (card.prompt === 'path_aspect') {
+              const aspect =
+                card.detail || (copy?.finaltouches_aspect_unknown ?? GRANTS.aspectUnknown);
+              return (
+                <div key={`${key}-aspect`} className="conditional">
+                  <p>
+                    <b>{card.name}</b>
+                  </p>
+                  <p>
+                    {(copy?.finaltouches_aspect_prompt ?? GRANTS.aspectPrompt).replace(
+                      '{aspect}',
+                      aspect
+                    )}
+                  </p>
+                  <p className="hint">{copy?.finaltouches_aspect_help ?? GRANTS.aspectHelp}</p>
+                </div>
+              );
+            }
+            return null;
+          })}
         </>
       )}
 

@@ -89,6 +89,8 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 "prestige_grant",
                 "organization_grant__organization",
                 "path_aspect_grant",
+                "persona_grant",
+                "organization_tie__org_type",
             )
             .prefetch_related(
                 Prefetch(

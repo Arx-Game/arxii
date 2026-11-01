@@ -487,6 +487,10 @@ _Avoid_: starting fame (fame is the tier derived from prestige), prestige event 
 The membership a card opens: the grant's own organization, or the player's pick at Final Touches from the **organization choices**, seated once at finalize through `join_organization` at the grant's rank or the entry rank.
 _Avoid_: card membership, starting org, vacancy (a vacancy is a staff-authored opening on a family's org).
 
+**Organization tie** (`DistinctionOrganizationTie`, #4856):
+The tie a card opens at Final Touches, free: with one of the realm's admitting organizations of the card's `org_type` (The Catspaw's gang, Cloistered's temple), the player's pick, either a membership at the entry rank or starting renown at the **Favored floor** (`types.FAVORED_FLOOR`, the Favored tier's lowest value, ruled 2026-11-01). The plan's third shape, "someone inside you can call on", has no ruled row and is not one of the kinds.
+_Avoid_: contact (unbuilt), starting reputation seed (that is a Lineage answer's `reputation_seed`), affiliation.
+
 **Admits player characters** (`Organization.admits_player_characters`, #4852):
 Staff's mark that a player character may join this organization from character creation. The organizations of a realm with it are the **organization choices** (`character_creation.offers.organization_choices`), listed at Final Touches for a card with an open organization grant; a covert organization may carry it, and the list is shown to its own player only.
 _Avoid_: joinable, open organization (covert ones admit too), public organization.

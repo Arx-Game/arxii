@@ -34445,12 +34445,16 @@ export interface components {
       | 'obituary'
       | 'description'
       | 'glimpse';
-    /** @description One ask a held card raises at Final Touches (#4852, slice 6 of #4813). */
+    /**
+     * @description One ask a held card raises at Final Touches (#4852, slice 6 of #4813); ``choices`` are
+     *     the organizations an ``organization`` or ``tie`` ask picks from (#4856), else empty.
+     */
     FinalTouchesCard: {
       distinction_id: number;
       name: string;
       prompt: components['schemas']['PromptEnum'];
       detail: string;
+      choices: components['schemas']['OrganizationChoice'][];
     };
     /** @description One axis a fixture kind mitigates (negative value = mitigation). */
     FixtureAffinity: {
@@ -40499,7 +40503,7 @@ export interface components {
       readonly ranks: components['schemas']['OrganizationRank'][];
       readonly house: components['schemas']['HouseDetail'] | null;
     };
-    /** @description One organization a card with an open organization grant may seat the character in. */
+    /** @description One organization an ask may seat the character in or tie them to (#4852, #4856). */
     OrganizationChoice: {
       id: number;
       name: string;
@@ -48239,9 +48243,19 @@ export interface components {
      *     * `prestige_story` - What people say happened (a prestige grant)
      *     * `organization` - The organization that takes you in (an organization grant)
      *     * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
+     *     * `officially_dead` - The face the world meets (a worn persona grant)
+     *     * `alter_ego` - A second face (a hidden persona grant)
+     *     * `tie` - A tie with an organization (an organization tie)
      * @enum {string}
      */
-    PromptEnum: 'crime' | 'prestige_story' | 'organization' | 'path_aspect';
+    PromptEnum:
+      | 'crime'
+      | 'prestige_story'
+      | 'organization'
+      | 'path_aspect'
+      | 'officially_dead'
+      | 'alter_ego'
+      | 'tie';
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;

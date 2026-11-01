@@ -77,8 +77,16 @@ character-creation/
     │                        #   and the prompt a held card asks (draft.final_touches_prompts;
     │                        #   `crime` is Jailbird's: a select over draft.crime_kinds and a
     │                        #   500-character line, saved as draft_data.crime in the stage's
-    │                        #   one PATCH, null when no kind is picked). The section is
-    │                        #   absent when no held card unlocks or asks anything.
+    │                        #   one PATCH, null when no kind is picked). The asks the grant
+    │                        #   sidecars raise (#4852, slice 6 of #4813: draft.final_touches_cards)
+    │                        #   each get a block under the card's name: a prestige card's story
+    │                        #   (500 characters, draft_data.prestige_stories keyed by card id,
+    │                        #   a blank one dropped), the organization a card seats you in (a
+    │                        #   select over draft.organization_choices with "None" first,
+    │                        #   draft_data.organizations, null for None), Capable Mentor's line
+    │                        #   naming the Path's stronger Aspect from the ask's detail (nothing
+    │                        #   to answer). The section is absent when no held card unlocks or
+    │                        #   asks anything.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
