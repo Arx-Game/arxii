@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from evennia.objects.models import ObjectDB
 
 from core_management.permissions import is_staff_observer
-from world.items.constants import EquipmentLayer
+from world.items.constants import EquipmentLayer, GearArchetype
 from world.items.services.visibility import is_see_through
 
 if TYPE_CHECKING:
@@ -113,10 +113,28 @@ def covered_regions(character: ObjectDB) -> set[str]:
     over nothing, skin and its markings. Consumers: felt sun exposure
     (``world.species.sun_exposure``) and body-marking visibility
     (``world.forms.services.markings``). Zero queries — reads the cached
-    equipment handler.
+    equipment handler, except for a character wearing an Unarmed item at the skin layer.
+
+    A natural weapon (#4898) is part of the body, so it covers nothing: claws do not
+    shade the hands from the sun or hide a marking there. Only an Unarmed skin-layer row
+    can be one, so the one query that tells which are runs only when such a row is worn.
     """
-    covered: set[str] = set()
-    for row in character.equipped_items:
-        if not is_see_through(row):
-            covered.add(row.body_region)
-    return covered
+    rows = [row for row in character.equipped_items if not is_see_through(row)]
+    candidates = [
+        row
+        for row in rows
+        if row.equipment_layer == EquipmentLayer.SKIN
+        and row.item_instance.template.gear_archetype == GearArchetype.UNARMED
+    ]
+    natural: set[int] = set()
+    if candidates:
+        from world.items.services.natural_weapons import (  # noqa: PLC0415
+            natural_weapon_template_ids,
+        )
+
+        natural = natural_weapon_template_ids(candidates[0].character)
+    return {
+        row.body_region
+        for row in rows
+        if not (row in candidates and row.item_instance.template_id in natural)
+    }
