@@ -47,7 +47,7 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); eight fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
+| `ManeuverEffect` | One named part of a combat maneuver and its base value (#4783); twelve fixed rows, admin edit-only | `key` (unique), `base_value`, `notes` |
 | `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE), `residence_comfort` (bool), `form_combat_profile` (FK forms.FormCombatProfile, SET_NULL) |
 | `CharacterModifier` | Materialized modifier value on a character for fast lookup (SharedMemoryModel) | `character` (FK CharacterSheet), `value` (int, can be negative), `source` (FK ModifierSource, CASCADE), `expires_at` (nullable datetime), `created_at` |
 
