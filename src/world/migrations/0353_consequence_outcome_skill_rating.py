@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0351_missed_surge_recurs")]
+    dependencies = [("arxii", "0352_missed_surge_recurs")]
 
     operations = [
         migrations.AddField(

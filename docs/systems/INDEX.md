@@ -1202,6 +1202,10 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `modifier_target_contributions(sheet, target, lane=...)` (CHARACTER + EQUIPMENT, the builder
   the check seam shares) and `conditions.services.condition_target_contributions` (CONDITION),
   so every stat reader sees one buffed number.
+  The maneuver effect lanes (#4876): `ModifierLane.DAMAGE`, `TO_HIT` and `PARTIAL_PROTECTION`
+  value a sized modifier on those effect kinds (`EFFECT_KIND_LANE`, `ModifierTarget.value_lane`);
+  `mechanics.effect_targets._modifier_total` reads a laned target through the same two builders
+  and tapers by the lane's rows. A size on any other kind is refused.
   The vow size step (#4747, ADR-4747-A): `ConditionInstance.modifier_vow_level` and
   `modifier_vow_tenths`, stamped at cast by `magic.services.modifier_sizing.caster_vow_step`
   (`VowStep`), add (value(L, size + 1) minus value(L, size)) x tenths / 10, rounded half up
@@ -8568,17 +8572,17 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `is_attack_on_opponent(action)` (an opponent target, or a joust pass). A missed attack (the hit
   roll failed, success level below 1: a Strike, a technique at an opponent, a lost joust pass)
   runs `record_miss_intensity` (`techniques/intensity.py`), a MISSED `apply_dramatic_surge` once
-  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0351; never
+  a round (`SurgeTriggerKind.MISSED`, allowed a repeat round with no outcome since 0352; never
   narrated, and left out of a bystander's `surge_beats`); an attack roll adds an "Intensity"
   contribution of the COMBAT engagement's intensity x "Intensity: to hit per point"
   (`intensity_to_hit_contribution`). Each Strike roll stores what its breakdown shows at roll
-  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0352 and
-  0353), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
+  time (`ConsequenceOutcome.skill_rating`, `weapon_label`, `weapon_kind`, `stat_label`, 0353 and
+  0354), the hit row's `result_note` reads "then the damage roll" on a hit, and `roll_breakdown`
   reaches only the roll's own account and staff. The striker's second-person telnet line is
   sent right after the room line (none in a room-less encounter, as for technique outcomes);
   the live `combat_encounter_state` frame refetches the Last Outcome card.
   `GearArchetype.UNARMED` joins `WEAPON_ARCHETYPES` and the
-  `items_weapon_damage_requires_weapon_archetype` constraint (0353).
+  `items_weapon_damage_requires_weapon_archetype` constraint (0354).
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →

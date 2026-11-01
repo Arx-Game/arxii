@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0350_strike_maneuver_effects"),
+        ("arxii", "0351_strike_maneuver_effects"),
     ]
 
     operations = [

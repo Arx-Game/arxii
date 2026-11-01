@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0348_control_loss_content"),
+        ("arxii", "0349_modifier_effect_lanes"),
     ]
 
     operations = [

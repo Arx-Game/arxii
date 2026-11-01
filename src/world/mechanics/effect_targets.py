@@ -5,13 +5,21 @@ value plus every modifier total a character has on a target scoped to that effec
 its kind). Combat and scene maneuvers call it instead of a constant.
 """
 
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.conditions.services import _active_matching_instances, get_condition_modifier_total
+from world.checks.modifier_values import load_taper_rules
+from world.checks.services import modifier_target_contributions
+from world.checks.types import ModifierBreakdown, ModifierContribution
+from world.conditions.services import (
+    _active_matching_instances,
+    condition_target_contributions,
+    get_condition_modifier_total,
+)
 from world.mechanics.constants import MANEUVER_EFFECT_CATEGORY_NAME, EffectKind
 from world.mechanics.maneuver_effects import get_maneuver_effect
 from world.mechanics.models import ManeuverEffect, ModifierTarget, ObjectProperty, Property
@@ -289,11 +297,38 @@ def _fits(target: ModifierTarget, context: TechniqueEffectContext) -> bool:
 
 
 def _modifier_total(sheet: "CharacterSheet", targets: list[ModifierTarget]) -> int:
-    """``sheet``'s modifier and active-condition totals summed over ``targets``."""
-    return sum(
-        get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
-        for target in targets
-    )
+    """``sheet``'s modifier and active-condition totals summed over ``targets``.
+
+    A target whose kind has a value lane (damage, to-hit, partial protection; #4876) is read
+    as the stat read is: its CHARACTER, EQUIPMENT and CONDITION contributions, a sized
+    distinction effect or technique buff valued from the lane's table, all of them gathered
+    into one breakdown that tapers by the lane's rows. Every other target is a flat sum.
+    For unsized rows and a lane with no taper rows the two reads agree.
+    """
+    flat = 0
+    laned: dict[str, list[ModifierContribution]] = {}
+    for target in targets:
+        lane = target.value_lane
+        if lane is None:
+            flat += get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
+            continue
+        laned.setdefault(lane, []).extend(
+            modifier_target_contributions(sheet, target, lane=lane)
+            + condition_target_contributions(sheet, target, lane=lane)
+        )
+    return flat + sum(_tapered_total(lane, rows) for lane, rows in laned.items())
+
+
+def _tapered_total(lane: str, contributions: list[ModifierContribution]) -> int:
+    """One lane's contributions summed, each source kind's piles tapered by the lane's rows.
+
+    The taper rules load only when some kind has two or more contributions, as on the stat
+    read, so a read with no pile runs no extra query.
+    """
+    kinds = Counter(contribution.source_kind for contribution in contributions)
+    has_pile = any(count >= 2 for count in kinds.values())  # noqa: PLR2004
+    tapers = load_taper_rules(lane) if has_pile else {}
+    return ModifierBreakdown(contributions=contributions, tapers=tapers).total
 
 
 def _clamp(kind: str, value: int) -> int:
