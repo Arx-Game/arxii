@@ -834,6 +834,8 @@ export const mockEmptyDraft: CharacterDraft = {
   introductions_offered: { first_journal: true },
   final_touches_prompts: [],
   crime_kinds: [],
+  final_touches_cards: [],
+  organization_choices: [],
 };
 
 export const mockDraftWithArea: CharacterDraft = {

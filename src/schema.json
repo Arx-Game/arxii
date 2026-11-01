@@ -51304,6 +51304,16 @@ components:
           items:
             $ref: '#/components/schemas/CrimeKind'
           readOnly: true
+        final_touches_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinalTouchesCard'
+          readOnly: true
+        organization_choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationChoice'
+          readOnly: true
       required:
       - age_max
       - age_min
@@ -51320,6 +51330,7 @@ components:
       - enemy_price_tables
       - enemy_reasons
       - family
+      - final_touches_cards
       - final_touches_prompts
       - has_existing_characters
       - height_band
@@ -51327,6 +51338,7 @@ components:
       - id
       - introductions_offered
       - magic_training
+      - organization_choices
       - public_worship
       - second_parent_species
       - secret_worship
@@ -59294,6 +59306,24 @@ components:
         * `obituary` - Obituary
         * `description` - Physical description
         * `glimpse` - Glimpse
+    FinalTouchesCard:
+      type: object
+      description: 'One ask a held card raises at Final Touches (#4852, slice 6 of
+        #4813).'
+      properties:
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        prompt:
+          $ref: '#/components/schemas/PromptEnum'
+        detail:
+          type: string
+      required:
+      - detail
+      - distinction_id
+      - name
+      - prompt
     FixtureAffinity:
       type: object
       description: One axis a fixture kind mitigates (negative value = mitigation).
@@ -71744,6 +71774,21 @@ components:
       - org_type_name
       - ranks
       - society_name
+    OrganizationChoice:
+      type: object
+      description: One organization a card with an open organization grant may seat
+        the character in.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_covert:
+          type: boolean
+      required:
+      - id
+      - is_covert
+      - name
     OrganizationMembership:
       type: object
       properties:
@@ -85193,6 +85238,18 @@ components:
       required:
       - new_level
       - reason
+    PromptEnum:
+      enum:
+      - crime
+      - prestige_story
+      - organization
+      - path_aspect
+      type: string
+      description: |-
+        * `crime` - Name the crime (Jailbird)
+        * `prestige_story` - What people say happened (a prestige grant)
+        * `organization` - The organization that takes you in (an organization grant)
+        * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
     Pronouns:
       type: object
       description: Serializer for pronoun sets.

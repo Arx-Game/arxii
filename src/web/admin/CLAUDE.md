@@ -1004,7 +1004,10 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
   `unlocked:` token (#4846) names the existing card that unlocks a Final Touches line,
-  so a card made earlier in the same table is not found yet),
+  so a card made earlier in the same table is not found yet; an effect token whose
+  target is `prestige` (`+150 prestige`, `-300 prestige`, #4852) makes the card's
+  `societies.DistinctionPrestigeGrant` sidecar instead of a modifier effect, one per
+  card and never without an amount),
   resolves every name against existing rows (`_one`: unknown or ambiguous is
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview

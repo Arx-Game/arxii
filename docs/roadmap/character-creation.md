@@ -87,6 +87,20 @@ never wired to a live check). See ADR-0280,
 [character_creation.md](../systems/character_creation.md)'s "Distinction offers"
 section.
 
+## Built (2026-11-01, #4852: the grants reconciled at finalize, backend; slice 6 of #4813)
+
+Three of the parent's slice 6 grants, each a sidecar in the `DistinctionStartingGrant` shape
+paid once by finalize and raising its own ask at Final Touches. A card starts a character
+with a flat prestige, positive or negative (`societies.DistinctionPrestigeGrant`, through
+`award_deed_prestige`; the player's story about it becomes the pick's notes). A card opens a
+membership (`societies.DistinctionOrganizationGrant`: its own organization, or the player's
+pick from the realm's organizations that `admits_player_characters`, seated through
+`join_organization`). Capable Mentor's +5 lands on the Path's stronger Aspect
+(`classes.DistinctionPathAspectGrant`, one `CharacterModifier` sourced to the pick). The
+paste's `+150 prestige` token makes the prestige sidecar. The leaf's three blocks are the
+frontend half; the persona grants and the organization ties wait on two maintainer rulings
+(the Officially dead door already does Presumed Dead's job; what row "a tie" writes).
+
 ## Built (2026-11-01, #4846: the Final Touches chapter, backend; slice 5 of #4813)
 
 Final Touches gained the card-gated chapter the rulings of 2026-10-29 describe. A distinction

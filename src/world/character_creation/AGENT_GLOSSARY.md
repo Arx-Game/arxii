@@ -84,5 +84,11 @@ unlock requirement.
 **Final Touches prompt** (`Distinction.final_touches_prompt`, `FinalTouchesPrompt`, #4846):
 The optional question a card asks at Final Touches; `crime` is Jailbird's, answered in
 `draft_data.crime` and written as a staff-only crime note (`justice.CharacterCrimeNote`) at
-finalize. _Avoid_: lingering question, door (the officially-dead door is a different shape),
-card effect.
+finalize. A grant sidecar raises its own prompt without the staff field (#4852):
+`prestige_story` (a prestige grant; the answer in `draft_data.prestige_stories` becomes the
+pick's notes), `organization` (an organization grant with no fixed organization; the pick
+in `draft_data.organizations` from the **organization choices**, the realm's organizations
+that admit player characters), `path_aspect` (a path aspect grant; nothing to answer, the
+line names the Path's stronger Aspect). `final_touches_cards` lists the card behind each
+ask. _Avoid_: lingering question, door (the officially-dead door is a different shape),
+card effect, grant prompt field (a grant's prompt is derived, never authored).

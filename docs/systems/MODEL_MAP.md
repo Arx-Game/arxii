@@ -2161,6 +2161,10 @@
 **Foreign Keys:**
   - character_class -> classes.CharacterClass [FK]
 
+### DistinctionPathAspectGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
 ### Path
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -4009,12 +4013,15 @@
   - reward_definitions <- achievements.RewardDefinition
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
+  - path_aspect_grant <- classes.DistinctionPathAspectGrant
   - closed_by_routes <- character_creation.OriginTemplate
   - carried_by_state_lines <- character_creation.TraditionStateLine
   - granted_by_schooling_lines <- character_creation.SchoolingLine
   - offers <- character_creation.DistinctionOffer
   - unlocked_offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
+  - prestige_grant <- societies.DistinctionPrestigeGrant
+  - organization_grant <- societies.DistinctionOrganizationGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
@@ -9759,6 +9766,16 @@
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - organization -> societies.Organization [FK]
 
+### DistinctionOrganizationGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+  - organization -> societies.Organization [FK] (nullable)
+  - rank -> societies.OrganizationRank [FK] (nullable)
+
+### DistinctionPrestigeGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+
 ### Domain
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
@@ -10162,6 +10179,7 @@
   - claimed_crew_slots <- societies.CrewSlot
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
+  - distinction_grants <- societies.DistinctionOrganizationGrant
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
@@ -10282,6 +10300,7 @@
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
   - vacancies <- societies.Vacancy
+  - distinction_grants <- societies.DistinctionOrganizationGrant
 
 ### OrganizationRelation
 **Foreign Keys:**

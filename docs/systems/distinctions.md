@@ -392,6 +392,34 @@ nothing and no repeatable path may call it. The player sees it before picking:
 Authored in the plain admin (Distinction Item Grants); exported with the content as
 `items.distinctionitemgrant`, keyed `(distinction, item_template)`.
 
+## The finalize grants of the life cards (#4852, slice 6 of #4813)
+
+Three more sidecars in the same ADR-0010 shape, each paid once from character creation's
+finalize and never by a `reconcile_*`, each raising its own optional ask at Final Touches
+(`character_creation.offers.final_touches_cards`; the card needs no `final_touches_prompt`
+for it). `Distinction` reads each through a `ReverseOneToOneOrNone` (`prestige_grant_or_none`,
+`organization_grant_or_none`, `path_aspect_grant_or_none`), select_related by the list
+viewset, and `effects_summary` prices each in words.
+
+- **Starting prestige**: `societies.DistinctionPrestigeGrant` (`amount`, non-zero; negative
+  valid, decision 3 of #4813). Renowned and Miraculous Survival at +150, Infamous and
+  Explosive Drama at -300. Paid by `renown.apply_starting_prestige` beside the inheritance,
+  through `award_deed_prestige`: no Legend row, no deed (decision 6). The player writes what
+  people say happened at Final Touches, and that becomes the pick's `notes`. Summary:
+  "Starts with -300 prestige". The paste's `+150 prestige` effect token makes one.
+- **The membership a card opens**: `societies.DistinctionOrganizationGrant` (`organization`
+  nullable, `rank` nullable). With Honors leaves the organization blank, so the player picks
+  one of the realm's organizations that `admits_player_characters` at Final Touches; finalize
+  seats it through `join_organization`. Summary: "Opens a membership in <organization>" or
+  "... in an organization of your realm, your pick at Final Touches".
+- **Capable Mentor**: `classes.DistinctionPathAspectGrant` (`value`, non-zero). Finalize
+  writes one `CharacterModifier` on the aspect target of the Path's heaviest `PathAspect`,
+  sourced to the pick with no effect template (`ModifierSource.character_distinction` alone;
+  `source_display` names the card). Summary: "+5 to your Path's stronger Aspect".
+
+Full mechanics in [character_creation.md](character_creation.md)'s "The grants reconciled at
+finalize" passage.
+
 ---
 
 ## Profile Visibility — relocated into Secrets (#1109 → #1334)
