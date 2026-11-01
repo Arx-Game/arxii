@@ -31,7 +31,9 @@ This is the deterministic fix CI applies (#4879), and it does nothing else:
    ``max_migration.txt``; each renamed file's AST equals the PR's original except for
    that one dependency name and still names no old chain name; the doc edits are
    exactly those name substitutions; the graph has one ``arxii`` leaf and no
-   migrations are missing.
+   migrations are missing; and the renamed files pass ``ruff format --check`` and
+   ``ruff check`` (migrations are not excluded from either hook, and the commit
+   skips hooks, so this is what keeps the bot from turning a PR red).
 
 On any refusal or failed check the merge is aborted and the tree is left as it was.
 Exit codes: 0 resolved (a merge commit was made), 3 nothing to do, 4 refused.
@@ -551,6 +553,22 @@ def verify_graph(repo: Path) -> None:
         raise RefusalError(msg)
 
 
+def verify_lint(repo: Path, the_plan: Plan, mdir: str) -> None:
+    """The renamed files pass the repo's ruff hooks, so the bot never turns a PR red.
+
+    Migrations are not excluded from ruff/ruff-format, and the bot commits with
+    --no-verify, so a dependency line pushed past the line limit would fail the PR's
+    own pre-commit job. Runs with the PR tree's ruff config, from the check job's venv.
+    """
+    files = [f"{mdir}/{r.new}.py" for r in the_plan.renames]
+    ruff = Path(sys.executable).with_name("ruff")
+    for argv in ([str(ruff), "format", "--check", *files], [str(ruff), "check", *files]):
+        proc = _run(argv, repo)
+        if proc.returncode != 0:
+            msg = f"the renamed files would fail `{' '.join(argv[1:3])}`:\n{proc.stdout[-1500:]}"
+            raise RefusalError(msg)
+
+
 def commit_message(the_plan: Plan, main_ref: str) -> str:
     lines = [
         f"Merge {main_ref}; renumber this branch's migrations after {the_plan.main_tip}",
@@ -582,6 +600,7 @@ def run(repo: Path, main_ref: str, mdir: str, *, check_graph: bool) -> Result:
         verify_doc_renames(repo, the_plan, before, after)
         if check_graph:
             verify_graph(repo)
+            verify_lint(repo, the_plan, mdir)
         # --no-verify: the hooks are the PR's own CI, which this push triggers.
         git(
             "commit",

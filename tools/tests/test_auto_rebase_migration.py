@@ -17,9 +17,12 @@ from auto_rebase_migration import (
     EXIT_NOTHING_TO_DO,
     EXIT_REFUSED,
     EXIT_RESOLVED,
+    Plan,
     RefusalError,
+    Rename,
     main,
     rewrite_dependency,
+    verify_lint,
     verify_rewrite,
 )
 import pytest
@@ -342,3 +345,30 @@ def test_two_in_app_dependencies_are_refused():
     src = "class Migration:\n    dependencies = [('arxii', '0001_a'), ('arxii', '0002_b')]\n"
     with pytest.raises(RefusalError, match="expected exactly 1"):
         rewrite_dependency(src, "f.py", "0009_c")
+
+
+def _lint_repo(tmp_path: Path, dep: str) -> Path:
+    path = tmp_path / "lint"
+    (path / MDIR).mkdir(parents=True)
+    (path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n")
+    (path / MDIR / "0005_new.py").write_text(
+        "from django.db import migrations\n\n\n"
+        "class Migration(migrations.Migration):\n"
+        f'    dependencies = [("arxii", "{dep}")]\n\n    operations = []\n'
+    )
+    return path
+
+
+def _plan() -> Plan:
+    return Plan(base_tip="", main_tip="", renames=[Rename("0004_new", "0005_new")], interleaved=[])
+
+
+def test_lint_gate_passes_a_clean_rename(tmp_path: Path):
+    verify_lint(_lint_repo(tmp_path, "0004_short"), _plan(), MDIR)
+
+
+def test_lint_gate_refuses_a_rename_the_formatter_would_change(tmp_path: Path):
+    """A long new name pushes the dependency line past 100; the PR's pre-commit would fail."""
+    repo = _lint_repo(tmp_path, "0004_" + "x" * 90)
+    with pytest.raises(RefusalError, match="would fail `format --check`"):
+        verify_lint(repo, _plan(), MDIR)
