@@ -18,6 +18,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 # transition backfills (deriving/re-keying existing rows during a field
 # rename/split), not authored seed content.
 ALLOWED_MIGRATIONS: set[str] = {
+    # #4802: carries existing code-held moon-control tuning and Berserk behaviour into
+    # the new Compulsion / ControlLossTrigger rows on a populated database, plus a
+    # nameplate "Lycan blood" condition with no prose. Every number mirrors one the code
+    # already used; skips anything that already exists. No-op on empty databases.
+    "world/migrations/0348_control_loss_content.py",
     # #4681: row-keyed affinity backfill. Re-keys existing CharacterAura percent
     # columns into CharacterAuraShare rows (empty in production) and copies enum
     # values into _ref FKs; no authored content is invented.

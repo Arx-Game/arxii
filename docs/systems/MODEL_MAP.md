@@ -2004,6 +2004,8 @@
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
+  - compulsions <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - modifier_target <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
   - detect_situation_traps <- mechanics.SituationTrapLink
@@ -2746,6 +2748,7 @@
 ### MovementConfig
 **Foreign Keys:**
   - held_ground_challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - steadying_capability -> conditions.CapabilityType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### NpcTacticsConfig
@@ -2948,6 +2951,7 @@
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `scan_round_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[RoundCombo]' - List every combo taking shape in this round's declared actions (#3553).`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' - Select and create NPC actions for the current round.`
+- `settle_wound_triggers(participant: 'CombatParticipant', result: 'ParticipantDamageResult') -> 'None' - Roll the wound triggers a knockout-band hit held back, once its knockout check landed.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None, line: 'OpponentLine | None' = None) -> 'CombatOpponent' - Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' - Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' - Bodies a single landing attack clears from a swarm (#875).`
@@ -3077,6 +3081,23 @@
   - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
 
+### Compulsion
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [OneToOne]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - forbidden <- conditions.CompulsionForbiddenAction
+  - bands <- conditions.CompulsionResistBand
+
+### CompulsionForbiddenAction
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+
+### CompulsionResistBand
+**Foreign Keys:**
+  - compulsion -> conditions.Compulsion [FK]
+  - outcome -> traits.CheckOutcome [FK]
+
 ### ConditionCapabilityEffect
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK] (nullable)
@@ -3177,6 +3198,7 @@
   - conditiondamagedealtmodifier_set <- conditions.ConditionDamageDealtModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - auderethreshold_set <- magic.AudereThreshold
 
 ### ConditionStageOnEntry
@@ -3225,6 +3247,8 @@
   - conditioninstance_set <- conditions.ConditionInstance
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
+  - compulsion <- conditions.Compulsion
+  - control_loss_triggers <- conditions.ControlLossTrigger
   - opponent_modifier_targets <- mechanics.ModifierTarget
   - inflicting_prices <- magic.Restriction
   - techniques_applying <- magic.Technique
@@ -3250,6 +3274,21 @@
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
+
+### ControlLossBand
+**Foreign Keys:**
+  - trigger -> conditions.ControlLossTrigger [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - applies -> conditions.ConditionTemplate [FK] (nullable)
+
+### ControlLossTrigger
+**Foreign Keys:**
+  - vulnerability -> conditions.ConditionTemplate [FK]
+  - stage -> conditions.ConditionStage [FK] (nullable)
+  - check_type -> checks.CheckType [FK]
+  - relief_gift -> magic.Gift [FK] (nullable)
+**Pointed to by:**
+  - bands <- conditions.ControlLossBand
 
 ### DamageSuccessLevelMultiplier
 
@@ -4436,6 +4475,7 @@
 - `apply_disguise(character: 'Any', disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE, kit_instance: 'Any' = None) -> 'CharacterFormState' - Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' - Assume an alternate self — swap in form/persona facets, create the`
 - `assume_alternate_self_for_audere(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'bool' - Put her in the alternate self whose reveal card she chose at Audere (#4731).`
+- `attempt_revert_form(sheet: 'CharacterSheet') -> 'CompulsionAttempt' - The player's entry point for changing back (#4802).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `change_appearance(character: 'Any', trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None, blend: 'bool' = False) -> 'CharacterFormValue' - Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character: 'Any', selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' - Create the true form for a character during character creation.`
@@ -9472,6 +9512,7 @@
 - `persona_discovery_between(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if`
 - `persona_for_character(character: 'Character') -> 'Persona' - Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `persona_names_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, str]' - Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).`
+- `personas_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, Persona]' - Batched ``active_persona_for_sheet``: the face each sheet presents, two queries.`
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`

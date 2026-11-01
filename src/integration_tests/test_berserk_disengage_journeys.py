@@ -3,7 +3,7 @@
 Berserk no longer refuses flee or parley. Mira, raging, types ``combat flee`` or
 ``combat parley Bandit Captain`` and the declaration stands; the round then rolls her
 check carrying whatever ConditionCheckModifier staff authored on the Berserk template.
-Only walking away (``combat_leave``) is still refused, with a pointer at fleeing.
+Walking away (``combat_leave``) rolls against the compulsion too (#4802).
 
 Expected values are the rows built here: a -7 on the flee check and a -4 on the parley
 check, read back from the modifier breakdown the real roll gathered.
@@ -17,6 +17,7 @@ from integration_tests.harness import JourneyCase
 from world.checks.constants import ModifierSourceKind
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import collect_check_modifiers
+from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import CombatManeuver, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -26,9 +27,16 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction, FleeConfig
 from world.combat.services import resolve_round
-from world.conditions.factories import ConditionCheckModifierFactory, ConditionInstanceFactory
+from world.conditions.constants import CompulsionResult
+from world.conditions.factories import (
+    CompulsionFactory,
+    CompulsionResistBandFactory,
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+)
 from world.magic.factories import BerserkConditionTemplateFactory
 from world.scenes.constants import RoundStatus
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
 
 FLEE_PENALTY = -7
@@ -131,15 +139,22 @@ class ARagingCharacterMayParley(_RagingMira):
         self.assertIn(PARLEY_PENALTY, terms)
 
 
-class ARagingCharacterWillNotWalkAway(_RagingMira):
-    def test_leaving_is_refused_with_a_pointer_at_fleeing(self) -> None:
+class ARagingCharacterRollsToWalkAway(_RagingMira):
+    def test_leaving_rolls_against_the_rage_instead_of_being_refused(self) -> None:
+        # The roll follows the compulsion on the condition (#4802), not its name.
+        failure = ensure_canonical_check_outcome("Failure")
+        CompulsionResistBandFactory(
+            compulsion=CompulsionFactory(condition=self.berserk),
+            outcome=failure,
+            result=CompulsionResult.COMPULSION_ACTS,
+        )
         self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
         self.encounter.save()
 
-        result = self.web(self.mira, "combat_leave")
+        with force_check_outcome(failure):
+            result = self.web(self.mira, "combat_leave")
 
         self.assertFalse(result.detail.success)
-        self.assertEqual(
-            result.detail.message, "The rage will not walk away. You can still try to flee."
-        )
+        self.assertIn("vs 12: Failure.", result.detail.message)
+        self.assertIn("You cannot break away.", result.detail.message)

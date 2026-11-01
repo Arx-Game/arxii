@@ -109,7 +109,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 17 queries on the warm call:
+        # 18 queries on the warm call:
         #   1. session + 2. encounter + 3. the lone remaining roster lookup
         #      the permission classes need (served by the account-level
         #      ``played_character_sheet_ids`` cached_property after warm-up).
@@ -153,7 +153,12 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # The viewer's own dodge plan (#4676) adds one: her Phase Step ward (the
         # capabilities that dodge come from the warmed cached_all()). Only her own row
         # computes it, so it does not scale with the participant count.
-        with self.assertNumQueries(17):
+        # The viewer's own compulsion (#4802) adds one: the movement config the steady
+        # plan reads (her active conditions come from the preloaded context). Own row
+        # only, so it does not scale with the participant count.
+        # The roster's persona names (#4802) add two: the sheets' worn personas and the
+        # persona rows, read once for every participant.
+        with self.assertNumQueries(20):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

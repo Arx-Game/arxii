@@ -54,6 +54,7 @@ class ClashStateSerializerContributorsTests(TestCase):
         contrib = data["contributors"][0]
         self.assertEqual(contrib["progress_delta"], 7)
         self.assertEqual(contrib["anima"], 3)
+        self.assertEqual(contrib["participant_id"], self.participant.pk)
 
 
 class ClashStateSerializerSideFavoredTests(TestCase):

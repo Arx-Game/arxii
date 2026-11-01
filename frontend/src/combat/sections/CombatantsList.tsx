@@ -48,6 +48,12 @@
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
+import {
+  COMPULSION_ITEM_CLASS,
+  CompulsionCostTag,
+  compulsionCost,
+  type Compulsion,
+} from '@/combat/components/CompulsionBanner';
 import { MoraleStateChip } from '@/combat/standoff/MoraleStateChip';
 import { MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
@@ -103,6 +109,8 @@ function ConditionRow({ conditions }: ConditionRowProps) {
 
 export interface CombatantsListProps {
   encounter: EncounterDetail;
+  /** The viewer's own compulsion (#4802), marked on the opponent menu's maneuvers. */
+  compulsion?: Compulsion | null;
   /** Whether the section is collapsed. Controlled by parent (Task 8.6). */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -323,6 +331,8 @@ interface OpponentRowProps {
   lockedToViewer?: boolean;
   /** Participants whose mark currently sits on this opponent, by mark id (#4603). */
   markedBy?: { id: number; name: string }[];
+  /** The viewer's own compulsion, when she has one (#4802). */
+  compulsion?: Compulsion | null;
 }
 
 /** Label for the GM boss-state morale chip (#3552) - defaults to "Steady". */
@@ -339,10 +349,12 @@ function moraleStateLabel(state: string | null | undefined): string {
 const OPPONENT_MANEUVERS: {
   key: 'combat_taunt' | 'combat_demoralize' | 'combat_parley' | 'combat_mark';
   label: string;
+  /** The compulsion payload's key for this maneuver; Mark is free, so it has none. */
+  compulsionKey?: string;
 }[] = [
-  { key: 'combat_taunt', label: 'Taunt' },
-  { key: 'combat_demoralize', label: 'Demoralize' },
-  { key: 'combat_parley', label: 'Parley' },
+  { key: 'combat_taunt', label: 'Taunt', compulsionKey: 'taunt' },
+  { key: 'combat_demoralize', label: 'Demoralize', compulsionKey: 'demoralize' },
+  { key: 'combat_parley', label: 'Parley', compulsionKey: 'parley' },
   { key: 'combat_mark', label: 'Mark' },
 ];
 
@@ -354,6 +366,7 @@ function OpponentRow({
   lockedToName,
   lockedToViewer = false,
   markedBy = [],
+  compulsion = null,
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
@@ -508,18 +521,23 @@ function OpponentRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {OPPONENT_MANEUVERS.map(({ key, label }) => (
-              <DropdownMenuItem
-                key={key}
-                disabled={isPending}
-                data-testid={`opponent-${key}-${opponent.id}`}
-                onClick={() => {
-                  handleManeuver(key, label).catch(() => {});
-                }}
-              >
-                {label}
-              </DropdownMenuItem>
-            ))}
+            {OPPONENT_MANEUVERS.map(({ key, label, compulsionKey }) => {
+              const cost = compulsionKey ? compulsionCost(compulsion, compulsionKey) : null;
+              return (
+                <DropdownMenuItem
+                  key={key}
+                  disabled={isPending}
+                  data-testid={`opponent-${key}-${opponent.id}`}
+                  className={cost ? COMPULSION_ITEM_CLASS : undefined}
+                  onClick={() => {
+                    handleManeuver(key, label).catch(() => {});
+                  }}
+                >
+                  {label}
+                  {cost && <CompulsionCostTag cost={cost} />}
+                </DropdownMenuItem>
+              );
+            })}
             {/* Engagement lock (#2020/#3447) — the web half #3396 deferred.
              * Engage offers when nobody holds the lock; Disengage when the
              * viewer holds it. A locked-to-someone-else opponent gets neither
@@ -563,6 +581,7 @@ export function CombatantsList({
   onToggleCollapse,
   characterId,
   canDeclareManeuvers = false,
+  compulsion = null,
 }: CombatantsListProps) {
   const {
     participants,
@@ -684,6 +703,7 @@ export function CombatantsList({
                   lockedToName={lockedOpponentNames.get(o.id)}
                   lockedToViewer={viewerLockedOpponentIds.has(o.id)}
                   markedBy={markedByOpponent.get(o.id)}
+                  compulsion={compulsion}
                 />
               ))}
             </div>

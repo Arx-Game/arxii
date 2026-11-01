@@ -11,6 +11,7 @@
  * See: docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §2
  */
 
+import { CompulsionMark } from '@/combat/components/CompulsionBanner';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AudereOfferGate } from '@/magic/components/AudereOfferGate';
@@ -297,18 +298,6 @@ export function CombatTurnPanel({
           {isJoining ? 'Joining…' : 'Join Encounter'}
         </button>
       )}
-      {isOpenEncounter && isBetweenRounds && isParticipant && (
-        <button
-          type="button"
-          data-testid="open-encounter-leave-btn"
-          onClick={() => leaveEncounter()}
-          disabled={isLeaving}
-          className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
-        >
-          {isLeaving ? 'Leaving…' : 'Leave Encounter'}
-        </button>
-      )}
-
       {/* Standoff (#4145): the pre-round card, present only before round 1. */}
       {encounter.standoff ? (
         <StandoffCard
@@ -331,18 +320,34 @@ export function CombatTurnPanel({
 
           {/* 1. YourTurn — only for participants */}
           {isParticipant ? (
-            <YourTurn
-              encounterId={encounterId}
-              characterId={characterId}
-              characterSheetId={characterSheetId}
-              roundNumber={roundNumber}
-              availableActions={combatActions}
-              readOnly={false}
-              encounter={encounter}
-              castPosition={castPosition}
-              onCastPositionChange={onCastPositionChange}
-              onPositionShapeChange={onPositionShapeChange}
-            />
+            <>
+              <YourTurn
+                encounterId={encounterId}
+                characterId={characterId}
+                characterSheetId={characterSheetId}
+                roundNumber={roundNumber}
+                availableActions={combatActions}
+                readOnly={false}
+                encounter={encounter}
+                castPosition={castPosition}
+                onCastPositionChange={onCastPositionChange}
+                onPositionShapeChange={onPositionShapeChange}
+              />
+              {/* The compulsion banner (in YourTurn) sits above Leave (#4802). */}
+              {isOpenEncounter && isBetweenRounds && isParticipant && (
+                <CompulsionMark compulsion={viewerParticipant?.compulsion} actionKey="leave">
+                  <button
+                    type="button"
+                    data-testid="open-encounter-leave-btn"
+                    onClick={() => leaveEncounter()}
+                    disabled={isLeaving}
+                    className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
+                  >
+                    {isLeaving ? 'Leaving…' : 'Leave Encounter'}
+                  </button>
+                </CompulsionMark>
+              )}
+            </>
           ) : (
             <>
               <PendingAttacks
@@ -389,6 +394,7 @@ export function CombatTurnPanel({
             onToggleCollapse={() => toggleSection('combatantsList')}
             characterId={characterId}
             canDeclareManeuvers={isParticipant && encounter.status === 'declaring'}
+            compulsion={viewerParticipant?.compulsion ?? null}
             data-testid="section-combatants-list"
           />
 

@@ -167,3 +167,37 @@ class FoundationalCapability:
     AWARENESS = "awareness"  # required by ~all techniques; unconscious zeroes it
     MOVEMENT = "movement"  # locomotion; immobilized/rooted zeroes it
     LIMB_USE = "limb_use"  # using arms/hands; bound reduces it
+
+
+class CompulsionWant(models.TextChoices):
+    """What a compulsion drives its bearer to do (#4802). Today only one want exists."""
+
+    ATTACK_OPPONENT = "attack_opponent", "Attack an opponent"
+
+
+class CompulsionForbidden(models.TextChoices):
+    """An action a compulsion resists, so doing it needs a resist roll (#4802).
+
+    Each is code because each needs a resolution seam that rolls the resist check.
+    """
+
+    FLEE = "flee", "Flee the fight"
+    PARLEY = "parley", "Parley"
+    LEAVE = "leave", "Leave the encounter"
+    REVERT_FORM = "revert_form", "Revert form"
+
+
+class CompulsionResult(models.TextChoices):
+    """How a resist roll against a compulsion turns out (#4802), best to worst."""
+
+    ACTS_FREELY = "acts_freely", "Acts freely"
+    ACTS_STRAINED = "acts_strained", "Acts, strained"
+    COMPULSION_ACTS = "compulsion_acts", "The compulsion acts"
+
+
+class ControlLossFiresOn(models.TextChoices):
+    """The event a control-loss trigger listens for (#4802)."""
+
+    MOON_PULL = "moon_pull", "Moon pull"
+    WOUND_THRESHOLD = "wound_threshold", "Wounded below a health threshold"
+    CONDITION_STAGE = "condition_stage", "Vulnerability enters a stage"

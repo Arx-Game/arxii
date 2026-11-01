@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0346_facet_effect_bonus")]
+    dependencies = [("arxii", "0348_control_loss_content")]
 
     operations = [
         migrations.AlterField(

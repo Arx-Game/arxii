@@ -267,6 +267,7 @@ function makeParticipant(
   return {
     id,
     character_sheet_id: characterSheetId,
+    persona_id: null,
     character_name: name,
     status: status as Participant['status'],
     health: null,
@@ -287,6 +288,8 @@ function makeParticipant(
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
   };
 }
@@ -2886,5 +2889,130 @@ describe('YourTurn — mounted maneuvers panel (#3381)', () => {
     await userEvent.click(screen.getByTestId('charge-confirm-btn'));
 
     expect(await screen.findByTestId('charge-error')).toHaveTextContent('Not mounted.');
+  });
+});
+
+describe('YourTurn — compulsion', () => {
+  const compulsion = {
+    condition_name: 'Berserk',
+    wants_label: 'Attack an opponent',
+    attack_target_name: 'Bandit Captain',
+    check_name: 'Resist compulsion',
+    against: [
+      { action_key: 'flee', label: 'Flee', difficulty: 36, forbidden: true, extra_difficulty: 5 },
+      {
+        action_key: 'use_item',
+        label: 'Use Item',
+        difficulty: 31,
+        forbidden: false,
+        extra_difficulty: 0,
+      },
+    ],
+  };
+
+  it('shows the banner and marks flee with its difficulty', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-banner')).toHaveTextContent('Berserk compels');
+    expect(screen.getByTestId('compulsion-declare-note')).toHaveTextContent(
+      'If you declare nothing, you attack, as today.'
+    );
+    expect(screen.getByTestId('compulsion-difficulty-flee')).toHaveTextContent('difficulty 36');
+    expect(screen.queryByTestId('compulsion-mark-cover')).not.toBeInTheDocument();
+  });
+
+  it('says what a declared forbidden maneuver adds, under that maneuver', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'flee',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    const box = screen.getByTestId('compulsion-chosen-line');
+    expect(box).toHaveTextContent(
+      'Berserk forbids Flee: Resist compulsion check, difficulty 36 (31 to resist, +5'
+    );
+    // Ruling 37: the box sits under the chosen action (the declared flee), not the banner.
+    expect(screen.getByTestId('flee-declared-badge').nextElementSibling).toBe(box);
+    expect(screen.getByTestId('compulsion-banner').nextElementSibling).not.toBe(box);
+    expect(screen.getAllByTestId('compulsion-chosen-line')).toHaveLength(1);
+  });
+
+  it('puts a declared parley box with the declared maneuver', () => {
+    setupMocks();
+    const parley = {
+      ...compulsion,
+      against: [
+        {
+          action_key: 'parley',
+          label: 'Parley',
+          difficulty: 36,
+          forbidden: true,
+          extra_difficulty: 5,
+        },
+      ],
+    };
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion: parley }],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'parley',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    const box = screen.getByTestId('compulsion-chosen-line');
+    expect(box).toHaveTextContent('Berserk forbids Parley: Resist compulsion check, difficulty 36');
+    expect(screen.getByTestId('maneuver-declaration-section')).toContainElement(box);
+  });
+
+  it('marks Use Item with its difficulty when a held item can be used', () => {
+    setupMocks({ inventory: [{ id: 9, display_name: 'Healing Potion', is_usable: true }] });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [{ ...makeSelfParticipant(5), compulsion }],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('compulsion-difficulty-use_item')).toHaveTextContent('Difficulty 31');
+    expect(screen.getByTestId('use-item-section')).toBeInTheDocument();
+  });
+
+  it('shows neither without a compulsion', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('compulsion-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('compulsion-declare-note')).not.toBeInTheDocument();
   });
 });

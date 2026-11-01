@@ -203,6 +203,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
     id: 1,
     character_sheet_id: 100,
+    persona_id: null,
     character_name: 'Aerande',
     status: 'active',
     health: 8,
@@ -223,6 +224,8 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     aftermath: null,
     reactions_used: null,
     dodge_plan: null,
+    compulsion: null,
+    steady_plan: null,
     dig_deep: null,
     ...overrides,
   };
@@ -789,6 +792,8 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
           aftermath: null,
           reactions_used: null,
           dodge_plan: null,
+          compulsion: null,
+          steady_plan: null,
           dig_deep: null,
         }),
       ],
@@ -911,6 +916,20 @@ describe('CombatTurnPanel — Open Encounter join/leave', () => {
       wrapper: createWrapper(),
     });
     expect(screen.getByTestId('open-encounter-leave-btn')).toBeInTheDocument();
+  });
+
+  it('puts Leave below the YourTurn section, where the compulsion banner sits', () => {
+    mockEncounter({
+      encounter_type: 'open_encounter',
+      status: 'between_rounds',
+      is_participant: true,
+    });
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+    const yourTurn = screen.getByTestId('your-turn-stub');
+    const leave = screen.getByTestId('open-encounter-leave-btn');
+    expect(yourTurn.compareDocumentPosition(leave) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('hides both buttons for party_combat encounters', () => {

@@ -58,6 +58,7 @@ from world.scenes.models import (
     InteractionAction,
     InteractionFavorite,
     InteractionReaction,
+    InteractionTargetPersona,
     Persona,
     ReactionEmoji,
     Scene,
@@ -361,9 +362,9 @@ class InteractionViewSet(
                 to_attr="cached_endorsements",
             ),
             Prefetch(
-                "target_personas",
-                queryset=Persona.objects.all(),
-                to_attr="cached_target_personas",
+                "interaction_targets",
+                queryset=InteractionTargetPersona.objects.select_related("persona"),
+                to_attr="cached_interaction_targets",
             ),
             Prefetch(
                 "favorites",
