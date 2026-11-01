@@ -719,6 +719,20 @@ class _CompelledMira(_ControlLossCase):
     def declared(self):
         return CombatRoundAction.objects.filter(participant=self.seat, round_number=1).first()
 
+    def room_rows(self) -> list[str]:
+        """The round lines Mira's room was pushed, in the order they went out."""
+        return self.mailbox(self.mira).rows
+
+    def assertRoomRow(self, needle: str) -> None:  # noqa: N802 - unittest style
+        """The round narration pushed to Mira's room carries ``needle``."""
+        self.assertShownRow(self.mira, needle)
+
+    def assertNoRoomRow(self, needle: str) -> None:  # noqa: N802 - unittest style
+        """No round line pushed to Mira's room carries ``needle``."""
+        rows = self.room_rows()
+        if any(needle in row for row in rows):
+            self.fail(f"Mira's room was pushed a row with {needle!r}. Rows:\n{rows}")
+
 
 class ACompelledFighterWhoAttacks(_CompelledMira):
     def test_compelled_pc_attacking_rolls_nothing(self) -> None:
@@ -730,7 +744,7 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
 
         compulsion = self.berserk.compulsion
         self.assertEqual(self.rolled_on(spy, compulsion.check_type), [])
-        self.assertNotTold(self.mira, "tries to")
+        self.assertNoRoomRow("tries to")
 
     def test_a_waiting_strike_is_an_attack_and_rolls_nothing(self) -> None:
         told = self.telnet(self.mira, "combat await Claw")
@@ -740,7 +754,7 @@ class ACompelledFighterWhoAttacks(_CompelledMira):
             self.resolve()
 
         self.assertEqual(self.rolled_on(spy, self.berserk.compulsion.check_type), [])
-        self.assertNotTold(self.mira, "tries to")
+        self.assertNoRoomRow("tries to")
 
     def test_idle_compelled_pc_is_auto_declared(self) -> None:
         with self.resist_rolls() as spy:
@@ -762,8 +776,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.partial):
             self.resolve()
 
-        self.assertTold(
-            self.mira,
+        self.assertRoomRow(
             "Mira tries to flee against Berserk. Resist compulsion vs 36: Partial Success.",
         )
         flee_rolls = self.rolled_on(spy, self.flee_check)
@@ -778,8 +791,8 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with self.resist_rolls() as spy, force_check_outcome(self.failure):
             self.resolve()
 
-        self.assertTold(self.mira, "Resist compulsion vs 36: Failure.")
-        self.assertTold(self.mira, "Berserk wins out: Mira attacks Bandit Captain.")
+        self.assertRoomRow("Resist compulsion vs 36: Failure.")
+        self.assertRoomRow("Berserk wins out: Mira attacks Bandit Captain.")
         self.assertEqual(self.rolled_on(spy, self.flee_check), [])
         action = self.declared()
         self.assertIsNone(action.maneuver)
@@ -788,6 +801,27 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         self.seat.refresh_from_db()
         self.assertEqual(self.seat.status, ParticipantStatus.ACTIVE)
 
+    def test_the_room_hears_the_roll_then_the_outcome_then_the_attack(self) -> None:
+        """L1: the compulsion lines go out in the round's own narration order."""
+        self.telnet(self.mira, "combat flee")
+        before = len(self.room_rows())
+
+        with force_check_outcome(self.failure):
+            self.resolve()
+
+        rows = self.room_rows()[before:]
+
+        def first(needle: str) -> int:
+            found = [i for i, row in enumerate(rows) if needle in row]
+            self.assertTrue(found, f"no round line with {needle!r}. Rows:\n{rows}")
+            return found[0]
+
+        roll = first("Mira tries to flee against Berserk. Resist compulsion vs 36: Failure.")
+        outcome = first("Berserk wins out: Mira attacks Bandit Captain.")
+        attack = first("Claw")
+        self.assertLess(roll, outcome, rows)
+        self.assertLess(outcome, attack, rows)
+
     def test_failed_resist_with_no_attack_available_cancels_without_error(self) -> None:
         CharacterTechnique.objects.filter(character=self.sheet, technique=self.claw).delete()
         self.telnet(self.mira, "combat flee")
@@ -795,7 +829,7 @@ class ACompelledFighterWhoFlees(_CompelledMira):
         with force_check_outcome(self.failure):
             self.resolve()
 
-        self.assertTold(self.mira, "Berserk wins out: Mira gives up trying to flee.")
+        self.assertRoomRow("Berserk wins out: Mira gives up trying to flee.")
         self.assertIsNone(self.declared())
 
 
@@ -808,8 +842,8 @@ class ACompelledFighterWhoHeals(_CompelledMira):
             self.resolve()
 
         # 25 base + 2 per severity x 3, and Mend is not a forbidden action.
-        self.assertTold(
-            self.mira, "Mira tries to use Mend against Berserk. Resist compulsion vs 31: Success."
+        self.assertRoomRow(
+            "Mira tries to use Mend against Berserk. Resist compulsion vs 31: Success."
         )
         self.assertEqual(self.declared().focused_action, self.mend)
 
@@ -820,7 +854,7 @@ class ACompelledFighterWhoHeals(_CompelledMira):
         with force_check_outcome(self.partial):
             self.resolve(offense)
 
-        self.assertTold(self.mira, "Resist compulsion vs 31: Partial Success.")
+        self.assertRoomRow("Resist compulsion vs 31: Partial Success.")
         self.assertEqual(offense.call_args.kwargs["extra_modifiers"], -4)
 
 
@@ -840,7 +874,7 @@ class ACompelledFighterWhoParleys(_CompelledMira):
             self.resolve()
 
         # 31 + 5: parley is forbidden.
-        self.assertTold(self.mira, "Mira tries to parley against Berserk. Resist compulsion vs 36")
+        self.assertRoomRow("Mira tries to parley against Berserk. Resist compulsion vs 36")
         parley_rolls = self.rolled_on(spy, self.parley_check)
         self.assertEqual(len(parley_rolls), 1)
         self.assertEqual(parley_rolls[0].kwargs["extra_modifiers"], -4)
@@ -861,10 +895,10 @@ class TwoCompulsionsAtOnce(_CompelledMira):
         with force_check_outcome(self.success):
             self.resolve()
 
-        self.assertTold(
-            self.mira, "Mira tries to flee against Battle fever. Resist compulsion vs 10: Success."
+        self.assertRoomRow(
+            "Mira tries to flee against Battle fever. Resist compulsion vs 10: Success."
         )
-        self.assertNotTold(self.mira, "against Berserk")
+        self.assertNoRoomRow("against Berserk")
 
 
 STEADY_ANIMA = 3
@@ -964,8 +998,9 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         first, second = calls[0][1]["extra_modifiers"], calls[1][1]["extra_modifiers"]
         self.assertEqual(len(calls), 2)
         self.assertEqual(second - first, 4)
-        self.assertTold(self.mira, "Brann steadies Mira.")
-        self.assertNotTold(self.mira, "Berserk wins out")
+        # L2: the steady line names the check the second roll used and how it came out.
+        self.assertRoomRow("Brann steadies Mira. Resist compulsion vs 36: Success.")
+        self.assertNoRoomRow("Berserk wins out")
         self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
         self.assertEqual(
             self.ally_seats["Brann"]
@@ -982,7 +1017,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         calls = self.resolve_with_rolls(self.failure, self.success)
 
         self.assertEqual(len(calls), 1)
-        self.assertTold(self.mira, "Berserk wins out: Mira attacks Bandit Captain.")
+        self.assertRoomRow("Berserk wins out: Mira attacks Bandit Captain.")
         self.assertEqual(self.anima(brann), 20)
 
     def test_steady_bonus_scales_with_bond_depth(self) -> None:
@@ -996,7 +1031,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
 
         bonus = calls[1][1]["extra_modifiers"] - calls[0][1]["extra_modifiers"]
         self.assertEqual(bonus, 4 + STEADY_PER_DEPTH * 10)
-        self.assertTold(self.mira, "Brann steadies Mira.")
+        self.assertRoomRow("Brann steadies Mira.")
         self.assertEqual(self.anima(brann), 20 - STEADY_ANIMA)
         self.assertEqual(self.anima(cade), 20)
 
@@ -1009,7 +1044,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
 
         self.resolve_with_rolls(self.failure, self.success)
 
-        self.assertTold(self.mira, "Brann steadies Mira.")
+        self.assertRoomRow("Brann steadies Mira.")
         self.assertEqual(self.anima(cade), 20)
 
     def test_a_compelled_ally_cannot_steady(self) -> None:
@@ -1021,7 +1056,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         calls = self.resolve_with_rolls(self.failure, self.success)
 
         self.assertEqual(len(calls), 1)
-        self.assertNotTold(self.mira, "steadies Mira")
+        self.assertNoRoomRow("steadies Mira")
         self.assertEqual(self.anima(cade), 20)
 
     def test_an_ally_who_cannot_act_does_not_steady(self) -> None:
@@ -1034,7 +1069,7 @@ class AnAllyWhoSteadies(_SteadyingAllies):
         calls = self.resolve_with_rolls(self.failure, self.success)
 
         self.assertEqual(len(calls), 1)
-        self.assertNotTold(self.mira, "steadies Mira")
+        self.assertNoRoomRow("steadies Mira")
         self.assertEqual(self.anima(tomas), 20)
 
     def test_an_ally_short_of_anima_cannot_steady(self) -> None:

@@ -39,8 +39,6 @@ import logging
 import math
 from typing import TYPE_CHECKING
 
-from django.db import transaction
-
 from world.combat.constants import CombatManeuver
 from world.combat.types import CompulsionAttempt, CompulsionCost, CompulsionRoll
 from world.conditions.constants import CompulsionForbidden, CompulsionResult
@@ -461,7 +459,12 @@ def _resist(
         steady = try_steady(participant, compulsion, difficulty)
         if steady is not None:
             steadied_by = steady.steadier
-            _tell_room(participant, f"{_name(steadied_by)} steadies {name}.")
+            _tell_room(
+                participant,
+                f"{_name(steadied_by)} steadies {name}. "
+                f"{steady.check_result.check_type.name} vs {difficulty}: "
+                f"{_outcome_name(steady.check_result)}.",
+            )
             band = compulsion_band(compulsion, steady.check_result.outcome, bands)
     _apply_band(participant, action, compulsion, band, name=name)
     return CompulsionRoll(
@@ -559,16 +562,20 @@ def _name(participant: CombatParticipant) -> str:
 
 
 def _tell_room(participant: CombatParticipant, line: str) -> None:
-    """Send a round line to the fight's room once the round commits.
+    """Send a round line through the round's own narration, in the round's order.
 
-    The room includes the character; with no room, only the character is told.
+    The same delivery the rest of the round's narration uses (an OUTCOME interaction,
+    pushed at once to web and telnet), so the roll line, its outcome and the action it
+    led to reach the room before the resolution lines that follow them. With no room
+    the row is still kept in the scene log and the character is told directly.
     """
-    room = participant.encounter.room
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+
+    encounter = participant.encounter
+    broadcast_action_outcome(encounter=encounter, narration=line, target_personas=[])
     character = participant.character_sheet.character
-    if room is not None:
-        transaction.on_commit(lambda: room.msg_contents(line))
-    elif character is not None:
-        transaction.on_commit(lambda: character.msg(line))
+    if encounter.room is None and character is not None:
+        character.msg(line)
 
 
 def _first_active_opponent(participant: CombatParticipant) -> CombatOpponent | None:
