@@ -38,7 +38,9 @@ and a modifier from any source points at an effect through a `ModifierTarget`.
   from their own `ModifierLane`; the refusal stays on every other kind.
 - **Derived amounts are their own later design (decision 10).** A source row choosing what its
   number scales from is not built. The fixed-input forms keep working: per thread level, per
-  character level, per condition severity.
+  character level, per condition severity. *Amended by #4878 (owner rulings on #4824,
+  2026-11-01):* distinction effects and condition modifier effects can pick an input, a "per N"
+  step and a cap through one shared mixin; an input replaces the row's own scaling.
 - **Targets keep holding their own scope links (decision 11).** `ModifierTarget` already carries
   seven specific-system links (`target_trait`, `target_being`, `target_damage_type` and others);
   the two new scope columns follow it rather than moving the link to a table on the specific side.

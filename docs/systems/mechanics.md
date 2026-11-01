@@ -357,7 +357,18 @@ counts the lane's value at its holder's level and held-rank size, and a sized te
 its own level and size. With no table row it keeps its flat amount. Every other kind takes flat
 amounts only: a size there is refused by `DistinctionEffect.clean()` ("Only damage, to-hit and
 partial protection effects take a size; clear the size."), as is a `DistinctionEffectRankSize`
-row on one. Derived amounts (#4824 part 1) are not built. A maneuver reads only the targets that carry no technique or
+row on one. **Derived amounts (#4878):** a distinction effect or condition modifier effect can
+pick an input (`AmountInput`: character level, the holder's highest thread on a named trait or
+facet at its shown level, or the holder's rank on a named check from `compute_check_rating`),
+a "per N" step (`amount_per`) and a cap (`amount_cap`), the columns of the abstract
+`DerivedAmountMixin` (`derived_amount_models.py`). The row's own amount is then the amount per
+step; `derived_amount(sheet, row, per_step)` (`derived_amounts.py`) returns it times
+`input // amount_per`, held at the cap. It is read at evaluation time by `get_modifier_breakdown`
+and `scaled_condition_effect_value`, never stored; readers that sum stored
+`CharacterModifier.value` (goals, AP regeneration, comfort) keep the flat amount, as for sizes. An
+input replaces the row's own scaling: a size, severity or stage never applies with it (`clean()`),
+and a check-rank input is refused on a stat or skill target, whose check would read it again. The
+target's soak input is the next slice. A maneuver reads only the targets that carry no technique or
 opponent scope, so a scoped target never reaches a maneuver (see "Technique effect scopes" and
 "Opponent scopes"). A kind-wide "damage" target with no technique scope reaches the
 damage of every technique hit, Charge included, and a Charge's own damage effect still counts only
