@@ -1031,6 +1031,38 @@ class AMaskedFighterWhoseRageAttacks(_CompelledMira):
         )
         self.assertNotIn("Mira", str(cards[0]))
 
+    def test_a_mend_at_a_masked_ally_is_tagged_with_the_mask(self) -> None:
+        """Mira mends Wynn, who wears a mask. As Tomas reads the card, it names the mask and
+        tags the mask, never Wynn's own face. Two rows tag the mask (the card and its
+        outcome line), so this also holds when a page carries the same target twice."""
+        wynn = self.make_player("Wynn", room=self.road)
+        tomas = self.make_player("Tomas", room=self.road)
+        wynn_seat = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=wynn.sheet_data,
+            status=ParticipantStatus.ACTIVE,
+        )
+        told = self.telnet(wynn, "persona mask hooded man")
+        cast = self.telnet(self.mira, "cast Mend at Wynn")
+        self.assertEqual(self.declared().focused_ally_target, wynn_seat, cast)
+
+        with force_check_outcome(self.success):
+            self.resolve()
+
+        response = self.api(self.account_of(tomas)).get(
+            f"/api/interactions/?scene={self.encounter.scene_id}"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = response.json()
+        rows = rows["results"] if isinstance(rows, dict) else rows
+        cards = [row for row in rows if row["mode"] == "action"]
+        self.assertEqual(len(cards), 1, (rows, told))
+        mask = wynn.sheet_data.personas.get(persona_type=PersonaType.TEMPORARY)
+        self.assertEqual(
+            (cards[0]["content"], cards[0]["target_persona_ids"]),
+            (f"Mend at {mask.name}", [mask.pk]),
+        )
+
 
 class ACompelledFighterWhoFlees(_CompelledMira):
     def test_compelled_flee_partial_success_flees_at_penalty(self) -> None:

@@ -1240,9 +1240,21 @@ class Interaction(SharedMemoryModel):
         return list(InteractionReceiver.objects.filter(interaction=self))
 
     @PrunedCachedProperty
+    def cached_interaction_targets(self) -> list[InteractionTargetPersona]:
+        """Target rows with their persona, fed by Prefetch(to_attr='cached_interaction_targets').
+
+        The feed prefetches these rows, never ``target_personas`` itself: Persona is
+        identity-mapped, so an m2m prefetch hands back one shared instance for a persona
+        two rows on the page both target, and Django files it under whichever row it
+        read last. The card and its outcome line both tag the target, so the card lost
+        its tag (#4802). A through row exists once, so it files under its own row.
+        """
+        return list(self.interaction_targets.select_related("persona"))
+
+    @PrunedCachedProperty
     def cached_target_personas(self) -> list[Persona]:
-        """Target personas, fed by Prefetch(to_attr='cached_target_personas')."""
-        return list(self.target_personas.all())
+        """Target personas, read off ``cached_interaction_targets`` (no query once fed)."""
+        return [row.persona for row in self.cached_interaction_targets]
 
     @PrunedCachedProperty
     def cached_favorites(self) -> list[InteractionFavorite]:

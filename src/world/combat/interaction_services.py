@@ -46,27 +46,19 @@ if TYPE_CHECKING:
 
 
 def personas_for_participants(participants: Iterable[CombatParticipant]) -> list[Persona]:
-    """Batch-resolve the PRIMARY personas for these participants' character sheets (#3787).
+    """Batch-resolve the personas these participants present (#3787, #4802).
 
-    One query total regardless of how many participants are passed (no queries
-    in a loop) -- used when a single NPC action's hit can land on several PC
-    participants at once, so the shared ACTION/OUTCOME rows for that action can
-    record every one of them as a target. A participant whose sheet has no
-    PRIMARY persona (legacy fixture content) is silently skipped, same as
-    ``create_action_interaction``'s own single-participant resolution.
+    One ``personas_for_sheets`` read for every participant passed, never one per
+    target (no queries in a loop). Used when a single NPC action's hit can land on
+    several PC participants at once, so the shared ACTION/OUTCOME rows for that action
+    can record every one of them as a target. The face each presents is recorded (the
+    active persona, else PRIMARY), so a masked fighter is tagged as the mask, never by
+    the face behind it. A participant whose sheet has neither (legacy fixture content)
+    is silently skipped, same as ``create_action_interaction``'s own resolution.
     """
-    from world.scenes.constants import PersonaType  # noqa: PLC0415
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    sheet_ids = [p.character_sheet_id for p in participants]
-    if not sheet_ids:
-        return []
-    return list(
-        Persona.objects.filter(
-            character_sheet_id__in=sheet_ids,
-            persona_type=PersonaType.PRIMARY,
-        )
-    )
+    return list(personas_for_sheets([p.character_sheet_id for p in participants]).values())
 
 
 def target_persona_for_round_action(action: CombatRoundAction) -> Persona | None:
@@ -74,20 +66,18 @@ def target_persona_for_round_action(action: CombatRoundAction) -> Persona | None
 
     Exactly one of ``focused_opponent_target``/``focused_ally_target`` is ever
     populated. An opponent target is an NPC with no Persona -- that records no
-    target, which is correct (there is no player behind an NPC), not a gap. An
-    ally target's Persona.DoesNotExist (legacy fixture content missing the
-    PRIMARY-persona invariant) is swallowed the same way
-    ``create_action_interaction`` already treats it for the actor's own persona.
+    target, which is correct (there is no player behind an NPC), not a gap. An ally
+    target is the face that ally presents (#4802), one read for the action's one
+    target; an ally sheet with no persona at all (legacy fixture content) records
+    no target, the same way ``create_action_interaction`` treats the actor.
     """
     if action.focused_ally_target_id is None:
         return None
 
-    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import personas_for_sheets  # noqa: PLC0415
 
-    try:
-        return action.focused_ally_target.character_sheet.primary_persona
-    except Persona.DoesNotExist:
-        return None
+    sheet_id = action.focused_ally_target.character_sheet_id
+    return personas_for_sheets([sheet_id]).get(sheet_id)
 
 
 def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action field recorded
@@ -202,7 +192,9 @@ def create_npc_action_interaction(
     return interaction
 
 
-def render_action_declaration_label(action: CombatRoundAction) -> str:
+def render_action_declaration_label(
+    action: CombatRoundAction, *, ally_persona: Persona | None = None
+) -> str:
     """Render a one-line declaration label for an ACTION Interaction's content.
 
     Format: ``<TechniqueName> at <TargetName>`` for targeted attacks;
@@ -214,6 +206,11 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
     round 1) — the same ``technique_display_name`` resolution the outcome
     narration uses, so the declaration and the outcome agree on what to call it
     within the same round.
+
+    An ally target is named by the face that ally presents (#4802), never the
+    character's key: ``ally_persona`` is the persona the caller already resolved
+    for the card's target tag (``target_persona_for_round_action``), so the label
+    and the tag agree and cost one read between them. Left out, it is resolved here.
     """
     technique = action.focused_action
     if technique is None:
@@ -230,8 +227,8 @@ def render_action_declaration_label(action: CombatRoundAction) -> str:
         target_name = action.focused_opponent_target.name
         return f"{display_name} at {target_name}"
     if action.focused_ally_target_id is not None:
-        ally = action.focused_ally_target
-        target_name = ally.character_sheet.character.db_key
+        persona = ally_persona or target_persona_for_round_action(action)
+        target_name = persona.name if persona is not None else "an ally"
         return f"{display_name} at {target_name}"
     return display_name
 
