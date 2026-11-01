@@ -8,6 +8,7 @@ the row's step, held at its cap. Read at evaluation time, never stored.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from world.mechanics.constants import AmountInput
@@ -17,19 +18,34 @@ if TYPE_CHECKING:
     from world.mechanics.derived_amount_models import DerivedAmountMixin
 
 
-def derived_amount(sheet: CharacterSheet | None, row: DerivedAmountMixin, per_step: int) -> int:
+@dataclass
+class DerivedInputs:
+    """Inputs read for one sheet during one read of several rows, so a check rank that two
+    rows name is worked out once. A caller looping over rows makes one and passes it in."""
+
+    check_ranks: dict[int, int] = field(default_factory=dict)
+
+
+def derived_amount(
+    sheet: CharacterSheet | None,
+    row: DerivedAmountMixin,
+    per_step: int,
+    inputs: DerivedInputs | None = None,
+) -> int:
     """``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.
 
     The sign is the per-step amount's; the cap is a magnitude. No sheet, no input: 0 steps.
     """
-    steps = input_value(sheet, row) // row.amount_per
+    steps = input_value(sheet, row, inputs) // row.amount_per
     total = per_step * steps
     if row.amount_cap is not None and abs(total) > row.amount_cap:
         return row.amount_cap if total > 0 else -row.amount_cap
     return total
 
 
-def input_value(sheet: CharacterSheet | None, row: DerivedAmountMixin) -> int:
+def input_value(
+    sheet: CharacterSheet | None, row: DerivedAmountMixin, inputs: DerivedInputs | None = None
+) -> int:
     """The row's input for ``sheet``, never below 0."""
     if sheet is None:
         return 0
@@ -38,28 +54,34 @@ def input_value(sheet: CharacterSheet | None, row: DerivedAmountMixin) -> int:
     if row.amount_input == AmountInput.THREAD_LEVEL:
         return _thread_level(sheet, row)
     if row.amount_input == AmountInput.CHECK_RANK:
-        return _check_rank(sheet, row)
+        if inputs is None:
+            return _check_rank(sheet, row)
+        if row.amount_check_type_id not in inputs.check_ranks:
+            inputs.check_ranks[row.amount_check_type_id] = _check_rank(sheet, row)
+        return inputs.check_ranks[row.amount_check_type_id]
     return 0
 
 
 def _thread_level(sheet: CharacterSheet, row: DerivedAmountMixin) -> int:
-    """The shown level of the holder's highest thread on the row's trait or facet.
+    """The shown level of the holder's highest live thread on the row's trait or facet.
 
-    A character holds one thread per resonance on an anchor, so the highest one counts.
-    No thread there: 0.
+    A character holds one thread per resonance on an anchor, so the highest one counts; a
+    retired thread does not. Read from the character's cached thread handler, so a row
+    costs no query. No thread there: 0.
     """
-    from django.db.models import Max  # noqa: PLC0415
-
-    from world.magic.models import Thread  # noqa: PLC0415
     from world.magic.services.threads import shown_thread_level  # noqa: PLC0415
 
-    threads = Thread.objects.filter(owner=sheet)
-    if row.amount_thread_trait_id is not None:
-        threads = threads.filter(target_trait_id=row.amount_thread_trait_id)
-    else:
-        threads = threads.filter(target_facet_id=row.amount_thread_facet_id)
-    stored = threads.aggregate(level=Max("level"))["level"]
-    return shown_thread_level(stored) if stored else 0
+    character = sheet.character
+    if character is None:
+        return 0
+    trait_id, facet_id = row.amount_thread_trait_id, row.amount_thread_facet_id
+    levels = [
+        thread.level
+        for thread in character.threads.all()
+        if (trait_id is not None and thread.target_trait_id == trait_id)
+        or (facet_id is not None and thread.target_facet_id == facet_id)
+    ]
+    return shown_thread_level(max(levels)) if levels else 0
 
 
 # The (sheet, check type) ratings being read right now. A check-rank row that the rating it

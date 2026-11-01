@@ -26,6 +26,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.utils import timezone
 
 from integration_tests.harness import JourneyCase
 from integration_tests.test_charge_effect_journeys import DAMAGE, TO_HIT
@@ -44,6 +45,7 @@ from world.distinctions.factories import DistinctionEffectFactory, DistinctionFa
 from world.distinctions.models import DERIVED_AMOUNT_SIZE_REFUSAL, DistinctionEffect
 from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
+from world.magic.models import Thread
 from world.mechanics.constants import (
     MANEUVER_EFFECT_CATEGORY_NAME,
     AmountInput,
@@ -165,6 +167,18 @@ class AThreadAndALevelDriveTheCharge(_WolfFangField):
     def test_with_no_wolf_thread_it_adds_nothing(self) -> None:
         self.grant_wolf_damage()
         self.thread_on(self.silk, shown_level=3)
+
+        _to_hit, damage = self.charge_and_resolve()
+
+        self.assertEqual(damage, DAMAGE)
+
+    def test_a_retired_wolf_thread_adds_nothing(self) -> None:
+        self.grant_wolf_damage()
+        self.thread_on(self.wolf, shown_level=3)
+        thread = Thread.objects.get(owner=self.sheet)
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+        self.hobb.threads.invalidate()
 
         _to_hit, damage = self.charge_and_resolve()
 

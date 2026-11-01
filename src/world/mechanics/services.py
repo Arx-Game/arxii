@@ -45,7 +45,7 @@ from world.mechanics.constants import (
     CapabilitySourceType,
     DifficultyIndicator,
 )
-from world.mechanics.derived_amounts import derived_amount
+from world.mechanics.derived_amounts import DerivedInputs, derived_amount
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -214,11 +214,12 @@ def _distinction_contributions(
     total = 0
     negatives_blocked = 0
     level = (sheet.current_level or None) if value_table is not None else None
+    inputs = DerivedInputs()
     for mod in distinction_mods:
         effect = mod.source.distinction_effect
         if effect.has_amount_input:
             sized = None
-            base_value = derived_amount(sheet, effect, mod.value)
+            base_value = derived_amount(sheet, effect, mod.value, inputs)
         else:
             sized = _sized_distinction_value(mod, value_table, level)
             base_value = mod.value if sized is None else sized[0]
