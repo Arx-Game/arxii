@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models import Gift
@@ -91,15 +93,43 @@ def deprovision_natural_weapon(sheet: CharacterSheet, gift: Gift) -> int:
     weapon, or a gift with none, is a no-op.
     """
     from world.items.models import ItemInstance  # noqa: PLC0415
+
+    marked = ItemInstance.objects.in_play().filter(
+        natural_weapon_gift=gift, holder_character_sheet=sheet
+    )
+    return _take_away(marked, note=f"Lost with the gift {gift.name}.")
+
+
+@transaction.atomic
+def deprovision_all_natural_weapons(sheet: CharacterSheet) -> int:
+    """Take every natural weapon off ``sheet`` before the sheet itself is deleted (#4898).
+
+    A sheet's gifts are deleted with it, while its items survive held by nobody; a marked
+    item left behind could never be picked up and would keep its gift from being deleted.
+    Called from the character's delete hook and the sheet admin's delete actions. Returns
+    how many were removed.
+    """
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    marked = ItemInstance.objects.in_play().filter(
+        holder_character_sheet=sheet, natural_weapon_gift__isnull=False
+    )
+    return _take_away(marked, note="Lost with the body.")
+
+
+def _take_away(items: Iterable[ItemInstance], *, note: str) -> int:
+    """Clear each item's marker, then destroy it through the canonical helper.
+
+    Clearing the marker first is what lets ``destroy_consumed_item_instance`` (and the
+    ``unequip_item`` it calls) past the removal gate: the one deliberate way around it.
+    """
     from world.items.services.usage import destroy_consumed_item_instance  # noqa: PLC0415
 
     removed = 0
-    for item in ItemInstance.objects.in_play().filter(
-        natural_weapon_gift=gift, holder_character_sheet=sheet
-    ):
+    for item in items:
         item.natural_weapon_gift = None
         item.save(update_fields=["natural_weapon_gift"])
-        destroy_consumed_item_instance(item, note=f"Lost with the gift {gift.name}.")
+        destroy_consumed_item_instance(item, note=note)
         removed += 1
     return removed
 

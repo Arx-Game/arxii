@@ -244,3 +244,35 @@ class ProjectsRefuseClaws(_ContributionProjectMixin, TestCase):
         self.assertFalse(BuildingMaterial.objects.filter(item_instance_pk=claws.pk).exists())
         self.assertIsNone(ItemInstance.objects.get(pk=claws.pk).destroyed_at)
         self.assertIsNotNone(ItemInstance.objects.get(pk=plain.pk).destroyed_at)
+
+
+class DeletingTheBodyTakesTheClaws(TestCase):
+    """A deleted character or sheet leaves no marked claws behind, held by nobody."""
+
+    def _marked_left(self, claws: ItemInstance) -> bool:
+        return ItemInstance.objects.filter(pk=claws.pk, natural_weapon_gift__isnull=False).exists()
+
+    def test_deleting_the_character_takes_the_claws(self) -> None:
+        sheet = CharacterSheetFactory()
+        claws = claws_on(sheet)
+        gift = claws.natural_weapon_gift
+
+        sheet.character.delete()
+
+        self.assertFalse(self._marked_left(claws))
+        gift.delete()  # nothing left to PROTECT it
+
+    def test_deleting_the_sheet_in_the_admin_takes_the_claws(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+
+        staff = AccountFactory(is_staff=True, is_superuser=True)
+        sheet = CharacterSheetFactory()
+        claws = claws_on(sheet)
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            f"/admin/arxii/charactersheet/{sheet.pk}/delete/", {"post": "yes"}
+        )
+
+        self.assertEqual(response.status_code, 302, response.content[:500])
+        self.assertFalse(self._marked_left(claws))

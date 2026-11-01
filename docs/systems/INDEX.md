@@ -7167,7 +7167,8 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   `world/items/services/natural_weapons.py`: `provision_natural_weapon(sheet, gift)`
   (idempotent, never adopts a plain copy; called from `grant_gift_to_character` and the
   covenant role grant), `deprovision_natural_weapon(sheet, gift)` (losing the gift: NPC
-  copy, beta reset), `is_natural_weapon(item)` (the marker, no query), `require_removable`.
+  copy, beta reset, gift admin and API delete), `deprovision_all_natural_weapons(sheet)`
+  (deleting the body: `Character.at_object_delete`, the sheet admin), `is_natural_weapon(item)` (the marker, no query), `require_removable`.
   Exceptions `NaturalWeaponNotRemovable`, `NaturalWeaponInTheWay`. Every removal path refuses
   one (backstops in `unequip_item`, `set_item_holder` and `destroy_consumed_item_instance`);
   `covered_regions` skips it; Required content `natural-weapon-templates`. See

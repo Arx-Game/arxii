@@ -133,8 +133,10 @@ cannot be removed."):
 
 Losing the gift is the one way it comes off: `deprovision_natural_weapon(sheet, gift)` clears
 the marker and hands the item to `destroy_consumed_item_instance`. It runs where
-`CharacterGift` rows are deleted: an NPC copy of Powers (`roster/services/npc_copy.py`) and the
-beta reset wipe of play-time gifts. Staff admin edits are not gated (staff power). A natural weapon covers no skin:
+`CharacterGift` rows are deleted: an NPC copy of Powers (`roster/services/npc_copy.py`), the
+beta reset wipe of play-time gifts, the `CharacterGift` admin and the character-gifts API
+delete. Deleting the body runs `deprovision_all_natural_weapons(sheet)`: the `Character`
+typeclass's `at_object_delete` and the `CharacterSheet` admin's delete actions. Staff admin edits are not gated (staff power). A natural weapon covers no skin:
 `covered_regions` skips it, so claws do not shade the hands from the sun or hide a marking.
 Its quality, facets and fittings use the ordinary item paths; a faceted piece counts once
 however many slots it fills (`CharacterEquipmentHandler.item_facets_for`), and so does a
@@ -142,7 +144,9 @@ weapon's covenant role bonus for weapon damage (`covenant_role_bonus`; armor sta
 as its soak is summed per worn row). It is struck like
 any equipped Unarmed weapon (see the Strike in `docs/systems/INDEX.md`), listed before bare
 hands. The Required content row `natural-weapon-templates` lists a natural weapon template
-that is not Unarmed, has no slots, has a slot off the skin layer, or tracks durability.
+that is not Unarmed, has no slots, has a slot off the skin layer, tracks durability, or is
+named by more than one gift (a holder of both would get a second pair that cannot be worn;
+there is no runtime guard).
 
 ### Outfits + Telnet/Action layer (#1866)
 `Outfit`/`OutfitSlot` are a named saved arrangement of items in body slots
