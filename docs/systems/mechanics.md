@@ -301,13 +301,15 @@ missing key; an edited base value is kept.
 (`MANEUVER_EFFECT_CATEGORY_NAME`, created by migration `0334`, and by `ensure_maneuver_effects` for a schema built
 without migrations; the seeder never writes it, since a category is content,
 and listed in `EQUIPMENT_RELEVANT_CATEGORIES` so the equipment walk reaches it: the vow stat
-scaling row and the crossing-choice conditions of worn facets and mantles; distinctions, crafted
+scaling row, a worn facet's `FacetEffectBonus` rows (#4815) and the crossing-choice conditions
+of worn facets and mantles; distinctions, crafted
 recipe modifiers and active conditions reach it without that entry), `clean()` requires exactly
 one of the two (a target with a technique scope names a kind instead, see "Technique effect scopes"); no other category may set either. A target with neither set matches nothing.
 Staff author targets after the catalog rows exist, then point a source at the target (an unsized
 distinction effect, a crafted recipe modifier, a condition modifier, a facet or mantle
-crossing-choice condition, or a vow stat scaling row). A facet's own tier-0 flat bonus does not
-reach an effect target: it needs a resonance on the target, and an effect target has none.
+crossing-choice condition, a facet effect bonus, or a vow stat scaling row). A facet's tier-0
+resonance flat bonus (`ThreadPullEffect`) does not reach an effect target: it needs a resonance on
+the target, and an effect target has none; the facet effect bonus is how a facet reaches one.
 
 **The reader.**
 - `effect_value(sheet, key)`: base value plus `effect_modifier_total`, floored at 0, and capped
@@ -334,6 +336,14 @@ reach an effect target: it needs a resonance on the target, and an effect target
   (stored // 10) x `bonus_per_level`; every other category keeps the stored level. Rows on an
   engaged role and on its anchor role both count, so a holder graduated to a sub-role keeps
   their scaling (`docs/systems/covenants.md`).
+- **Facets (#4815, slice 4 of #4783).** `FacetEffectBonus` (`world/magic/models/motifs.py`:
+  `facet`, `target` limited to the "maneuver_effect" category, non-zero `amount`; unique per
+  facet and target) is the facet naming the effect it boosts, whatever its thread's resonance
+  (owner ruling 2026-11-01). `passive_facet_bonuses` adds, for each FACET thread whose facet is
+  on a worn item, `amount x item quality multiplier x attachment quality multiplier x max(1,
+  SHOWN thread level)` per worn item facet, in one query for all the threads' facets. Staff
+  author rows in the Facet admin's "Facet effect bonuses" inline; `merge_facets` moves them,
+  keeping the winner's row where both facets boost one target.
 
 **Rules and limits.** Each effect kind fixes the unit of every modifier that targets it.
 Damage, to-hit and partial protection take a size (#4876, the owner's "likely grants only"

@@ -5979,6 +5979,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - aliases <- magic.FacetAlias
+  - effect_bonuses <- magic.FacetEffectBonus
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
@@ -5995,6 +5996,11 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - facet -> magic.Facet [FK]
+
+### FacetEffectBonus
+**Foreign Keys:**
+  - facet -> magic.Facet [FK]
+  - target -> mechanics.ModifierTarget [FK]
 
 ### FallRedemptionConfig
 
@@ -7111,6 +7117,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - codex_entry <- codex.CodexEntry
+  - facet_effect_bonuses <- magic.FacetEffectBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
   - covenant_role_bonuses <- covenants.CovenantRoleBonus

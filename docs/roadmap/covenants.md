@@ -964,8 +964,11 @@ the vow-only action scaling table is gone. What was built:
 - **Not built**: derived amounts (a source choosing what its number scales from, #4824). The technique scopes
   (technique, gift, function, damage type, resonance; damage, condition severity and condition
   duration) shipped in #4822, and the opponent scopes (the opponent's property or condition, for
-  the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. See `docs/systems/mechanics.md` "Maneuver effects", "Technique
-  effect scopes" and "Opponent scopes".
+  the same three kinds) in #4823; neither reaches a single maneuver effect or to hit. A gear
+  facet's own bonus to a maneuver effect it names (`FacetEffectBonus`, scaled by item and
+  attachment quality and the shown facet thread level) shipped in #4815. See
+  `docs/systems/mechanics.md` "Maneuver effects", "Technique effect scopes" and "Opponent
+  scopes".
 - **Focus picks**: `VowStatScaling` gained the nullable `focus_pick` #4805 gave action scaling,
   so a focus pick can still carry maneuver (and stat) scaling rows. As with the other payload
   tables, no reader filters by the chosen pick yet.
