@@ -16,10 +16,11 @@ from django.urls import NoReverseMatch, reverse
 from core.app_domains import resolve_model_by_name
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.combat.models import CreatureTemplate
-from world.conditions.models import ConditionStage
+from world.conditions.models import ConditionStage, ConditionTemplate
 from world.covenants.models import CovenantRole
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
+from world.mechanics.models import Property
 from world.missions.constants import OptionKind
 from world.missions.models import MissionOption, MissionOptionOpponentLine
 from world.societies.models import Organization, Society
@@ -91,6 +92,15 @@ def builder_label(obj: object) -> str:
     for model, label in _BUILDER_LABELS:
         if isinstance(obj, model):
             return label
+    return ""
+
+
+def combo_map_url(obj: object) -> str:
+    """The combo map page for a property or a condition (#4891), or "" for anything else."""
+    if isinstance(obj, Property) and obj.pk:
+        return reverse("admin_combo_map_property", args=[obj.pk])
+    if isinstance(obj, ConditionTemplate) and obj.pk:
+        return reverse("admin_combo_map_condition", args=[obj.pk])
     return ""
 
 
