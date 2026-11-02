@@ -24,6 +24,7 @@ from django.db import DatabaseError, connection
 from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from actions.factories import ActionTemplateFactory
@@ -40,6 +41,7 @@ from world.covenants.constants import FocusPickLimitKind
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CharacterVowFocusPickFactory,
+    CombatStyleFactory,
     CovenantRoleFactory,
     CovenantRoleTechniqueSpecialtyFactory,
     SubroleCovenantRoleFactory,
@@ -60,6 +62,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueFunctionTagFactory,
 )
+from world.skills.factories import SkillFactory
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -643,6 +646,96 @@ class VowPowerPreviewTests(VowPageCase):
         self.assertEqual(len(four), len(three))
 
 
+class VowStylesModuleTests(VowPageCase):
+    """The "Combat styles that work with this vow" module (#4932, slice 7 of #4843)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.author)
+
+    def _module(self, url: str | None = None) -> str:
+        response = self.client.get(url or self.url)
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        return body.split('id="styles-module"', 1)[1].split('id="holders-module"', 1)[0]
+
+    def _row(self, module: str, name: str) -> str:
+        return module.split(f">{name}</a>", 1)[1].split("</tr>", 1)[0]
+
+    def test_with_no_styles_it_says_so(self) -> None:
+        module = self._module()
+        self.assertIn("Combat styles that work with this vow</h2>", module)
+        self.assertIn("No combat styles are authored yet.", module)
+
+    def test_a_listed_style_works_and_an_unlisted_one_shows_its_cost(self) -> None:
+        listed = CombatStyleFactory(name="Storm Footwork", skill=SkillFactory(trait__name="Squall"))
+        listed.compatible_roles.add(self.role)
+        unlisted = CombatStyleFactory(name="Iron Guard", skill=SkillFactory(trait__name="Bulwark"))
+        module = self._module()
+        url = reverse("admin:arxii_combatstyle_change", args=[listed.pk])
+        self.assertIn(f'<a href="{url}">Storm Footwork</a>', module)
+        works = self._row(module, "Storm Footwork")
+        self.assertIn('<span class="vb-fit vb-fit-works">works</span>', works)
+        self.assertIn("<td>Squall</td>", works)
+        self.assertNotIn("loses", works)
+        not_works = self._row(module, unlisted.name)
+        self.assertIn('<span class="vb-fit vb-fit-not">does not work</span>', not_works)
+        self.assertIn(
+            "A holder fighting this style loses Bulwark on attack and defense rolls; "
+            "its hit stat and defense type still apply.",
+            not_works,
+        )
+
+    def test_a_style_with_no_skill_has_nothing_to_lose(self) -> None:
+        CombatStyleFactory(name="Bare Stance")
+        row = self._row(self._module(), "Bare Stance")
+        self.assertIn("<td>none</td>", row)
+        self.assertIn("No style skill to lose; its hit stat and defense type apply as usual.", row)
+
+    def test_a_sub_role_page_counts_a_style_listing_its_anchor(self) -> None:
+        sub = SubroleCovenantRoleFactory(
+            name="Fulmination Choir", slug="fulmination-choir", parent_role=self.role
+        )
+        listed = CombatStyleFactory(name="Storm Footwork")
+        listed.compatible_roles.add(self.role)
+        row = self._row(self._module(reverse("admin_vow_builder", args=[sub.pk])), listed.name)
+        self.assertIn("vb-fit-works", row)
+
+    def test_holders_are_this_vows_live_primary_holders_of_that_style(self) -> None:
+        style = CombatStyleFactory(name="Storm Footwork")
+        style.compatible_roles.add(self.role)
+        for membership in (self.ysolde, self.corvin):
+            membership.character_sheet.combat_style = style
+            membership.character_sheet.save()
+        self.corvin.left_at = timezone.now()
+        self.corvin.save()
+        secondary = CharacterCovenantRoleFactory(covenant_role=self.role, is_secondary=True)
+        secondary.character_sheet.combat_style = style
+        secondary.character_sheet.save()
+        other = CharacterCovenantRoleFactory(
+            covenant_role=CovenantRoleFactory(name="Elsewhere", slug="elsewhere-vow")
+        )
+        other.character_sheet.combat_style = style
+        other.character_sheet.save()
+        self.assertIn("<td>1</td>", self._row(self._module(), "Storm Footwork"))
+
+    def test_the_module_costs_the_same_queries_with_one_style_or_four(self) -> None:
+        CombatStyleFactory(name="Count Style 0", skill=SkillFactory(trait__name="Count 0"))
+        self._module()  # warm the site caches
+        with CaptureQueriesContext(connection) as one:
+            self._module()
+        for index in range(1, 4):
+            style = CombatStyleFactory(
+                name=f"Count Style {index}", skill=SkillFactory(trait__name=f"Count {index}")
+            )
+            style.compatible_roles.add(self.role)
+        self._module()  # warm the new styles' skills into the identity map
+        with CaptureQueriesContext(connection) as four:
+            module = self._module()
+        self.assertEqual(module.count("Count Style"), 4)
+        self.assertEqual(len(four), len(one))
+
+
 class RankWordingTests(SimpleTestCase):
     """The rank row's arithmetic and wording (#4930), apart from any page."""
 
@@ -725,6 +818,9 @@ class VowBuilderStylingTest(VowPageCase):
 
     def _states(self) -> dict[str, str]:
         self.client.force_login(self.author)
+        # A style that works and one that does not, so both chips are read (#4932).
+        CombatStyleFactory(name="Styling Works").compatible_roles.add(self.role)
+        CombatStyleFactory(name="Styling Not")
         warned = self.client.post(
             self.url, self._payload(**{self._pick_key(self.kneel, "value"): "6"})
         ).content.decode()

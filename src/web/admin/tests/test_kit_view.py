@@ -26,6 +26,7 @@ from web.admin.tests.test_kit_view_live import KitLiveCase, _know, _technique
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.factories import (
     CharacterVowFocusPickFactory,
+    CombatStyleFactory,
     VowAddedEffectFactory,
     VowFocusPickFactory,
     engage_vow_with_thread,
@@ -112,6 +113,18 @@ class KitPageTest(KitPageCase):
             ["Home", "&rsaquo;", "Combat", "roles", "&rsaquo;", "Kit", "view", "&rsaquo;", name],
         )
         self.assertIn(f"<h1>{name}</h1>", body)
+
+    def test_the_sheet_module_names_the_style_and_whether_it_works(self) -> None:
+        self.assertIn('<td class="kv-muted">No combat style</td>', self.get(self.url()))
+        style = CombatStyleFactory(name="Page Style")
+        style.compatible_roles.add(self.vow)
+        self.sheet.combat_style = style
+        self.sheet.save()
+        style_url = reverse("admin:arxii_combatstyle_change", args=[style.pk])
+        self.assertIn(
+            f'<td><a href="{style_url}">Page Style</a> &middot; works with Tempest</td>',
+            self.get(self.url()),
+        )
 
     def test_a_character_with_nothing_says_what_is_absent(self) -> None:
         body = self.get(self.url(CharacterSheetFactory().pk))

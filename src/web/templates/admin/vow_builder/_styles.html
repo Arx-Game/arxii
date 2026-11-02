@@ -1,0 +1,29 @@
+{% comment %}
+The vow page's combat styles module (#4932, slice 7 of #4843): every style, whether it
+works with this vow (``style_fit``'s rule, a sub-role by its anchor), its skill, how many
+of the vow's live primary holders fight it, and what a mismatch costs. Read only; a
+style's vows are edited on its own change page.
+{% endcomment %}
+<div class="module" id="styles-module">
+  <h2>Combat styles that work with this vow</h2>
+  {% if styles %}
+  <table class="tuning-table vb-table">
+    <thead><tr><th scope="col">Style</th><th scope="col">Works with this vow</th>
+      <th scope="col">Skill</th><th scope="col">Holders using it</th>
+      <th scope="col">What a mismatch costs</th></tr></thead>
+    <tbody>
+      {% for row in styles %}
+      <tr>
+        <td><a href="{{ row.url }}">{{ row.name }}</a></td>
+        <td>{% if row.works %}<span class="vb-fit vb-fit-works">works</span>{% else %}<span class="vb-fit vb-fit-not">does not work</span>{% endif %}</td>
+        <td>{{ row.skill_name|default:"none" }}</td>
+        <td>{{ row.holders }}</td>
+        <td>{{ row.mismatch }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="help">No combat styles are authored yet.</p>
+  {% endif %}
+</div>
