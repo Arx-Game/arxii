@@ -51,3 +51,58 @@ class FiredVowEffect:
     severity_bonus: int
     duration_bonus: int
     damage_bonus: int
+
+
+@dataclass(frozen=True)
+class VowPickEntry:
+    """One focus pick as its vow holder sees it in the pick catalog (#4929).
+
+    ``effects`` are the plain-words lines of the payload rows the pick carries and
+    ``limits`` its limits in one line ("no limits" when it has none). ``locked_reason``
+    is blank when the pick can be chosen now, else why not: its level is above the
+    shown vow level, or it costs more than its level has left.
+    """
+
+    id: int
+    name: str
+    description: str
+    price: int
+    effects: list[str]
+    limits: str
+    chosen: bool
+    locked_reason: str
+
+    @property
+    def choosable(self) -> bool:
+        return not self.chosen and not self.locked_reason
+
+
+@dataclass(frozen=True)
+class VowPickLevel:
+    """One pick level of a vow holder's catalog: its budget, what is spent, its picks."""
+
+    level: int
+    is_open: bool
+    budget: int
+    spent: int
+    picks: list[VowPickEntry]
+
+    @property
+    def left(self) -> int:
+        return max(0, self.budget - self.spent)
+
+
+@dataclass(frozen=True)
+class VowPickCatalog:
+    """Every focus pick one primary vow offers its holder, by pick level (#4929).
+
+    A sub-role holder's catalog holds the anchor vow's picks and the sub-role's
+    together, the way ``choosable_role_ids`` lets them choose.
+    """
+
+    membership_id: int
+    covenant_id: int
+    covenant: str
+    vow: str
+    vow_level: int
+    levels: list[VowPickLevel]

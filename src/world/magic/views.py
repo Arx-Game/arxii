@@ -1510,6 +1510,23 @@ class RitualPerformView(APIView):
             return Response({"detail": err.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return None
 
+    @staticmethod
+    def _add_opened_picks(
+        payload: dict, sheet: CharacterSheet, thread: Thread, result: object
+    ) -> None:
+        """Append the new focus pick lines of a vow thread's imbue to ``payload`` (#4929)."""
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            new_picks_lines,
+            picks_opened_by_imbuing,
+        )
+        from world.magic.types.threads import ThreadImbueResult  # noqa: PLC0415
+
+        if not isinstance(result, ThreadImbueResult):
+            return
+        opened = picks_opened_by_imbuing(sheet, thread, result)
+        payload["opened_pick_levels"] = opened
+        payload["message"] = "\n".join([payload["message"], *new_picks_lines(opened)])
+
     def _run_imbue_finisher(self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict) -> Response:
         """Fuse the telnet ``imbue`` finisher onto a web-hosted Rite of Imbuing.
 
@@ -1535,6 +1552,8 @@ class RitualPerformView(APIView):
                     asdict(imbue_result) if dataclasses.is_dataclass(imbue_result) else imbue_result
                 ),
                 "message": finisher_result.message,
+                # The vow's new focus pick levels (#4929), for the web's "Choose picks".
+                "opened_pick_levels": finisher_result.data.get("opened_pick_levels", []),
             },
             status=status.HTTP_200_OK,
         )
@@ -1599,6 +1618,10 @@ class RitualPerformView(APIView):
             # The action's line, which a service result may extend (the thread retune does),
             # so the web shows what telnet prints.
             payload["message"] = action_result.message
+            if imbuing:
+                # A staff-authored SERVICE imbuing rite says what the vow's new levels
+                # opened, as the canonical rite's finisher does (#4929).
+                self._add_opened_picks(payload, sheet, kwargs["thread"], result)
             payload["result"] = (
                 asdict(result, dict_factory=_model_ref_dict)
                 if dataclasses.is_dataclass(result)

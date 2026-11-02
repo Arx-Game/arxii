@@ -61,6 +61,7 @@ from world.covenants.serializers import (
     ReorderRanksRequestSerializer,
     SphinxVerdictSerializer,
     TransferTopRequestSerializer,
+    VowPickCatalogSerializer,
 )
 from world.covenants.services import (
     assign_rank,
@@ -133,6 +134,33 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
             character_sheet__roster_entry__tenures__end_date__isnull=True,
             character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+    @extend_schema(responses=VowPickCatalogSerializer(many=True))
+    @action(detail=False, methods=["GET"], url_path="vow-picks", pagination_class=None)
+    def vow_picks(self, request: Request) -> Response:
+        """GET /api/covenants/character-roles/vow-picks/?character_sheet=<id>
+
+        Every focus pick each of the character's primary vows offers, by level, with
+        the chosen ones marked and the locked ones saying why (#4929). Read-only and
+        self-only: a player reads only a character they play now; staff read any.
+        Choosing goes through the action dispatch (``choose_vow_focus_pick``).
+        """
+        from world.covenants.focus_picks import vow_pick_catalogs  # noqa: PLC0415
+
+        # One sheet's catalog, not a filtered list of rows: not a FilterSet fit.
+        sheet_param = request.query_params.get("character_sheet", "")  # noqa: USE_FILTERSET
+        if not sheet_param.isdigit():
+            return Response(
+                {"detail": "character_sheet is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        sheets = CharacterSheet.objects.filter(pk=int(sheet_param))
+        if not request.user.is_staff:
+            sheets = sheets.filter(
+                roster_entry__tenures__end_date__isnull=True,
+                roster_entry__tenures__player_data__account=request.user,
+            )
+        sheet = get_object_or_404(sheets.distinct())
+        return Response(VowPickCatalogSerializer(vow_pick_catalogs(sheet), many=True).data)
 
     @action(
         detail=True,

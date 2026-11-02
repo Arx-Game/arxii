@@ -404,6 +404,10 @@ def add_member(
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
+    # A rejoin, or a vow whose thread was woven before, already has pick levels open.
+    from world.covenants.focus_picks import announce_open_vow_picks  # noqa: PLC0415
+
+    announce_open_vow_picks(row)
     return row
 
 
@@ -596,6 +600,9 @@ def assign_covenant_role(
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(character_sheet)
+    from world.covenants.focus_picks import announce_open_vow_picks  # noqa: PLC0415
+
+    announce_open_vow_picks(row)
     return row
 
 

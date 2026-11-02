@@ -451,6 +451,7 @@ class ActionRegistryTests(TestCase):
             "stand_down_battle_covenant",
             "deposit_covenant_funds",
             "withdraw_covenant_funds",
+            "choose_vow_focus_pick",
             "event_create",
             "event_schedule",
             "event_start",

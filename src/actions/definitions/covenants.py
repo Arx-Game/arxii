@@ -1,5 +1,6 @@
 """Single-actor covenant lifecycle REGISTRY actions — the action.run() seam
-for engage/disengage/leave/kick/rank/transfer/stand-down (#1346).
+for engage/disengage/leave/kick/rank/transfer/stand-down (#1346), and a vow
+holder choosing a focus pick (#4929).
 
 Thin wrappers over world.covenants.services; the web viewsets call the same
 services directly. CovenantError → failure ActionResult(exc.user_message)."""
@@ -310,4 +311,64 @@ class StandDownBattleCovenantAction(Action):
         return _run_service(
             lambda: stand_down_battle_covenant(covenant=kwargs["covenant"]),
             "The banners are lowered; the covenant stands down.",
+        )
+
+
+def _optional_int(value: object) -> int | None:
+    """An id kwarg as an int: the web sends a JSON number, a hand-typed call a string."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(str(value))
+    except ValueError:
+        return None
+
+
+@dataclass
+class ChooseVowFocusPickAction(Action):
+    """A vow holder chooses one focus pick within its level's budget (#4929).
+
+    Kwargs: ``pick_id`` (web) or ``pick_name`` (telnet), and ``covenant_id`` when the
+    holder has vows in more than one covenant. The pick is looked up only among the
+    actor's own vows (``resolve_pick_for_choice``), so no client-sent id can reach
+    another character's membership.
+    """
+
+    key: str = "choose_vow_focus_pick"
+    name: str = "Choose Vow Pick"
+    icon: str = "sparkles"
+    category: str = "covenant"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            choose_vow_focus_pick,
+            focus_pick_budget,
+            resolve_pick_for_choice,
+            spent_at_level,
+        )
+
+        sheet = actor.sheet_data
+        try:
+            membership, pick = resolve_pick_for_choice(
+                sheet,
+                pick_id=_optional_int(kwargs.get("pick_id")),
+                pick_name=str(kwargs.get("pick_name") or "").strip(),
+                covenant_id=_optional_int(kwargs.get("covenant_id")),
+            )
+            choose_vow_focus_pick(membership, pick)
+        except CovenantError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        level = pick.pick_level
+        spent = spent_at_level(membership, level)
+        return ActionResult(
+            success=True,
+            message=f"You take {pick.name}. Level {level}: {spent} of {focus_pick_budget()}.",
+            data={"pick_id": pick.pk, "membership_id": membership.pk},
         )

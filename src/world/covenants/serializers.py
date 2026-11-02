@@ -460,6 +460,42 @@ class SphinxVerdictSerializer(serializers.Serializer):
     style = SphinxStyleLineSerializer(read_only=True, allow_null=True)
 
 
+class VowPickEntrySerializer(serializers.Serializer):
+    """One focus pick in a vow holder's catalog (#4929). Read-only."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    price = serializers.IntegerField(read_only=True)
+    effects = serializers.ListField(child=serializers.CharField(), read_only=True)
+    limits = serializers.CharField(read_only=True)
+    chosen = serializers.BooleanField(read_only=True)
+    locked_reason = serializers.CharField(read_only=True)
+    choosable = serializers.BooleanField(read_only=True)
+
+
+class VowPickLevelSerializer(serializers.Serializer):
+    """One pick level of a vow holder's catalog: budget, spend, what is left, picks."""
+
+    level = serializers.IntegerField(read_only=True)
+    is_open = serializers.BooleanField(read_only=True)
+    budget = serializers.IntegerField(read_only=True)
+    spent = serializers.IntegerField(read_only=True)
+    left = serializers.IntegerField(read_only=True)
+    picks = VowPickEntrySerializer(many=True, read_only=True)
+
+
+class VowPickCatalogSerializer(serializers.Serializer):
+    """Every focus pick one primary vow offers its holder, by level (#4929). Read-only."""
+
+    membership_id = serializers.IntegerField(read_only=True)
+    covenant_id = serializers.IntegerField(read_only=True)
+    covenant = serializers.CharField(read_only=True)
+    vow = serializers.CharField(read_only=True)
+    vow_level = serializers.IntegerField(read_only=True)
+    levels = VowPickLevelSerializer(many=True, read_only=True)
+
+
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
     """Read-only serializer for GearArchetypeCompatibility join rows."""
 
