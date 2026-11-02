@@ -49,8 +49,10 @@ from actions.definitions.areas import DeclareElevationAction
 from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.atlas_map import (
     AtlasCarveFootprintAction,
+    AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
     AtlasPaintTerrainAction,
+    AtlasRestoreFootprintAction,
 )
 from actions.definitions.battles import (
     BeginBattleRoundAction,
@@ -1321,6 +1323,8 @@ _ALL_ACTIONS: list[Action] = [
     # #4242 the world map: region maps, footprints, paint (the upload is an endpoint).
     AtlasCreateRegionMapAction(),
     AtlasCarveFootprintAction(),
+    AtlasClearFootprintAction(),
+    AtlasRestoreFootprintAction(),
     AtlasPaintTerrainAction(),
     AlmanachPlantRungAction(),
     AlmanachBatchUnclaimedAction(),
