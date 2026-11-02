@@ -77,16 +77,17 @@ def undress(character: CharacterState) -> None:
     """Unequip every item currently worn by the character.
 
     Items stay in inventory (the existing unequip behavior). Idempotent on
-    a naked character.
+    a naked character. A natural weapon (#4898) stays on: it is part of the body,
+    so undressing leaves it rather than refusing.
     """
     item_ids = list(
         EquippedItem.objects.filter(character_id=character.obj.pk)
         .values_list("item_instance_id", flat=True)
         .distinct()
     )
-    for item in ItemInstance.objects.filter(id__in=item_ids):
-        item_state = ItemState(item, context=character.context)
-        unequip(character, item_state)
+    worn = ItemInstance.objects.filter(id__in=item_ids, natural_weapon_gift__isnull=True)
+    for item in worn:
+        unequip(character, ItemState(item, context=character.context))
 
 
 def save_outfit(

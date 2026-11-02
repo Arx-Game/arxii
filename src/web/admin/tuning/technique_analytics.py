@@ -169,17 +169,53 @@ def _evaluate_corpus(
     if cached is not None:
         return cached
 
-    context = EvalContext(
+    context = _eval_context(params)
+    reports, reference = technique_power_eval.evaluate_all_with_reference(context)
+    result = (reports, reference, timezone.now())
+    cache.set(key, result, _CORPUS_CACHE_TIMEOUT)
+    return result
+
+
+def _eval_context(params: TechniqueAnalyticsParams) -> EvalContext:
+    return EvalContext(
         level=params.level,
         thread_level=params.thread_level,
         roller_points=params.roller_points,
         target_difficulty=params.target_difficulty,
         roll_modifier=params.roll_modifier,
     )
-    reports, reference = technique_power_eval.evaluate_all_with_reference(context)
-    result = (reports, reference, timezone.now())
-    cache.set(key, result, _CORPUS_CACHE_TIMEOUT)
-    return result
+
+
+def default_context_and_reference() -> tuple[EvalContext, ReferenceFrame]:
+    """The Techniques panel's default context and its reference DPR, for a preview (#4930).
+
+    The context is the panel's default knobs. The reference is the cached corpus's when
+    the panel has run at those knobs, else ``de_valuation.compute_reference_frame`` at
+    them, cached by the catalog revision as the corpus is, so a preview and the panel
+    price "1 DE" alike and a page load does not evaluate the catalog twice.
+    """
+    params = TechniqueAnalyticsParams()
+    context = _eval_context(params)
+    corpus = cache.get(_corpus_cache_key(params))
+    if corpus is not None:
+        return context, corpus[1]
+    key = f"tuning-tech-power-reference:{_corpus_cache_key(params)}"
+    reference = cache.get(key)
+    if reference is None:
+        reference = de_valuation.compute_reference_frame(context)
+        cache.set(key, reference, _CORPUS_CACHE_TIMEOUT)
+    return context, reference
+
+
+def default_catalog_reports() -> list[TechniquePowerReport]:
+    """Every catalog technique's report at the panel's default knobs (#4930).
+
+    The Techniques panel's own corpus (``_evaluate_corpus``): read from its cache for the
+    current catalog revision, else evaluated once and cached exactly as the panel does.
+    The vow page's catalog rank compares against these baseline figures.
+    """
+    reports, _reference, _evaluated_at = _evaluate_corpus(TechniqueAnalyticsParams())
+    return reports
 
 
 def _is_zero_value(report: TechniquePowerReport) -> bool:

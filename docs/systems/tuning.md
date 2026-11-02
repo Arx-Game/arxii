@@ -161,6 +161,13 @@ recently cached result instead of losing it.
 - `tier` (`OpponentTier.choices`), `risk_level` (`RiskLevel.choices`) — `ChoiceField`s;
   an unrecognized value IS a real form error (there's no sane way to clamp a string into
   an enum member).
+- `technique` ("Technique (blank = basic attack)") and `covenant_role` ("Vow (blank = no
+  vow)"): optional `ModelChoiceField`s (#4930); an unknown id is a form error. They
+  become `SimulationParams.technique_id` / `covenant_role_id`, and
+  `_simulation_cache_key` carries both. A GET's `?technique=` / `?covenant_role=` (digits
+  only) prefill them, and `tuning_dashboard` forwards those two params from its own URL
+  into the panel's first `hx-get`, so the vow page's "Run the fight simulator" link opens
+  the form filled. Staff run it once with the vow and once with it blank.
 
 The view calls `simulation.run_party_vs_boss_simulation` via the module object (not a
 bare `from ... import`) so tests can patch the function at its origin module and still
@@ -181,7 +188,16 @@ reinventing the wheel" / no-parallel-implementations rule (see
 
 `SimulationParams` (frozen dataclass): `party_size: int = 4`, `avg_level: int = 5`,
 `tier: str = OpponentTier.BOSS`, `risk_level: str = RiskLevel.MODERATE`,
-`iterations: int = 50`, `round_cap: int = 20`.
+`iterations: int = 50`, `round_cap: int = 20`, `combo_rate: float = 0.0`,
+`technique_id: int | None = None`, `covenant_role_id: int | None = None` (#4930; ids keep
+the dataclass hashable). With `technique_id` the party casts that catalog technique
+(fetched once per batch) instead of the synthetic basic attack; combat reads no
+`CharacterTechnique` for a declared technique, so none is made. With `covenant_role_id`
+every party member holds that vow engaged, as a primary membership of one shared
+synthetic covenant, with its COVENANT_ROLE thread at shown level `avg_level`
+(`engage_vow_with_thread`; the thread cap is character level x 10), so the cast path
+fires the vow's added effects and power terms as for a real holder. Both roll back with
+the batch.
 
 `SimulationReport` (frozen dataclass): `params`, `iterations_run`, `victories`,
 `defeats`, `stalemates`, `win_rate`, `round_counts: list[int]`, `mean_rounds`,
@@ -224,6 +240,22 @@ live combat formulas and stays importable by future budget/simulation phases:
 - `world/magic/services/technique_power_eval.py` —
   `evaluate_all_with_reference(EvalContext) -> (list[TechniquePowerReport], ReferenceFrame)`
   (and the `evaluate_all` wrapper). Types in `world/magic/types/technique_power.py`.
+- **The vow term (#4930):** `evaluate_technique(..., vow_effects=(), vow_thread_level=0)`
+  also prices `VowAddedEffect` rows riding the technique, into both figures. Each effect's
+  bonuses at `vow_thread_level` come from `world.covenants.added_effects.vow_effect_bonuses`,
+  the rule the cast uses: its damage profiles go through the damage valuator with the
+  `damage_bonus` added to each band's budget (`kind="vow damage"`); its applied conditions
+  route like the technique's own rows with the severity and duration bonuses (a team-lane
+  row takes neither; `kind="vow <kind>"`). An effect below its unlock is priced with no
+  bonus; one another passed effect `upgrades` is dropped. Not priced: the effect's
+  treatments, removed conditions and morale, the hard-control line, situations, secondary
+  potency, and the weapon augment. Power, anima, windup and flags are the technique's
+  own; with no effects the report is unchanged. `_amplified_delta`
+  (`amplified_power_delta(context)`) lets a caller pricing many techniques read the blend
+  config once. Readers: the vow page's Power preview and the kit view's Preview column
+  (`web/admin/authoring/power_preview.py`), at the Techniques panel's default context and
+  reference (`technique_analytics.default_context_and_reference`, cached by catalog
+  revision).
 - **Shared DE formula core (#3390):** `world/magic/services/de_valuation.py` holds every
   row/technique-independent formula this evaluator uses — `matchup_bands`,
   `reference_attack_de`, `cached_damage_multiplier`, `dot_per_round`,
@@ -427,6 +459,9 @@ Health panel from `tech_health.py`, and a Required-Content sentinel panel from
 | Technical Health | `ops_tech_fragment` | `admin_ops_tech` |
 | Required content | `ops_required_content_fragment` | `admin_ops_required_content` |
 
+The Missing combat content page (`_combat_content/`, `admin_combat_content`, #4906) is a
+full page under Ops, not a panel; see the sentinel section below.
+
 Views live in `src/web/admin/tuning/ops_views.py`.
 
 ### `src/web/admin/tuning/metrics.py`
@@ -535,6 +570,29 @@ when the row is absent.
   query, for `AnyRowProbe`/`FilteredRowProbe`/`CustomProbe`). `RequiredContentSnapshot`
   sorts the result into `missing_required`, `present_required`, `missing_tuning`,
   `present_tuning`.
+- **Per-row links (#4906).** A probe that names rows can link each one to its own fix
+  page: `ProbeResult.flagged` is a tuple of `FlaggedRow(text, url)`, filled alongside
+  `missing` (the same texts in the same order, so every reader of `missing` is
+  unchanged). The panel draws `flagged` as links when present, else `missing` as text.
+- **Missing combat content flags (#4906, slice 4 of #4843)** - five `TUNING` rows from
+  `web/admin/tuning/combat_role_flags.py` (`combat_role_declarations()`, folded into
+  `_declarations()`): `combat_vow_no_picks` (a vow with no focus pick of its own, nor on
+  its anchor for a sub-role; links its vow page), `combat_holder_over_budget` (a live
+  primary membership whose chosen picks at one level cost more than
+  `focus_pick_budget()`, priced through `price_for`; links the `CharacterVowFocusPick`
+  changelist searched by the character), `combat_condition_never_read` (a condition
+  carrying a property, landed by something, with no reader of any property it carries and
+  none naming it), `combat_condition_set_by_nothing` (a condition carrying a property some
+  row reads, landed by nothing; both condition flags link the condition's combo map and
+  read the combo map's own batched lists in `web/admin/combo_map/live.py`, so the two
+  cannot disagree), and `combat_pick_blank_payload` (a pick with no stat scaling,
+  situational perk or added effect; links its vow page). Flags only: nothing is blocked
+  and no save refuses for them. The run is a fixed number of queries however many rows
+  there are (116 today, pinned in `tests/test_combat_role_flags.py`).
+  `collect_combat_role_flags()` resolves just these five for the **Missing combat
+  content** page (`_combat_content/`, `admin_combat_content`, superuser-only,
+  `combat_content_views.py`: Flag / What / Fix it, one row per open flag, each flagged
+  row linked) and the Combat roles panel's row of the same name ("N open flags").
 
 The panel probes the live database because no repo artifact can answer the
 question: seeds under `world/seeds/` are clone-bootstrap and E2E scaffolding only,

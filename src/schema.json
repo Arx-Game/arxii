@@ -4768,6 +4768,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/CGPointBudget'
           description: ''
+  /api/character-creation/combat-styles/:
+    get:
+      operationId: character_creation_combat_styles_list
+      description: The styles, each with its gear kinds read in one query for the
+        whole list.
+      parameters:
+      - in: query
+        name: draft_id
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGCombatStyleOption'
+          description: ''
+  /api/character-creation/combat-styles/{id}/:
+    get:
+      operationId: character_creation_combat_styles_retrieve
+      description: |-
+        List the combat styles a draft's chosen Tradition teaches during CG (#4921).
+
+        Query params:
+            draft_id: The caller's CharacterDraft (required; empty list without it).
+
+        Empty list until the draft has a selected Tradition, and for a Tradition that
+        teaches no style (the Gift stage then skips its style step). Each row says how the
+        style attacks and defends; nothing about vows (character creation never mentions
+        covenant vows).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat style.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGCombatStyleOption'
+          description: ''
   /api/character-creation/draft-markings/:
     get:
       operationId: character_creation_draft_markings_list
@@ -5423,7 +5477,8 @@ paths:
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
         applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-        removes whatever it carried the same way.
+        removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+        a combat style the new tradition does not teach (#4921).
       parameters:
       - in: path
         name: id
@@ -49209,6 +49264,71 @@ components:
       - off_affinity
       - resonance_name
       - strain_units_per_point
+    CGCombatStyleOption:
+      type: object
+      description: |-
+        A combat style the draft's Tradition teaches, for the Gift stage's style step (#4921).
+
+        Backs ``GET /api/character-creation/combat-styles/?draft_id=<id>``. How the style
+        attacks (its weapon kinds and hit stat) and defends (defense style, armor kinds and
+        armor share). Never its vows: character creation never mentions covenant vows. The
+        view passes each style's gear kinds as ``gear_by_style`` in context, one query for
+        the list.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Name staff and players see, e.g. 'Duelist's Footwork'.
+        description:
+          type: string
+          readOnly: true
+          description: How a fighter of this style moves and defends, in the words
+            players read.
+        defense_style:
+          allOf:
+          - $ref: '#/components/schemas/DefenseStyleEnum'
+          readOnly: true
+          description: |-
+            How a character with this style defends: Evasion (not being there), Barrier (a ward that needs a check) or Mitigation (armor takes the blow).
+
+            * `gear_soak` - Mitigation
+            * `evasion` - Evasion
+            * `barrier` - Barrier
+        defense_style_display:
+          type: string
+          readOnly: true
+        armor_share_tenths:
+          type: integer
+          readOnly: true
+          description: How much of the character's armor counts, in tenths (0 to 10).
+            10 means all of it; an evasion style usually counts less.
+        hit_stat_name:
+          type: string
+          nullable: true
+          readOnly: true
+        weapon_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGStyleGearKind'
+          readOnly: true
+        armor_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/CGStyleGearKind'
+          readOnly: true
+      required:
+      - armor_kinds
+      - armor_share_tenths
+      - defense_style
+      - defense_style_display
+      - description
+      - hit_stat_name
+      - id
+      - name
+      - weapon_kinds
     CGGiftOption:
       type: object
       description: |-
@@ -49539,6 +49659,20 @@ components:
       required:
       - name
       - quantity
+    CGStyleGearKind:
+      type: object
+      description: One weapon or armor kind a style fights with, by its ``GearArchetype``
+        label.
+      properties:
+        value:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+      required:
+      - label
+      - value
     CGTechniqueOption:
       type: object
       description: |-
@@ -51250,6 +51384,9 @@ components:
             directly, so we inject ``beginning_id`` into a per-draft context rather than
             relying on the list endpoint's pre-built map.
           readOnly: true
+        selected_combat_style:
+          type: integer
+          readOnly: true
         public_worship:
           allOf:
           - $ref: '#/components/schemas/WorshippedBeingRef'
@@ -51410,6 +51547,7 @@ components:
       - secret_worship
       - selected_area
       - selected_beginnings
+      - selected_combat_style
       - selected_gender
       - selected_origin_template
       - selected_path
@@ -51545,6 +51683,10 @@ components:
           writeOnly: true
           nullable: true
         selected_tradition_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_combat_style_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -55327,6 +55469,16 @@ components:
           type: integer
       required:
       - project_id
+    DefenseStyleEnum:
+      enum:
+      - gear_soak
+      - evasion
+      - barrier
+      type: string
+      description: |-
+        * `gear_soak` - Mitigation
+        * `evasion` - Evasion
+        * `barrier` - Barrier
     DefinitionTierEnum:
       enum:
       - name_only
@@ -79231,6 +79383,10 @@ components:
           writeOnly: true
           nullable: true
         selected_tradition_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_combat_style_id:
           type: integer
           writeOnly: true
           nullable: true

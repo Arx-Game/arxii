@@ -105,6 +105,49 @@ def _held_vows(character: Character) -> list[CovenantRole]:
     return list(character.covenant_roles.currently_engaged_primary_roles())
 
 
+def _lists(listed: set[int], role: CovenantRole) -> bool:
+    return role.pk in listed or role.parent_role_id in listed
+
+
+def styles_listing_vow(role: CovenantRole) -> set[int]:
+    """The pk of every style that lists ``role``'s vow, in one query (#4932).
+
+    The batched form of ``style_lists_vow``: a style lists a sub-role when it lists the
+    sub-role or its anchor. The vow page reads it for every style at once.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    vow_ids = {role.pk} if role.parent_role_id is None else {role.pk, role.parent_role_id}
+    return set(
+        CombatStyle.objects.filter(compatible_roles__in=vow_ids)
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+
+
+def style_vow_ids(style: CombatStyle) -> set[int]:
+    """The pk of every vow ``style`` lists, in one query (#4932).
+
+    Read once, then ask ``lists_vow`` for each held vow, so a page checking one style
+    against several vows costs one query.
+    """
+    return set(style.compatible_roles.values_list("pk", flat=True))
+
+
+def lists_vow(listed: set[int], role: CovenantRole) -> bool:
+    """Whether ``listed`` (a style's vow pks) covers ``role``; a sub-role counts by its anchor."""
+    return _lists(listed, role)
+
+
+def style_lists_vow(style: CombatStyle, role: CovenantRole) -> bool:
+    """Whether ``style`` lists ``role``'s vow; a sub-role counts by its anchor (#4921).
+
+    The Sphinx's style line and the kit view read it; the roll's lapse test is the same
+    rule.
+    """
+    return style.pk in styles_listing_vow(role)
+
+
 def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | None:
     """The first held vow the style does not list (a sub-role counts by its anchor)."""
     held = _held_vows(character)
@@ -112,7 +155,7 @@ def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | No
         return None
     listed = set(style.compatible_roles.values_list("pk", flat=True))
     for role in held:
-        if role.pk not in listed and role.parent_role_id not in listed:
+        if not _lists(listed, role):
             return role
     return None
 

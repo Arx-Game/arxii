@@ -7,7 +7,9 @@ closed ApostateCD's open PR #4866, unmerged, the moment #4899 merged.
 
 Used by the commit-msg hook (tools/githooks/commit-msg) with the branch's issue as
 the one allowed target, and by spec-evidence.yml on the PR body with the PR's own
-``Closes #N``. Standard library only, so the hook runs without a venv.
+``Closes #N``. Both also refuse a line holding two closing references (#4922): GitHub
+closes only the first, so each goes on its own line. Standard library only, so the hook
+runs without a venv.
 
     python3 tools/closing_keywords.py commit-msg <message-file>
 """
@@ -36,6 +38,11 @@ _SCISSORS = "# ------------------------ >8 ------------------------"
 _CLOSING_LINE_FILLER = re.compile(r"^[\s,;.&*-]*(?:and[\s,;.&]*)*$", re.IGNORECASE)
 
 
+# A closing reference followed straight away by more numbers: "Closes #1 #2", "Fixes #1, #2".
+_LISTED_AFTER_CLOSE = re.compile(
+    STRAY.pattern + r"(?:\s*(?:,|;|&|\band\b)?\s*#\d+)+", re.IGNORECASE
+)
+
 # A labelled close: "- Fixes #3679: hub models are blind ..." (colon straight after it).
 _LABELLED_CLOSE = re.compile(r"^\s*(?:[-*]\s+)?" + STRAY.pattern + r":\s", re.IGNORECASE)
 
@@ -43,8 +50,9 @@ _LABELLED_CLOSE = re.compile(r"^\s*(?:[-*]\s+)?" + STRAY.pattern + r":\s", re.IG
 def _is_closing_line(line: str) -> bool:
     """A deliberate close: a line of nothing but closing references, or a labelled one.
 
-    `Closes #1`, `Closes #1, closes #2`, `- Fixes #3679: what it fixes`. Not a sentence
-    that happens to hold a keyword: "Do not close #3751" closed #3751 (#3955).
+    `Closes #1`, `- Fixes #3679: what it fixes`. Not a sentence that happens to hold a
+    keyword: "Do not close #3751" closed #3751 (#3955). A line holding two references is
+    still a closing line here; ``crowded_closing_lines`` is what refuses it.
     """
     if not STRAY.search(line):
         return False
@@ -67,6 +75,20 @@ def stray_references(text: str, allowed: str | None) -> list[str]:
         if not _is_closing_line(line)
         for m in STRAY.finditer(line)
         if m["number"] != allowed
+    ]
+
+
+def crowded_closing_lines(text: str) -> list[str]:
+    """Lines that try to close two or more issues (#4922).
+
+    GitHub closes only the first reference on such a line: two keywords comma-separated,
+    or one keyword followed by a list of numbers, both leave the rest open. Each closing
+    keyword goes on a line of its own.
+    """
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if len(STRAY.findall(line)) > 1 or _LISTED_AFTER_CLOSE.search(line)
     ]
 
 
@@ -117,17 +139,26 @@ def check_commit_message(path: str) -> int:
     text = message_text(Path(path).read_text(encoding="utf-8"))
     allowed = branch_issue(_current_branch())
     found = stray_references(text, allowed)
-    if not found:
+    if found:
+        target = f"#{allowed}, this branch's issue" if allowed else "nothing (no issue in the name)"
+        print(
+            "Commit rejected: GitHub closes what a closing keyword names (#4903).", file=sys.stderr
+        )
+        for phrase in found:
+            print(f"  {phrase!r}", file=sys.stderr)
+        print(
+            f"On this branch a closing keyword may name {target}. Reword the rest, e.g.\n"
+            "'the bot renumbered #4866' or 'on #4866', not 'fixed #4866'.",
+            file=sys.stderr,
+        )
+        return 1
+    crowded = crowded_closing_lines(text)
+    if not crowded:
         return 0
-    target = f"#{allowed}, this branch's issue" if allowed else "nothing (no issue in the name)"
-    print("Commit rejected: GitHub closes what a closing keyword names (#4903).", file=sys.stderr)
-    for phrase in found:
-        print(f"  {phrase!r}", file=sys.stderr)
-    print(
-        f"On this branch a closing keyword may name {target}. Reword the rest, e.g.\n"
-        "'the bot renumbered #4866' or 'on #4866', not 'fixed #4866'.",
-        file=sys.stderr,
-    )
+    print("Commit rejected: one closing keyword per line (#4922).", file=sys.stderr)
+    for line in crowded:
+        print(f"  {line!r}", file=sys.stderr)
+    print("GitHub closes only the first one on a line; put each on its own.", file=sys.stderr)
     return 1
 
 

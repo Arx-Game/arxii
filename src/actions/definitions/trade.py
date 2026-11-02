@@ -25,6 +25,7 @@ from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.items.exceptions import (
+    NaturalWeaponNotRemovable,
     NotInPossession,
     RecipientConsentDenied,
     RecipientNotAdjacent,
@@ -221,6 +222,7 @@ class StageTradeItemAction(Action):
             NotInPossession,
             TradeItemAlreadyStaked,
             RecipientConsentDenied,
+            NaturalWeaponNotRemovable,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 

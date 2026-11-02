@@ -24,6 +24,12 @@ class RiteIsCeremony(RiteNotAvailable):
     user_message = "That rite is a ceremony: open one in the being's name."
 
 
+class RiteGiftIsPartOfTheBody(WorshipRiteError):
+    """A natural weapon (#4898) offered during a rite: it is part of the body."""
+
+    user_message = "That is part of the body and cannot be removed."
+
+
 class RiteScenePrerequisiteFailed(WorshipRiteError):
     """A rite is a scene act: it needs an active scene the performer is in."""
 

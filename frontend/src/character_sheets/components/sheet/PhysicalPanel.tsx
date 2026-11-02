@@ -16,6 +16,7 @@
 
 import type { CharacterVitalsData } from '@/vitals/vitalsQueries';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
+import { NaturalWeapons } from './NaturalWeapons';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
 import type { GlanceRow } from './primitives';
 
@@ -126,6 +127,8 @@ export function PhysicalPanel({
               )}
             </Stack>
           )}
+
+          <NaturalWeapons weapons={sheet.natural_weapons} />
         </Stack>
 
         {isPrivileged && vitals ? (

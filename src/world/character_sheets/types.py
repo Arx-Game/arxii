@@ -9,6 +9,7 @@ from typing import TypedDict
 
 from django.db import models
 
+from world.covenants.style_profile import GearKindLabel
 from world.magic.types.technique_effects import (
     TechniqueEffectPayload,
     TechniqueFormPayload,
@@ -612,6 +613,57 @@ class WornEntry(TypedDict):
     name: str
     description: str
     is_hidden: bool
+
+
+class NaturalWeaponEntry(TypedDict):
+    """One natural weapon the character holds, for the sheet's Physical section (#4898).
+
+    Claws, a bite or horns a gift gave them (``ItemInstance.natural_weapon_gift``): struck
+    on Unarmed, never removable. Owner and staff only, like the rest of the sheet's own
+    mechanics. ``from_species`` is True when the gift reached the character as a species
+    grant (``CharacterGift.origin``). ``damage`` is the item's effective weapon damage
+    (quality applied); ``damage_type`` is its damage type's name, blank when it has none.
+    ``facets`` are the attached facets' names; ``facets_used`` counts the crafted ones,
+    which are what ``facet_capacity`` limits (inherent facets do not count).
+    """
+
+    id: int
+    name: str
+    gift_name: str
+    from_species: bool
+    damage: int
+    damage_type: str
+    facets: list[str]
+    facets_used: int
+    facet_capacity: int
+
+
+class CombatStyleSection(TypedDict):
+    """The character's combat style, for the sheet (#4921): owner and staff only.
+
+    The same structured fields character creation's style step shows (how the style
+    attacks and defends), never its vows. ``weapon_kinds`` and ``armor_kinds`` are
+    ``GearKindLabel`` rows (``world.covenants.style_profile``). ``skill_name`` is the
+    style's own skill, blank when it has none; ``skill_value`` is the character's value in
+    it, 0 when untrained. ``tradition_name`` is the character's active Tradition when it
+    teaches the style, else the first Tradition that does, None when none does; ``vows``
+    are the names of the style's ``compatible_roles`` in name order (the sheet, unlike
+    character creation, shows them, as the approved demo's screen 6 does).
+    """
+
+    id: int
+    name: str
+    description: str
+    defense_style: str
+    defense_style_display: str
+    armor_share_tenths: int
+    hit_stat_name: str | None
+    weapon_kinds: list[GearKindLabel]
+    armor_kinds: list[GearKindLabel]
+    skill_name: str
+    skill_value: int
+    tradition_name: str | None
+    vows: list[str]
 
 
 class ProfileTextField(models.TextChoices):

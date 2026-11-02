@@ -3110,6 +3110,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/combat-styles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The styles, each with its gear kinds read in one query for the whole list. */
+    get: operations['character_creation_combat_styles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/combat-styles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the combat styles a draft's chosen Tradition teaches during CG (#4921).
+     *
+     *     Query params:
+     *         draft_id: The caller's CharacterDraft (required; empty list without it).
+     *
+     *     Empty list until the draft has a selected Tradition, and for a Tradition that
+     *     teaches no style (the Gift stage then skips its style step). Each row says how the
+     *     style attacks and defends; nothing about vows (character creation never mentions
+     *     covenant vows).
+     */
+    get: operations['character_creation_combat_styles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/draft-markings/': {
     parameters: {
       query?: never;
@@ -3502,7 +3546,8 @@ export interface paths {
      *     state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
      *     to that state may name a drawback distinction the pick carries for free,
      *     applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-     *     removes whatever it carried the same way.
+     *     removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+     *     a combat style the new tradition does not teach (#4921).
      */
     post: operations['character_creation_drafts_select_tradition_create'];
     delete?: never;
@@ -29792,6 +29837,36 @@ export interface components {
       ceiling_tier_name: string | null;
     };
     /**
+     * @description A combat style the draft's Tradition teaches, for the Gift stage's style step (#4921).
+     *
+     *     Backs ``GET /api/character-creation/combat-styles/?draft_id=<id>``. How the style
+     *     attacks (its weapon kinds and hit stat) and defends (defense style, armor kinds and
+     *     armor share). Never its vows: character creation never mentions covenant vows. The
+     *     view passes each style's gear kinds as ``gear_by_style`` in context, one query for
+     *     the list.
+     */
+    CGCombatStyleOption: {
+      readonly id: number;
+      /** @description Name staff and players see, e.g. 'Duelist's Footwork'. */
+      readonly name: string;
+      /** @description How a fighter of this style moves and defends, in the words players read. */
+      readonly description: string;
+      /**
+       * @description How a character with this style defends: Evasion (not being there), Barrier (a ward that needs a check) or Mitigation (armor takes the blow).
+       *
+       *     * `gear_soak` - Mitigation
+       *     * `evasion` - Evasion
+       *     * `barrier` - Barrier
+       */
+      readonly defense_style: components['schemas']['DefenseStyleEnum'];
+      readonly defense_style_display: string;
+      /** @description How much of the character's armor counts, in tenths (0 to 10). 10 means all of it; an evasion style usually counts less. */
+      readonly armor_share_tenths: number;
+      readonly hit_stat_name: string | null;
+      readonly weapon_kinds: components['schemas']['CGStyleGearKind'][];
+      readonly armor_kinds: components['schemas']['CGStyleGearKind'][];
+    };
+    /**
      * @description Gift row for the CG gift-options list (#2426).
      *
      *     Backs ``GET /api/character-creation/gifts/?draft_id=<id>`` — a gift the
@@ -29953,6 +30028,11 @@ export interface components {
     CGPriceComponent: {
       name: string;
       quantity: number;
+    };
+    /** @description One weapon or armor kind a style fights with, by its ``GearArchetype`` label. */
+    CGStyleGearKind: {
+      readonly value: string;
+      readonly label: string;
     };
     /**
      * @description Technique row for the CG technique-options list (#2426).
@@ -30705,6 +30785,7 @@ export interface components {
       readonly selected_tradition: {
         [key: string]: unknown;
       } | null;
+      readonly selected_combat_style: number;
       readonly public_worship: components['schemas']['WorshippedBeingRef'];
       readonly secret_worship: components['schemas']['WorshippedBeingRef'];
       /** @description Staged data: stats, skills, traits, identity, etc. */
@@ -30815,6 +30896,7 @@ export interface components {
       build_id?: number | null;
       selected_path_id?: number | null;
       selected_tradition_id?: number | null;
+      selected_combat_style_id?: number | null;
       public_worship_id?: number | null;
       secret_worship_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
@@ -32564,6 +32646,13 @@ export interface components {
     DefenseInstallResult: {
       project_id: number;
     };
+    /**
+     * @description * `gear_soak` - Mitigation
+     *     * `evasion` - Evasion
+     *     * `barrier` - Barrier
+     * @enum {string}
+     */
+    DefenseStyleEnum: 'gear_soak' | 'evasion' | 'barrier';
     /**
      * @description * `name_only` - Name Only
      *     * `functionary` - Functionary
@@ -45019,6 +45108,7 @@ export interface components {
       build_id?: number | null;
       selected_path_id?: number | null;
       selected_tradition_id?: number | null;
+      selected_combat_style_id?: number | null;
       public_worship_id?: number | null;
       secret_worship_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
@@ -59425,6 +59515,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CGPointBudget'];
+        };
+      };
+    };
+  };
+  character_creation_combat_styles_list: {
+    parameters: {
+      query?: {
+        draft_id?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGCombatStyleOption'][];
+        };
+      };
+    };
+  };
+  character_creation_combat_styles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat style. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGCombatStyleOption'];
         };
       };
     };

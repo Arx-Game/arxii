@@ -8,15 +8,30 @@ reinvented combat math).
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from evennia.utils.idmapper.models import flush_cache
 
+from actions.factories import ActionTemplateFactory
 from world.checks.outcome_models import ConsequenceOutcome
+from world.combat import services
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.factories import CombatEncounterFactory, seed_scaling_defaults
-from world.combat.models import CombatEncounter, OpponentTierTemplate
+from world.combat.models import (
+    CombatEncounter,
+    CombatParticipant,
+    CombatRoundAction,
+    OpponentTierTemplate,
+)
 from world.combat.scaling import compute_opponent_stat_block
 from world.combat.simulation import SimulationParams, run_party_vs_boss_simulation
+from world.covenants.factories import CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.magic.constants import TargetKind
+from world.magic.factories import TechniqueFactory
+from world.magic.models import Thread
+from world.magic.services.threads import shown_thread_level
 from world.scenes.models import Interaction
 from world.vitals.models import CharacterVitals
 
@@ -159,3 +174,88 @@ class SimulationComboRateTests(TestCase):
             )
         )
         self.assertEqual(report.iterations_run, 1)
+
+
+class SimulationTechniqueAndVowTests(TestCase):
+    """The party's technique and vow (#4930), seen from inside each round.
+
+    ``resolve_round`` is wrapped, not replaced: the wrapper reads the round's
+    declarations and the party's vows, then the real round resolves. Every row it
+    sees rolls back with the batch.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(
+            name="Simulated lash", action_template=ActionTemplateFactory()
+        )
+        cls.role = CovenantRoleFactory(name="Simulated vow")
+
+    def _run(self, **params: object) -> list[CombatEncounter]:
+        seen: list[CombatEncounter] = []
+        self.actions: set[int] = set()
+        self.memberships: list[tuple[int, int, int | None]] = []
+        real = services.resolve_round
+
+        def watch(encounter: CombatEncounter) -> None:
+            seen.append(encounter)
+            self.actions |= set(
+                CombatRoundAction.objects.filter(participant__encounter=encounter).values_list(
+                    "focused_action_id", flat=True
+                )
+            )
+            for participant in CombatParticipant.objects.filter(encounter=encounter):
+                sheet = participant.character_sheet
+                membership = CharacterCovenantRole.objects.filter(
+                    character_sheet=sheet, left_at__isnull=True
+                ).first()
+                thread = Thread.objects.filter(
+                    owner=sheet, target_kind=TargetKind.COVENANT_ROLE
+                ).first()
+                self.memberships.append(
+                    (
+                        sheet.pk,
+                        membership.covenant_role_id if membership else 0,
+                        shown_thread_level(thread.level) if thread else None,
+                    )
+                )
+            real(encounter)
+
+        with patch.object(services, "resolve_round", side_effect=watch):
+            run_party_vs_boss_simulation(
+                SimulationParams(
+                    party_size=2,
+                    avg_level=4,
+                    tier=OpponentTier.MOOK,
+                    iterations=1,
+                    round_cap=1,
+                    **params,
+                )
+            )
+        return seen
+
+    def test_a_technique_is_what_every_party_member_casts(self) -> None:
+        self.assertTrue(self._run(technique_id=self.technique.pk))
+        self.assertEqual(self.actions, {self.technique.pk})
+
+    def test_without_one_the_party_casts_the_basic_attack(self) -> None:
+        self._run()
+        self.assertEqual(len(self.actions), 1)
+        self.assertNotIn(self.technique.pk, self.actions)
+
+    def test_a_vow_gives_every_member_the_membership_and_its_thread(self) -> None:
+        self._run(covenant_role_id=self.role.pk)
+        self.assertEqual(len(self.memberships), 2)
+        for _sheet, role_id, level in self.memberships:
+            self.assertEqual((role_id, level), (self.role.pk, 4))
+
+    def test_without_one_nobody_holds_a_vow(self) -> None:
+        self._run()
+        self.assertEqual([(r, lvl) for _s, r, lvl in self.memberships], [(0, None)] * 2)
+
+    def test_the_run_still_writes_nothing(self) -> None:
+        before = CharacterCovenantRole.objects.count()
+        self._run(technique_id=self.technique.pk, covenant_role_id=self.role.pk)
+        flush_cache()
+        self.assertEqual(CharacterCovenantRole.objects.count(), before)
+        self.assertEqual(CombatEncounter.objects.count(), 0)

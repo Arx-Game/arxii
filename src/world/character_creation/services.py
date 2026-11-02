@@ -2918,6 +2918,20 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         ),
         require_roster_entry=True,
     )
+    _finalize_combat_style(draft, sheet)
+
+
+def _finalize_combat_style(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """The style the draft chose becomes the character's (#4921).
+
+    ``compute_magic_errors`` held it to the Tradition's styles. Its trained skill value
+    rides ``draft_data["magic_skills"]`` into ``_create_skill_values`` like any Magic
+    skill, so both skill stores are written there. No style chosen leaves none.
+    """
+    if draft.selected_combat_style_id is None:
+        return
+    sheet.combat_style = draft.selected_combat_style
+    sheet.save(update_fields=["combat_style"])
 
 
 def _link_glimpse_distinctions(draft: CharacterDraft, sheet: CharacterSheet, aura: Any) -> None:

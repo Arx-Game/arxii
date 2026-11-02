@@ -1,0 +1,63 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+  &rsaquo; <a href="{% url 'admin_ops' %}">{% translate "Ops" %}</a>
+  &rsaquo; <a href="{% url 'admin_ops' %}#panel-ops-required-content">{% translate "Required content" %}</a>
+  &rsaquo; {% translate "Combat roles" %}
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<style>
+  #combat-content-root .combat-content-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #combat-content-root .combat-content-note {
+    font-weight: normal;
+    font-size: 0.72rem;
+    padding: 0 6px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+  }
+  #combat-content-root .combat-content-body {
+    padding: 8px 10px;
+  }
+</style>
+<div id="combat-content-root">
+  <div class="module">
+    <h2 class="combat-content-head">{% translate "Combat roles" %}<span class="combat-content-note">{% translate "flags only, nothing blocked" %}</span></h2>
+    {% if open_flags %}
+    <table class="tuning-table">
+      <thead>
+        <tr>
+          <th>{% translate "Flag" %}</th>
+          <th>{% translate "What" %}</th>
+          <th>{% translate "Fix it" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for flag in open_flags %}{% for flagged in flag.rows %}
+        <tr>
+          {% if forloop.first %}<td rowspan="{{ flag.rows|length }}">{{ flag.label }}</td>{% endif %}
+          <td>{{ flagged.text }}</td>
+          <td>{% if flagged.url %}<a href="{{ flagged.url }}" aria-label="{{ flag.fix_label }}: {{ flagged.text }}">{{ flag.fix_label }}</a>{% endif %}</td>
+        </tr>
+        {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="combat-content-body">{% translate "Nothing is flagged." %}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

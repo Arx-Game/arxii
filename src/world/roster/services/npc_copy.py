@@ -118,6 +118,7 @@ def _copy_prose(source: CharacterSheet, target: CharacterSheet, field: str) -> N
 
 
 def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
+    from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
     from world.magic.constants import AcquisitionOrigin, TargetKind  # noqa: PLC0415
     from world.magic.models import CharacterGift, CharacterTechnique, Thread  # noqa: PLC0415
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
@@ -170,6 +171,9 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
         target_gift_id__in=removed.values("gift_id"),
         retired_at__isnull=True,
     ).update_with_reason(reason="issue #4418: gift removed by NPC copy", retired_at=timezone.now())
+    # A removed gift takes its natural weapon with it (#4898).
+    for gift_row in removed.select_related("gift"):
+        deprovision_natural_weapon(target, gift_row.gift)
     removed.delete()
     for gift in source_gifts:
         # An already-owned gift keeps its origin (a species-granted gift stays so).

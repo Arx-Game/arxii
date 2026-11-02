@@ -35,18 +35,36 @@ class DependencyTier(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class FlaggedRow:
+    """One row a probe names as a gap, with the page that fixes that row (#4906).
+
+    `url` is None when no single page fixes the row; the panel then shows the
+    text alone.
+    """
+
+    text: str
+    url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeResult:
     """The outcome of resolving one `ContentProbe`.
 
     `admin_url` lets a probe that knows the exact page to author its gap on
     (the Soulfray Stage Builder at the first empty stage, #4089) name it; the
     panel prefers it over the model changelist.
+
+    `flagged` lets a probe that names rows link each one to its own fix page
+    (a vow's builder, a condition's combo map, #4906). Such a probe fills both:
+    `missing` keeps the texts, so every reader of `missing` is unchanged, and
+    `flagged` carries the same texts with their links, in the same order.
     """
 
     present: bool
     missing: tuple[str, ...] = ()
     detail: str = ""
     admin_url: str | None = None
+    flagged: tuple[FlaggedRow, ...] = ()
 
 
 class ContentProbe:
@@ -598,6 +616,75 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
         )
     else:
         detail = ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _natural_weapon_template_faults(
+    template: object, layers: list[str], gift_names: list[str]
+) -> list[str]:
+    """What is wrong with one gift's natural weapon template, if anything (#4898).
+
+    ``layers`` is the equipment layer of each of the template's slots; ``gift_names`` the
+    gifts naming it.
+    """
+    from world.items.constants import EquipmentLayer, GearArchetype  # noqa: PLC0415
+
+    faults: list[str] = []
+    if template.gear_archetype != GearArchetype.UNARMED:
+        faults.append(f"gear kind is {template.get_gear_archetype_display()}, not Unarmed")
+    if not layers:
+        faults.append("it has no slots, so it is never equipped")
+    elif any(layer != EquipmentLayer.SKIN for layer in layers):
+        faults.append("a slot is off the skin layer, so it collides with worn gear")
+    if template.max_durability:
+        faults.append("durability is tracked, so it can break")
+    if len(gift_names) > 1:
+        faults.append(
+            f"named by more than one gift ({', '.join(gift_names)}), so a holder of both "
+            "gets a second pair that cannot be worn"
+        )
+    return faults
+
+
+def _probe_natural_weapon_templates() -> ProbeResult:
+    """Every gift's natural weapon template is one the Strike and the body can carry.
+
+    Consumer: `world/items/services/natural_weapons.py provision_natural_weapon()` and
+    `world/combat/services/declarations/strike.py strike_weapon_for_item()`. A template
+    that is not Unarmed is struck on another weapon's skill (or not offered at all); one
+    with no slots is never equipped; one off the skin layer is skipped where worn gear
+    already sits; one with tracked durability breaks, and nobody can replace it. One
+    named by two gifts makes a second marked pair for a holder of both, which the first
+    pair keeps out of its slots. Present when no gift names a natural weapon.
+    """
+    from world.items.models import ItemTemplate, TemplateSlot  # noqa: PLC0415
+    from world.magic.models import Gift  # noqa: PLC0415
+
+    templates = list(
+        ItemTemplate.objects.filter(natural_weapon_gifts__isnull=False).distinct().order_by("name")
+    )
+    layers: dict[int, list[str]] = {template.pk: [] for template in templates}
+    for template_id, layer in TemplateSlot.objects.filter(template_id__in=layers).values_list(
+        "template_id", "equipment_layer"
+    ):
+        layers[template_id].append(layer)
+    gift_names: dict[int, list[str]] = {template.pk: [] for template in templates}
+    for template_id, name in (
+        Gift.objects.filter(natural_weapon_template_id__in=layers)
+        .order_by("name")
+        .values_list("natural_weapon_template_id", "name")
+    ):
+        gift_names[template_id].append(name)
+    missing = tuple(
+        f"{template.name}: {'; '.join(faults)}"
+        for template in templates
+        if (
+            faults := _natural_weapon_template_faults(
+                template, layers[template.pk], gift_names[template.pk]
+            )
+        )
+    )
+    detail = f"Natural weapon template(s) to fix: {' | '.join(missing)}." if missing else ""
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
@@ -2514,6 +2601,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     function runs rather than as a silently stale string literal.
     """
     from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME  # noqa: PLC0415
+    from web.admin.tuning.combat_role_flags import combat_role_declarations  # noqa: PLC0415
     from world.areas.positioning.constants import (  # noqa: PLC0415
         AERIAL_PROPERTY_NAME,
         CATCH_THE_FALLER_NAME,
@@ -3005,6 +3093,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "is refused: the strike skill it rolls has no check type."
             ),
             probe=NamedRowsProbe(label="CheckType", names=STRIKE_CHECK_TYPE_NAMES),
+        ),
+        ContentDependency(
+            key="natural-weapon-templates",
+            label="Natural weapon templates: Unarmed, skin-layer slots, no durability, one gift",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/items/services/natural_weapons.py provision_natural_weapon(); "
+                "world/combat/services/declarations/strike.py strike_weapon_for_item()"
+            ),
+            consequence=(
+                "A gift's claws are struck on the wrong skill or not offered to the Strike, "
+                "never equipped, pushed aside by worn gear, break for good, or come twice."
+            ),
+            probe=CustomProbe(fn=_probe_natural_weapon_templates),
+            admin_model="ItemTemplate",
         ),
         ContentDependency(
             key="concentration-check-type",
@@ -5733,6 +5836,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence="Standoffs offer no terms; players can only fight.",
             probe=AnyRowProbe(label="StandoffTerms"),
         ),
+        # --- Missing combat content flags (#4906) ----------------------------------------
+        *combat_role_declarations(),
     )
 
 

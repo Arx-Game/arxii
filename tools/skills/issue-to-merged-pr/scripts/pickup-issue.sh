@@ -167,12 +167,13 @@ COMPLEXITY=$(jq -r '.labels[] | select(.name | startswith("complexity:")) | .nam
 # repo's Polytoken config uses codex/* model selectors. The model name for each
 # complexity tier is overridable via env var so neither harness is hardcoded:
 #   ISSUE_MODEL_HIGH / ISSUE_MODEL_MEDIUM / ISSUE_MODEL_LOW
-# Defaults are the Claude Code tiers (backwards-compatible with the prior
-# behavior). Set the env vars (e.g. in .devcontainer/dev.env) to retarget.
+# Defaults are Claude Code's /model aliases, which always mean the latest model of
+# that family, so no version id goes stale (#4924). Set the env vars (e.g. in
+# .devcontainer/dev.env) to retarget.
 case "$COMPLEXITY" in
-  "complexity:high")   MODEL="${ISSUE_MODEL_HIGH:-claude-opus-4-8}" ;;
-  "complexity:medium") MODEL="${ISSUE_MODEL_MEDIUM:-claude-sonnet-4-6}" ;;
-  "complexity:low")    MODEL="${ISSUE_MODEL_LOW:-claude-sonnet-4-6}" ;;
+  "complexity:high")   MODEL="${ISSUE_MODEL_HIGH:-opus}" ;;
+  "complexity:medium") MODEL="${ISSUE_MODEL_MEDIUM:-sonnet}" ;;
+  "complexity:low")    MODEL="${ISSUE_MODEL_LOW:-haiku}" ;;
   *)                   MODEL="" ;;
 esac
 # Compact (single-line) JSON: the contract is one stdout line, so a caller can

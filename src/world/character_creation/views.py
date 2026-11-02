@@ -30,6 +30,7 @@ from world.character_creation.constants import (
     OfferChapter,
 )
 from world.character_creation.filters import (
+    CGCombatStyleOptionFilter,
     CGGiftOptionFilter,
     CGTechniqueOptionFilter,
     DraftMarkingFilter,
@@ -40,6 +41,7 @@ from world.character_creation.filters import (
     SpeciesFilter,
     TraditionFilter,
 )
+from world.character_creation.magic_training import reconcile_combat_style, taught_styles
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
@@ -65,6 +67,7 @@ from world.character_creation.offers import (
 from world.character_creation.serializers import (
     BeatPoolEntrySerializer,
     BeginningsSerializer,
+    CGCombatStyleOptionSerializer,
     CGExplanationsSerializer,
     CGGiftOptionSerializer,
     CGGlimpseTagSerializer,
@@ -114,6 +117,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.codex.models import BeginningsCodexGrant, PathCodexGrant, TraditionCodexGrant
+from world.covenants.models import CombatStyle, CombatStyleGear
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
 from world.forms.services import get_cg_form_options
 from world.magic.exceptions import GiftResonanceUnresolvable
@@ -578,6 +582,56 @@ class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):
             else frozenset()
         )
         return context
+
+
+class CGCombatStyleOptionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List the combat styles a draft's chosen Tradition teaches during CG (#4921).
+
+    Query params:
+        draft_id: The caller's CharacterDraft (required; empty list without it).
+
+    Empty list until the draft has a selected Tradition, and for a Tradition that
+    teaches no style (the Gift stage then skips its style step). Each row says how the
+    style attacks and defends; nothing about vows (character creation never mentions
+    covenant vows).
+    """
+
+    serializer_class = CGCombatStyleOptionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # A Tradition teaches a handful of styles.
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CGCombatStyleOptionFilter
+
+    def filter_queryset(self, queryset: QuerySet[CombatStyle]) -> QuerySet[CombatStyle]:
+        """Skip the filterset's form validation, as ``CGGiftOptionViewSet`` does."""
+        return queryset
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """The styles, each with its gear kinds read in one query for the whole list."""
+        styles = list(self.get_queryset())
+        gear_by_style: dict[int, list[str]] = defaultdict(list)
+        for style_id, kind in CombatStyleGear.objects.filter(style__in=styles).values_list(
+            "style_id", "gear_archetype"
+        ):
+            gear_by_style[style_id].append(kind)
+        context = {**self.get_serializer_context(), "gear_by_style": gear_by_style}
+        return Response(self.get_serializer_class()(styles, many=True, context=context).data)
+
+    def get_queryset(self) -> QuerySet[CombatStyle]:
+        """The draft's Tradition's styles, with their hit stat."""
+        request = _view_request(self)
+        if request is None:
+            return CombatStyle.objects.none()
+        raw = request.query_params.get("draft_id")  # noqa: USE_FILTERSET
+        try:
+            draft_id = int(raw) if raw else None
+        except (TypeError, ValueError):
+            draft_id = None
+        if draft_id is None:
+            return CombatStyle.objects.none()
+        draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
+        return taught_styles(draft).select_related("hit_stat")
 
 
 class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1113,7 +1167,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
         applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-        removes whatever it carried the same way.
+        removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+        a combat style the new tradition does not teach (#4921).
         """
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
@@ -1122,6 +1177,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
             reconcile_offer_picks(draft)
+            reconcile_combat_style(draft)
             return Response({"status": "tradition cleared"})
 
         if not draft.selected_beginnings:
@@ -1139,6 +1195,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         draft.selected_tradition = tradition
         draft.save(update_fields=["selected_tradition"])
         reconcile_offer_picks(draft)
+        # A style the new Tradition does not teach is cleared with its skill points (#4921).
+        reconcile_combat_style(draft)
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)

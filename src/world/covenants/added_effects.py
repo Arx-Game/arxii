@@ -16,7 +16,9 @@ out-of-combat cast) call into this module:
 - ``record_vow_effect_firings`` spends once-per-round and once-per-fight rows
   in the ``VowAddedEffectFiring`` ledger. The caller writes it only after a
   cast lands, so a failed cast never spends a limited effect.
-- ``vow_added_effects_on_technique`` is the static view for display (#4565).
+- ``vow_added_effects_on_technique`` is the static view for display (#4565);
+  ``vow_added_effects_on_techniques`` answers it for many techniques in one
+  query (the kit view, #4918).
 - ``effect_rides_technique`` and ``techniques_ridden_by`` are the one catalog
   match between a row and the techniques it rides (function tag, then the gift
   or technique narrowing), shared by the cast path, the static view and the
@@ -87,7 +89,7 @@ row is limited.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
@@ -112,7 +114,7 @@ from world.covenants.perks.services import (
     vow_holder_candidates,
     vow_holder_thread_levels,
 )
-from world.covenants.types import FiredVowEffect
+from world.covenants.types import FiredVowEffect, VowEffectBonuses
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueFunctionTag
 
 if TYPE_CHECKING:
@@ -260,25 +262,75 @@ def vow_added_effects_on_technique(
     The rows keep their ``beneficiary``, so a display can tell a row riding the
     sheet's own casts from one riding its allies'. A row with a ``focus_pick`` is
     listed only when the sheet chose that pick, since it never rides the sheet's
-    casts otherwise.
+    casts otherwise. The one-technique form of ``vow_added_effects_on_techniques``.
     """
-    functions = {tag.function for tag in technique.cached_function_tags}
-    if not functions:
-        return []
+    functions = {technique.pk: [tag.function for tag in technique.cached_function_tags]}
+    return vow_added_effects_on_techniques(sheet, [technique], functions)[technique.pk]
+
+
+def function_tags_by_technique(techniques: Sequence[Technique]) -> dict[int, list[str]]:
+    """Each technique's function tag values, ordered, keyed by technique pk: one query (#4918).
+
+    Read fresh with ``values_list``, so a reader of many techniques needs no prefetch onto
+    the identity-mapped rows. A technique with no tag maps to ``[]``; no query when
+    ``techniques`` is empty.
+    """
+    by_technique: dict[int, list[str]] = {t.pk: [] for t in techniques}
+    if not by_technique:
+        return by_technique
+    rows = (
+        TechniqueFunctionTag.objects.filter(technique_id__in=by_technique)
+        .order_by("function")
+        .values_list("technique_id", "function")
+    )
+    for technique_id, function in rows:
+        by_technique[technique_id].append(function)
+    return by_technique
+
+
+def vow_added_effects_on_techniques(
+    sheet: CharacterSheet,
+    techniques: Sequence[Technique],
+    functions: Mapping[int, Iterable[str]] | None = None,
+) -> dict[int, list[VowAddedEffect]]:
+    """The static view for many techniques at once, keyed by technique pk (#4918).
+
+    The same rows ``vow_added_effects_on_technique`` lists for each technique, matched by
+    ``effect_rides_technique`` alone, from one ``VowAddedEffect`` query for every
+    technique (its role, pick, gift and technique joined, its four payload prefetches)
+    and one chosen-pick query only when a fetched row carries a pick. ``functions`` is
+    each technique's function tags by pk; when it is not passed they are read in one
+    query (``function_tags_by_technique``). A technique with no row maps to ``[]``; with
+    no function tag anywhere, or no engaged vow, no effect is queried.
+    """
+    by_technique: dict[int, list[VowAddedEffect]] = {t.pk: [] for t in techniques}
+    if functions is None:
+        functions = function_tags_by_technique(techniques)
+    tags = {t.pk: set(functions.get(t.pk, ())) for t in techniques}
+    wanted = set().union(*tags.values()) if tags else set()
+    if not wanted:
+        return by_technique
     candidates = _self_candidates(sheet)
     if not candidates:
-        return []
-    effects = [
-        effect
-        for effect in VowAddedEffect.objects.filter(
-            covenant_role_id__in={c.role_id for c in candidates}, function__in=functions
+        return by_technique
+    effects = list(
+        VowAddedEffect.objects.filter(
+            covenant_role_id__in={c.role_id for c in candidates}, function__in=wanted
         )
-        if effect_rides_technique(effect, technique, functions)
-    ]
-    if not any(effect.focus_pick_id is not None for effect in effects):
-        return effects
-    chosen = chosen_pick_ids_by_holder({sheet.pk})
-    return [effect for effect in effects if holder_has_pick(effect.focus_pick_id, sheet.pk, chosen)]
+        .select_related("covenant_role", "focus_pick", "gift", "technique")
+        .prefetch_related(*payload_prefetches())
+    )
+    chosen: dict[int, set[int]] = {}
+    if any(effect.focus_pick_id is not None for effect in effects):
+        chosen = chosen_pick_ids_by_holder({sheet.pk})
+    for technique in techniques:
+        by_technique[technique.pk] = [
+            effect
+            for effect in effects
+            if effect_rides_technique(effect, technique, tags[technique.pk])
+            and holder_has_pick(effect.focus_pick_id, sheet.pk, chosen)
+        ]
+    return by_technique
 
 
 def apply_vow_effect_payloads(  # noqa: PLR0913 - the payload seams' own parameters
@@ -601,27 +653,47 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
     potency_tenths: int | None = None
     fired: list[FiredVowEffect] = []
     for row in chosen.values():
-        effect = row.effect
-        above = max(0, row.thread_level - effect.unlock_thread_level)
-        severity = above * effect.severity_per_thread_level
-        duration = above * effect.duration_per_thread_level
-        damage = above * effect.damage_per_thread_level
-        if row.candidate.is_secondary:
-            if potency_tenths is None:
-                from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+        if row.candidate.is_secondary and potency_tenths is None:
+            from world.covenants.services import secondary_vow_config  # noqa: PLC0415
 
-                potency_tenths = secondary_vow_config().potency_tenths
-            severity = severity * potency_tenths // 10
-            duration = duration * potency_tenths // 10
-            damage = damage * potency_tenths // 10
+            potency_tenths = secondary_vow_config().potency_tenths
+        bonuses = vow_effect_bonuses(
+            row.effect,
+            row.thread_level,
+            potency_tenths=potency_tenths if row.candidate.is_secondary else None,
+        )
         fired.append(
             FiredVowEffect(
-                effect=effect,
+                effect=row.effect,
                 holder=row.candidate.holder,
                 is_secondary=row.candidate.is_secondary,
-                severity_bonus=severity,
-                duration_bonus=duration,
-                damage_bonus=damage,
+                severity_bonus=bonuses.severity,
+                duration_bonus=bonuses.duration,
+                damage_bonus=bonuses.damage,
             )
         )
     return fired
+
+
+def vow_effect_bonuses(
+    effect: VowAddedEffect, thread_level: int, *, potency_tenths: int | None = None
+) -> VowEffectBonuses:
+    """The bonuses ``effect`` adds at shown ``thread_level``: the one per-level rule (#4930).
+
+    Each shown level above ``unlock_thread_level`` adds the row's
+    ``severity_per_thread_level``, ``duration_per_thread_level`` and
+    ``damage_per_thread_level``; a level at or below the unlock adds nothing.
+    ``potency_tenths`` is ``SecondaryVowConfig.potency_tenths`` for a row from a
+    secondary vow (each bonus times it, floor-divided by 10), or ``None`` for a
+    primary vow. The cast (``_scaled_firings``) and the technique power evaluator
+    both call this, so a preview prices what a cast adds. Issues no query.
+    """
+    above = max(0, thread_level - effect.unlock_thread_level)
+    severity = above * effect.severity_per_thread_level
+    duration = above * effect.duration_per_thread_level
+    damage = above * effect.damage_per_thread_level
+    if potency_tenths is not None:
+        severity = severity * potency_tenths // 10
+        duration = duration * potency_tenths // 10
+        damage = damage * potency_tenths // 10
+    return VowEffectBonuses(severity=severity, duration=duration, damage=damage)

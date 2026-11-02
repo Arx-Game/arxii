@@ -516,6 +516,12 @@ def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -
     if holder is None or seller_sheet is None or holder.pk != seller_sheet.pk:
         msg = "seller does not hold the item"
         raise MarketServiceError(msg, user_message="You can only fence what you hold.")
+    from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if is_natural_weapon(instance):
+        msg = "item is the seller's natural weapon"
+        raise MarketServiceError(msg, user_message=NaturalWeaponNotRemovable.user_message)
     value = instance.template.value or 0
     price = value * FENCE_RATE_PCT // 100
     if price <= 0:

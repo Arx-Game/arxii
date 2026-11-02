@@ -21,9 +21,9 @@ from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.magic.skill_choices import (
-    MAGIC_SKILL_CHOICES,
-    MAGIC_SKILL_ERROR_MESSAGES,
-    MAGIC_SKILL_HELP,
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
 )
 
 
@@ -88,13 +88,13 @@ class Path(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="technique_skill_paths",
-        limit_choices_to=MAGIC_SKILL_CHOICES,
-        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
         help_text=(
             "The skill added to every cast of a Major Gift technique by a character on "
             "this Path (#4450). A technique's own skill, if set, wins; a Minor Gift "
             "technique uses the Gift's skill instead. Blank = this Path adds no skill. "
-            f"{MAGIC_SKILL_HELP}"
+            f"{MAGIC_PICKER_SKILL_HELP}"
         ),
     )
 

@@ -11,10 +11,16 @@ from django.contrib.auth.models import Permission
 from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from world.conditions.factories import ConditionTemplateFactory
-from world.covenants.factories import CombatStyleFactory, CovenantRoleFactory
-from world.covenants.models import VowFocusPickConfig
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CombatStyleFactory,
+    CovenantRoleFactory,
+    VowFocusPickFactory,
+)
+from world.covenants.models import CombatStyle, VowFocusPickConfig
 from world.mechanics.factories import PropertyFactory
 
 
@@ -50,8 +56,9 @@ class CombatRolesPanelTests(TestCase):
                 "Conditions",
                 "Properties",
                 "Combo map",
+                "Kit view",
                 "Focus pick budget",
-                "Required content",
+                "Missing combat content",
             ],
         )
         for link in links:
@@ -60,6 +67,24 @@ class CombatRolesPanelTests(TestCase):
                     self.assertEqual(self.client.get(link.url).status_code, 200)
                 else:
                     self.assertTrue(link.pickers, "a row with no page of its own needs a picker")
+
+    def test_the_missing_combat_content_row_counts_the_open_flags(self) -> None:
+        def shown() -> tuple[int, str]:
+            row = next(link for link in self._links() if link.label == "Missing combat content")
+            self.assertEqual(row.url, reverse("admin_combat_content"))
+            return row.flag_count, row.note
+
+        # The class's bare style is taught by no Tradition and works with no vow (#4932).
+        self.assertEqual(shown(), (1, "open flag"))
+        CombatStyle.objects.all().delete()
+        self.assertEqual(shown(), (0, "no open flags"))
+        CovenantRoleFactory(name="Warden")
+        self.assertEqual(shown(), (1, "open flag"))
+        VowFocusPickFactory(covenant_role=CovenantRoleFactory(name="Aegis"), name="Bare")
+        # Aegis now has a pick, but that pick has no payload; Warden still has none.
+        self.assertEqual(shown(), (2, "open flags"))
+        body = self.client.get(reverse("admin:index")).content.decode()
+        self.assertIn('<span class="combat-roles-flagdot">2</span> open flags', body)
 
     def test_the_vow_picker_lists_every_vow_and_opens_its_vow_page(self) -> None:
         role = CovenantRoleFactory(name="Fulmination")
@@ -88,6 +113,18 @@ class CombatRolesPanelTests(TestCase):
         row = re.search(r'id="(combat-roles-link-\d+)">Combo map</th>', body).group(1)
         self.assertIn(f'aria-labelledby="{row} combat-roles-open-', body)
         self.assertRegex(body, r'id="combat-roles-open-\d+-2">Open condition</button>')
+
+    def test_the_kit_view_row_picks_a_character_holding_a_live_primary_vow(self) -> None:
+        holder = CharacterCovenantRoleFactory()
+        CharacterCovenantRoleFactory(is_secondary=True)
+        CharacterCovenantRoleFactory(left_at=timezone.now())
+        kit = next(link for link in self._links() if link.label == "Kit view")
+        self.assertEqual((kit.url, kit.note), ("", "one character, read only"))
+        (picker,) = kit.pickers
+        sheet = holder.character_sheet
+        self.assertEqual(picker.choices, [(sheet.pk, sheet.character.db_key)])
+        response = self.client.get(picker.action, {"pk": sheet.pk})
+        self.assertRedirects(response, reverse("admin_kit_view", args=[sheet.pk]))
 
     def test_counts_read_the_rows(self) -> None:
         styles = next(link for link in self._links() if link.label == "Combat styles")

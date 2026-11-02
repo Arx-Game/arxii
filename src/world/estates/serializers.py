@@ -111,6 +111,13 @@ class BequestSerializer(serializers.ModelSerializer):
             item = self._value(attrs, "item")
             if item is not None and item.holder_character_sheet_id != will.character_sheet_id:
                 raise serializers.ValidationError({"item": "You can only bequeath what you own."})
+            from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+            if item is not None and is_natural_weapon(item):
+                # A natural weapon stays with the body (#4898).
+                raise serializers.ValidationError(
+                    {"item": "That is part of the body and cannot be bequeathed."}
+                )
 
 
 class WillSerializer(serializers.ModelSerializer):

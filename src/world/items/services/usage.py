@@ -37,6 +37,7 @@ from world.items.exceptions import (
     VaultFull,
 )
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
+from world.items.services.natural_weapons import require_removable
 from world.items.types import UseItemResult
 from world.scenes.action_constants import ActionRequestStatus
 
@@ -74,8 +75,10 @@ def release_item_for_custody(item_instance: ItemInstance) -> None:
     Unequips it, spills a container's contents to where the container was (they stay with
     their holder, as when a container is destroyed) and clears ``contained_in`` in memory;
     the caller saves that field with the custody change. Used by the org vault before
-    ``dematerialize_item_instance``. Caller owns the transaction.
+    ``dematerialize_item_instance``. Caller owns the transaction. Refuses a natural
+    weapon (#4898), worn or not.
     """
+    require_removable(item_instance)
     _unequip_everywhere(item_instance)
     game_object = item_instance.game_object
     holder_object = game_object.location if game_object is not None else None
@@ -93,11 +96,12 @@ def dematerialize_item_instance(item_instance: ItemInstance) -> None:
     follow). It is not a destroy path: a row that is used up goes through
     ``destroy_consumed_item_instance``. A row-only item is a no-op. The holder's
     ``carried_items`` cache is invalidated. Mutates the instance in place; caller owns
-    the transaction.
+    the transaction. Refuses a natural weapon (#4898).
     """
     game_object = item_instance.game_object
     if game_object is None:
         return
+    require_removable(item_instance)
     holder_object = game_object.location
     item_instance.game_object = None
     item_instance.save(update_fields=["game_object"])
@@ -141,6 +145,8 @@ def destroy_consumed_item_instance(
     ``provenance.last_holder``). A destroyed container's contents are never destroyed
     with it: they spill to where the container was (``_spill_contents``).
     """
+    # A natural weapon (#4898) is never used up, worn or not: refuse before any write.
+    require_removable(item_instance)
     if preserve is None:
         preserve = item_instance.differs_from_template
     _unequip_everywhere(item_instance)

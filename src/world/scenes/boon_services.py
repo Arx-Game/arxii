@@ -263,6 +263,12 @@ def _validate_held_item_ask(
     if item.holder_character_sheet_id != target_persona.character_sheet_id:
         msg = "They do not hold that item."
         raise ValidationError(msg)
+    from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if is_natural_weapon(item):
+        # Nobody can be asked for their claws (#4898).
+        raise ValidationError(NaturalWeaponNotRemovable.user_message)
 
 
 def _validate_vault_item_ask(
@@ -581,6 +587,12 @@ def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:
     if item.holder_character_sheet_id != target_sheet.pk:
         msg = "They no longer hold the asked item."
         raise ValidationError(msg)
+    from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if is_natural_weapon(item):
+        # The target gained the gift after the ask (#4898): their claws stay with them.
+        raise ValidationError(NaturalWeaponNotRemovable.user_message)
 
     # Snapshot rows before iteration — unequip_item deletes them as we go (give's pattern).
     for equipped in list(item.equipped_slots.all()):

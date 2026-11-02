@@ -2,8 +2,9 @@
 
 Every page staff use to author a vow's combat kit, one click from the front page
 ("I wouldn't want to hunt around for things", owner ruling 2026-11-01). The combo
-map arrived with slice 3 (#4891); later slices of #4843 add the kit view and
-missing combat content rows here as they land.
+map arrived with slice 3 (#4891), the Missing combat content row, with its count of
+open flags, with slice 4 (#4906), and the kit view, opened on one character, with
+slice 5 (#4918).
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ class CombatRolesLink:
     url: str
     note: str
     pickers: list[RowPicker] = field(default_factory=list)
+    #: An open count drawn as a pill before the note (the Missing combat content row).
+    flag_count: int = 0
 
 
 def _changelist(model_name: str) -> str:
@@ -123,6 +126,44 @@ def _combo_map_link(user: AbstractBaseUser | AnonymousUser) -> CombatRolesLink |
     )
 
 
+def _kit_view_link() -> CombatRolesLink:
+    """The kit view row (#4918): a picker of every character holding a live primary vow.
+
+    One query, ordered by the character's name.
+    """
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    choices = list(
+        CharacterCovenantRole.objects.filter(left_at__isnull=True, is_secondary=False)
+        .order_by("character_sheet__character__db_key", "character_sheet_id")
+        .values_list("character_sheet_id", "character_sheet__character__db_key")
+        .distinct()
+    )
+    return CombatRolesLink(
+        label="Kit view",
+        url="",
+        note="one character, read only",
+        pickers=[RowPicker(action=reverse("admin_kit_view_pick"), choices=choices)],
+    )
+
+
+def _missing_combat_content_link() -> CombatRolesLink:
+    """The Missing combat content row (#4906): its page and how many flags are open."""
+    from web.admin.tuning.combat_role_flags import collect_combat_role_flags  # noqa: PLC0415
+
+    count = sum(1 for row in collect_combat_role_flags() if not row.result.present)
+    if count == 0:
+        note = "no open flags"
+    else:
+        note = f"open flag{'' if count == 1 else 's'}"
+    return CombatRolesLink(
+        label="Missing combat content",
+        url=reverse("admin_combat_content"),
+        note=note,
+        flag_count=count,
+    )
+
+
 def can_view(user: AbstractBaseUser | AnonymousUser, model: type[Model]) -> bool:
     """Whether ``user`` may open ``model``'s admin pages: a view or a change permission."""
     return user.has_perm(f"arxii.view_{model.__name__.lower()}") or user.has_perm(
@@ -134,9 +175,9 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
     """The panel's rows a user can open, in the order an author works through a vow.
 
     A row whose page would refuse the user is left out: a model they cannot view, and
-    the vow pages and Required content (the Game Ops dashboard) for anyone but a
-    superuser.
+    the vow pages and Missing combat content for anyone but a superuser.
     """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.covenants.models import (  # noqa: PLC0415
         CombatStyle,
@@ -167,14 +208,10 @@ def combat_roles_links(user: AbstractBaseUser | AnonymousUser) -> list[CombatRol
     combo_map = _combo_map_link(user)
     if combo_map is not None:
         links.append(combo_map)
+    if can_view(user, CharacterSheet):
+        links.append(_kit_view_link())
     if can_view(user, VowFocusPickConfig):
         links.append(_budget_link())
     if user.is_superuser:
-        links.append(
-            CombatRolesLink(
-                label="Required content",
-                url=reverse("admin_ops"),
-                note="missing-content flags",
-            )
-        )
+        links.append(_missing_combat_content_link())
     return links

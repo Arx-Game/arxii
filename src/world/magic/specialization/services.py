@@ -220,6 +220,10 @@ def grant_gift_to_character(
     original origin — a re-grant is a no-op, not a re-provenance). Defaults to
     ``CHARACTER_CREATION`` since that is this function's oldest/most common caller.
 
+    A gift that names a natural weapon (#4898) also gets that weapon made and equipped,
+    once per character (``provision_natural_weapon`` is idempotent), so every way a gift
+    is gained gives the claws with it.
+
     Returns ``(character_gift, created)``.
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
@@ -229,6 +233,9 @@ def grant_gift_to_character(
         character=sheet, gift=gift, defaults={"origin": origin}
     )
     provision_latent_gift_thread(sheet, gift, resonance=resolved)
+    from world.items.services.natural_weapons import provision_natural_weapon  # noqa: PLC0415
+
+    provision_natural_weapon(sheet, gift)
     return character_gift, created
 
 

@@ -67,6 +67,13 @@ def add_contribution(  # noqa: PLR0913
             "cannot accept contributions."
         )
         raise ProjectNotActiveError(msg)
+    if item_instance is not None and item_instance.natural_weapon_gift_id is not None:
+        # A natural weapon (#4898) is part of the body; it is never given to a project.
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+
+        raise ValidationError({"item_instance": NaturalWeaponNotRemovable.user_message})
 
     contribution = Contribution(
         project=project,

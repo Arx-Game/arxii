@@ -35,6 +35,8 @@ from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
 from world.classes.factories import PathFactory
 from world.classes.models import Path
+from world.covenants.factories import CombatStyleFactory
+from world.covenants.models import CombatStyle
 from world.magic.constants import GiftKind, MagicActivity
 from world.magic.factories import (
     BinaryEffectTypeFactory,
@@ -131,6 +133,10 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.persuasion = SkillFactory(
             trait=SkillTraitFactory(name="Persuasion", category=TraitCategory.SOCIAL)
         )
+        # A combat style's own skill is a Magic skill no picker offers (#4921), so every
+        # "offered" set below holds Thaumaturgy alone.
+        self.daring_dance = _magic_skill("The Daring Dance")
+        CombatStyleFactory(name="The Daring Dance", skill=self.daring_dance)
 
     def offered(self, model_name: str, field_name: str) -> set[str]:
         """The skills the picker's search box offers, as the admin widget asks for them."""
@@ -220,6 +226,46 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
                 errors = self.validation_errors(row)
                 self.assertIn(field, errors)
                 self.assertIn("Magic category", " ".join(errors[field]))
+
+    def test_a_style_skill_is_refused_by_every_picker(self) -> None:
+        """A combat style's skill is trained in creation; no magical roll adds it (#4921)."""
+        rows = (
+            MagicActivitySkill(activity=MagicActivity.CEREMONY, skill=self.daring_dance),
+            Path(name="Path of Steps", technique_skill=self.daring_dance),
+            Gift(name="Step Song", kind=GiftKind.MINOR, technique_skill=self.daring_dance),
+            Technique(gift=GiftFactory(), name="Step Edge", skill=self.daring_dance),
+        )
+        for row in rows:
+            on_row = isinstance(row, MagicActivitySkill | Technique)
+            field = "skill" if on_row else "technique_skill"
+            with self.subTest(model=type(row).__name__):
+                errors = self.validation_errors(row)
+                self.assertIn(field, errors)
+                self.assertIn("not a combat style's skill", " ".join(errors[field]))
+
+    def test_a_style_refuses_a_skill_a_picker_already_adds(self) -> None:
+        """The other way round: a style never takes a picker's skill (#4921)."""
+        PathFactory(technique_skill=self.thaumaturgy)
+        style = CombatStyle(name="Veil and Needle", defense_style="barrier", skill=self.thaumaturgy)
+
+        errors = self.validation_errors(style)
+
+        self.assertIn("skill", errors)
+        self.assertIn("already adds this skill", " ".join(errors["skill"]))
+        style.skill = _magic_skill("Veil and Needle")
+        self.assertEqual(self.validation_errors(style), {})
+
+    def test_a_path_refuses_a_style_skill_in_admin(self) -> None:
+        path = PathFactory()
+
+        refused = self.save_change_form(
+            reverse("admin:arxii_path_change", args=[path.pk]), "technique_skill", self.daring_dance
+        )
+
+        self.assertEqual(refused.status_code, 200)
+        self.assertIn("technique_skill", refused.context["adminform"].form.errors)
+        path.refresh_from_db()
+        self.assertIsNone(path.technique_skill_id)
 
     @staticmethod
     def validation_errors(row) -> dict[str, list[str]]:

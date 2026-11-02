@@ -95,6 +95,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.permissions import (
     CanPrepareCharacterText,
     IsRitualAuthorOrStaff,
+    IsStaffForBaseWrites,
     IsStaffOrReadOnly,
     IsThreadOwner,
 )
@@ -431,7 +432,7 @@ class GiftViewSet(viewsets.ModelViewSet):
     # router/schema introspection in some code paths, so keep a bare model
     # reference rather than duplicating the Prefetch/annotate chain here.
     queryset = Gift.objects.none()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -670,7 +671,7 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterAuraSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterAuraFilter
 
@@ -774,7 +775,7 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterResonanceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterResonanceFilter
 
@@ -807,7 +808,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterGiftSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterGiftFilter
 
@@ -849,6 +850,16 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
         return queryset.filter(character_id__in=character_ids)
 
+    def perform_destroy(self, instance: CharacterGift) -> None:
+        """A removed gift takes its natural weapon with it (#4898)."""
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
+
+        with transaction.atomic():
+            deprovision_natural_weapon(instance.character, instance.gift)
+            instance.delete()
+
 
 class CharacterAnimaViewSet(viewsets.ModelViewSet):
     """
@@ -863,7 +874,7 @@ class CharacterAnimaViewSet(viewsets.ModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = CharacterAnimaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffForBaseWrites]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CharacterAnimaFilter
 

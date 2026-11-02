@@ -1583,10 +1583,13 @@ symmetric.
   generator/staff) and `AreaFootprintPip` (one row per pip naming its lowest holder; every
   ancestor's footprint is derived by walking `Area.parent`, so containment holds by construction). `worldmap/azgaar.py` rasterizes the file's
   grid arrays and river paths; `worldmap/services.py` carries `create_region_map`,
-  `import_region_map_file`, `paint_terrain`, `set_footprint`, `holder_at`, `region_read`;
-  actions `atlas_create_region_map`/`atlas_carve_footprint`/`atlas_paint_terrain`; the staff
+  `import_region_map_file`, `paint_terrain`, `set_footprint` (reports each pip's holder before
+  and after), `clear_footprint`, `restore_pips` (the staff undo's write, #4905, ADR-4905),
+  `holder_at`, `region_read`; actions `atlas_create_region_map`/`atlas_carve_footprint`/
+  `atlas_clear_footprint`/`atlas_restore_footprint`/`atlas_paint_terrain`; the staff
   `region-maps` API (upload, pips, file) on the world-builder router; the Atlas's region-map
-  view. See `docs/systems/areas.md` "World map".
+  view with its Brush, Fill and Loop tools, undo and redo, and Clear (#4905). See
+  `docs/systems/areas.md` "World map".
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
@@ -7175,6 +7178,21 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Natural weapons (#4898, slice 4 of #4844):** `Gift.natural_weapon_template` (nullable FK
+  to an Unarmed `ItemTemplate`, PROTECT) and the marker `ItemInstance.natural_weapon_gift`
+  (nullable FK to `Gift`, PROTECT, `related_name="natural_weapon_items"`, readonly in admin).
+  `world/items/services/natural_weapons.py`: `provision_natural_weapon(sheet, gift)`
+  (idempotent, never adopts a plain copy; called from `grant_gift_to_character` and the
+  covenant role grant), `deprovision_natural_weapon(sheet, gift)` (losing the gift: NPC
+  copy, beta reset, gift admin and API delete), `deprovision_all_natural_weapons(sheet)`
+  (deleting the body: `Character.at_object_delete`, the sheet admin), `is_natural_weapon(item)` (the marker, no query), `require_removable`.
+  Exceptions `NaturalWeaponNotRemovable`, `NaturalWeaponInTheWay`. Every removal path refuses
+  one (backstops in `unequip_item`, `set_item_holder` and `destroy_consumed_item_instance`);
+  `covered_regions` skips it; Required content `natural-weapon-templates`. The character
+  sheet payload's `natural_weapons` (`NaturalWeaponEntry`, owner and staff only; the
+  weapon then leaves their Wearing list) feeds the Physical section's Natural weapons
+  block. See docs/systems/items.md ("Natural weapons").
+
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
   (template check-bonus + default-Property authoring; `checks/services.py`'s
   `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
@@ -7917,7 +7935,12 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `CombatStyleGear` (NK `(style, gear_archetype)`)). `world.covenants.style_fit`
     (`style_fit_for_attack`, `style_fit_for_defense`, `StyleFit`, `StyleLapse`) puts the
     style skill on Strike, technique hit and PC defense rolls while the weapon, armor and
-    vow are on the style [BUILT & WIRED].
+    vow are on the style [BUILT & WIRED]. Since #4921 a player chooses the style in
+    creation (`CharacterDraft.selected_combat_style`, `GET
+    /api/character-creation/combat-styles/`, `world.character_creation.magic_training`:
+    `taught_styles`, `training_skills`, `reconcile_combat_style`) and the Sphinx's
+    `SphinxVerdict.style` (`SphinxStyleLine`, `style_fit.style_lists_vow`) says whether it
+    suits a vow [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
     `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
@@ -8114,7 +8137,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  (the static view, does not filter by beneficiary; `vow_added_effects_on_techniques` is its
+  batched form, read by the admin kit view `admin_kit_view`, #4918);
   `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,
@@ -8567,7 +8591,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `declare_strike(participant, opponent, item_instance=None)` (refuses a weapon not equipped, a
   strike skill with no check type, an opponent out of reach: ranged and thrown reach the room,
   every other Strike its own position or the next), `strike_weapon_options(character)`
-  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, then bare hands),
+  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, a natural weapon
+  from a gift among them (#4898), then bare hands),
   `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
   draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
   with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
@@ -8589,7 +8614,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   empty. The web Last Outcome card renders every roll of the latest action as those rows. The
   room is told "Hobb strikes Bandit with a rapier. A good hit: 11 damage." and the striker's
   telnet "You strike Bandit with your rapier. ..." instead (`broadcast_action_outcome`'s
-  `telnet_exclude`; `core.text.with_indefinite_article`). Action
+  `telnet_exclude`; `core.text.with_indefinite_article`). Bare hands and a natural weapon
+  take no article ("Hobb strikes Bandit with Khati Claws."). Action
   `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
   <opp> [with <weapon>]` and `combat strike`, web: Strike is the first pick in the focused
   `ActionDeclarationCard` row (`leadingPick`), its `StrikeControl` "With" row fed by the own
@@ -10882,12 +10908,15 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   (`consequence_analytics.py` — `inspect_pool`, `list_pools`), condition danger ranking
   plus a DE column (`condition_analytics.py` — `compute_condition_danger`;
   `condition_power_analytics.py` — `build_condition_power_panel`, #3390), a Monte Carlo
-  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`),
+  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`, with an
+  optional technique and vow for the party, #4930),
   a technique combat-power league table (#3279: `technique_analytics.py` —
   `build_technique_panel`, over
   `world.magic.services.technique_power_eval.evaluate_all_with_reference(EvalContext) ->
   (list[TechniquePowerReport], ReferenceFrame)`; types in
-  `world/magic/types/technique_power.py`), plus a starting-kit pricer and a per-pool floor
+  `world/magic/types/technique_power.py`; `evaluate_technique` also takes a vow term,
+  `vow_effects`/`vow_thread_level`, #4930, read by the vow page's Power preview and the kit
+  view's Preview column through `web/admin/authoring/power_preview.py`), plus a starting-kit pricer and a per-pool floor
   scan on that same panel (#3716: `build_starting_kit_report` prices one
   character-creation combination as the picks a new character actually gets, at level 1
   and gift thread level 0, not the panel's own level/thread knobs; `build_pool_scan`
@@ -10924,7 +10953,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   database row) gets registered, and `collect_required_content()` probes the live
   database for each one, since no repo artifact can answer the question (ADR-0238).
   Each row links to the admin changelist where its rows are authored
-  (`links.admin_changelist_url`, #3831). See
+  (`links.admin_changelist_url`, #3831); a probe can link each row it names through
+  `ProbeResult.flagged` (`FlaggedRow`, #4906). The five missing combat content flags
+  (`tuning/combat_role_flags.py`, #4906) have their own page, `admin_combat_content`. See
   `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via

@@ -30,6 +30,7 @@ from world.worship.constants import (
 from world.worship.exceptions import (
     RiteActionPointsInsufficient,
     RiteAwardMissing,
+    RiteGiftIsPartOfTheBody,
     RiteIsCeremony,
     RiteNotAvailable,
     RiteScenePrerequisiteFailed,
@@ -344,6 +345,10 @@ def read_rite_gifts(
 
     if not items:
         return RiteGifts()
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if any(is_natural_weapon(item) for item in items):
+        raise RiteGiftIsPartOfTheBody
     config = get_devotion_config()
     pledge = closing_of
     if pledge is None:

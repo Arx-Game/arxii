@@ -8,8 +8,10 @@ from evennia.objects.models import ObjectDB
 
 from actions.definitions.atlas_map import (
     AtlasCarveFootprintAction,
+    AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
     AtlasPaintTerrainAction,
+    AtlasRestoreFootprintAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.areas.constants import AreaLevel
@@ -102,7 +104,13 @@ class AtlasMapActionTests(TestCase):
             self.staff, area_id=self.county.pk, add=[[1, 1], [2, 1]]
         )
         assert result.success, result.message
-        assert result.data == {"area_id": self.county.pk, "added": 2, "removed": 0, "skipped": 0}
+        assert result.data == {
+            "area_id": self.county.pk,
+            "added": 2,
+            "removed": 0,
+            "skipped": 0,
+            "changed": [[1, 1, None, self.county.pk], [2, 1, None, self.county.pk]],
+        }
         result = AtlasCarveFootprintAction().run(
             self.staff, area_id=self.county.pk, remove=[[1, 1]]
         )
@@ -118,10 +126,41 @@ class AtlasMapActionTests(TestCase):
             self.staff, area_id=other.pk, add=[[2, 1], [3, 1]]
         )
         assert partial.success, partial.message
-        assert partial.data == {"area_id": other.pk, "added": 1, "removed": 0, "skipped": 1}
+        assert partial.data == {
+            "area_id": other.pk,
+            "added": 1,
+            "removed": 0,
+            "skipped": 1,
+            "changed": [[3, 1, None, other.pk]],
+        }
         assert partial.message == "Other: 1 pips added, 0 removed. 1 skipped (County)."
         bad = AtlasCarveFootprintAction().run(self.staff, area_id=self.county.pk, add="nope")
         assert not bad.success
+
+    def test_clear_and_restore_round_trip_through_the_actions(self) -> None:
+        carved = AtlasCarveFootprintAction().run(
+            self.staff, area_id=self.county.pk, add=[[1, 1], [2, 1]]
+        )
+        assert carved.data["changed"] == [
+            [1, 1, None, self.county.pk],
+            [2, 1, None, self.county.pk],
+        ]
+        cleared = AtlasClearFootprintAction().run(self.staff, area_id=self.county.pk)
+        assert cleared.success, cleared.message
+        assert cleared.data["removed"] == 2
+        assert cleared.message == "County: 2 pips cleared."
+        assert not AreaFootprintPip.objects.filter(area=self.county).exists()
+        restored = AtlasRestoreFootprintAction().run(
+            self.staff, pips=[[x, y, before] for x, y, before, _after in cleared.data["changed"]]
+        )
+        assert restored.success, restored.message
+        assert restored.data == {"restored": 2}
+        assert AreaFootprintPip.objects.filter(area=self.county).count() == 2
+        assert not AtlasRestoreFootprintAction().run(self.staff, pips=[[1, 1]]).success
+        assert not AtlasRestoreFootprintAction().run(self.staff, pips=[[1, 1, 999999]]).success
+        assert not AtlasClearFootprintAction().run(self.player, area_id=self.county.pk).success
+        assert not AtlasRestoreFootprintAction().run(self.player, pips=[[1, 1, None]]).success
+        assert not AtlasClearFootprintAction().run(self.staff, area_id=999999).success
 
     def test_paint_terrain(self) -> None:
         result = AtlasPaintTerrainAction().run(

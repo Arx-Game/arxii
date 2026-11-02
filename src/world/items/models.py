@@ -943,6 +943,17 @@ class ItemInstance(SharedMemoryModel):
             "written (a gift, an inheritance). Null for an item the holder made or bought."
         ),
     )
+    # The marker of a natural weapon (#4898): the gift whose claws this is. Written only by
+    # provision_natural_weapon and cleared only by deprovision_natural_weapon; a bought,
+    # crafted or traded copy of the same template leaves it null and is ordinary gear.
+    natural_weapon_gift = models.ForeignKey(
+        "arxii.Gift",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="natural_weapon_items",
+        help_text="The gift this is the natural weapon of. Set by the game, never by hand.",
+    )
     crafter_character_sheet = models.ForeignKey(
         _CHARACTER_SHEET_FK,
         on_delete=models.SET_NULL,

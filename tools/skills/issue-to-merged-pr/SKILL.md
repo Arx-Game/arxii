@@ -173,15 +173,17 @@ Await-approval, and Implementation.
   cd "$(jq -r '.worktree_path' <<<"$START_JSON")"
   ```
 - **Model selection.** Read the `model` and `complexity` fields from the
-  emitted JSON. Any model at Haiku 5.5 or higher is acceptable (`claude-haiku-5-5`,
-  `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, and later). If the
-  session is already on one of those, keep it and proceed. Otherwise, before any
-  design, planning, or implementation work, switch to the tier for the label:
-  - `complexity:high` → `claude-sonnet-5-5` or higher — run `/model claude-sonnet-5-5`
-  - `complexity:medium` → `claude-sonnet-5-5` or `claude-haiku-5-5` — run `/model <choice>`
-  - `complexity:low` → `claude-haiku-5-5` is enough as the session model
+  emitted JSON. Model names here are the `/model` aliases (`haiku`, `sonnet`,
+  `opus`), which always mean the latest model of that family; never pin a version
+  id in this skill or its scripts. Any current Haiku, Sonnet or Opus, or anything
+  newer, is acceptable. If the session is already on one, keep it and proceed.
+  Otherwise, before any design, planning, or implementation work, switch to the
+  tier for the label:
+  - `complexity:high` → the latest Sonnet or higher (`/model sonnet`, or `/model opus`)
+  - `complexity:medium` → the latest Sonnet or Haiku (`/model sonnet` or `/model haiku`)
+  - `complexity:low` → the latest Haiku is enough as the session model
   - Mechanical work with a settled plan (a refactor, a rename, a move) may stay on
-    `claude-haiku-5-5` at any complexity; Haiku 5.5 is a capable implementer.
+    the latest Haiku at any complexity; it is a capable implementer.
   - Leaf subagents in workflow scripts use `opts.model` at or above the session's
     tier, and may use `"haiku"` for narrow read-only fan-out.
   - No `complexity:*` label → no change; proceed on the current model.
@@ -573,7 +575,7 @@ agent has uncommitted work in the worktree.
 > ⚠️ **Do not spend a heavy model on CI watch or any looping/polling phase.**
 > The watch loop runs up to 25 minutes at 60-second intervals — potentially
 > 25+ model calls for pure polling work. If the session is on a heavier model,
-> switch to `claude-haiku-5-5` (or `claude-sonnet-5-5`) before running
+> switch to the latest Haiku (`/model haiku`, or `/model sonnet`) before running
 > `watch-ci.sh`. Use the heavier models for design and implementation, not waiting.
 
 > ⚠️ **Probe any poll command once in the foreground before arming a loop.**

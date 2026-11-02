@@ -23,6 +23,7 @@ import {
   getBeginnings,
   getBeginningsPerspectives,
   getBuilds,
+  getCGCombatStyles,
   getCGGifts,
   getCGPointBudget,
   getCGTechniqueOptions,
@@ -108,6 +109,9 @@ export const characterCreationKeys = {
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   // CG gift/technique options (GiftStage funnel, #2426 Task 10)
   cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
+  // Keyed by tradition too: the styles are the chosen Tradition's (#4921).
+  cgCombatStyles: (draftId: number, traditionId: number | null) =>
+    [...characterCreationKeys.all, 'cg-combat-styles', draftId, traditionId] as const,
   cgTechniqueOptions: (draftId: number, giftId: number, speciesId?: number | null) =>
     [
       ...characterCreationKeys.all,
@@ -510,6 +514,18 @@ export function useCGGifts(draftId: number | undefined) {
     queryKey: characterCreationKeys.cgGifts(draftId!),
     queryFn: () => getCGGifts(draftId!),
     enabled: !!draftId,
+  });
+}
+
+/**
+ * The combat styles the draft's chosen Tradition teaches (GiftStage style step, #4921).
+ * Off until a Tradition is chosen.
+ */
+export function useCGCombatStyles(draftId: number | undefined, traditionId: number | null) {
+  return useQuery({
+    queryKey: characterCreationKeys.cgCombatStyles(draftId!, traditionId),
+    queryFn: () => getCGCombatStyles(draftId!),
+    enabled: !!draftId && traditionId != null,
   });
 }
 

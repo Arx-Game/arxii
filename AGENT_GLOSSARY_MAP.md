@@ -91,7 +91,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
-- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530)
+- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
@@ -362,7 +362,8 @@ Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 **Combat style** (#4759, ADR-4759):
 How a character was taught to fight with magic (`CombatStyle` on `CharacterSheet.combat_style`):
 a Defense Style and an armor share that replace the vow's Defense Profile, and (#4884) a style
-skill, a hit stat, its Traditions, vows and gear kinds. _Avoid_: technique
+skill, a hit stat, its Traditions, vows and gear kinds; chosen in creation from the
+Tradition's styles (#4921). _Avoid_: technique
 style (`TechniqueStyle`, how a Path or Gift casts).
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 

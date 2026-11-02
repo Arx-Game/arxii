@@ -40,6 +40,7 @@ from world.character_sheets.types import (
     AuraShareEntry,
     AuraThemingData,
     BeatEntry,
+    CombatStyleSection,
     CovenantRoleEntry,
     DistinctionEntry,
     EnemyEntry,
@@ -57,6 +58,7 @@ from world.character_sheets.types import (
     MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
+    NaturalWeaponEntry,
     OrgDomainEntry,
     OrgMembershipEntry,
     OrgReputationEntry,
@@ -106,11 +108,11 @@ from world.forms.models import (
 )
 from world.game_clock.serializers import IcDateDisplayField
 from world.game_clock.services import format_ic_month_day
-from world.items.models import EquippedItem
+from world.items.models import EquippedItem, ItemFacet, ItemInstance
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
 from world.locations.models import LocationTenancy
-from world.magic.constants import GlimpseState, RitualExecutionKind
+from world.magic.constants import AcquisitionOrigin, GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
     CharacterGift,
@@ -2119,6 +2121,10 @@ def _build_worn(sheet: CharacterSheet, *, privileged: bool) -> list[WornEntry]:
         is_hidden = not visibility.is_visible(instance.pk)
         if is_hidden and not privileged:
             continue
+        # The owner and staff read a natural weapon in its own block (#4898), so it is
+        # not listed twice; anyone else sees it here, as anything worn on the skin.
+        if privileged and instance.natural_weapon_gift_id is not None:
+            continue
         entries.append(
             WornEntry(
                 id=instance.pk,
@@ -2128,6 +2134,128 @@ def _build_worn(sheet: CharacterSheet, *, privileged: bool) -> list[WornEntry]:
             )
         )
     return entries
+
+
+def _build_natural_weapons(sheet: CharacterSheet) -> list[NaturalWeaponEntry]:
+    """The natural weapons the character holds (#4898): owner and staff only.
+
+    One query for the weapons; a sheet with none stops there. A sheet with some pays two
+    more, fixed however many it holds: their attached facets and the gift rows saying how
+    each gift reached the character (a species grant or another way). Plain queries, not
+    a sheet prefetch: the sheet is idmapper-shared and a ``to_attr`` prefetch that already
+    ran once is skipped, so a weapon gained mid-session would never show.
+    """
+    weapons = list(
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=sheet, natural_weapon_gift__isnull=False)
+        .select_related(
+            "template", "template__weapon_damage_type", "quality_tier", "natural_weapon_gift"
+        )
+        .order_by("pk")
+    )
+    if not weapons:
+        return []
+    facets: dict[int, list[ItemFacet]] = {}
+    for row in (
+        ItemFacet.attached()
+        .filter(item_instance__in=weapons)
+        .select_related("facet")
+        .order_by("facet__name", "pk")
+    ):
+        facets.setdefault(row.item_instance_id, []).append(row)
+    species_gift_ids = set(
+        CharacterGift.objects.filter(
+            character=sheet,
+            gift_id__in={weapon.natural_weapon_gift_id for weapon in weapons},
+            origin=AcquisitionOrigin.SPECIES_GRANT,
+        ).values_list("gift_id", flat=True)
+    )
+    entries: list[NaturalWeaponEntry] = []
+    for weapon in weapons:
+        attached = facets.get(weapon.pk, [])
+        damage_type = weapon.effective_weapon_damage_type
+        entries.append(
+            NaturalWeaponEntry(
+                id=weapon.pk,
+                name=weapon.display_name,
+                gift_name=weapon.natural_weapon_gift.name,
+                from_species=weapon.natural_weapon_gift_id in species_gift_ids,
+                damage=weapon.effective_weapon_damage,
+                damage_type=damage_type.name if damage_type else "",
+                facets=[row.facet.name for row in attached],
+                facets_used=sum(1 for row in attached if not row.is_inherent),
+                facet_capacity=weapon.template.facet_capacity,
+            )
+        )
+    return entries
+
+
+#: The style and the rows its section names, joined onto the sheet's own query (#4921).
+_COMBAT_STYLE_SELECT_RELATED: tuple[str, ...] = (
+    "combat_style",
+    "combat_style__hit_stat",
+    "combat_style__skill__trait",
+)
+_COMBAT_STYLE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
+
+def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
+    """The character's combat style (#4921): owner and staff only, None without one.
+
+    The style rides the sheet's own query (``_COMBAT_STYLE_SELECT_RELATED``), so a sheet
+    with no style pays nothing. One with a style pays four plain queries, fixed however
+    many kinds, Traditions or vows it has: its gear kinds, the character's value in its
+    skill, the Tradition to name (the character's active one first) and its vows. Plain
+    reads, not a sheet prefetch, since an idmapper-shared sheet skips a ``to_attr``
+    prefetch that already ran once.
+    """
+    style = sheet.combat_style
+    if style is None:
+        return None
+    from world.covenants.models import CombatStyleGear  # noqa: PLC0415
+    from world.covenants.style_profile import armor_kinds, weapon_kinds  # noqa: PLC0415
+
+    held = list(
+        CombatStyleGear.objects.filter(style=style).values_list("gear_archetype", flat=True)
+    )
+    skill = style.skill
+    skill_value = 0
+    if skill is not None:
+        skill_value = (
+            CharacterSkillValue.objects.filter(character=sheet, skill=skill)
+            .values_list("value", flat=True)
+            .first()
+        ) or 0
+    from django.db.models import Exists, OuterRef  # noqa: PLC0415
+
+    from world.magic.models import CharacterTradition, Tradition  # noqa: PLC0415
+
+    held_tradition = CharacterTradition.objects.filter(
+        character=sheet, tradition=OuterRef("pk"), left_at__isnull=True
+    )
+    tradition = (
+        Tradition.objects.filter(combat_styles=style)
+        .annotate(held=Exists(held_tradition))
+        .order_by("-held", "sort_order", "name")
+        .values_list("name", flat=True)
+        .first()
+    )
+    vows = list(style.compatible_roles.order_by("name").values_list("name", flat=True))
+    return CombatStyleSection(
+        id=style.pk,
+        name=style.name,
+        description=style.description,
+        defense_style=style.defense_style,
+        defense_style_display=style.get_defense_style_display(),
+        armor_share_tenths=style.armor_share_tenths,
+        hit_stat_name=style.hit_stat.name if style.hit_stat is not None else None,
+        weapon_kinds=weapon_kinds(held),
+        armor_kinds=armor_kinds(held),
+        skill_name=skill.name if skill is not None else "",
+        skill_value=skill_value,
+        tradition_name=tradition,
+        vows=vows,
+    )
 
 
 _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = (
@@ -2150,6 +2278,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_STANDING_SELECT_RELATED, _STANDING_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
     (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
+    (_COMBAT_STYLE_SELECT_RELATED, _COMBAT_STYLE_PREFETCH_RELATED),
 )
 
 
@@ -2316,6 +2445,12 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.
             "worn": _build_worn(sheet, privileged=privileged),
+            # #4898 — claws, a bite or horns a gift gave them. The sheet's own mechanics,
+            # so owner and staff only; anyone else sees them under Wearing.
+            "natural_weapons": _build_natural_weapons(sheet) if privileged else [],
+            # #4921: how the character was taught to fight, with its skill value. The
+            # sheet's own mechanics, so owner and staff only, like the natural weapons.
+            "combat_style": _build_combat_style(sheet) if privileged else None,
             # Ties' Mentors block. Owner and staff only, like the covenant roles it
             # sits beside.
             "mentors": _build_mentors(sheet, privileged=privileged),

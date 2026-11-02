@@ -34,6 +34,7 @@ enumeration over the same tables — see that function's docstring.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -65,6 +66,8 @@ from world.magic.types.technique_power import (
 )
 
 if TYPE_CHECKING:
+    from world.covenants.models import VowAddedEffect
+    from world.covenants.types import VowEffectBonuses
     from world.magic.models.techniques import (
         AbstractAppliedCondition,
         AbstractDamageProfile,
@@ -101,7 +104,7 @@ _reference_attack_de = de_valuation.reference_attack_de
 _cached_damage_multiplier = de_valuation.cached_damage_multiplier
 
 
-def _amplified_power_delta(context: EvalContext) -> int:
+def amplified_power_delta(context: EvalContext) -> int:
     """Power gained going from baseline to the "fully matched anchor" (#3279).
 
     Sums the two role-band pure helpers (extracted from ``power_terms.py`` in
@@ -128,18 +131,23 @@ def _damage_row_valuation(
     power: int,
     bands: list[_MatchupBand],
     multiplier_cache: dict[int, Decimal],
+    budget_bonus: int = 0,
 ) -> PayloadValuation:
     """Expected DE for one ``TechniqueDamageProfile`` row at a given power.
 
     ``expected = Σ over bands with sl >= row.minimum_success_level of
     P(sl) x row.compute_damage_budget(power, sl) x get_damage_multiplier(sl)``
     — the currency spec's attack formula.
+
+    ``budget_bonus`` is added to each band's budget before the multiplier, as the
+    cast adds a vow added effect's ``damage_bonus`` (#4930).
     """
     expected = 0.0
     for band in bands:
         if band.success_level < row.minimum_success_level:
             continue
         budget = row.compute_damage_budget(effective_power=power, success_level=band.success_level)
+        budget += budget_bonus
         multiplier = _cached_damage_multiplier(band.success_level, multiplier_cache)
         expected += band.probability * float(budget) * float(multiplier)
 
@@ -172,6 +180,7 @@ def _expected_duration_rounds(
     *,
     power: int,
     bands: list[_MatchupBand],
+    duration_bonus: int = 0,
 ) -> float:
     """Band-weighted expected duration (rounds) for an applied-condition row.
 
@@ -179,14 +188,18 @@ def _expected_duration_rounds(
     row.compute_duration_rounds(power, sl)`` over bands with
     ``sl >= row.minimum_success_level``. ``compute_duration_rounds`` can return
     ``None`` (only when a condition template's ``default_duration_value`` is
-    itself null); treated as 0 rounds.
+    itself null); treated as 0 rounds. ``duration_bonus`` is a vow added effect's
+    (#4930), added the way the cast adds it (``bonused_duration``).
     """
+    from world.magic.services.condition_application import bonused_duration  # noqa: PLC0415
+
     total = 0.0
     for band in bands:
         if band.success_level < row.minimum_success_level:
             continue
-        duration = row.compute_duration_rounds(
-            effective_power=power, success_level=band.success_level
+        duration = bonused_duration(
+            row.compute_duration_rounds(effective_power=power, success_level=band.success_level),
+            duration_bonus,
         )
         total += band.probability * (duration or 0)
     return total
@@ -197,16 +210,32 @@ def _expected_severity(
     *,
     power: int,
     bands: list[_MatchupBand],
+    severity_bonus: int = 0,
 ) -> float:
-    """Band-weighted expected severity for an applied-condition row (mirrors duration)."""
+    """Band-weighted expected severity for an applied-condition row (mirrors duration).
+
+    ``severity_bonus`` is a vow added effect's (#4930), added as the cast adds it.
+    """
     total = 0.0
     for band in bands:
         if band.success_level < row.minimum_success_level:
             continue
-        total += band.probability * row.compute_severity(
-            effective_power=power, success_level=band.success_level
+        total += band.probability * _bonused_row_severity(
+            row, power=power, success_level=band.success_level, severity_bonus=severity_bonus
         )
     return total
+
+
+def _bonused_row_severity(
+    row: AbstractAppliedCondition, *, power: int, success_level: int, severity_bonus: int
+) -> int:
+    """``row``'s severity at one band plus a vow's ``severity_bonus`` (#4930), as the cast."""
+    from world.magic.services.condition_application import bonused_severity  # noqa: PLC0415
+
+    return bonused_severity(
+        row.compute_severity(effective_power=power, success_level=success_level),
+        severity_bonus,
+    )
 
 
 #: Alias onto the shared core (#3390) — see ``de_valuation.is_team_lane_condition``.
@@ -260,6 +289,7 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
     context: EvalContext,
     duration: float,
     multiplier_cache: dict[int, Decimal],
+    severity_bonus: int = 0,
 ) -> PayloadValuation | None:
     """Value a non-team-lane, ``ConditionModifierEffect``-carrying applied-condition row.
 
@@ -289,7 +319,9 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
     for band in bands:
         if band.success_level < row.minimum_success_level:
             continue
-        severity = row.compute_severity(effective_power=power, success_level=band.success_level)
+        severity = _bonused_row_severity(
+            row, power=power, success_level=band.success_level, severity_bonus=severity_bonus
+        )
         shift = de_valuation.modifier_effect_shift(row.condition, severity=severity)
         expected_shift += band.probability * (shift or 0.0)
 
@@ -336,6 +368,7 @@ def _dot_valuation(
     power: int,
     bands: list[_MatchupBand],
     duration: float,
+    severity_bonus: int = 0,
 ) -> PayloadValuation | None:
     """Value an ENEMY applied-condition row whose condition carries damage-over-time.
 
@@ -349,7 +382,9 @@ def _dot_valuation(
 
     Row-independent arithmetic delegates to ``de_valuation.dot_per_round`` (#3390).
     """
-    expected_severity = _expected_severity(row, power=power, bands=bands)
+    expected_severity = _expected_severity(
+        row, power=power, bands=bands, severity_bonus=severity_bonus
+    )
     per_round = de_valuation.dot_per_round(
         row.condition, severity=expected_severity, stack_count=row.stack_count
     )
@@ -422,6 +457,7 @@ def _routed_condition_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
     duration: float,
     reference: ReferenceFrame,
     multiplier_cache: dict[int, Decimal],
+    severity_bonus: int = 0,
 ) -> PayloadValuation:
     """Route one ``TechniqueAppliedCondition`` row to its valuator (#3279 Task 2).
 
@@ -435,6 +471,9 @@ def _routed_condition_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
     - SELF/ALLY with none of the above -> :func:`_mitigation_valuation`, else
       UNPRICEABLE.
     - ENEMY with none of the above -> UNPRICEABLE.
+
+    ``severity_bonus`` is a vow added effect's (#4930); the team lane ignores it, as the
+    cast does.
     """
     if _is_team_lane_condition(row.condition):
         return _team_lane_valuation(
@@ -442,7 +481,9 @@ def _routed_condition_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
         )
 
     if is_enemy:
-        dot = _dot_valuation(row, power=power, bands=bands, duration=duration)
+        dot = _dot_valuation(
+            row, power=power, bands=bands, duration=duration, severity_bonus=severity_bonus
+        )
         if dot is not None:
             return dot
 
@@ -453,6 +494,7 @@ def _routed_condition_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
         context=context,
         duration=duration,
         multiplier_cache=multiplier_cache,
+        severity_bonus=severity_bonus,
     )
     if modifier is not None:
         return modifier
@@ -478,10 +520,14 @@ def _hard_control_valuation(
     ``reference.incoming_dpr`` (#3279's currency spec; deliberately per-technique,
     not per-row).
     """
+    # The enemy rows first (#4930): a technique with none needs no tag read, so a preview
+    # pricing many techniques reads no function tags for the ones that land nothing.
+    if not enemy_durations:
+        return None
     has_hard_control_tag = any(
         tag.function in _HARD_CONTROL_FUNCTIONS for tag in technique.cached_function_tags
     )
-    if not has_hard_control_tag or not enemy_durations:
+    if not has_hard_control_tag:
         return None
 
     control_duration = max(enemy_durations)
@@ -575,7 +621,10 @@ def _treatment_valuations(
     currency spec's ``max(1, expected_duration_rounds if it has one else 1)``
     window is always 1 here.
     """
-    rows: list[TechniqueTreatment] = list(technique.treatments.select_related("treatment_template"))
+    # The cached list (#4930): the same rows, and no query when a reader prefetched them
+    # (``technique_payload_prefetches``), so a preview pricing one technique several
+    # times pays for its treatments once.
+    rows: list[TechniqueTreatment] = technique.cached_treatments
     valuations: list[PayloadValuation] = []
     for row in rows:
         template = row.treatment_template
@@ -737,6 +786,117 @@ def _all_payload_valuations(  # noqa: PLR0913 - cohesive per-technique valuation
     return valuations
 
 
+def _vow_effect_valuations(  # noqa: PLR0913 - cohesive per-technique valuation params
+    vow_effects: Sequence[VowAddedEffect],
+    *,
+    thread_level: int,
+    power: int,
+    bands: list[_MatchupBand],
+    context: EvalContext,
+    reference: ReferenceFrame,
+    multiplier_cache: dict[int, Decimal],
+    language_condition_ids: set[int],
+) -> list[PayloadValuation]:
+    """What ``vow_effects`` add to one cast at ``power``, priced like the technique's rows (#4930).
+
+    Each effect's bonuses at ``thread_level`` come from ``vow_effect_bonuses``, the rule
+    the cast uses. A damage profile is priced by :func:`_damage_row_valuation` with the
+    effect's ``damage_bonus`` added to each band's budget. An applied condition is
+    routed by :func:`_routed_condition_valuation` like a technique row (enemy and ally
+    routing alike), with the severity and duration bonuses; a team-lane row takes
+    neither, as in the cast. Every line's ``kind`` is prefixed ``vow`` so a reader can
+    tell it from the technique's own.
+
+    Not priced here: the effect's treatments, removed conditions and morale (the
+    technique-side valuators read the technique, not a row), the hard-control line
+    (it stays the technique's own), and the cast-time gates (unlock level, situation,
+    context, frequency, weapon augment). An effect below its unlock is priced with no
+    bonus. An effect another passed effect ``upgrades`` is dropped, as the cast drops it.
+    Reads only the effects' cached payload lists, so prefetched rows cost no query for
+    damage; a condition row costs the same per-row lookups a technique row does.
+    """
+    from world.covenants.added_effects import vow_effect_bonuses  # noqa: PLC0415
+
+    upgraded = {effect.upgrades_id for effect in vow_effects if effect.upgrades_id is not None}
+    valuations: list[PayloadValuation] = []
+    for effect in vow_effects:
+        if effect.pk in upgraded:
+            continue
+        bonuses = vow_effect_bonuses(effect, thread_level)
+        valuations.extend(
+            replace(
+                _damage_row_valuation(
+                    row,
+                    power=power,
+                    bands=bands,
+                    multiplier_cache=multiplier_cache,
+                    budget_bonus=bonuses.damage,
+                ),
+                kind="vow damage",
+            )
+            for row in effect.cached_damage_profiles
+        )
+        for row in effect.cached_applied_conditions:
+            valuations.extend(
+                _vow_condition_valuations(
+                    row,
+                    bonuses=bonuses,
+                    power=power,
+                    bands=bands,
+                    context=context,
+                    reference=reference,
+                    multiplier_cache=multiplier_cache,
+                    language_condition_ids=language_condition_ids,
+                )
+            )
+    return valuations
+
+
+def _vow_condition_valuations(  # noqa: PLR0913 - cohesive per-row valuation params
+    row: AbstractAppliedCondition,
+    *,
+    bonuses: VowEffectBonuses,
+    power: int,
+    bands: list[_MatchupBand],
+    context: EvalContext,
+    reference: ReferenceFrame,
+    multiplier_cache: dict[int, Decimal],
+    language_condition_ids: set[int],
+) -> list[PayloadValuation]:
+    """One vow applied-condition row's valuation lines, routed like a technique row (#4930).
+
+    A team-lane row takes neither the severity nor the duration bonus, as in the cast. A
+    condition with language effects adds its not-combat-power line (or replaces an
+    unpriceable routed line with it), as :func:`_condition_application_valuations` does.
+    """
+    team_lane = _is_team_lane_condition(row.condition)
+    duration = _expected_duration_rounds(
+        row, power=power, bands=bands, duration_bonus=0 if team_lane else bonuses.duration
+    )
+    routed = _routed_condition_valuation(
+        row,
+        is_enemy=row.target_kind == ConditionTargetKind.ENEMY,
+        power=power,
+        bands=bands,
+        context=context,
+        duration=duration,
+        reference=reference,
+        multiplier_cache=multiplier_cache,
+        severity_bonus=0 if team_lane else bonuses.severity,
+    )
+    lines: list[PayloadValuation] = []
+    if de_valuation.has_language_modifier_effects(
+        row.condition, language_condition_ids=language_condition_ids
+    ):
+        language_row = de_valuation.not_combat_power_valuation(row.condition)
+        if routed.provenance == ValuationProvenance.UNPRICEABLE:
+            routed = language_row
+        else:
+            lines.append(replace(language_row, kind=f"vow {language_row.kind}"))
+    lines.append(replace(routed, kind=f"vow {routed.kind}"))
+    return lines
+
+
 def _effective_anima(technique: Technique) -> int:
     """Effective anima cost at the technique's own (unmodified) intensity/control."""
     from world.magic.services.techniques import calculate_effective_anima_cost  # noqa: PLC0415
@@ -791,6 +951,9 @@ def evaluate_technique(
     *,
     _multiplier_cache: dict[int, Decimal] | None = None,
     _bands: list[_MatchupBand] | None = None,
+    vow_effects: Sequence[VowAddedEffect] = (),
+    vow_thread_level: int = 0,
+    _amplified_delta: int | None = None,
 ) -> TechniquePowerReport:
     """Full combat-power report for one technique at one evaluation context (#3279).
 
@@ -798,12 +961,20 @@ def evaluate_technique(
     ``_derive_power(character=None)`` returns
     (``world/magic/services/techniques.py:394``, ``PowerLedgerBuilder(base=max(0,
     channeled_intensity)).build()`` when there is no character to derive
-    contributions from). Amplified power adds ``_amplified_power_delta`` on top —
+    contributions from). Amplified power adds ``amplified_power_delta`` on top:
     the "fully matched anchor" comparison point.
 
     ``_multiplier_cache``/``_bands`` let ``evaluate_all`` share one damage-
     multiplier cache and one matchup-band computation across every technique in
     a run; a standalone caller computes its own (fresh per call) when omitted.
+    ``_amplified_delta`` is :func:`amplified_power_delta` for ``context``, passed by a
+    caller pricing many techniques so the blend config is read once (#4930).
+
+    ``vow_effects`` (#4930) are vow added effects riding this technique, priced into
+    both figures at shown thread level ``vow_thread_level`` by
+    :func:`_vow_effect_valuations` (the power preview on the vow page and the kit view).
+    They change no power, anima, windup or flag. With none, the report is exactly the
+    technique's own.
     """
     if _multiplier_cache is None:
         _multiplier_cache = {}
@@ -811,7 +982,9 @@ def evaluate_technique(
         _bands = _matchup_bands(context)
 
     baseline_power = technique.intensity
-    amplified_power = baseline_power + _amplified_power_delta(context)
+    if _amplified_delta is None:
+        _amplified_delta = amplified_power_delta(context)
+    amplified_power = baseline_power + _amplified_delta
     effective_anima = _effective_anima(technique)
 
     if not _bands:
@@ -839,6 +1012,7 @@ def evaluate_technique(
     # condition row inside it.
     language_condition_ids = de_valuation.condition_ids_with_language_effects(
         [row.condition_id for row in technique.cached_condition_applications]
+        + [row.condition_id for effect in vow_effects for row in effect.cached_applied_conditions]
     )
 
     valuations = _all_payload_valuations(
@@ -859,6 +1033,21 @@ def evaluate_technique(
         multiplier_cache=_multiplier_cache,
         language_condition_ids=language_condition_ids,
     )
+    for power, priced in ((baseline_power, valuations), (amplified_power, amplified_valuations)):
+        if not vow_effects:
+            break
+        priced.extend(
+            _vow_effect_valuations(
+                vow_effects,
+                thread_level=vow_thread_level,
+                power=power,
+                bands=_bands,
+                context=context,
+                reference=reference,
+                multiplier_cache=_multiplier_cache,
+                language_condition_ids=language_condition_ids,
+            )
+        )
     baseline_de = sum(v.value for v in valuations)
     amplified_de = sum(v.value for v in amplified_valuations)
 

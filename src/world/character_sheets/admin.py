@@ -188,6 +188,24 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
     large_table_widget_exempt = ["roster_entry"]
 
+    # A deleted sheet takes its natural weapons with it (#4898), from either delete button.
+    def delete_model(self, request, obj) -> None:
+        from world.items.services.natural_weapons import (  # noqa: PLC0415
+            deprovision_all_natural_weapons,
+        )
+
+        deprovision_all_natural_weapons(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset) -> None:
+        from world.items.services.natural_weapons import (  # noqa: PLC0415
+            deprovision_all_natural_weapons,
+        )
+
+        for sheet in queryset:
+            deprovision_all_natural_weapons(sheet)
+        super().delete_queryset(request, queryset)
+
     def save_model(
         self, request: HttpRequest, obj: CharacterSheet, form: Any, change: bool
     ) -> None:

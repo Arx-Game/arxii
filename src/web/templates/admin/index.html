@@ -24,7 +24,7 @@
                         {% for link in combat_roles_links %}
                             <tr>
                                 <th scope="row" id="combat-roles-link-{{ forloop.counter }}">{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}</th>
-                                <td>{{ link.note }}
+                                <td>{% if link.flag_count %}<span class="combat-roles-flagdot">{{ link.flag_count }}</span> {% endif %}{{ link.note }}
                                     {% for picker in link.pickers %}
                                     <form method="get" action="{{ picker.action }}" class="combat-roles-picker">
                                         <select name="pk" aria-labelledby="combat-roles-link-{{ forloop.parentloop.counter }}{% if picker.label %} combat-roles-open-{{ forloop.parentloop.counter }}-{{ forloop.counter }}{% endif %}">

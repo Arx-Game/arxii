@@ -633,6 +633,13 @@ vow the Sphinx warned about).
     something the character can actually go and learn. Replaced the former
     `can_learn_technique` path-style filter, which both recommended techniques from
     unowned gifts and hid ones the character's own path had granted (ADR-0167).
+  - `SphinxVerdict.style` (#4921, slice 5 of #4844) - a `SphinxStyleLine` (`style_name`,
+    `suits`) for a character with a `CharacterSheet.combat_style`, None without one.
+    `suits` is `style_fit.style_lists_vow(style, role)`: the style's `compatible_roles` hold
+    the role or, for a sub-role, its anchor (the same rule the roll's vow lapse uses). The
+    endpoint returns it as `style`; the `sphinx` verb adds "Your style suits it." or "Your
+    style does not suit it: no style benefits while it is active." after the tier line. It
+    never blocks the vow.
 - **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
   — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
   `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:
@@ -1102,7 +1109,9 @@ list[FiredVowEffect]` runs these steps in order:
 8. **Scaling**: each level above `unlock_thread_level` adds the row's
    `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
    A row from a SECONDARY vow has each bonus multiplied by
-   `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159).
+   `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159). The rule is
+   `vow_effect_bonuses(effect, thread_level, *, potency_tenths=None) -> VowEffectBonuses`,
+   shared with the technique power evaluator's vow term (#4930).
 
 `FiredVowEffect` (`world.covenants.types`) carries `effect`, `holder`, `is_secondary` and the
 three bonuses. Every cast in the game calls this, so the order keeps the common cast cheap: a
@@ -1135,7 +1144,12 @@ The other seams in the module:
   the sheet's own engaged vows' rows that match the technique's function and narrowing, with
   no cast-dependent filter (not unlock level, context, situation or frequency), and it does
   NOT filter by `beneficiary`, so a display tells a row riding the sheet's own casts from one
-  riding its allies' by reading `beneficiary`. **[BUILT, NOT WIRED]** pending #4565.
+  riding its allies' by reading `beneficiary`. `vow_added_effects_on_techniques(sheet,
+  techniques, functions=None) -> dict[int, list[VowAddedEffect]]` (#4918) is the batched form
+  the single one calls: one effect query (role, pick, gift and technique joined, payloads
+  prefetched) for every technique, the function tags read fresh by
+  `function_tags_by_technique(techniques)` when not passed. **[BUILT & WIRED]** in the admin
+  kit view; the player-facing #4565 display still waits.
 - `effect_rides_technique(effect, technique, technique_functions) -> bool` and
   `techniques_ridden_by(effect) -> QuerySet[Technique]` (#4880) are the one catalog match
   between a row and the techniques it rides: the row's `function` among the technique's
@@ -1250,7 +1264,11 @@ decides defense" under Combat Seams).
   (`ARMOR_ARCHETYPES`) its defense profile; its choices are those two sets only
   (`COMBAT_STYLE_GEAR_CHOICES`), never jewelry, clothing or other gear. The style admin page edits them all (gear kinds
   as an inline). Required content (TUNING): a style with no skill, no hit stat or no weapon
-  kind, and an active Tradition that teaches no style.
+  kind, and an active Tradition that teaches no style. Since #4921 (slice 5) a player chooses
+  the style in character creation from the styles her Tradition teaches
+  (`CharacterDraft.selected_combat_style`, see `character_creation.md`), and
+  `CombatStyle.clean()` refuses a skill a magic skill picker (Path, Gift, technique or
+  magical activity) already adds.
 
 ### Price and choice rules (`world.covenants.focus_picks`)
 
@@ -1272,6 +1290,10 @@ decides defense" under Combat Seams).
   left count. A holder with no pick is absent.
 - `holder_has_pick(focus_pick_id, holder_id, chosen) -> bool` - True for a row with no pick
   (the base vow), else only when the holder chose it.
+- `spent_by_membership_level(choices) -> dict[tuple[int, int], int]` (#4918) - what each
+  membership spent per pick level, keyed `(character_role_id, pick_level)`, priced through
+  `price_for` from one limits query. The Holder over budget flag and the kit view both sum
+  with it.
 
 ### Focus picks in play (#4806, slice 2)
 
@@ -1305,6 +1327,17 @@ payload row as one line with its stock admin form in the popup, the budget per l
 the techniques the vow rides, and warns before a save that changes what live holders spend.
 It is opened from a "Vow page" column and object tool on `CovenantRole` and the Combat
 roles panel's vow picker. See `src/web/admin/CLAUDE.md` "Vow page".
+
+Five Required content flags (#4906, `web/admin/tuning/combat_role_flags.py`) list a vow
+with no picks, a holder over budget at a level, a pick with no payload row, and conditions
+that are landed but never read or read but never landed, each linked to the vow page or
+the condition's combo map, on the Missing combat content page (`_combat_content/`). Flags
+only; nothing is refused for them.
+
+The kit view (#4918, `web/admin/kit_view/`, `_kit_view/<sheet_pk>/`) shows one real
+character's techniques with what its vows add (the batched static view, base lines then one
+group per chosen pick), its chosen picks per level against the budget, and its path, gift,
+vow and defense profile. Read only. See `src/web/admin/CLAUDE.md` "Kit view".
 
 ## Enums / Constants
 
@@ -1376,6 +1409,10 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
 - A lapse drops the style skill only: the hit stat and the defense type still apply, and
   the style's armor share is unchanged (owner rulings, 2026-11-01). No style, or a style
   with no active skill, adds no style term and no lapse line.
+- `style_lists_vow(style, role)` is the vow test on its own (a sub-role counts by itself or
+  its anchor); `styles_listing_vow(role)` is its batched form, the pks of every style that
+  lists the vow in one query, read by the vow page's style module and the kit view's Style
+  row (`web/admin/authoring/combat_styles.py`, #4932).
 - Readers: `CombatTechniqueResolver.roll_check_with_breakdown` (the shared attack-roll
   seam: Strike, technique, joust) adds the term; a Strike also hits with `hit_stat`
   (`_stat_override`), a technique keeps its weapon's stat. `resolve_npc_attack` adds it to

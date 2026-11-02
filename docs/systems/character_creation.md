@@ -333,7 +333,27 @@ Gift resonance's affinity), only when `base > 0`, and rounds the total down to a
 given the picked resonance's `affinity` (the `Resonance.affinity` foreign key; the fit compares
 `Affinity` rows, never names). A Magic skill value costs its own value in points,
 the ordinary 10 per step. `required_spend` is `min(total, active Magic skill count x
-max_skill_value)`.
+max_skill_value)`, counting the Magic skills `magic_training.training_skills(draft)` returns.
+
+**Combat style (#4921, slice 5 of #4844).** A Tradition teaches the styles whose
+`CombatStyle.taught_by` holds it. The Gift stage has a fighting style step after the Resonance,
+listed by `GET /api/character-creation/combat-styles/?draft_id=` (`CGCombatStyleOptionViewSet`,
+`CGCombatStyleOptionSerializer`: `defense_style_display`, `armor_share_tenths`, `hit_stat_name`,
+`weapon_kinds`, `armor_kinds` as `GearArchetype` labels; never the style's vows, since creation
+never mentions covenant vows). The pick is `CharacterDraft.selected_combat_style` (SET_NULL FK),
+written as `selected_combat_style_id` on the draft PATCH, which refuses a style the draft's
+Tradition does not teach. `compute_magic_errors` says "Choose a combat style" after the
+resonance check when the Tradition teaches one, and skips it when it teaches none.
+`world/character_creation/magic_training.py` holds the rules: `taught_styles(draft)`,
+`training_skills(draft)` (the active Magic skills less every style's skill but the chosen
+style's: the training list, the allocation check and `required_spend` read it, while the
+skills-stage no-points rule and the Anima Check exclusion keep `magic_category_skills()`), and
+`reconcile_combat_style(draft)`, run by `select-tradition` and by the draft PATCH when the
+Tradition or style changes: it clears a style the Tradition does not teach and drops
+`magic_skills` points on any other style's skill. Finalize (`_finalize_combat_style`, after
+`provision_magic`) writes `CharacterSheet.combat_style`; the style skill's value rides
+`magic_skills` through `_create_skill_values` into both skill stores. Switching style after
+creation is not built (#4844 non-goal).
 
 The player spends the pool on the Gift stage's own training step, after the Gift pick (its Gift
 bonus depends on the pick). The allocation lives in `draft_data["magic_skills"]` (skill id to value).

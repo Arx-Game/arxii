@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.items.constants import OrgVaultEventKind, VaultTransitResolution
+from world.items.exceptions import NaturalWeaponNotRemovable
 from world.items.models import ItemInstance
 from world.items.org_vault_models import (
     OrganizationVault,
@@ -27,6 +28,7 @@ from world.items.org_vault_models import (
 )
 from world.items.services.holding import set_item_holder
 from world.items.services.materialize import materialize_item_game_object
+from world.items.services.natural_weapons import is_natural_weapon
 from world.items.services.usage import dematerialize_item_instance, release_item_for_custody
 
 if TYPE_CHECKING:
@@ -107,6 +109,9 @@ def deposit_item_to_vault(
     if VaultHolding.objects.filter(item_instance=item).exists():
         msg = "That item is already in a vault."
         raise ValidationError(msg)
+    if is_natural_weapon(item):
+        # A natural weapon never leaves its holder (#4898).
+        raise ValidationError(NaturalWeaponNotRemovable.user_message)
 
     _take_into_custody(item)
     holding = VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=persona)

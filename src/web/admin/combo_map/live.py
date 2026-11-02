@@ -62,10 +62,14 @@ class CarrierRow:
 
 @dataclass(frozen=True)
 class SetterRow:
+    """One authored row landing a condition. ``condition_pk`` is the landed template's pk;
+    ``condition`` its name, for display only."""
+
     source: SourceLink
     kind: str
     condition: str
     lands: str
+    condition_pk: int
 
 
 @dataclass(frozen=True)
@@ -142,21 +146,44 @@ def conditions_carrying(prop: Property) -> list[CarrierRow]:
     return sorted(rows, key=lambda row: row.name)
 
 
+def properties_carried_by(templates: Iterable[ConditionTemplate]) -> dict[int, list[CarrierRow]]:
+    """Every property each of ``templates`` carries, keyed by template pk, in two queries.
+
+    A property on the template itself, or only on some of its stages (#4906 reads every
+    condition at once for the missing combat content flags).
+    """
+    template_ids = {t.pk for t in templates}
+    by_template: dict[int, list[CarrierRow]] = {pk: [] for pk in template_ids}
+    if not template_ids:
+        return by_template
+    whole: dict[int, dict[int, Property]] = defaultdict(dict)
+    template_links = ConditionTemplate.properties.through.objects.filter(
+        conditiontemplate_id__in=template_ids
+    ).select_related("property")
+    for link in template_links:
+        whole[link.conditiontemplate_id][link.property_id] = link.property
+    staged: dict[int, dict[int, tuple[Property, list[int]]]] = defaultdict(dict)
+    stage_links = ConditionStage.properties.through.objects.filter(
+        conditionstage__condition_id__in=template_ids
+    ).select_related("property", "conditionstage")
+    for link in stage_links:
+        template_id = link.conditionstage.condition_id
+        if link.property_id not in whole[template_id]:
+            entry = staged[template_id].setdefault(link.property_id, (link.property, []))
+            entry[1].append(link.conditionstage.stage_order)
+    for template_id in template_ids:
+        rows = [CarrierRow(pk=p.pk, name=p.name) for p in whole[template_id].values()]
+        rows.extend(
+            CarrierRow(pk=prop.pk, name=prop.name, stages=tuple(sorted(orders)))
+            for prop, orders in staged[template_id].values()
+        )
+        by_template[template_id] = sorted(rows, key=lambda row: row.name)
+    return by_template
+
+
 def properties_carried(template: ConditionTemplate) -> list[CarrierRow]:
     """Every property ``template`` carries: on itself, or only on some of its stages."""
-    whole = {p.pk: p for p in template.properties.all()}
-    staged: dict[int, tuple[Property, list[int]]] = {}
-    links = ConditionStage.properties.through.objects.filter(conditionstage__condition=template)
-    for link in links.select_related("property", "conditionstage"):
-        prop = link.property
-        if prop.pk not in whole:
-            staged.setdefault(prop.pk, (prop, []))[1].append(link.conditionstage.stage_order)
-    rows = [CarrierRow(pk=p.pk, name=p.name) for p in whole.values()]
-    rows.extend(
-        CarrierRow(pk=prop.pk, name=prop.name, stages=tuple(sorted(orders)))
-        for prop, orders in staged.values()
-    )
-    return sorted(rows, key=lambda row: row.name)
+    return properties_carried_by([template])[template.pk]
 
 
 def _setter_rows(source: SetterSource, template_ids: set[int]) -> list[SetterRow]:
@@ -172,6 +199,7 @@ def _setter_rows(source: SetterSource, template_ids: set[int]) -> list[SetterRow
                 kind=source.kind,
                 condition=condition.name,
                 lands=f"{condition.name} {source.where(row)}",
+                condition_pk=condition.pk,
             )
         )
     return rows
@@ -186,16 +214,12 @@ def setters_for_conditions(templates: Iterable[ConditionTemplate]) -> list[Sette
     return sorted(rows, key=lambda r: (r.condition, r.kind, r.source.label))
 
 
-def _reader_rows(source: ReaderSource, lookup: Q) -> list[ReaderRow]:
-    queryset = source.model.objects.filter(lookup).select_related(source.field, *source.related)
-    return [
-        ReaderRow(
-            source=_link(row, source.owner, source.label),
-            kind=source.kind,
-            does=source.does(row),
-        )
-        for row in queryset
-    ]
+def _reader_row(source: ReaderSource, row: Model) -> ReaderRow:
+    return ReaderRow(
+        source=_link(row, source.owner, source.label),
+        kind=source.kind,
+        does=source.does(row),
+    )
 
 
 def _sorted(rows: list[ReaderRow]) -> list[ReaderRow]:
@@ -213,13 +237,7 @@ def readers_for_properties(props: Iterable[Property]) -> dict[int, list[ReaderRo
             continue
         queryset = source.model.objects.filter(**{f"{source.field}__in": prop_ids})
         for row in queryset.select_related(source.field, *source.related):
-            by_property[getattr(row, f"{source.field}_id")].append(
-                ReaderRow(
-                    source=_link(row, source.owner, source.label),
-                    kind=source.kind,
-                    does=source.does(row),
-                )
-            )
+            by_property[getattr(row, f"{source.field}_id")].append(_reader_row(source, row))
     return {pk: _sorted(rows) for pk, rows in by_property.items()}
 
 
@@ -227,25 +245,48 @@ def readers_for_property(prop: Property) -> list[ReaderRow]:
     return readers_for_properties([prop])[prop.pk]
 
 
-def readers_for_condition(template: ConditionTemplate) -> list[ReaderRow]:
-    """Every reader naming ``template`` itself, or one of its stages."""
-    rows: list[ReaderRow] = []
+def _condition_id_of(source: ReaderSource, row: Model) -> int:
+    """The template a condition or stage reader row names."""
+    if source.reads == Reads.STAGE:
+        return getattr(row, source.field).condition_id
+    return getattr(row, f"{source.field}_id")
+
+
+def readers_for_conditions(templates: Iterable[ConditionTemplate]) -> dict[int, list[ReaderRow]]:
+    """Every reader naming each of ``templates`` itself, or one of its stages, keyed by pk.
+
+    One query per condition or stage reader source, however many templates.
+    """
+    template_ids = {t.pk for t in templates}
+    by_condition: dict[int, list[ReaderRow]] = {pk: [] for pk in template_ids}
+    if not template_ids:
+        return by_condition
     for source in READER_SOURCES:
         if source.reads == Reads.CONDITION:
-            rows.extend(_reader_rows(source, Q(**{source.field: template})))
+            lookup = Q(**{f"{source.field}__in": template_ids})
         elif source.reads == Reads.STAGE:
-            rows.extend(_reader_rows(source, Q(**{f"{source.field}__condition": template})))
-    return _sorted(rows)
+            lookup = Q(**{f"{source.field}__condition__in": template_ids})
+        else:
+            continue
+        queryset = source.model.objects.filter(lookup)
+        for row in queryset.select_related(source.field, *source.related):
+            by_condition[_condition_id_of(source, row)].append(_reader_row(source, row))
+    return {pk: _sorted(rows) for pk, rows in by_condition.items()}
+
+
+def readers_for_condition(template: ConditionTemplate) -> list[ReaderRow]:
+    """Every reader naming ``template`` itself, or one of its stages."""
+    return readers_for_conditions([template])[template.pk]
 
 
 def _set_by(templates: list[ConditionTemplate]) -> list[SetterLine]:
     setters = setters_for_conditions(templates)
-    set_names = {row.condition for row in setters}
+    set_ids = {row.condition_pk for row in setters}
     lines = [SetterLine(setter=row) for row in setters]
     lines.extend(
         SetterLine(unset_condition=t.name)
         for t in sorted(templates, key=lambda t: t.name)
-        if t.name not in set_names
+        if t.pk not in set_ids
     )
     return lines
 

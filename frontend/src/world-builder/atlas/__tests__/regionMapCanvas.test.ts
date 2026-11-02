@@ -161,6 +161,18 @@ describe('region map drawing', () => {
     );
   });
 
+  it('outlines only the footprints asked for', () => {
+    // the coast and the cell lines are the two strokes every map draws
+    const plain = recordingCanvas();
+    drawRegionMap(plain.ctx, drawingData, { selectedAreaId: 11 });
+    expect(plain.context.stroke).toHaveBeenCalledTimes(2);
+    const outlined = recordingCanvas();
+    drawRegionMap(outlined.ctx, drawingData, { outlineAreaIds: new Set([10]) });
+    expect(outlined.context.stroke).toHaveBeenCalledTimes(3);
+    // an outlined footprint fills at the emphasised alpha, like a selected one
+    expect(outlined.paints[4]).toEqual({ style: holderColor(4, 0.65), rect: [6, 6, 6, 6] });
+  });
+
   it('hides labels on request and draws a removal preview after the seated holdings', () => {
     const { ctx, context } = recordingCanvas();
     drawRegionMap(ctx, drawingData, {

@@ -114,9 +114,12 @@ def covered_regions(character: ObjectDB) -> set[str]:
     (``world.species.sun_exposure``) and body-marking visibility
     (``world.forms.services.markings``). Zero queries — reads the cached
     equipment handler.
+
+    A natural weapon (#4898) is part of the body, so it covers nothing: claws do not
+    shade the hands from the sun or hide a marking there.
     """
-    covered: set[str] = set()
-    for row in character.equipped_items:
-        if not is_see_through(row):
-            covered.add(row.body_region)
-    return covered
+    return {
+        row.body_region
+        for row in character.equipped_items
+        if not is_see_through(row) and row.item_instance.natural_weapon_gift_id is None
+    }

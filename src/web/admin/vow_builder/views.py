@@ -24,9 +24,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from web.admin.authoring.combat_styles import styles_for_vow
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
 from web.admin.authoring.identity_map import CacheGuard
+from web.admin.authoring.power_preview import vow_power_preview
 from web.admin.tuning.views import superuser_required
 from web.admin.vow_builder import live
 from web.admin.vow_builder.forms import (
@@ -271,6 +273,8 @@ def _render_page(
             "budget_rows": live.budget_rows(role),
             "budget": live.focus_pick_budget(),
             "rides": rides.rows,
+            "power_preview": vow_power_preview(role),
+            "styles": styles_for_vow(role),
             "price_rules": _price_rules(),
             "changes": changes or [],
             "confirm_field": CONFIRM_FIELD,

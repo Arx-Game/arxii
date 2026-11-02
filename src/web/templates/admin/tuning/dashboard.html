@@ -23,7 +23,7 @@
   </section>
 
   <section class="tuning-panel" id="panel-simulation"
-           hx-get="{% url 'admin_tuning_simulation' %}" hx-trigger="load">
+           hx-get="{% url 'admin_tuning_simulation' %}{% if simulation_query %}?{{ simulation_query }}{% endif %}" hx-trigger="load">
     <p>Loading simulation&hellip;</p>
   </section>
 

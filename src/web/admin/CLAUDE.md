@@ -134,12 +134,15 @@ superusers only, #4880), Covenant roles,
 Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
 Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
 singleton's change page, or its list with the default before the row exists; a GET never
-creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
+creates it), and Missing combat content (`admin_combat_content`, superusers only, its note
+"N open flags", #4906). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
 `RowPicker`s (`CombatRolesLink.pickers`); the Combo map row (#4891) has no page of its own (blank
 `url`) and holds a property picker and a condition picker, each shown only to staff who can view
-that model (`combat_roles.can_view`). Every combat role authoring page belongs
-here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
-kit view and missing combat content rows. Tests:
+that model (`combat_roles.can_view`). The Kit view row (#4918) is the same shape: no page of
+its own, one `RowPicker` of every character holding a live primary vow (sheet pk and
+character name, one query), shown to staff who can view `CharacterSheet`, note "one
+character, read only". Every combat role authoring page belongs
+here, so staff never hunt for one (owner ruling 2026-11-01). Tests:
 `tests/test_combat_roles_panel.py` follows every link.
 
 ### Save as new on every change form (#4094)
@@ -1181,7 +1184,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 each pick's `VowFocusPickLimit` rows. Pattern mirrors the Distinction Builder:
 `superuser_required`, the contributor gate, plain Django forms, `base_site.html`, a
 page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 and 7 of the
-#4843 spec; the style module, power preview and flags are later slices (7, 6, 4).
+#4843 spec; flags are slice 4, the power preview slice 6 (#4930) and the style module
+slice 7 (#4932).
 
 - **Files** - `web/admin/vow_builder/`: `views.py` (`vow_builder`, `vow_builder_pick`,
   `vow_builder_review`), `forms.py` (`VowForm`, `SpecialtyFormSet`, `PickFormSet`,
@@ -1191,7 +1195,7 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   `holder_impact`, `pick_changes`, `description_clause`, `focus_pick_budget`; dataclasses
   only). Templates in
   `web/templates/admin/vow_builder/`: `page.html`, `_pick.html` (one pick as a `<details>`),
-  `_rail.html`, `_css.html`.
+  `_styles.html` (the combat styles module, #4932), `_rail.html`, `_css.html`.
 - **Payload rows are not edited here.** `VowAddedEffect`, `VowSituationalPerk` and
   `VowStatScaling` rows show as one plain line each (an added effect through
   `summarize_vow_added_effect`; a perk from its beneficiary, kind, situations and magnitude,
@@ -1257,7 +1261,49 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   the vow's added effects grouped by function and narrowing; a count and three names linked
   to their admin change pages, from one `world.covenants.added_effects
   .techniques_by_function` query narrowed by `effect_rides_technique`, the match the cast
-  path uses), then Credit.
+  path uses), then "Power preview" (#4930), then Credit.
+- **Power preview** - `web/admin/authoring/power_preview.py` `vow_power_preview(role)`,
+  headed "Power preview . <vow name>" (a middle dot): the techniques the vow's added effects
+  ride, by name, the first three priced (`PREVIEW_TECHNIQUES`) and the rest counted ("+N
+  more"). Per technique: "No vow: N DE", "With base vow, level L: N DE" (rows with no focus
+  pick riding it), then "With <pick>: N DE" (base plus that pick) for each pick with a row
+  riding it; then the catalog rank row, "Catalog rank, level <level> <function>
+  techniques: <n>th of <m>" (or "Catalog rank: the only level <level> <function>
+  technique" when nothing compares); then a "Run the fight simulator" link to
+  `admin_tuning?technique=&covenant_role=#panel-simulation`, or, for a technique with no
+  action template, a muted line saying the simulator cannot cast it. L is the vow's highest
+  pick level, or 1 with no picks, said in a muted line; then the line on what DE is and
+  "Situational perks and stat scaling are not priced." Each figure is
+  `evaluate_technique(...).baseline_de` with the vow term (`vow_effects`,
+  `vow_thread_level`; see `docs/systems/tuning.md`), rounded, at the Techniques panel's
+  default context and reference (`technique_analytics.default_context_and_reference`,
+  cached by catalog revision).
+- **Catalog rank** - the technique's best with-vow figure (its highest line) against the
+  rounded baseline DE of every catalog technique with the same `level` carrying the
+  function the vow rides it by (the first in `TechniqueFunction` order when several). The
+  catalog figures are the Techniques panel's own corpus at its default knobs
+  (`technique_analytics.default_catalog_reports`, `_evaluate_corpus`: its cache for the
+  current catalog revision, else evaluated once and cached as the panel does). The
+  technique counts once, at its with-vow figure; ties share the better rank
+  (`catalog_rank`); `ordinal` and `rank_line` word it.
+- **Preview queries** - one for the effects (payloads prefetched), one for the picks, one
+  for the function tags, the priced techniques with their payload prefetches, one for the
+  rank peers (`TechniqueFunctionTag` by function and level, `_peer_figures`), then the
+  evaluator's own reads. The count is the same with one shown technique or three, and a
+  fourth, unshown one adds none (`VowPowerPreviewTests`); the first load on a new catalog
+  revision also evaluates the catalog once.
+- **Combat styles that work with this vow (#4932)** - a main-column module after the focus
+  picks, read only: Style (linked to its change page) / Works with this vow (a "works" or
+  "does not work" chip, `.vb-fit`) / Skill / Holders using it (this vow's live primary
+  memberships, `left_at` null and not secondary, whose sheet's `combat_style` is the style;
+  a character in two covenants counts once) / What a mismatch costs (only for "does not
+  work": "A holder fighting this style loses <skill> on attack and defense rolls; its hit
+  stat and defense type still apply.", or, for a style with no active skill, "No style skill
+  to lose; its hit stat and defense type apply as usual."). "No combat styles are authored
+  yet." with none. Read by `web/admin/authoring/combat_styles.py` `styles_for_vow(role) ->
+  list[StyleRow]`: whether a style works is `style_fit.styles_listing_vow(role)`, the
+  batched form of `style_lists_vow` (a sub-role counts by its anchor), so the page and the
+  roll's lapse test share one rule. Three queries however many styles.
 - **URLs** (superuser-only): `_vow_builder/pick/` -> `admin_vow_builder_pick` (`?pk=`, GET
   redirect, 400 on a missing or unknown pk), `_vow_builder/<pk>/` -> `admin_vow_builder`,
   `_vow_builder/<pk>/review/` -> `admin_vow_builder_review` (POST).
@@ -1321,6 +1367,115 @@ Demo screen 3 of the #4843 spec.
   change-form links, a query-count pin, and the styling test: every class under
   `#combo-map-root` has a rule reaching the page, with and without gap marks).
   Deliberate no-ADR: the page follows the approved #4843 spec.
+- **Batched reads (#4906)** - `properties_carried_by(templates)` and
+  `readers_for_conditions(templates)` answer for many conditions at once, keyed by pk;
+  `properties_carried` and `readers_for_condition` call them. `SetterRow.condition_pk`
+  carries the landed template, so nothing joins setters to conditions by name.
+
+## Missing combat content (#4906, slice 4 of #4843)
+
+**Purpose:** demo screen 6. Six Required content flags on a vow's combat kit, on their
+own page with a link to fix each flagged row. Flags only: nothing is blocked, no save
+path changes.
+
+- **Flags** - `web/admin/tuning/combat_role_flags.py`, each a `CustomProbe` on a `TUNING`
+  `ContentDependency` in `combat_role_declarations()` (also in the Ops Required content
+  panel): Vow with no picks (none of its own, nor on its anchor for a sub-role; vow page),
+  Holder over budget (live primary memberships only, priced with `price_for`, against
+  `vow_builder.live.focus_pick_budget()`; the `CharacterVowFocusPick` changelist `?q=` the
+  character), Condition set, never read and Condition carrying a read property, set by
+  nothing (both through the combo map's batched reads; the condition's combo map), Pick
+  with a blank payload (vow page), and Style nothing uses (#4932: a `CombatStyle` no
+  `Tradition` teaches, "<style> (taught by no Tradition)", or with no `compatible_roles`,
+  "<style> (works with no vow)", one row naming both when it has both; one query; the
+  style's change page). Each names its rows in `ProbeResult.flagged`
+  (`FlaggedRow(text, url)`) as well as `missing`.
+- **Page** - `tuning/combat_content_views.py` `combat_content`, `_combat_content/` ->
+  `admin_combat_content`, superuser-only (`superuser_required`). Template
+  `templates/admin/tuning/combat_content.html` (extends `base_site.html`, includes
+  `_panel_css.html` for `tuning-panel`/`tuning-table`, its one own class styled inline):
+  breadcrumb Home > Ops > Required content > Combat roles, an admin module headed "Combat
+  roles" with the tag "flags only, nothing blocked", then a Flag / What / Fix it table of
+  the open flags: one table row per flagged row, the flag's label spanning them, and a Fix it
+  link per row whose text is the flag's `FIX_LABELS` entry ("vow page", "their picks",
+  "combo map", "style") and whose `aria-label` names the row. With nothing open, "Nothing is flagged."
+- **Panel** - `combat_roles._missing_combat_content_link` runs
+  `collect_combat_role_flags()` on every front-page load for a superuser: a fixed 117
+  queries, whatever the catalog size. The count is `CombatRolesLink.flag_count`, drawn as a
+  `.combat-roles-flagdot` pill (`arx_admin.css`) before the note.
+- **Queries** - fixed however many vows, picks, holders or conditions; pinned in
+  `tests/test_combat_role_flags.py` `QueryCountTest`.
+- Tests: `tests/test_combat_role_flags.py` (each flag's positive and negative cases and
+  links), `tests/test_combat_content_page.py` (the page through the client, the gate, the
+  links opening, and the styling test), `tests/test_combat_roles_panel.py` (the row's
+  count). Deliberate no-ADR: the page follows the approved #4843 spec.
+
+## Kit view (#4918, slice 5 of #4843)
+
+**Purpose:** demo screen 4. One real character's combat kit on one read-only page: each
+technique it knows with what its vows add, its chosen focus picks against the budget, and
+the sheet facts beside them, the combat style among them (slice 7, #4932).
+
+- **Files** - `web/admin/kit_view/`: `live.py` (pure reads, frozen dataclasses: `kit_for(sheet)
+  -> Kit`, built from `known_techniques`, `vow_levels`, `technique_lines`, `pick_levels`,
+  `held_vows`, `sheet_facts`), `views.py` (`kit_view`, `kit_view_pick`). Templates in
+  `web/templates/admin/kit_view/`: `page.html`, `_css.html` (classes under `#kit-view-root`).
+- **Techniques, with what the vow adds** - Technique (linked, its function tag labels under
+  it) / Base (the technique's `cached_effect_summary` line) / Vow adds (level N, when the
+  character holds one primary vow). The vow lines come from
+  `world.covenants.added_effects.vow_added_effects_on_techniques`, the static view, which
+  ignores unlock level, context, situation and frequency by design: "Base: <line>" first,
+  then "<pick>: <line>" per chosen pick (by level, then name); with more than one live vow
+  the base group is named "<vow> base". Each line is `summarize_vow_added_effect`. A row
+  whose `unlock_thread_level` is above the character's shown thread level on that vow is
+  still listed, chipped "unlocks at level N"; a row whose beneficiary is not the holder's
+  own casts is chipped "rides <beneficiary>". A technique with no line reads "nothing: <vow>
+  adds nothing to <function>" ("it carries no function tag" / "no engaged vow" otherwise).
+  A fourth column, Preview (#4930), is the technique's DE with those vow lines
+  (`power_preview.preview_de`) at the highest shown level among their vows (a secondary
+  vow's lines are priced at full potency), the technique's own DE with no line, and "n/a"
+  for a technique with no function tag.
+- **Focus picks chosen** - per live primary vow and pick level with a chosen pick: "Level N
+  . <picks>" (each linked to its `VowFocusPick` change page) and "<spent> of <budget>",
+  chipped "over budget" when spent is more. Spent is
+  `focus_picks.spent_by_membership_level` (shared with the Holder over budget flag), budget
+  `vow_builder.live.focus_pick_budget()`. Links to the vow page and the
+  `CharacterVowFocusPick` changelist searched by the character's key.
+- **Sheet** - Path . Gift (newest path history row, gift names), each live vow (linked to its
+  vow page, shown level, "not engaged" chip; secondary vows labelled), and Defense: the
+  primary vow's `CovenantRoleDefenseProfile` style (the resolved sub-role's own, else its
+  anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". Then Style
+  (#4932): the sheet's `combat_style` linked to its change page, then per held primary vow
+  " . works with <vow>" or " . not a style for <vow>: its skill does not count on attack and
+  defense rolls" (just " . not a style for <vow>" for a style with no active skill), the
+  resolved sub-role tested with `style_fit.style_lists_vow` through
+  `authoring.combat_styles.style_on_vow` (`HeldVow.style`, `SheetFacts.style` and
+  `style_lines`); "No combat style" with none, the name alone with no primary vow. A
+  character
+  with no vow, no technique or a secondary vow only renders and says what is absent.
+- **Queries** - fixed however many techniques, added effects or picks (a styled sheet adds
+  the style's own reads and one query per primary vow; an unstyled one adds none): 26 for
+  the kit reads
+  (`tests/test_kit_view_live.py` `KIT_QUERIES`, four of them the preview frame), 78 for the
+  whole request (`tests/test_kit_view.py` `PAGE_QUERIES`, mostly admin chrome). A technique
+  whose own or vow rows apply conditions costs the evaluator's per-row lookups. Function tags are read with
+  one `values_list` (`function_tags_by_technique`), never prefetched onto the identity-mapped
+  techniques (ADR-0263).
+- **URLs** (GET only; staff with view or change permission on `CharacterSheet`, 403
+  otherwise): `_kit_view/<sheet_pk>/` -> `admin_kit_view` (404 for an unknown sheet),
+  `_kit_view/pick/` -> `admin_kit_view_pick` (`?pk=`, redirect, 400 on a missing or unknown
+  pk).
+- **Ways in** - the Combat roles panel's Kit view row, and a "Kit view" object tool on the
+  `CharacterSheet` change form and on the `CharacterVowFocusPick` change form (to the pick's
+  character; `CharacterCovenantRole` has no admin page), through `links.kit_view_url` and the
+  `authoring_tags.kit_view_url` filter in `change_form.html`.
+- Tests: `tests/test_kit_view_live.py` (base and pick lines, an unchosen pick absent, the
+  unlock and rider marks, nothing added, over budget, no vow, secondary only, a sub-role
+  holder's anchor picks, the query pin), `tests/test_kit_view.py` (each module through the
+  client, the gate, the pick route, both change-form links, the request query pin, and the
+  styling test: every class under `#kit-view-root` has a rule reaching the page, with and
+  without a vow), `tests/test_combat_roles_panel.py` (the row and its picker). Deliberate
+  no-ADR: the page follows the approved #4843 spec.
 
 ## Standoff Profile Builder (#4354)
 
@@ -1630,7 +1785,9 @@ sub-URL (`tuning/views.py`): checks-analytics (`tuning_checks_fragment`,
 `checks_analytics.py`), consequence-pool inspector (`tuning_consequences_fragment`,
 `consequence_analytics.py`), condition danger ranking (`tuning_conditions_fragment`,
 `condition_analytics.py`), and Monte Carlo party-vs-boss simulation
-(`tuning_simulation_fragment`, `SimulationRunForm` + `world.combat.simulation`). Read+preview
+(`tuning_simulation_fragment`, `SimulationRunForm` + `world.combat.simulation`; optional
+technique and vow picks, which the dashboard forwards from its own `?technique=` /
+`?covenant_role=` into the panel's first load, #4930). Read+preview
 only — sliders/forms re-render fragments via `hx-get`; the simulation run itself writes
 nothing persistent (isolation contract in `world/combat/simulation.py`'s module docstring).
 

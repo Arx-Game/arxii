@@ -75,3 +75,46 @@ class CovenantRoleBonusGearCarriesStatTests(TestCase):
         self._equip(archetype=GearArchetype.ROBE)
 
         self.assertEqual(self._bonus(self.weapon_target), 0)
+
+    def _equip_across(self, regions, *, weapon_damage=0, armor_soak=0, archetype) -> None:
+        """One piece worn at several slots, as claws on both hands or plate on torso and arms."""
+        from world.items.constants import EquipmentLayer
+
+        template = ItemTemplateFactory(
+            gear_archetype=archetype,
+            base_weapon_damage=weapon_damage,
+            base_armor_soak=armor_soak,
+        )
+        piece = ItemInstanceFactory(template=template)
+        for region in regions:
+            EquippedItemFactory(
+                character=self.character.sheet_data,
+                item_instance=piece,
+                body_region=region,
+                equipment_layer=EquipmentLayer.BASE,
+            )
+        self.character.equipped_items.invalidate()
+
+    def test_a_weapon_in_two_slots_counts_once(self) -> None:
+        # #4898: claws on both hands, or a greatsword held in both, are one weapon.
+        from world.items.constants import BodyRegion
+
+        self._equip_across(
+            (BodyRegion.LEFT_HAND, BodyRegion.RIGHT_HAND),
+            weapon_damage=5,
+            archetype=GearArchetype.MELEE_TWO_HAND,
+        )
+
+        self.assertEqual(self._bonus(self.weapon_target), ROLE_BONUS)
+
+    def test_armor_in_two_slots_counts_per_slot(self) -> None:
+        # Armor stays per slot, as its soak is summed per worn row.
+        from world.items.constants import BodyRegion
+
+        self._equip_across(
+            (BodyRegion.TORSO, BodyRegion.LEFT_ARM),
+            armor_soak=3,
+            archetype=GearArchetype.HEAVY_ARMOR,
+        )
+
+        self.assertEqual(self._bonus(self.soak_target), ROLE_BONUS * 2)

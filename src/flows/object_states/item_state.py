@@ -61,12 +61,20 @@ class ItemState(BaseState):
         obj_location = item.game_object.location
         return obj_location in (character_obj, character_obj.location)
 
+    def is_natural_weapon(self) -> bool:
+        """Whether this item is its holder's natural weapon, never removable (#4898)."""
+        from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+        return is_natural_weapon(self.instance)
+
     # ------------------------------------------------------------------
     # Permission checks
     # ------------------------------------------------------------------
 
     def can_take(self, taker: BaseState | None = None) -> bool:
         """Whether ``taker`` may pick up this item."""
+        if self.is_natural_weapon():
+            return False
         result = self._run_package_hook("can_take", taker)
         if result is not None:
             return bool(result)
@@ -76,6 +84,8 @@ class ItemState(BaseState):
 
     def can_drop(self, dropper: BaseState | None = None) -> bool:
         """Whether ``dropper`` may drop this item."""
+        if self.is_natural_weapon():
+            return False
         result = self._run_package_hook("can_drop", dropper)
         if result is not None:
             return bool(result)
@@ -89,6 +99,8 @@ class ItemState(BaseState):
         recipient: BaseState | None = None,
     ) -> bool:
         """Whether ``giver`` may give this item to ``recipient``."""
+        if self.is_natural_weapon():
+            return False
         result = self._run_package_hook("can_give", giver, recipient)
         if result is not None:
             return bool(result)
@@ -104,3 +116,12 @@ class ItemState(BaseState):
         if wearer is None or wearer.obj is None:
             return True  # no concrete actor — default permissive (used by tests / package hooks)
         return self.is_in_possession(wearer.obj)
+
+    def can_unequip(self, wearer: BaseState | None = None) -> bool:
+        """Whether ``wearer`` may take this item off. A natural weapon never comes off."""
+        if self.is_natural_weapon():
+            return False
+        result = self._run_package_hook("can_unequip", wearer)
+        if result is not None:
+            return bool(result)
+        return True

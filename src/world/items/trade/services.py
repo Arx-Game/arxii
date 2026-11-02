@@ -141,6 +141,11 @@ def stake_item(
         locked_item = ItemInstance.objects.select_for_update().filter(pk=item_instance.pk).first()
         if locked_item is None or locked_item.holder_character_sheet_id != party_sheet.pk:
             raise NotInPossession
+        from world.items.services.natural_weapons import require_removable  # noqa: PLC0415
+
+        # A natural weapon never goes on the table (#4898); can_give below refuses it too,
+        # but with the possession message, so say the real reason first.
+        require_removable(locked_item)
 
         from flows.object_states.item_state import ItemState  # noqa: PLC0415
         from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415

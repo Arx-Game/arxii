@@ -215,7 +215,9 @@ create_region_map(*, name, anchor_x, anchor_y, width_cells, area=None, new_conti
 import_region_map_file(*, region, file_name, data, actor=None)  # parse, keep, rasterize
 rasterize_upload(upload)  # re-run the rasterize step from a kept file
 paint_terrain(*, region, pips, terrain)  # staff pips, survive every upload
-set_footprint(*, area, add=(), remove=()) -> FootprintChange  # takes what it may and skips the rest: carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip and a descendant's pip are skipped and counted by holder name; water is taken like land
+set_footprint(*, area, add=(), remove=()) -> FootprintChange  # takes what it may and skips the rest: carving inside an ancestor moves its row down, shrinking hands it back up; another domain's pip and a descendant's pip are skipped and counted by holder name; water is taken like land; `changed` names every pip moved as (x, y, holder before, holder after)
+clear_footprint(*, area) -> FootprintChange  # every row the area itself holds, on every region map, to its ladder parent or open ground; descendants' rows stay (#4905)
+restore_pips(*, pips) -> int  # give each (x, y, area_id | None) its named holder: the staff undo and redo write one column of a `changed` list back (#4905)
 footprint_of(area)  # every pip inside an area: its own rows and its descendants'
 holder_at(x, y)  # the area whose row holds the pip, or None (open ground)
 region_read(region)  # the pips payload: terrain rows + footprints with holder, title, seat
@@ -229,11 +231,20 @@ ancestor with it. A carve is a drag, and a drag takes what it may (#4317): a pip
 holds, or one a descendant stands on when shrinking, is skipped rather than refusing the whole
 sweep, and the `FootprintChange` names the holders skipped so the action's message can say so.
 Water is a pip like any other: a realm's footprint includes its territorial waters (ApostateCD,
-2026-10-12, reversing the spec's land-only rule on #4242).
+2026-10-12, reversing the spec's land-only rule on #4242). The page's fills honour that by
+staying out of it: Fill and Loop take land only, and water joins a footprint by Brush, on
+purpose (ApostateCD, 2026-11-01, #4905). **Undo restores, it does not invert** (ADR-4905): a
+carve and a clear report each pip's holder before and after, and `restore_pips` writes one
+column back, because `_release` hands a pip to the ladder parent rather than to whoever held
+it, so an inverse carve of a county cut from kingdom-held land would leave the pip with the
+duchy.
 
 **Actions** (`actions/definitions/atlas_map.py`, `category="almanach"`, staff only):
-`atlas_create_region_map`, `atlas_carve_footprint` (`area_id`, `add`/`remove` as `[x, y]`
-lists), `atlas_paint_terrain` (`region_id`, `pips`, `terrain`). Create Domain from the
+`atlas_create_region_map`, `atlas_carve_footprint` (`area_id` or `title_id`, `add`/`remove`
+as `[x, y]` lists; its result `data.changed` is `[[x, y, before, after], ...]`),
+`atlas_clear_footprint` (`area_id` or `title_id`; same `changed` shape, #4905),
+`atlas_restore_footprint` (`pips` as `[[x, y, area_id | null], ...]`, #4905),
+`atlas_paint_terrain` (`region_id`, `pips`, `terrain`). Create Domain from the
 map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a rung.
 
 **API** (`worldmap/views.py`, on the world-builder router, `IsAdminUser`):
@@ -246,7 +257,18 @@ upload, decompressed, under its original name).
 **Frontend:** the Atlas's region-map view (`frontend/src/world-builder/atlas/RegionMapPage.tsx`,
 view kind `regionmap`, reached from the index rail's Maps section): pips on one canvas
 in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
-as a dot; modes select, carve and paint; writes dispatch through `runAction`. The rail's
+as a dot; modes select, carve and paint; writes dispatch through `runAction`. Carve mode
+has three tools (#4905, `regionMapFill.ts`, pure): **Brush** drags a 1, 3 or 7-pip square
+(shift takes pips out; Paint mode shares the width), **Fill** floods the landmass under a
+click, stopping at water and at any domain not on the target's ladder line (shift floods
+the pips the target holds, as a removal), **Loop** joins the drag's samples into a closed
+line and fills the land inside. A big fill goes out in batches of the server's cap. Every
+gesture is one entry in the page's undo and redo stacks (`carveHistory.ts`, pure; cleared on
+unmount), undone and redone through `atlas_restore_footprint` with the entry's before or
+after holders; Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y while in Carve mode. **Clear**
+confirms, then `atlas_clear_footprint`, also an undo entry. Only the domain being carved
+(Carve mode) or the selected one (Select mode) draws an outline; every other footprint is
+shading, since the owner ruled there are no enclaves to disambiguate. The rail's
 New region form carries a continent choice: a new CONTINENT rung by the region's name
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.

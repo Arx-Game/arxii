@@ -399,6 +399,23 @@ def _scope_queryset(entry: ScopeEntry):
     return qs
 
 
+def _deprovision_wiped_natural_weapons() -> None:
+    """A play-time gift the wipe deletes takes its natural weapon with it (#4898).
+
+    The weapon carries its gift as ``ItemInstance.natural_weapon_gift`` and can never be
+    removed by any other path, so a wiped gift would otherwise leave claws nobody can
+    take off. Runs before the ``CharacterGift`` rows go, inside the wipe's transaction.
+    """
+    from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
+
+    wiped = CharacterGift.objects.filter(
+        origin__in=list(PLAY_TIME_ACQUISITION_ORIGINS),
+        gift__natural_weapon_template__isnull=False,
+    ).select_related("character", "gift")
+    for row in wiped:
+        deprovision_natural_weapon(row.character, row.gift)
+
+
 def preview_pristine_world_wipe() -> WipeReport:
     """Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.
 
@@ -487,6 +504,7 @@ def wipe_pristine_world(
 
     counts: list[ScopeCount] = []
     with transaction.atomic():
+        _deprovision_wiped_natural_weapons()
         for entry in SCOPE_TABLE:
             qs = _scope_queryset(entry)
             deleted, _ = qs.delete()

@@ -117,6 +117,13 @@ character-creation/
     │   │                        #   over, and a StatRow per Magic skill writing
     │   │                        #   draft_data.magic_skills. The step is absent with no
     │   │                        #   training and nothing allocated (`magicTraining.ts`)
+    │   ├── StyleStep.tsx        # The fighting style step (#4921), after the Resonance and
+    │   │                        #   only for a Tradition that teaches a style (GET
+    │   │                        #   .../combat-styles/?draft_id=): each style's defense style,
+    │   │                        #   description and an Attacks/Defends profile read in the
+    │   │                        #   closed entry (Entry's `profile` slot; the lines in
+    │   │                        #   `styleLines.ts`), never its vows; saves
+    │   │                        #   selected_combat_style_id. The training step waits on it
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
     │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
@@ -279,6 +286,7 @@ changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
+- `GET /api/character-creation/combat-styles/?draft_id=X` - The combat styles the draft's Tradition teaches, with how each attacks and defends (#4921)
 - `GET /api/magic/resonances/` - Every Resonance with its `affinity_name`, unpaginated (the Gift
   stage's Resonance step; `GET /api/magic/affinities/` lists the Affinities, #4665)
 - `GET /api/character-creation/glimpse-tags/` - List the active glimpse tag catalog (guided Glimpse flow, #2427)

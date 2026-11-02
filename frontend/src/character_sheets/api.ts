@@ -581,6 +581,11 @@ export interface CharacterSheetPayload {
   plate_ink: PlateInk;
   /** #3898 — what the character has on, as the layer walk says anyone would see it. */
   worn: CharacterSheetWorn[];
+  /** #4898 — claws, a bite or horns a gift gave them. Empty for anyone but the owner and staff. */
+  natural_weapons: CharacterSheetNaturalWeapon[];
+  /** #4921: how the character was taught to fight, with its skill value. Null for anyone
+   * but the owner and staff, and for a character with no style. */
+  combat_style: CharacterSheetCombatStyle | null;
   /** #3898 — active Mentor's Vow bonds. Empty for anyone but the owner and staff. */
   mentors: CharacterSheetMentor[];
   /** #3901 — land the character's organizations hold. Empty for anyone but the owner. */
@@ -745,6 +750,47 @@ export interface CharacterSheetWorn {
   name: string;
   description: string;
   is_hidden: boolean;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.NaturalWeaponEntry` (#4898) — one natural weapon.
+ * `from_species` is true when the gift came as a species grant. `facets_used` counts the
+ * crafted facets, the ones `facet_capacity` limits.
+ */
+export interface CharacterSheetNaturalWeapon {
+  id: number;
+  name: string;
+  gift_name: string;
+  from_species: boolean;
+  damage: number;
+  /** The damage type's name, blank when it has none. */
+  damage_type: string;
+  facets: string[];
+  facets_used: number;
+  facet_capacity: number;
+}
+
+/**
+ * The character's combat style (#4921): how it attacks and defends, in the same fields
+ * the CG style step reads (never its vows), and the character's value in its skill.
+ */
+export interface CharacterSheetCombatStyle {
+  id: number;
+  name: string;
+  description: string;
+  defense_style: string;
+  defense_style_display: string;
+  armor_share_tenths: number;
+  hit_stat_name: string | null;
+  weapon_kinds: { value: string; label: string }[];
+  armor_kinds: { value: string; label: string }[];
+  /** The style's own skill, blank when it has none. */
+  skill_name: string;
+  skill_value: number;
+  /** The character's active Tradition when it teaches the style, else the first that does. */
+  tradition_name: string | null;
+  /** The vows the style works with, in name order (the sheet shows them; creation never). */
+  vows: string[];
 }
 
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {

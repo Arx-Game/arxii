@@ -68,16 +68,28 @@ class CmdSphinx(ArxCommand):
 
         if verdict.tier == SphinxTier.TAKES:
             lines.append("The vow will take.")
+            lines.extend(self._style_line(verdict))
             lines.extend(self._answered_lines(verdict))
         elif verdict.tier == SphinxTier.DORMANT:
             lines.append("The vow would lie dormant in places:")
             lines.extend(self._uncovered_lines(verdict))
+            lines.extend(self._style_line(verdict))
         else:
             lines.append("The vow will not take. Yet.")
+            lines.extend(self._style_line(verdict))
             lines.extend(self._uncovered_lines(verdict))
             lines.extend(self._shopping_lines(verdict))
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _style_line(verdict: SphinxVerdict) -> list[str]:
+        """Whether the character's combat style suits the vow (#4921); none without one."""
+        if verdict.style is None:
+            return []
+        if verdict.style.suits:
+            return ["Your style suits it."]
+        return ["Your style does not suit it: no style benefits while it is active."]
 
     @staticmethod
     def _answered_lines(verdict: SphinxVerdict) -> list[str]:

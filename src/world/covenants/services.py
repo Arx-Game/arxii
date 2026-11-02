@@ -896,6 +896,7 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
     Does NOT revoke techniques the character learned independently — only
     grants role-specific ones.
     """
+    from world.items.services.natural_weapons import provision_natural_weapon  # noqa: PLC0415
     from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415  # noqa: PLC0415
         CharacterGift,
@@ -920,6 +921,10 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
             gift=gift,
             defaults={"origin": AcquisitionOrigin.ROLE_GRANT},
         )
+        # A role gift that names a natural weapon gives it here too (#4898). This path
+        # mints CharacterGift itself rather than through grant_gift_to_character, which
+        # would also provision a GIFT thread a role grant has never made.
+        provision_natural_weapon(sheet, gift)
         # Mint CharacterTechnique for each of the gift's techniques. An ultimate is
         # never auto-granted (#4098) — it is reachable only by discovering it at
         # Audere/Audere Majora.

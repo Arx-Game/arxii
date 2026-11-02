@@ -447,9 +447,11 @@ def record_offering(
     points (doubled for a favored facet) set the pool grant and the officiant's devotion
     (``devotion_per_offering_point``); an item with no points, or past the week's limit
     shared with shrine sacrifices, is given up for nothing. A ceremony offering is not
-    rolled separately: the ceremony's own rite roll is its check.
+    rolled separately: the ceremony's own rite roll is its check. A natural weapon (#4898)
+    is part of the body and is refused before anything is given up.
     """
     _require_open(ceremony)
+    _refuse_natural_weapons(item_instances)
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
     from world.worship.sacrifice_services import sacrifice_slots_left  # noqa: PLC0415
@@ -1343,16 +1345,31 @@ def _pay_sacrifice(
     )
 
 
+def _refuse_natural_weapons(item_instances: "list[ItemInstance]") -> None:
+    """A ceremony offering never takes a natural weapon (#4898): it is part of the body."""
+    from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
+    if any(is_natural_weapon(instance) for instance in item_instances):
+        message = NaturalWeaponNotRemovable.user_message
+        raise CeremonyError(message, user_message=message)
+
+
 def _validate_sacrifice_items(
     sheet: "CharacterSheet", item_instances: "list[ItemInstance]"
 ) -> None:
-    """Refuse the whole sacrifice if any item is not carried by its giver."""
+    """Refuse the whole sacrifice if any item is not carried by its giver, or is a natural
+    weapon (#4898), which is part of the body."""
+    from world.items.exceptions import NaturalWeaponNotRemovable  # noqa: PLC0415
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
     from world.worship.exceptions import SacrificeRefused  # noqa: PLC0415
 
     for instance in item_instances:
         if instance.game_object is None or instance.game_object.location != sheet.character:
             msg = f"You are not carrying {instance}."
             raise SacrificeRefused(msg)
+        if is_natural_weapon(instance):
+            raise SacrificeRefused(NaturalWeaponNotRemovable.user_message)
 
 
 def _roll_counted_sacrifice(

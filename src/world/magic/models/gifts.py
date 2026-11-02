@@ -11,12 +11,13 @@ from django.utils.functional import cached_property
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.items.constants import GearArchetype
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 from world.magic.skill_choices import (
-    MAGIC_SKILL_CHOICES,
-    MAGIC_SKILL_ERROR_MESSAGES,
-    MAGIC_SKILL_HELP,
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
 )
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
@@ -121,13 +122,29 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="technique_skill_gifts",
-        limit_choices_to=MAGIC_SKILL_CHOICES,
-        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
         help_text=(
             "Minor Gifts only (#4450): the skill added to every cast of this Gift's "
             "techniques. A technique's own skill, if set, wins. A Major Gift's "
             "techniques take the caster's Path technique skill instead. Blank = this "
-            f"Gift adds no skill. {MAGIC_SKILL_HELP}"
+            f"Gift adds no skill. {MAGIC_PICKER_SKILL_HELP}"
+        ),
+    )
+    # The gift points at the item primitive (ADR-0010). The weapon made from it carries
+    # ItemInstance.natural_weapon_gift back to this gift, so a plain copy of the same
+    # template stays ordinary gear (#4898).
+    natural_weapon_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="natural_weapon_gifts",
+        limit_choices_to={"gear_archetype": GearArchetype.UNARMED},
+        help_text=(
+            "Claws, a bite or horns this gift gives its holder: an Unarmed item template "
+            "worn at the skin layer. Made and equipped once when the gift is gained; it "
+            "comes off only if the gift is lost. Blank = no natural weapon."
         ),
     )
     ultimate_techniques = models.ManyToManyField(
