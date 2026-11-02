@@ -103,6 +103,11 @@ ALLOWED_MIGRATIONS: set[str] = {
     # catalog rows the code reads by key, the same 2026-10-22 ruling as 0334. An existing
     # row keeps its value; a fresh database gets the same rows from ensure_maneuver_effects().
     "world/migrations/0351_strike_maneuver_effects.py",
+    # #4975: ADR-0237 restructure backfill, carries each role's CovenantRoleDefenseProfile and
+    # GearArchetypeCompatibility rows onto placeholder CombatStyle rows (plain names, blank
+    # prose, no skill) before 0366 drops both tables. Every style mirrors rows that already
+    # existed in a different shape; nothing is invented. No-op on empty databases.
+    "world/migrations/0365_vow_tables_to_placeholder_styles.py",
 }
 
 # Patterns that suggest seed data in migrations
