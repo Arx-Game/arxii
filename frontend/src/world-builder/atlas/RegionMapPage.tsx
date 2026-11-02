@@ -92,6 +92,7 @@ function cursorClass(panning: boolean, mode: MapMode): string {
   return mode === 'select' ? 'cursor-grab' : 'cursor-crosshair';
 }
 const DRAG_THRESHOLD_PX = 4;
+const NO_DOMAIN_MESSAGE = 'Pick a domain to carve.';
 /** The server's per-call cap (`MAX_FOOTPRINT_PIPS_PER_CALL`); a bigger fill goes in batches. */
 const MAX_PIPS_PER_CALL = 20000;
 /** View storage is keyed by node id; region maps live past every area id. */
@@ -236,6 +237,12 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     const startY = event.clientY;
     const origin = view;
     const panMode = mode === 'select' || event.altKey;
+    if (!panMode && mode === 'carve' && carveTitleId == null) {
+      // A carve with nothing picked is a mistake, not a gesture: say so before any
+      // drag or preview starts (#4935).
+      toast.error(NO_DOMAIN_MESSAGE);
+      return;
+    }
     const remove = event.shiftKey;
     let moved = false;
     const dragged = new Set<string>();
@@ -305,7 +312,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     try {
       if (mode === 'carve') {
         if (carveTitleId == null) {
-          toast.error('Pick a domain to carve.');
+          toast.error(NO_DOMAIN_MESSAGE);
           return;
         }
         // Every batch that landed is undoable, even when a later batch is refused or
@@ -594,6 +601,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
                   size="sm"
                   variant={tool === t ? 'default' : 'outline'}
                   aria-pressed={tool === t}
+                  disabled={carveTitleId == null}
                   onClick={() => setTool(t)}
                 >
                   {TOOL_LABELS[t]}

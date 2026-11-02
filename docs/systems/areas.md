@@ -258,7 +258,9 @@ upload, decompressed, under its original name).
 view kind `regionmap`, reached from the index rail's Maps section): pips on one canvas
 in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
 as a dot; modes select, carve and paint; writes dispatch through `runAction`. Carve mode
-has three tools (#4905, `regionMapFill.ts`, pure): **Brush** drags a 1, 3 or 7-pip square
+has three tools (#4905, `regionMapFill.ts`, pure), disabled until a domain is picked (a gesture
+on the map without one is refused with "Pick a domain to carve." before any drag starts,
+#4935): **Brush** drags a 1, 3 or 7-pip square
 (shift takes pips out; Paint mode shares the width), **Fill** floods the landmass under a
 click, stopping at water and at any domain not on the target's ladder line (shift floods
 the pips the target holds, as a removal), **Loop** joins the drag's samples into a closed
