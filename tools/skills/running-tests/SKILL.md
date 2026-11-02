@@ -25,7 +25,7 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 Production runs Postgres exclusively. Tests run in TWO tiers:
 
 1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`), and cached: `SqliteTestRunner` saves the built test DB to `src/.test_schema_cache/` keyed by a model-state fingerprint and restores it on later runs, so only the first run after a model change pays the schema build (~15s extra). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: ~6-10s of fixed per-invocation overhead (imports, discovery, cached-schema restore) plus the tests themselves. `ARX_SCHEMA_CACHE=0` bypasses the cache if you suspect it.
-2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Uses the same schema-from-models build CI uses: the test DB is pre-built by `tools/build_schema.py` (via `just build-test-schema`) and reused across runs with `--keepdb`, not rebuilt from migration replay per run. Migration replay only happens at chain regeneration, in `just verify-regeneration` (ADR-0083, ADR-4250). Building the test DB once (`just build-test-schema`, or automatically on the first `just test-parity`/`just regression` run) takes seconds, not the 48 minutes a full migration replay cost on a dev box on 2026-09-05 (ADR-0276 regenerates the chain; a monthly job opens an issue once 100 incremental migrations pile up, ADR-4250) — parity runs are fast locally afterward. Go through `just test-parity <app>` / `just regression` (or `build-test-schema --rebuild` after a model change), not bare `arx test`/`arx test --keepdb` — only the `just` recipes probe that the pre-built schema (partition, matviews, seeds) is actually complete before reusing it; a bare Django-created test DB is syncdb-only and missing all three. CI's 6-shard matrix (`.github/workflows/ci.yml`) runs every PR on this tier.
+2. **Parity tier — Postgres, run by CI** (not locally; see the local testing rule). `just test-parity <app>` / `arx test` (no flag — PG is the default). Uses the same schema-from-models build CI uses: the test DB is pre-built by `tools/build_schema.py` (via `just build-test-schema`) and reused across runs with `--keepdb`, not rebuilt from migration replay per run. Migration replay only happens at chain regeneration, in `just verify-regeneration` (ADR-0083, ADR-4250). Building the test DB once (`just build-test-schema`, or automatically on the first `just test-parity`/`just regression` run) takes seconds, not the 48 minutes a full migration replay cost on a dev box on 2026-09-05 (ADR-0276 regenerates the chain; a monthly job opens an issue once 100 incremental migrations pile up, ADR-4250) — parity runs are fast locally afterward. When this tier does run (CI, or the rare local repro), it goes through `just test-parity <app>` / `just regression` (or `build-test-schema --rebuild` after a model change), not bare `arx test`/`arx test --keepdb` — only the `just` recipes probe that the pre-built schema (partition, matviews, seeds) is actually complete before reusing it; a bare Django-created test DB is syncdb-only and missing all three. CI's 6-shard matrix (`.github/workflows/ci.yml`) runs every PR on this tier.
 
 ### Local testing rule
 
@@ -61,11 +61,11 @@ just test-fast <app>.tests.test_module   # one module (serial)
 just test-fast <app1> <app2>             # multiple apps (auto --parallel): CI only
 just test-fast-par <app>                 # force --parallel: CI only
 
-# Change-impact-aware (touched apps PLUS importers; many apps at once, so CI-scale):
+# Change-impact-aware (touched apps PLUS importers; many apps at once, so CI only):
 just test-affected                       # diff vs origin/main: not run locally
 just test-affected --keepdb              # extra args passed to arx test
 
-# Parity tier (PG, serial by default — pass --parallel yourself if you want it):
+# Parity tier (PG, serial by default; CI runs it):
 just test-parity <app>                   # one app: CI's tier, not run locally
 just test-parity                         # full suite: CI's tier, not run locally
 
@@ -78,9 +78,9 @@ just regression                          # echo "yes" | arx test
 
 ```bash
 # Direct arx test (when you need exact CLI control):
-arx test <app>                                 # PG, serial (default)
+arx test <app>                                 # PG, serial (default): CI only
 arx test --sqlite <app>                        # SQLite inner loop
-arx test --parallel <app>                      # PG, parallel — use for large suites
+arx test --parallel <app>                      # PG, parallel: CI only
 arx test --exclude-tag postgres --sqlite ...   # skip @tag("postgres") explicitly on SQLite
 ```
 
@@ -177,8 +177,8 @@ just regression                        # echo "yes" | arx test — fresh DB, mat
 just                        # list recipes
 just test flows --keepdb    # arx test pass-through
 just test-fast world.foo    # SQLite inner loop (serial)
-just test-fast-par world.foo # SQLite inner loop (forced parallel)
-just test-affected          # only apps your branch touches + importers (CI-scale)
+just test-fast-par world.foo # SQLite, forced parallel: CI only
+just test-affected          # only apps your branch touches + importers: CI only
 just test-parity world.foo  # PG parity tier (CI's tier)
 just regression             # full no-keepdb regression run (CI's tier)
 just lint                   # ruff check

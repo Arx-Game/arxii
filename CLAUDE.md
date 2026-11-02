@@ -559,8 +559,9 @@ rule: see the `running-tests` skill.
 
 ## Proactive Quality Checks
 
-- **After editing Python:** run `arx test <app>` for the affected app (don't wait to
-  be asked) and `ruff check <file>` on changed files.
+- **After editing Python:** run the test module you changed on the SQLite tier
+  (`just test-fast <app>.tests.test_module`, don't wait to be asked) and
+  `ruff check <file>` on changed files.
 - **After editing TypeScript:** run `pnpm typecheck` and `pnpm lint` on changed files.
 - **Dead-code removal (careful — active development):** check for TODO/FIXME first;
   stubs/empty implementations/unused imports may be intentional placeholders. When
