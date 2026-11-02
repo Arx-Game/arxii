@@ -54,6 +54,8 @@ def _url_for(result: rc.ProbeResult, text: str) -> str | None:
 
 
 class CombatRoleFlagsCase(TestCase):
+    _effects_made = 0
+
     @classmethod
     def setUpTestData(cls) -> None:
         VowFocusPickConfigFactory(budget_per_level=4)
@@ -108,7 +110,12 @@ class CombatRoleFlagsCase(TestCase):
     @classmethod
     def _land(cls, template, setters: int) -> None:
         for _ in range(setters):
-            effect = VowAddedEffectFactory(covenant_role=cls.warden)
+            # A distinct unlock level per effect: Postgres treats the scope key's nulls as
+            # equal, so two otherwise identical effects on one vow collide.
+            cls._effects_made += 1
+            effect = VowAddedEffectFactory(
+                covenant_role=cls.warden, unlock_thread_level=cls._effects_made
+            )
             VowAddedEffectAppliedConditionFactory(effect=effect, condition=template)
 
     @classmethod
