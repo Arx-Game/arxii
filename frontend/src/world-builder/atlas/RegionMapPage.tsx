@@ -18,6 +18,16 @@ import { toast } from 'sonner';
 
 import { useAlmanachMutation, useLadder, useRealms } from '@/almanach/queries';
 import { Plate, PlateHead } from '@/components/folio';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -35,7 +45,22 @@ import {
   zoomAround,
   type LatticeView,
 } from './latticeState';
-import { EMPTY_HISTORY, type CarveHistory } from './carveHistory';
+import {
+  EMPTY_HISTORY,
+  afterHolders,
+  beforeHolders,
+  chunk,
+  parseChanged,
+  pushEntry,
+  restoreRedo,
+  restoreUndo,
+  takeRedo,
+  takeUndo,
+  type CarveEntry,
+  type CarveHistory,
+  type PipChange,
+  type PipHolder,
+} from './carveHistory';
 import {
   PIP_PX,
   TERRAIN_COLORS,
@@ -45,7 +70,15 @@ import {
   pipKey,
   regionBounds,
 } from './regionMapCanvas';
-import { BRUSH_WIDTHS, brushPips, type BrushWidth, type Pip } from './regionMapFill';
+import {
+  BRUSH_WIDTHS,
+  brushPips,
+  floodHeld,
+  floodLand,
+  loopInterior,
+  type BrushWidth,
+  type Pip,
+} from './regionMapFill';
 
 type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
@@ -59,6 +92,8 @@ function cursorClass(panning: boolean, mode: MapMode): string {
   return mode === 'select' ? 'cursor-grab' : 'cursor-crosshair';
 }
 const DRAG_THRESHOLD_PX = 4;
+/** The server's per-call cap (`MAX_FOOTPRINT_PIPS_PER_CALL`); a bigger fill goes in batches. */
+const MAX_PIPS_PER_CALL = 20000;
 /** View storage is keyed by node id; region maps live past every area id. */
 const VIEW_NODE_OFFSET = 1_000_000;
 const PLANT_TIERS = ['kingdom', 'duchy', 'county', 'march', 'barony'] as const;
@@ -85,7 +120,8 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const [paintTerrain, setPaintTerrain] = useState<string>('plain');
   const [tool, setTool] = useState<CarveTool>('brush');
   const [brushWidth, setBrushWidth] = useState<BrushWidth>(1);
-  const [history] = useState<CarveHistory>(EMPTY_HISTORY);
+  const [history, setHistory] = useState<CarveHistory>(EMPTY_HISTORY);
+  const [clearOpen, setClearOpen] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [pendingRemove, setPendingRemove] = useState(false);
   const [plantOpen, setPlantOpen] = useState(false);
@@ -165,6 +201,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     () => data?.footprints.find((f) => f.area_id === selectedAreaId) ?? null,
     [data, selectedAreaId]
   );
+  const ladderRows = ladder?.rows ?? [];
   const carveTarget = useMemo(
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
@@ -202,12 +239,14 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     const remove = event.shiftKey;
     let moved = false;
     const dragged = new Set<string>();
-    const brushing = mode === 'paint' || tool === 'brush';
+    const path: Pip[] = [];
+    const carveTool: CarveTool = mode === 'paint' ? 'brush' : tool;
     const addPip = (clientX: number, clientY: number) => {
       const pip = pipAt(data.region, view, rect, clientX, clientY);
       if (!pip) return;
-      const pips = brushing ? brushPips(pip, brushWidth).filter(insideRegion) : [pip];
+      const pips = carveTool === 'brush' ? brushPips(pip, brushWidth).filter(insideRegion) : [pip];
       for (const [x, y] of pips) dragged.add(pipKey(x, y));
+      path.push(pip);
       setPending(new Set(dragged));
       setPendingRemove(remove);
     };
@@ -236,8 +275,19 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
         }
         return;
       }
-      const pips = [...dragged].map((key) => key.split(',').map(Number) as [number, number]);
       setPending(new Set());
+      if (carveTool === 'fill') {
+        if (moved || path.length === 0 || carveTitleId == null) return;
+        const pips = remove
+          ? floodHeld(data, path[0], carveTitleId)
+          : floodLand(data, path[0], carveTitleId, ladderRows);
+        if (pips.length > 0) void commit(pips, remove);
+        return;
+      }
+      const pips =
+        carveTool === 'loop'
+          ? loopInterior(data, path)
+          : [...dragged].map((key) => key.split(',').map(Number) as Pip);
       if (pips.length === 0) return;
       void commit(pips, remove);
     };
@@ -258,10 +308,16 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           toast.error('Pick a domain to carve.');
           return;
         }
-        await runAction({
-          key: 'atlas_carve_footprint',
-          kwargs: { title_id: carveTitleId, [remove ? 'remove' : 'add']: pips },
-        });
+        const changed: PipChange[] = [];
+        for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
+          const result = await runAction({
+            key: 'atlas_carve_footprint',
+            kwargs: { title_id: carveTitleId, [remove ? 'remove' : 'add']: part },
+          });
+          if (result.success === false) break;
+          changed.push(...parseChanged(result.data));
+        }
+        setHistory((h) => pushEntry(h, { titleId: carveTitleId, changed }));
       } else if (mode === 'paint') {
         await runAction({
           key: 'atlas_paint_terrain',
@@ -272,6 +328,67 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       // the mutation already toasted
     }
   };
+
+  // ---- undo, redo, clear (#4905): restores write prior holders back, never an inverse carve
+  const restore = async (holders: PipHolder[]): Promise<boolean> => {
+    try {
+      for (const part of chunk(holders, MAX_PIPS_PER_CALL)) {
+        const result = await runAction({ key: 'atlas_restore_footprint', kwargs: { pips: part } });
+        if (result.success === false) return false;
+      }
+      return true;
+    } catch {
+      return false; // the mutation already toasted
+    }
+  };
+  const undo = async () => {
+    const taken = takeUndo(history);
+    if (!taken.entry) return;
+    const entry: CarveEntry = taken.entry;
+    setHistory(taken.history);
+    if (!(await restore(beforeHolders(entry)))) setHistory((h) => restoreUndo(h, entry));
+  };
+  const redo = async () => {
+    const taken = takeRedo(history);
+    if (!taken.entry) return;
+    const entry: CarveEntry = taken.entry;
+    setHistory(taken.history);
+    if (!(await restore(afterHolders(entry)))) setHistory((h) => restoreRedo(h, entry));
+  };
+  const clearTarget = async () => {
+    setClearOpen(false);
+    if (carveTitleId == null) return;
+    try {
+      const result = await runAction({
+        key: 'atlas_clear_footprint',
+        kwargs: { title_id: carveTitleId },
+      });
+      if (result.success === false) return;
+      setHistory((h) =>
+        pushEntry(h, { titleId: carveTitleId, changed: parseChanged(result.data) })
+      );
+    } catch {
+      // the mutation already toasted
+    }
+  };
+  const keysRef = useRef({ undo, redo });
+  keysRef.current = { undo, redo };
+  useEffect(() => {
+    if (mode !== 'carve') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      if (target && /^(input|select|textarea)$/i.test(target.tagName)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'z' && event.shiftKey) void keysRef.current.redo();
+      else if (key === 'z') void keysRef.current.undo();
+      else if (key === 'y') void keysRef.current.redo();
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode]);
 
   const plant = async () => {
     if (realmId == null || !plantName.trim()) return;
@@ -456,13 +573,31 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
               </Button>
             ))}
             {tool === 'brush' && brushWidthSelect}
-            <Button type="button" size="sm" variant="ghost" disabled={history.undo.length === 0}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={history.undo.length === 0}
+              onClick={() => void undo()}
+            >
               Undo
             </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={history.redo.length === 0}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={history.redo.length === 0}
+              onClick={() => void redo()}
+            >
               Redo
             </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={carveTitleId == null}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={carveTitleId == null}
+              onClick={() => setClearOpen(true)}
+            >
               Clear
             </Button>
           </>
@@ -601,6 +736,23 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           </Plate>
         </aside>
       </div>
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Clear {carveTarget?.name || carveTarget?.tier || 'this domain'} from the map
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Every pip it holds itself, on every region. Its child domains keep their ground. Undo
+              puts it back.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void clearTarget()}>Clear</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

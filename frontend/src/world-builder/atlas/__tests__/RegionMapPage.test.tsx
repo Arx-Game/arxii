@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -68,10 +68,13 @@ const payload: RegionMapPips = {
     },
   },
   terrains: ['water', 'plain', 'forest'],
-  pips: [
-    [0, 0, 'water', false],
-    [1, 0, 'plain', true],
-  ],
+  // a nine-pip island at (1..3, 0..2) in a sea
+  pips: Array.from({ length: 5 * 4 }, (_, i): RegionMapPips['pips'][number] => {
+    const x = i % 5;
+    const y = Math.floor(i / 5);
+    const land = x >= 1 && x <= 3 && y <= 2;
+    return [x, y, land ? 'plain' : 'water', x === 1 && y === 0];
+  }),
   footprints: [
     {
       area_id: 10,
@@ -170,6 +173,96 @@ describe('RegionMapPage', () => {
     expect(add).toHaveLength(9);
     expect(add).toContainEqual([4, 4]);
     expect(add).toContainEqual([6, 6]);
+  });
+
+  async function enterCarve(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+  }
+  function click(x: number, y: number) {
+    const viewport = screen.getByTestId('region-map-viewport');
+    fireEvent.pointerDown(viewport, { clientX: x, clientY: y, button: 0 });
+    fireEvent.pointerUp(window, { clientX: x, clientY: y });
+  }
+  const lastCall = () => mutateAsync.mock.calls.at(-1)?.[0];
+  const ISLAND = ['1,0', '1,1', '1,2', '2,0', '2,1', '2,2', '3,0', '3,1', '3,2'];
+
+  it('fills the landmass under a click and nothing from water', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    await user.click(screen.getByRole('button', { name: 'Fill' }));
+    click(3, 3); // pip (0, 0): water
+    click(9, 9); // pip (1, 1): the island
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const { key, kwargs } = lastCall();
+    expect(key).toBe('atlas_carve_footprint');
+    const add = (kwargs.add as [number, number][]).map(([x, y]) => `${x},${y}`).sort();
+    expect(add).toEqual(ISLAND);
+  });
+
+  it('fills the land inside a drawn loop', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    await user.click(screen.getByRole('button', { name: 'Loop' }));
+    const viewport = screen.getByTestId('region-map-viewport');
+    // the island's four corners, sampled far apart: the loop must join them and fill (2, 1)
+    fireEvent.pointerDown(viewport, { clientX: 9, clientY: 3, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 21, clientY: 3 });
+    fireEvent.pointerMove(window, { clientX: 21, clientY: 15 });
+    fireEvent.pointerMove(window, { clientX: 9, clientY: 15 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 15 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const add = (lastCall().kwargs.add as [number, number][]).map(([x, y]) => `${x},${y}`).sort();
+    expect(add).toEqual(ISLAND);
+  });
+
+  it('undoes a gesture by restoring prior holders, redoes with the new ones, and keeps a refused undo', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { changed: [[1, 0, null, 10]] },
+    });
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    click(9, 3);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    mutateAsync.mockResolvedValue({ success: true, message: '', data: null });
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    expect(lastCall()).toEqual({
+      key: 'atlas_restore_footprint',
+      kwargs: { pips: [[1, 0, null]] },
+    });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Redo' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    expect(lastCall()).toEqual({
+      key: 'atlas_restore_footprint',
+      kwargs: { pips: [[1, 0, 10]] },
+    });
+    // the server refuses the next undo: the entry stays
+    mutateAsync.mockResolvedValue({ success: false, message: 'No.', data: null });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    expect(lastCall().key).toBe('atlas_restore_footprint');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+  });
+
+  it('clears the domain behind a confirmation', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Salvation');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(lastCall()).toEqual({ key: 'atlas_clear_footprint', kwargs: { title_id: 100 } });
   });
 
   it('shows the loading and error states', () => {
