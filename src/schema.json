@@ -11750,6 +11750,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
+  /api/covenants/character-roles/vow-picks/:
+    get:
+      operationId: covenants_character_roles_vow_picks_list
+      description: |-
+        GET /api/covenants/character-roles/vow-picks/?character_sheet=<id>
+
+        Every focus pick each of the character's primary vows offers, by level, with
+        the chosen ones marked and the locked ones saying why (#4929). Read-only and
+        self-only: a player reads only a character they play now; staff read any.
+        Choosing goes through the action dispatch (``choose_vow_focus_pick``).
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VowPickCatalog'
+          description: ''
   /api/covenants/covenants/:
     get:
       operationId: covenants_covenants_list
@@ -99207,6 +99230,113 @@ components:
       - name
       - position_id
       - position_name
+    VowPickCatalog:
+      type: object
+      description: Every focus pick one primary vow offers its holder, by level (#4929).
+        Read-only.
+      properties:
+        membership_id:
+          type: integer
+          readOnly: true
+        covenant_id:
+          type: integer
+          readOnly: true
+        covenant:
+          type: string
+          readOnly: true
+        vow:
+          type: string
+          readOnly: true
+        vow_level:
+          type: integer
+          readOnly: true
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/VowPickLevel'
+          readOnly: true
+      required:
+      - covenant
+      - covenant_id
+      - levels
+      - membership_id
+      - vow
+      - vow_level
+    VowPickEntry:
+      type: object
+      description: One focus pick in a vow holder's catalog (#4929). Read-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        price:
+          type: integer
+          readOnly: true
+        effects:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        limits:
+          type: string
+          readOnly: true
+        chosen:
+          type: boolean
+          readOnly: true
+        locked_reason:
+          type: string
+          readOnly: true
+        choosable:
+          type: boolean
+          readOnly: true
+      required:
+      - choosable
+      - chosen
+      - description
+      - effects
+      - id
+      - limits
+      - locked_reason
+      - name
+      - price
+    VowPickLevel:
+      type: object
+      description: 'One pick level of a vow holder''s catalog: budget, spend, what
+        is left, picks.'
+      properties:
+        level:
+          type: integer
+          readOnly: true
+        is_open:
+          type: boolean
+          readOnly: true
+        budget:
+          type: integer
+          readOnly: true
+        spent:
+          type: integer
+          readOnly: true
+        left:
+          type: integer
+          readOnly: true
+        picks:
+          type: array
+          items:
+            $ref: '#/components/schemas/VowPickEntry'
+          readOnly: true
+      required:
+      - budget
+      - is_open
+      - left
+      - level
+      - picks
+      - spent
     Voyage:
       type: object
       description: Serializer for Voyage — includes nested participants and invites.

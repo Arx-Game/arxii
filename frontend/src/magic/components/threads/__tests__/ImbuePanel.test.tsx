@@ -12,6 +12,11 @@ vi.mock('@/magic/queries', () => ({
   useImbueThread: vi.fn(),
 }));
 
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({ data: [{ id: 42, character_id: 100 }] })),
+}));
+
+import { MemoryRouter } from 'react-router-dom';
 import * as magicQueries from '@/magic/queries';
 import { ImbuePanel } from '../ImbuePanel';
 
@@ -228,5 +233,51 @@ describe('ImbuePanel', () => {
       expect(screen.getByTestId('imbue-result')).toBeInTheDocument();
       expect(screen.getByTestId('imbue-levels-gained')).toBeInTheDocument();
     });
+  });
+
+  it('leads to the sheet to choose picks when the imbue opened a vow pick level', () => {
+    const message = 'You complete the rite, imbuing Quicksilver.\nVow level 2: 4 pts of new picks.';
+    const mockMutate = vi.fn((_vars, options: { onSuccess: (result: unknown) => void }) =>
+      options.onSuccess({ success: true, message, opened_pick_levels: [2] })
+    );
+    vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+      makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+        typeof magicQueries.useImbueThread
+      >
+    );
+    const Wrapper = createWrapper();
+    render(
+      <MemoryRouter>
+        <Wrapper>
+          <ImbuePanel thread={makeThread()} balance={10} characterSheetId={100} />
+        </Wrapper>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('imbue-button'));
+
+    expect(screen.getByText(/Vow level 2: 4 pts of new picks\./)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Choose picks' })).toHaveAttribute(
+      'href',
+      '/characters/42?section=ties'
+    );
+  });
+
+  it('offers no Choose picks when nothing opened', () => {
+    const mockMutate = vi.fn((_vars, options: { onSuccess: (result: unknown) => void }) =>
+      options.onSuccess({ success: true, message: 'Done.', opened_pick_levels: [] })
+    );
+    vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+      makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+        typeof magicQueries.useImbueThread
+      >
+    );
+    render(<ImbuePanel thread={makeThread()} balance={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    fireEvent.click(screen.getByTestId('imbue-button'));
+
+    expect(screen.queryByRole('link', { name: 'Choose picks' })).not.toBeInTheDocument();
   });
 });

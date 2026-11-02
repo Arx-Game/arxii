@@ -3,10 +3,13 @@
  *
  * Shows a stepper for `amount` (0..balance). Amount=0 is valid (probes blocked_by).
  * On success, displays an inline summary of levels_gained, new_level, and blocked_by.
- * On error, shows the typed user_message inline.
+ * On error, shows the typed user_message inline. When the imbue opened new vow pick
+ * levels (#4929), "Choose picks" leads to the character's sheet, where they are chosen.
  */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { extractErrorMessage } from '@/lib/errors';
 import { useImbueThread } from '../../queries';
 import type { ImbueResponse, Thread } from '../../types';
@@ -17,6 +20,18 @@ interface ImbuePanelProps {
   balance: number;
   characterSheetId: number;
   onResult?: (result: ImbueResponse) => void;
+}
+
+/** The sheet's Ties section, where the vow's picks are chosen. */
+function ChoosePicksLink({ characterSheetId }: { characterSheetId: number }) {
+  const { data: entries } = useMyRosterEntriesQuery();
+  const entry = entries?.find((row) => row.character_id === characterSheetId);
+  if (!entry) return null;
+  return (
+    <Button asChild size="sm" variant="outline">
+      <Link to={`/characters/${entry.id}?section=ties`}>Choose picks</Link>
+    </Button>
+  );
 }
 
 export function ImbuePanel({ thread, balance, characterSheetId, onResult }: ImbuePanelProps) {
@@ -96,7 +111,12 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
       {/* Success summary */}
       {lastResult && lastResult.success && (
         <div className="space-y-1 rounded-md bg-muted p-3 text-sm" data-testid="imbue-result">
-          {lastResult.message && <p className="text-muted-foreground">{lastResult.message}</p>}
+          {lastResult.message && (
+            <p className="whitespace-pre-line text-muted-foreground">{lastResult.message}</p>
+          )}
+          {(lastResult.opened_pick_levels?.length ?? 0) > 0 && (
+            <ChoosePicksLink characterSheetId={characterSheetId} />
+          )}
           {lastResult.levels_gained !== undefined && (
             <p data-testid="imbue-levels-gained">
               <span className="font-medium">{lastResult.levels_gained}</span>{' '}

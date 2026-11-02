@@ -8068,6 +8068,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/vow-picks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/covenants/character-roles/vow-picks/?character_sheet=<id>
+     *
+     *     Every focus pick each of the character's primary vows offers, by level, with
+     *     the chosen ones marked and the locked ones saying why (#4929). Read-only and
+     *     self-only: a player reads only a character they play now; staff read any.
+     *     Choosing goes through the action dispatch (``choose_vow_focus_pick``).
+     */
+    get: operations['covenants_character_roles_vow_picks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/covenants/': {
     parameters: {
       query?: never;
@@ -54938,6 +54962,36 @@ export interface components {
       readonly position_id: number | null;
       readonly position_name: string | null;
     };
+    /** @description Every focus pick one primary vow offers its holder, by level (#4929). Read-only. */
+    VowPickCatalog: {
+      readonly membership_id: number;
+      readonly covenant_id: number;
+      readonly covenant: string;
+      readonly vow: string;
+      readonly vow_level: number;
+      readonly levels: components['schemas']['VowPickLevel'][];
+    };
+    /** @description One focus pick in a vow holder's catalog (#4929). Read-only. */
+    VowPickEntry: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly price: number;
+      readonly effects: string[];
+      readonly limits: string;
+      readonly chosen: boolean;
+      readonly locked_reason: string;
+      readonly choosable: boolean;
+    };
+    /** @description One pick level of a vow holder's catalog: budget, spend, what is left, picks. */
+    VowPickLevel: {
+      readonly level: number;
+      readonly is_open: boolean;
+      readonly budget: number;
+      readonly spent: number;
+      readonly left: number;
+      readonly picks: components['schemas']['VowPickEntry'][];
+    };
     /** @description Serializer for Voyage — includes nested participants and invites. */
     Voyage: {
       readonly id: number;
@@ -65544,6 +65598,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_vow_picks_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VowPickCatalog'][];
         };
       };
     };

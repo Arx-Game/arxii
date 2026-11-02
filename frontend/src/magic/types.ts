@@ -158,6 +158,8 @@ export interface ImbueResponse {
    * NONE | XP_LOCK | ANCHOR_CAP | LEVEL_CAP | INSUFFICIENT_BUCKET
    */
   blocked_by?: string;
+  /** Vow pick levels this imbue of a vow thread opened (#4929); empty for any other. */
+  opened_pick_levels?: number[];
 }
 
 // ---------------------------------------------------------------------------

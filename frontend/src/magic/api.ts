@@ -591,6 +591,7 @@ export async function imbueThread(body: ImbueRequest): Promise<ImbueResponse> {
   // The backend wraps the ThreadImbueResult dataclass in `result`.
   const raw = res as unknown as {
     message?: string;
+    opened_pick_levels?: number[];
     result?: {
       resonance_spent?: number;
       developed_points_added?: number;
@@ -609,6 +610,7 @@ export async function imbueThread(body: ImbueRequest): Promise<ImbueResponse> {
     new_level: raw.result?.new_level,
     new_developed_points: raw.result?.new_developed_points,
     blocked_by: raw.result?.blocked_by,
+    opened_pick_levels: raw.opened_pick_levels ?? [],
   };
 }
 
