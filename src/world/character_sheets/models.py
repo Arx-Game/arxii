@@ -593,8 +593,8 @@ class CharacterSheet(SharedMemoryModel):
         related_name="character_sheets",
         help_text=(
             "How this character fights with magic: sets their defense style and how much "
-            "of their armor counts, in place of their vow's defense profile. Blank keeps "
-            "the vow's."
+            "of their armor counts, and which weapon and armor kinds and vows their style "
+            "bonus works with. Blank means no defense style and all armor counts."
         ),
     )
 

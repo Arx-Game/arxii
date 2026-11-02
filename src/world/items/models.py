@@ -548,7 +548,8 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         choices=GearArchetype.choices,
         default=GearArchetype.OTHER,
         help_text=(
-            "Gear category. Drives covenant role × gear compatibility. "
+            "Gear category. Drives whether a worn piece fits the wearer's combat style and "
+            "vow (clothing, jewelry and other kinds always fit). "
             "Immutable across instances of this template."
         ),
     )
