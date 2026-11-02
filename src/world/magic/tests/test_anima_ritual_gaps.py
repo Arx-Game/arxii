@@ -385,6 +385,19 @@ class RitualViewSetPatchTests(APITestCase):
         self.scene_config.refresh_from_db()
         self.assertEqual(self.scene_config.target_difficulty, 5)
 
+    def test_patch_without_config_preserves_top_level_update(self) -> None:
+        """A missing check config does not prevent the ritual update."""
+        self.client.force_authenticate(user=self.author_account)
+        resp = self.client.patch(
+            self._patch_url(self.ritual.pk),
+            {"name": "Updated without config", "check_config": {"target_difficulty": 5}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
+        self.ritual.refresh_from_db()
+        self.assertEqual(self.ritual.name, "Updated without config")
+        self.assertIsNone(self.ritual.check_config_or_none)
+
     def test_get_returns_author_account_id_and_config(self) -> None:
         """GET on a SCENE_ACTION ritual includes author_account_id and check_config."""
         self.client.force_authenticate(user=self.author_account)

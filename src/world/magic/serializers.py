@@ -1447,11 +1447,10 @@ class RitualPatchSerializer(serializers.ModelSerializer):
         ritual = super().update(instance, validated_data)
         if config_data:
             config = instance.check_config_or_none
-            if config is None:
-                return ritual
-            for field, value in config_data.items():
-                setattr(config, field, value)
-            config.save()
+            if config is not None:
+                for field, value in config_data.items():
+                    setattr(config, field, value)
+                config.save()
         return ritual
 
 
