@@ -140,7 +140,7 @@ class VowPreview:
 def simulator_url(technique: Technique, role: CovenantRole) -> str:
     """The Game Tuning dashboard with the simulation form filled for this technique and vow."""
     query = urlencode({"technique": technique.pk, "covenant_role": role.pk})
-    return f"{reverse('admin_tuning')}?{query}#simulation"
+    return f"{reverse('admin_tuning')}?{query}#panel-simulation"
 
 
 def _preview_level(picks: Sequence[VowFocusPick]) -> tuple[int, str]:

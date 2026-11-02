@@ -17,8 +17,11 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from web.admin.tuning.views import _simulation_cache_key
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
+from world.covenants.factories import CovenantRoleFactory
+from world.magic.factories import TechniqueFactory
 
 _PATCH_TARGET = "world.combat.simulation.run_party_vs_boss_simulation"
 
@@ -150,3 +153,86 @@ class TestSimulationFragmentView(TestCase):
         called_params = mock_run.call_args.args[0]
         self.assertEqual(called_params.iterations, 500)
         self.assertEqual(called_params.party_size, 1)
+
+
+class TestSimulationTechniqueAndVow(TestCase):
+    """The panel's technique and vow picks (#4930), and the dashboard forwarding them."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser(
+            "rootadmin4930", "root4930@example.com", "pw-123456"
+        )
+        cls.technique = TechniqueFactory(name="Panel lash")
+        cls.role = CovenantRoleFactory(name="Panel vow")
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.client.force_login(self.super)
+
+    def _post(self, **picks: Any):
+        data = {
+            "party_size": 4,
+            "avg_level": 5,
+            "tier": OpponentTier.BOSS,
+            "risk_level": RiskLevel.MODERATE,
+            "iterations": 7,
+            **picks,
+        }
+        return self.client.post(reverse("admin_tuning_simulation"), data)
+
+    @patch(_PATCH_TARGET)
+    def test_the_picks_reach_the_params(self, mock_run: Any) -> None:
+        mock_run.return_value = _canned_report()
+        resp = self._post(technique=self.technique.pk, covenant_role=self.role.pk)
+        self.assertEqual(resp.status_code, 200)
+        params = mock_run.call_args.args[0]
+        self.assertEqual(
+            (params.technique_id, params.covenant_role_id), (self.technique.pk, self.role.pk)
+        )
+
+    @patch(_PATCH_TARGET)
+    def test_blank_picks_are_the_basic_attack_and_no_vow(self, mock_run: Any) -> None:
+        mock_run.return_value = _canned_report()
+        self._post(technique="", covenant_role="")
+        params = mock_run.call_args.args[0]
+        self.assertEqual((params.technique_id, params.covenant_role_id), (None, None))
+
+    @patch(_PATCH_TARGET)
+    def test_an_unknown_id_is_refused_without_running(self, mock_run: Any) -> None:
+        for field in ("technique", "covenant_role"):
+            with self.subTest(field=field):
+                resp = self._post(**{field: 999999})
+                self.assertIn("errorlist", resp.content.decode())
+        mock_run.assert_not_called()
+
+    def test_the_cache_key_differs_per_technique_and_vow(self) -> None:
+        keys = {
+            _simulation_cache_key(SimulationParams(technique_id=t, covenant_role_id=r))
+            for t in (None, self.technique.pk)
+            for r in (None, self.role.pk)
+        }
+        self.assertEqual(len(keys), 4)
+
+    def test_the_form_labels_both_picks(self) -> None:
+        body = self.client.get(reverse("admin_tuning_simulation")).content.decode()
+        self.assertIn("Technique (blank = basic attack)", body)
+        self.assertIn("Vow (blank = no vow)", body)
+
+    def test_the_panel_opens_filled_from_its_query(self) -> None:
+        url = reverse("admin_tuning_simulation")
+        query = f"?technique={self.technique.pk}&covenant_role={self.role.pk}"
+        body = self.client.get(url + query).content.decode()
+        self.assertIn(f'<option value="{self.technique.pk}" selected>Panel lash', body)
+        self.assertIn(f'<option value="{self.role.pk}" selected>', body)
+
+    def test_the_dashboard_forwards_the_picks_to_the_panel(self) -> None:
+        query = f"technique={self.technique.pk}&covenant_role={self.role.pk}"
+        body = self.client.get(f"{reverse('admin_tuning')}?{query}").content.decode()
+        panel = reverse("admin_tuning_simulation")
+        self.assertIn(f'hx-get="{panel}?{query.replace("&", "&amp;")}"', body)
+
+    def test_the_dashboard_drops_a_pick_that_is_not_an_id(self) -> None:
+        body = self.client.get(f"{reverse('admin_tuning')}?technique=x").content.decode()
+        self.assertIn(f'hx-get="{reverse("admin_tuning_simulation")}"', body)

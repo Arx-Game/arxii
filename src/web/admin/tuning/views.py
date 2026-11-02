@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from functools import wraps
 from typing import Any
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib.admin.views.decorators import staff_member_required
@@ -54,8 +55,10 @@ from world.classes.models import Path, PathStage
 from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
+from world.covenants.models import CovenantRole
 from world.magic.constants import GiftKind
 from world.magic.models.gifts import Gift, Tradition
+from world.magic.models.techniques import Technique
 from world.magic.services.technique_effects import technique_catalog_revision
 from world.species.models import Species
 
@@ -103,8 +106,15 @@ def superuser_required(view: Callable[..., HttpResponse]) -> Callable[..., HttpR
 
 @superuser_required
 def tuning_dashboard(request: HttpRequest) -> HttpResponse:
-    """Game Tuning dashboard skeleton: five HTMX-loaded panels."""
-    context = {"title": "Game Tuning"}
+    """Game Tuning dashboard skeleton: five HTMX-loaded panels.
+
+    ``?technique=`` and ``?covenant_role=`` (the vow page's simulator link, #4930) are
+    forwarded to the simulation panel's first load, so its form opens filled.
+    """
+    context = {
+        "title": "Game Tuning",
+        "simulation_query": urlencode(_simulation_picks(request)),
+    }
     return render(request, "admin/tuning/dashboard.html", context)
 
 
@@ -259,6 +269,17 @@ class SimulationRunForm(forms.Form):
     tier = forms.ChoiceField(choices=OpponentTier.choices)
     risk_level = forms.ChoiceField(choices=RiskLevel.choices)
     iterations = forms.IntegerField()
+    #: The party's technique and vow (#4930); blank is the basic attack and no vow.
+    technique = forms.ModelChoiceField(
+        queryset=Technique.objects.order_by("name"),
+        required=False,
+        label="Technique (blank = basic attack)",
+    )
+    covenant_role = forms.ModelChoiceField(
+        queryset=CovenantRole.objects.order_by("name"),
+        required=False,
+        label="Vow (blank = no vow)",
+    )
 
     def clean_party_size(self) -> int:
         return _clamp(self.cleaned_data["party_size"], 1, 8)
@@ -270,8 +291,22 @@ class SimulationRunForm(forms.Form):
         return _clamp(self.cleaned_data["iterations"], 1, 500)
 
 
-def _simulation_form_defaults() -> dict[str, Any]:
-    """Initial values for a fresh GET form, mirroring `SimulationParams` defaults."""
+#: The query params that pick the simulation's technique and vow (#4930).
+_SIMULATION_PICKS = ("technique", "covenant_role")
+
+
+def _simulation_picks(request: HttpRequest) -> dict[str, str]:
+    """The request's ``technique`` / ``covenant_role`` query params that are ids."""
+    return {
+        name: request.GET[name] for name in _SIMULATION_PICKS if request.GET.get(name, "").isdigit()
+    }
+
+
+def _simulation_form_defaults(picks: dict[str, str] | None = None) -> dict[str, Any]:
+    """Initial values for a fresh GET form, mirroring `SimulationParams` defaults.
+
+    ``picks`` (from ``_simulation_picks``) prefills the technique and vow selects.
+    """
     defaults = SimulationParams()
     return {
         "party_size": defaults.party_size,
@@ -279,14 +314,16 @@ def _simulation_form_defaults() -> dict[str, Any]:
         "tier": defaults.tier,
         "risk_level": defaults.risk_level,
         "iterations": defaults.iterations,
+        **(picks or {}),
     }
 
 
 def _simulation_cache_key(params: SimulationParams) -> str:
-    """Exact-param cache key, per the brief's tuple format."""
+    """Exact-param cache key, per the brief's tuple format, plus technique and vow."""
     return (
         f"tuning-sim:{params.party_size}:{params.avg_level}:{params.tier}:"
-        f"{params.risk_level}:{params.iterations}:{params.round_cap}"
+        f"{params.risk_level}:{params.iterations}:{params.round_cap}:"
+        f"{params.technique_id}:{params.covenant_role_id}"
     )
 
 
@@ -302,6 +339,10 @@ def _round_count_histogram(round_counts: list[int]) -> list[dict[str, int]]:
         {"rounds": rounds_used, "count": count, "pct": round(count / max_count * 100)}
         for rounds_used, count in sorted(counts.items())
     ]
+
+
+def _pk_or_none(row: Technique | CovenantRole | None) -> int | None:
+    return row.pk if row is not None else None
 
 
 @superuser_required
@@ -333,13 +374,15 @@ def tuning_simulation_fragment(request: HttpRequest) -> HttpResponse:
                 tier=form.cleaned_data["tier"],
                 risk_level=form.cleaned_data["risk_level"],
                 iterations=form.cleaned_data["iterations"],
+                technique_id=_pk_or_none(form.cleaned_data["technique"]),
+                covenant_role_id=_pk_or_none(form.cleaned_data["covenant_role"]),
             )
             report = simulation.run_party_vs_boss_simulation(params)
             cache_key = _simulation_cache_key(params)
             cache.set(cache_key, report, _SIMULATION_CACHE_TIMEOUT)
             cache.set(_SIMULATION_LAST_KEY, cache_key, _SIMULATION_CACHE_TIMEOUT)
     else:
-        form = SimulationRunForm(initial=_simulation_form_defaults())
+        form = SimulationRunForm(initial=_simulation_form_defaults(_simulation_picks(request)))
         last_key = cache.get(_SIMULATION_LAST_KEY)
         if last_key:
             report = cache.get(last_key)

@@ -531,7 +531,7 @@ class VowPowerPreviewTests(VowPageCase):
         self.assertIn("DE is damage equivalent per cast, from the technique power evaluator.", body)
         self.assertIn("Situational perks and stat scaling are not priced.", body)
         simulator = reverse("admin_tuning") + (
-            f"?technique={technique.pk}&amp;covenant_role={self.role.pk}#simulation"
+            f"?technique={technique.pk}&amp;covenant_role={self.role.pk}#panel-simulation"
         )
         self.assertIn(f'href="{simulator}">Run the fight simulator', body)
 
