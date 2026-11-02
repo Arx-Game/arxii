@@ -15,9 +15,10 @@ from django.urls import NoReverseMatch, reverse
 
 from core.app_domains import resolve_model_by_name
 from world.character_creation.models import Beginnings, OriginTemplate
+from world.character_sheets.models import CharacterSheet
 from world.combat.models import CreatureTemplate
 from world.conditions.models import ConditionStage, ConditionTemplate
-from world.covenants.models import CovenantRole
+from world.covenants.models import CharacterVowFocusPick, CovenantRole
 from world.distinctions.models import Distinction
 from world.magic.services.soulfray import is_soulfray_stage
 from world.mechanics.models import Property
@@ -101,6 +102,19 @@ def combo_map_url(obj: object) -> str:
         return reverse("admin_combo_map_property", args=[obj.pk])
     if isinstance(obj, ConditionTemplate) and obj.pk:
         return reverse("admin_combo_map_condition", args=[obj.pk])
+    return ""
+
+
+def kit_view_url(obj: object) -> str:
+    """The kit view for a character sheet or a chosen focus pick's character (#4918), or "".
+
+    ``CharacterCovenantRole`` has no admin page, so the chosen pick's change form is the
+    membership-level form that carries the link.
+    """
+    if isinstance(obj, CharacterSheet) and obj.pk:
+        return reverse("admin_kit_view", args=[obj.pk])
+    if isinstance(obj, CharacterVowFocusPick) and obj.pk:
+        return reverse("admin_kit_view", args=[obj.character_role.character_sheet_id])
     return ""
 
 

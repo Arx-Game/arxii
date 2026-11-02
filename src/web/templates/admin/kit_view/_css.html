@@ -1,0 +1,49 @@
+{% comment %}
+The kit view's own stylesheet (#4918). Admin's `.module` and `table.tuning-table` carry the
+structure; this adds the two columns, the muted function line under a technique, the group
+labels in the Vow adds cell, and the marks. Every colour is an admin variable or a token set
+for admin's light and dark selectors, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #kit-view-root {
+    --kv-mark-bg: #fbe3d4;
+    --kv-mark-fg: #8a3a10;
+  }
+  @media (prefers-color-scheme: dark) {
+    #kit-view-root { --kv-mark-bg: #4a2a18; --kv-mark-fg: #f0c3a0; }
+  }
+  html[data-theme="light"] #kit-view-root { --kv-mark-bg: #fbe3d4; --kv-mark-fg: #8a3a10; }
+  html[data-theme="dark"] #kit-view-root { --kv-mark-bg: #4a2a18; --kv-mark-fg: #f0c3a0; }
+
+  #kit-view-root .kv-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #kit-view-root .kv-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #kit-view-root .kv-scroll { overflow-x: auto; }
+  #kit-view-root .kv-table { margin-bottom: 0; width: 100%; }
+  #kit-view-root .kv-table th { white-space: nowrap; }
+  #kit-view-root .kv-table td { vertical-align: top; }
+  #kit-view-root .kv-muted { color: var(--body-quiet-color); }
+  #kit-view-root .kv-sub { display: block; color: var(--body-quiet-color); font-size: 0.6875rem; }
+  #kit-view-root .kv-line { margin: 0 0 0.3rem; }
+  #kit-view-root .kv-line:last-child { margin-bottom: 0; }
+  #kit-view-root .kv-group { font-weight: 600; }
+  #kit-view-root .kv-num { text-align: right; white-space: nowrap; }
+  #kit-view-root .kv-links { margin: 0; padding: 0.6rem 10px; }
+
+  #kit-view-root .kv-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  #kit-view-root .kv-mark { background: var(--kv-mark-bg); color: var(--kv-mark-fg); }
+  #kit-view-root .kv-note { background: var(--darkened-bg); color: var(--body-quiet-color); }
+</style>

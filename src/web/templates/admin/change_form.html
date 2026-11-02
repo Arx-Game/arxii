@@ -39,6 +39,11 @@
         <a href="{{ cm }}" class="workbench-open-link">Combo map</a>
     </li>
     {% endif %}{% endwith %}
+    {% with kv=original|kit_view_url %}{% if kv %}
+    <li>
+        <a href="{{ kv }}" class="workbench-open-link">Kit view</a>
+    </li>
+    {% endif %}{% endwith %}
     {% change_form_object_tools %}
   </ul>
 {% endif %}
