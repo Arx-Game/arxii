@@ -3663,11 +3663,9 @@
   - granted_capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
   - sub_roles <- covenants.CovenantRole
-  - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - vow_stat_scalings <- covenants.VowStatScaling
   - technique_specialties <- covenants.CovenantRoleTechniqueSpecialty
-  - defense_profile <- covenants.CovenantRoleDefenseProfile
   - focus_picks <- covenants.VowFocusPick
   - combat_styles <- covenants.CombatStyle
   - gift_grants <- covenants.CovenantRoleGiftGrant
@@ -3683,20 +3681,12 @@
   - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
 
-### CovenantRoleDefenseProfile
-**Foreign Keys:**
-  - covenant_role -> covenants.CovenantRole [OneToOne]
-
 ### CovenantRoleGiftGrant
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK]
 
 ### CovenantRoleTechniqueSpecialty
-**Foreign Keys:**
-  - covenant_role -> covenants.CovenantRole [FK]
-
-### GearArchetypeCompatibility
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
 
@@ -3840,11 +3830,10 @@
 - `establish_mentor_bond_via_session(*, session: 'RitualSession') -> 'MentorBond' - Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' - Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' - When an engaged member arrives in a room with an active CovenantRiteInstance,`
-- `gear_additive_fraction(character: 'object') -> 'Decimal' - MAX gear-additive fraction across engaged PRIMARY roles' defense profiles (#2533).`
 - `get_court_grant_config() -> 'CourtGrantConfig' - Get-or-create the Court grant negotiation config singleton (pk=1).`
 - `get_mentor_bond_config() -> 'MentorBondConfig' - Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' - Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
-- `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' - Return True if a row exists in GearArchetypeCompatibility for this pair.`
+- `is_gear_compatible(character: 'Character', role: 'CovenantRole', archetype: 'str') -> 'bool' - Whether ``role``'s bonuses add to ``character``'s gear of this kind (#4975).`
 - `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' - Remove a member by rank authority. Soft-ends the target. Covenants never`
 - `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' - A member voluntarily leaves a covenant. Soft-ends the membership. Covenants`
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' - Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`

@@ -7,6 +7,12 @@ state of the codebase after Slice A landed. Subsequent slices extended the schem
 `CharacterCovenantRole.rank` FK — see `docs/roadmap/covenants.md` §"Two Orthogonal
 Authority Axes" for the full two-axis model. `CovenantRole.is_leadership` was
 removed by #1027 and no longer exists.
+> **Superseded in part by #4975 (slice 3 of #4844, ADR-4975).** `GearArchetypeCompatibility`
+> and the `is_gear_compatible(role, archetype)` signature below no longer exist: gear
+> compatibility is read from the character's combat style
+> (`world.covenants.style_fit.style_gear_reach`, `is_gear_compatible(character, role,
+> archetype)`). The rest of this document stands as the Slice A record.
+
 **Branch:** TBD (e.g. `covenants-slice-a-entity`)
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; this spec implements the foundational missing skeleton
@@ -28,7 +34,7 @@ This is the first slice of a multi-slice Covenants buildout. Subsequent slices (
 ### What exists today
 
 - **`CovenantRole`** (lookup, SharedMemoryModel) — staff-authored, scoped by `covenant_type`, includes `archetype` and `speed_rank`. Combat reads `speed_rank` directly. (`src/world/covenants/models.py:16-61`)
-- **`GearArchetypeCompatibility`** (existence-only join) — `CovenantRole × GearArchetype`. Drives gear-bonus stacking math (Spec D §4.4). (`src/world/covenants/models.py:64-90`)
+- **`GearArchetypeCompatibility`** (existence-only join) — `CovenantRole × GearArchetype`. Drives gear-bonus stacking math (Spec D §4.4). (`src/world/covenants/models.py:64-90`) (superseded by #4975: the table was dropped and gear compatibility is read from the character's combat style, ADR-4975)
 - **`CharacterCovenantRole`** (per-character assignment) — `character_sheet`, `covenant_role`, `joined_at`, `left_at`. Partial unique constraint: at most one active assignment per `(character_sheet, covenant_role)`. Consumed by combat (resolution speed), magic (`has_ever_held` weave gate, anchor cap formula), modifier pipeline. (`src/world/covenants/models.py:93-124`)
 - **`Thread` with `target_kind=COVENANT_ROLE`** (`src/world/magic/models/threads.py:266-541`) — the existing role-mastery axis. Has `level`, `developed_points`, `ThreadLevelUnlock` per-boundary XP receipts, `ThreadPullEffect` rows that can grant capabilities (`effect_kind=CAPABILITY_GRANT`) at level thresholds, partial unique constraint enforcing one active Thread per `(owner, covenant_role)`.
 - **Anchor cap formula** (`src/world/magic/services/threads.py:136-137`):

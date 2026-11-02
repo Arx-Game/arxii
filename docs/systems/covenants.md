@@ -1,6 +1,6 @@
 # Covenants
 
-Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
+Magically-empowered group oaths with roles, a per-covenant rank
 ladder, and (as of #1165) a Mentor's Vow bond system for level-mismatched parties.
 
 **Standing invariant:** `CovenantRole` = combat power (SWORD/SHIELD/CROWN blend
@@ -31,10 +31,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   visibility"), `CharacterCovenantRoleSerializer.display_name` names the sworn face
   (never "Character #n"), and the telnet `sheet/covenant` section, self-only, marks a
   vow sworn under another of your own faces "(as Robert)".
-- **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
-  compatible with which `GearArchetype` values (read-only authored content).
-  Lore-repo content as of #2533 (`NaturalKeyMixin` NK `["covenant_role",
-  "gear_archetype"]`, `covenants.geararchetypecompatibility` in `CONTENT_MODELS`).
+- **`GearArchetypeCompatibility`** — **REMOVED in #4975** (slice 3 of #4844, migrations
+  0365 and 0366). Formerly an existence-only join of `CovenantRole` x `GearArchetype`.
+  Which gear works with a vow is now read from the character's `CombatStyle` (see "Gear
+  compatibility through the combat style" below); migration 0365 carried each row onto a
+  placeholder style's `CombatStyleGear` and `compatible_roles` (ADR-4975).
 - **`CovenantRole.sword_weight` / `.shield_weight` / `.crown_weight`** (#2529, ADR-0149)
   — `DecimalField`s (max_digits=4, decimal_places=3) forming the combat-identity blend.
   Weights are stored on primary roles only and sum to 1; sub-roles carry all-zero
@@ -76,30 +77,29 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   → `thread_level_multiplier`), short-circuited to a flat 0 by #2529 because it was
   never seeded in a real game. ADR-0149's Layer 3 decided its fate: rather than
   re-key a second per-archetype gear multiplier onto the new blend model, the single
-  authored fraction on `CovenantRoleDefenseProfile.gear_additive_tenths` (below)
-  subsumes what `VowGearScaling` would have done — one dial per role instead of a
+  authored fraction on `CovenantRoleDefenseProfile.gear_additive_tenths` (since removed
+  by #4975, the combat style's armor share now plays that part) subsumed what
+  `VowGearScaling` would have done — one dial per role instead of a
   full `(gear_archetype × role_archetype)` matrix. The model, its migration
   (`covenants.0031_delete_vowgearscaling`), `vow_gear_scaling_bonus`, and both its
   call sites in `world.mechanics.services` (`equipment_walk_total` and
   `equipment_walk_total_unblended`) are gone.
 - **`DefenseStyle`** (`TextChoices` in `world.covenants.constants`, #2533) — how a
-  covenant vow defends: `GEAR_SOAK` (armor is the defense; labelled "Mitigation" since
+  character defends: `GEAR_SOAK` (armor is the defense; labelled "Mitigation" since
   #4759, stored value still `gear_soak`), `EVASION` (not being there is the defense),
-  `BARRIER` (force/warding is the defense). Also read by `CombatStyle.defense_style`
-  (see "Vow focus picks and combat styles" below). Code-defined
+  `BARRIER` (force/warding is the defense). Read through `CombatStyle.defense_style`
+  (see "Vow focus picks and combat styles" below); it was keyed per vow on the removed
+  `CovenantRoleDefenseProfile` until #4975. Code-defined
   vocabulary (not lore-repo content) per the shared-vocabulary ruling — ADR-0149
   Layer 4's situational perks (#2536) key on these labels, and the 2026-07-20 niche
   ruling requires each style to have distinct shine-situations in that perk set
   (exact tuning numbers are secondary to that coverage).
-- **`CovenantRoleDefenseProfile`** (#2533) — per-role defense tuning: `covenant_role`
-  (OneToOne, CASCADE, `related_name="defense_profile"`), `style` (`DefenseStyle`),
-  `gear_additive_tenths` (PositiveIntegerField, default 10 = fully additive/legacy
-  behavior). One row per `CovenantRole`, including sub-roles — the model imposes no
-  parent/sub-role constraint; whether a sub-role's row replaces or extends its
-  anchor's is a resolution-time decision (`gear_additive_fraction`, see "Combat
-  Seams" below), not a model-level restriction. Lore-repo content (`NaturalKeyMixin`
-  NK `["covenant_role"]`, `covenants.covenantroledefenseprofile` in
-  `CONTENT_MODELS`).
+- **`CovenantRoleDefenseProfile`** (#2533) — **REMOVED in #4975** (slice 3 of #4844,
+  migrations 0365 and 0366). Formerly the per-role defense tuning (`style`,
+  `gear_additive_tenths`) and `gear_additive_fraction`. A character's defense style and
+  armor share now come from their `CombatStyle` only; migration 0365 carried each
+  distinct profile onto a placeholder style named "Placeholder <Defense> Style <n>"
+  (ADR-4975).
 - **Maneuver effects through `VowStatScaling`** (#4783, ADR-4783-A; **removed**
   `CovenantRoleActionScaling`, `CovenantScaledAction` and
   `covenant_role_action_scaling_bonus`, which #2529 and #4739 built to scale Interpose, Rally
@@ -546,7 +546,10 @@ ADR-0213 for the rationale.
   and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
   `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`.
   Same no-attrition-dissolve rule as `leave_covenant` (#2992, ADR-0042 amendment).
-- `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
+- `is_gear_compatible(character, role, archetype) -> bool` (#4975) — whether the role's
+  bonuses add to the character's gear of this kind, read from their combat style (clothing,
+  jewelry and other kinds always; a weapon or armor kind when the style lists the kind and
+  the vow). See "Defense styles + gear compatibility through the combat style" below.
 - `role_base_bonus_for_target(role, target, char_level) -> int` (in
   `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
   `char_level × bonus_per_level`; 0 if no row
@@ -1255,7 +1258,8 @@ decides defense" under Combat Seams).
 - **`CombatStyle`** (NK `name`, `CreditedContent`, in `CONTENT_MODELS`) - `name`,
   `description`, `defense_style` (`DefenseStyle`), `armor_share_tenths` (0 to 10, default 10).
   A character's style is `CharacterSheet.combat_style` (nullable, PROTECT); it replaces the
-  vow's `CovenantRoleDefenseProfile` (ADR-4759, read by `defense_style_for` since #4809).
+  vow's defense profile (ADR-4759, read by `defense_style_for` since #4809; the profile
+  table itself was dropped in #4975, ADR-4975).
   Since #4884 (slice 2 of #4844) a style also has `skill` (nullable one-to-one to a
   Magic-category `Skill`, PROTECT, one style per skill), `hit_stat` (nullable FK to a stat
   `Trait`, PROTECT), `taught_by` (M2M `Tradition`, `related_name="combat_styles"`) and
@@ -1439,7 +1443,7 @@ only; nothing is refused for them.
 The kit view (#4918, `web/admin/kit_view/`, `_kit_view/<sheet_pk>/`) shows one real
 character's techniques with what its vows add (the batched static view, base lines then one
 group per chosen pick), its chosen picks per level against the budget, and its path, gift,
-vow and defense profile. Read only. See `src/web/admin/CLAUDE.md` "Kit view".
+vow and combat style defense. Read only. See `src/web/admin/CLAUDE.md` "Kit view".
 
 ## Enums / Constants
 
@@ -1475,13 +1479,11 @@ shrinks; an elevated sidekick's bonus grows.
 
 `world.covenants.defense`:
 
-- `defense_style_for(character) -> DefenseResolution` (`style`, `armor_share_tenths`,
-  `from_combat_style`). Resolution order: the character's `CombatStyle`, then the engaged
-  PRIMARY vow profile from `engaged_primary_defense_profile`, then `(None, 10, False)`, the
-  legacy behavior.
-- `engaged_primary_defense_profile(character)` is the profile chooser, shared with
-  `gear_additive_fraction` below: it picks the highest `gear_additive_tenths`, the first on a
-  tie, and a sub-role falls back to its anchor's row.
+- `defense_style_for(character) -> DefenseResolution` (`style`, `armor_share_tenths`). The
+  character's `CombatStyle` supplies both; a character with no style gets `(None, 10)`: no
+  defense style, all armor counts, the behavior before #4759. Since #4975 the vow's defense
+  profile is no longer a fallback (the table is gone, `from_combat_style` and
+  `engaged_primary_defense_profile` went with it).
 - `NpcHitDefense` / `npc_hit_defense(...)` is the context `resolve_npc_attack` sets for a
   barrier or mitigation defender. `barrier_absorb_fraction(character)` rolls the barrier
   ward's check (called by `absorb_pool`). `mitigation_leak(character, soaked)` and
@@ -1546,32 +1548,38 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
 - Every combat roll row records `ConsequenceOutcome.combat_round` (the Strike and defense
   recorders pass it; any other combat row reads it from the scene's encounter), and the
   turn panel's Last Outcome card shows every roll of the newest round.
-- Not yet: `is_gear_compatible` still reads the vow's `GearArchetypeCompatibility` (slice
-  3 re-keys it with the data migration).
 
-### Defense styles + gear substitution (#2533, ADR-0149 Layer 3)
+### Defense styles + gear compatibility through the combat style (#2533, #4975, ADR-0149 Layer 3)
 
-`gear_additive_fraction(character)` (`world.covenants.services`) returns the MAX
-`gear_additive_tenths` fraction (as `Decimal`, e.g. `Decimal("0.3")`) across the
-character's engaged PRIMARY roles' resolved `CovenantRoleDefenseProfile` rows
-(#2641 — a secondary vow's defense profile never substitutes for gear). Per
-engaged role, the profile resolves to the role's own row when present, else its
-anchor's; no engaged role has a profile at all → `Decimal(1)` (legacy
-fully-additive behavior, byte-identical to pre-#2533). One batched query over the
-role + parent pks — no per-role query loop.
+#2533 gave each vow a defense profile and a `gear_additive_fraction`; slice 3 of #4844
+(#4975, ADR-4975) retired that table and `GearArchetypeCompatibility` in favor of the
+character's `CombatStyle`.
 
-With no combat style (#4809), `apply_equipped_armor_soak` (`world.combat.services`,
-#1174) applies the fraction to the COMPATIBLE armor bucket only, once, right after the role-compatibility
-split and before the compatible-additive/incompatible-max blend:
+`world.covenants.style_fit.style_gear_reach(character) -> StyleGearReach` reads the style's
+`CombatStyleGear` kinds and `compatible_roles` once (two queries with a style, none
+without) and answers `StyleGearReach.allows(role, archetype)` per piece. A kind outside
+`COMBAT_GEAR_ARCHETYPES` (weapon and armor kinds) is always compatible: clothing, jewelry
+and other kinds fit every style and vow (owner ruling 2026-11-02, no style can forbid
+them). A weapon or armor kind is compatible only when the style lists the kind AND lists
+the held vow in `compatible_roles` (a sub-role counts by its anchor); with no style none is.
+`is_gear_compatible(character, role, archetype)` (`world.covenants.services`) is the
+one-shot form; `covenant_role_bonus` and the armor split build the reach once per walk.
 
-    compat_soak = int(compat_soak * gear_additive_fraction(character))
-    soak = compat_soak + max(incompat_physical, resonant)
+`apply_equipped_armor_soak` (`world.combat.services`, #1174) splits worn armor into the
+compatible and incompatible buckets through that reach (PRIMARY vows only, #2641), then
+the style's `armor_share_tenths` scales BOTH buckets (a style is how they fight, whatever
+they wear), before the compatible-additive/incompatible-max blend:
 
-The resonant pool and the incompatible-`max` branch are untouched — gear is
-physical and counts once; a character holding multiple engaged vows gets the most
-gear-friendly one's fraction, not a stack of fractions. Durability still wears on
-every compatible piece whose (now-scaled) soak contributes to the result,
-unchanged from #1174.
+    compat_soak = compat_soak * armor_share_tenths // 10
+    incompat_soak = incompat_soak * armor_share_tenths // 10
+    soak = compat_soak + max(incompat_soak, resonant)
+
+With no style the share is 10 and no armor kind is compatible, so all armor competes with
+the resonant pool through `max`. The resonant pool and the incompatible-`max` branch are
+untouched. Durability still wears on every piece whose (scaled) soak contributes.
+
+Not built: a cap on how much mitigation worn sources give per style (additive-source
+tuning). It is an open idea with no commitment.
 
 ### The Insight rider (#2645)
 
@@ -1642,7 +1650,7 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 
 ## API Endpoints
 
-- `GET /api/covenants/gear-compatibilities/` — read-only authored content
+- `GET /api/covenants/gear-compatibilities/` — **removed in #4975** with the table it listed
 - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
   currently-played sheets; exposes nested `rank` + `viewer_capabilities`.
   `CharacterCovenantRoleSerializer` fields:
@@ -1684,7 +1692,8 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   the shared `magic.TechniqueFunction` vocabulary — see ADR-0149's 2026-07-20 amendment
   and `docs/systems/magic.md`); #2533 shipped **Layer 3** (`DefenseStyle` vocabulary +
   per-role `CovenantRoleDefenseProfile`, the `gear_additive_fraction` substitution rule
-  at the armor-soak seam, and `VowGearScaling`'s removal — see "Combat Seams" above); and
+  at the armor-soak seam, and `VowGearScaling`'s removal; #4975 later moved the profile and
+  the gear compatibility list onto the combat style — see "Combat Seams" above); and
   #2536 slice 1 (ADR-0151) shipped the **Layer 4** machinery — the situation library +
   registry, `VowSituationalPerk` authoring models, `POWER_BONUS`/`CHECK_BONUS` delivery, and
   the dual-dispatch presentation contract (see "Layer 4: Situational Perks" above), whose
@@ -1734,8 +1743,8 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   + `faction_affiliation` to gate COURT engagement)
 - Mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`)
 - Items (`gear_archetype` on `ItemTemplate`)
-- Combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `gear_additive_fraction`
-  scales the compatible-armor bucket, #2533; `compute_party_profile` via `effective_combat_level`)
+- Combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; the combat style's
+  `armor_share_tenths` scales worn armor, #4975; `compute_party_profile` via `effective_combat_level`)
 - Achievements (`CovenantRole.discovery_achievement` FK; `grant_achievement` on sub-role
   threshold crossing; `Discovery` row created on first-ever earner)
 - Codex (`CovenantRole.codex_entry` FK; `CharacterCodexKnowledge(status=KNOWN)` created per

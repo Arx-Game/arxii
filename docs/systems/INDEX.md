@@ -7784,7 +7784,7 @@ holder is never notified a claim exists.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
+Magically-empowered group oaths with roles, a per-covenant rank
 ladder, a Mentor's Vow bond system for level-mismatched parties (#1165), and a Covenant
 of the Court type for master/servant pacts (#1589).
 
@@ -7914,16 +7914,17 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     sibling `_maybe_suggest_entrance_dramatic_moment`). Distinct in weight from the
     light "Look out!" callout (#2637): the callout is frequent/small/names-no-counter,
     the Insight is rare/large/specific.
-  - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
-    compatible with which `GearArchetype` values (read-only authored content)
+  - `GearArchetypeCompatibility` — **removed in #4975** (slice 3 of #4844, ADR-4975). Which
+    gear works with a vow is read from the character's `CombatStyle` (`CombatStyleGear` kinds
+    plus `compatible_roles`), see `style_gear_reach` under "Combat seams" below.
   - `CovenantRoleBonus` — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
     `char_level × bonus_per_level`; no row → 0. Lore-repo content (#2533,
     `NaturalKeyMixin`, `CONTENT_MODELS`).
   - `DefenseStyle` (`TextChoices`, #2533, ADR-0149 Layer 3) — `GEAR_SOAK`
-    (labelled "Mitigation" since #4759) / `EVASION`/`BARRIER`, how a covenant vow
-    defends. Code-defined vocabulary (Layer 4's situational perks, #2536, key on these
+    (labelled "Mitigation" since #4759) / `EVASION`/`BARRIER`, how a character
+    defends (read through `CombatStyle.defense_style`). Code-defined vocabulary (Layer 4's situational perks, #2536, key on these
     labels).
   - **Vow focus picks and combat styles (#4759 slice 1, ADR-4759) [BUILT, NOT WIRED]:**
     `VowFocusPick` (NK `(covenant_role, name)`, `pick_level` 1-3, `value`),
@@ -7958,11 +7959,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     (`ReswearOptions`, `ReswearResult`), `VowFocusPickConfig.respec_ap_cost`; `GET
     /api/covenants/character-roles/reswear-options/`; telnet `vow reswear`. See
     `covenants.md` "Vow focus picks and combat styles".
-  - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
-    `related_name="defense_profile"`): `style` (`DefenseStyle`),
-    `gear_additive_tenths` (default 10 = fully additive). Lore-repo content
-    (`NaturalKeyMixin` NK `["covenant_role"]`, `CONTENT_MODELS`). Read via
-    `gear_additive_fraction(character)` — see "Combat seams" below.
+  - `CovenantRoleDefenseProfile` (#2533) — **removed in #4975** (slice 3 of #4844,
+    ADR-4975). A character's defense style and armor share now come from their
+    `CombatStyle` only; migration 0365 carried each profile onto a placeholder style.
   - `CovenantRank` — per-covenant administrative authority tier.
     Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
     `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` (may lead
@@ -8022,7 +8021,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     Covenants never dissolve from attrition (#2992, ADR-0042 amendment — the covenant
     persists at any active-member count, including zero); `kick_member` raises
     `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
-  - `is_gear_compatible(role, archetype) -> bool`
+  - `is_gear_compatible(character, role, archetype) -> bool` (#4975, through the combat style)
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
   - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
@@ -8118,11 +8117,12 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `GET /api/covenants/roles/sphinx/?role=<id-or-slug>` (self-character only) and the
     `sphinx <vow name>` telnet command (`commands/sphinx.py`) — both call `judge_vow`
     directly, no parallel logic.
-- **Combat seams (#985, #1174, #1165, #2533):** `apply_equipped_armor_soak` splits worn armor into
-  role-compatible vs incompatible buckets; compatible soak is scaled once by
-  `gear_additive_fraction(character)` (`world.covenants.services`, #2533 — MAX
-  `CovenantRoleDefenseProfile.gear_additive_tenths` fraction across engaged roles,
-  `1` with no profile); final soak = `compat_physical +
+- **Combat seams (#985, #1174, #1165, #2533, #4975):** `apply_equipped_armor_soak` splits worn
+  armor into role-compatible vs incompatible buckets through the character's combat style
+  (`world.covenants.style_fit.style_gear_reach` / `StyleGearReach.allows`, #4975: clothing,
+  jewelry and other kinds always fit; a weapon or armor kind fits when the style lists the kind
+  and the held vow, a sub-role by its anchor; no style, none), and both buckets are scaled by the
+  style's `armor_share_tenths` (`1.0` with no style); final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
   `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
   covenant-level + mantle + motif-style). The soak itself is the pure read
@@ -8205,7 +8205,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `resolve_actor_membership(*, covenant, character_sheets, capability=None)`,
   `get_active_memberships(*, character_sheet)` — shared by viewsets and the covenant Actions.
 - **API Endpoints:**
-  - `GET /api/covenants/gear-compatibilities/` — read-only authored content
+  - `GET /api/covenants/gear-compatibilities/` — removed in #4975
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
     currently-played sheets; exposes nested `rank` + `viewer_capabilities`
     (`can_invite`/`can_kick`/`can_manage_ranks`/`can_request_gm` bools — the last
@@ -9316,7 +9316,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `edge_crossing_cost`, `strike_reaches`); see `docs/systems/areas.md`.
 - **Defense styles (#4809, slice 5 of #4759) [BUILT & WIRED]:** see
   `docs/systems/COMBAT_DEFENSES.md` "Defense styles". `world/covenants/defense.py`:
-  `defense_style_for` (combat style, then vow profile, then legacy), `NpcHitDefense` /
+  `defense_style_for` (the combat style, else no defense style and all armor, #4975), `NpcHitDefense` /
   `npc_hit_defense`, `barrier_absorb_fraction` (the barrier ward rolls), `mitigation_leak`.
   Tuning: `MovementConfig.mitigation_level_gap_cap` / `mitigation_leak_percent`; also on the
   row for slice 6, `wound_cap_shrink_per_round` / `reactive_save_max_cut` (percent).

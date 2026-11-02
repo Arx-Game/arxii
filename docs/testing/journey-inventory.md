@@ -13,7 +13,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 |---|---|---|
 | Actions (`actions.registry`) | 580 | 0 |
 | Commands (character + account cmdsets) | 272 | 57 |
-| API routes (`urls.py` under `src/`) | 567 | 83 |
+| API routes (`urls.py` under `src/`) | 566 | 83 |
 | Frontend routes (`App.tsx`) | 134 | 60 |
 
 ## Actions
@@ -1083,7 +1083,6 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `whitelist/` | `SocialConsentWhitelistViewSet` | `world.consent.urls` | `frontend/src/consent/__tests__/PrivacyPage.test.tsx`, `frontend/src/consent/__tests__/consentTree.test.ts`, `frontend/src/consent/__tests__/queries.test.ts`, `src/actions/tests/test_base.py` (+24) |
 | `blacklist/` | `SocialConsentBlacklistViewSet` | `world.consent.urls` | `frontend/src/consent/__tests__/PrivacyPage.test.tsx`, `frontend/src/consent/__tests__/queries.test.ts`, `frontend/src/scenes/components/ConsentPrompt.test.tsx`, `src/actions/tests/test_base.py` (+16) |
 | `character-roles/` | `CharacterCovenantRoleViewSet` | `world.covenants.urls` | `frontend/src/magic/components/threads/__tests__/WeaveThreadWizard.test.tsx`, `src/world/covenants/tests/test_engagement_views.py`, `src/world/covenants/tests/test_exit_views.py`, `src/world/covenants/tests/test_membership_block_placeholder.py` (+1) |
-| `gear-compatibilities/` | `GearArchetypeCompatibilityViewSet` | `world.covenants.urls` | `src/world/covenants/tests/test_views.py` |
 | `covenants/` | `CovenantViewSet` | `world.covenants.urls` | `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts`, `frontend/e2e/evidence/family-kin-4210.spec.ts`, `frontend/e2e/evidence/sheet-gallery-4151.spec.ts`, `frontend/e2e/evidence/sheet-goals-and-favor-4106.spec.ts` (+250) |
 | `roles/` | `CovenantRoleViewSet` | `world.covenants.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/staff-group-fit-4229.spec.ts`, `frontend/src/character_sheets/components/sheet/__tests__/StaffEdit.test.tsx` (+93) |
 | `level-thresholds/` | `CovenantLevelThresholdViewSet` | `world.covenants.urls` | `src/world/covenants/tests/test_views.py` |

@@ -170,15 +170,13 @@ declared one (`_narrate_reaction_declined`, below).
 ## Defense styles: evasion, barrier, mitigation (#4809, slice 5 of #4759) [BUILT & WIRED]
 
 `world.covenants.defense.defense_style_for(character)` returns a `DefenseResolution`
-(`style`, `armor_share_tenths`, `from_combat_style`). The character's `CombatStyle`
-(`CharacterSheet.combat_style`) wins; with no style, the engaged PRIMARY vow's
-`CovenantRoleDefenseProfile` with the highest `gear_additive_tenths` governs
-(`engaged_primary_defense_profile`, the chooser `gear_additive_fraction` also uses); with
-neither, `style` is None and all armor counts (the behavior before #4759).
+(`style`, `armor_share_tenths`). Both come from the character's `CombatStyle`
+(`CharacterSheet.combat_style`); with no style, `style` is None and all armor counts (the
+behavior before #4759). Until #4975 a character with no style fell back to the engaged
+vow's `CovenantRoleDefenseProfile`; that table is gone (ADR-4975).
 
-- **Armor share.** `apply_equipped_armor_soak` scales armor by the share once. A combat
-  style's share reaches ALL worn armor, both compatibility buckets. A vow profile's share
-  keeps its #2533 reach, the compatible bucket only.
+- **Armor share.** `apply_equipped_armor_soak` scales armor by the share once. The combat
+  style's share reaches ALL worn armor, both compatibility buckets.
 - **Evasion** defends through the automatic dodge below, unchanged. The dodge stays
   capability-driven for every style (#4651 decision 2: movement reads capabilities, never
   their source), so evasion's difference from the others is its lower armor share.
@@ -271,9 +269,9 @@ Flat damage reduction applied after evasion and barrier.
 - **Armor soak:** `apply_equipped_armor_soak`
   (`world/combat/services/`). Role-gated — compatible covenant-role armor
   adds on top; incompatible armor competes with a resonant pool via `max`.
-  Since #4809 the share comes from `defense_style_for(character)`: a `CombatStyle`'s
-  `armor_share_tenths` scales all worn armor; with no style, the vow profile's
-  `gear_additive_tenths` scales the compatible bucket only (#2533); with neither, all
-  armor counts. A mitigation defender's armor leaks part of what it stopped against an
+  The share comes from `defense_style_for(character)`: a `CombatStyle`'s
+  `armor_share_tenths` scales all worn armor; with no style, all armor counts. Which armor is
+  "compatible" is the style's too (#4975): a weapon or armor kind must be listed on the style
+  with the held vow, while clothing and jewelry always are. A mitigation defender's armor leaks part of what it stopped against an
   attacker past the level gap (see "Defense styles" above).
-  See `docs/systems/covenants.md`'s "Defense styles + gear substitution" for detail.
+  See `docs/systems/covenants.md`'s "Defense styles + gear compatibility through the combat style" for detail.

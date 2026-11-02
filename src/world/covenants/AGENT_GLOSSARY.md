@@ -97,16 +97,6 @@ situational perks (#2536) key on these labels, and each style must have a distin
 shine-situation in that perk set (2026-07-20 niche ruling; exact tuning numbers are secondary).
 _Avoid_: defense type, defense mode, archetype.
 
-**Defense Profile**:
-`CovenantRoleDefenseProfile` (#2533) — the per-`CovenantRole` row carrying a role's Defense
-Style plus `gear_additive_tenths`, the fraction of COMPATIBLE armor soak that stays additive
-with the vow's own defense (default 10 = fully additive/legacy). Read via
-`gear_additive_fraction(character)`, which takes the MAX fraction across a character's engaged
-roles' resolved profiles (sub-role's own profile when present, else its anchor's) and scales the
-compatible-armor bucket once in `apply_equipped_armor_soak` (#1174). Superseded `VowGearScaling`
-as the mechanism for a vow's defense to substitute for gear rather than stack with it.
-_Avoid_: gear profile, armor profile, VowGearScaling (removed model).
-
 **Focus pick**:
 One option in a vow's catalog that a holder chooses at pick level 1, 2 or 3 (`VowFocusPick`,
 #4759). Its payload is the existing vow rows (added effects, situational perks, vow stat scaling)
@@ -127,15 +117,18 @@ specialization (that is the resonance sub-role).
 
 **Combat style**:
 How a character was taught to fight with magic (`CombatStyle`, `CharacterSheet.combat_style`,
-#4759): a Defense Style plus `armor_share_tenths`, how much of their armor counts. It replaces the
-vow's Defense Profile for that character; a character with none keeps the profile (ADR-4759).
+#4759): a Defense Style plus `armor_share_tenths`, how much of their armor counts. It replaced the
+vow's per-role defense profile (dropped in #4975, ADR-4975): a
+character with no style has no Defense Style and all their armor counts. Gear compatibility is
+the style's too: a weapon or armor kind works with a vow only when the style lists the kind and
+the vow, while clothing and jewelry always do.
 Since #4884 it also has a **style skill** (its own Magic skill), a **hit stat** (the stat a
 Strike hits with), the Traditions that teach it, the vows it works with and its weapon and
 armor kinds (`CombatStyleGear`). Since #4921 a player chooses it in character creation from
 the styles her Tradition teaches (`CharacterDraft.selected_combat_style`; the Gift stage's step
 reads "Fighting style", the demo's label), and the Sphinx says whether it suits a vow.
 _Avoid_: technique style (`TechniqueStyle` is how a Path or Gift casts, a different thing),
-fighting stance, defense profile (that is the vow's fallback row).
+fighting stance, defense profile (the removed per-vow table).
 
 **Style lapse**:
 A combat style's skill not counting on one roll because the character is not fighting its

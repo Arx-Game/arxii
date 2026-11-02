@@ -4,6 +4,10 @@
 reader described below were removed; a vow scales a maneuver through `VowStatScaling` rows on
 maneuver-effect targets. The blend and the rest of the four layers stand.*
 
+*Amended by ADR-4975: `CovenantRoleDefenseProfile` and `GearArchetypeCompatibility`, which Layer 3
+below builds on, were dropped; a character's combat style now sets the defense style, the armor
+share and which gear kinds work with the vow.*
+
 ADR-0108 modeled a character's engaged `CovenantRole` as picking exactly one combat
 archetype (SWORD, SHIELD, or CROWN) via a single `CovenantRole.archetype` field, with
 three power pillars keyed off it. That single-value field couldn't express hybrid roles
