@@ -1409,6 +1409,10 @@ The behavior is documented in `docs/systems/COMBAT_DEFENSES.md`, "Defense styles
 - A lapse drops the style skill only: the hit stat and the defense type still apply, and
   the style's armor share is unchanged (owner rulings, 2026-11-01). No style, or a style
   with no active skill, adds no style term and no lapse line.
+- `style_lists_vow(style, role)` is the vow test on its own (a sub-role counts by itself or
+  its anchor); `styles_listing_vow(role)` is its batched form, the pks of every style that
+  lists the vow in one query, read by the vow page's style module and the kit view's Style
+  row (`web/admin/authoring/combat_styles.py`, #4932).
 - Readers: `CombatTechniqueResolver.roll_check_with_breakdown` (the shared attack-roll
   seam: Strike, technique, joust) adds the term; a Strike also hits with `hit_stat`
   (`_stat_override`), a technique keeps its weapon's stat. `resolve_npc_attack` adds it to

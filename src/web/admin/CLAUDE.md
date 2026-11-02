@@ -1184,8 +1184,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 each pick's `VowFocusPickLimit` rows. Pattern mirrors the Distinction Builder:
 `superuser_required`, the contributor gate, plain Django forms, `base_site.html`, a
 page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 and 7 of the
-#4843 spec; the style module is a later slice (7); flags are slice 4 and the power
-preview slice 6 (#4930).
+#4843 spec; flags are slice 4, the power preview slice 6 (#4930) and the style module
+slice 7 (#4932).
 
 - **Files** - `web/admin/vow_builder/`: `views.py` (`vow_builder`, `vow_builder_pick`,
   `vow_builder_review`), `forms.py` (`VowForm`, `SpecialtyFormSet`, `PickFormSet`,
@@ -1195,7 +1195,7 @@ preview slice 6 (#4930).
   `holder_impact`, `pick_changes`, `description_clause`, `focus_pick_budget`; dataclasses
   only). Templates in
   `web/templates/admin/vow_builder/`: `page.html`, `_pick.html` (one pick as a `<details>`),
-  `_rail.html`, `_css.html`.
+  `_styles.html` (the combat styles module, #4932), `_rail.html`, `_css.html`.
 - **Payload rows are not edited here.** `VowAddedEffect`, `VowSituationalPerk` and
   `VowStatScaling` rows show as one plain line each (an added effect through
   `summarize_vow_added_effect`; a perk from its beneficiary, kind, situations and magnitude,
@@ -1292,6 +1292,18 @@ preview slice 6 (#4930).
   evaluator's own reads. The count is the same with one shown technique or three, and a
   fourth, unshown one adds none (`VowPowerPreviewTests`); the first load on a new catalog
   revision also evaluates the catalog once.
+- **Combat styles that work with this vow (#4932)** - a main-column module after the focus
+  picks, read only: Style (linked to its change page) / Works with this vow (a "works" or
+  "does not work" chip, `.vb-fit`) / Skill / Holders using it (this vow's live primary
+  memberships, `left_at` null and not secondary, whose sheet's `combat_style` is the style;
+  a character in two covenants counts once) / What a mismatch costs (only for "does not
+  work": "A holder fighting this style loses <skill> on attack and defense rolls; its hit
+  stat and defense type still apply.", or, for a style with no active skill, "No style skill
+  to lose; its hit stat and defense type apply as usual."). "No combat styles are authored
+  yet." with none. Read by `web/admin/authoring/combat_styles.py` `styles_for_vow(role) ->
+  list[StyleRow]`: whether a style works is `style_fit.styles_listing_vow(role)`, the
+  batched form of `style_lists_vow` (a sub-role counts by its anchor), so the page and the
+  roll's lapse test share one rule. Three queries however many styles.
 - **URLs** (superuser-only): `_vow_builder/pick/` -> `admin_vow_builder_pick` (`?pk=`, GET
   redirect, 400 on a missing or unknown pk), `_vow_builder/<pk>/` -> `admin_vow_builder`,
   `_vow_builder/<pk>/review/` -> `admin_vow_builder_review` (POST).
@@ -1362,7 +1374,7 @@ Demo screen 3 of the #4843 spec.
 
 ## Missing combat content (#4906, slice 4 of #4843)
 
-**Purpose:** demo screen 6. Five Required content flags on a vow's combat kit, on their
+**Purpose:** demo screen 6. Six Required content flags on a vow's combat kit, on their
 own page with a link to fix each flagged row. Flags only: nothing is blocked, no save
 path changes.
 
@@ -1373,7 +1385,10 @@ path changes.
   `vow_builder.live.focus_pick_budget()`; the `CharacterVowFocusPick` changelist `?q=` the
   character), Condition set, never read and Condition carrying a read property, set by
   nothing (both through the combo map's batched reads; the condition's combo map), Pick
-  with a blank payload (vow page). Each names its rows in `ProbeResult.flagged`
+  with a blank payload (vow page), and Style nothing uses (#4932: a `CombatStyle` no
+  `Tradition` teaches, "<style> (taught by no Tradition)", or with no `compatible_roles`,
+  "<style> (works with no vow)", one row naming both when it has both; one query; the
+  style's change page). Each names its rows in `ProbeResult.flagged`
   (`FlaggedRow(text, url)`) as well as `missing`.
 - **Page** - `tuning/combat_content_views.py` `combat_content`, `_combat_content/` ->
   `admin_combat_content`, superuser-only (`superuser_required`). Template
@@ -1383,9 +1398,9 @@ path changes.
   roles" with the tag "flags only, nothing blocked", then a Flag / What / Fix it table of
   the open flags: one table row per flagged row, the flag's label spanning them, and a Fix it
   link per row whose text is the flag's `FIX_LABELS` entry ("vow page", "their picks",
-  "combo map") and whose `aria-label` names the row. With nothing open, "Nothing is flagged."
+  "combo map", "style") and whose `aria-label` names the row. With nothing open, "Nothing is flagged."
 - **Panel** - `combat_roles._missing_combat_content_link` runs
-  `collect_combat_role_flags()` on every front-page load for a superuser: a fixed 116
+  `collect_combat_role_flags()` on every front-page load for a superuser: a fixed 117
   queries, whatever the catalog size. The count is `CombatRolesLink.flag_count`, drawn as a
   `.combat-roles-flagdot` pill (`arx_admin.css`) before the note.
 - **Queries** - fixed however many vows, picks, holders or conditions; pinned in
@@ -1399,7 +1414,7 @@ path changes.
 
 **Purpose:** demo screen 4. One real character's combat kit on one read-only page: each
 technique it knows with what its vows add, its chosen focus picks against the budget, and
-the sheet facts beside them. Not here yet: the style row (slice 7, after #4844).
+the sheet facts beside them, the combat style among them (slice 7, #4932).
 
 - **Files** - `web/admin/kit_view/`: `live.py` (pure reads, frozen dataclasses: `kit_for(sheet)
   -> Kit`, built from `known_techniques`, `vow_levels`, `technique_lines`, `pick_levels`,
@@ -1429,9 +1444,18 @@ the sheet facts beside them. Not here yet: the style row (slice 7, after #4844).
 - **Sheet** - Path . Gift (newest path history row, gift names), each live vow (linked to its
   vow page, shown level, "not engaged" chip; secondary vows labelled), and Defense: the
   primary vow's `CovenantRoleDefenseProfile` style (the resolved sub-role's own, else its
-  anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". A character
+  anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". Then Style
+  (#4932): the sheet's `combat_style` linked to its change page, then per held primary vow
+  " . works with <vow>" or " . not a style for <vow>: its skill does not count on attack and
+  defense rolls" (just " . not a style for <vow>" for a style with no active skill), the
+  resolved sub-role tested with `style_fit.style_lists_vow` through
+  `authoring.combat_styles.style_on_vow` (`HeldVow.style`, `SheetFacts.style` and
+  `style_lines`); "No combat style" with none, the name alone with no primary vow. A
+  character
   with no vow, no technique or a secondary vow only renders and says what is absent.
-- **Queries** - fixed however many techniques, added effects or picks: 26 for the kit reads
+- **Queries** - fixed however many techniques, added effects or picks (a styled sheet adds
+  the style's own reads and one query per primary vow; an unstyled one adds none): 26 for
+  the kit reads
   (`tests/test_kit_view_live.py` `KIT_QUERIES`, four of them the preview frame), 78 for the
   whole request (`tests/test_kit_view.py` `PAGE_QUERIES`, mostly admin chrome). A technique
   whose own or vow rows apply conditions costs the evaluator's per-row lookups. Function tags are read with
