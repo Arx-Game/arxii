@@ -70,10 +70,7 @@ export async function getServiceOffers(): Promise<ServiceOffer[]> {
 }
 
 export type MarketActionKey =
-  | 'market_buy_stock'
-  | 'market_buy_ware'
-  | 'market_finish_ware'
-  | 'market_service_craft';
+  'market_buy_stock' | 'market_buy_ware' | 'market_finish_ware' | 'market_service_craft';
 
 /**
  * Dispatch a market REGISTRY action. `DispatchActionView` resolves HTTP 200

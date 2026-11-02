@@ -134,20 +134,18 @@ export function useGridCanvasNodes<TRoom extends GridRoomLike>({
             floor: room.floor,
           })),
           floor
-        ).map(
-          (ghost): Node => ({
-            id: `ghost-${ghost.x}-${ghost.y}`,
-            type: 'ghost',
-            position: cellToPosition(ghost),
-            data: {
-              ghost,
-              onDig: onDigAt,
-              label: ghostLabel ? ghostLabel(ghost) : `Dig ${ghost.direction}`,
-            },
-            draggable: false,
-            selectable: false,
-          })
-        )
+        ).map((ghost): Node => ({
+          id: `ghost-${ghost.x}-${ghost.y}`,
+          type: 'ghost',
+          position: cellToPosition(ghost),
+          data: {
+            ghost,
+            onDig: onDigAt,
+            label: ghostLabel ? ghostLabel(ghost) : `Dig ${ghost.direction}`,
+          },
+          draggable: false,
+          selectable: false,
+        }))
       : [];
 
     const placedIds = new Set(placed.map((room) => room.id));

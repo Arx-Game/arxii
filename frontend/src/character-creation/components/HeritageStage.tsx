@@ -104,9 +104,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   }
   const topLevel: SpeciesEntryItem[] = [
     ...standalones.map((species): SpeciesEntryItem => ({ kind: 'leaf', species })),
-    ...Array.from(parentGroups.entries()).map(
-      ([parentId, group]): SpeciesEntryItem => ({ kind: 'group', parentId, ...group })
-    ),
+    ...Array.from(parentGroups.entries()).map(([parentId, group]): SpeciesEntryItem => ({
+      kind: 'group',
+      parentId,
+      ...group,
+    })),
   ];
 
   // If no area selected, prompt user to go back.

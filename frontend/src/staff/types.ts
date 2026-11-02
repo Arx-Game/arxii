@@ -197,8 +197,7 @@ export interface RosterApplicationDetail extends RosterApplicationListItem {
 // NOT a RosterApplicationDetail. See RosterApplicationApprovalSerializer.save()
 // in world/roster/serializers/applications.py.
 export type RosterApplicationReviewResult =
-  | { action: 'approved'; tenure_created: boolean }
-  | { action: 'denied'; success: boolean };
+  { action: 'approved'; tenure_created: boolean } | { action: 'denied'; success: boolean };
 
 // Submission status values
 export type SubmissionStatus = 'open' | 'reviewed' | 'dismissed';

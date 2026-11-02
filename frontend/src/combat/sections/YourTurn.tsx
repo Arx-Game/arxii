@@ -408,8 +408,7 @@ function buildFocusedJob(
   // technique can otherwise leak into a differently-shaped technique's
   // dispatch (#2206 review finding).
   type PositionParams =
-    | { destination_position_id: number }
-    | { position_a_id: number; position_b_id: number };
+    { destination_position_id: number } | { position_a_id: number; position_b_id: number };
   const positionKwargs: Record<string, PositionParams> = {};
   if (positionTargetShape === 'single' && castPosition?.destinationId !== undefined) {
     positionKwargs.position_params = { destination_position_id: castPosition.destinationId };

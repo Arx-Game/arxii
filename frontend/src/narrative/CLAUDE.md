@@ -84,13 +84,13 @@ Re-exports from `@/generated/api`:
 
 **Phase 5 — gemit + mute:**
 
-| File                      | Purpose                                                                                    |
+| File | Purpose |
 | ------------------------- | ------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------- |
-| `GemitRenderer.tsx`       | Inline green `                                                                             | G[GEMIT] | n` display block for real-time and historical gemit rendering |
-| `GemitHistorySection.tsx` | Paginated gemit history list in the character-sheet page (or standalone dialog)            |
-| `SendGemitDialog.tsx`     | Staff-only dialog: compose body + optional era ID + broadcast action                       |
-| `SendStoryOOCDialog.tsx`  | Lead GM/staff dialog: compose OOC notice → fans out to all story participants              |
-| `MuteStoryToggle.tsx`     | Bell icon button on `StoryDetailPage` — mutes/unmutes real-time narrative push for a story |
+| `GemitRenderer.tsx` | Inline green `                                                                             | G[GEMIT] | n` display block for real-time and historical gemit rendering |
+| `GemitHistorySection.tsx` | Paginated gemit history list in the character-sheet page (or standalone dialog) |
+| `SendGemitDialog.tsx` | Staff-only dialog: compose body + optional era ID + broadcast action |
+| `SendStoryOOCDialog.tsx` | Lead GM/staff dialog: compose OOC notice → fans out to all story participants |
+| `MuteStoryToggle.tsx` | Bell icon button on `StoryDetailPage` — mutes/unmutes real-time narrative push for a story |
 
 **#1522 — category mute:**
 

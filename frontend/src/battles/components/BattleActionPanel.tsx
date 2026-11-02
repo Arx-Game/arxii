@@ -92,11 +92,11 @@ export function BattleActionPanel({ sceneId, battle, detail }: Props) {
   const round = (detail?.round ?? null) as BattleRoundSummary | null;
   const showDeclaration = Boolean(
     battle &&
-      detail &&
-      myParticipant &&
-      characterId !== null &&
-      myParticipant.status === 'active' &&
-      round?.status === 'declaring'
+    detail &&
+    myParticipant &&
+    characterId !== null &&
+    myParticipant.status === 'active' &&
+    round?.status === 'declaring'
   );
 
   // Phase 2 (#3389 Decision 3) — SceneDetail.viewer_can_gm as the client-side

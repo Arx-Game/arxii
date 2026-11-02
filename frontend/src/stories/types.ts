@@ -729,14 +729,11 @@ export type StakeRewardSink = NonNullable<components['schemas']['StakeRewardLine
 export type StakeSeverity = NonNullable<components['schemas']['SeverityEnum']>;
 export type StakeOutcomeMethod = NonNullable<components['schemas']['MethodEnum']>;
 export type StakeEscalatesToRisk =
-  | components['schemas']['EscalatesToRiskEnum']
-  | components['schemas']['BlankEnum'];
+  components['schemas']['EscalatesToRiskEnum'] | components['schemas']['BlankEnum'];
 export type StakeSetsSubjectLifecycle =
-  | components['schemas']['SetsSubjectLifecycleEnum']
-  | components['schemas']['BlankEnum'];
+  components['schemas']['SetsSubjectLifecycleEnum'] | components['schemas']['BlankEnum'];
 export type StakeMachineMatchLifecycleState =
-  | components['schemas']['MachineMatchLifecycleStateEnum']
-  | components['schemas']['BlankEnum'];
+  components['schemas']['MachineMatchLifecycleStateEnum'] | components['schemas']['BlankEnum'];
 
 /**
  * `StakeResolution.transitions_subject_asset` (ASSET stakes only). Not a

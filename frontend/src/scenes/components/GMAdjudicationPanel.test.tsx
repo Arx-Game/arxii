@@ -42,9 +42,8 @@ interface DispatchBody {
   kwargs: Record<string, unknown>;
 }
 
-const mutateAsync = vi.fn(
-  (_body: DispatchBody): Promise<import('@/combat/types').DispatchResult> =>
-    Promise.resolve({ backend: 'registry', deferred: false, success: true, message: 'Done.' })
+const mutateAsync = vi.fn((_body: DispatchBody): Promise<import('@/combat/types').DispatchResult> =>
+  Promise.resolve({ backend: 'registry', deferred: false, success: true, message: 'Done.' })
 );
 vi.mock('@/combat/queries', () => ({
   useDispatchPlayerAction: vi.fn((_characterId: number) => ({

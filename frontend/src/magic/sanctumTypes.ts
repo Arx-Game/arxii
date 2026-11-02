@@ -17,11 +17,7 @@ export type SanctumDetails = components['schemas']['SanctumDetails'];
  * of the 5 canonical tiers seeded in world/seeds/checks.py (#1207).
  */
 export type SanctumOutcomeTier =
-  | 'Critical Failure'
-  | 'Failure'
-  | 'Partial Success'
-  | 'Success'
-  | 'Critical Success';
+  'Critical Failure' | 'Failure' | 'Partial Success' | 'Success' | 'Critical Success';
 
 export interface HomecomingRequest {
   resonance_sacrificed: number;

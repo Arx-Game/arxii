@@ -587,14 +587,12 @@ export function ThreadedNarrativeReader({
       grouped.set(key, rows);
     }
     return [...grouped.entries()]
-      .map(
-        ([key, rows]): Group => ({
-          key,
-          interactions: [...rows].sort(
-            (a, b) => a.timestamp.localeCompare(b.timestamp) || a.id - b.id
-          ),
-        })
-      )
+      .map(([key, rows]): Group => ({
+        key,
+        interactions: [...rows].sort(
+          (a, b) => a.timestamp.localeCompare(b.timestamp) || a.id - b.id
+        ),
+      }))
       .sort(
         (a, b) =>
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||

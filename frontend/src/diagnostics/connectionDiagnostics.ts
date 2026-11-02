@@ -481,12 +481,7 @@ export class ConnectionDiagnostics {
     identity: string,
     generation: number,
     reason:
-      | 'disconnect'
-      | 'disconnect_all'
-      | 'logout'
-      | 'account_switch'
-      | 'page_resume'
-      | 'teardown'
+      'disconnect' | 'disconnect_all' | 'logout' | 'account_switch' | 'page_resume' | 'teardown'
   ): void {
     const socket = this.sockets.get(identity);
     if (!socket || socket.generation !== generation) return;

@@ -28686,13 +28686,7 @@ export interface components {
      * @enum {string}
      */
     AxisEnum:
-      | 'TONE'
-      | 'CONSEQUENCE'
-      | 'WITNESS'
-      | 'SENSORY'
-      | 'TRIGGER'
-      | 'CHOOSING'
-      | 'REFLECTION';
+      'TONE' | 'CONSEQUENCE' | 'WITNESS' | 'SENSORY' | 'TRIGGER' | 'CHOOSING' | 'REFLECTION';
     /**
      * @description * `born` - Born Into
      *     * `married_in` - Married In
@@ -28957,8 +28951,7 @@ export interface components {
        *     * `episode_reached` - Episode reached or passed
        */
       referenced_milestone_type?:
-        | components['schemas']['ReferencedMilestoneTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ReferencedMilestoneTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description For referenced_milestone_type=CHAPTER_REACHED. */
       referenced_chapter?: number | null;
       /** @description For referenced_milestone_type=EPISODE_REACHED. */
@@ -29087,8 +29080,7 @@ export interface components {
        *     * `territory` - Territory
        */
       cause_override?:
-        | components['schemas']['CauseOverrideEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['CauseOverrideEnum'] | components['schemas']['BlankEnum'];
       /** @description Blank keeps the template's cause margin (percent). */
       cause_margin_override?: number | null;
       /** @description Blank keeps the template's affiliation; pick another for this placement. */
@@ -29135,8 +29127,7 @@ export interface components {
        *     * `territory` - Territory
        */
       cause_override?:
-        | components['schemas']['CauseOverrideEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['CauseOverrideEnum'] | components['schemas']['BlankEnum'];
       /** @description Blank keeps the template's cause margin (percent). */
       cause_margin_override?: number | null;
       /** @description Blank keeps the template's affiliation; pick another for this placement. */
@@ -29251,8 +29242,7 @@ export interface components {
        *     * `episode_reached` - Episode reached or passed
        */
       referenced_milestone_type?:
-        | components['schemas']['ReferencedMilestoneTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ReferencedMilestoneTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description For referenced_milestone_type=CHAPTER_REACHED. */
       referenced_chapter?: number | null;
       /** @description For referenced_milestone_type=EPISODE_REACHED. */
@@ -30225,8 +30215,7 @@ export interface components {
       thumbnail_url: string;
       played_by: string;
       played_by_role:
-        | (components['schemas']['PlayedByRoleEnum'] | components['schemas']['NullEnum'])
-        | null;
+        (components['schemas']['PlayedByRoleEnum'] | components['schemas']['NullEnum']) | null;
       loan_id: number | null;
       loan_status: string | null;
       tier: string | null;
@@ -31841,13 +31830,7 @@ export interface components {
      * @enum {string}
      */
     ConnectionKindEnum:
-      | 'raised_by'
-      | 'taught_by'
-      | 'served'
-      | 'sailed_with'
-      | 'owes'
-      | 'sworn_to'
-      | 'hunted_by';
+      'raised_by' | 'taught_by' | 'served' | 'sailed_with' | 'owes' | 'sworn_to' | 'hunted_by';
     /**
      * @description * `therefore` - Therefore
      *     * `but` - But
@@ -31864,12 +31847,7 @@ export interface components {
      * @enum {string}
      */
     ConsentModeEnum:
-      | 'everyone'
-      | 'ask'
-      | 'all_but_blacklist'
-      | 'friends_whitelist'
-      | 'rivals'
-      | 'allowlist';
+      'everyone' | 'ask' | 'all_but_blacklist' | 'friends_whitelist' | 'rivals' | 'allowlist';
     ConsentResponseRequest: {
       decision: components['schemas']['DecisionEnum'];
       target_persona_id?: number;
@@ -32539,8 +32517,7 @@ export interface components {
     CustodyClearanceRequestRequest: {
       protected_subject?: number | null;
       subject_kind?:
-        | (components['schemas']['SubjectKindEnum'] | components['schemas']['NullEnum'])
-        | null;
+        (components['schemas']['SubjectKindEnum'] | components['schemas']['NullEnum']) | null;
       /** @description The character this sheet belongs to */
       subject_sheet?: number | null;
       subject_item?: number | null;
@@ -33566,8 +33543,7 @@ export interface components {
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
-        | components['schemas']['Outcome88eEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['Outcome88eEnum'] | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
@@ -33668,8 +33644,7 @@ export interface components {
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
-        | components['schemas']['Outcome88eEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['Outcome88eEnum'] | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
@@ -38479,11 +38454,9 @@ export interface components {
       track_success_target?: number | null;
       track_failure_target?: number | null;
       track_success_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
       track_failure_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for MissionNode rows.
@@ -38556,11 +38529,9 @@ export interface components {
       track_success_target?: number | null;
       track_failure_target?: number | null;
       track_success_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
       track_failure_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -38651,8 +38622,7 @@ export interface components {
        *     * `lethal` - Lethal
        */
       encounter_risk_level?:
-        | components['schemas']['EncounterRiskLevelEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EncounterRiskLevelEnum'] | components['schemas']['BlankEnum'];
       /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
       opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
@@ -38705,8 +38675,7 @@ export interface components {
        *     * `territory` - Territory
        */
       cause_override?:
-        | components['schemas']['CauseOverrideEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['CauseOverrideEnum'] | components['schemas']['BlankEnum'];
       /** @description Blank keeps the template's cause margin (percent). */
       cause_margin_override?: number | null;
       /** @description Blank keeps the template's affiliation; pick another for this placement. */
@@ -38740,8 +38709,7 @@ export interface components {
        *     * `territory` - Territory
        */
       cause_override?:
-        | components['schemas']['CauseOverrideEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['CauseOverrideEnum'] | components['schemas']['BlankEnum'];
       /** @description Blank keeps the template's cause margin (percent). */
       cause_margin_override?: number | null;
       /** @description Blank keeps the template's affiliation; pick another for this placement. */
@@ -38786,8 +38754,7 @@ export interface components {
        *     * `lethal` - Lethal
        */
       encounter_risk_level?:
-        | components['schemas']['EncounterRiskLevelEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EncounterRiskLevelEnum'] | components['schemas']['BlankEnum'];
       /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
       opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
@@ -44847,8 +44814,7 @@ export interface components {
         [key: string]: unknown;
       }[];
       readonly audere_state:
-        | (components['schemas']['AudereStateEnum'] | components['schemas']['NullEnum'])
-        | null;
+        (components['schemas']['AudereStateEnum'] | components['schemas']['NullEnum']) | null;
       /**
        * @description Direct portrait URL via the presented persona (mirrors OpponentSerializer).
        *
@@ -45007,8 +44973,7 @@ export interface components {
        *     * `episode_reached` - Episode reached or passed
        */
       referenced_milestone_type?:
-        | components['schemas']['ReferencedMilestoneTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ReferencedMilestoneTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description For referenced_milestone_type=CHAPTER_REACHED. */
       referenced_chapter?: number | null;
       /** @description For referenced_milestone_type=EPISODE_REACHED. */
@@ -45521,11 +45486,9 @@ export interface components {
       track_success_target?: number | null;
       track_failure_target?: number | null;
       track_success_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
       track_failure_beat_outcome?:
-        | components['schemas']['BeatOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -45588,8 +45551,7 @@ export interface components {
        *     * `lethal` - Lethal
        */
       encounter_risk_level?:
-        | components['schemas']['EncounterRiskLevelEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EncounterRiskLevelEnum'] | components['schemas']['BlankEnum'];
       /** @description ENCOUNTER options only: the spawned encounter opens as a standoff. */
       opens_as_standoff?: boolean;
       /** @description Phase 0 predicate tree gating this option's visibility. */
@@ -46313,8 +46275,7 @@ export interface components {
        *     * `extreme` - Extreme
        */
       escalates_to_risk?:
-        | components['schemas']['EscalatesToRiskEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EscalatesToRiskEnum'] | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
@@ -46334,8 +46295,7 @@ export interface components {
        *     * `DEAD` - Dead
        */
       sets_subject_lifecycle?:
-        | components['schemas']['SetsSubjectLifecycleEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['SetsSubjectLifecycleEnum'] | components['schemas']['BlankEnum'];
       /**
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
@@ -46705,8 +46665,7 @@ export interface components {
        *     * `but` - But
        */
       connection_type?:
-        | components['schemas']['ConnectionTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ConnectionTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description Short narrative description of why this transition fires. */
       connection_summary?: string;
       order?: number;
@@ -46733,8 +46692,7 @@ export interface components {
        *     * `expired` - Expired
        */
       required_outcome?:
-        | components['schemas']['RequiredOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredOutcomeEnum'] | components['schemas']['BlankEnum'];
       /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
       required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
@@ -46747,8 +46705,7 @@ export interface components {
        *     * `withdrawal` - Withdrawal
        */
       required_stake_column?:
-        | components['schemas']['RequiredStakeColumnEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredStakeColumnEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Owner-authored ``TreasuredSubject`` CRUD shape.
@@ -47633,8 +47590,7 @@ export interface components {
       readonly enhancements: components['schemas']['AvailableEnhancement'][];
       readonly strain: components['schemas']['StrainAvailability'] | null;
       readonly action_category:
-        | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
-        | null;
+        (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum']) | null;
       readonly reach: string | null;
       readonly protective_flavor: string | null;
       readonly reactive_anima_cost: number | null;
@@ -50310,13 +50266,7 @@ export interface components {
      * @enum {string}
      */
     SectionEnum:
-      | 'identity'
-      | 'description'
-      | 'background'
-      | 'powers'
-      | 'regard'
-      | 'preferences'
-      | 'all';
+      'identity' | 'description' | 'background' | 'powers' | 'regard' | 'preferences' | 'all';
     /**
      * @description POST body for the #3412 character-selection endpoint.
      *
@@ -51507,8 +51457,7 @@ export interface components {
        *     * `extreme` - Extreme
        */
       escalates_to_risk?:
-        | components['schemas']['EscalatesToRiskEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EscalatesToRiskEnum'] | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
@@ -51528,8 +51477,7 @@ export interface components {
        *     * `DEAD` - Dead
        */
       sets_subject_lifecycle?:
-        | components['schemas']['SetsSubjectLifecycleEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['SetsSubjectLifecycleEnum'] | components['schemas']['BlankEnum'];
       /**
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
@@ -51578,8 +51526,7 @@ export interface components {
        *     * `extreme` - Extreme
        */
       escalates_to_risk?:
-        | components['schemas']['EscalatesToRiskEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['EscalatesToRiskEnum'] | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
@@ -51599,8 +51546,7 @@ export interface components {
        *     * `DEAD` - Dead
        */
       sets_subject_lifecycle?:
-        | components['schemas']['SetsSubjectLifecycleEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['SetsSubjectLifecycleEnum'] | components['schemas']['BlankEnum'];
       /**
        * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
@@ -51918,12 +51864,7 @@ export interface components {
      * @enum {string}
      */
     Status110Enum:
-      | 'submitted'
-      | 'in_review'
-      | 'revisions_requested'
-      | 'approved'
-      | 'denied'
-      | 'withdrawn';
+      'submitted' | 'in_review' | 'revisions_requested' | 'approved' | 'denied' | 'withdrawn';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -53486,14 +53427,7 @@ export interface components {
      * @enum {string}
      */
     TerrainTypeEnum:
-      | 'open'
-      | 'difficult'
-      | 'fortified'
-      | 'elevated'
-      | 'flooded'
-      | 'urban'
-      | 'water'
-      | 'aerial';
+      'open' | 'difficult' | 'fortified' | 'elevated' | 'flooded' | 'urban' | 'water' | 'aerial';
     /**
      * @description * `default` - Default
      *     * `arx` - Arx
@@ -53672,8 +53606,7 @@ export interface components {
       resonance_name: string;
       affinity_name: string;
       conversion_type:
-        | (components['schemas']['ConversionTypeEnum'] | components['schemas']['NullEnum'])
-        | null;
+        (components['schemas']['ConversionTypeEnum'] | components['schemas']['NullEnum']) | null;
       projected_points: number;
       merges_into_thread_id: number | null;
       readonly qualifying: components['schemas']['DriftQualifyingComponent'][];
@@ -54067,8 +54000,7 @@ export interface components {
        *     * `but` - But
        */
       connection_type?:
-        | components['schemas']['ConnectionTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ConnectionTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description Short narrative description of why this transition fires. */
       connection_summary?: string;
       order?: number;
@@ -54097,8 +54029,7 @@ export interface components {
        *     * `but` - But
        */
       connection_type?:
-        | components['schemas']['ConnectionTypeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['ConnectionTypeEnum'] | components['schemas']['BlankEnum'];
       /** @description Short narrative description of why this transition fires. */
       connection_summary?: string;
       order?: number;
@@ -54126,8 +54057,7 @@ export interface components {
        *     * `expired` - Expired
        */
       required_outcome?:
-        | components['schemas']['RequiredOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredOutcomeEnum'] | components['schemas']['BlankEnum'];
       /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
       required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
@@ -54140,8 +54070,7 @@ export interface components {
        *     * `withdrawal` - Withdrawal
        */
       required_stake_column?:
-        | components['schemas']['RequiredStakeColumnEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredStakeColumnEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Full serializer for TransitionRequiredOutcome.
@@ -54165,8 +54094,7 @@ export interface components {
        *     * `expired` - Expired
        */
       required_outcome?:
-        | components['schemas']['RequiredOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredOutcomeEnum'] | components['schemas']['BlankEnum'];
       /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
       required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
@@ -54179,8 +54107,7 @@ export interface components {
        *     * `withdrawal` - Withdrawal
        */
       required_stake_column?:
-        | components['schemas']['RequiredStakeColumnEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredStakeColumnEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description One routing rule as the graph and the author tree read it (#3563).
@@ -54194,16 +54121,14 @@ export interface components {
       readonly beat: number;
       readonly beat_title: string;
       readonly required_outcome:
-        | components['schemas']['RequiredOutcomeEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredOutcomeEnum'] | components['schemas']['BlankEnum'];
       /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
       readonly required_outcome_key: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       readonly stake: number | null;
       readonly stake_summary: string;
       readonly required_stake_column:
-        | components['schemas']['RequiredStakeColumnEnum']
-        | components['schemas']['BlankEnum'];
+        components['schemas']['RequiredStakeColumnEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description One trap visible to the requesting character (#3011).
@@ -54758,10 +54683,7 @@ export interface components {
      * @enum {string}
      */
     UnlockTypeEnum:
-      | 'class_level'
-      | 'thread_xp_lock'
-      | 'skill_breakthrough'
-      | 'language_breakthrough';
+      'class_level' | 'thread_xp_lock' | 'skill_breakthrough' | 'language_breakthrough';
     /** @description Response shape for ``PlayerMailViewSet.unread_count`` -- schema only, never a model. */
     UnreadMailCount: {
       readonly count: number;
@@ -59306,12 +59228,7 @@ export interface operations {
          *     * `withdrawn` - Withdrawn
          */
         status?:
-          | 'approved'
-          | 'denied'
-          | 'in_review'
-          | 'revisions_requested'
-          | 'submitted'
-          | 'withdrawn';
+          'approved' | 'denied' | 'in_review' | 'revisions_requested' | 'submitted' | 'withdrawn';
       };
       header?: never;
       path?: never;
@@ -60540,13 +60457,7 @@ export interface operations {
          *     * `REFLECTION` - The Reflection
          */
         axis?:
-          | 'CHOOSING'
-          | 'CONSEQUENCE'
-          | 'REFLECTION'
-          | 'SENSORY'
-          | 'TONE'
-          | 'TRIGGER'
-          | 'WITNESS';
+          'CHOOSING' | 'CONSEQUENCE' | 'REFLECTION' | 'SENSORY' | 'TONE' | 'TRIGGER' | 'WITNESS';
         path_id?: number;
       };
       header?: never;

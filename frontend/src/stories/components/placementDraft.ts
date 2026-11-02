@@ -105,13 +105,11 @@ export function placementFieldsFromLine(line: PlacementLineFields): PlacementDra
     cause_margin_override: line.cause_margin_override ?? null,
     organization: line.organization ?? null,
     organization_name: line.organization_name ?? '',
-    drive_edits: (line.drive_edits ?? []).map(
-      (e): DriveEditDraft => ({
-        property: e.property,
-        property_name: e.property_name ?? '',
-        strength: e.strength,
-      })
-    ),
+    drive_edits: (line.drive_edits ?? []).map((e): DriveEditDraft => ({
+      property: e.property,
+      property_name: e.property_name ?? '',
+      strength: e.strength,
+    })),
     suppressed_faction_rules: line.suppressed_faction_rules ?? [],
   };
 }

@@ -184,11 +184,11 @@ export const EMPTY_POWERS: PowersDraft = {
 export function magicComplete(powers: PowersDraft): boolean {
   return Boolean(
     powers.tradition &&
-      powers.gift &&
-      powers.techniques.length > 0 &&
-      powers.resonance &&
-      powers.animaStat &&
-      powers.animaSkill
+    powers.gift &&
+    powers.techniques.length > 0 &&
+    powers.resonance &&
+    powers.animaStat &&
+    powers.animaSkill
   );
 }
 

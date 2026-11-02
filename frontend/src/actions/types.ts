@@ -8,11 +8,7 @@
 export type EffortLevel = 'VERY_LOW' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERY_HIGH';
 
 export type ActionSlot =
-  | 'focused'
-  | 'passive-physical'
-  | 'passive-social'
-  | 'passive-mental'
-  | 'scene'; // single-card scene context
+  'focused' | 'passive-physical' | 'passive-social' | 'passive-mental' | 'scene'; // single-card scene context
 
 export interface ActionContext {
   slot: ActionSlot;
