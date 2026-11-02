@@ -57,6 +57,7 @@ from world.character_sheets.types import (
     MentorBondEntry,
     MotifResonanceEntry,
     MotifSection,
+    NaturalWeaponEntry,
     OrgDomainEntry,
     OrgMembershipEntry,
     OrgReputationEntry,
@@ -106,11 +107,11 @@ from world.forms.models import (
 )
 from world.game_clock.serializers import IcDateDisplayField
 from world.game_clock.services import format_ic_month_day
-from world.items.models import EquippedItem
+from world.items.models import EquippedItem, ItemFacet, ItemInstance
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
 from world.locations.models import LocationTenancy
-from world.magic.constants import GlimpseState, RitualExecutionKind
+from world.magic.constants import AcquisitionOrigin, GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
     CharacterGift,
@@ -2119,12 +2120,70 @@ def _build_worn(sheet: CharacterSheet, *, privileged: bool) -> list[WornEntry]:
         is_hidden = not visibility.is_visible(instance.pk)
         if is_hidden and not privileged:
             continue
+        # The owner and staff read a natural weapon in its own block (#4898), so it is
+        # not listed twice; anyone else sees it here, as anything worn on the skin.
+        if privileged and instance.natural_weapon_gift_id is not None:
+            continue
         entries.append(
             WornEntry(
                 id=instance.pk,
                 name=instance.display_name,
                 description=instance.display_description,
                 is_hidden=is_hidden,
+            )
+        )
+    return entries
+
+
+def _build_natural_weapons(sheet: CharacterSheet) -> list[NaturalWeaponEntry]:
+    """The natural weapons the character holds (#4898): owner and staff only.
+
+    One query for the weapons; a sheet with none stops there. A sheet with some pays two
+    more, fixed however many it holds: their attached facets and the gift rows saying how
+    each gift reached the character (a species grant or another way). Plain queries, not
+    a sheet prefetch: the sheet is idmapper-shared and a ``to_attr`` prefetch that already
+    ran once is skipped, so a weapon gained mid-session would never show.
+    """
+    weapons = list(
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=sheet, natural_weapon_gift__isnull=False)
+        .select_related(
+            "template", "template__weapon_damage_type", "quality_tier", "natural_weapon_gift"
+        )
+        .order_by("pk")
+    )
+    if not weapons:
+        return []
+    facets: dict[int, list[ItemFacet]] = {}
+    for row in (
+        ItemFacet.attached()
+        .filter(item_instance__in=weapons)
+        .select_related("facet")
+        .order_by("facet__name", "pk")
+    ):
+        facets.setdefault(row.item_instance_id, []).append(row)
+    species_gift_ids = set(
+        CharacterGift.objects.filter(
+            character=sheet,
+            gift_id__in={weapon.natural_weapon_gift_id for weapon in weapons},
+            origin=AcquisitionOrigin.SPECIES_GRANT,
+        ).values_list("gift_id", flat=True)
+    )
+    entries: list[NaturalWeaponEntry] = []
+    for weapon in weapons:
+        attached = facets.get(weapon.pk, [])
+        damage_type = weapon.effective_weapon_damage_type
+        entries.append(
+            NaturalWeaponEntry(
+                id=weapon.pk,
+                name=weapon.display_name,
+                gift_name=weapon.natural_weapon_gift.name,
+                from_species=weapon.natural_weapon_gift_id in species_gift_ids,
+                damage=weapon.effective_weapon_damage,
+                damage_type=damage_type.name if damage_type else "",
+                facets=[row.facet.name for row in attached],
+                facets_used=sum(1 for row in attached if not row.is_inherent),
+                facet_capacity=weapon.template.facet_capacity,
             )
         )
     return entries
@@ -2316,6 +2375,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.
             "worn": _build_worn(sheet, privileged=privileged),
+            # #4898 — claws, a bite or horns a gift gave them. The sheet's own mechanics,
+            # so owner and staff only; anyone else sees them under Wearing.
+            "natural_weapons": _build_natural_weapons(sheet) if privileged else [],
             # Ties' Mentors block. Owner and staff only, like the covenant roles it
             # sits beside.
             "mentors": _build_mentors(sheet, privileged=privileged),

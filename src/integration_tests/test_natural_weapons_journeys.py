@@ -572,3 +572,69 @@ class OfferingTheClaws(JourneyCase):
         self.assertIn(REFUSED, told)
         self.assertFalse(CeremonyOffering.objects.exists())
         self.assert_claws_kept()
+
+
+class TheClawsOnTheSheet(JourneyCase):
+    """Hobb opens his own sheet and finds his claws; a stranger sees them only as worn."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = self.make_room("The Academy Yard")
+        self.hobb = self.make_player("Hobb", room=self.room)
+        self.sheet = self.hobb.sheet_data
+        self.stranger = self.make_player("Wren", room=self.room)
+        self.gift = clawed_gift()
+
+    def sheet_as(self, character) -> dict:
+        response = self.api(self.account_of(character)).get(
+            f"/api/character-sheets/{self.sheet.pk}/"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_a_species_gift_shows_its_claws_with_damage_and_runes(self) -> None:
+        from world.conditions.factories import DamageTypeFactory
+        from world.magic.constants import AcquisitionOrigin
+
+        template = self.gift.natural_weapon_template
+        template.weapon_damage_type = DamageTypeFactory(name="Slashing")
+        template.save(update_fields=["weapon_damage_type"])
+        grant_gift_to_character(self.sheet, self.gift, origin=AcquisitionOrigin.SPECIES_GRANT)
+        (claws,) = claws_of(self.sheet)
+        ItemFacetFactory(item_instance=claws, facet=FacetFactory(name="Keenness"))
+
+        data = self.sheet_as(self.hobb)
+
+        self.assertEqual(
+            data["natural_weapons"],
+            [
+                {
+                    "id": claws.pk,
+                    "name": CLAWS,
+                    "gift_name": "Khati Claws",
+                    "from_species": True,
+                    "damage": CLAWS_DAMAGE,
+                    "damage_type": "Slashing",
+                    "facets": ["Keenness"],
+                    "facets_used": 1,
+                    "facet_capacity": 1,
+                }
+            ],
+        )
+        self.assertNotIn(CLAWS, [row["name"] for row in data["worn"]])
+
+    def test_a_gift_learned_in_play_names_the_gift_and_no_facets(self) -> None:
+        grant_gift_to_character(self.sheet, self.gift)
+
+        (row,) = self.sheet_as(self.hobb)["natural_weapons"]
+
+        self.assertFalse(row["from_species"])
+        self.assertEqual((row["facets"], row["facets_used"]), ([], 0))
+
+    def test_a_stranger_sees_them_worn_and_no_weapon_block(self) -> None:
+        grant_gift_to_character(self.sheet, self.gift)
+
+        data = self.sheet_as(self.stranger)
+
+        self.assertEqual(data["natural_weapons"], [])
+        self.assertIn(CLAWS, [row["name"] for row in data["worn"]])
