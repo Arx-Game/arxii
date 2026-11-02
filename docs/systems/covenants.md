@@ -1135,7 +1135,12 @@ The other seams in the module:
   the sheet's own engaged vows' rows that match the technique's function and narrowing, with
   no cast-dependent filter (not unlock level, context, situation or frequency), and it does
   NOT filter by `beneficiary`, so a display tells a row riding the sheet's own casts from one
-  riding its allies' by reading `beneficiary`. **[BUILT, NOT WIRED]** pending #4565.
+  riding its allies' by reading `beneficiary`. `vow_added_effects_on_techniques(sheet,
+  techniques, functions=None) -> dict[int, list[VowAddedEffect]]` (#4918) is the batched form
+  the single one calls: one effect query (role, pick, gift and technique joined, payloads
+  prefetched) for every technique, the function tags read fresh by
+  `function_tags_by_technique(techniques)` when not passed. **[BUILT & WIRED]** in the admin
+  kit view; the player-facing #4565 display still waits.
 - `effect_rides_technique(effect, technique, technique_functions) -> bool` and
   `techniques_ridden_by(effect) -> QuerySet[Technique]` (#4880) are the one catalog match
   between a row and the techniques it rides: the row's `function` among the technique's
@@ -1272,6 +1277,10 @@ decides defense" under Combat Seams).
   left count. A holder with no pick is absent.
 - `holder_has_pick(focus_pick_id, holder_id, chosen) -> bool` - True for a row with no pick
   (the base vow), else only when the holder chose it.
+- `spent_by_membership_level(choices) -> dict[tuple[int, int], int]` (#4918) - what each
+  membership spent per pick level, keyed `(character_role_id, pick_level)`, priced through
+  `price_for` from one limits query. The Holder over budget flag and the kit view both sum
+  with it.
 
 ### Focus picks in play (#4806, slice 2)
 
@@ -1311,6 +1320,11 @@ with no picks, a holder over budget at a level, a pick with no payload row, and 
 that are landed but never read or read but never landed, each linked to the vow page or
 the condition's combo map, on the Missing combat content page (`_combat_content/`). Flags
 only; nothing is refused for them.
+
+The kit view (#4918, `web/admin/kit_view/`, `_kit_view/<sheet_pk>/`) shows one real
+character's techniques with what its vows add (the batched static view, base lines then one
+group per chosen pick), its chosen picks per level against the budget, and its path, gift,
+vow and defense profile. Read only. See `src/web/admin/CLAUDE.md` "Kit view".
 
 ## Enums / Constants
 

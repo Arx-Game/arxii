@@ -8129,7 +8129,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  (the static view, does not filter by beneficiary; `vow_added_effects_on_techniques` is its
+  batched form, read by the admin kit view `admin_kit_view`, #4918);
   `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,

@@ -40,6 +40,14 @@ def combo_map_url(obj) -> str:
     return _combo_map_url(obj)
 
 
+@register.filter
+def kit_view_url(obj) -> str:
+    """The kit view for a character sheet or chosen focus pick on screen, or ``""`` (#4918)."""
+    from web.admin.authoring.links import kit_view_url as _kit_view_url  # noqa: PLC0415
+
+    return _kit_view_url(obj)
+
+
 @register.simple_tag
 def builder_link(obj: object) -> SafeString | str:
     """Render `<a href="...">label</a>` to ``obj``'s own Builder page (#3675 Task 10).
