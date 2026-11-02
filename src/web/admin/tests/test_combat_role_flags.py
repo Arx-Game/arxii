@@ -30,6 +30,7 @@ from world.conditions.factories import ConditionStageFactory, ConditionTemplateF
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CharacterVowFocusPickFactory,
+    CombatStyleFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
     VowAddedEffectAppliedConditionFactory,
@@ -41,6 +42,7 @@ from world.covenants.factories import (
     VowStatScalingFactory,
 )
 from world.covenants.perks.constants import Situation
+from world.magic.factories import TraditionFactory
 from world.mechanics.constants import EffectKind
 from world.mechanics.factories import ModifierTargetFactory, PropertyFactory
 
@@ -231,8 +233,51 @@ class PickBlankPayloadTest(CombatRoleFlagsCase):
         self.assertNotIn("Kneel", texts)
 
 
+class StyleUnusedTest(CombatRoleFlagsCase):
+    """Style nothing uses (#4932): a style no Tradition teaches, or that works with no vow."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        tradition = TraditionFactory(name="Flag Tradition")
+        cls.used = CombatStyleFactory(name="Flag Used Style")
+        cls.used.taught_by.add(tradition)
+        cls.used.compatible_roles.add(cls.fulmination)
+        cls.untaught = CombatStyleFactory(name="Flag Untaught Style")
+        cls.untaught.compatible_roles.add(cls.fulmination)
+        cls.vowless = CombatStyleFactory(name="Flag Vowless Style")
+        cls.vowless.taught_by.add(tradition)
+        cls.orphan = CombatStyleFactory(name="Flag Orphan Style")
+
+    def test_each_gap_is_named_and_both_gaps_are_one_row(self) -> None:
+        self.assertEqual(
+            _texts(flags._probe_combat_style_unused()),
+            [
+                "Flag Orphan Style (taught by no Tradition, works with no vow)",
+                "Flag Untaught Style (taught by no Tradition)",
+                "Flag Vowless Style (works with no vow)",
+            ],
+        )
+
+    def test_a_taught_style_with_a_vow_is_not_flagged(self) -> None:
+        self.assertNotIn("Flag Used Style", " ".join(_texts(flags._probe_combat_style_unused())))
+
+    def test_each_row_links_to_the_style_change_page(self) -> None:
+        result = flags._probe_combat_style_unused()
+        self.assertEqual(
+            _url_for(result, "Flag Vowless Style (works with no vow)"),
+            reverse("admin:arxii_combatstyle_change", args=[self.vowless.pk]),
+        )
+        self.assertEqual(flags.FIX_LABELS["combat_style_unused"], "style")
+
+    def test_with_no_gaps_the_flag_is_clear(self) -> None:
+        for style in (self.untaught, self.vowless, self.orphan):
+            style.delete()
+        self.assertTrue(flags._probe_combat_style_unused().present)
+
+
 class RegistryTest(CombatRoleFlagsCase):
-    def test_the_five_flags_are_tuning_rows_of_the_required_content_registry(self) -> None:
+    def test_the_six_flags_are_tuning_rows_of_the_required_content_registry(self) -> None:
         keys = {dep.key: dep.tier for dep in rc._declarations() if dep.key.startswith("combat_")}
         self.assertEqual(
             keys,
@@ -243,14 +288,16 @@ class RegistryTest(CombatRoleFlagsCase):
                     "combat_condition_never_read",
                     "combat_condition_set_by_nothing",
                     "combat_pick_blank_payload",
+                    "combat_style_unused",
                 ),
                 rc.DependencyTier.TUNING,
             ),
         )
 
 
-#: The five probes' queries together, however many vows, picks, holders and conditions.
-FLAG_QUERIES = 116
+#: The six probes' queries together, however many vows, picks, holders, conditions and
+#: styles (the style probe is one query, #4932).
+FLAG_QUERIES = 117
 
 
 class QueryCountTest(CombatRoleFlagsCase):
@@ -269,6 +316,7 @@ class QueryCountTest(CombatRoleFlagsCase):
             self._holder(pick)
             self._condition(f"Extra set {index}", self.lonely, setters=1)
             self._condition(f"Extra unset {index}", self.indulgence, setters=0)
+            CombatStyleFactory(name=f"Extra style {index}")
         self._run_all()
         after = self._run_all()
         self.assertEqual(before, after)

@@ -20,7 +20,7 @@ from world.covenants.factories import (
     CovenantRoleFactory,
     VowFocusPickFactory,
 )
-from world.covenants.models import VowFocusPickConfig
+from world.covenants.models import CombatStyle, VowFocusPickConfig
 from world.mechanics.factories import PropertyFactory
 
 
@@ -74,6 +74,9 @@ class CombatRolesPanelTests(TestCase):
             self.assertEqual(row.url, reverse("admin_combat_content"))
             return row.flag_count, row.note
 
+        # The class's bare style is taught by no Tradition and works with no vow (#4932).
+        self.assertEqual(shown(), (1, "open flag"))
+        CombatStyle.objects.all().delete()
         self.assertEqual(shown(), (0, "no open flags"))
         CovenantRoleFactory(name="Warden")
         self.assertEqual(shown(), (1, "open flag"))

@@ -1,6 +1,6 @@
 """Missing combat content flags (#4906, slice 4 of #4843): gaps in a vow's combat kit.
 
-Five Required content probes, each naming the rows it flags and the page that fixes each
+Six Required content probes, each naming the rows it flags and the page that fixes each
 one (``FlaggedRow``). They are tuning flags: the game runs with every one of them open,
 nothing is blocked, and no save refuses a row for them. The two condition flags read the
 combo map's own lists (``web.admin.combo_map.live``), so the flags and the map cannot
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.urls import reverse
 
 from web.admin.tuning.required_content import (
@@ -226,6 +226,44 @@ def _probe_pick_blank_payload() -> ProbeResult:
     return _flags(rows)
 
 
+def _probe_combat_style_unused() -> ProbeResult:
+    """A combat style no Tradition teaches, or that works with no vow (#4932).
+
+    A style nobody is taught never reaches a character (creation offers the styles a
+    Tradition teaches); a style listing no vow lapses its skill under every vow a holder
+    has (``style_fit``). A style with both gaps is one row naming both. One query.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    through_taught = CombatStyle.taught_by.through
+    through_vows = CombatStyle.compatible_roles.through
+    styles = (
+        CombatStyle.objects.annotate(
+            taught=Exists(through_taught.objects.filter(combatstyle_id=OuterRef("pk"))),
+            with_vow=Exists(through_vows.objects.filter(combatstyle_id=OuterRef("pk"))),
+        )
+        .filter(Q(taught=False) | Q(with_vow=False))
+        .order_by("name")
+    )
+    rows: list[FlaggedRow] = []
+    for style in styles:
+        gaps = [
+            gap
+            for gap, missing in (
+                ("taught by no Tradition", not style.taught),
+                ("works with no vow", not style.with_vow),
+            )
+            if missing
+        ]
+        rows.append(
+            FlaggedRow(
+                text=f"{style.name} ({', '.join(gaps)})",
+                url=reverse("admin:arxii_combatstyle_change", args=[style.pk]),
+            )
+        )
+    return _flags(rows)
+
+
 _CONSUMER_PICKS = "world/covenants/focus_picks.py validate_character_focus_pick(), pick_price()"
 _CONSUMER_COMBO = (
     "web/admin/combo_map/sources.py SETTER_SOURCES, READER_SOURCES "
@@ -234,7 +272,7 @@ _CONSUMER_COMBO = (
 
 
 def combat_role_declarations() -> tuple[ContentDependency, ...]:
-    """The five missing combat content flags, in the order an author works through a vow."""
+    """The six missing combat content flags, in the order an author works through a vow."""
     return (
         ContentDependency(
             key="combat_vow_no_picks",
@@ -297,6 +335,21 @@ def combat_role_declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_pick_blank_payload),
             admin_model="VowFocusPick",
         ),
+        ContentDependency(
+            key="combat_style_unused",
+            label="Style nothing uses",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/covenants/style_fit.py style_fit_for_attack(), style_fit_for_defense(); "
+                "world/character_creation/magic_training.py taught_styles()"
+            ),
+            consequence=(
+                "No Tradition teaches this style, so no character is offered it, or it works "
+                "with no vow, so its skill never counts for a holder of any vow."
+            ),
+            probe=CustomProbe(fn=_probe_combat_style_unused),
+            admin_model="CombatStyle",
+        ),
     )
 
 
@@ -308,11 +361,12 @@ FIX_LABELS: dict[str, str] = {
     "combat_condition_never_read": "combo map",
     "combat_condition_set_by_nothing": "combo map",
     "combat_pick_blank_payload": "vow page",
+    "combat_style_unused": "style",
 }
 
 
 def collect_combat_role_flags() -> list[DependencyRow]:
-    """The five flags resolved, in declaration order, for the Missing combat content page
+    """The six flags resolved, in declaration order, for the Missing combat content page
     and the Combat roles panel. A clear flag is ``result.present``."""
     return [
         DependencyRow(dependency=dependency, result=dependency.probe.resolve(None))

@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from web.admin.tests.test_distinction_builder import emitted_classes, reachable_css
 from world.covenants.factories import (
+    CombatStyleFactory,
     CovenantRoleFactory,
     VowFocusPickFactory,
     VowStatScalingFactory,
@@ -84,6 +85,8 @@ class CombatContentPageTest(CombatContentPageCase):
         VowFocusPickFactory(covenant_role=fulmination, name="Under Open Sky")
         kept = VowFocusPickFactory(covenant_role=fulmination, name="Arcing Charge")
         VowStatScalingFactory(covenant_role=fulmination, focus_pick=kept)
+        style = CombatStyleFactory(name="Iron Guard")
+        style.compatible_roles.add(fulmination)
 
         body = self.get()
         self.assertEqual(
@@ -92,7 +95,13 @@ class CombatContentPageTest(CombatContentPageCase):
                 "Vow with no picks Aegis vow page",
                 "Warden vow page",
                 "Pick with a blank payload Under Open Sky (Fulmination) vow page",
+                "Style nothing uses Iron Guard (taught by no Tradition) style",
             ],
+        )
+        self.assertIn(
+            f'<a href="{reverse("admin:arxii_combatstyle_change", args=[style.pk])}" '
+            'aria-label="style: Iron Guard (taught by no Tradition)">style</a>',
+            body,
         )
         for role in (warden, aegis):
             self.assertIn(
