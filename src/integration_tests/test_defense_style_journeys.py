@@ -13,10 +13,8 @@ defense style decides what comes off it.
   attack's own defence check. A partial success (level 1) takes half the blow (5), the
   armor takes 2 of the rest, 3 lands. A clean one (level 2) takes all of it. A failure
   takes none: 10 - 2 = 8, and the ward keeps its whole buffer.
-- No style and no vow profile: all 4 soak counts, the field absorbs without a roll, and
-  only the defence roll is rolled (the behavior before #4759).
-- No style but an engaged vow whose defense profile is Barrier: the ward rolls (the vow
-  profile is the fallback). A style on top of that vow wins.
+- No style: all 4 soak counts, the field absorbs without a roll, and only the defence roll
+  is rolled (the behavior before #4759). A vow carries no defense of its own (#4975).
 
 Expected values come from the spec (#4759 Decisions 2 and 3, Verification 5) and the
 MovementConfig field defaults (gap 3, leak 50 percent); the defence ladder is
@@ -53,11 +51,8 @@ from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import _install_reactive_side_effects
 from world.covenants.constants import DefenseStyle
-from world.covenants.defense import defense_style_for
 from world.covenants.factories import (
     CombatStyleFactory,
-    CovenantRoleDefenseProfileFactory,
-    make_engaged_member,
 )
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
@@ -283,39 +278,3 @@ class TheBarrierRolls(_TheYard):
         self.assertEqual(roll.calls["Bram"], 1)  # the defence roll only
         self.assertEqual(self.health(bram), HEALTH)  # 6 absorbed, 4 soaked
         self.assertFalse(ConditionInstance.objects.filter(pk=ward.pk).exists())  # spent
-
-
-class TheVowProfileIsTheFallback(_TheYard):
-    def _sworn(self, name: str, *, style=None):
-        character = self.fighter(name, style=style)
-        membership = make_engaged_member(character_sheet=character.sheet_data)
-        character.covenant_roles.invalidate()
-        CovenantRoleDefenseProfileFactory(
-            covenant_role=membership.covenant_role,
-            style=DefenseStyle.BARRIER,
-            gear_additive_tenths=10,
-        )
-        return character
-
-    def test_a_barrier_vow_with_no_style_rolls_the_ward(self) -> None:
-        aud = self._sworn("Aud")
-        self.ward(aud)
-        self.blade()
-        roll = RollsInTurn({"Aud": [0, 1]})
-
-        self.resolve(roll)
-
-        self.assertEqual(roll.calls["Aud"], 2)
-        self.assertEqual(self.health(aud), HEALTH - (STRIKE - 5 - ARMOR))  # 1 lands
-
-    def test_a_style_wins_over_the_vow(self) -> None:
-        aud = self._sworn("Aud", style=self.evasion)
-        self.assertEqual(defense_style_for(aud).style, DefenseStyle.EVASION)
-        self.ward(aud)
-        self.blade()
-        roll = RollsInTurn({"Aud": [0]})
-
-        self.resolve(roll)
-
-        self.assertEqual(roll.calls["Aud"], 1)  # evasion: no ward roll
-        self.assertEqual(self.health(aud), HEALTH)  # 10 absorbed outright

@@ -10,8 +10,6 @@ every neighboring covenants test file documents.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -25,19 +23,17 @@ from world.covenants.exceptions import (
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
-    CovenantRoleDefenseProfileFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
     VowSituationalPerkFactory,
+    give_combat_style,
 )
 from world.covenants.models import SecondaryVowConfig
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind
 from world.covenants.perks.services import FiredPerk, applicable_perks
-from world.covenants.services import (
-    gear_additive_fraction,
-    secondary_vow_config,
-    set_engaged_membership,
-)
+from world.covenants.services import secondary_vow_config, set_engaged_membership
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.models import Thread
@@ -301,13 +297,13 @@ class SecondaryVowChassisIsolationTests(TestCase):
         resolved = precedence_role_for_combat(self.sheet)
         self.assertEqual(resolved, self.primary_role)
 
-    def test_gear_additive_fraction_unaffected_by_secondary_profile(self) -> None:
-        CovenantRoleDefenseProfileFactory(covenant_role=self.primary_role, gear_additive_tenths=5)
-        baseline = gear_additive_fraction(self.character)
-        self.assertEqual(baseline, Decimal(5) / 10)
+    def test_secondary_vow_never_makes_armor_compatible(self) -> None:
+        """The style lists only the SECONDARY vow and light armor: the worn light armor stays
+        in the incompatible bucket, since gear compatibility reads engaged PRIMARY vows
+        only (#2641; the style, not the vow, carries the compatibility, #4975)."""
+        from world.combat.services import _split_armor_soak_by_compatibility
 
         secondary_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        CovenantRoleDefenseProfileFactory(covenant_role=secondary_role, gear_additive_tenths=10)
         CharacterCovenantRoleFactory(
             character_sheet=self.sheet,
             covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
@@ -315,9 +311,22 @@ class SecondaryVowChassisIsolationTests(TestCase):
             engaged=True,
             is_secondary=True,
         )
+        give_combat_style(self.sheet, roles=[secondary_role], kinds=[GearArchetype.LIGHT_ARMOR])
+        template = ItemTemplateFactory(
+            gear_archetype=GearArchetype.LIGHT_ARMOR, base_armor_soak=3, max_durability=30
+        )
+        EquippedItemFactory(
+            character=self.sheet,
+            item_instance=ItemInstanceFactory(template=template, durability=30),
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.character.equipped_items.invalidate()
+        self.character.covenant_roles.invalidate()
 
-        with_secondary = gear_additive_fraction(self.character)
-        self.assertEqual(with_secondary, baseline)
+        compat_soak, incompat_soak, _, _ = _split_armor_soak_by_compatibility(self.character)
+
+        self.assertEqual((compat_soak, incompat_soak), (0, 3))
 
     def test_vow_scaled_maneuver_effect_unaffected_by_secondary(self) -> None:
         """A secondary vow never scales a maneuver: its ``VowStatScaling`` row on a

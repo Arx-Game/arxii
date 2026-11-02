@@ -4,7 +4,7 @@ One real character's techniques, each with what its vows add (the static view,
 ``vow_added_effects_on_techniques``, which ignores the unlock level, context, situation
 and frequency by design) and its power preview (#4930), the focus picks it chose with
 each level's spend against the budget, and the sheet facts a reader needs beside them:
-path, gifts, vows, the vow's defense profile and the combat style (#4932). The budget is
+path, gifts, vows, the style's defense type and the combat style (#4932, #4975). The budget is
 read without creating the config row, the rule every Combat roles page keeps on a GET.
 
 The page's query count is fixed however many added effects or picks the character has;
@@ -29,7 +29,7 @@ from world.covenants.added_effects import (
     vow_added_effects_on_techniques,
 )
 from world.covenants.focus_picks import spent_by_membership_level
-from world.covenants.models import CharacterVowFocusPick, CovenantRoleDefenseProfile
+from world.covenants.models import CharacterVowFocusPick
 from world.covenants.perks.services import _SELF_BENEFICIARIES
 from world.covenants.style_fit import style_vow_ids
 from world.magic.constants import TargetKind, TechniqueFunction
@@ -118,8 +118,8 @@ class PickLevel:
 class HeldVow:
     """One live vow membership: the vow, its shown level, and its defense style.
 
-    ``defense`` is the vow's defense profile style label (the resolved sub-role's own
-    profile, else its anchor's), or "" when it has none. ``style`` says whether the
+    ``defense`` is the defense type of the character's combat style, or "" with no style.
+    ``style`` says whether the
     character's combat style works with a primary vow (#4932, the resolved sub-role
     against ``style_fit``'s rule); None for a secondary vow or a character with no style.
     """
@@ -339,10 +339,10 @@ def held_vows(
     levels: dict[int, int],
     style: CombatStyle | None = None,
 ) -> list[HeldVow]:
-    """Each live membership, primary first: one query for the defense profiles.
+    """Each live membership, primary first.
 
-    A primary vow's defense is its resolved sub-role's own profile, else its anchor's
-    (``engaged_primary_defense_profile``'s rule); a secondary vow reads its own role.
+    Every vow's ``defense`` is the held style's defense type (the character defends the
+    way their combat style teaches, whatever vow they hold), or blank with no style.
     With ``style``, each primary vow also says whether the style works with it (one
     query for the vows the style lists, ``style_vow_ids``, however many vows are held).
     """
@@ -357,18 +357,11 @@ def held_vows(
         )
         for m in memberships
     }
-    role_ids = {role.pk for role in resolved.values()} | {
-        _anchor_id(role) for role in resolved.values()
-    }
-    profiles = {
-        profile.covenant_role_id: profile
-        for profile in CovenantRoleDefenseProfile.objects.filter(covenant_role_id__in=role_ids)
-    }
+    defense = style.get_defense_style_display() if style is not None else ""
     listed = style_vow_ids(style) if style is not None else set()
     vows: list[HeldVow] = []
     for membership in sorted(memberships, key=lambda m: (m.is_secondary, m.covenant_role.name)):
         role = resolved[membership.pk]
-        profile = profiles.get(role.pk) or profiles.get(_anchor_id(role))
         vows.append(
             HeldVow(
                 vow=Link(
@@ -378,7 +371,7 @@ def held_vows(
                 level=levels.get(_anchor_id(membership.covenant_role), 0),
                 is_secondary=membership.is_secondary,
                 engaged=membership.engaged,
-                defense=profile.get_style_display() if profile is not None else "",
+                defense=defense,
                 style=(
                     style_on_vow(style, role, listed)
                     if style is not None and not membership.is_secondary

@@ -14,7 +14,7 @@ from world.classes.factories import CharacterClassFactory, CharacterClassLevelFa
 from world.combat.factories import wire_armor_soak_modifier_target
 from world.covenants.factories import (
     CovenantRoleBonusFactory,
-    GearArchetypeCompatibilityFactory,
+    give_combat_style,
     make_engaged_member,
 )
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
@@ -87,8 +87,8 @@ class EquipmentWalkUnblendedTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
         char.equipped_items.invalidate()
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role, gear_archetype=GearArchetype.HEAVY_ARMOR
+        give_combat_style(
+            sheet, roles=[membership.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
         # raw base = 3 * 2 = 6; facet/mantle/motif/covenant-level = 0.
         self.assertEqual(equipment_walk_total_unblended(sheet, target), 6)

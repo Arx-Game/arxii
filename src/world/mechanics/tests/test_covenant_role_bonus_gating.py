@@ -17,7 +17,7 @@ from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
     CovenantRoleFactory,
-    GearArchetypeCompatibilityFactory,
+    give_combat_style,
     make_engaged_member,
 )
 from world.covenants.services import set_engaged_membership
@@ -106,9 +106,8 @@ class CovenantRoleBonusGatingTests(TestCase):
         that the function runs without error and returns an int.
         """
         membership = make_engaged_member(character_sheet=self.sheet)
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        give_combat_style(
+            self.sheet, roles=[membership.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
         self.character.covenant_roles.invalidate()
         result = covenant_role_bonus(self.sheet, self.target)

@@ -676,7 +676,7 @@ class CovenantRoleBonusTests(TestCase):
         from evennia_extensions.factories import CharacterFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
-            GearArchetypeCompatibilityFactory,
+            give_combat_style,
         )
         from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
@@ -699,10 +699,9 @@ class CovenantRoleBonusTests(TestCase):
         EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
-        # Create compatibility row so is_gear_compatible returns True
-        GearArchetypeCompatibilityFactory(
-            covenant_role=assignment.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        # Style fights with the kind and lists the vow, so is_gear_compatible is True
+        give_combat_style(
+            sheet, roles=[assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
 
         with (
@@ -713,8 +712,44 @@ class CovenantRoleBonusTests(TestCase):
 
         assert result == 10  # role_bonus only (combat already counts gear stat)
 
+    def test_clothing_adds_role_bonus_with_no_style(self) -> None:
+        """Patched helpers (role=10, gear=3). Clothing fits every vow and style (owner
+        ruling 2026-11-02), so with no combat style the role bonus is still whole: 10."""
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import set_engaged_membership
+        from world.items.constants import GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="ClothingChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="ClothingTarget")
+
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
+        sheet.character.covenant_roles.invalidate()
+
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.CLOTHING)
+        item = ItemInstanceFactory(template=template)
+        EquippedItemFactory(character=char.sheet_data, item_instance=item)
+        char.equipped_items.invalidate()
+
+        with (
+            patch("world.mechanics.services.role_base_bonus_for_target", return_value=10),
+            patch("world.mechanics.services.item_mundane_stat_for_target", return_value=3),
+        ):
+            result = covenant_role_bonus(sheet, target)
+
+        assert result == 10
+
     def test_incompatible_gear_marginal(self) -> None:
-        """Patched helpers (role=10, gear=3). No compat row → max(0, 10-3) = 7."""
+        """Patched helpers (role=10, gear=3). No combat style → max(0, 10-3) = 7."""
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -740,7 +775,7 @@ class CovenantRoleBonusTests(TestCase):
         EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
-        # No GearArchetypeCompatibility row → incompatible
+        # No combat style → a weapon kind is incompatible
 
         with (
             patch("world.mechanics.services.role_base_bonus_for_target", return_value=10),
@@ -751,7 +786,7 @@ class CovenantRoleBonusTests(TestCase):
         assert result == 7  # max(0, 10-3) marginal surplus
 
     def test_incompatible_gear_suppressed_when_gear_exceeds_role(self) -> None:
-        """Patched helpers (role=2, gear=15). No compat row → max(0, 2-15) = 0."""
+        """Patched helpers (role=2, gear=15). No combat style → max(0, 2-15) = 0."""
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -803,7 +838,7 @@ class CovenantRoleBonusTests(TestCase):
         from evennia_extensions.factories import CharacterFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
-            GearArchetypeCompatibilityFactory,
+            give_combat_style,
         )
         from world.covenants.services import set_engaged_membership
         from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
@@ -821,7 +856,7 @@ class CovenantRoleBonusTests(TestCase):
         set_engaged_membership(membership=assignment)
         sheet.character.covenant_roles.invalidate()
 
-        # Compatible item: HEAVY_ARMOR with compat row
+        # Compatible item: HEAVY_ARMOR the style fights with and lists the vow for
         compat_template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         compat_item = ItemInstanceFactory(template=compat_template)
         EquippedItemFactory(
@@ -830,12 +865,11 @@ class CovenantRoleBonusTests(TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=assignment.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        give_combat_style(
+            sheet, roles=[assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
 
-        # Incompatible item: RANGED, no compat row
+        # Incompatible item: RANGED, which the style does not list
         incompat_template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
         incompat_item = ItemInstanceFactory(template=incompat_template)
         EquippedItemFactory(

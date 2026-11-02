@@ -60,28 +60,30 @@ def _split_armor_soak_by_compatibility(
     """Split worn armor's effective soak into role-compatible vs incompatible buckets (#1174).
 
     A piece is compatible when ANY engaged PRIMARY covenant role is gear-compatible with
-    its archetype (existing GearArchetypeCompatibility). With no engaged primary role,
-    all armor is incompatible (it then competes via ``max`` against a 0 resonant pool →
-    armor-only). PRIMARY-only (#2641, Layer 3 — chassis): a secondary vow never widens
-    gear compatibility.
+    its archetype through the character's combat style (``StyleGearReach.allows``: clothing
+    and other non-armor kinds always fit; armor needs the style to list the kind and the vow).
+    With no engaged primary role, all armor is incompatible (it then competes via ``max``
+    against a 0 resonant pool → armor-only). PRIMARY-only (#2641, Layer 3 — chassis): a
+    secondary vow never widens gear compatibility.
 
     Returns ``(compat_soak, incompat_soak, compat_pieces, incompat_pieces)`` where the
     piece lists are the ItemInstances whose physical soak fell in each bucket (for
     durability wear).
     """
-    from world.covenants.services import is_gear_compatible  # noqa: PLC0415
+    from world.covenants.style_fit import style_gear_reach  # noqa: PLC0415
 
     engaged_roles = (
         character.covenant_roles.currently_engaged_primary_roles()
         if hasattr(character, "covenant_roles")
         else []
     )
+    reach = style_gear_reach(character) if engaged_roles else None
     compat_soak = incompat_soak = 0
     compat_pieces: list[ItemInstance] = []
     incompat_pieces: list[ItemInstance] = []
     for inst, soak in _equipped_armor_soak_pieces(character):
         archetype = inst.template.gear_archetype
-        if any(is_gear_compatible(role, archetype) for role in engaged_roles):
+        if reach is not None and any(reach.allows(role, archetype) for role in engaged_roles):
             compat_soak += soak
             compat_pieces.append(inst)
         else:
@@ -95,14 +97,13 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
 
     Worn armor is split by covenant-role compatibility. How much of it counts comes from
     ``defense_style_for`` (#4759): the character's ``CombatStyle`` share scales ALL worn
-    armor (a style is how they fight, whatever they wear); with no style, an engaged vow
-    defense profile's share scales the COMPATIBLE armor only (#2533); with neither, all
-    armor counts (legacy, byte-identical). The resonant soak pool (covenant role base +
+    armor (a style is how they fight, whatever they wear); with no style, all armor counts
+    (legacy, byte-identical). The resonant soak pool (covenant role base +
     facet + mantle + motif + covenant-level, un-blended) then competes with
     *incompatible* armor via ``max``; the (possibly scaled) compatible armor adds on top:
 
-        compat_soak = compat_soak * share / 10        (style or vow profile)
-        incompat_soak = incompat_soak * share / 10    (style only)
+        compat_soak = compat_soak * share / 10        (style)
+        incompat_soak = incompat_soak * share / 10    (style)
         soak = compat_soak + max(incompat_soak, resonant)
 
     Because ``resonant`` scales on character level and physical armor does not, a role
@@ -141,7 +142,7 @@ def equipped_armor_soak(character: Character) -> int:
 def _worn_soak(character: Character) -> tuple[int, list[ItemInstance]]:
     """The character's soak against one hit and the armor pieces whose soak counts in it.
 
-    The rule ``apply_equipped_armor_soak`` documents: the style or vow share scales the
+    The rule ``apply_equipped_armor_soak`` documents: the style share scales the
     armor, the resonant pool competes with incompatible armor, compatible armor adds on top.
     Only armor whose physical soak contributed is listed, for wear.
     """
@@ -152,8 +153,7 @@ def _worn_soak(character: Character) -> tuple[int, list[ItemInstance]]:
     )
     defense = defense_style_for(character)
     compat_soak = compat_soak * defense.armor_share_tenths // 10
-    if defense.from_combat_style:
-        incompat_soak = incompat_soak * defense.armor_share_tenths // 10
+    incompat_soak = incompat_soak * defense.armor_share_tenths // 10
     resonant = _resonant_armor_soak(character)
 
     incompatible_wins = incompat_soak > 0 and incompat_soak >= resonant

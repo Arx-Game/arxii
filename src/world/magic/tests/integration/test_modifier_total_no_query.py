@@ -22,17 +22,19 @@ Query budget analysis (as of Spec D PR1):
        → @cached_property fires once per sheet instance. NOT warmed by handler
        warming. Caches after first access.
 
-  4. is_gear_compatible (covenant role bonus, covenants/services.py):
-       GearArchetypeCompatibility.objects.filter(...).exists()
-       → Same issue as ThreadPullEffect — filter/exists results are NOT
+  4. style_gear_reach (covenant role bonus, covenants/style_fit.py, #4975):
+       the character's combat style's CombatStyleGear kinds and compatible_roles ids
+       → Same issue as ThreadPullEffect — filter/values_list results are NOT
          identity-map cached.
-       → Fires 1 query per unique (role, archetype) pair across equipped items.
+       → Fires 2 queries once per covenant_role_bonus call (not per equipped item),
+         and none for a character with no combat style.
 
   With the fixture below (1 FACET-kind thread + 1 equipped item + 1 covenant role):
     Query 1: CharacterModifier.exists() — eager path check (no rows → early return)
     Query 2: ThreadPullEffect.filter(...) — facet pull effects lookup
     Query 3: CharacterClassLevel select_related — current_level @cached_property
-    Query 4: GearArchetypeCompatibility.filter(...).exists() — 1 equipped item
+    Queries 4a and 4b: the style's CombatStyleGear kinds and its compatible vow ids
+             (style_gear_reach), read once however many items are equipped
     Query 5: CovenantLevelBonus.filter(modifier_target=...).first() — covenant_level_bonus
              (#762) queries once per engaged member's modifier-total call; here it
              returns None (no row authored for this target) → contributes 0.
@@ -48,20 +50,20 @@ Query budget analysis (as of Spec D PR1):
              fires once per FACET-kind thread; returns no rows (no crossing choices
              authored) so it contributes 0 to the result.
 
-  BASELINE = 8 queries.
+  BASELINE = 10 queries (the test below lists the VowStatScaling query this header predates).
 
   Note: after the first call, query 3 is cached via @cached_property, so repeated
-  calls to get_modifier_total on the same sheet instance would yield 7 queries.
-  The first-call baseline of 8 is the most conservative (and correct) measurement.
+  calls to get_modifier_total on the same sheet instance would yield one fewer.
+  The first-call baseline is the most conservative (and correct) measurement.
 
   Character-side handler walks (equipped_items.iter_item_facets,
   threads.threads_of_kind, covenant_roles.currently_engaged_roles) fire ZERO queries
-  after warming — these are properly handler-cached. The 8 above are genuine
+  after warming — these are properly handler-cached. The queries above are genuine
   "always-query" sites at the service function level. covenant_level_bonus only
   reaches its config query for ENGAGED members (it early-outs via the warm
   currently_engaged_roles handler otherwise).
 
-  Future work (PR3): caching ThreadPullEffect, GearArchetypeCompatibility,
+  Future work (PR3): caching ThreadPullEffect, the style's gear reach,
   CovenantLevelBonus, and CovenantRoleBonus lookups with an LRU or process-level dict
   would bring this to 1 (or 0 if CharacterModifier gets a per-character cache too).
   This test will need to be updated when that work lands.
@@ -79,10 +81,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
 
     Fixture covers BOTH equipment-walk paths:
     - passive_facet_bonuses (§5.2): FACET-kind thread + equipped item bearing the facet
-    - covenant_role_bonus (§5.6): CharacterCovenantRole + GearArchetypeCompatibility row
+    - covenant_role_bonus (§5.6): CharacterCovenantRole + a combat style that fits it
 
     After calling iter_item_facets / threads_of_kind / currently_engaged_roles to warm the
-    character-side handlers, exactly 7 queries remain (see module docstring).
+    character-side handlers, exactly 10 queries remain (see module docstring).
     """
 
     @classmethod
@@ -91,7 +93,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
-            GearArchetypeCompatibilityFactory,
+            give_combat_style,
         )
         from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
         from world.items.factories import (
@@ -187,10 +189,9 @@ class ModifierTotalQueryBudgetTests(TestCase):
         cls.assignment = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
         set_engaged_membership(membership=cls.assignment)
 
-        # 10. GearArchetypeCompatibility for (role, HEAVY_ARMOR) — compatible pair
-        GearArchetypeCompatibilityFactory(
-            covenant_role=cls.assignment.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        # 10. A combat style fighting with HEAVY_ARMOR and listing the role — compatible pair
+        give_combat_style(
+            cls.sheet, roles=[cls.assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
 
         # 11. Invalidate handler caches so fresh load sees all rows
@@ -200,7 +201,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     def test_query_budget_after_handler_warm(self) -> None:
         """Pin get_modifier_total to BASELINE_QUERIES after character-side handlers are warm.
 
-        Documented query budget (9 total on first call):
+        Documented query budget (10 total on first call):
           Query 1: CharacterModifier.exists() — always fires in get_modifier_breakdown,
                    returns early because no CharacterModifier rows exist for this sheet.
           Query 2: ThreadPullEffect.filter(target_kind=FACET, resonance=..., tier=0, ...) —
@@ -209,9 +210,9 @@ class ModifierTotalQueryBudgetTests(TestCase):
           Query 3: CharacterClassLevel select_related — CharacterSheet.current_level is a
                    @cached_property read by covenant_role_bonus → role_base_bonus_for_target.
                    Fires once per sheet instance; cached after the first call.
-          Query 4: GearArchetypeCompatibility.filter(...).exists() — is_gear_compatible
-                   queries the DB once per unique (role, archetype) pair encountered
-                   during the equipped-items walk.
+          Queries 4a and 4b: the combat style's CombatStyleGear kinds and its
+                   compatible vow ids (style_gear_reach, #4975), each read once per
+                   covenant_role_bonus call however many items are equipped.
           Query 5: CovenantLevelBonus.filter(modifier_target=...).first() —
                    covenant_level_bonus (#762) fires once per engaged member's
                    modifier-total call; returns None here (no authored row for this
@@ -239,7 +240,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         #2022) was removed by the #2529 short-circuit (CovenantRole.archetype was removed
         for the SWORD/SHIELD/CROWN blend rewrite) and the underlying model + consumer were
         fully removed by #2533 (replaced by the defense-profile gear-substitution fraction
-        at the armor-soak seam, ``world.covenants.services.gear_additive_fraction``).
+        at the armor-soak seam, now the combat style's armor share, #4975).
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -263,8 +264,8 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
-        # BASELINE = 9: CharacterModifier.exists + ThreadPullEffect.filter
-        #               + CharacterClassLevel (current_level) + is_gear_compatible
+        # BASELINE = 10: CharacterModifier.exists + ThreadPullEffect.filter
+        #               + CharacterClassLevel (current_level) + style_gear_reach (two queries)
         #               + CovenantLevelBonus.first() (covenant_level_bonus, #762)
         #               + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
         #               + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
@@ -273,7 +274,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         # (the "gear scaling" query, #2022, was removed by the #2529 short-circuit and
         # the underlying model + consumer were fully removed by #2533 — see the
         # docstring note above.)
-        baseline_queries = 9
+        baseline_queries = 10
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)
 
@@ -285,10 +286,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.assertEqual(result, 5)
 
     def test_no_handler_warm_query_count_is_higher(self) -> None:
-        """Without warming, handler queries fire on top of the baseline 9.
+        """Without warming, handler queries fire on top of the baseline 10.
 
         This is the control test: demonstrate that warmup matters. After
-        invalidating the handler caches, we expect MORE than 9 queries because
+        invalidating the handler caches, we expect MORE than 10 queries because
         the handler walks (equipped_items, threads, covenant_roles) must fetch
         from the DB on first access.
 
@@ -305,7 +306,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 9
+        baseline_queries = 10
 
         # Capture actual count by running without constraint
         from django.db import connection

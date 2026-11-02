@@ -1,6 +1,6 @@
 """The kit view's reads for one character (#4918, slice 5 of #4843).
 
-Tempest is a vow at thread level 2 with an Evasion defense profile. Its holder knows
+Tempest is a vow at thread level 2. Its holder knows
 Bolt (a strike), Watch (perception, which the vow adds nothing to) and Bare (no function
 tag). The vow adds to strikes: a base row, a base row that unlocks at level 5, a row
 riding covenant allies' casts, a row on the chosen Spark pick, and a row on Unchosen, a
@@ -24,7 +24,6 @@ from world.covenants.factories import (
     CharacterVowFocusPickFactory,
     CombatStyleFactory,
     CovenantFactory,
-    CovenantRoleDefenseProfileFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
     VowAddedEffectDamageProfileFactory,
@@ -64,7 +63,6 @@ class KitLiveCase(TestCase):
         VowFocusPickConfigFactory(budget_per_level=4)
         cls.covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
         cls.vow = CovenantRoleFactory(name="Tempest", covenant_type=CovenantType.DURANCE)
-        CovenantRoleDefenseProfileFactory(covenant_role=cls.vow, style=DefenseStyle.EVASION)
         cls.spark = VowFocusPickFactory(covenant_role=cls.vow, name="Spark", value=4)
         cls.gale = VowFocusPickFactory(covenant_role=cls.vow, name="Gale", value=3)
         cls.unchosen = VowFocusPickFactory(covenant_role=cls.vow, name="Unchosen", value=2)
@@ -212,6 +210,10 @@ class PicksAndSheetTest(KitLiveCase):
         self.assertEqual(kit.picks_url, f"{changelist}?q={self.sheet.character.db_key}")
 
     def test_the_sheet_names_path_gift_vow_level_and_defense(self) -> None:
+        self.sheet.combat_style = CombatStyleFactory(
+            name="Kit Evasion Style", defense_style=DefenseStyle.EVASION
+        )
+        self.sheet.save()
         kit = live.kit_for(self.sheet)
         self.assertEqual(kit.sheet.path, "Tomes")
         self.assertEqual(kit.sheet.gifts, ["Storms"])
@@ -225,6 +227,10 @@ class PicksAndSheetTest(KitLiveCase):
 
 
 class AbsentPartsTest(KitLiveCase):
+    def test_a_vow_with_no_combat_style_has_no_defense(self) -> None:
+        (vow,) = live.kit_for(self.sheet).sheet.vows
+        self.assertEqual(vow.defense, "")
+
     def test_a_character_with_no_vow_and_no_technique(self) -> None:
         kit = live.kit_for(CharacterSheetFactory())
         self.assertEqual((kit.techniques, kit.picks, kit.sheet.vows), ([], [], []))
@@ -253,14 +259,18 @@ class AbsentPartsTest(KitLiveCase):
 
     def test_a_sub_role_holder_counts_the_anchor_picks(self) -> None:
         choir = SubroleCovenantRoleFactory(name="Tempest Choir", parent_role=self.vow)
-        sheet = CharacterSheetFactory()
+        sheet = CharacterSheetFactory(
+            combat_style=CombatStyleFactory(
+                name="Kit Choir Evasion", defense_style=DefenseStyle.EVASION
+            )
+        )
         membership = engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
         CharacterVowFocusPickFactory(character_role=membership, pick=self.gale)
         kit = live.kit_for(sheet)
         (level,) = kit.picks
         self.assertEqual((level.vow, level.spent, level.over), ("Tempest Choir", 3, False))
         (vow,) = kit.sheet.vows
-        # The thread keys on the anchor; the sub-role has no profile, so the anchor's counts.
+        # The thread keys on the anchor; the defense comes from the character's style.
         self.assertEqual((vow.level, vow.defense), (3, "Evasion"))
 
 
@@ -364,7 +374,7 @@ class QueryCountTest(KitLiveCase):
 #: One primary vow with picks and techniques the vow adds to: the memberships, thread
 #: levels, the techniques with six payload prefetches, their function tags, the
 #: sub-role resolve, the added effects with four payload prefetches, the chosen picks
-#: (twice: the filter and the picks module), the pick limits, path, gifts and defense,
+#: (twice: the filter and the picks module), the pick limits, path and gifts,
 #: and the power preview's frame (#4930: two check ranks, the result charts and the
 #: blend config, read once; the Preview column reads nothing per technique here).
-KIT_QUERIES = 26
+KIT_QUERIES = 25

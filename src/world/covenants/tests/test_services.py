@@ -32,7 +32,8 @@ from world.covenants.factories import (
     CovenantManagerRankFactory,
     CovenantRankFactory,
     CovenantRoleFactory,
-    GearArchetypeCompatibilityFactory,
+    SubroleCovenantRoleFactory,
+    give_combat_style,
 )
 from world.covenants.models import CharacterCovenantRole, CovenantRank
 from world.covenants.services import (
@@ -489,18 +490,59 @@ class EndCovenantRoleTests(TestCase):
 
 
 class IsGearCompatibleTests(TestCase):
+    """Gear compatibility reads the character's combat style (#4975)."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.role = CovenantRoleFactory(slug="crown-gear")
 
-    def test_is_gear_compatible_returns_true_when_row_exists(self) -> None:
-        GearArchetypeCompatibilityFactory(
-            covenant_role=self.role, gear_archetype=GearArchetype.HEAVY_ARMOR
-        )
-        self.assertTrue(is_gear_compatible(self.role, GearArchetype.HEAVY_ARMOR))
+    def setUp(self) -> None:
+        self.character = CharacterSheetFactory().character
 
-    def test_is_gear_compatible_returns_false_when_row_missing(self) -> None:
-        self.assertFalse(is_gear_compatible(self.role, GearArchetype.LIGHT_ARMOR))
+    def _style(self, *, roles=(), kinds=()):
+        return give_combat_style(self.character.sheet_data, roles=roles, kinds=kinds)
+
+    def test_clothing_jewelry_and_other_are_always_compatible_with_a_style(self) -> None:
+        self._style(roles=[], kinds=[GearArchetype.HEAVY_ARMOR])
+        for kind in (GearArchetype.CLOTHING, GearArchetype.JEWELRY, GearArchetype.OTHER):
+            with self.subTest(kind=kind):
+                self.assertTrue(is_gear_compatible(self.character, self.role, kind))
+
+    def test_clothing_jewelry_and_other_are_always_compatible_with_no_style(self) -> None:
+        for kind in (GearArchetype.CLOTHING, GearArchetype.JEWELRY, GearArchetype.OTHER):
+            with self.subTest(kind=kind):
+                self.assertTrue(is_gear_compatible(self.character, self.role, kind))
+
+    def test_weapon_and_armor_kinds_are_compatible_when_style_and_vow_are_listed(self) -> None:
+        self._style(
+            roles=[self.role], kinds=[GearArchetype.HEAVY_ARMOR, GearArchetype.MELEE_ONE_HAND]
+        )
+        self.assertTrue(is_gear_compatible(self.character, self.role, GearArchetype.HEAVY_ARMOR))
+        self.assertTrue(is_gear_compatible(self.character, self.role, GearArchetype.MELEE_ONE_HAND))
+
+    def test_a_kind_the_style_does_not_list_is_incompatible(self) -> None:
+        self._style(roles=[self.role], kinds=[GearArchetype.HEAVY_ARMOR])
+        self.assertFalse(is_gear_compatible(self.character, self.role, GearArchetype.LIGHT_ARMOR))
+        self.assertFalse(is_gear_compatible(self.character, self.role, GearArchetype.RANGED))
+
+    def test_a_vow_the_style_does_not_list_is_incompatible(self) -> None:
+        self._style(roles=[CovenantRoleFactory()], kinds=[GearArchetype.HEAVY_ARMOR])
+        self.assertFalse(is_gear_compatible(self.character, self.role, GearArchetype.HEAVY_ARMOR))
+
+    def test_a_sub_role_is_compatible_through_its_anchor(self) -> None:
+        sub_role = SubroleCovenantRoleFactory(parent_role=self.role)
+        self._style(roles=[self.role], kinds=[GearArchetype.HEAVY_ARMOR])
+        self.assertTrue(is_gear_compatible(self.character, sub_role, GearArchetype.HEAVY_ARMOR))
+
+    def test_an_anchor_is_not_compatible_through_its_sub_role(self) -> None:
+        sub_role = SubroleCovenantRoleFactory(parent_role=self.role)
+        self._style(roles=[sub_role], kinds=[GearArchetype.HEAVY_ARMOR])
+        self.assertFalse(is_gear_compatible(self.character, self.role, GearArchetype.HEAVY_ARMOR))
+
+    def test_no_style_makes_weapon_and_armor_kinds_incompatible(self) -> None:
+        for kind in (GearArchetype.HEAVY_ARMOR, GearArchetype.MELEE_ONE_HAND):
+            with self.subTest(kind=kind):
+                self.assertFalse(is_gear_compatible(self.character, self.role, kind))
 
 
 class SetEngagedMembershipTests(TestCase):

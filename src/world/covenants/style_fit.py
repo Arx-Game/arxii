@@ -160,6 +160,45 @@ def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | No
     return None
 
 
+#: The kinds a combat style can list: weapons and armor. Every other kind always fits.
+COMBAT_GEAR_ARCHETYPES = WEAPON_ARCHETYPES | ARMOR_ARCHETYPES
+
+
+@dataclass(frozen=True)
+class StyleGearReach:
+    """Which gear kinds work with a character's vows, through their combat style (#4975).
+
+    A weapon or armor kind is compatible with a vow when the character's style lists the
+    kind (``CombatStyleGear``) and lists the vow (``compatible_roles``; a sub-role counts by
+    its anchor). Clothing, jewelry and other kinds fit every style and every vow (owner
+    ruling, 2026-11-02). With no style no weapon or armor kind is compatible.
+
+    Built once per call site by ``style_gear_reach`` (two queries when the character has a
+    style, none otherwise), then asked per piece, so a walk over worn items never queries
+    per piece.
+    """
+
+    kinds: frozenset[str] = frozenset()
+    vow_ids: frozenset[int] = frozenset()
+
+    def allows(self, role: CovenantRole, archetype: str) -> bool:
+        """Whether ``role``'s bonuses add to gear of this kind."""
+        if archetype not in COMBAT_GEAR_ARCHETYPES:
+            return True
+        return archetype in self.kinds and lists_vow(set(self.vow_ids), role)
+
+
+def style_gear_reach(character: Character) -> StyleGearReach:
+    """The weapon and armor kinds and vows of ``character``'s combat style (#4975)."""
+    style = _style_of(character)
+    if style is None:
+        return StyleGearReach()
+    return StyleGearReach(
+        kinds=frozenset(style.gear.values_list("gear_archetype", flat=True)),
+        vow_ids=frozenset(style_vow_ids(style)),
+    )
+
+
 def _gear_note(archetype: str) -> str:
     words = STYLE_LAPSE_GEAR_WORDS.get(archetype)
     if words is None:

@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
+    from world.covenants.style_fit import StyleGearReach
     from world.items.models import EquippedItem, ItemInstance
     from world.mechanics.engagement import CharacterEngagement
     from world.skills.models import Skill
@@ -1031,8 +1032,11 @@ def covenant_role_bonus(
 
     Per slot for armor, per piece for a weapon (#4898), as a marginal blend (combat already
     counts the gear's base stat directly):
-    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus stacks on top.
-    - Incompatible gear (no row): max(0, role_bonus - gear_stat) — only the role's
+    - Compatible gear (clothing, jewelry and other kinds always; a weapon or armor kind when
+      the character's combat style fights with it and lists the vow, #4975): role_bonus
+      stacks on top.
+    - Incompatible gear (a weapon or armor kind the style or vow does not cover, or no
+      style): max(0, role_bonus - gear_stat) — only the role's
       surplus beyond what the gear already provides; never negative.
 
     At low character levels an incompatible item may fully suppress the role bonus;
@@ -1065,11 +1069,14 @@ def covenant_role_bonus(
         return 0
 
     character_level = level_override if level_override is not None else sheet.current_level
+    from world.covenants.style_fit import style_gear_reach  # noqa: PLC0415
+
     counted = _role_bonus_gear(char.equipped_items, target)
+    reach = style_gear_reach(char)
     total = 0
     for role in engaged_roles:
         role_bonus = role_base_bonus_for_target(role, target, character_level)
-        total += sum(_role_gear_share(role, role_bonus, item, target) for item in counted)
+        total += sum(_role_gear_share(role, role_bonus, item, target, reach) for item in counted)
     return total
 
 
@@ -1101,14 +1108,17 @@ def _role_bonus_gear(
 
 
 def _role_gear_share(
-    role: CovenantRole, role_bonus: int, item: ItemInstance, target: ModifierTarget
+    role: CovenantRole,
+    role_bonus: int,
+    item: ItemInstance,
+    target: ModifierTarget,
+    reach: StyleGearReach,
 ) -> int:
     """One worn item's share of ``role``'s bonus: the whole bonus on compatible gear, which
-    combat already counts the stat of, else only the role's surplus over the gear's stat."""
-    from world.covenants.services import is_gear_compatible  # noqa: PLC0415
-
+    combat already counts the stat of, else only the role's surplus over the gear's stat.
+    ``reach`` is the character's style reach, read once for the whole walk."""
     gear_stat = item_mundane_stat_for_target(item, target)
-    if is_gear_compatible(role, item.template.gear_archetype):
+    if reach.allows(role, item.template.gear_archetype):
         return role_bonus
     return max(0, role_bonus - gear_stat)
 
