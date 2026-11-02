@@ -134,9 +134,12 @@ superusers only, #4880), Covenant roles,
 Vow focus picks, Vow added effects, Vow situational perks, Combat styles, Conditions and
 Properties (each with its row count), the focus pick budget (the `VowFocusPickConfig`
 singleton's change page, or its list with the default before the row exists; a GET never
-creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. Every combat role authoring page belongs
+creates it), and Required content (`admin_ops`, superusers only). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
+`RowPicker`s (`CombatRolesLink.pickers`); the Combo map row (#4891) has no page of its own (blank
+`url`) and holds a property picker and a condition picker, each shown only to staff who can view
+that model (`combat_roles.can_view`). Every combat role authoring page belongs
 here, so staff never hunt for one (owner ruling 2026-11-01); the later #4843 slices add the
-combo map, kit view and missing combat content rows. Tests:
+kit view and missing combat content rows. Tests:
 `tests/test_combat_roles_panel.py` follows every link.
 
 ### Save as new on every change form (#4094)
@@ -1019,6 +1022,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>`, first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
+  a leading star on a first-look name (`*Reavers`, #4865) also marks that pin as part of the
+  beginning's suggested life (`OfferFirstLook.preselected`); an
   `unlocked:` token (#4846) names the existing card that unlocks a Final Touches line,
   so a card made earlier in the same table is not found yet; an effect token whose
   target is `prestige` (`+150 prestige`, `-300 prestige`, #4852) makes the card's
@@ -1270,6 +1275,52 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   read, a membership the handler loaded before the POST and a sub-role's `parent_role`.
   Deliberate no-ADR: the page layout and the warn-then-confirm save follow the approved
   #4843 spec and its 2026-11-01 rulings.
+
+## Combo map (#4891, slice 3 of #4843)
+
+**Purpose:** one read-only page per condition property and per condition template: the
+conditions carrying the property (on the template, or "(stage N only)"), then Set by (every
+authored row that lands one of those conditions: Source, Kind, Lands) beside Read by (every
+row play reads it through: Reader, Kind, Does), each row linked to its admin change page.
+Demo screen 3 of the #4843 spec.
+
+- **Files** - `web/admin/combo_map/`: `sources.py` (`SETTER_SOURCES`, `READER_SOURCES`,
+  `EXCLUDED_FIELDS`: one entry per model field pointing at `Property`, `ConditionTemplate` or
+  `ConditionStage`, each source naming its kind label, its field, the row its label links to
+  and its Lands/Does text; an exclusion says why), `live.py` (pure reads, one query per
+  source: `conditions_carrying`, `properties_carried`, `setters_for_conditions`,
+  `readers_for_property`, `readers_for_properties`, `readers_for_condition`, `property_map`,
+  `condition_map` -> `ComboMap` with `set_by_nothing`/`read_by_nothing`), `views.py`.
+  Templates in `web/templates/admin/combo_map/`: `page.html`, `_css.html`.
+- **Setters and readers** - a setter lands a template (play starts it at its first stage; no
+  authored row lands a stage). Config singletons count (Soulfray, Drift, Fury, Standoff,
+  Vitals, Social maneuver, Audere). Draft rows, removers, play-state rows, a condition's own
+  effect rows and properties used in another sense (standoff drives, battle-unit, item and
+  persona properties, object-property-only matches) are excluded with their reason. A field
+  can be both: `ConditionOnCheckConfig.immunity_condition` lands immunity and gates on it.
+- **Completeness guard** - `tests/test_combo_map_sources.py` walks every model field that
+  points at the three models and fails, naming `Model.field`, on one in none of the lists, and
+  on a listed field that no longer exists. A new setter or reader has to be classified.
+- **Condition page** - the properties it carries (linked to their property pages), its
+  setters, then Read by grouped: readers naming the condition itself (or one of its stages),
+  then one group per property it carries.
+- **Marks** - a carrying condition nothing lands reads "Set by nothing" in the Set by table;
+  an empty reader group reads "Read by nothing". Flags only, drawn where the data shows a side
+  empty; per-row engine gaps (the demo's "damage doesn't read target conditions") have no
+  authored row behind them and are not drawn.
+- **URLs** (GET only; staff with view or change permission on `Property` /
+  `ConditionTemplate`, 403 otherwise): `_combo_map/property/<pk>/` ->
+  `admin_combo_map_property`, `_combo_map/condition/<pk>/` -> `admin_combo_map_condition`,
+  `_combo_map/property/pick/` and `_combo_map/condition/pick/` (`?pk=`, redirect, 400 on a
+  missing or unknown pk).
+- **Ways in** - the Combat roles panel's Combo map row (two pickers), and a "Combo map" object
+  tool on the property and condition change forms (`links.combo_map_url`, the
+  `authoring_tags.combo_map_url` filter in `change_form.html`).
+- Tests: `tests/test_combo_map_live.py` (carriers, setters, readers, marks),
+  `tests/test_combo_map.py` (both pages through the client, the gate, the pick routes, the
+  change-form links, a query-count pin, and the styling test: every class under
+  `#combo-map-root` has a rule reaching the page, with and without gap marks).
+  Deliberate no-ADR: the page follows the approved #4843 spec.
 
 ## Standoff Profile Builder (#4354)
 

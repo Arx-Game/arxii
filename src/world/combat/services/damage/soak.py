@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.combat.constants import OpponentTier
 from world.combat.models import CombatOpponent
 from world.combat.services.damage.vulnerability import _is_vulnerable
 
@@ -16,6 +17,24 @@ def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) ->
     if bypass_soak or _is_vulnerable(opponent):
         return 0
     return opponent.soak_value
+
+
+def target_soak_of(opponent: CombatOpponent) -> int:
+    """The soak that stands against a hit on ``opponent``, for a derived amount (#4892).
+
+    An ordinary opponent's ``soak_value``, 0 while it is vulnerable; a swarm has no soak; a
+    duel mirror's is the mirrored player's worn-armor soak, read without wearing it. Thread
+    damage reduction and the mitigation leak are not soak and are left out.
+    """
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        return 0
+    if opponent.is_duel_mirror:
+        from world.combat.services.equipment.armor_soak import (  # noqa: PLC0415
+            equipped_armor_soak,
+        )
+
+        return equipped_armor_soak(opponent.mirrors_participant.character_sheet.character)
+    return _effective_soak_for_opponent(opponent, bypass_soak=False)
 
 
 def _duel_mirror_pc_reduction(

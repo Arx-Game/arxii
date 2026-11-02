@@ -265,6 +265,31 @@ class BuilderSaveTest(BuilderTestCase):
         assert offer.prompt == "fear"
         assert list(offer.first_look.all()) == [household]
 
+        # #4865: the pin's suggested-life flag survives a re-save of the page, since the
+        # pins are written as a diff; a pin dropped from the field is deleted.
+        from world.character_creation.models import OfferFirstLook
+
+        (pin,) = OfferFirstLook.objects.filter(offer=offer)
+        pin.preselected = True
+        pin.save(update_fields=["preselected"])
+        other = BeginningsFactory(name="Another Household")
+        data = self._post_data(
+            **{
+                "offers-INITIAL_FORMS": "1",
+                "offers-0-id": str(offer.pk),
+                "offers-0-chapter": OfferChapter.ACTORS_SHEET,
+                "offers-0-origin_choice": "",
+                "offers-0-prompt": "fear",
+                "offers-0-first_look": [str(household.pk), str(other.pk)],
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302, resp.content
+        flags = dict(offer.pins.values_list("beginning_id", "preselected"))
+        assert flags == {household.pk: True, other.pk: False}
+
     def test_save_rejects_an_actors_sheet_offer_with_no_prompt(self):
         self.client.force_login(self.author)
         data = self._post_data(

@@ -110,6 +110,20 @@ class BeatExclusionForBeginningInline(admin.TabularInline):
     fields = ["beat", "reason"]
 
 
+class SuggestedLifeInline(admin.TabularInline):
+    """The beginning's suggested life (#4865, slice 7 of #4813): its first-look pins, each
+    with the flag that loads the card when the life first opens for this beginning. One
+    starred card per one-of beat; the first by the grid's order stands."""
+
+    model = OfferFirstLook
+    formset = OneRowPerFormSet
+    extra = 0
+    raw_id_fields = ["offer"]
+    fields = ["offer", "preselected"]
+    verbose_name = "Suggested life pin"
+    verbose_name_plural = "Suggested life"
+
+
 @admin.register(Beginnings)
 class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
@@ -146,6 +160,7 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
         BeginningsCodexGrantInline,
         BeginningEnemyOfferInline,
         BeatExclusionForBeginningInline,
+        SuggestedLifeInline,
     ]
 
     fieldsets = [
@@ -531,7 +546,8 @@ class CGPointBudgetAdmin(admin.ModelAdmin):
 class OfferFirstLookAdmin(admin.ModelAdmin):
     """#3831 - one Beginning pinning one offer line into its chapter's first look."""
 
-    list_display = ["beginning", "offer"]
+    list_display = ["beginning", "offer", "preselected"]
+    list_filter = ["preselected"]
     list_select_related = ["beginning"]
     raw_id_fields = ["offer"]
     autocomplete_fields = ["beginning"]

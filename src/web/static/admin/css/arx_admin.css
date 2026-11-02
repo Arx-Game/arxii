@@ -83,6 +83,17 @@
     vertical-align: middle;
 }
 
+/* The dashboard keeps td on one line and gives th the rest, so a row with two pickers
+   squeezed every label to one letter a line. Labels stay on one line; notes wrap. */
+#combat-roles-module th {
+    white-space: nowrap;
+    width: 1%;
+}
+
+#combat-roles-module td {
+    white-space: normal;
+}
+
 /* Sized to the row's text, so the picker never makes its row taller than the others. */
 .combat-roles-picker select,
 .combat-roles-picker .button {

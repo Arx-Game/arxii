@@ -118,8 +118,34 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
     if damage <= 0:
         return damage
 
-    from world.covenants.defense import defense_style_for, mitigation_leak  # noqa: PLC0415
+    from world.covenants.defense import mitigation_leak  # noqa: PLC0415
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+    soak, contributors = _worn_soak(character)
+    if soak <= 0:
+        return damage
+
+    for inst in contributors:
+        decrement_item_durability(item_instance=inst)
+
+    soaked = min(soak, damage)
+    return damage - soaked + mitigation_leak(character, soaked)
+
+
+def equipped_armor_soak(character: Character) -> int:
+    """The soak ``apply_equipped_armor_soak`` would subtract from a hit, read without wearing
+    any armor (#4892): what a technique's target's soak input reads for a duelist."""
+    return _worn_soak(character)[0]
+
+
+def _worn_soak(character: Character) -> tuple[int, list[ItemInstance]]:
+    """The character's soak against one hit and the armor pieces whose soak counts in it.
+
+    The rule ``apply_equipped_armor_soak`` documents: the style or vow share scales the
+    armor, the resonant pool competes with incompatible armor, compatible armor adds on top.
+    Only armor whose physical soak contributed is listed, for wear.
+    """
+    from world.covenants.defense import defense_style_for  # noqa: PLC0415
 
     compat_soak, incompat_soak, compat_pieces, incompat_pieces = _split_armor_soak_by_compatibility(
         character
@@ -132,15 +158,7 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
 
     incompatible_wins = incompat_soak > 0 and incompat_soak >= resonant
     soak = compat_soak + (incompat_soak if incompatible_wins else resonant)
-    if soak <= 0:
-        return damage
-
-    # Wear only armor whose physical soak actually contributed.
     contributors = list(compat_pieces)
     if incompatible_wins:
         contributors += incompat_pieces
-    for inst in contributors:
-        decrement_item_durability(item_instance=inst)
-
-    soaked = min(soak, damage)
-    return damage - soaked + mitigation_leak(character, soaked)
+    return soak, contributors

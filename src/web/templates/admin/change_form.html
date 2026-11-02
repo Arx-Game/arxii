@@ -34,6 +34,11 @@
         <a href="{{ bu }}" class="workbench-open-link">{{ original|builder_label }}</a>
     </li>
     {% endif %}{% endwith %}{% endif %}
+    {% with cm=original|combo_map_url %}{% if cm %}
+    <li>
+        <a href="{{ cm }}" class="workbench-open-link">Combo map</a>
+    </li>
+    {% endif %}{% endwith %}
     {% change_form_object_tools %}
   </ul>
 {% endif %}

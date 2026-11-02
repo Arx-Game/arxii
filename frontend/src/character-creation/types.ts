@@ -1078,6 +1078,11 @@ export interface DraftData {
   // The optional text a life ends on (#4830), up to RECENT_HISTORY_MAX_LENGTH characters;
   // finalize writes it as the lead-in paragraph of the background.
   recent_history?: string;
+  /**
+   * The beginning whose suggested life was last loaded into this draft (#4865): the leaf
+   * loads the life once per beginning and never over one the player edited or cleared.
+   */
+  life_loaded_for?: number;
   // One paragraph per life stage (#4874), up to STAGE_DESCRIPTION_MAX_LENGTH characters
   // each; finalize prints it under the stage's name in the told background.
   stage_descriptions?: Record<string, string>;

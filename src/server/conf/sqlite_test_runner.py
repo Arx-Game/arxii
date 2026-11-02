@@ -373,6 +373,11 @@ class SqliteTestRunner(TimedEvenniaTestRunner):
             _analyze_planner_stats()
             return config
         old_config = super().setup_databases(**kwargs)
+        if not old_config:
+            # A suite of SimpleTestCases builds no test database. Dumping here would
+            # cache the bare connection (stand-in tables only) as this fingerprint's
+            # template, and every later run would restore a schema with no models.
+            return old_config
         # Create the stand-ins before dumping so the cached template carries
         # them; the restore path still re-runs the (idempotent) helper to
         # upgrade templates dumped before the stand-ins existed.
