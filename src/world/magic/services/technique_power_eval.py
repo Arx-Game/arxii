@@ -927,7 +927,7 @@ def evaluate_technique(
     ``_derive_power(character=None)`` returns
     (``world/magic/services/techniques.py:394``, ``PowerLedgerBuilder(base=max(0,
     channeled_intensity)).build()`` when there is no character to derive
-    contributions from). Amplified power adds ``amplified_power_delta`` on top —
+    contributions from). Amplified power adds ``amplified_power_delta`` on top:
     the "fully matched anchor" comparison point.
 
     ``_multiplier_cache``/``_bands`` let ``evaluate_all`` share one damage-
