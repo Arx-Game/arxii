@@ -8081,7 +8081,9 @@ export interface paths {
      *     Every focus pick each of the character's primary vows offers, by level, with
      *     the chosen ones marked and the locked ones saying why (#4929). Read-only and
      *     self-only: a player reads only a character they play now; staff read any.
-     *     Choosing goes through the action dispatch (``choose_vow_focus_pick``).
+     *     Choosing goes through the action dispatch (``choose_vow_focus_pick``). Who may
+     *     read is ``MayPlayCatalogSheet`` (a 400 for a malformed id, a 404 for a sheet the
+     *     requester may not play).
      */
     get: operations['covenants_character_roles_vow_picks_list'];
     put?: never;
