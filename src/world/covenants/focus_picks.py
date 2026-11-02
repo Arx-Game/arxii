@@ -392,7 +392,7 @@ def _catalog_for(
         level_spent = reads.spent.get((membership.pk, level), 0)
         left = max(0, budget - level_spent)
         entries = []
-        for pick in reads.picks:
+        for pick in sorted(reads.picks, key=_anchor_first):
             if pick.pick_level != level or pick.covenant_role_id not in role_ids:
                 continue
             pick_limits = reads.limits.get(pick.pk, [])
@@ -401,6 +401,7 @@ def _catalog_for(
             entries.append(
                 VowPickEntry(
                     id=pick.pk,
+                    vow=pick.covenant_role.name,
                     name=pick.name,
                     description=pick.description,
                     price=price,
@@ -429,8 +430,14 @@ def _catalog_for(
         covenant=membership.covenant.name,
         vow=membership.covenant_role.name,
         vow_level=vow_level,
+        vows=list(dict.fromkeys(entry.vow for level in levels for entry in level.picks)),
         levels=levels,
     )
+
+
+def _anchor_first(pick: VowFocusPick) -> tuple[bool, str, str]:
+    """The anchor vow's picks before a sub-role's, then by vow and pick name."""
+    return (pick.covenant_role.parent_role_id is not None, pick.covenant_role.name, pick.name)
 
 
 def vow_pick_catalogs(sheet: CharacterSheet) -> list[VowPickCatalog]:
@@ -455,9 +462,9 @@ def vow_pick_catalogs(sheet: CharacterSheet) -> list[VowPickCatalog]:
     role_ids = {m.pk: choosable_role_ids(m) for m in memberships}
     every_role_id = set().union(*role_ids.values())
     picks = list(
-        VowFocusPick.objects.filter(covenant_role_id__in=every_role_id).order_by(
-            "pick_level", "name"
-        )
+        VowFocusPick.objects.filter(covenant_role_id__in=every_role_id)
+        .select_related("covenant_role")
+        .order_by("pick_level", "name")
     )
     limits: dict[int, list[VowFocusPickLimit]] = defaultdict(list)
     for limit in VowFocusPickLimit.objects.filter(pick__in=picks) if picks else ():

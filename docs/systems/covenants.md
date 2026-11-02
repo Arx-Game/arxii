@@ -1331,7 +1331,12 @@ All in `world.covenants.focus_picks`:
   `summarize_vow_added_effect`, `summarize_situational_perk`, `summarize_stat_scaling` in
   `added_effect_summary.py`), its limits line (`limits_line`: "Target limit: a boss, met 3
   times in 10", "Cost limit: ..., price less 1", "no limits"), whether it is chosen and why it
-  is locked ("opens at vow level N", "costs more than is left"). Picks, limits, choices and
+  is locked ("opens at vow level N", "costs more than is left"). A sub-role holder's
+  catalog names each vow that offers a pick (`VowPickCatalog.vows`, anchor first;
+  `VowPickEntry.vow`): the budget is the membership's, one per level, shared by the anchor
+  vow's and the sub-role's picks (the validator sums every chosen pick at the level), so the
+  sheet and `vow picks` draw one budget line per level and group its picks under one heading
+  per vow. Picks, limits, choices and
   payload rows are each one query for every membership. Read by `GET
   /api/covenants/character-roles/vow-picks/?character_sheet=<id>` (read-only; a player reads
   only a character they play now, staff any; 404 otherwise), the sheet's Covenant block
@@ -1349,7 +1354,8 @@ All in `world.covenants.focus_picks`:
   `assign_covenant_role`, `change_role` and the founders of `create_covenant`: a member
   whose vow thread already stands at a level is sent the same lines as a COVENANT narrative
   message once the joining commits (`transaction.on_commit`, so a rite rolled back tells
-  nothing); a fresh joiner has no vow thread and is told nothing until imbuing opens level 1.
+  nothing); a fresh joiner has no vow thread and is told nothing until imbuing opens level 1
+  (the maintainer's "thread first" ruling, ledger row vow-picks-open-with-the-thread).
 - The catalog read and the dispatch share one rule for who may act as a character:
   `web.api.permissions.account_may_play` (`IsCharacterOwner`'s rule: a begun tenure, a
   borrowed NPC yes, a lent one no).

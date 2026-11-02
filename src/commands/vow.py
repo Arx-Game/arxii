@@ -125,17 +125,26 @@ class CmdVow(ArxCommand):
 
 def _render_catalog(catalog: VowPickCatalog) -> str:
     lines = [f"|w{catalog.vow}|n, vow level {catalog.vow_level}."]
+    grouped = len(catalog.vows) > 1
     for level in catalog.levels:
-        lines.extend(_render_level(level))
+        lines.extend(_render_level(level, grouped=grouped))
     return "\n".join(lines)
 
 
-def _render_level(level: VowPickLevel) -> list[str]:
+def _render_level(level: VowPickLevel, *, grouped: bool) -> list[str]:
+    """One budget line for the level, then its picks, under each vow's name for a sub-role."""
     if level.is_open:
         head = f"Level {level.level}: {level.spent} of {level.budget}."
     else:
         head = f"Level {level.level}: opens at vow level {level.level}."
-    return [head, *(_render_pick(pick) for pick in level.picks)]
+    lines = [head]
+    vow = None
+    for pick in level.picks:
+        if grouped and pick.vow != vow:
+            vow = pick.vow
+            lines.append(f" {vow}:")
+        lines.append(_render_pick(pick))
+    return lines
 
 
 def _render_pick(pick: VowPickEntry) -> str:

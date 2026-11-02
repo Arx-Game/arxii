@@ -229,15 +229,43 @@ class ASubRoleHoldersPicksInOnePlace(_VowHolderCase):
         self.membership.save(update_fields=["covenant_role"])
         self.pick("Riposte", level=1, value=1, role=sub_role)
 
-        first = self.level(self.catalog()[0], 1)
+        (catalog,) = self.catalog()
+        self.assertEqual(catalog["vows"], ["Quicksilver", "Quicksilver Duelist"])
+        first = self.level(catalog, 1)
         self.assertEqual(
-            {row["name"] for row in first["picks"]},
-            {"Strike from the Flank", "Quick Recovery", "Light on Your Feet", "Riposte"},
+            [(row["vow"], row["name"]) for row in first["picks"]],
+            [
+                ("Quicksilver", "Light on Your Feet"),
+                ("Quicksilver", "Quick Recovery"),
+                ("Quicksilver", "Strike from the Flank"),
+                ("Quicksilver Duelist", "Riposte"),
+            ],
         )
         told = self.telnet(self.ysmay, "vow pick Riposte")
         self.assertIn("You take Riposte. Level 1: 1 of 4.", told)
+        # One budget per level for the membership, whichever vow's catalog a pick is from.
         told = self.telnet(self.ysmay, "vow pick Quick Recovery")
         self.assertIn("You take Quick Recovery. Level 1: 3 of 4.", told)
+        first = self.level(self.catalog()[0], 1)
+        self.assertEqual((first["spent"], first["left"]), (3, 1))
+        self.assertEqual(
+            self.entry(first, "Light on Your Feet")["locked_reason"], "costs more than is left"
+        )
+
+        listed = self.telnet(self.ysmay, "vow picks")
+        level_one = listed[listed.index("Level 1: 3 of 4.") : listed.index("Level 2:")]
+        self.assertLess(level_one.index(" Quicksilver:"), level_one.index("Strike from the Flank"))
+        self.assertLess(
+            level_one.index("Strike from the Flank"), level_one.index(" Quicksilver Duelist:")
+        )
+        self.assertLess(level_one.index(" Quicksilver Duelist:"), level_one.index("Riposte"))
+        self.assertEqual(level_one.count("of 4."), 1)
+
+    def test_a_holder_of_the_anchor_alone_sees_no_vow_headings(self) -> None:
+        listed = self.telnet(self.ysmay, "vow picks")
+
+        self.assertEqual(self.catalog()[0]["vows"], ["Quicksilver"])
+        self.assertNotIn(" Quicksilver:", listed)
 
 
 class ASecondaryOrLeftVowIsRefused(_VowHolderCase):

@@ -54969,11 +54969,13 @@ export interface components {
       readonly covenant: string;
       readonly vow: string;
       readonly vow_level: number;
+      readonly vows: string[];
       readonly levels: components['schemas']['VowPickLevel'][];
     };
     /** @description One focus pick in a vow holder's catalog (#4929). Read-only. */
     VowPickEntry: {
       readonly id: number;
+      readonly vow: string;
       readonly name: string;
       readonly description: string;
       readonly price: number;

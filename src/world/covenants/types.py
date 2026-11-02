@@ -60,10 +60,13 @@ class VowPickEntry:
     ``effects`` are the plain-words lines of the payload rows the pick carries and
     ``limits`` its limits in one line ("no limits" when it has none). ``locked_reason``
     is blank when the pick can be chosen now, else why not: its level is above the
-    shown vow level, or it costs more than its level has left.
+    shown vow level, or it costs more than its level has left. ``vow`` names the
+    catalog the pick comes from: the anchor vow, or the sub-role a holder holds or has
+    grown into.
     """
 
     id: int
+    vow: str
     name: str
     description: str
     price: int
@@ -79,7 +82,13 @@ class VowPickEntry:
 
 @dataclass(frozen=True)
 class VowPickLevel:
-    """One pick level of a vow holder's catalog: its budget, what is spent, its picks."""
+    """One pick level of a vow holder's catalog: its budget, what is spent, its picks.
+
+    The budget is the membership's, shared by the anchor vow's and the sub-role's picks
+    at this level (``validate_character_focus_pick`` sums every chosen pick at the level),
+    so a level has one spend whichever catalog a pick came from. Its picks run anchor
+    vow first, then the sub-role's.
+    """
 
     level: int
     is_open: bool
@@ -97,7 +106,9 @@ class VowPickCatalog:
     """Every focus pick one primary vow offers its holder, by pick level (#4929).
 
     A sub-role holder's catalog holds the anchor vow's picks and the sub-role's
-    together, the way ``choosable_role_ids`` lets them choose.
+    together, the way ``choosable_role_ids`` lets them choose; ``vows`` names each
+    catalog that offers a pick, anchor first, so the sheet and ``vow picks`` group a
+    level's picks under one heading each.
     """
 
     membership_id: int
@@ -105,4 +116,5 @@ class VowPickCatalog:
     covenant: str
     vow: str
     vow_level: int
+    vows: list[str]
     levels: list[VowPickLevel]

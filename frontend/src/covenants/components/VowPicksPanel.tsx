@@ -3,12 +3,13 @@
  *
  * One block per primary vow: its vow level, then each pick level with what is spent of
  * its budget and every pick the vow offers there (the anchor's and the sub-role's
- * together). A chosen pick is marked, a pick that cannot be taken now is dimmed with
+ * together, each under its vow's name within the level, beside the level's one shared
+ * budget). A chosen pick is marked, a pick that cannot be taken now is dimmed with
  * why, and a pick that can is chosen with its button, through the action dispatch.
  * Budget left unspent simply stays left.
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Heading, Stack, Tag } from '@/character_sheets/components/sheet/primitives';
 import type { VowPickCatalog, VowPickEntry, VowPickLevel } from '../api';
@@ -66,10 +67,13 @@ function PickRow({
 
 function LevelBlock({
   level,
+  grouped,
   onChoose,
   pending,
 }: {
   level: VowPickLevel;
+  /** A sub-role holder's level: one budget line, then each vow's picks under its name. */
+  grouped: boolean;
   onChoose: (pickId: number) => void;
   pending: boolean;
 }) {
@@ -90,14 +94,18 @@ function LevelBlock({
           </span>
         )}
       </div>
-      {level.picks.map((pick) => (
-        <PickRow
-          key={pick.id}
-          pick={pick}
-          levelOpen={level.is_open}
-          pending={pending}
-          onChoose={() => onChoose(pick.id)}
-        />
+      {level.picks.map((pick, index) => (
+        <Fragment key={pick.id}>
+          {grouped && pick.vow !== level.picks[index - 1]?.vow && (
+            <h4 className="vowpicks-vow">{pick.vow}</h4>
+          )}
+          <PickRow
+            pick={pick}
+            levelOpen={level.is_open}
+            pending={pending}
+            onChoose={() => onChoose(pick.id)}
+          />
+        </Fragment>
       ))}
     </div>
   );
@@ -123,6 +131,7 @@ function VowBlock({ catalog, sheetId }: { catalog: VowPickCatalog; sheetId: numb
         <LevelBlock
           key={level.level}
           level={level}
+          grouped={catalog.vows.length > 1}
           onChoose={onChoose}
           pending={choose.isPending}
         />

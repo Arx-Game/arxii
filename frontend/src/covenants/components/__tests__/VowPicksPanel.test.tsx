@@ -19,6 +19,7 @@ const CATALOG: VowPickCatalog = {
   covenant: 'The Quicksilver Hall',
   vow: 'Quicksilver',
   vow_level: 2,
+  vows: ['Quicksilver'],
   levels: [
     {
       level: 1,
@@ -29,6 +30,7 @@ const CATALOG: VowPickCatalog = {
       picks: [
         {
           id: 11,
+          vow: 'Quicksilver',
           name: 'Strike from the Flank',
           description: 'Your cut lands harder on someone already busy with an ally.',
           price: 2,
@@ -40,6 +42,7 @@ const CATALOG: VowPickCatalog = {
         },
         {
           id: 12,
+          vow: 'Quicksilver',
           name: 'Light on Your Feet',
           description: '',
           price: 4,
@@ -60,6 +63,7 @@ const CATALOG: VowPickCatalog = {
       picks: [
         {
           id: 21,
+          vow: 'Quicksilver',
           name: 'Read the Feint',
           description: 'You see the second blade coming.',
           price: 1,
@@ -80,6 +84,7 @@ const CATALOG: VowPickCatalog = {
       picks: [
         {
           id: 31,
+          vow: 'Quicksilver',
           name: 'Last Stand',
           description: '',
           price: 2,
@@ -181,5 +186,30 @@ describe('VowPicksPanel', () => {
 
     expect(drawn.size).toBeGreaterThan(5);
     for (const name of drawn) expect(css).toContain(`.${name}`);
+  });
+
+  it("groups a sub-role holder's picks under each vow beside one budget line per level", () => {
+    const level = CATALOG.levels[0];
+    const riposte = { ...level.picks[1], id: 13, vow: 'Quicksilver Duelist', name: 'Riposte' };
+    mockQueries([
+      {
+        ...CATALOG,
+        vow: 'Quicksilver Duelist',
+        vows: ['Quicksilver', 'Quicksilver Duelist'],
+        levels: [{ ...level, picks: [...level.picks, riposte] }],
+      },
+    ]);
+    render(<VowPicksPanel sheetId={5} />);
+
+    const headings = screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent);
+    expect(headings).toEqual(['Quicksilver', 'Quicksilver Duelist']);
+    expect(screen.getAllByText('4 of 4')).toHaveLength(1);
+  });
+
+  it('draws no vow headings for a holder of the anchor alone', () => {
+    mockQueries([CATALOG]);
+    render(<VowPicksPanel sheetId={5} />);
+
+    expect(screen.queryAllByRole('heading', { level: 4 })).toHaveLength(0);
   });
 });

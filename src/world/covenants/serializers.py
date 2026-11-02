@@ -464,6 +464,7 @@ class VowPickEntrySerializer(serializers.Serializer):
     """One focus pick in a vow holder's catalog (#4929). Read-only."""
 
     id = serializers.IntegerField(read_only=True)
+    vow = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
     price = serializers.IntegerField(read_only=True)
@@ -493,6 +494,7 @@ class VowPickCatalogSerializer(serializers.Serializer):
     covenant = serializers.CharField(read_only=True)
     vow = serializers.CharField(read_only=True)
     vow_level = serializers.IntegerField(read_only=True)
+    vows = serializers.ListField(child=serializers.CharField(), read_only=True)
     levels = VowPickLevelSerializer(many=True, read_only=True)
 
 

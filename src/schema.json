@@ -99250,6 +99250,11 @@ components:
         vow_level:
           type: integer
           readOnly: true
+        vows:
+          type: array
+          items:
+            type: string
+          readOnly: true
         levels:
           type: array
           items:
@@ -99262,12 +99267,16 @@ components:
       - membership_id
       - vow
       - vow_level
+      - vows
     VowPickEntry:
       type: object
       description: One focus pick in a vow holder's catalog (#4929). Read-only.
       properties:
         id:
           type: integer
+          readOnly: true
+        vow:
+          type: string
           readOnly: true
         name:
           type: string
@@ -99305,6 +99314,7 @@ components:
       - locked_reason
       - name
       - price
+      - vow
     VowPickLevel:
       type: object
       description: 'One pick level of a vow holder''s catalog: budget, spend, what

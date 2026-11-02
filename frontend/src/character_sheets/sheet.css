@@ -1143,3 +1143,13 @@
 .vowpicks-error {
   color: hsl(var(--destructive));
 }
+/* A sub-role holder's level groups its picks under the anchor vow's and the sub-role's name. */
+.vowpicks-vow {
+  font-family: var(--sheet-caps);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin: 0.5rem 0 0;
+}
