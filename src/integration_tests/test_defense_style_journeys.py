@@ -15,6 +15,14 @@ defense style decides what comes off it.
   takes none: 10 - 2 = 8, and the ward keeps its whole buffer.
 - No style: all 4 soak counts, the field absorbs without a roll, and only the defence roll
   is rolled (the behavior before #4759). A vow carries no defense of its own (#4975).
+- A fighter who holds a vow, under an evasion style that counts half its armor, with a
+  1-point resonant soak from the vow: a style that lists the vow makes the armor
+  compatible, so the armor's counted half (2) stacks with the resonant soak (1): 10 - 3 = 7.
+  A style that does not list the vow leaves the armor incompatible, so it competes with the
+  resonant soak by max(2, 1) = 2: 10 - 2 = 8. The style's defense type and armor share apply
+  to both: an unlisted vow changes only which bucket the armor falls in (owner rulings,
+  2026-11-01 and 2026-11-02; the soak formula is ``apply_equipped_armor_soak``'s docstring,
+  #1174).
 
 Expected values come from the spec (#4759 Decisions 2 and 3, Verification 5) and the
 MovementConfig field defaults (gap 3, leak 50 percent); the defence ladder is
@@ -28,6 +36,7 @@ from unittest.mock import MagicMock
 
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.combat.constants import (
     OpponentTier,
     ParticipantStatus,
@@ -42,6 +51,7 @@ from world.combat.factories import (
     OpponentTierTemplateFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
+    wire_armor_soak_modifier_target,
 )
 from world.combat.models import MovementConfig
 from world.combat.services import resolve_round
@@ -50,9 +60,15 @@ from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import _install_reactive_side_effects
-from world.covenants.constants import DefenseStyle
+from world.covenants.constants import CovenantType, DefenseStyle
+from world.covenants.defense import defense_style_for
 from world.covenants.factories import (
     CombatStyleFactory,
+    CombatStyleGearFactory,
+    CovenantFactory,
+    CovenantRoleBonusFactory,
+    CovenantRoleFactory,
+    engage_vow_with_thread,
 )
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemTemplateFactory
@@ -278,3 +294,64 @@ class TheBarrierRolls(_TheYard):
         self.assertEqual(roll.calls["Bram"], 1)  # the defence roll only
         self.assertEqual(self.health(bram), HEALTH)  # 6 absorbed, 4 soaked
         self.assertFalse(ConditionInstance.objects.filter(pk=ward.pk).exists())  # spent
+
+
+class AVowTheStyleDoesNotListChangesOnlyTheArmorBucket(_TheYard):
+    """Two fighters wear the same 4-soak light armor under the same evasion style (half the
+    armor counts, 2 of 4); each swears a vow worth 1 point of resonant soak. The style
+    lists light armor and one of the two vows. Each fighter is resolved in a yard of their
+    own, so the blow lands on them without relying on whom the blade picks."""
+
+    RESONANT = 1
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.soak_target = wire_armor_soak_modifier_target()
+        self.style = CombatStyleFactory(
+            name="Duelist's Footwork Two", defense_style=DefenseStyle.EVASION, armor_share_tenths=5
+        )
+        CombatStyleGearFactory(style=self.style, gear_archetype=GearArchetype.LIGHT_ARMOR)
+        self.listed_vow = CovenantRoleFactory(name="Quicksilver")
+        self.unlisted_vow = CovenantRoleFactory(name="Bulwark")
+        self.style.compatible_roles.add(self.listed_vow)
+
+    def holder(self, name: str, vow):
+        """A fighter of level 1 in the style, sworn to ``vow`` (1 resonant soak a level)."""
+        character = self.fighter(name, style=self.style)
+        sheet = character.sheet_data
+        CharacterClassLevelFactory(
+            character=sheet, character_class=CharacterClassFactory(), level=1
+        )
+        sheet.invalidate_class_level_cache()
+        CovenantRoleBonusFactory(
+            covenant_role=vow, modifier_target=self.soak_target, bonus_per_level=self.RESONANT
+        )
+        engage_vow_with_thread(
+            sheet,
+            vow,
+            covenant=CovenantFactory(covenant_type=CovenantType.DURANCE),
+            thread_level=1,
+        )
+        return character
+
+    def test_a_listed_vow_makes_the_armor_stack_with_the_resonant_soak(self) -> None:
+        tam = self.holder("Tam", self.listed_vow)
+        self.blade()
+
+        self.resolve(RollsInTurn({"Tam": [0]}))
+
+        # The style's defense type and share still apply (half of 4 = 2), and the armor,
+        # compatible, adds to the vow's resonant 1: 3 comes off the 10.
+        self.assertEqual(defense_style_for(tam), (DefenseStyle.EVASION, 5))
+        self.assertEqual(self.health(tam), HEALTH - (STRIKE - 2 - self.RESONANT))
+
+    def test_an_unlisted_vow_leaves_the_armor_competing_with_the_resonant_soak(self) -> None:
+        vik = self.holder("Vik", self.unlisted_vow)
+        self.blade()
+
+        self.resolve(RollsInTurn({"Vik": [0]}))
+
+        # The lapse drops the gear's compatibility, never the style's defense type or share:
+        # the half-counted armor (2) is incompatible and wins the max over the resonant 1.
+        self.assertEqual(defense_style_for(vik), (DefenseStyle.EVASION, 5))
+        self.assertEqual(self.health(vik), HEALTH - (STRIKE - max(2, self.RESONANT)))
