@@ -24,7 +24,7 @@ class GearKindLabel(TypedDict):
 def _kinds(held: Iterable[str], wanted: frozenset[str]) -> list[GearKindLabel]:
     held_set = set(held)
     return [
-        GearKindLabel(value=value, label=label)
+        GearKindLabel(value=value, label=str(label))
         for value, label in GearArchetype.choices
         if value in held_set and value in wanted
     ]
