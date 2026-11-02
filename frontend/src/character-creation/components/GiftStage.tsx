@@ -160,6 +160,43 @@ function glimpseRailRows(
   return rows;
 }
 
+interface LaterStepsInput {
+  showStyle: boolean;
+  showTraining: boolean;
+  styleChosen: boolean;
+  giftDone: boolean;
+  resonanceDone: boolean;
+}
+
+/**
+ * The steps after the Resonance (#4921): the style step (only for a Tradition that
+ * teaches one), the training (only with training) and the Anima Check, numbered in that
+ * order, and whether the training is open yet and what it waits on if not.
+ */
+function laterSteps({
+  showStyle,
+  showTraining,
+  styleChosen,
+  giftDone,
+  resonanceDone,
+}: LaterStepsInput) {
+  const styleNumber = 5;
+  const trainingNumber = styleNumber + (showStyle ? 1 : 0);
+  const animaNumber = trainingNumber + (showTraining ? 1 : 0);
+  const trainingReady = giftDone && resonanceDone && (!showStyle || styleChosen);
+  let trainingGate = 'Choose a style first';
+  if (!giftDone) trainingGate = 'Choose a gift first';
+  else if (!resonanceDone) trainingGate = 'Choose a resonance first';
+  return {
+    styleNumber,
+    trainingNumber,
+    animaNumber,
+    stepCount: animaNumber,
+    trainingReady,
+    trainingGate,
+  };
+}
+
 export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
@@ -204,15 +241,14 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const { data: styles = [] } = useCGCombatStyles(draft.id, draft.selected_tradition?.id ?? null);
   const showStyle = styles.length > 0;
   const chosenStyle = styles.find((style) => style.id === draft.selected_combat_style);
-  const styleNumber = 5;
-  const trainingNumber = styleNumber + (showStyle ? 1 : 0);
-  const animaNumber = trainingNumber + (showTraining ? 1 : 0);
-  const stepCount = animaNumber;
-  const trainingReady =
-    completion.gift && completion.resonance && (!showStyle || chosenStyle != null);
-  let trainingGate = 'Choose a style first';
-  if (!completion.gift) trainingGate = 'Choose a gift first';
-  else if (!completion.resonance) trainingGate = 'Choose a resonance first';
+  const { styleNumber, trainingNumber, animaNumber, stepCount, trainingReady, trainingGate } =
+    laterSteps({
+      showStyle,
+      showTraining,
+      styleChosen: chosenStyle != null,
+      giftDone: completion.gift,
+      resonanceDone: completion.resonance,
+    });
   const trainingValue = showTraining ? `${training.allocated} of ${training.total}` : undefined;
 
   // The Tradition row names the schooling stance under it, when one is

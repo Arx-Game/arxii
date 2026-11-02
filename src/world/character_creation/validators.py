@@ -550,9 +550,6 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
         get_species_technique_options,
         get_technique_options,
     )
-    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     if not draft.selected_tradition:
         return ["Select a tradition"]
@@ -608,6 +605,29 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     if style_error:
         return [style_error]
 
+    anima_error = _anima_check_error(draft)
+    if anima_error:
+        return [anima_error]
+
+    errors = _technique_personalization_errors(
+        draft,
+        technique_ids=technique_ids,
+        available_techniques=available_techniques,
+        selected_ids=selected_ids,
+        resonance_id=resonance_id,
+    )
+    if errors:
+        return errors[:1]
+
+    return _magic_skill_allocation_errors(draft)
+
+
+def _anima_check_error(draft: CharacterDraft) -> str | None:
+    """The Anima Check needs a stat and an active skill outside the Magic category."""
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
     stat_id = draft.draft_data.get("anima_check_stat_id")
     skill_id = draft.draft_data.get("anima_check_skill_id")
     stat_valid = (
@@ -622,19 +642,8 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
         .exists()
     )
     if not (stat_valid and skill_valid):
-        return ["Choose the stat and skill your magic rolls (your Anima Check)"]
-
-    errors = _technique_personalization_errors(
-        draft,
-        technique_ids=technique_ids,
-        available_techniques=available_techniques,
-        selected_ids=selected_ids,
-        resonance_id=resonance_id,
-    )
-    if errors:
-        return errors[:1]
-
-    return _magic_skill_allocation_errors(draft)
+        return "Choose the stat and skill your magic rolls (your Anima Check)"
+    return None
 
 
 def _combat_style_error(draft: CharacterDraft) -> str | None:

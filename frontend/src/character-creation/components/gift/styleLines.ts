@@ -35,5 +35,6 @@ export function defendsLine(style: StyleProfileFields): string {
       ? 'all of it counts'
       : `${style.armor_share_tenths} of 10 counts`;
   const armor = lower(style.armor_kinds).join(' or ');
-  return `${style.defense_style_display.toLowerCase()} · ${armor ? `${armor}, ${share}` : share}`;
+  const worn = armor ? [armor, share].join(', ') : share;
+  return `${style.defense_style_display.toLowerCase()} · ${worn}`;
 }
