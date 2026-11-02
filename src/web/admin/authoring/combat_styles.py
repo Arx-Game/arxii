@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from django.urls import reverse
 
 from world.covenants.models import CharacterCovenantRole, CombatStyle
-from world.covenants.style_fit import style_lists_vow, styles_listing_vow
+from world.covenants.style_fit import lists_vow, styles_listing_vow
 
 if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
@@ -121,12 +121,13 @@ class StyleOnVow:
     text: str
 
 
-def style_on_vow(style: CombatStyle, role: CovenantRole) -> StyleOnVow:
+def style_on_vow(style: CombatStyle, role: CovenantRole, listed: set[int]) -> StyleOnVow:
     """The kit view's line for ``style`` against one held primary vow (``role`` resolved).
 
-    One query (``style_lists_vow``).
+    ``listed`` is ``style_vow_ids(style)``, read once by the caller, so checking several
+    held vows costs no query each; ``lists_vow`` is the rule the roll's lapse test uses.
     """
-    if style_lists_vow(style, role):
+    if lists_vow(listed, role):
         return StyleOnVow(vow=role.name, works=True, text=f"works with {role.name}")
     text = f"not a style for {role.name}"
     if _skill_name(style) is not None:

@@ -21,7 +21,7 @@ from world.covenants.factories import (
     SubroleCovenantRoleFactory,
 )
 from world.covenants.models import CombatStyle
-from world.covenants.style_fit import style_lists_vow, styles_listing_vow
+from world.covenants.style_fit import style_lists_vow, style_vow_ids, styles_listing_vow
 from world.skills.factories import SkillFactory
 
 
@@ -121,13 +121,14 @@ class StylesForVowTest(TestCase):
         self.assertEqual(combat_styles.styles_for_vow(self.vow), [])
 
     def test_the_kit_line_against_one_vow(self) -> None:
-        works = combat_styles.style_on_vow(self.listed, self.vow)
+        works = combat_styles.style_on_vow(self.listed, self.vow, style_vow_ids(self.listed))
         self.assertEqual((works.works, works.text), (True, "works with Style Vow"))
         skilled = CombatStyleFactory(name="Skilled Elsewhere", skill=SkillFactory())
         self.assertEqual(
-            combat_styles.style_on_vow(skilled, self.vow).text,
+            combat_styles.style_on_vow(skilled, self.vow, style_vow_ids(skilled)).text,
             "not a style for Style Vow: its skill does not count on attack and defense rolls",
         )
         self.assertEqual(
-            combat_styles.style_on_vow(self.unlisted, self.vow).text, "not a style for Style Vow"
+            combat_styles.style_on_vow(self.unlisted, self.vow, style_vow_ids(self.unlisted)).text,
+            "not a style for Style Vow",
         )

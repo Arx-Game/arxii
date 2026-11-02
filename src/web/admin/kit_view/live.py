@@ -31,6 +31,7 @@ from world.covenants.added_effects import (
 from world.covenants.focus_picks import spent_by_membership_level
 from world.covenants.models import CharacterVowFocusPick, CovenantRoleDefenseProfile
 from world.covenants.perks.services import _SELF_BENEFICIARIES
+from world.covenants.style_fit import style_vow_ids
 from world.magic.constants import TargetKind, TechniqueFunction
 from world.magic.models import CharacterGift, Technique, Thread
 from world.magic.services.technique_effects import technique_payload_prefetches
@@ -343,7 +344,7 @@ def held_vows(
     A primary vow's defense is its resolved sub-role's own profile, else its anchor's
     (``engaged_primary_defense_profile``'s rule); a secondary vow reads its own role.
     With ``style``, each primary vow also says whether the style works with it (one
-    query per primary vow, ``style_lists_vow``).
+    query for the vows the style lists, ``style_vow_ids``, however many vows are held).
     """
     from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
@@ -363,6 +364,7 @@ def held_vows(
         profile.covenant_role_id: profile
         for profile in CovenantRoleDefenseProfile.objects.filter(covenant_role_id__in=role_ids)
     }
+    listed = style_vow_ids(style) if style is not None else set()
     vows: list[HeldVow] = []
     for membership in sorted(memberships, key=lambda m: (m.is_secondary, m.covenant_role.name)):
         role = resolved[membership.pk]
@@ -378,7 +380,7 @@ def held_vows(
                 engaged=membership.engaged,
                 defense=profile.get_style_display() if profile is not None else "",
                 style=(
-                    style_on_vow(style, role)
+                    style_on_vow(style, role, listed)
                     if style is not None and not membership.is_secondary
                     else None
                 ),

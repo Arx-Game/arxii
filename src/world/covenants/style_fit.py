@@ -125,6 +125,20 @@ def styles_listing_vow(role: CovenantRole) -> set[int]:
     )
 
 
+def style_vow_ids(style: CombatStyle) -> set[int]:
+    """The pk of every vow ``style`` lists, in one query (#4932).
+
+    Read once, then ask ``lists_vow`` for each held vow, so a page checking one style
+    against several vows costs one query.
+    """
+    return set(style.compatible_roles.values_list("pk", flat=True))
+
+
+def lists_vow(listed: set[int], role: CovenantRole) -> bool:
+    """Whether ``listed`` (a style's vow pks) covers ``role``; a sub-role counts by its anchor."""
+    return _lists(listed, role)
+
+
 def style_lists_vow(style: CombatStyle, role: CovenantRole) -> bool:
     """Whether ``style`` lists ``role``'s vow; a sub-role counts by its anchor (#4921).
 
