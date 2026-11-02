@@ -5,7 +5,7 @@
  * the server stays the authority and skips any pip the client got wrong.
  */
 import type { RegionMapFootprint, RegionMapPips } from '../types';
-import { footprintAt, pipKey, regionBounds } from './regionMapCanvas';
+import { pipKey, regionBounds } from './regionMapCanvas';
 
 export type Pip = [number, number];
 
@@ -110,18 +110,24 @@ function flood(grid: Grid, start: Pip, admits: (x: number, y: number) => boolean
   return out;
 }
 
-/** A pip's lowest holder, memoised per call: `footprintAt` scans every footprint. */
+/**
+ * Every held pip mapped to its lowest holder, built in one pass over the footprints
+ * (largest level first, so a lower holder overwrites its ancestors). A flood asks for
+ * tens of thousands of pips, and `footprintAt` scans every footprint per ask.
+ */
+export function lowestHolderIndex(
+  footprints: RegionMapFootprint[]
+): Map<string, RegionMapFootprint> {
+  const index = new Map<string, RegionMapFootprint>();
+  for (const footprint of [...footprints].sort((a, b) => b.level - a.level)) {
+    for (const [x, y] of footprint.pips) index.set(pipKey(x, y), footprint);
+  }
+  return index;
+}
+
 function holderIndex(footprints: RegionMapFootprint[]) {
-  const cache = new Map<string, RegionMapFootprint | null>();
-  return (x: number, y: number): RegionMapFootprint | null => {
-    const key = pipKey(x, y);
-    let hit = cache.get(key);
-    if (hit === undefined) {
-      hit = footprintAt(footprints, x, y);
-      cache.set(key, hit);
-    }
-    return hit;
-  };
+  const index = lowestHolderIndex(footprints);
+  return (x: number, y: number): RegionMapFootprint | null => index.get(pipKey(x, y)) ?? null;
 }
 
 /**

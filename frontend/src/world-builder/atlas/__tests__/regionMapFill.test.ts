@@ -8,6 +8,7 @@ import {
   floodLand,
   isTakeable,
   loopInterior,
+  lowestHolderIndex,
   type Pip,
 } from '../regionMapFill';
 
@@ -118,6 +119,24 @@ describe('isTakeable and ancestorTitleIds', () => {
     expect(isTakeable(footprint(10, 1, []), 3, rows)).toBe(true);
     expect(isTakeable(footprint(30, 3, []), 1, rows)).toBe(true);
     expect(isTakeable(footprint(40, 4, []), 3, rows)).toBe(false);
+  });
+});
+
+describe('lowestHolderIndex', () => {
+  it('maps every held pip to its lowest holder in one pass', () => {
+    const county = footprint(10, 100, [
+      [2, 2],
+      [3, 2],
+    ]);
+    county.level = 53;
+    const barony = footprint(11, 101, [[3, 2]]);
+    barony.level = 40;
+    const index = lowestHolderIndex([county, barony]);
+    expect(index.get('2,2')?.area_id).toBe(10);
+    expect(index.get('3,2')?.area_id).toBe(11);
+    expect(index.get('9,9')).toBeUndefined();
+    // order of the input does not matter
+    expect(lowestHolderIndex([barony, county]).get('3,2')?.area_id).toBe(11);
   });
 });
 

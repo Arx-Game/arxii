@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -392,9 +393,10 @@ def _wanted_holders(pips: Iterable[PipHolder]) -> tuple[dict[Pip, int | None], d
     refuses an area that does not exist or sits below BARONY."""
     wanted: dict[Pip, int | None] = {}
     for x, y, area_id in pips:
-        if len(wanted) >= MAX_FOOTPRINT_PIPS_PER_CALL and (x, y) not in wanted:
-            break
         wanted[(x, y)] = area_id
+        if len(wanted) > MAX_FOOTPRINT_PIPS_PER_CALL:
+            msg = f"At most {MAX_FOOTPRINT_PIPS_PER_CALL} pips in one call."
+            raise WorldMapServiceError(msg)
     area_ids = {area_id for area_id in wanted.values() if area_id is not None}
     areas = {a.pk: a for a in Area.objects.filter(pk__in=area_ids)}
     if len(areas) != len(area_ids):
@@ -443,10 +445,17 @@ def restore_pips(*, pips: Iterable[PipHolder]) -> int:
 
 
 def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:
-    rows = AreaFootprintPip.objects.filter(
-        x__in={p[0] for p in pips}, y__in={p[1] for p in pips}
-    ).select_related("area")
-    return {(r.x, r.y): r for r in sorted(rows, key=lambda r: (r.y, r.x)) if (r.x, r.y) in pips}
+    """The footprint rows at exactly ``pips``, in ``(y, x)`` order. One query, one
+    ``x`` list per row of the map, so a set that spans regions (a cleared realm's
+    undo) never loads the whole band its x and y ranges would cover."""
+    by_y: dict[int, list[int]] = {}
+    for x, y in pips:
+        by_y.setdefault(y, []).append(x)
+    rows_q = Q()
+    for y, xs in by_y.items():
+        rows_q |= Q(y=y, x__in=xs)
+    rows = AreaFootprintPip.objects.filter(rows_q).select_related("area").order_by("y", "x")
+    return {(r.x, r.y): r for r in rows}
 
 
 def _skip(skipped: dict[str, int], holder: Area, fallback: str) -> None:

@@ -253,6 +253,32 @@ describe('RegionMapPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
   });
 
+  it('ignores a second undo while the first restore is in flight', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { changed: [[1, 0, null, 10]] },
+    });
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    click(9, 3);
+    click(15, 3);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    let settle: (value: unknown) => void = () => {};
+    mutateAsync.mockImplementation(() => new Promise((resolve) => (settle = resolve)));
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    expect(lastCall().key).toBe('atlas_restore_footprint');
+    settle({ success: true, message: '', data: null });
+    // the first undo settles with one entry left to undo, nothing double-counted
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Redo' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    expect(mutateAsync).toHaveBeenCalledTimes(3);
+  });
+
   it('clears the domain behind a confirmation', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} />);

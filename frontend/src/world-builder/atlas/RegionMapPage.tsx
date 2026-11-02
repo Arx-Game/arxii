@@ -341,19 +341,34 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       return false; // the mutation already toasted
     }
   };
+  // One restore at a time: a held Ctrl+Z would otherwise send overlapping restores
+  // that can land out of order and leave the map in neither state.
+  const restoringRef = useRef(false);
   const undo = async () => {
+    if (restoringRef.current) return;
     const taken = takeUndo(history);
     if (!taken.entry) return;
     const entry: CarveEntry = taken.entry;
+    restoringRef.current = true;
     setHistory(taken.history);
-    if (!(await restore(beforeHolders(entry)))) setHistory((h) => restoreUndo(h, entry));
+    try {
+      if (!(await restore(beforeHolders(entry)))) setHistory((h) => restoreUndo(h, entry));
+    } finally {
+      restoringRef.current = false;
+    }
   };
   const redo = async () => {
+    if (restoringRef.current) return;
     const taken = takeRedo(history);
     if (!taken.entry) return;
     const entry: CarveEntry = taken.entry;
+    restoringRef.current = true;
     setHistory(taken.history);
-    if (!(await restore(afterHolders(entry)))) setHistory((h) => restoreRedo(h, entry));
+    try {
+      if (!(await restore(afterHolders(entry)))) setHistory((h) => restoreRedo(h, entry));
+    } finally {
+      restoringRef.current = false;
+    }
   };
   const clearTarget = async () => {
     setClearOpen(false);

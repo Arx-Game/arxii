@@ -36,7 +36,9 @@ from world.areas.worldmap.models import (
     TerrainPip,
 )
 from world.areas.worldmap.services import (
+    MAX_FOOTPRINT_PIPS_PER_CALL,
     WorldMapServiceError,
+    _rows_at,
     clear_footprint,
     create_region_map,
     footprint_of,
@@ -350,6 +352,20 @@ class FootprintServiceTests(TestCase):
             restore_pips(pips=[(6, 6, AreaFactory(name="W3", level=AreaLevel.WARD).pk)])
         with self.assertRaises(WorldMapServiceError):
             restore_pips(pips=[(6, 6, 999999)])
+
+    def test_restore_refuses_more_pips_than_one_call_takes(self) -> None:
+        too_many = [(x % 300, x // 300, None) for x in range(MAX_FOOTPRINT_PIPS_PER_CALL + 1)]
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=too_many)
+        assert restore_pips(pips=too_many[:MAX_FOOTPRINT_PIPS_PER_CALL]) == 0
+
+    def test_rows_at_fetches_only_the_pips_asked_for(self) -> None:
+        # (1, 1) and (2, 2) are asked for; (1, 2) and (2, 1) share their x and y sets
+        set_footprint(area=self.kingdom, add=[(1, 1), (2, 2), (1, 2), (2, 1)])
+        with self.assertNumQueries(1):
+            rows = _rows_at({(1, 1), (2, 2), (9, 9)})
+        assert set(rows) == {(1, 1), (2, 2)}
+        assert list(rows) == [(1, 1), (2, 2)]
 
 
 class RegionMapApiTests(TestCase):

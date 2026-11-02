@@ -15,3 +15,10 @@ with the duchy between them, and `_claim` cannot push a row back up past a desce
 The restore write is a few lines and exact; the inverse is free and silently wrong on the
 common top-down carve (realm first, then its duchies and counties). The cost is one more
 staff action and a page that remembers prior holders per gesture rather than per domain.
+**Concurrency is last writer wins, on purpose.** A restore writes the holders the entry
+remembers without checking what the map holds now, so an undo after a second staff
+member carved the same pips overwrites their carve with a success message. The staff is
+two people and the map is carved in sittings, so a per-pip expected-holder check (and the
+skipped-count message it would need) was judged more machinery than the case warrants;
+the page refuses a second undo or redo while one is in flight, which is the overlap that
+actually happens. Revisit if the staff grows or a shared carving session becomes routine.
