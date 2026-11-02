@@ -311,6 +311,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
         // Every batch that landed is undoable, even when a later batch is refused or
         // the request fails, so the entry is pushed whatever way the loop ends.
         const changed: PipChange[] = [];
+        busyRef.current = true;
         try {
           for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
             const result = await runAction({
@@ -321,6 +322,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
             changed.push(...parseChanged(result.data));
           }
         } finally {
+          busyRef.current = false;
           setHistory((h) => pushEntry(h, { titleId: carveTitleId, changed }));
         }
       } else if (mode === 'paint') {
@@ -346,38 +348,40 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       return false; // the mutation already toasted
     }
   };
-  // One restore at a time: a held Ctrl+Z would otherwise send overlapping restores
-  // that can land out of order and leave the map in neither state.
-  const restoringRef = useRef(false);
+  // One write at a time for the history: a held Ctrl+Z would otherwise send overlapping
+  // restores that can land out of order, and an undo pressed while a fill is still
+  // committing would undo the gesture before it and lose the redo when the fill lands.
+  const busyRef = useRef(false);
   const undo = async () => {
-    if (restoringRef.current) return;
+    if (busyRef.current) return;
     const taken = takeUndo(history);
     if (!taken.entry) return;
     const entry: CarveEntry = taken.entry;
-    restoringRef.current = true;
+    busyRef.current = true;
     setHistory(taken.history);
     try {
       if (!(await restore(beforeHolders(entry)))) setHistory((h) => restoreUndo(h, entry));
     } finally {
-      restoringRef.current = false;
+      busyRef.current = false;
     }
   };
   const redo = async () => {
-    if (restoringRef.current) return;
+    if (busyRef.current) return;
     const taken = takeRedo(history);
     if (!taken.entry) return;
     const entry: CarveEntry = taken.entry;
-    restoringRef.current = true;
+    busyRef.current = true;
     setHistory(taken.history);
     try {
       if (!(await restore(afterHolders(entry)))) setHistory((h) => restoreRedo(h, entry));
     } finally {
-      restoringRef.current = false;
+      busyRef.current = false;
     }
   };
   const clearTarget = async () => {
     setClearOpen(false);
-    if (carveTitleId == null) return;
+    if (carveTitleId == null || busyRef.current) return;
+    busyRef.current = true;
     try {
       const result = await runAction({
         key: 'atlas_clear_footprint',
@@ -389,6 +393,8 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       );
     } catch {
       // the mutation already toasted
+    } finally {
+      busyRef.current = false;
     }
   };
   const keysRef = useRef({ undo, redo });

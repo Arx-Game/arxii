@@ -287,6 +287,35 @@ describe('RegionMapPage', () => {
     expect(mutateAsync).toHaveBeenCalledTimes(3);
   });
 
+  it('ignores undo while a carve is still committing, then undoes it', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { changed: [[1, 0, null, 10]] },
+    });
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    click(9, 3);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    let settle: (value: unknown) => void = () => {};
+    mutateAsync.mockImplementation(() => new Promise((resolve) => (settle = resolve)));
+    click(15, 3); // this carve stays in flight
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mutateAsync).toHaveBeenCalledTimes(2);
+    settle({ success: true, message: '', data: { changed: [[2, 0, null, 10]] } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    mutateAsync.mockResolvedValue({ success: true, message: '', data: null });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    expect(lastCall()).toEqual({
+      key: 'atlas_restore_footprint',
+      kwargs: { pips: [[2, 0, null]] },
+    });
+  });
+
   it('swallows a failed carve request and leaves nothing to undo', async () => {
     const user = userEvent.setup();
     mutateAsync.mockRejectedValue(new Error('The action failed.'));
