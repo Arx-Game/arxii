@@ -588,7 +588,6 @@ def _is_charmed_by_caster(opponent, caster_character) -> bool:
     )
 
 
-@transaction.atomic
 def _consume_promotion_charm(combat_opponent, caster_character) -> None:
     """Consume the caster's charm after a successful promotion."""
     from world.conditions.constants import Allegiance  # noqa: PLC0415
@@ -606,6 +605,7 @@ def _consume_promotion_charm(combat_opponent, caster_character) -> None:
         remove_condition(combat_opponent.objectdb, instance.condition)
 
 
+@transaction.atomic
 def promote_summon_to_companion(
     *,
     caster_sheet: CharacterSheet,

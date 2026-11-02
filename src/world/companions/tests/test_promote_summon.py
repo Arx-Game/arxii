@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -178,6 +180,41 @@ class PromoteSummonTests(TestCase):
 
         active = get_active_conditions(target_character, condition=charm_template)
         self.assertEqual(list(active), [], "Charm condition should be consumed after bind")
+
+    def test_failed_charm_cleanup_rolls_back_the_new_companion(self):
+        """Binding and charm cleanup share one transaction."""
+        from world.checks.test_helpers import force_check_outcome
+        from world.companions.models import Companion
+        from world.conditions.constants import CHARM_CONDITION_NAME
+        from world.conditions.models import ConditionTemplate
+        from world.conditions.services import apply_condition, get_active_conditions
+        from world.traits.factories import CheckOutcomeFactory
+
+        archetype = CompanionArchetypeFactory(
+            bind_difficulty=20, capacity_cost=5, charm_difficulty_reduction=20
+        )
+        opponent = CombatOpponentFactory(encounter=self.encounter, threat_pool=self.threat_pool)
+        charm = ConditionTemplate.get_by_name(CHARM_CONDITION_NAME)
+        apply_condition(opponent.objectdb, charm, source_character=self.sheet.character)
+        success = CheckOutcomeFactory(name="Forced Rollback Success", success_level=5)
+        before = Companion.objects.count()
+        with (
+            force_check_outcome(success),
+            patch(
+                "world.companions.services._consume_promotion_charm",
+                side_effect=RuntimeError("cleanup failed"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "cleanup failed"),
+        ):
+            promote_summon_to_companion(
+                caster_sheet=self.sheet,
+                combat_opponent=opponent,
+                archetype=archetype,
+                granting_gift=self.gift,
+                name="Must Roll Back",
+            )
+        self.assertEqual(Companion.objects.count(), before)
+        self.assertTrue(get_active_conditions(opponent.objectdb, condition=charm).exists())
 
     def test_charmed_enemy_wrong_charmer_rejected(self):
         """A charmed enemy charmed by someone else is rejected (source_character check)."""
