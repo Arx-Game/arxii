@@ -560,46 +560,48 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
               Create domain
             </Button>
             <span className="mx-1 h-6 border-l" aria-hidden="true" />
-            {(['brush', 'fill', 'loop'] as const).map((t) => (
+            <span className="flex items-center gap-2" data-testid="carve-tools">
+              {(['brush', 'fill', 'loop'] as const).map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={tool === t ? 'default' : 'outline'}
+                  aria-pressed={tool === t}
+                  onClick={() => setTool(t)}
+                >
+                  {TOOL_LABELS[t]}
+                </Button>
+              ))}
+              {tool === 'brush' && brushWidthSelect}
               <Button
-                key={t}
                 type="button"
                 size="sm"
-                variant={tool === t ? 'default' : 'outline'}
-                aria-pressed={tool === t}
-                onClick={() => setTool(t)}
+                variant="ghost"
+                disabled={history.undo.length === 0}
+                onClick={() => void undo()}
               >
-                {TOOL_LABELS[t]}
+                Undo
               </Button>
-            ))}
-            {tool === 'brush' && brushWidthSelect}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={history.undo.length === 0}
-              onClick={() => void undo()}
-            >
-              Undo
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={history.redo.length === 0}
-              onClick={() => void redo()}
-            >
-              Redo
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={carveTitleId == null}
-              onClick={() => setClearOpen(true)}
-            >
-              Clear
-            </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={history.redo.length === 0}
+                onClick={() => void redo()}
+              >
+                Redo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={carveTitleId == null}
+                onClick={() => setClearOpen(true)}
+              >
+                Clear
+              </Button>
+            </span>
           </>
         )}
         <div className="ml-auto flex items-center gap-1">
