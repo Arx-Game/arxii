@@ -29,6 +29,19 @@ class CovenantFounder:
 
 
 @dataclass(frozen=True)
+class VowEffectBonuses:
+    """The thread-level bonuses one ``VowAddedEffect`` carries at one shown level (#4930).
+
+    ``vow_effect_bonuses`` builds it; the cast (``FiredVowEffect``) and the technique
+    power evaluator read the same three figures, so a preview prices what a cast adds.
+    """
+
+    severity: int
+    duration: int
+    damage: int
+
+
+@dataclass(frozen=True)
 class FiredVowEffect:
     """One ``VowAddedEffect`` that fires for a single cast, with its scaled bonuses (#4581).
 

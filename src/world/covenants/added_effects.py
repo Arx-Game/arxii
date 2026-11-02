@@ -114,7 +114,7 @@ from world.covenants.perks.services import (
     vow_holder_candidates,
     vow_holder_thread_levels,
 )
-from world.covenants.types import FiredVowEffect
+from world.covenants.types import FiredVowEffect, VowEffectBonuses
 from world.magic.models.techniques import ConditionTargetKind, Technique, TechniqueFunctionTag
 
 if TYPE_CHECKING:
@@ -653,27 +653,47 @@ def _scaled_firings(live: list[_LiveRow]) -> list[FiredVowEffect]:
     potency_tenths: int | None = None
     fired: list[FiredVowEffect] = []
     for row in chosen.values():
-        effect = row.effect
-        above = max(0, row.thread_level - effect.unlock_thread_level)
-        severity = above * effect.severity_per_thread_level
-        duration = above * effect.duration_per_thread_level
-        damage = above * effect.damage_per_thread_level
-        if row.candidate.is_secondary:
-            if potency_tenths is None:
-                from world.covenants.services import secondary_vow_config  # noqa: PLC0415
+        if row.candidate.is_secondary and potency_tenths is None:
+            from world.covenants.services import secondary_vow_config  # noqa: PLC0415
 
-                potency_tenths = secondary_vow_config().potency_tenths
-            severity = severity * potency_tenths // 10
-            duration = duration * potency_tenths // 10
-            damage = damage * potency_tenths // 10
+            potency_tenths = secondary_vow_config().potency_tenths
+        bonuses = vow_effect_bonuses(
+            row.effect,
+            row.thread_level,
+            potency_tenths=potency_tenths if row.candidate.is_secondary else None,
+        )
         fired.append(
             FiredVowEffect(
-                effect=effect,
+                effect=row.effect,
                 holder=row.candidate.holder,
                 is_secondary=row.candidate.is_secondary,
-                severity_bonus=severity,
-                duration_bonus=duration,
-                damage_bonus=damage,
+                severity_bonus=bonuses.severity,
+                duration_bonus=bonuses.duration,
+                damage_bonus=bonuses.damage,
             )
         )
     return fired
+
+
+def vow_effect_bonuses(
+    effect: VowAddedEffect, thread_level: int, *, potency_tenths: int | None = None
+) -> VowEffectBonuses:
+    """The bonuses ``effect`` adds at shown ``thread_level``: the one per-level rule (#4930).
+
+    Each shown level above ``unlock_thread_level`` adds the row's
+    ``severity_per_thread_level``, ``duration_per_thread_level`` and
+    ``damage_per_thread_level``; a level at or below the unlock adds nothing.
+    ``potency_tenths`` is ``SecondaryVowConfig.potency_tenths`` for a row from a
+    secondary vow (each bonus times it, floor-divided by 10), or ``None`` for a
+    primary vow. The cast (``_scaled_firings``) and the technique power evaluator
+    both call this, so a preview prices what a cast adds. Issues no query.
+    """
+    above = max(0, thread_level - effect.unlock_thread_level)
+    severity = above * effect.severity_per_thread_level
+    duration = above * effect.duration_per_thread_level
+    damage = above * effect.damage_per_thread_level
+    if potency_tenths is not None:
+        severity = severity * potency_tenths // 10
+        duration = duration * potency_tenths // 10
+        damage = damage * potency_tenths // 10
+    return VowEffectBonuses(severity=severity, duration=duration, damage=damage)
