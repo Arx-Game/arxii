@@ -19,17 +19,22 @@ from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.admin.models import LogEntry
-from django.db import DatabaseError
-from django.test import TestCase
+from django.core.cache import cache
+from django.db import DatabaseError, connection
+from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.models import PlayerData
+from web.admin.authoring import power_preview
 from web.admin.tests.test_distinction_builder import (
     emitted_classes,
     reachable_css,
     stylesheet_hrefs,
 )
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.contributors.factories import ContentContributorFactory
 from world.covenants.constants import FocusPickLimitKind
 from world.covenants.factories import (
@@ -38,6 +43,7 @@ from world.covenants.factories import (
     CovenantRoleFactory,
     CovenantRoleTechniqueSpecialtyFactory,
     SubroleCovenantRoleFactory,
+    VowAddedEffectDamageProfileFactory,
     VowAddedEffectFactory,
     VowFocusPickFactory,
     VowFocusPickLimitFactory,
@@ -49,7 +55,18 @@ from world.covenants.models import (
     VowFocusPickLimit,
 )
 from world.magic.constants import TechniqueFunction
-from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+from world.magic.factories import (
+    TechniqueDamageProfileFactory,
+    TechniqueFactory,
+    TechniqueFunctionTagFactory,
+)
+from world.traits.factories import (
+    CheckOutcomeFactory,
+    CheckRankFactory,
+    ResultChartFactory,
+    ResultChartOutcomeFactory,
+)
+from world.traits.models import ResultChart
 
 
 def _superuser(name: str) -> AccountDB:
@@ -454,6 +471,203 @@ class VowPageRestoreTests(VowPageCase):
         self.assertFalse(VowFocusPick.objects.filter(name="Under Open Sky").exists())
         self.assertFalse(
             any(pick.name == "Under Open Sky" for pick in VowFocusPick.get_all_cached_instances())
+        )
+
+
+def even_chart() -> None:
+    """A two-band chart (SL 1 and SL 3, half each) and a x1 multiplier, so DE is not zero."""
+    CheckRankFactory(rank=0, min_points=0)
+    chart = ResultChartFactory(rank_difference=0, name="Preview even")
+    for success_level, low, high in ((1, 1, 50), (3, 51, 100)):
+        outcome = CheckOutcomeFactory(
+            name=f"Preview SL {success_level}", success_level=success_level
+        )
+        ResultChartOutcomeFactory(chart=chart, outcome=outcome, min_roll=low, max_roll=high)
+    DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=Decimal("1.00"))
+    ResultChart.clear_cache()
+
+
+def _de_lines(body: str, technique: str) -> dict[str, int]:
+    """The preview module's lines for one technique, label to DE."""
+    module = body.split('id="power-preview-module"', 1)[1].split('id="credit-module"', 1)[0]
+    block = module.split(f">{technique}</a>", 1)[1].split("Run the fight simulator", 1)[0]
+    return {
+        label: int(de) for label, de in re.findall(r"<span>([^<]+)</span><b>(\d+) DE</b>", block)
+    }
+
+
+class VowPowerPreviewTests(VowPageCase):
+    """The rail's Power preview (#4930): each ridden technique with no vow, the base vow
+    and each pick, then the fight simulator link."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        even_chart()
+        # The catalog evaluation and reference are cached by catalog revision, which a
+        # factory write does not bump: start every test from an empty cache.
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.client.force_login(self.author)
+
+    def _ridden(self, name: str, *, castable: bool = True, level: int = 3) -> object:
+        template = ActionTemplateFactory() if castable else None
+        technique = TechniqueFactory(name=name, intensity=4, action_template=template, level=level)
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.STRIKE)
+        return technique
+
+    def _peer(self, name: str, de: int, *, level: int = 3, function: str = "") -> None:
+        """A catalog technique whose baseline DE is ``de``: one flat damage row."""
+        technique = TechniqueFactory(name=name, level=level, damage_profile=False)
+        TechniqueDamageProfileFactory(
+            technique=technique,
+            base_damage=de,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+        TechniqueFunctionTagFactory(
+            technique=technique, function=function or TechniqueFunction.STRIKE
+        )
+
+    def _rank(self, body: str, technique: str) -> str:
+        module = body.split('id="power-preview-module"', 1)[1]
+        block = module.split(f">{technique}</a>", 1)[1]
+        found = re.search(
+            r'<div class="vb-stat vb-rank"><span>(Catalog rank[^<]*)</span><b>([^<]*)</b>', block
+        )
+        return f"{found.group(1)}: {found.group(2)}"
+
+    def _base_damage(self) -> None:
+        effect = VowAddedEffectFactory(
+            covenant_role=self.role, function=TechniqueFunction.STRIKE, unlock_thread_level=10
+        )
+        VowAddedEffectDamageProfileFactory(effect=effect, base_damage=6)
+
+    def test_each_technique_is_priced_with_no_vow_the_base_and_each_pick(self) -> None:
+        technique = self._ridden("Arc Lash")
+        self._base_damage()
+        on_pick = VowAddedEffectFactory(
+            covenant_role=self.role,
+            function=TechniqueFunction.STRIKE,
+            focus_pick=self.halo,
+            unlock_thread_level=11,
+        )
+        VowAddedEffectDamageProfileFactory(effect=on_pick, base_damage=4)
+        body = self._get()
+        self.assertIn("Power preview &middot; Fulmination</h2>", body)
+        lines = _de_lines(body, "Arc Lash")
+        self.assertEqual(
+            list(lines), ["No vow", "With base vow, level 3", f"With {self.halo.name}"]
+        )
+        self.assertGreater(lines["With base vow, level 3"], lines["No vow"])
+        self.assertGreater(lines[f"With {self.halo.name}"], lines["With base vow, level 3"])
+        self.assertIn("Level 3: the vow&#x27;s highest pick level.", body)
+        self.assertIn("DE is damage equivalent per cast, from the technique power evaluator.", body)
+        self.assertIn("Situational perks and stat scaling are not priced.", body)
+        simulator = reverse("admin_tuning") + (
+            f"?technique={technique.pk}&amp;covenant_role={self.role.pk}#panel-simulation"
+        )
+        self.assertIn(f'href="{simulator}">Run the fight simulator', body)
+
+    def test_a_technique_with_no_action_template_gets_no_simulator_link(self) -> None:
+        quiet = self._ridden("Quiet Lash", castable=False)
+        self._base_damage()
+        body = self._get()
+        self.assertIn("Quiet Lash", body)
+        self.assertNotIn(f"?technique={quiet.pk}&amp;", body)
+        self.assertIn("No action template, so the fight simulator cannot cast it.", body)
+
+    def test_a_vow_with_no_added_effect_says_so(self) -> None:
+        self.assertIn("No added effect rides a technique yet.", self._get())
+
+    def test_the_catalog_rank_counts_same_level_same_function_peers(self) -> None:
+        self._ridden("Arc Lash")
+        self._base_damage()
+        best = max(_de_lines(self._get(), "Arc Lash").values())
+        self._peer("Rank above", best + 50)
+        self._peer("Rank below", 1)
+        self._peer("Rank other level", best + 60, level=4)
+        self._peer("Rank other job", best + 70, function=TechniqueFunction.BARRIER)
+        cache.clear()  # the catalog changed after the first evaluation was cached
+        self.assertEqual(
+            self._rank(self._get(), "Arc Lash"), "Catalog rank, level 3 strike techniques: 2nd of 3"
+        )
+
+    def test_a_tie_shares_the_better_rank(self) -> None:
+        self._ridden("Arc Lash")
+        self._base_damage()
+        best = max(_de_lines(self._get(), "Arc Lash").values())
+        self._peer("Rank above", best + 50)
+        self._peer("Rank tied", best)
+        cache.clear()
+        self.assertEqual(
+            self._rank(self._get(), "Arc Lash"), "Catalog rank, level 3 strike techniques: 2nd of 3"
+        )
+
+    def test_with_nothing_to_compare_it_is_the_only_one(self) -> None:
+        self._ridden("Arc Lash")
+        self._base_damage()
+        self.assertEqual(
+            self._rank(self._get(), "Arc Lash"), "Catalog rank: the only level 3 strike technique"
+        )
+
+    def test_one_shown_or_three_costs_the_same_queries(self) -> None:
+        self._base_damage()
+        self._ridden("Preview A")
+        self._get()  # warm the catalog evaluation, the reference and the site caches
+        with CaptureQueriesContext(connection) as one:
+            self._get()
+        self._ridden("Preview B")
+        self._ridden("Preview C")
+        # Warm again: a technique already in the identity map skips its payload
+        # prefetches, so both counts are taken with every shown technique cached.
+        self._get()
+        with CaptureQueriesContext(connection) as three:
+            body = self._get()
+        self.assertEqual(body.count("Catalog rank"), 3)
+        self.assertEqual(len(three), len(one))
+
+    def test_the_first_three_by_name_then_a_count_with_flat_queries(self) -> None:
+        self._base_damage()
+        for name in ("Preview A", "Preview B", "Preview C"):
+            self._ridden(name)
+        self._get()  # warm the reference frame and the site caches
+        with CaptureQueriesContext(connection) as three:
+            body = self._get()
+        self.assertNotIn("more</p>", body)
+        self._ridden("Preview D")
+        with CaptureQueriesContext(connection) as four:
+            body = self._get()
+        self.assertIn("+1 more", body)
+        self.assertNotIn(">Preview D</a>", body)
+        self.assertEqual(len(four), len(three))
+
+
+class RankWordingTests(SimpleTestCase):
+    """The rank row's arithmetic and wording (#4930), apart from any page."""
+
+    def test_ordinals(self) -> None:
+        cases = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 11: "11th", 12: "12th", 13: "13th"}
+        cases |= {21: "21st", 22: "22nd", 23: "23rd", 101: "101st", 111: "111th"}
+        for number, text in cases.items():
+            with self.subTest(number=number):
+                self.assertEqual(power_preview.ordinal(number), text)
+
+    def test_rank_counts_the_technique_once_and_ties_share_the_better_rank(self) -> None:
+        peers = {1: 40.0, 2: 30.4, 3: 29.6, 4: 10.0, 9: 12.0}
+        # Technique 9 is itself (its catalog figure is replaced by its with-vow 30);
+        # 30.4 and 29.6 round to 30 and tie it, so only 40 is above.
+        self.assertEqual(power_preview.catalog_rank(9, 30, peers), (2, 5))
+        self.assertEqual(power_preview.catalog_rank(7, 30, peers), (2, 6))
+
+    def test_the_rank_line_and_the_single_technique_line(self) -> None:
+        self.assertEqual(
+            power_preview.rank_line(7, 41, level=3, function=TechniqueFunction.STRIKE),
+            "Catalog rank, level 3 strike techniques: 7th of 41",
+        )
+        self.assertEqual(
+            power_preview.rank_line(1, 1, level=3, function=TechniqueFunction.STRIKE),
+            "Catalog rank: the only level 3 strike technique",
         )
 
 

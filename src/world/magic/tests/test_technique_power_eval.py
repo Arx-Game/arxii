@@ -12,10 +12,25 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
-from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.factories import (
+    ConditionDamageOverTimeFactory,
+    ConditionTemplateFactory,
+    DamageSuccessLevelMultiplierFactory,
+)
+from world.covenants.added_effects import payload_prefetches
+from world.covenants.factories import (
+    CovenantRoleFactory,
+    VowAddedEffectAppliedConditionFactory,
+    VowAddedEffectDamageProfileFactory,
+    VowAddedEffectFactory,
+)
+from world.covenants.models import VowAddedEffect
 from world.magic.factories import TechniqueDamageProfileFactory, TechniqueFactory
+from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.power_terms import (
     blend_power_contribution,
     get_covenant_role_blend_config,
@@ -210,3 +225,142 @@ class ProvenanceSplitTests(TestCase):
 
     def test_empty_valuations_split_to_zero(self) -> None:
         self.assertEqual(provenance_split([]), (0.0, 0.0))
+
+
+class VowEffectTermTests(TestCase):
+    """The vow term (#4930): what a vow's added effects add to a technique's DE."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # The same even two-band chart as TechniquePowerEvalDamageTests: SL 1 and SL 3,
+        # P=0.5 each, one x1.00 multiplier row.
+        CheckRankFactory(rank=0, min_points=0)
+        sl1 = CheckOutcomeFactory(name="Partial", success_level=1)
+        sl3 = CheckOutcomeFactory(name="Full", success_level=3)
+        chart = ResultChartFactory(rank_difference=0, name="Even")
+        ResultChartOutcomeFactory(chart=chart, outcome=sl1, min_roll=1, max_roll=50)
+        ResultChartOutcomeFactory(chart=chart, outcome=sl3, min_roll=51, max_roll=100)
+        DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=Decimal("1.00"))
+
+        cls.technique = TechniqueFactory(intensity=4, damage_profile=False, windup_rounds=1)
+        TechniqueDamageProfileFactory(
+            technique=cls.technique,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal("1.00"),
+            damage_per_extra_sl=2,
+            minimum_success_level=1,
+        )
+        cls.role = CovenantRoleFactory()
+
+    def setUp(self) -> None:
+        ResultChart.clear_cache()
+
+    def _damage_effect(self, *, unlock: int = 0, per_level: int = 0) -> VowAddedEffect:
+        """A vow row with one damage profile budgeted like the technique's own (11 DE)."""
+        effect = VowAddedEffectFactory(
+            covenant_role=self.role,
+            unlock_thread_level=unlock,
+            damage_per_thread_level=per_level,
+        )
+        VowAddedEffectDamageProfileFactory(
+            effect=effect,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal("1.00"),
+            damage_per_extra_sl=2,
+            minimum_success_level=1,
+        )
+        return self._fetched([effect])[0]
+
+    def _fetched(self, effects: list[VowAddedEffect]) -> list[VowAddedEffect]:
+        """The rows as a reader fetches them: the four payload prefetches."""
+        return list(
+            VowAddedEffect.objects.filter(pk__in=[e.pk for e in effects])
+            .order_by("unlock_thread_level")
+            .prefetch_related(*payload_prefetches())
+        )
+
+    def _report(self, effects: list[VowAddedEffect], level: int = 0):
+        return evaluate_technique(
+            self.technique,
+            EvalContext(),
+            _PLACEHOLDER_REFERENCE,
+            vow_effects=effects,
+            vow_thread_level=level,
+        )
+
+    def test_no_vow_effects_leaves_the_report_unchanged(self) -> None:
+        own = evaluate_technique(self.technique, EvalContext(), _PLACEHOLDER_REFERENCE)
+        self.assertEqual(self._report([]), own)
+        # The technique's own figures, by hand: 11 DE over (1 + windup 1).
+        self.assertAlmostEqual(own.baseline_de, 11.0 / 2)
+        self.assertEqual([v.kind for v in own.valuations], ["damage"])
+        empty = VowAddedEffectFactory(covenant_role=self.role, unlock_thread_level=7)
+        self.assertEqual(self._report(self._fetched([empty]), level=9), own)
+
+    def test_a_vow_damage_row_adds_its_de_and_changes_no_cost(self) -> None:
+        own = evaluate_technique(self.technique, EvalContext(), _PLACEHOLDER_REFERENCE)
+        report = self._report([self._damage_effect()])
+        self.assertAlmostEqual(report.baseline_de, (11.0 + 11.0) / 2)
+        self.assertEqual([v.kind for v in report.valuations], ["damage", "vow damage"])
+        self.assertEqual(report.valuations[1].label, "untyped damage")
+        self.assertGreater(report.amplified_de, own.amplified_de)
+        for field in ("baseline_power", "amplified_power", "effective_anima", "flags"):
+            with self.subTest(field=field):
+                self.assertEqual(getattr(report, field), getattr(own, field))
+
+    def test_the_level_bonus_raises_each_band_budget(self) -> None:
+        # 2 levels above unlock 0 x 3 per level = +6 budget per band: 11 + 6 = 17.
+        report = self._report([self._damage_effect(per_level=3)], level=2)
+        self.assertAlmostEqual(report.valuations[1].value, 17.0)
+
+    def test_an_effect_below_its_unlock_is_priced_with_no_bonus(self) -> None:
+        report = self._report([self._damage_effect(unlock=5, per_level=3)], level=2)
+        self.assertAlmostEqual(report.valuations[1].value, 11.0)
+
+    def test_an_upgrade_replaces_its_base(self) -> None:
+        base = self._damage_effect()
+        upgrade = VowAddedEffectFactory(
+            covenant_role=self.role, unlock_thread_level=1, upgrades=base
+        )
+        report = self._report(self._fetched([base, upgrade]))
+        self.assertEqual([v.kind for v in report.valuations], ["damage"])
+
+    def test_an_applied_condition_is_valued_with_its_bonuses(self) -> None:
+        condition = ConditionTemplateFactory()
+        ConditionDamageOverTimeFactory(
+            condition=condition, base_damage=5, scales_with_severity=True
+        )
+        effect = VowAddedEffectFactory(
+            covenant_role=self.role,
+            unlock_thread_level=0,
+            severity_per_thread_level=2,
+            duration_per_thread_level=1,
+        )
+        VowAddedEffectAppliedConditionFactory(
+            effect=effect,
+            condition=condition,
+            target_kind=ConditionTargetKind.ENEMY,
+            base_severity=1,
+            base_duration_rounds=2,
+        )
+        [fetched] = self._fetched([effect])
+        with self.subTest(level=0):
+            # Severity 1 x 5 damage a round x 2 rounds.
+            [line] = [v for v in self._report([fetched]).valuations if v.kind == "vow debuff"]
+            self.assertAlmostEqual(line.value, 10.0)
+        with self.subTest(level=3):
+            # Severity 1 + 6 = 7, so 35 a round, over 2 + 3 = 5 rounds.
+            [line] = [
+                v for v in self._report([fetched], level=3).valuations if v.kind == "vow debuff"
+            ]
+            self.assertAlmostEqual(line.value, 175.0)
+
+    def test_queries_do_not_grow_with_prefetched_damage_effects(self) -> None:
+        one = [self._damage_effect()]
+        two = self._fetched([one[0], self._damage_effect(unlock=4)])
+        self._report(one)  # warm the technique's own cached payload lists
+        with CaptureQueriesContext(connection) as one_effect:
+            self._report(one)
+        with CaptureQueriesContext(connection) as two_effects:
+            self._report(two)
+        self.assertEqual(len(two_effects), len(one_effect))

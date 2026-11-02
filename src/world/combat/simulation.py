@@ -36,6 +36,16 @@ Isolation contract (the entire point of this module):
    tuning edits — this module never overwrites it. A tuning-preview tool that
    silently reset the very tuning it's supposed to preview would defeat its
    own purpose.
+
+The party's technique and vow (#4930): ``SimulationParams.technique_id`` names a
+catalog technique the whole party casts instead of the synthetic basic attack
+(fetched once per batch; combat reads no ``CharacterTechnique`` for it, so none is
+made). ``covenant_role_id`` gives every party member that vow as a live, engaged
+primary membership of one shared synthetic covenant, with its COVENANT_ROLE thread
+at shown level ``avg_level`` (the thread cap is character level x 10, so the
+party's level is the honest level), so the cast path fires the vow's added effects
+and power terms as it would for a real holder. Both are ids so the params stay
+hashable for the dashboard's cache key, and both roll back with everything else.
 """
 
 from __future__ import annotations
@@ -49,6 +59,7 @@ from evennia.utils.idmapper.models import flush_cache
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.classes.factories import CharacterClassLevelFactory
 from world.combat import services
 from world.combat.constants import EncounterOutcome, OpponentTier, ParticipantStatus, RiskLevel
@@ -68,6 +79,8 @@ from world.combat.models import (
     EncounterScalingConfig,
 )
 from world.combat.scaling import compute_opponent_stat_block
+from world.covenants.factories import CovenantFactory, engage_vow_with_thread
+from world.covenants.models import Covenant, CovenantRole
 from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
 from world.magic.models import Technique
 from world.mechanics.factories import CharacterEngagementFactory
@@ -115,6 +128,10 @@ class SimulationParams:
     iterations: int = 50
     round_cap: int = 20
     combo_rate: float = 0.0
+    #: A catalog technique the party casts; ``None`` is the synthetic basic attack.
+    technique_id: int | None = None
+    #: A vow every party member holds; ``None`` is no vow.
+    covenant_role_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -173,12 +190,13 @@ def run_party_vs_boss_simulation(params: SimulationParams) -> SimulationReport:
             # game balance in a tool whose entire purpose is to preview it.
             if not EncounterScalingConfig.objects.exists():
                 seed_scaling_defaults()
+            loadout = _loadout(params)
 
             for _ in range(params.iterations):
                 try:
                     with transaction.atomic():
                         outcome, rounds_used, iteration_opponent_max_health = _run_one_iteration(
-                            params
+                            params, loadout
                         )
                         round_counts.append(rounds_used)
                         opponent_max_health = iteration_opponent_max_health
@@ -215,7 +233,30 @@ def run_party_vs_boss_simulation(params: SimulationParams) -> SimulationReport:
     )
 
 
-def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int, int]:
+@dataclass(frozen=True)
+class _Loadout:
+    """The batch's catalog technique and vow, read once; ``None`` for the defaults."""
+
+    technique: Technique | None
+    role: CovenantRole | None
+
+
+def _loadout(params: SimulationParams) -> _Loadout:
+    """Fetch the params' technique and vow once per batch (#4930)."""
+    technique = (
+        Technique.objects.get(pk=params.technique_id) if params.technique_id is not None else None
+    )
+    role = (
+        CovenantRole.objects.get(pk=params.covenant_role_id)
+        if params.covenant_role_id is not None
+        else None
+    )
+    return _Loadout(technique=technique, role=role)
+
+
+def _run_one_iteration(
+    params: SimulationParams, loadout: _Loadout | None = None
+) -> tuple[str | None, int, int]:
     """Run a single simulated party-vs-opponent combat to completion or the round cap.
 
     Returns ``(outcome, rounds_used, opponent_max_health)``. ``outcome`` is an
@@ -235,9 +276,10 @@ def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int, int]:
             round_number=1,
         ),
     )
-    participants = _build_party(encounter, params)
+    loadout = loadout or _Loadout(technique=None, role=None)
+    participants = _build_party(encounter, params, role=loadout.role)
     opponent = _build_opponent(encounter, params)
-    technique = _build_basic_attack_technique()
+    technique = loadout.technique or _build_basic_attack_technique()
 
     outcome: str | None = None
     rounds_used = 0
@@ -292,11 +334,22 @@ def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int, int]:
     return outcome, rounds_used, opponent.max_health
 
 
-def _build_party(encounter: CombatEncounter, params: SimulationParams) -> list[CombatParticipant]:
-    """Create ``params.party_size`` locationless PC participants for *encounter*."""
+def _build_party(
+    encounter: CombatEncounter, params: SimulationParams, *, role: CovenantRole | None = None
+) -> list[CombatParticipant]:
+    """Create ``params.party_size`` locationless PC participants for *encounter*.
+
+    With ``role``, each member holds it as an engaged primary vow of one shared
+    covenant, its thread at shown level ``params.avg_level`` (#4930).
+    """
+    covenant = (
+        cast("Covenant", CovenantFactory(covenant_type=role.covenant_type))
+        if role is not None
+        else None
+    )
     participants: list[CombatParticipant] = []
     for _ in range(params.party_size):
-        sheet = CharacterSheetFactory()
+        sheet = cast("CharacterSheet", CharacterSheetFactory())
         CharacterClassLevelFactory(
             character=sheet,
             level=params.avg_level,
@@ -310,6 +363,8 @@ def _build_party(encounter: CombatEncounter, params: SimulationParams) -> list[C
         )
         CharacterAnimaFactory(character=sheet, current=_PC_ANIMA, maximum=_PC_ANIMA)
         CharacterEngagementFactory(character=sheet)
+        if role is not None and covenant is not None:
+            engage_vow_with_thread(sheet, role, covenant=covenant, thread_level=params.avg_level)
         participants.append(
             cast(
                 "CombatParticipant",

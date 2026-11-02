@@ -1184,7 +1184,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 each pick's `VowFocusPickLimit` rows. Pattern mirrors the Distinction Builder:
 `superuser_required`, the contributor gate, plain Django forms, `base_site.html`, a
 page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 and 7 of the
-#4843 spec; the style module, power preview and flags are later slices (7, 6, 4).
+#4843 spec; the style module is a later slice (7); flags are slice 4 and the power
+preview slice 6 (#4930).
 
 - **Files** - `web/admin/vow_builder/`: `views.py` (`vow_builder`, `vow_builder_pick`,
   `vow_builder_review`), `forms.py` (`VowForm`, `SpecialtyFormSet`, `PickFormSet`,
@@ -1260,7 +1261,37 @@ page-owned `extrastyle` link to `forms.css` and `widgets.css`. Demo screens 2 an
   the vow's added effects grouped by function and narrowing; a count and three names linked
   to their admin change pages, from one `world.covenants.added_effects
   .techniques_by_function` query narrowed by `effect_rides_technique`, the match the cast
-  path uses), then Credit.
+  path uses), then "Power preview" (#4930), then Credit.
+- **Power preview** - `web/admin/authoring/power_preview.py` `vow_power_preview(role)`,
+  headed "Power preview . <vow name>" (a middle dot): the techniques the vow's added effects
+  ride, by name, the first three priced (`PREVIEW_TECHNIQUES`) and the rest counted ("+N
+  more"). Per technique: "No vow: N DE", "With base vow, level L: N DE" (rows with no focus
+  pick riding it), then "With <pick>: N DE" (base plus that pick) for each pick with a row
+  riding it; then the catalog rank row, "Catalog rank, level <level> <function>
+  techniques: <n>th of <m>" (or "Catalog rank: the only level <level> <function>
+  technique" when nothing compares); then a "Run the fight simulator" link to
+  `admin_tuning?technique=&covenant_role=#panel-simulation`, or, for a technique with no
+  action template, a muted line saying the simulator cannot cast it. L is the vow's highest
+  pick level, or 1 with no picks, said in a muted line; then the line on what DE is and
+  "Situational perks and stat scaling are not priced." Each figure is
+  `evaluate_technique(...).baseline_de` with the vow term (`vow_effects`,
+  `vow_thread_level`; see `docs/systems/tuning.md`), rounded, at the Techniques panel's
+  default context and reference (`technique_analytics.default_context_and_reference`,
+  cached by catalog revision).
+- **Catalog rank** - the technique's best with-vow figure (its highest line) against the
+  rounded baseline DE of every catalog technique with the same `level` carrying the
+  function the vow rides it by (the first in `TechniqueFunction` order when several). The
+  catalog figures are the Techniques panel's own corpus at its default knobs
+  (`technique_analytics.default_catalog_reports`, `_evaluate_corpus`: its cache for the
+  current catalog revision, else evaluated once and cached as the panel does). The
+  technique counts once, at its with-vow figure; ties share the better rank
+  (`catalog_rank`); `ordinal` and `rank_line` word it.
+- **Preview queries** - one for the effects (payloads prefetched), one for the picks, one
+  for the function tags, the priced techniques with their payload prefetches, one for the
+  rank peers (`TechniqueFunctionTag` by function and level, `_peer_figures`), then the
+  evaluator's own reads. The count is the same with one shown technique or three, and a
+  fourth, unshown one adds none (`VowPowerPreviewTests`); the first load on a new catalog
+  revision also evaluates the catalog once.
 - **URLs** (superuser-only): `_vow_builder/pick/` -> `admin_vow_builder_pick` (`?pk=`, GET
   redirect, 400 on a missing or unknown pk), `_vow_builder/<pk>/` -> `admin_vow_builder`,
   `_vow_builder/<pk>/review/` -> `admin_vow_builder_review` (POST).
@@ -1368,8 +1399,7 @@ path changes.
 
 **Purpose:** demo screen 4. One real character's combat kit on one read-only page: each
 technique it knows with what its vows add, its chosen focus picks against the budget, and
-the sheet facts beside them. Not here yet: the power preview column (slice 6) and the style
-row (slice 7, after #4844).
+the sheet facts beside them. Not here yet: the style row (slice 7, after #4844).
 
 - **Files** - `web/admin/kit_view/`: `live.py` (pure reads, frozen dataclasses: `kit_for(sheet)
   -> Kit`, built from `known_techniques`, `vow_levels`, `technique_lines`, `pick_levels`,
@@ -1386,6 +1416,10 @@ row (slice 7, after #4844).
   still listed, chipped "unlocks at level N"; a row whose beneficiary is not the holder's
   own casts is chipped "rides <beneficiary>". A technique with no line reads "nothing: <vow>
   adds nothing to <function>" ("it carries no function tag" / "no engaged vow" otherwise).
+  A fourth column, Preview (#4930), is the technique's DE with those vow lines
+  (`power_preview.preview_de`) at the highest shown level among their vows (a secondary
+  vow's lines are priced at full potency), the technique's own DE with no line, and "n/a"
+  for a technique with no function tag.
 - **Focus picks chosen** - per live primary vow and pick level with a chosen pick: "Level N
   . <picks>" (each linked to its `VowFocusPick` change page) and "<spent> of <budget>",
   chipped "over budget" when spent is more. Spent is
@@ -1397,9 +1431,10 @@ row (slice 7, after #4844).
   primary vow's `CovenantRoleDefenseProfile` style (the resolved sub-role's own, else its
   anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". A character
   with no vow, no technique or a secondary vow only renders and says what is absent.
-- **Queries** - fixed however many techniques, added effects or picks: 22 for the kit reads
-  (`tests/test_kit_view_live.py` `KIT_QUERIES`), 74 for the whole request
-  (`tests/test_kit_view.py` `PAGE_QUERIES`, mostly admin chrome). Function tags are read with
+- **Queries** - fixed however many techniques, added effects or picks: 26 for the kit reads
+  (`tests/test_kit_view_live.py` `KIT_QUERIES`, four of them the preview frame), 78 for the
+  whole request (`tests/test_kit_view.py` `PAGE_QUERIES`, mostly admin chrome). A technique
+  whose own or vow rows apply conditions costs the evaluator's per-row lookups. Function tags are read with
   one `values_list` (`function_tags_by_technique`), never prefetched onto the identity-mapped
   techniques (ADR-0263).
 - **URLs** (GET only; staff with view or change permission on `CharacterSheet`, 403
@@ -1726,7 +1761,9 @@ sub-URL (`tuning/views.py`): checks-analytics (`tuning_checks_fragment`,
 `checks_analytics.py`), consequence-pool inspector (`tuning_consequences_fragment`,
 `consequence_analytics.py`), condition danger ranking (`tuning_conditions_fragment`,
 `condition_analytics.py`), and Monte Carlo party-vs-boss simulation
-(`tuning_simulation_fragment`, `SimulationRunForm` + `world.combat.simulation`). Read+preview
+(`tuning_simulation_fragment`, `SimulationRunForm` + `world.combat.simulation`; optional
+technique and vow picks, which the dashboard forwards from its own `?technique=` /
+`?covenant_role=` into the panel's first load, #4930). Read+preview
 only — sliders/forms re-render fragments via `hx-get`; the simulation run itself writes
 nothing persistent (isolation contract in `world/combat/simulation.py`'s module docstring).
 

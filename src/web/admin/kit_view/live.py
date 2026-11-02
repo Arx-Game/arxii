@@ -2,13 +2,14 @@
 
 One real character's techniques, each with what its vows add (the static view,
 ``vow_added_effects_on_techniques``, which ignores the unlock level, context, situation
-and frequency by design), the focus picks it chose with each level's spend against the
-budget, and the sheet facts a reader needs beside them: path, gifts, vows and the vow's
-defense profile. The budget is read without creating the config row, the rule every
-Combat roles page keeps on a GET.
+and frequency by design) and its power preview (#4930), the focus picks it chose with
+each level's spend against the budget, and the sheet facts a reader needs beside them:
+path, gifts, vows and the vow's defense profile. The budget is read without creating
+the config row, the rule every Combat roles page keeps on a GET.
 
-The page's query count is fixed however many techniques, added effects or picks the
-character has; it grows only with the character's live vow memberships.
+The page's query count is fixed however many added effects or picks the character has;
+it grows with the character's live vow memberships, and by the power evaluator's own
+per-technique reads for each known technique (the Preview column, #4930).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
+from web.admin.authoring.power_preview import PreviewFrame, preview_de, preview_frame
 from web.admin.vow_builder.live import focus_pick_budget
 from world.covenants.added_effect_summary import summarize_vow_added_effect
 from world.covenants.added_effects import (
@@ -77,7 +79,9 @@ class TechniqueLine:
 
     ``functions`` is its function tags' labels; ``base`` the plain-words line every
     surface shows for the technique. ``nothing`` says why no vow line is listed, and is
-    "" when ``groups`` holds any.
+    "" when ``groups`` holds any. ``preview`` is the power preview (#4930): "N DE" with
+    the character's own vow lines at its vow level (``power_preview.preview_de``), the
+    technique's own DE with no line, or "n/a" for a technique with no function tag.
     """
 
     technique: Link
@@ -85,6 +89,7 @@ class TechniqueLine:
     base: str
     groups: list[VowGroup] = field(default_factory=list)
     nothing: str = ""
+    preview: str = ""
 
 
 @dataclass(frozen=True)
@@ -160,7 +165,7 @@ def known_techniques(sheet: CharacterSheet) -> list[Technique]:
     """
     return list(
         Technique.objects.filter(character_grants__character=sheet)
-        .select_related("gift")
+        .select_related("gift", "effect_type")
         .prefetch_related(*technique_payload_prefetches())
         .distinct()
         .order_by("name")
@@ -219,6 +224,24 @@ def _labels(tags: list[str], joiner: str) -> str:
     return joiner.join(str(TechniqueFunction(tag).label) for tag in tags)
 
 
+#: The Preview cell of a technique with no function tag: no vow line can ride it.
+NO_PREVIEW = "n/a"
+
+
+def _preview(
+    technique: Technique,
+    tags: list[str],
+    effects: list[VowAddedEffect],
+    levels: dict[int, int],
+    frame: PreviewFrame,
+) -> str:
+    """The technique's DE with its vow lines, at the highest level among their vows."""
+    if not tags:
+        return NO_PREVIEW
+    level = max((levels.get(_anchor_id(e.covenant_role), 0) for e in effects), default=0)
+    return f"{preview_de(technique, frame, effects, level)} DE"
+
+
 def technique_lines(
     sheet: CharacterSheet, memberships: list[CharacterCovenantRole], levels: dict[int, int]
 ) -> list[TechniqueLine]:
@@ -228,6 +251,7 @@ def technique_lines(
     effects = vow_added_effects_on_techniques(sheet, techniques, tags)
     engaged_vows = sorted({m.covenant_role.name for m in memberships if m.engaged})
     name_vows = len({_anchor_id(m.covenant_role) for m in memberships}) > 1
+    frame = preview_frame() if techniques else None
     lines: list[TechniqueLine] = []
     for technique in techniques:
         own_tags = tags[technique.pk]
@@ -244,6 +268,9 @@ def technique_lines(
                 nothing=""
                 if groups
                 else _nothing(own_tags, _labels(own_tags, " or "), engaged_vows),
+                preview=_preview(technique, own_tags, effects[technique.pk], levels, frame)
+                if frame is not None
+                else "",
             )
         )
     return lines

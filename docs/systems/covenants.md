@@ -1109,7 +1109,9 @@ list[FiredVowEffect]` runs these steps in order:
 8. **Scaling**: each level above `unlock_thread_level` adds the row's
    `severity_per_thread_level`, `duration_per_thread_level` and `damage_per_thread_level`.
    A row from a SECONDARY vow has each bonus multiplied by
-   `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159).
+   `SecondaryVowConfig.potency_tenths` and floor-divided by 10 (ADR-0159). The rule is
+   `vow_effect_bonuses(effect, thread_level, *, potency_tenths=None) -> VowEffectBonuses`,
+   shared with the technique power evaluator's vow term (#4930).
 
 `FiredVowEffect` (`world.covenants.types`) carries `effect`, `holder`, `is_secondary` and the
 three bonuses. Every cast in the game calls this, so the order keeps the common cast cheap: a

@@ -122,6 +122,16 @@
     {{ form.iterations.errors }}
   </div>
   <div class="tuning-field">
+    <label for="{{ form.technique.id_for_label }}">{% translate "Technique (blank = basic attack)" %}</label>
+    {{ form.technique }}
+    {{ form.technique.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.covenant_role.id_for_label }}">{% translate "Vow (blank = no vow)" %}</label>
+    {{ form.covenant_role }}
+    {{ form.covenant_role.errors }}
+  </div>
+  <div class="tuning-field">
     <button type="submit">{% translate "Run simulation" %}</button>
   </div>
 </form>

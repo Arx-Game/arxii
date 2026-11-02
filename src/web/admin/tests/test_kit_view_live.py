@@ -16,15 +16,17 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from web.admin.kit_view import live
+from web.admin.tests.test_vow_builder import even_chart
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
-from world.covenants.constants import CovenantType, DefenseStyle
+from world.covenants.constants import CovenantType, DefenseStyle, VowEffectFrequency
 from world.covenants.factories import (
     CharacterVowFocusPickFactory,
     CovenantFactory,
     CovenantRoleDefenseProfileFactory,
     CovenantRoleFactory,
     SubroleCovenantRoleFactory,
+    VowAddedEffectDamageProfileFactory,
     VowAddedEffectFactory,
     VowFocusPickConfigFactory,
     VowFocusPickFactory,
@@ -149,6 +151,49 @@ class TechniqueLinesTest(KitLiveCase):
         self.assertEqual(self._line("Bare").nothing, "nothing: it carries no function tag")
 
 
+class PreviewTest(KitLiveCase):
+    """The Preview column (#4930): the technique's DE with its vow lines, at its vow level."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        even_chart()
+
+    def _preview(self, name: str) -> str:
+        return next(
+            line.preview
+            for line in live.kit_for(self.sheet).techniques
+            if line.technique.label == name
+        )
+
+    def test_a_technique_with_no_function_tag_reads_not_applicable(self) -> None:
+        self.assertEqual(self._preview("Bare"), live.NO_PREVIEW)
+
+    def test_a_technique_with_no_vow_line_reads_its_own_de(self) -> None:
+        self.assertRegex(self._preview("Watch"), r"^[1-9]\d* DE$")
+
+    def test_a_vow_damage_line_raises_it_and_the_vow_level_scales_it(self) -> None:
+        before = int(self._preview("Bolt").split()[0])
+        flat = VowAddedEffectFactory(
+            covenant_role=self.vow,
+            function=TechniqueFunction.STRIKE,
+            beneficiary=PerkBeneficiary.WHOLE_GROUP,
+        )
+        VowAddedEffectDamageProfileFactory(effect=flat, base_damage=5)
+        with_line = int(self._preview("Bolt").split()[0])
+        self.assertEqual(with_line, before + 5)
+        # The holder's vow is level 2 and the row unlocks at 0: +3 a level is +6 a band.
+        scaled = VowAddedEffectFactory(
+            covenant_role=self.vow,
+            function=TechniqueFunction.STRIKE,
+            beneficiary=PerkBeneficiary.WHOLE_GROUP,
+            unlock_thread_level=0,
+            damage_per_thread_level=3,
+            frequency=VowEffectFrequency.ONCE_PER_ROUND,
+        )
+        VowAddedEffectDamageProfileFactory(effect=scaled, base_damage=5)
+        self.assertEqual(int(self._preview("Bolt").split()[0]), with_line + 5 + 6)
+
+
 class PicksAndSheetTest(KitLiveCase):
     def test_the_chosen_picks_by_level_with_the_spend_over_budget(self) -> None:
         (level,) = live.kit_for(self.sheet).picks
@@ -258,5 +303,7 @@ class QueryCountTest(KitLiveCase):
 #: One primary vow with picks and techniques the vow adds to: the memberships, thread
 #: levels, the techniques with six payload prefetches, their function tags, the
 #: sub-role resolve, the added effects with four payload prefetches, the chosen picks
-#: (twice: the filter and the picks module), the pick limits, path, gifts and defense.
-KIT_QUERIES = 22
+#: (twice: the filter and the picks module), the pick limits, path, gifts and defense,
+#: and the power preview's frame (#4930: two check ranks, the result charts and the
+#: blend config, read once; the Preview column reads nothing per technique here).
+KIT_QUERIES = 26

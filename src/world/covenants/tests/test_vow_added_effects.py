@@ -45,6 +45,7 @@ from world.covenants.added_effects import (
     vow_added_effects_for_cast,
     vow_added_effects_on_technique,
     vow_damage_profiles,
+    vow_effect_bonuses,
 )
 from world.covenants.constants import CovenantType, VowEffectContext, VowEffectFrequency
 from world.covenants.factories import (
@@ -677,6 +678,32 @@ class DedupeTests(VowAddedEffectsTestBase):
                 [fired] = _scaled_firings(live)
                 self.assertFalse(fired.is_secondary)
                 self.assertEqual(fired.severity_bonus, 50)
+
+
+class VowEffectBonusesTests(TestCase):
+    """The one per-level rule the cast and the power evaluator share (#4930)."""
+
+    def _effect(self) -> VowAddedEffect:
+        return VowAddedEffectFactory.build(
+            unlock_thread_level=2,
+            severity_per_thread_level=3,
+            duration_per_thread_level=1,
+            damage_per_thread_level=4,
+        )
+
+    def test_each_level_above_the_unlock_adds_each_column(self) -> None:
+        bonuses = vow_effect_bonuses(self._effect(), 5)
+        self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (9, 3, 12))
+
+    def test_at_or_below_the_unlock_adds_nothing(self) -> None:
+        for level in (0, 2):
+            with self.subTest(level=level):
+                bonuses = vow_effect_bonuses(self._effect(), level)
+                self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (0, 0, 0))
+
+    def test_a_secondary_vow_scales_by_potency_and_floors(self) -> None:
+        bonuses = vow_effect_bonuses(self._effect(), 5, potency_tenths=5)
+        self.assertEqual((bonuses.severity, bonuses.duration, bonuses.damage), (4, 1, 6))
 
 
 class StaticViewTests(VowAddedEffectsTestBase):

@@ -161,6 +161,13 @@ recently cached result instead of losing it.
 - `tier` (`OpponentTier.choices`), `risk_level` (`RiskLevel.choices`) — `ChoiceField`s;
   an unrecognized value IS a real form error (there's no sane way to clamp a string into
   an enum member).
+- `technique` ("Technique (blank = basic attack)") and `covenant_role` ("Vow (blank = no
+  vow)"): optional `ModelChoiceField`s (#4930); an unknown id is a form error. They
+  become `SimulationParams.technique_id` / `covenant_role_id`, and
+  `_simulation_cache_key` carries both. A GET's `?technique=` / `?covenant_role=` (digits
+  only) prefill them, and `tuning_dashboard` forwards those two params from its own URL
+  into the panel's first `hx-get`, so the vow page's "Run the fight simulator" link opens
+  the form filled. Staff run it once with the vow and once with it blank.
 
 The view calls `simulation.run_party_vs_boss_simulation` via the module object (not a
 bare `from ... import`) so tests can patch the function at its origin module and still
@@ -181,7 +188,16 @@ reinventing the wheel" / no-parallel-implementations rule (see
 
 `SimulationParams` (frozen dataclass): `party_size: int = 4`, `avg_level: int = 5`,
 `tier: str = OpponentTier.BOSS`, `risk_level: str = RiskLevel.MODERATE`,
-`iterations: int = 50`, `round_cap: int = 20`.
+`iterations: int = 50`, `round_cap: int = 20`, `combo_rate: float = 0.0`,
+`technique_id: int | None = None`, `covenant_role_id: int | None = None` (#4930; ids keep
+the dataclass hashable). With `technique_id` the party casts that catalog technique
+(fetched once per batch) instead of the synthetic basic attack; combat reads no
+`CharacterTechnique` for a declared technique, so none is made. With `covenant_role_id`
+every party member holds that vow engaged, as a primary membership of one shared
+synthetic covenant, with its COVENANT_ROLE thread at shown level `avg_level`
+(`engage_vow_with_thread`; the thread cap is character level x 10), so the cast path
+fires the vow's added effects and power terms as for a real holder. Both roll back with
+the batch.
 
 `SimulationReport` (frozen dataclass): `params`, `iterations_run`, `victories`,
 `defeats`, `stalemates`, `win_rate`, `round_counts: list[int]`, `mean_rounds`,
@@ -224,6 +240,22 @@ live combat formulas and stays importable by future budget/simulation phases:
 - `world/magic/services/technique_power_eval.py` —
   `evaluate_all_with_reference(EvalContext) -> (list[TechniquePowerReport], ReferenceFrame)`
   (and the `evaluate_all` wrapper). Types in `world/magic/types/technique_power.py`.
+- **The vow term (#4930):** `evaluate_technique(..., vow_effects=(), vow_thread_level=0)`
+  also prices `VowAddedEffect` rows riding the technique, into both figures. Each effect's
+  bonuses at `vow_thread_level` come from `world.covenants.added_effects.vow_effect_bonuses`,
+  the rule the cast uses: its damage profiles go through the damage valuator with the
+  `damage_bonus` added to each band's budget (`kind="vow damage"`); its applied conditions
+  route like the technique's own rows with the severity and duration bonuses (a team-lane
+  row takes neither; `kind="vow <kind>"`). An effect below its unlock is priced with no
+  bonus; one another passed effect `upgrades` is dropped. Not priced: the effect's
+  treatments, removed conditions and morale, the hard-control line, situations, secondary
+  potency, and the weapon augment. Power, anima, windup and flags are the technique's
+  own; with no effects the report is unchanged. `_amplified_delta`
+  (`amplified_power_delta(context)`) lets a caller pricing many techniques read the blend
+  config once. Readers: the vow page's Power preview and the kit view's Preview column
+  (`web/admin/authoring/power_preview.py`), at the Techniques panel's default context and
+  reference (`technique_analytics.default_context_and_reference`, cached by catalog
+  revision).
 - **Shared DE formula core (#3390):** `world/magic/services/de_valuation.py` holds every
   row/technique-independent formula this evaluator uses — `matchup_bands`,
   `reference_attack_de`, `cached_damage_multiplier`, `dot_per_round`,
