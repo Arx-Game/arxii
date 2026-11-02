@@ -1,6 +1,6 @@
 {% comment %}
 The vow page's rail (#4880): offered prices per level against the budget, the
-techniques the vow's added effects ride, and credit. Outside the main form, since
+techniques the vow's added effects ride, their power preview (#4930), and credit. Outside the main form, since
 "Mark reviewed" is its own POST.
 {% endcomment %}
 <div class="module" id="budget-module">
@@ -22,6 +22,22 @@ techniques the vow's added effects ride, and credit. Outside the main form, sinc
   {% empty %}
   <p>No specialties or added effects yet.</p>
   {% endfor %}
+</div>
+
+<div class="module" id="power-preview-module">
+  <h2>Power preview</h2>
+  {% for technique in power_preview.techniques %}
+  <p class="vb-preview-name"><a href="{{ technique.url }}">{{ technique.name }}</a></p>
+  {% for line in technique.lines %}
+  <div class="vb-stat"><span>{{ line.label }}</span><b>{{ line.de }} DE</b></div>
+  {% endfor %}
+  <p><a href="{{ technique.simulator_url }}">Run the fight simulator</a></p>
+  {% empty %}
+  <p class="vb-muted">No added effect rides a technique yet.</p>
+  {% endfor %}
+  {% if power_preview.more %}<p class="vb-muted">+{{ power_preview.more }} more</p>{% endif %}
+  <p class="vb-muted">{{ power_preview.level_note }}</p>
+  <p class="vb-muted">{{ power_preview.explanation }} {{ power_preview.not_priced }}</p>
 </div>
 
 <div class="module" id="credit-module">

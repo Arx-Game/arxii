@@ -103,7 +103,7 @@ _reference_attack_de = de_valuation.reference_attack_de
 _cached_damage_multiplier = de_valuation.cached_damage_multiplier
 
 
-def _amplified_power_delta(context: EvalContext) -> int:
+def amplified_power_delta(context: EvalContext) -> int:
     """Power gained going from baseline to the "fully matched anchor" (#3279).
 
     Sums the two role-band pure helpers (extracted from ``power_terms.py`` in
@@ -519,10 +519,14 @@ def _hard_control_valuation(
     ``reference.incoming_dpr`` (#3279's currency spec; deliberately per-technique,
     not per-row).
     """
+    # The enemy rows first (#4930): a technique with none needs no tag read, so a preview
+    # pricing many techniques reads no function tags for the ones that land nothing.
+    if not enemy_durations:
+        return None
     has_hard_control_tag = any(
         tag.function in _HARD_CONTROL_FUNCTIONS for tag in technique.cached_function_tags
     )
-    if not has_hard_control_tag or not enemy_durations:
+    if not has_hard_control_tag:
         return None
 
     control_duration = max(enemy_durations)
@@ -616,7 +620,10 @@ def _treatment_valuations(
     currency spec's ``max(1, expected_duration_rounds if it has one else 1)``
     window is always 1 here.
     """
-    rows: list[TechniqueTreatment] = list(technique.treatments.select_related("treatment_template"))
+    # The cached list (#4930): the same rows, and no query when a reader prefetched them
+    # (``technique_payload_prefetches``), so a preview pricing one technique several
+    # times pays for its treatments once.
+    rows: list[TechniqueTreatment] = technique.cached_treatments
     valuations: list[PayloadValuation] = []
     for row in rows:
         template = row.treatment_template
@@ -912,6 +919,7 @@ def evaluate_technique(
     _bands: list[_MatchupBand] | None = None,
     vow_effects: Sequence[VowAddedEffect] = (),
     vow_thread_level: int = 0,
+    _amplified_delta: int | None = None,
 ) -> TechniquePowerReport:
     """Full combat-power report for one technique at one evaluation context (#3279).
 
@@ -919,12 +927,14 @@ def evaluate_technique(
     ``_derive_power(character=None)`` returns
     (``world/magic/services/techniques.py:394``, ``PowerLedgerBuilder(base=max(0,
     channeled_intensity)).build()`` when there is no character to derive
-    contributions from). Amplified power adds ``_amplified_power_delta`` on top —
+    contributions from). Amplified power adds ``amplified_power_delta`` on top —
     the "fully matched anchor" comparison point.
 
     ``_multiplier_cache``/``_bands`` let ``evaluate_all`` share one damage-
     multiplier cache and one matchup-band computation across every technique in
     a run; a standalone caller computes its own (fresh per call) when omitted.
+    ``_amplified_delta`` is :func:`amplified_power_delta` for ``context``, passed by a
+    caller pricing many techniques so the blend config is read once (#4930).
 
     ``vow_effects`` (#4930) are vow added effects riding this technique, priced into
     both figures at shown thread level ``vow_thread_level`` by
@@ -938,7 +948,9 @@ def evaluate_technique(
         _bands = _matchup_bands(context)
 
     baseline_power = technique.intensity
-    amplified_power = baseline_power + _amplified_power_delta(context)
+    if _amplified_delta is None:
+        _amplified_delta = amplified_power_delta(context)
+    amplified_power = baseline_power + _amplified_delta
     effective_anima = _effective_anima(technique)
 
     if not _bands:

@@ -19,8 +19,9 @@ from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.admin.models import LogEntry
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
@@ -30,6 +31,7 @@ from web.admin.tests.test_distinction_builder import (
     reachable_css,
     stylesheet_hrefs,
 )
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.contributors.factories import ContentContributorFactory
 from world.covenants.constants import FocusPickLimitKind
 from world.covenants.factories import (
@@ -38,6 +40,7 @@ from world.covenants.factories import (
     CovenantRoleFactory,
     CovenantRoleTechniqueSpecialtyFactory,
     SubroleCovenantRoleFactory,
+    VowAddedEffectDamageProfileFactory,
     VowAddedEffectFactory,
     VowFocusPickFactory,
     VowFocusPickLimitFactory,
@@ -50,6 +53,13 @@ from world.covenants.models import (
 )
 from world.magic.constants import TechniqueFunction
 from world.magic.factories import TechniqueFactory, TechniqueFunctionTagFactory
+from world.traits.factories import (
+    CheckOutcomeFactory,
+    CheckRankFactory,
+    ResultChartFactory,
+    ResultChartOutcomeFactory,
+)
+from world.traits.models import ResultChart
 
 
 def _superuser(name: str) -> AccountDB:
@@ -455,6 +465,93 @@ class VowPageRestoreTests(VowPageCase):
         self.assertFalse(
             any(pick.name == "Under Open Sky" for pick in VowFocusPick.get_all_cached_instances())
         )
+
+
+def even_chart() -> None:
+    """A two-band chart (SL 1 and SL 3, half each) and a x1 multiplier, so DE is not zero."""
+    CheckRankFactory(rank=0, min_points=0)
+    chart = ResultChartFactory(rank_difference=0, name="Preview even")
+    for success_level, low, high in ((1, 1, 50), (3, 51, 100)):
+        outcome = CheckOutcomeFactory(
+            name=f"Preview SL {success_level}", success_level=success_level
+        )
+        ResultChartOutcomeFactory(chart=chart, outcome=outcome, min_roll=low, max_roll=high)
+    DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=Decimal("1.00"))
+    ResultChart.clear_cache()
+
+
+def _de_lines(body: str, technique: str) -> dict[str, int]:
+    """The preview module's lines for one technique, label to DE."""
+    module = body.split('id="power-preview-module"', 1)[1].split('id="credit-module"', 1)[0]
+    block = module.split(f">{technique}</a>", 1)[1].split("Run the fight simulator", 1)[0]
+    return {
+        label: int(de) for label, de in re.findall(r"<span>([^<]+)</span><b>(\d+) DE</b>", block)
+    }
+
+
+class VowPowerPreviewTests(VowPageCase):
+    """The rail's Power preview (#4930): each ridden technique with no vow, the base vow
+    and each pick, then the fight simulator link."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        even_chart()
+        self.client.force_login(self.author)
+
+    def _ridden(self, name: str) -> object:
+        technique = TechniqueFactory(name=name, intensity=4)
+        TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.STRIKE)
+        return technique
+
+    def _base_damage(self) -> None:
+        effect = VowAddedEffectFactory(
+            covenant_role=self.role, function=TechniqueFunction.STRIKE, unlock_thread_level=10
+        )
+        VowAddedEffectDamageProfileFactory(effect=effect, base_damage=6)
+
+    def test_each_technique_is_priced_with_no_vow_the_base_and_each_pick(self) -> None:
+        technique = self._ridden("Arc Lash")
+        self._base_damage()
+        on_pick = VowAddedEffectFactory(
+            covenant_role=self.role,
+            function=TechniqueFunction.STRIKE,
+            focus_pick=self.halo,
+            unlock_thread_level=11,
+        )
+        VowAddedEffectDamageProfileFactory(effect=on_pick, base_damage=4)
+        body = self._get()
+        self.assertIn("Power preview", body)
+        lines = _de_lines(body, "Arc Lash")
+        self.assertEqual(
+            list(lines), ["no vow", "with base vow, level 3", f"with {self.halo.name}"]
+        )
+        self.assertGreater(lines["with base vow, level 3"], lines["no vow"])
+        self.assertGreater(lines[f"with {self.halo.name}"], lines["with base vow, level 3"])
+        self.assertIn("Level 3: the vow&#x27;s highest pick level.", body)
+        self.assertIn("DE is damage equivalent per cast, from the technique power evaluator.", body)
+        self.assertIn("Situational perks and stat scaling are not priced.", body)
+        simulator = reverse("admin_tuning") + (
+            f"?technique={technique.pk}&amp;covenant_role={self.role.pk}#simulation"
+        )
+        self.assertIn(f'href="{simulator}">Run the fight simulator', body)
+
+    def test_a_vow_with_no_added_effect_says_so(self) -> None:
+        self.assertIn("No added effect rides a technique yet.", self._get())
+
+    def test_the_first_three_by_name_then_a_count_with_flat_queries(self) -> None:
+        self._base_damage()
+        for name in ("Preview A", "Preview B", "Preview C"):
+            self._ridden(name)
+        self._get()  # warm the reference frame and the site caches
+        with CaptureQueriesContext(connection) as three:
+            body = self._get()
+        self.assertNotIn("more</p>", body)
+        self._ridden("Preview D")
+        with CaptureQueriesContext(connection) as four:
+            body = self._get()
+        self.assertIn("+1 more", body)
+        self.assertNotIn(">Preview D</a>", body)
+        self.assertEqual(len(four), len(three))
 
 
 class _ClassCollector(HTMLParser):

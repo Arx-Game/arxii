@@ -78,6 +78,9 @@ class KitPageTest(KitPageCase):
         self.assertIn('<span class="kv-chip kv-mark">unlocks at level 5</span>', body)
         self.assertIn('<span class="kv-chip kv-note">rides Covenant Allies</span>', body)
         self.assertIn("nothing: Tempest adds nothing to Perception", body)
+        self.assertIn('<th scope="col">Preview</th>', body)
+        self.assertIn('<td class="kv-num">n/a</td>', body)  # Bare carries no function tag
+        self.assertRegex(body, r'<td class="kv-num">\d+ DE</td>')
 
     def test_the_picks_module_marks_a_level_over_budget(self) -> None:
         body = self.get(self.url())
@@ -272,7 +275,7 @@ class KitViewStylingTest(KitPageCase):
 
 
 #: The whole request for one primary vow with picks and techniques the vow adds to: the
-#: session and user, the sheet, the kit reads (``test_kit_view_live.KIT_QUERIES``, 22) and
+#: session and user, the sheet, the kit reads (``test_kit_view_live.KIT_QUERIES``, 26) and
 #: the admin chrome (``each_context``'s one existence check per config singleton). See
 #: ``KitPageTest.test_query_count_stays_flat_as_the_kit_grows``.
-PAGE_QUERIES = 74
+PAGE_QUERIES = 78

@@ -32,6 +32,7 @@
                 <th scope="col">Technique</th>
                 <th scope="col">Base</th>
                 <th scope="col">Vow adds{% if kit.level is not None %} (level {{ kit.level }}){% endif %}</th>
+                <th scope="col">Preview</th>
               </tr>
             </thead>
             <tbody>
@@ -48,9 +49,10 @@
                       <span class="kv-muted">{{ line.nothing }}</span>
                     {% endfor %}
                   </td>
+                  <td class="kv-num">{{ line.preview }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="3" class="kv-muted">Knows no techniques.</td></tr>
+                <tr><td colspan="4" class="kv-muted">Knows no techniques.</td></tr>
               {% endfor %}
             </tbody>
           </table>
