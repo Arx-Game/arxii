@@ -162,8 +162,23 @@ the server would use `arxiidev`.
    `pnpm --dir frontend install`, then `just fe-build` (it also collects
    static files). Chromium for Playwright: `just fe-e2e-install`, once per
    container.
-3. Start: `DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 just start`.
-   Web is on
+3. Start, with the busy check and the start in **one script file** run as one
+   command. A check from an earlier call is stale: another session can start
+   between it and your start, and `arx start` then kills that session's server
+   or test run (#4670). The harness refuses a compound command, so write the
+   script, then run it:
+
+   ```bash
+   # scratchpad/start-rt.sh
+   if pgrep -af '[e]vennia|[t]wistd|[s]erver\.py|[p]ortal\.py' | grep -v defunct; then
+     echo BUSY; exit 1
+   fi
+   if ss -ltn | grep -qE ':(4001|4002) '; then echo BUSY; exit 1; fi
+   DATABASE_URL=postgres://arxii:arxii@db:5432/rt_4246 just start
+   ```
+
+   `BUSY` means Form A, or wait and run the script again. Restart (step 5) through
+   the same script. Web is on
    :4001, the websocket on :4002. Watch the startup output and the server log
    for errors: a process that started is not a process that is ready.
 4. Drive the UI with Playwright against your server, one worker:
