@@ -67,6 +67,7 @@ from world.magic.types.technique_power import (
 
 if TYPE_CHECKING:
     from world.covenants.models import VowAddedEffect
+    from world.covenants.types import VowEffectBonuses
     from world.magic.models.techniques import (
         AbstractAppliedCondition,
         AbstractDamageProfile,
@@ -836,31 +837,64 @@ def _vow_effect_valuations(  # noqa: PLR0913 - cohesive per-technique valuation 
             for row in effect.cached_damage_profiles
         )
         for row in effect.cached_applied_conditions:
-            team_lane = _is_team_lane_condition(row.condition)
-            duration = _expected_duration_rounds(
-                row, power=power, bands=bands, duration_bonus=0 if team_lane else bonuses.duration
+            valuations.extend(
+                _vow_condition_valuations(
+                    row,
+                    bonuses=bonuses,
+                    power=power,
+                    bands=bands,
+                    context=context,
+                    reference=reference,
+                    multiplier_cache=multiplier_cache,
+                    language_condition_ids=language_condition_ids,
+                )
             )
-            routed = _routed_condition_valuation(
-                row,
-                is_enemy=row.target_kind == ConditionTargetKind.ENEMY,
-                power=power,
-                bands=bands,
-                context=context,
-                duration=duration,
-                reference=reference,
-                multiplier_cache=multiplier_cache,
-                severity_bonus=0 if team_lane else bonuses.severity,
-            )
-            if de_valuation.has_language_modifier_effects(
-                row.condition, language_condition_ids=language_condition_ids
-            ):
-                language_row = de_valuation.not_combat_power_valuation(row.condition)
-                if routed.provenance == ValuationProvenance.UNPRICEABLE:
-                    routed = language_row
-                else:
-                    valuations.append(replace(language_row, kind=f"vow {language_row.kind}"))
-            valuations.append(replace(routed, kind=f"vow {routed.kind}"))
     return valuations
+
+
+def _vow_condition_valuations(  # noqa: PLR0913 - cohesive per-row valuation params
+    row: AbstractAppliedCondition,
+    *,
+    bonuses: VowEffectBonuses,
+    power: int,
+    bands: list[_MatchupBand],
+    context: EvalContext,
+    reference: ReferenceFrame,
+    multiplier_cache: dict[int, Decimal],
+    language_condition_ids: set[int],
+) -> list[PayloadValuation]:
+    """One vow applied-condition row's valuation lines, routed like a technique row (#4930).
+
+    A team-lane row takes neither the severity nor the duration bonus, as in the cast. A
+    condition with language effects adds its not-combat-power line (or replaces an
+    unpriceable routed line with it), as :func:`_condition_application_valuations` does.
+    """
+    team_lane = _is_team_lane_condition(row.condition)
+    duration = _expected_duration_rounds(
+        row, power=power, bands=bands, duration_bonus=0 if team_lane else bonuses.duration
+    )
+    routed = _routed_condition_valuation(
+        row,
+        is_enemy=row.target_kind == ConditionTargetKind.ENEMY,
+        power=power,
+        bands=bands,
+        context=context,
+        duration=duration,
+        reference=reference,
+        multiplier_cache=multiplier_cache,
+        severity_bonus=0 if team_lane else bonuses.severity,
+    )
+    lines: list[PayloadValuation] = []
+    if de_valuation.has_language_modifier_effects(
+        row.condition, language_condition_ids=language_condition_ids
+    ):
+        language_row = de_valuation.not_combat_power_valuation(row.condition)
+        if routed.provenance == ValuationProvenance.UNPRICEABLE:
+            routed = language_row
+        else:
+            lines.append(replace(language_row, kind=f"vow {language_row.kind}"))
+    lines.append(replace(routed, kind=f"vow {routed.kind}"))
+    return lines
 
 
 def _effective_anima(technique: Technique) -> int:
