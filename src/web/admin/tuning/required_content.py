@@ -3841,8 +3841,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "No ritual changes a thread's resonance: the Spellbook's Retune thread "
                 "button has no rite to perform and telnet has no rite to name, so no player "
-                "can move a thread to another resonance until staff author the SERVICE "
-                "ritual (and its offering requirements)."
+                "can move a thread to another resonance until staff make the SERVICE "
+                "ritual on the Ritual admin page, choosing the retune service, with its "
+                "offering requirements."
             ),
             probe=CustomProbe(fn=_probe_thread_resonance_ritual),
             admin_model="Ritual",
@@ -3890,7 +3891,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "No ritual changes a chosen vow pick: the sheet's Change picks dialog says "
                 "so and vow reswear refuses, so a vow holder keeps every pick they chose "
-                "until staff author the SERVICE ritual (its anima and components)."
+                "until staff make it on the Ritual admin page, choosing the Rite of "
+                "Re-swearing service, with its anima and components."
             ),
             probe=CustomProbe(fn=_probe_reswear_ritual),
             admin_model="Ritual",

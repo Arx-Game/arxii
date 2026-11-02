@@ -856,6 +856,9 @@ admin all converge on the same service layer.
   creates `PendingRitualEffect` (finisher command completes the ritual);
   `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
   `site_property` optionally gates where it can be performed.
+  A SERVICE ritual's path is picked in the Ritual admin from the registry
+  `service_rituals.SERVICE_RITUAL_FUNCTIONS` (`RitualAdminForm`; unlisted paths refused).
+  Add a new SERVICE function there in the PR that adds it.
 - `RitualComponentRequirement` - FK to `Ritual`, `quantity`, optional `min_quality_tier`,
   and exactly one of three modes (DB `CheckConstraint`): `item_template` (template mode),
   `min_touchstone_tier` (touchstone mode, #707), or `matches_target_resonance` (target-resonance

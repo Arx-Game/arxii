@@ -1404,6 +1404,10 @@ Also in `world.covenants.focus_picks`. The only way to change a chosen pick.
   panel's Change picks) posts them to `/api/magic/rituals/perform/`.
 - Telnet `vow reswear <chosen>=<new> [in <covenant>]` (`CmdVow`) resolves the names among the
   caller's own catalogs and performs the same rite with everything carried.
+- Staff make the rite on the Ritual admin page, choosing "Covenants: Rite of Re-swearing" from
+  the registered services (`world.magic.service_rituals`), with its anima and components.
+- Known gap (maintainer, ledger row reswear-holder-only-not-guarded): only the holder should
+  re-swear, but a borrower of a loaned character can perform the rite; no guard, far from MVP.
 - Required content: `reswear-ritual` (REQUIRED), `reswear-ritual-single` and
   `reswear-ritual-web-payable` (a target-resonance offering, which the rite never names a
   resonance for) (TUNING).
