@@ -2924,6 +2924,9 @@ class TestCharacterSheetQueryCount(TestCase):
         # its own; a skill with a bonus costs two more plus one per such skill.
         # +1 (#4898): the natural weapons read, owner and staff only. A sheet with none
         # stops at that one query; one with some pays two more (facets, gift origins).
+        # +0 (#4921): the combat style rides the sheet's own query (select_related); a
+        # sheet with a style pays two more (its gear kinds, its skill value). This
+        # fixture's character has none.
         ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
         with self.assertNumQueries(59):
             response = self.client.get(url)

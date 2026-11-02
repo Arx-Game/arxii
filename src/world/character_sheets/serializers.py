@@ -40,6 +40,7 @@ from world.character_sheets.types import (
     AuraShareEntry,
     AuraThemingData,
     BeatEntry,
+    CombatStyleSection,
     CovenantRoleEntry,
     DistinctionEntry,
     EnemyEntry,
@@ -2189,6 +2190,55 @@ def _build_natural_weapons(sheet: CharacterSheet) -> list[NaturalWeaponEntry]:
     return entries
 
 
+#: The style and the rows its section names, joined onto the sheet's own query (#4921).
+_COMBAT_STYLE_SELECT_RELATED: tuple[str, ...] = (
+    "combat_style",
+    "combat_style__hit_stat",
+    "combat_style__skill__trait",
+)
+_COMBAT_STYLE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
+
+def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
+    """The character's combat style (#4921): owner and staff only, None without one.
+
+    The style rides the sheet's own query (``_COMBAT_STYLE_SELECT_RELATED``), so a sheet
+    with no style pays nothing. One with a style pays two plain queries, its gear kinds and
+    the character's value in its skill: plain reads, not a sheet prefetch, since an
+    idmapper-shared sheet skips a ``to_attr`` prefetch that already ran once.
+    """
+    style = sheet.combat_style
+    if style is None:
+        return None
+    from world.covenants.models import CombatStyleGear  # noqa: PLC0415
+    from world.covenants.style_profile import armor_kinds, weapon_kinds  # noqa: PLC0415
+
+    held = list(
+        CombatStyleGear.objects.filter(style=style).values_list("gear_archetype", flat=True)
+    )
+    skill = style.skill
+    skill_value = 0
+    if skill is not None:
+        skill_value = (
+            CharacterSkillValue.objects.filter(character=sheet, skill=skill)
+            .values_list("value", flat=True)
+            .first()
+        ) or 0
+    return CombatStyleSection(
+        id=style.pk,
+        name=style.name,
+        description=style.description,
+        defense_style=style.defense_style,
+        defense_style_display=style.get_defense_style_display(),
+        armor_share_tenths=style.armor_share_tenths,
+        hit_stat_name=style.hit_stat.name if style.hit_stat is not None else None,
+        weapon_kinds=weapon_kinds(held),
+        armor_kinds=armor_kinds(held),
+        skill_name=skill.name if skill is not None else "",
+        skill_value=skill_value,
+    )
+
+
 _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = (
     (_CAN_EDIT_SELECT_RELATED, _CAN_EDIT_PREFETCH_RELATED),
     (_IDENTITY_SELECT_RELATED, _IDENTITY_PREFETCH_RELATED),
@@ -2209,6 +2259,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_STANDING_SELECT_RELATED, _STANDING_PREFETCH_RELATED),
     (_WORN_SELECT_RELATED, _WORN_PREFETCH_RELATED),
     (_MENTORS_SELECT_RELATED, _MENTORS_PREFETCH_RELATED),
+    (_COMBAT_STYLE_SELECT_RELATED, _COMBAT_STYLE_PREFETCH_RELATED),
 )
 
 
@@ -2378,6 +2429,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #4898 — claws, a bite or horns a gift gave them. The sheet's own mechanics,
             # so owner and staff only; anyone else sees them under Wearing.
             "natural_weapons": _build_natural_weapons(sheet) if privileged else [],
+            # #4921: how the character was taught to fight, with its skill value. The
+            # sheet's own mechanics, so owner and staff only, like the natural weapons.
+            "combat_style": _build_combat_style(sheet) if privileged else None,
             # Ties' Mentors block. Owner and staff only, like the covenant roles it
             # sits beside.
             "mentors": _build_mentors(sheet, privileged=privileged),

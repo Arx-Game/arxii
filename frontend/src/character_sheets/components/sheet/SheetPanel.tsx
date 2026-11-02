@@ -23,6 +23,7 @@ import type {
   CharacterSheetPayload,
 } from '@/character_sheets/api';
 import { AbilitiesBand } from './AbilitiesBand';
+import { FightingStyle } from './FightingStyle';
 import { BeatsBand } from './BeatsBand';
 import { CastRow } from './CastRow';
 import { GuidelinesBand } from './GuidelinesBand';
@@ -110,6 +111,7 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
         <Stack wide>
           <TraitsBlock distinctions={distinctions} />
           <GiftBlock magic={magic} isMyCharacter={isMyCharacter} />
+          <FightingStyle style={sheet.combat_style} />
         </Stack>
 
         <CastRow slots={story.origin_slots} />

@@ -196,6 +196,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     plate_ink: 'ember',
     worn: [],
     natural_weapons: [],
+    combat_style: null,
     mentors: [],
     domains: [],
     keyring: [],

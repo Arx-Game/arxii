@@ -9,6 +9,7 @@ from typing import TypedDict
 
 from django.db import models
 
+from world.covenants.style_profile import GearKindLabel
 from world.magic.types.technique_effects import (
     TechniqueEffectPayload,
     TechniqueFormPayload,
@@ -635,6 +636,29 @@ class NaturalWeaponEntry(TypedDict):
     facets: list[str]
     facets_used: int
     facet_capacity: int
+
+
+class CombatStyleSection(TypedDict):
+    """The character's combat style, for the sheet (#4921): owner and staff only.
+
+    The same structured fields character creation's style step shows (how the style
+    attacks and defends), never its vows. ``weapon_kinds`` and ``armor_kinds`` are
+    ``GearKindLabel`` rows (``world.covenants.style_profile``). ``skill_name`` is the
+    style's own skill, blank when it has none; ``skill_value`` is the character's value in
+    it, 0 when untrained.
+    """
+
+    id: int
+    name: str
+    description: str
+    defense_style: str
+    defense_style_display: str
+    armor_share_tenths: int
+    hit_stat_name: str | None
+    weapon_kinds: list[GearKindLabel]
+    armor_kinds: list[GearKindLabel]
+    skill_name: str
+    skill_value: int
 
 
 class ProfileTextField(models.TextChoices):

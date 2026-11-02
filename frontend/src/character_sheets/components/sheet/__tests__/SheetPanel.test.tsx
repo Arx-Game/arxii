@@ -68,6 +68,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     plate_ink: 'ember',
     worn: [],
     natural_weapons: [],
+    combat_style: null,
     mentors: [],
     domains: [],
     keyring: [],
@@ -93,6 +94,41 @@ describe('SheetPanel', () => {
     renderSheet(payload({ family: { id: 7, name: 'Katta' } }));
     expect(screen.getByRole('link', { name: 'Katta' })).toHaveAttribute('href', '/families/7');
     expect(document.querySelector('a[href^="/orgs/"]')).toBeNull();
+  });
+
+  it('shows the fighting style with how it attacks and defends and its skill value (#4921)', () => {
+    const sheet = payload({ family: null });
+    sheet.combat_style = {
+      id: 3,
+      name: 'The Daring Dance',
+      description: 'Never where the blow lands.',
+      defense_style: 'evasion',
+      defense_style_display: 'Evasion',
+      armor_share_tenths: 3,
+      hit_stat_name: 'agility',
+      weapon_kinds: [
+        { value: 'melee_one_hand', label: 'One-Handed Melee' },
+        { value: 'thrown', label: 'Thrown' },
+      ],
+      armor_kinds: [{ value: 'light_armor', label: 'Light Armor' }],
+      skill_name: 'The Daring Dance',
+      skill_value: 30,
+    };
+    renderSheet(sheet);
+    expect(screen.getByText('Fighting style')).toBeInTheDocument();
+    expect(screen.getByText('Evasion')).toBeInTheDocument();
+    expect(screen.getByText('Never where the blow lands.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Attacks: one-handed melee, thrown · hits with Agility')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Defends: evasion · light armor, 3 of 10 counts')).toBeInTheDocument();
+    expect(screen.getByText('The Daring Dance 30')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/vow/i);
+  });
+
+  it('has no fighting style block without a style (or for a stranger)', () => {
+    renderSheet(payload({ family: null }));
+    expect(screen.queryByText('Fighting style')).not.toBeInTheDocument();
   });
 
   it('has no House row for a character without a family', () => {

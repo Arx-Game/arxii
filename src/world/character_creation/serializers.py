@@ -87,6 +87,7 @@ from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
 from world.covenants.models import CombatStyle
+from world.covenants.style_profile import GearKindLabel, armor_kinds, weapon_kinds
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.constants import IC_MONTH_NAMES
@@ -670,28 +671,16 @@ class CGCombatStyleOptionSerializer(serializers.ModelSerializer):
     def get_hit_stat_name(self, obj: CombatStyle) -> str | None:
         return obj.hit_stat.name if obj.hit_stat is not None else None
 
-    def _kinds(self, obj: CombatStyle, wanted: frozenset[str]) -> list[dict[str, str]]:
-        """The style's kinds in ``wanted``, in ``GearArchetype`` order, with their labels."""
-        from world.items.constants import GearArchetype  # noqa: PLC0415
-
-        held = set(self.context.get("gear_by_style", {}).get(obj.pk, []))
-        return [
-            {"value": value, "label": label}
-            for value, label in GearArchetype.choices
-            if value in held and value in wanted
-        ]
+    def _held(self, obj: CombatStyle) -> list[str]:
+        return self.context.get("gear_by_style", {}).get(obj.pk, [])
 
     @extend_schema_field(CGStyleGearKindSerializer(many=True))
-    def get_weapon_kinds(self, obj: CombatStyle) -> list[dict[str, str]]:
-        from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
-
-        return self._kinds(obj, WEAPON_ARCHETYPES)
+    def get_weapon_kinds(self, obj: CombatStyle) -> list[GearKindLabel]:
+        return weapon_kinds(self._held(obj))
 
     @extend_schema_field(CGStyleGearKindSerializer(many=True))
-    def get_armor_kinds(self, obj: CombatStyle) -> list[dict[str, str]]:
-        from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
-
-        return self._kinds(obj, ARMOR_ARCHETYPES)
+    def get_armor_kinds(self, obj: CombatStyle) -> list[GearKindLabel]:
+        return armor_kinds(self._held(obj))
 
 
 class CGTechniqueOptionSerializer(serializers.ModelSerializer):

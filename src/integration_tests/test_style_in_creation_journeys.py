@@ -36,6 +36,7 @@ from world.distinctions.factories import DistinctionEffectFactory, DistinctionFa
 from world.items.constants import GearArchetype
 from world.magic.factories import TraditionFactory, TraditionGiftGrantFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.roster.factories import RosterTenureFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory
 from world.skills.models import CharacterSkillValue
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
@@ -212,6 +213,51 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
         self.assertEqual(
             CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, total
         )
+
+    def test_the_owners_sheet_shows_the_style_and_a_strangers_does_not(self) -> None:
+        draft = self._schooled_draft(self.tradition)
+        self._patch(draft, {"selected_combat_style_id": self.dance.pk})
+        skill = self.dance.skill
+        total = self._detail(draft)["magic_training"]["total"]
+        self._patch(draft, {"draft_data": {"magic_skills": {str(skill.pk): total}}})
+        sheet = self._finalize(draft)
+        # A player takes up the new character (arranged: the roster's own flow is not
+        # what this journey proves).
+        owner = AccountFactory()
+        RosterTenureFactory(
+            roster_entry=sheet.roster_entry, player_data__account=owner, end_date=None
+        )
+        sheet.roster_entry.invalidate_tenure_cache()
+        url = f"/api/character-sheets/{sheet.pk}/"
+
+        response = self.api(owner).get(url)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        style = response.json()["combat_style"]
+        self.assertEqual(
+            style,
+            {
+                "id": self.dance.pk,
+                "name": "The Daring Dance",
+                "description": "Never where the blow lands.",
+                "defense_style": DefenseStyle.EVASION,
+                "defense_style_display": "Evasion",
+                "armor_share_tenths": 3,
+                "hit_stat_name": "agility",
+                "weapon_kinds": [
+                    {"value": GearArchetype.MELEE_ONE_HAND, "label": "One-Handed Melee"},
+                    {"value": GearArchetype.THROWN, "label": "Thrown"},
+                ],
+                "armor_kinds": [{"value": GearArchetype.LIGHT_ARMOR, "label": "Light Armor"}],
+                "skill_name": "The Daring Dance",
+                "skill_value": total,
+            },
+        )
+        self.assertNotIn("Quicksilver", str(style))
+
+        stranger = self.api(AccountFactory()).get(url)
+        self.assertEqual(stranger.status_code, 200, stranger.content)
+        self.assertIsNone(stranger.json()["combat_style"])
 
     def test_a_tradition_that_teaches_no_style_skips_the_step(self) -> None:
         draft = self._schooled_draft(self.plain)
