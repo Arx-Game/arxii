@@ -33,7 +33,7 @@ jobs:
       FACEBOOK_APP_ID: test-facebook-id
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Mint a throwaway MFA_SECRETS_KEY for this job
         run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       - name: Start Postgres with max_locks_per_transaction bumped

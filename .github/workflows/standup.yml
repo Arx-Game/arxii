@@ -59,7 +59,7 @@ jobs:
     # has to cover the once-per-database first run.
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Shared with rehearse.yml (#2236 review): OpenTofu + Python +
       # ansible-core + collections + the 0600 SSH admin key write. Must come
       # AFTER checkout — see the action's own header comment.

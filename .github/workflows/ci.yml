@@ -61,7 +61,7 @@ jobs:
       backend: ${{ steps.filter.outcome == 'success' && steps.filter.outputs.backend || 'true' }}
       frontend: ${{ steps.filter.outcome == 'success' && steps.filter.outputs.frontend || 'true' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -82,7 +82,7 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           version: 9
@@ -108,7 +108,7 @@ jobs:
     name: SonarCloud rule policy matches sonar-rules.yaml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
@@ -303,7 +303,7 @@ jobs:
       FACEBOOK_APP_ID: test-facebook-id
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Mint a throwaway MFA_SECRETS_KEY for this job
         # settings.py requires the key (ADR-0267) and the startup check refuses the
         # all-zero placeholder, so each job mints its own instead of committing a literal.
@@ -450,7 +450,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
@@ -494,7 +494,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           version: 9
@@ -515,7 +515,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           version: 9
@@ -535,7 +535,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           version: 9
@@ -612,7 +612,7 @@ jobs:
       FACEBOOK_APP_ID: test-facebook-id
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Mint a throwaway MFA_SECRETS_KEY for this job
         # settings.py requires the key (ADR-0267) and the startup check refuses the
         # all-zero placeholder, so each job mints its own instead of committing a literal.

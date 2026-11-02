@@ -29,7 +29,7 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -91,7 +91,7 @@ jobs:
       SENDGRID_API_KEY: test-sendgrid-key
       DEFAULT_FROM_EMAIL: test@example.com
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Mint throwaway secrets for this job
         # MFA_SECRETS_KEY: settings.py requires it (ADR-0267). The EVENNIA_* pair
         # lets Evennia create its Account #1 superuser without the interactive
