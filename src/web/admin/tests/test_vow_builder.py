@@ -532,7 +532,10 @@ class VowPowerPreviewTests(VowPageCase):
     def _rank(self, body: str, technique: str) -> str:
         module = body.split('id="power-preview-module"', 1)[1]
         block = module.split(f">{technique}</a>", 1)[1]
-        return re.search(r"<p class=\"vb-muted\">(Catalog rank[^<]*)</p>", block).group(1)
+        found = re.search(
+            r'<div class="vb-stat vb-rank"><span>(Catalog rank[^<]*)</span><b>([^<]*)</b>', block
+        )
+        return f"{found.group(1)}: {found.group(2)}"
 
     def _base_damage(self) -> None:
         effect = VowAddedEffectFactory(

@@ -148,6 +148,8 @@ against admin's light and dark selectors, so the page follows the theme toggle.
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
+  /* The catalog rank row (#4930): its long label wraps, its figure stays on one line. */
+  #vow-builder-root .vb-rank b { white-space: nowrap; }
   #vow-builder-root .vb-rail p { font-size: 0.75rem; padding: 0 10px; }
   /* The power preview's technique name, above its DE lines (#4930). */
   #vow-builder-root .vb-rail .vb-preview-name { margin: 0.6rem 0 0.1rem; font-weight: 600; }

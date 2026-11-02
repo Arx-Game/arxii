@@ -124,6 +124,16 @@ class TechniquePreview:
     #: Where its best with-vow figure ranks among same-level techniques of its function.
     rank: str = ""
 
+    @property
+    def rank_label(self) -> str:
+        """The rank row's label, drawn on the left of a stat row as in the demo."""
+        return self.rank.rpartition(": ")[0]
+
+    @property
+    def rank_value(self) -> str:
+        """The rank row's figure, drawn bold on the right ("2nd of 3")."""
+        return self.rank.rpartition(": ")[2]
+
 
 @dataclass(frozen=True)
 class VowPreview:
