@@ -5190,6 +5190,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/clear-life/:
+    post:
+      operationId: character_creation_drafts_clear_life_create
+      description: |-
+        Start blank (#4865): drop the draft's Backgrounds picks and beat states, keep
+        every other chapter's pick and the loaded stamp. Answers with the draft.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterDraftRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterDraft'
+          description: ''
   /api/character-creation/drafts/{id}/finalize-gm/:
     post:
       operationId: character_creation_drafts_finalize_gm_create
@@ -5274,6 +5302,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HouseClaimStatus'
+          description: ''
+  /api/character-creation/drafts/{id}/load-default-life/:
+    post:
+      operationId: character_creation_drafts_load_default_life_create
+      description: |-
+        Load the beginning's suggested life into the draft (#4865, slice 7 of #4813).
+
+        The leaf calls it when the life first opens for a beginning the draft's
+        ``life_loaded_for`` stamp does not name; the same beginning never loads again
+        over a life the player has edited or cleared, and a draft with no beginning is
+        left as it is. Answers with the draft.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterDraftRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterDraft'
           description: ''
   /api/character-creation/drafts/{id}/offers/:
     get:

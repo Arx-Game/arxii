@@ -1,0 +1,51 @@
+{% comment %}
+The combo map's own stylesheet (#4891). Admin's `.module` and `table.tuning-table` carry the
+structure; this adds the two columns, the muted kind beside the name, the group rows and
+the gap chip. Every colour is an admin variable or a token set for admin's light and dark
+selectors, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #combo-map-root {
+    --cm-gap-bg: #fbe3d4;
+    --cm-gap-fg: #8a3a10;
+  }
+  @media (prefers-color-scheme: dark) {
+    #combo-map-root { --cm-gap-bg: #4a2a18; --cm-gap-fg: #f0c3a0; }
+  }
+  html[data-theme="light"] #combo-map-root { --cm-gap-bg: #fbe3d4; --cm-gap-fg: #8a3a10; }
+  html[data-theme="dark"] #combo-map-root { --cm-gap-bg: #4a2a18; --cm-gap-fg: #f0c3a0; }
+
+  .cm-kind { color: var(--body-quiet-color); font-weight: normal; font-size: 0.6em; }
+
+  #combo-map-root .cm-carriers { margin: 0; padding: 0.6rem 10px; }
+  #combo-map-root .cm-muted { color: var(--body-quiet-color); }
+
+  #combo-map-root .cm-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #combo-map-root .cm-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #combo-map-root .cm-scroll { overflow-x: auto; }
+  #combo-map-root .cm-table { margin-bottom: 0; }
+  #combo-map-root .cm-table th { white-space: nowrap; }
+  #combo-map-root .cm-table td { vertical-align: top; }
+  #combo-map-root .cm-group th {
+    background: var(--darkened-bg);
+    color: var(--body-quiet-color);
+    font-weight: 600;
+  }
+
+  #combo-map-root .cm-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  #combo-map-root .cm-gap { background: var(--cm-gap-bg); color: var(--cm-gap-fg); }
+</style>

@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0359_life_page_backend")]
+    dependencies = [("arxii", "0361_offerfirstlook_preselected")]
 
     operations = [
         migrations.AddField(
