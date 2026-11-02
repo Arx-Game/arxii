@@ -55,6 +55,7 @@ from web.admin.distinction_builder.views import (
 )
 from web.admin.faction_rules.views import organization_faction_rules, society_faction_rules
 from web.admin.game_setup_views import game_setup
+from web.admin.kit_view.views import kit_view, kit_view_pick
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.soulfray_builder.views import (
     soulfray_builder,
@@ -286,6 +287,8 @@ urlpatterns = [
         name="admin_combo_map_condition_pick",
     ),
     path("_combo_map/condition/<int:pk>/", combo_map_condition, name="admin_combo_map_condition"),
+    path("_kit_view/pick/", kit_view_pick, name="admin_kit_view_pick"),
+    path("_kit_view/<int:sheet_pk>/", kit_view, name="admin_kit_view"),
     path(
         "_standoff_profile/<int:template_pk>/",
         standoff_profile,

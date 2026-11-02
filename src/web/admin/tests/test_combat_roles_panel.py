@@ -11,9 +11,11 @@ from django.contrib.auth.models import Permission
 from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
     CombatStyleFactory,
     CovenantRoleFactory,
     VowFocusPickFactory,
@@ -54,6 +56,7 @@ class CombatRolesPanelTests(TestCase):
                 "Conditions",
                 "Properties",
                 "Combo map",
+                "Kit view",
                 "Focus pick budget",
                 "Missing combat content",
             ],
@@ -107,6 +110,18 @@ class CombatRolesPanelTests(TestCase):
         row = re.search(r'id="(combat-roles-link-\d+)">Combo map</th>', body).group(1)
         self.assertIn(f'aria-labelledby="{row} combat-roles-open-', body)
         self.assertRegex(body, r'id="combat-roles-open-\d+-2">Open condition</button>')
+
+    def test_the_kit_view_row_picks_a_character_holding_a_live_primary_vow(self) -> None:
+        holder = CharacterCovenantRoleFactory()
+        CharacterCovenantRoleFactory(is_secondary=True)
+        CharacterCovenantRoleFactory(left_at=timezone.now())
+        kit = next(link for link in self._links() if link.label == "Kit view")
+        self.assertEqual((kit.url, kit.note), ("", "one character, read only"))
+        (picker,) = kit.pickers
+        sheet = holder.character_sheet
+        self.assertEqual(picker.choices, [(sheet.pk, sheet.character.db_key)])
+        response = self.client.get(picker.action, {"pk": sheet.pk})
+        self.assertRedirects(response, reverse("admin_kit_view", args=[sheet.pk]))
 
     def test_counts_read_the_rows(self) -> None:
         styles = next(link for link in self._links() if link.label == "Combat styles")

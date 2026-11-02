@@ -1,0 +1,114 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:index' %}#group-combat-roles">Combat roles</a>
+  &rsaquo; Kit view
+  &rsaquo; {{ kit.name }}
+</div>
+{% endblock %}
+
+{% block content_title %}<h1>{{ kit.name }}</h1>{% endblock %}
+
+{% block content %}
+<ul class="object-tools">
+  <li><a href="{{ kit.sheet_url }}">Edit character sheet</a></li>
+</ul>
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/kit_view/_css.html" %}
+<div id="kit-view-root">
+  <div class="kv-columns">
+    <div>
+      <div class="module" id="kit-view-techniques">
+        <h2>Techniques, with what the vow adds</h2>
+        <div class="kv-scroll">
+          <table class="tuning-table kv-table">
+            <thead>
+              <tr>
+                <th scope="col">Technique</th>
+                <th scope="col">Base</th>
+                <th scope="col">Vow adds{% if kit.level is not None %} (level {{ kit.level }}){% endif %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in kit.techniques %}
+                <tr>
+                  <td><a href="{{ line.technique.url }}">{{ line.technique.label }}</a>{% if line.functions %}<span class="kv-sub">{{ line.functions }}</span>{% endif %}</td>
+                  <td>{{ line.base }}</td>
+                  <td>
+                    {% for group in line.groups %}
+                      {% for vow_line in group.lines %}
+                        <p class="kv-line"><span class="kv-group">{{ group.label }}:</span> {{ vow_line.text }}{% if vow_line.unlocks_at is not None %} <span class="kv-chip kv-mark">unlocks at level {{ vow_line.unlocks_at }}</span>{% endif %}{% if vow_line.rides %} <span class="kv-chip kv-note">rides {{ vow_line.rides }}</span>{% endif %}</p>
+                      {% endfor %}
+                    {% empty %}
+                      <span class="kv-muted">{{ line.nothing }}</span>
+                    {% endfor %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3" class="kv-muted">Knows no techniques.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="module" id="kit-view-picks">
+        <h2>Focus picks chosen</h2>
+        <table class="tuning-table kv-table">
+          <tbody>
+            {% for level in kit.picks %}
+              <tr>
+                <th scope="row">{% if kit.primary_vows|length > 1 %}{{ level.vow }}, {% endif %}Level {{ level.level }} &middot; {% for pick in level.picks %}<a href="{{ pick.url }}">{{ pick.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</th>
+                <td class="kv-num">{{ level.spent }} of {{ level.budget }}{% if level.over %} <span class="kv-chip kv-mark">over budget</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2" class="kv-muted">{% if kit.primary_vows %}No focus picks chosen.{% else %}No primary vow, so no focus picks.{% endif %}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if kit.primary_vows %}
+          <p class="kv-links">
+            {% for vow in kit.primary_vows %}<a href="{{ vow.vow.url }}">{{ vow.vow.label }} vow page</a> &middot; {% endfor %}<a href="{{ kit.picks_url }}">Edit chosen picks</a>
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <div class="module" id="kit-view-sheet">
+        <h2>Sheet</h2>
+        <table class="tuning-table kv-table">
+          <tbody>
+            <tr>
+              <th scope="row">Path &middot; Gift</th>
+              <td>{{ kit.sheet.path|default:"No path" }} &middot; {% if kit.sheet.gifts %}{{ kit.sheet.gifts|join:", " }}{% else %}no gift{% endif %}</td>
+            </tr>
+            {% for vow in kit.sheet.vows %}
+              <tr>
+                <th scope="row">{% if vow.is_secondary %}Secondary vow{% else %}Vow{% endif %}</th>
+                <td><a href="{{ vow.vow.url }}">{{ vow.vow.label }}</a>, level {{ vow.level }}{% if not vow.engaged %} <span class="kv-chip kv-note">not engaged</span>{% endif %}</td>
+              </tr>
+              {% if not vow.is_secondary %}
+                <tr>
+                  <th scope="row">Defense</th>
+                  <td>{{ vow.defense|default:"No defense profile" }}</td>
+                </tr>
+              {% endif %}
+            {% empty %}
+              <tr>
+                <th scope="row">Vow</th>
+                <td class="kv-muted">No live vow</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
