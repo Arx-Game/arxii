@@ -22,6 +22,7 @@ from world.classes.factories import PathFactory
 from world.covenants.constants import CovenantType, DefenseStyle, VowEffectFrequency
 from world.covenants.factories import (
     CharacterVowFocusPickFactory,
+    CombatStyleFactory,
     CovenantFactory,
     CovenantRoleDefenseProfileFactory,
     CovenantRoleFactory,
@@ -42,6 +43,7 @@ from world.magic.factories import (
     TechniqueFunctionTagFactory,
 )
 from world.progression.factories import CharacterPathHistoryFactory
+from world.skills.factories import SkillFactory
 
 
 def _technique(name: str, *functions: str):
@@ -260,6 +262,65 @@ class AbsentPartsTest(KitLiveCase):
         (vow,) = kit.sheet.vows
         # The thread keys on the anchor; the sub-role has no profile, so the anchor's counts.
         self.assertEqual((vow.level, vow.defense), (3, "Evasion"))
+
+
+class StyleTest(KitLiveCase):
+    """The Sheet module's Style row (#4932): the style, and whether it works with each vow."""
+
+    def _styled(self, style, sheet=None):
+        sheet = sheet or self.sheet
+        sheet.combat_style = style
+        sheet.save()
+        return live.kit_for(sheet).sheet
+
+    def test_no_style(self) -> None:
+        facts = live.kit_for(self.sheet).sheet
+        self.assertIsNone(facts.style)
+        self.assertEqual(facts.style_lines, [])
+
+    def test_a_style_listing_the_vow_works_with_it(self) -> None:
+        style = CombatStyleFactory(name="Kit Listed Style")
+        style.compatible_roles.add(self.vow)
+        facts = self._styled(style)
+        self.assertEqual(facts.style.label, "Kit Listed Style")
+        self.assertEqual(
+            facts.style.url, reverse("admin:arxii_combatstyle_change", args=[style.pk])
+        )
+        self.assertEqual(facts.style_lines, ["works with Tempest"])
+
+    def test_an_unlisted_style_with_a_skill_says_the_skill_does_not_count(self) -> None:
+        style = CombatStyleFactory(name="Kit Unlisted Style", skill=SkillFactory())
+        self.assertEqual(
+            self._styled(style).style_lines,
+            ["not a style for Tempest: its skill does not count on attack and defense rolls"],
+        )
+
+    def test_an_unlisted_style_with_no_skill(self) -> None:
+        style = CombatStyleFactory(name="Kit Bare Style")
+        self.assertEqual(self._styled(style).style_lines, ["not a style for Tempest"])
+
+    def test_a_sub_role_holder_counts_by_the_anchor(self) -> None:
+        choir = SubroleCovenantRoleFactory(
+            name="Tempest Style Choir", slug="tempest-style-choir", parent_role=self.vow
+        )
+        sheet = CharacterSheetFactory()
+        engage_vow_with_thread(sheet, choir, covenant=self.covenant, thread_level=3)
+        style = CombatStyleFactory(name="Kit Anchor Style")
+        style.compatible_roles.add(self.vow)
+        self.assertEqual(self._styled(style, sheet).style_lines, ["works with Tempest Style Choir"])
+
+    def test_no_vow_shows_just_the_style(self) -> None:
+        facts = self._styled(CombatStyleFactory(name="Kit Lone Style"), CharacterSheetFactory())
+        self.assertEqual((facts.style.label, facts.style_lines), ("Kit Lone Style", []))
+
+    def test_a_secondary_vow_gets_no_line(self) -> None:
+        sheet = CharacterSheetFactory()
+        engage_vow_with_thread(
+            sheet, self.vow, covenant=self.covenant, thread_level=1, is_secondary=True
+        )
+        self.assertEqual(
+            self._styled(CombatStyleFactory(name="Kit Side Style"), sheet).style_lines, []
+        )
 
 
 class QueryCountTest(KitLiveCase):

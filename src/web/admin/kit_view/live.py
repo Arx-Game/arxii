@@ -4,8 +4,8 @@ One real character's techniques, each with what its vows add (the static view,
 ``vow_added_effects_on_techniques``, which ignores the unlock level, context, situation
 and frequency by design) and its power preview (#4930), the focus picks it chose with
 each level's spend against the budget, and the sheet facts a reader needs beside them:
-path, gifts, vows and the vow's defense profile. The budget is read without creating
-the config row, the rule every Combat roles page keeps on a GET.
+path, gifts, vows, the vow's defense profile and the combat style (#4932). The budget is
+read without creating the config row, the rule every Combat roles page keeps on a GET.
 
 The page's query count is fixed however many added effects or picks the character has;
 it grows with the character's live vow memberships, and by the power evaluator's own
@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
+from web.admin.authoring.combat_styles import StyleOnVow, style_change_url, style_on_vow
 from web.admin.authoring.power_preview import PreviewFrame, preview_de, preview_frame
 from web.admin.vow_builder.live import focus_pick_budget
 from world.covenants.added_effect_summary import summarize_vow_added_effect
@@ -37,7 +38,12 @@ from world.magic.services.threads import shown_thread_level
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.covenants.models import CharacterCovenantRole, CovenantRole, VowAddedEffect
+    from world.covenants.models import (
+        CharacterCovenantRole,
+        CombatStyle,
+        CovenantRole,
+        VowAddedEffect,
+    )
 
 #: The group of a technique's vow lines that no focus pick owns.
 BASE_GROUP = "Base"
@@ -112,7 +118,9 @@ class HeldVow:
     """One live vow membership: the vow, its shown level, and its defense style.
 
     ``defense`` is the vow's defense profile style label (the resolved sub-role's own
-    profile, else its anchor's), or "" when it has none.
+    profile, else its anchor's), or "" when it has none. ``style`` says whether the
+    character's combat style works with a primary vow (#4932, the resolved sub-role
+    against ``style_fit``'s rule); None for a secondary vow or a character with no style.
     """
 
     vow: Link
@@ -120,15 +128,25 @@ class HeldVow:
     is_secondary: bool
     engaged: bool
     defense: str
+    style: StyleOnVow | None = None
 
 
 @dataclass(frozen=True)
 class SheetFacts:
-    """The sheet facts the kit view shows beside the techniques."""
+    """The sheet facts the kit view shows beside the techniques.
+
+    ``style`` is the character's combat style, linked to its change page, or None.
+    """
 
     path: str
     gifts: list[str]
     vows: list[HeldVow]
+    style: Link | None = None
+
+    @property
+    def style_lines(self) -> list[str]:
+        """Whether the style works with each held primary vow, in words."""
+        return [vow.style.text for vow in self.vows if vow.style is not None]
 
 
 @dataclass(frozen=True)
@@ -315,12 +333,17 @@ def pick_levels(memberships: list[CharacterCovenantRole]) -> list[PickLevel]:
 
 
 def held_vows(
-    sheet: CharacterSheet, memberships: list[CharacterCovenantRole], levels: dict[int, int]
+    sheet: CharacterSheet,
+    memberships: list[CharacterCovenantRole],
+    levels: dict[int, int],
+    style: CombatStyle | None = None,
 ) -> list[HeldVow]:
     """Each live membership, primary first: one query for the defense profiles.
 
     A primary vow's defense is its resolved sub-role's own profile, else its anchor's
     (``engaged_primary_defense_profile``'s rule); a secondary vow reads its own role.
+    With ``style``, each primary vow also says whether the style works with it (one
+    query per primary vow, ``style_lists_vow``).
     """
     from world.covenants.services import resolve_effective_role  # noqa: PLC0415
 
@@ -354,6 +377,11 @@ def held_vows(
                 is_secondary=membership.is_secondary,
                 engaged=membership.engaged,
                 defense=profile.get_style_display() if profile is not None else "",
+                style=(
+                    style_on_vow(style, role)
+                    if style is not None and not membership.is_secondary
+                    else None
+                ),
             )
         )
     return vows
@@ -362,7 +390,11 @@ def held_vows(
 def sheet_facts(
     sheet: CharacterSheet, memberships: list[CharacterCovenantRole], levels: dict[int, int]
 ) -> SheetFacts:
-    """Path (the newest path history row), gifts by name, and the live vows."""
+    """Path (the newest path history row), gifts by name, the live vows and the style.
+
+    No query for the style when the sheet has none.
+    """
+    style = sheet.combat_style if sheet.combat_style_id is not None else None
     history = sheet.cached_path_history
     gifts = (
         CharacterGift.objects.filter(character=sheet)
@@ -372,7 +404,8 @@ def sheet_facts(
     return SheetFacts(
         path=history[0].path.name if history else "",
         gifts=list(gifts),
-        vows=held_vows(sheet, memberships, levels),
+        vows=held_vows(sheet, memberships, levels, style),
+        style=Link(label=style.name, url=style_change_url(style)) if style is not None else None,
     )
 
 

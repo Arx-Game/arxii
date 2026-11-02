@@ -107,6 +107,14 @@
                 <td class="kv-muted">No live vow</td>
               </tr>
             {% endfor %}
+            <tr>
+              <th scope="row">Style</th>
+              {% if kit.sheet.style %}
+                <td><a href="{{ kit.sheet.style.url }}">{{ kit.sheet.style.label }}</a>{% for line in kit.sheet.style_lines %} &middot; {{ line }}{% endfor %}</td>
+              {% else %}
+                <td class="kv-muted">No combat style</td>
+              {% endif %}
+            </tr>
           </tbody>
         </table>
       </div>
