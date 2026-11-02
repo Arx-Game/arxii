@@ -132,6 +132,18 @@ against admin's light and dark selectors, so the page follows the theme toggle.
   #vow-builder-root .vb-warn ul { margin: 0.3rem 0 0; padding-left: 1rem; }
   #vow-builder-root .vb-over { color: var(--vb-warn); font-weight: 600; }
 
+  /* The combat styles module (#4932): whether each style works with this vow. */
+  #vow-builder-root .vb-fit {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    border: 1px solid var(--hairline-color);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
+  #vow-builder-root .vb-fit-works { color: var(--body-fg); }
+  #vow-builder-root .vb-fit-not { color: var(--vb-warn); border-color: var(--vb-warn); }
+
   /* The rail */
   #vow-builder-root .vb-rail .module { margin-bottom: 1rem; }
   #vow-builder-root .vb-stat {

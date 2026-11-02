@@ -192,6 +192,8 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
           </div>
         </div>
 
+        {% include "admin/vow_builder/_styles.html" %}
+
         {% if changes %}
         <div class="module" id="holders-module">
           <h2>Before you save
