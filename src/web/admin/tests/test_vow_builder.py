@@ -25,6 +25,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.models import PlayerData
 from web.admin.tests.test_distinction_builder import (
     emitted_classes,
@@ -498,8 +499,9 @@ class VowPowerPreviewTests(VowPageCase):
         even_chart()
         self.client.force_login(self.author)
 
-    def _ridden(self, name: str) -> object:
-        technique = TechniqueFactory(name=name, intensity=4)
+    def _ridden(self, name: str, *, castable: bool = True) -> object:
+        template = ActionTemplateFactory() if castable else None
+        technique = TechniqueFactory(name=name, intensity=4, action_template=template)
         TechniqueFunctionTagFactory(technique=technique, function=TechniqueFunction.STRIKE)
         return technique
 
@@ -534,6 +536,14 @@ class VowPowerPreviewTests(VowPageCase):
             f"?technique={technique.pk}&amp;covenant_role={self.role.pk}#panel-simulation"
         )
         self.assertIn(f'href="{simulator}">Run the fight simulator', body)
+
+    def test_a_technique_with_no_action_template_gets_no_simulator_link(self) -> None:
+        quiet = self._ridden("Quiet Lash", castable=False)
+        self._base_damage()
+        body = self._get()
+        self.assertIn("Quiet Lash", body)
+        self.assertNotIn(f"?technique={quiet.pk}&amp;", body)
+        self.assertIn("No action template, so the fight simulator cannot cast it.", body)
 
     def test_a_vow_with_no_added_effect_says_so(self) -> None:
         self.assertIn("No added effect rides a technique yet.", self._get())

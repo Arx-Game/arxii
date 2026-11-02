@@ -31,7 +31,7 @@ techniques the vow's added effects ride, their power preview (#4930), and credit
   {% for line in technique.lines %}
   <div class="vb-stat"><span>{{ line.label }}</span><b>{{ line.de }} DE</b></div>
   {% endfor %}
-  <p><a href="{{ technique.simulator_url }}">Run the fight simulator</a></p>
+  {% if technique.simulator_url %}<p><a href="{{ technique.simulator_url }}">Run the fight simulator</a></p>{% else %}<p class="vb-muted">No action template, so the fight simulator cannot cast it.</p>{% endif %}
   {% empty %}
   <p class="vb-muted">No added effect rides a technique yet.</p>
   {% endfor %}

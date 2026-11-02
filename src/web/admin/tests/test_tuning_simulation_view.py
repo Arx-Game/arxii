@@ -17,6 +17,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from actions.factories import ActionTemplateFactory
 from web.admin.tuning.views import _simulation_cache_key
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
@@ -163,7 +164,9 @@ class TestSimulationTechniqueAndVow(TestCase):
         cls.super = AccountDB.objects.create_superuser(
             "rootadmin4930", "root4930@example.com", "pw-123456"
         )
-        cls.technique = TechniqueFactory(name="Panel lash")
+        cls.technique = TechniqueFactory(name="Panel lash", action_template=ActionTemplateFactory())
+        # No action template: combat refuses to cast it, so the form must not offer it.
+        cls.uncastable = TechniqueFactory(name="Panel whisper")
         cls.role = CovenantRoleFactory(name="Panel vow")
 
     def setUp(self) -> None:
@@ -206,6 +209,15 @@ class TestSimulationTechniqueAndVow(TestCase):
                 resp = self._post(**{field: 999999})
                 self.assertIn("errorlist", resp.content.decode())
         mock_run.assert_not_called()
+
+    @patch(_PATCH_TARGET)
+    def test_a_technique_combat_cannot_cast_is_refused_without_running(self, mock_run: Any) -> None:
+        resp = self._post(technique=self.uncastable.pk, covenant_role="")
+        mock_run.assert_not_called()
+        self.assertIn("errorlist", resp.content.decode())
+        body = self.client.get(reverse("admin_tuning_simulation")).content.decode()
+        self.assertNotIn("Panel whisper", body)
+        self.assertIn("Panel lash", body)
 
     def test_the_cache_key_differs_per_technique_and_vow(self) -> None:
         keys = {

@@ -269,9 +269,11 @@ class SimulationRunForm(forms.Form):
     tier = forms.ChoiceField(choices=OpponentTier.choices)
     risk_level = forms.ChoiceField(choices=RiskLevel.choices)
     iterations = forms.IntegerField()
-    #: The party's technique and vow (#4930); blank is the basic attack and no vow.
+    #: The party's technique and vow (#4930); blank is the basic attack and no vow. Only a
+    #: technique with an action template can be cast in combat: the round refuses any other
+    #: (``pc_action``'s TECHNIQUE_NOT_COMBAT_READY), which aborted the whole run.
     technique = forms.ModelChoiceField(
-        queryset=Technique.objects.order_by("name"),
+        queryset=Technique.objects.filter(action_template__isnull=False).order_by("name"),
         required=False,
         label="Technique (blank = basic attack)",
     )

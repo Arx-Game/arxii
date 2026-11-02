@@ -118,6 +118,7 @@ class TechniquePreview:
     name: str
     url: str
     lines: list[PreviewLine]
+    #: Blank for a technique with no action template: the fight simulator cannot cast it.
     simulator_url: str
 
 
@@ -222,7 +223,9 @@ def vow_power_preview(role: CovenantRole) -> VowPreview:
                 name=technique.name,
                 url=reverse("admin:arxii_technique_change", args=[technique.pk]),
                 lines=lines,
-                simulator_url=simulator_url(technique, role),
+                simulator_url=(
+                    simulator_url(technique, role) if technique.action_template_id else ""
+                ),
             )
         )
     return VowPreview(
