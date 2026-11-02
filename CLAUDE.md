@@ -539,17 +539,15 @@ rubric and recipes.
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 `just regression`), which CI runs on every PR.
 
-**For PR work, prefer `just test-affected`** — it diffs against `origin/main`
-and runs only the apps your branch touches plus import dependents, so you don't
-waste time on unrelated suites. For a single app, use `just test-fast <app>`.
-(Use `test-affected` for *mid-work* iteration on a multi-app change — but at the
-**final pre-push moment** keep to the focused per-app `just test-fast <app>` and
-skip whole-repo passes; running everything at once can crash the devcontainer.
-See "Completing a Unit of Work.")
+**Locally, run only the test module you added or changed**, on the SQLite tier,
+serially, one app per invocation (`just test-fast <app>.tests.test_module`). Never
+the Postgres tier locally, and never several apps in one run (that turns on
+`--parallel` and can crash the shared devcontainer); the `running-tests` skill
+has the detail (#4924).
 
-Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
-fixing what CI catches. **CI is the full-regression gate** — run a local
-`just regression` only to reproduce a CI failure the fast tier doesn't surface.
+Then push and **monitor the PR**, fixing what CI catches. **CI is the
+full-regression gate**: it runs Postgres and every app on each PR. To understand a
+CI failure, read CI's log for that test first.
 **Never pipe exit-code-bearing commands (`arx test`, `git commit`) through
 `tail`/`head`** — the pipe masks the exit code and buries the OK/FAILED summary
 (false-green runs on #947/#948; a silently aborted commit reopened #927). Run
@@ -575,8 +573,8 @@ rule: see the `running-tests` skill.
   *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
-  At this final pre-push moment keep it to the focused per-app run — **do NOT run
+- **Run the test modules you added or changed** on the SQLite tier
+  (`just test-fast <app>.tests.test_module`, one app per run). **Do NOT run
   `pre-commit run --all-files`, a broad `just test-affected`, or `just regression`
   as a precheck; the whole-repo pass can crash this devcontainer** (per-file hooks
   already ran at commit, and CI is the gate). If you must re-run hooks locally,

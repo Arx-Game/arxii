@@ -29,14 +29,17 @@ Production runs Postgres exclusively. Tests run in TWO tiers:
 
 ### Local testing rule
 
-**Use the SQLite fast tier (`just test-fast`) for the inner loop.** For PG-only apps (magic, scenes, etc.), or before pushing, run `just test-parity <app>` — the pre-built test DB makes this fast locally now, not the multi-minute rebuild the old migration-replay path required. Always go through the `just` recipes (`test-parity`/`regression`/`build-test-schema`) rather than bare `arx test`/`arx test --keepdb` against Postgres, so the schema-completeness probe runs before reuse.
+**Locally, run only the test module you added or changed, on the SQLite fast tier, serially, one app per invocation** (`just test-fast <app>.tests.test_module`). CI is the gate: it runs the Postgres tier and every other app on each PR, so the local run proves your new tests and nothing more. The owner's rulings (2026-07 to 2026-10-31): "I don't even want you using the postgres database locally. Like virtually never. It's much too slow." and "If we're ever running tests in parallel we're doing something wrong."
 
-### Per-invocation overhead dominates — batch, don't narrow
+- **The Postgres tier runs in CI.** For a PG-only app (magic, scenes, etc.) write the test, read it through, push, and read the result on CI's shard. Locally that leaves out `just test-parity`, `just regression` and `@tag("postgres")` runs.
+- **One app per invocation.** Several apps in one `just test-fast` call turn on `--parallel`, which pegs every core of the shared container.
+- **After a rebase or a conflict fix, push.** CI re-runs everything.
+- **Evidence for a challenge** is CI's log for that test at the PR head, quoted.
 
-Most of a fast-tier run's wall time is **fixed per-invocation cost** (interpreter + Django/Evennia imports, test discovery, schema restore), not test execution — 109 tests execute in ~3s inside a ~10s invocation. Two consequences:
+### Per-invocation overhead
 
-- **Batch apps into one invocation.** `just test-fast app1 app2 app3` pays the overhead once (and auto-enables `--parallel`); three separate runs pay it three times.
-- **Don't narrow the selection to save time.** Running one module instead of the whole app saves almost nothing — select by what you want to *see*, not for speed.
+Most of a fast-tier run's wall time is **fixed per-invocation cost** (interpreter + Django/Evennia imports, test discovery, schema restore), not test execution — 109 tests execute in ~3s inside a ~10s invocation. So a run of one module costs about what a run of its whole app costs; choose the module for what you want to see, and keep to one app per invocation (see the local testing rule).
+
 - **Run from an ext4 worktree.** The 9p-mounted main checkout adds ~25s of import stat-storm per invocation; the `just` test recipes warn when you're on 9p. Worktrees under `.claude/worktrees/` don't pay it.
 
 ### Working app set for `--sqlite`
@@ -45,7 +48,7 @@ Most of a fast-tier run's wall time is **fixed per-invocation cost** (interprete
 |---|---|
 | **SQLite-clean** | action_points, forms, achievements, game_clock, skills, relationships, flows, checks, events, missions, journals, mechanics, progression, conditions |
 | **SQLite with caveats** (5-15% broken, partial tagging) | combat, items, vitals, actions |
-| **PG only — `just test-parity` required** | roster, character_sheets, magic, scenes, codex, areas, societies |
+| **PG only — CI runs them** | roster, character_sheets, magic, scenes, codex, areas, societies |
 
 For the PG-only apps, `--sqlite` either fails immediately (carved out via `MIGRATION_MODULES = None` in settings) or the fixture chain hits PG-vs-SQLite FK timing differences.
 
@@ -55,22 +58,21 @@ For the PG-only apps, `--sqlite` either fails immediately (carved out via `MIGRA
 # Inner-loop (SQLite tier — fast, excludes @tag("postgres")):
 just test-fast <app>                     # one app (serial)
 just test-fast <app>.tests.test_module   # one module (serial)
-just test-fast <app1> <app2>             # multiple apps (auto --parallel)
-just test-fast-par <app>                 # force --parallel on one large app
+just test-fast <app1> <app2>             # multiple apps (auto --parallel): CI only
+just test-fast-par <app>                 # force --parallel: CI only
 
-# Change-impact-aware (recommended for PR work — runs only apps your branch
-# touches PLUS apps that import from them):
-just test-affected                       # diff vs origin/main
+# Change-impact-aware (touched apps PLUS importers; many apps at once, so CI-scale):
+just test-affected                       # diff vs origin/main: not run locally
 just test-affected --keepdb              # extra args passed to arx test
 
 # Parity tier (PG, serial by default — pass --parallel yourself if you want it):
-just test-parity <app>                   # one app
-just test-parity                         # full suite (avoid locally — see below)
+just test-parity <app>                   # one app: CI's tier, not run locally
+just test-parity                         # full suite: CI's tier, not run locally
 
 # Generic pass-through (PG, no parallel):
 just test <args>
 
-# Full-suite parity gate (matches CI exactly):
+# Full-suite parity gate (CI runs this; not run locally):
 just regression                          # echo "yes" | arx test
 ```
 
@@ -124,9 +126,7 @@ See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canoni
 
 ## CI is the full-regression gate
 
-**For PR work, prefer `just test-affected`** — it diffs your branch against `origin/main` and runs only the apps you touched plus apps that import from them, so you don't waste time running unrelated suites. For a single app, use `just test-fast <app>`.
-
-Then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR (6 parallel shards, ~2,500 tests each) — let it catch regressions and fix what it reports there. Run a local `just regression` only to reproduce a CI failure the fast tier doesn't surface.
+**For PR work, run the module you added or changed** (`just test-fast <app>.tests.test_module`, see the local testing rule), then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR (6 parallel shards, ~2,500 tests each); let it catch regressions and fix what it reports there. To understand a CI failure, read CI's log for that test first (the Checks API annotations if the log is long). A local Postgres run is the rare exception, for a failure CI's log cannot explain.
 
 ## Background-run lifecycle (kills, hangs, branch switches)
 
@@ -157,7 +157,7 @@ A background `arx test` run holds live shared state; three recurring traps:
 
 ## `--keepdb` and faithful local repro
 
-CI always starts from a fresh DB. To reproduce a CI failure locally, run without `--keepdb` so Evennia setup objects (Limbo room #2, default Account #1) and prior-run state don't leak in:
+CI always starts from a fresh DB. In the rare case a CI failure must be reproduced locally (see "CI is the full-regression gate"), run without `--keepdb` so Evennia setup objects (Limbo room #2, default Account #1) and prior-run state don't leak in:
 
 ```
 just regression                        # echo "yes" | arx test — fresh DB, matches CI
@@ -178,9 +178,9 @@ just                        # list recipes
 just test flows --keepdb    # arx test pass-through
 just test-fast world.foo    # SQLite inner loop (serial)
 just test-fast-par world.foo # SQLite inner loop (forced parallel)
-just test-affected          # only apps your branch touches + importers
-just test-parity world.foo  # PG parity tier (serial; pass --parallel yourself if you want it)
-just regression             # full no-keepdb regression run
+just test-affected          # only apps your branch touches + importers (CI-scale)
+just test-parity world.foo  # PG parity tier (CI's tier)
+just regression             # full no-keepdb regression run (CI's tier)
 just lint                   # ruff check
 just manage migrate flows   # arx manage pass-through
 ```
