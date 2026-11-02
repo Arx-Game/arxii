@@ -10908,12 +10908,15 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   (`consequence_analytics.py` — `inspect_pool`, `list_pools`), condition danger ranking
   plus a DE column (`condition_analytics.py` — `compute_condition_danger`;
   `condition_power_analytics.py` — `build_condition_power_panel`, #3390), a Monte Carlo
-  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`),
+  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`, with an
+  optional technique and vow for the party, #4930),
   a technique combat-power league table (#3279: `technique_analytics.py` —
   `build_technique_panel`, over
   `world.magic.services.technique_power_eval.evaluate_all_with_reference(EvalContext) ->
   (list[TechniquePowerReport], ReferenceFrame)`; types in
-  `world/magic/types/technique_power.py`), plus a starting-kit pricer and a per-pool floor
+  `world/magic/types/technique_power.py`; `evaluate_technique` also takes a vow term,
+  `vow_effects`/`vow_thread_level`, #4930, read by the vow page's Power preview and the kit
+  view's Preview column through `web/admin/authoring/power_preview.py`), plus a starting-kit pricer and a per-pool floor
   scan on that same panel (#3716: `build_starting_kit_report` prices one
   character-creation combination as the picks a new character actually gets, at level 1
   and gift thread level 0, not the panel's own level/thread knobs; `build_pool_scan`
