@@ -1262,21 +1262,36 @@ preview slice 6 (#4930).
   to their admin change pages, from one `world.covenants.added_effects
   .techniques_by_function` query narrowed by `effect_rides_technique`, the match the cast
   path uses), then "Power preview" (#4930), then Credit.
-- **Power preview** - `web/admin/authoring/power_preview.py` `vow_power_preview(role)`: the
-  techniques the vow's added effects ride, by name, the first three priced
-  (`PREVIEW_TECHNIQUES`) and the rest counted ("+N more"). Per technique: "no vow: N DE",
-  "with base vow, level L: N DE" (rows with no focus pick riding it), then "with <pick>: N
-  DE" (base plus that pick) for each pick with a row riding it, and a "Run the fight
-  simulator" link to `admin_tuning?technique=&covenant_role=#panel-simulation`. L is the
-  vow's highest pick level, or 1 with no picks, said in a muted line; then the line on what
-  DE is and "Situational perks and stat scaling are not priced." Each figure is
+- **Power preview** - `web/admin/authoring/power_preview.py` `vow_power_preview(role)`,
+  headed "Power preview . <vow name>" (a middle dot): the techniques the vow's added effects
+  ride, by name, the first three priced (`PREVIEW_TECHNIQUES`) and the rest counted ("+N
+  more"). Per technique: "No vow: N DE", "With base vow, level L: N DE" (rows with no focus
+  pick riding it), then "With <pick>: N DE" (base plus that pick) for each pick with a row
+  riding it; then the catalog rank row, "Catalog rank, level <level> <function>
+  techniques: <n>th of <m>" (or "Catalog rank: the only level <level> <function>
+  technique" when nothing compares); then a "Run the fight simulator" link to
+  `admin_tuning?technique=&covenant_role=#panel-simulation`, or, for a technique with no
+  action template, a muted line saying the simulator cannot cast it. L is the vow's highest
+  pick level, or 1 with no picks, said in a muted line; then the line on what DE is and
+  "Situational perks and stat scaling are not priced." Each figure is
   `evaluate_technique(...).baseline_de` with the vow term (`vow_effects`,
   `vow_thread_level`; see `docs/systems/tuning.md`), rounded, at the Techniques panel's
   default context and reference (`technique_analytics.default_context_and_reference`,
-  cached by catalog revision). Queries: one for the effects (payloads prefetched), one
-  for the picks, one for the function tags, the priced techniques with their payload
-  prefetches, then the evaluator's own reads; adding a fourth technique adds none
-  (`VowPowerPreviewTests`).
+  cached by catalog revision).
+- **Catalog rank** - the technique's best with-vow figure (its highest line) against the
+  rounded baseline DE of every catalog technique with the same `level` carrying the
+  function the vow rides it by (the first in `TechniqueFunction` order when several). The
+  catalog figures are the Techniques panel's own corpus at its default knobs
+  (`technique_analytics.default_catalog_reports`, `_evaluate_corpus`: its cache for the
+  current catalog revision, else evaluated once and cached as the panel does). The
+  technique counts once, at its with-vow figure; ties share the better rank
+  (`catalog_rank`); `ordinal` and `rank_line` word it.
+- **Preview queries** - one for the effects (payloads prefetched), one for the picks, one
+  for the function tags, the priced techniques with their payload prefetches, one for the
+  rank peers (`TechniqueFunctionTag` by function and level, `_peer_figures`), then the
+  evaluator's own reads. The count is the same with one shown technique or three, and a
+  fourth, unshown one adds none (`VowPowerPreviewTests`); the first load on a new catalog
+  revision also evaluates the catalog once.
 - **URLs** (superuser-only): `_vow_builder/pick/` -> `admin_vow_builder_pick` (`?pk=`, GET
   redirect, 400 on a missing or unknown pk), `_vow_builder/<pk>/` -> `admin_vow_builder`,
   `_vow_builder/<pk>/review/` -> `admin_vow_builder_review` (POST).
