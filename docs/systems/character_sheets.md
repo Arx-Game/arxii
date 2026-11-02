@@ -132,6 +132,27 @@ Natural weapons block (`NaturalWeapons.tsx`): the name, an Unarmed tag, "From th
 gift X." or "From the gift X.", and one line of damage, facets ("Keenness, 1 of 1") and
 "cannot be taken from you".
 
+**`combat_style`** (#4921, slice 5 of #4844) is the owner's and staff's too: the
+`CharacterSheet.combat_style` chosen in character creation, or null (for anyone else, and
+for a character with no style). `_build_combat_style` returns a `CombatStyleSection`: `id`,
+`name`, `description`, `defense_style`, `defense_style_display`, `armor_share_tenths`,
+`hit_stat_name`, `weapon_kinds` and `armor_kinds` (`GearKindLabel` rows from
+`world.covenants.style_profile`, the same fields the CG style step reads), `skill_name` (the
+style's own skill, blank with none), `skill_value` (the character's value in it, 0
+untrained), `tradition_name` (the character's active Tradition when it teaches the style,
+else the first Tradition that does in `sort_order`, null when none does) and `vows` (the
+names of the style's `compatible_roles`, in name order). The sheet shows the vows, as demo
+screen 6's style card does; the owner's "never mentions covenant vows" ruling covers
+character creation only, whose style list stays free of them. The style rides the sheet
+query (`_COMBAT_STYLE_SELECT_RELATED`), so a sheet with no style pays nothing; one with a
+style pays four plain queries, fixed however many kinds, Traditions or vows it has (its
+gear kinds, its skill value, the Tradition to name, its vows). The front of the sheet draws
+it beside the Gift as the Fighting style block (`FightingStyle.tsx`): the name, the defense
+style as a tag, the description, then Tradition, Attacks, Defends and Vows rows (the CG
+step's `styleLines.ts` writes the middle two; an empty row is dropped) and the skill with
+its value. The style skill also shows among the trained
+skills.
+
 Threads under Magic reuse the existing thread list endpoint, narrowed to one character by
 `ThreadFilter.owner` (#3898) — the list is account-scoped, so without it an account with
 alts read every character's threads on whichever sheet it opened.

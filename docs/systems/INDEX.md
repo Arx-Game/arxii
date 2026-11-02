@@ -7935,7 +7935,12 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `CombatStyleGear` (NK `(style, gear_archetype)`)). `world.covenants.style_fit`
     (`style_fit_for_attack`, `style_fit_for_defense`, `StyleFit`, `StyleLapse`) puts the
     style skill on Strike, technique hit and PC defense rolls while the weapon, armor and
-    vow are on the style [BUILT & WIRED].
+    vow are on the style [BUILT & WIRED]. Since #4921 a player chooses the style in
+    creation (`CharacterDraft.selected_combat_style`, `GET
+    /api/character-creation/combat-styles/`, `world.character_creation.magic_training`:
+    `taught_styles`, `training_skills`, `reconcile_combat_style`) and the Sphinx's
+    `SphinxVerdict.style` (`SphinxStyleLine`, `style_fit.style_lists_vow`) says whether it
+    suits a vow [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
     `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
@@ -8132,7 +8137,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   technique, *, resolution, target) -> list[FiredVowEffect]` (upgrade rule, then the
   frequency ledger, then dedupe and thread-level scaling), `apply_vow_effect_payloads`,
   `vow_damage_profiles`, `record_vow_effect_firings`, and `vow_added_effects_on_technique`
-  (the static view for #4565, **[BUILT, NOT WIRED]**, does not filter by beneficiary);
+  (the static view, does not filter by beneficiary; `vow_added_effects_on_techniques` is its
+  batched form, read by the admin kit view `admin_kit_view`, #4918);
   `effect_rides_technique` / `techniques_ridden_by` are the one catalog match (#4880). Runs
   in combat (`CombatTechniqueResolver`) and out of it (`cast_services`) on casts at success
   level 1 or higher only. The perk machinery exposed `VowHolderCandidate`,

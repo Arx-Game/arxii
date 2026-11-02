@@ -26,6 +26,7 @@ vi.mock('../../queries', async (importOriginal) => ({
   useSelectTradition: () => ({ mutate: vi.fn(), isPending: false }),
   useTraditionPerspectives: () => ({ data: [] }),
   useCGGifts: () => ({ data: [], isLoading: false }),
+  useCGCombatStyles: () => ({ data: [] }),
   useCGTechniqueOptions: () => ({ data: [], isLoading: false }),
   useGlimpseTags: () => ({ data: [], isLoading: false }),
   useDraftOffers: () => ({ data: { offers: [], closed: [] }, isLoading: false }),

@@ -1462,6 +1462,7 @@
   - second_parent_species -> species.Species [FK] (nullable)
   - selected_path -> classes.Path [FK] (nullable)
   - selected_tradition -> magic.Tradition [FK] (nullable)
+  - selected_combat_style -> covenants.CombatStyle [FK] (nullable)
   - height_band -> forms.HeightBand [FK] (nullable)
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)

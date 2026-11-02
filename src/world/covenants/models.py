@@ -1611,6 +1611,31 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.name} ({self.get_defense_style_display()})"
 
+    def clean(self) -> None:
+        """A style's skill is no magic skill picker's skill (#4921, #4844 decision 16).
+
+        The four pickers refuse a style's skill; this refuses the other way round, so a
+        skill a magical roll already adds never becomes a style's too.
+        """
+        super().clean()
+        skill = self.skill
+        if skill is None:
+            return
+        if (
+            skill.technique_skill_paths.exists()
+            or skill.technique_skill_gifts.exists()
+            or skill.override_techniques.exists()
+            or skill.magic_activity_rows.exists()
+        ):
+            raise ValidationError(
+                {
+                    "skill": (
+                        "A Path, Gift, technique or magical activity already adds this skill. "
+                        "Give the style a skill of its own."
+                    )
+                }
+            )
+
 
 #: The kinds a combat style can fight with: weapons and armor, never jewelry, clothing or
 #: other gear (#4884). In ``GearArchetype`` order.

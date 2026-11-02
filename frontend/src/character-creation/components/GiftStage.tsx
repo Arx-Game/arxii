@@ -1,9 +1,10 @@
 /**
  * Stage 6: Gift (#3630).
  *
- * The Gift funnel — Tradition, Gift, Techniques, Resonance, magical training (#4659,
- * only for a draft with training; after the Resonance, whose affinity its bonus reads),
- * Anima Check — as nested index entries: each step is an `Entry` in an `EntryList`,
+ * The Gift funnel (Tradition, Gift, Techniques, Resonance, fighting style (#4921, only
+ * for a Tradition that teaches one), magical training (#4659, only for a draft with
+ * training; after the Resonance, whose affinity its bonus reads, and the style, whose
+ * skill it lists), Anima Check) as nested index entries: each step is an `Entry` in an `EntryList`,
  * closed and unreadable (`gated`) until the step before it is done, and its
  * own body holds that step's picker. Motif is a field below the funnel;
  * the Glimpse is mounted via `GlimpseSection` (#2427; folio-grammar
@@ -33,6 +34,7 @@ import {
 } from '../folio';
 import {
   useCGExplanations,
+  useCGCombatStyles,
   useCGGifts,
   useCGPointBudget,
   useDraftOffers,
@@ -47,6 +49,7 @@ import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
+import { StyleStep } from './gift/StyleStep';
 import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
@@ -157,6 +160,43 @@ function glimpseRailRows(
   return rows;
 }
 
+interface LaterStepsInput {
+  showStyle: boolean;
+  showTraining: boolean;
+  styleChosen: boolean;
+  giftDone: boolean;
+  resonanceDone: boolean;
+}
+
+/**
+ * The steps after the Resonance (#4921): the style step (only for a Tradition that
+ * teaches one), the training (only with training) and the Anima Check, numbered in that
+ * order, and whether the training is open yet and what it waits on if not.
+ */
+function laterSteps({
+  showStyle,
+  showTraining,
+  styleChosen,
+  giftDone,
+  resonanceDone,
+}: LaterStepsInput) {
+  const styleNumber = 5;
+  const trainingNumber = styleNumber + (showStyle ? 1 : 0);
+  const animaNumber = trainingNumber + (showTraining ? 1 : 0);
+  const trainingReady = giftDone && resonanceDone && (!showStyle || styleChosen);
+  let trainingGate = 'Choose a style first';
+  if (!giftDone) trainingGate = 'Choose a gift first';
+  else if (!resonanceDone) trainingGate = 'Choose a resonance first';
+  return {
+    styleNumber,
+    trainingNumber,
+    animaNumber,
+    stepCount: animaNumber,
+    trainingReady,
+    trainingGate,
+  };
+}
+
 export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
@@ -195,9 +235,20 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const training = draft.magic_training;
   const showTraining = hasMagicTraining(training);
   const trainingSpent = showTraining && isTrainingSpent(training);
-  const stepCount = showTraining ? 6 : 5;
-  const afterResonance = showTraining ? 1 : 0;
-  const trainingReady = completion.gift && completion.resonance;
+
+  // The style step (#4921) sits after the Resonance, only for a Tradition that teaches a
+  // style; the training after it waits on the style, since its list holds the style's skill.
+  const { data: styles = [] } = useCGCombatStyles(draft.id, draft.selected_tradition?.id ?? null);
+  const showStyle = styles.length > 0;
+  const chosenStyle = styles.find((style) => style.id === draft.selected_combat_style);
+  const { styleNumber, trainingNumber, animaNumber, stepCount, trainingReady, trainingGate } =
+    laterSteps({
+      showStyle,
+      showTraining,
+      styleChosen: chosenStyle != null,
+      giftDone: completion.gift,
+      resonanceDone: completion.resonance,
+    });
   const trainingValue = showTraining ? `${training.allocated} of ${training.total}` : undefined;
 
   // The Tradition row names the schooling stance under it, when one is
@@ -287,6 +338,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           { label: 'Gift', value: giftName },
           { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
           { label: 'Resonance', value: resonanceName },
+          ...(showStyle ? [{ label: 'Style', value: chosenStyle?.name }] : []),
           { label: 'Anima check', value: animaCheckLine },
           ...glimpseRows,
           {
@@ -393,15 +445,30 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           </EntryList>
         </FunnelStep>
 
+        {showStyle && (
+          <FunnelStep
+            n={styleNumber}
+            total={stepCount}
+            name="Fighting style"
+            value={chosenStyle?.name}
+            done={chosenStyle != null}
+            gated={!completion.resonance}
+            gateReason="Choose a resonance first"
+            open={completion.resonance && chosenStyle == null}
+          >
+            <StyleStep draft={draft} styles={styles} />
+          </FunnelStep>
+        )}
+
         {showTraining && (
           <FunnelStep
-            n={5}
+            n={trainingNumber}
             total={stepCount}
             name={trainingHeading(copy, draft.selected_tradition?.name ?? '')}
             value={trainingValue}
             done={trainingSpent}
             gated={!trainingReady}
-            gateReason={completion.gift ? 'Choose a resonance first' : 'Choose a gift first'}
+            gateReason={trainingGate}
             open={trainingReady && !trainingSpent}
           >
             <MagicTrainingBlock draft={draft} />
@@ -409,7 +476,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         )}
 
         <FunnelStep
-          n={5 + afterResonance}
+          n={animaNumber}
           total={stepCount}
           name={copy?.anima_check_heading ?? 'Anima Check'}
           value={animaCheckLine}

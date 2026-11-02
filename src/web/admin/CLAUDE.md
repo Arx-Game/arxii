@@ -138,9 +138,11 @@ creates it), and Missing combat content (`admin_combat_content`, superusers only
 "N open flags", #4906). A row whose page would refuse the viewer (no view or change permission on its model) is left out. A row holds any number of
 `RowPicker`s (`CombatRolesLink.pickers`); the Combo map row (#4891) has no page of its own (blank
 `url`) and holds a property picker and a condition picker, each shown only to staff who can view
-that model (`combat_roles.can_view`). Every combat role authoring page belongs
-here, so staff never hunt for one (owner ruling 2026-11-01); a later #4843 slice adds the
-kit view. Tests:
+that model (`combat_roles.can_view`). The Kit view row (#4918) is the same shape: no page of
+its own, one `RowPicker` of every character holding a live primary vow (sheet pk and
+character name, one query), shown to staff who can view `CharacterSheet`, note "one
+character, read only". Every combat role authoring page belongs
+here, so staff never hunt for one (owner ruling 2026-11-01). Tests:
 `tests/test_combat_roles_panel.py` follows every link.
 
 ### Save as new on every change form (#4094)
@@ -1361,6 +1363,60 @@ path changes.
   links), `tests/test_combat_content_page.py` (the page through the client, the gate, the
   links opening, and the styling test), `tests/test_combat_roles_panel.py` (the row's
   count). Deliberate no-ADR: the page follows the approved #4843 spec.
+
+## Kit view (#4918, slice 5 of #4843)
+
+**Purpose:** demo screen 4. One real character's combat kit on one read-only page: each
+technique it knows with what its vows add, its chosen focus picks against the budget, and
+the sheet facts beside them. Not here yet: the power preview column (slice 6) and the style
+row (slice 7, after #4844).
+
+- **Files** - `web/admin/kit_view/`: `live.py` (pure reads, frozen dataclasses: `kit_for(sheet)
+  -> Kit`, built from `known_techniques`, `vow_levels`, `technique_lines`, `pick_levels`,
+  `held_vows`, `sheet_facts`), `views.py` (`kit_view`, `kit_view_pick`). Templates in
+  `web/templates/admin/kit_view/`: `page.html`, `_css.html` (classes under `#kit-view-root`).
+- **Techniques, with what the vow adds** - Technique (linked, its function tag labels under
+  it) / Base (the technique's `cached_effect_summary` line) / Vow adds (level N, when the
+  character holds one primary vow). The vow lines come from
+  `world.covenants.added_effects.vow_added_effects_on_techniques`, the static view, which
+  ignores unlock level, context, situation and frequency by design: "Base: <line>" first,
+  then "<pick>: <line>" per chosen pick (by level, then name); with more than one live vow
+  the base group is named "<vow> base". Each line is `summarize_vow_added_effect`. A row
+  whose `unlock_thread_level` is above the character's shown thread level on that vow is
+  still listed, chipped "unlocks at level N"; a row whose beneficiary is not the holder's
+  own casts is chipped "rides <beneficiary>". A technique with no line reads "nothing: <vow>
+  adds nothing to <function>" ("it carries no function tag" / "no engaged vow" otherwise).
+- **Focus picks chosen** - per live primary vow and pick level with a chosen pick: "Level N
+  . <picks>" (each linked to its `VowFocusPick` change page) and "<spent> of <budget>",
+  chipped "over budget" when spent is more. Spent is
+  `focus_picks.spent_by_membership_level` (shared with the Holder over budget flag), budget
+  `vow_builder.live.focus_pick_budget()`. Links to the vow page and the
+  `CharacterVowFocusPick` changelist searched by the character's key.
+- **Sheet** - Path . Gift (newest path history row, gift names), each live vow (linked to its
+  vow page, shown level, "not engaged" chip; secondary vows labelled), and Defense: the
+  primary vow's `CovenantRoleDefenseProfile` style (the resolved sub-role's own, else its
+  anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". A character
+  with no vow, no technique or a secondary vow only renders and says what is absent.
+- **Queries** - fixed however many techniques, added effects or picks: 22 for the kit reads
+  (`tests/test_kit_view_live.py` `KIT_QUERIES`), 74 for the whole request
+  (`tests/test_kit_view.py` `PAGE_QUERIES`, mostly admin chrome). Function tags are read with
+  one `values_list` (`function_tags_by_technique`), never prefetched onto the identity-mapped
+  techniques (ADR-0263).
+- **URLs** (GET only; staff with view or change permission on `CharacterSheet`, 403
+  otherwise): `_kit_view/<sheet_pk>/` -> `admin_kit_view` (404 for an unknown sheet),
+  `_kit_view/pick/` -> `admin_kit_view_pick` (`?pk=`, redirect, 400 on a missing or unknown
+  pk).
+- **Ways in** - the Combat roles panel's Kit view row, and a "Kit view" object tool on the
+  `CharacterSheet` change form and on the `CharacterVowFocusPick` change form (to the pick's
+  character; `CharacterCovenantRole` has no admin page), through `links.kit_view_url` and the
+  `authoring_tags.kit_view_url` filter in `change_form.html`.
+- Tests: `tests/test_kit_view_live.py` (base and pick lines, an unchosen pick absent, the
+  unlock and rider marks, nothing added, over budget, no vow, secondary only, a sub-role
+  holder's anchor picks, the query pin), `tests/test_kit_view.py` (each module through the
+  client, the gate, the pick route, both change-form links, the request query pin, and the
+  styling test: every class under `#kit-view-root` has a rule reaching the page, with and
+  without a vow), `tests/test_combat_roles_panel.py` (the row and its picker). Deliberate
+  no-ADR: the page follows the approved #4843 spec.
 
 ## Standoff Profile Builder (#4354)
 

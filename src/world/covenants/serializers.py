@@ -440,13 +440,24 @@ class SphinxShoppingItemSerializer(serializers.Serializer):
     function = serializers.CharField(read_only=True)
 
 
+class SphinxStyleLineSerializer(serializers.Serializer):
+    """Read-only shape for the Sphinx's style line (#4921)."""
+
+    style_name = serializers.CharField(read_only=True)
+    suits = serializers.BooleanField(read_only=True)
+
+
 class SphinxVerdictSerializer(serializers.Serializer):
-    """Read-only shape for the Sphinx of Black Quartz's full verdict (#2640)."""
+    """Read-only shape for the Sphinx of Black Quartz's full verdict (#2640).
+
+    ``style`` is null for a character with no combat style (#4921).
+    """
 
     tier = serializers.CharField(read_only=True)
     role_name = serializers.CharField(read_only=True)
     demands = SphinxDemandSerializer(many=True, read_only=True)
     shopping_list = SphinxShoppingItemSerializer(many=True, read_only=True)
+    style = SphinxStyleLineSerializer(read_only=True, allow_null=True)
 
 
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):

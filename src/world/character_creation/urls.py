@@ -8,6 +8,7 @@ from rest_framework.routers import DefaultRouter
 from world.character_creation.views import (
     BeginningsViewSet,
     CanCreateCharacterView,
+    CGCombatStyleOptionViewSet,
     CGExplanationsView,
     CGGiftOptionViewSet,
     CGGlimpseTagViewSet,
@@ -48,6 +49,7 @@ router.register("applications", DraftApplicationViewSet, basename="application")
 router.register("house-titles", ClaimableTitleViewSet, basename="house-title")
 router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
 router.register("gifts", CGGiftOptionViewSet, basename="cg-gift-option")
+router.register("combat-styles", CGCombatStyleOptionViewSet, basename="cg-combat-style-option")
 router.register("technique-options", CGTechniqueOptionViewSet, basename="cg-technique-option")
 router.register("glimpse-tags", CGGlimpseTagViewSet, basename="cg-glimpse-tag")
 router.register("origin-templates", CGOriginTemplateViewSet, basename="cg-origin-template")

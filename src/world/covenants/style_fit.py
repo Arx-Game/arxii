@@ -105,6 +105,18 @@ def _held_vows(character: Character) -> list[CovenantRole]:
     return list(character.covenant_roles.currently_engaged_primary_roles())
 
 
+def _lists(listed: set[int], role: CovenantRole) -> bool:
+    return role.pk in listed or role.parent_role_id in listed
+
+
+def style_lists_vow(style: CombatStyle, role: CovenantRole) -> bool:
+    """Whether ``style`` lists ``role``'s vow; a sub-role counts by its anchor (#4921).
+
+    The Sphinx's style line reads it; the roll's lapse test is the same rule.
+    """
+    return _lists(set(style.compatible_roles.values_list("pk", flat=True)), role)
+
+
 def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | None:
     """The first held vow the style does not list (a sub-role counts by its anchor)."""
     held = _held_vows(character)
@@ -112,7 +124,7 @@ def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | No
         return None
     listed = set(style.compatible_roles.values_list("pk", flat=True))
     for role in held:
-        if role.pk not in listed and role.parent_role_id not in listed:
+        if not _lists(listed, role):
             return role
     return None
 
