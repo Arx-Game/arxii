@@ -143,7 +143,11 @@ however many slots it fills (`CharacterEquipmentHandler.item_facets_for`), and s
 weapon's covenant role bonus for weapon damage (`covenant_role_bonus`; armor stays per slot,
 as its soak is summed per worn row). It is struck like
 any equipped Unarmed weapon (see the Strike in `docs/systems/INDEX.md`), listed before bare
-hands. The Required content row `natural-weapon-templates` lists a natural weapon template
+hands; the room hears it named with no article ("Hobb strikes Bandit with Khati Claws.").
+The owner and staff read it on the character sheet's Physical section in its own Natural
+weapons block (the sheet payload's `natural_weapons`, see docs/systems/character_sheets.md),
+which takes it out of their Wearing list; everyone else sees it under Wearing. The Required
+content row `natural-weapon-templates` lists a natural weapon template
 that is not Unarmed, has no slots, has a slot off the skin layer, tracks durability, or is
 named by more than one gift (a holder of both would get a second pair that cannot be worn;
 there is no runtime guard).
