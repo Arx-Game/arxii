@@ -103,12 +103,13 @@ ALLOWED_MIGRATIONS: set[str] = {
     # catalog rows the code reads by key, the same 2026-10-22 ruling as 0334. An existing
     # row keeps its value; a fresh database gets the same rows from ensure_maneuver_effects().
     "world/migrations/0351_strike_maneuver_effects.py",
-    # #4975: ADR-0237 restructure backfill, carries each role's CovenantRoleDefenseProfile and
-    # GearArchetypeCompatibility rows onto placeholder CombatStyle rows (plain names, blank
-    # prose, no skill) before 0366 drops both tables. Every style mirrors rows that already
-    # existed in a different shape; nothing is invented. No-op on empty databases.
-    "world/migrations/0365_vow_tables_to_placeholder_styles.py",
 }
+
+# A migration that carries rows the database already holds (an ADR-0237 restructure backfill)
+# declares it with this marker line and a reason, inside its own file. The exemption names no
+# file, so renumbering the migration (tools/auto_rebase_migration.py) never touches it, and
+# it shows in the diff of the migration that claims it.
+ALLOW_MARKER = "# seed-data-ok:"
 
 # Patterns that suggest seed data in migrations
 SEED_FUNCTION_PATTERNS = [
@@ -169,6 +170,14 @@ class SeedDataVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def has_allow_marker(content: str) -> bool:
+    """Whether a line of ``content`` is the allow marker followed by a stated reason."""
+    return any(
+        line.startswith(ALLOW_MARKER) and line[len(ALLOW_MARKER) :].strip()
+        for line in content.splitlines()
+    )
+
+
 def check_migration_file(filepath: Path) -> list[str]:
     """Check a single migration file for seed data patterns.
 
@@ -176,6 +185,9 @@ def check_migration_file(filepath: Path) -> list[str]:
         List of issue descriptions found in the file.
     """
     content = filepath.read_text(encoding="utf-8")
+
+    if has_allow_marker(content):
+        return []
 
     # Quick check: if no RunPython, skip detailed analysis
     if "RunPython" not in content:
@@ -265,8 +277,8 @@ def main() -> int:
     print()
     print("=" * 70)
     print("To fix: Move seed data to fixtures/*.json files and delete the migration.")
-    print("        Or add to ALLOWED_MIGRATIONS in tools/check_migration_seed_data.py")
-    print("        if this is essential system configuration.")
+    print("        Or, for a backfill of rows the database already holds, put a line")
+    print("        '# seed-data-ok: <reason>' in the migration itself.")
     print("=" * 70)
 
     return 1

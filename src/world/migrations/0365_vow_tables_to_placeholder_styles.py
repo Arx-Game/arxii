@@ -14,9 +14,13 @@ it had with no profile. Gear kinds a style cannot hold (jewelry, clothing, other
 ``CombatStyleGear`` row to land on; the count of those skipped is printed.
 
 Everything is copied here, never imported from app code, so the migration cannot drift.
-Idempotent: a style is found by its name. Reversing is a no-op: the styles are plain
-content rows and the old tables are restored empty by reversing 0366.
+Idempotent: a style is found by its name, and one that already exists with a different
+defense style or armor share raises (naming it) rather than being reused. Reversing is a
+no-op: the styles are plain content rows and the old tables are restored empty by reversing
+0366.
 """
+
+# seed-data-ok: ADR-0237 restructure backfill of rows the vow tables already hold
 
 from collections.abc import Iterable
 
@@ -99,15 +103,29 @@ def carry_vow_tables_to_styles(apps, schema_editor) -> None:
 
     groups, skipped = group_roles(profiles, gear)
     names = style_names(groups)
+    # Validate every existing style before writing any, so a mismatch leaves nothing half done.
+    found = {}
+    for key in groups:
+        defense_style, share, _kinds = key
+        existing = CombatStyle.objects.filter(name=names[key]).first()
+        if existing is not None and (existing.defense_style, existing.armor_share_tenths) != (
+            defense_style,
+            share,
+        ):
+            msg = (
+                f"CombatStyle {names[key]!r} already exists as {existing.defense_style} at "
+                f"{existing.armor_share_tenths} tenths, but the vow tables put "
+                f"{defense_style} at {share} tenths there. Rename or remove it, then migrate."
+            )
+            raise ValueError(msg)
+        found[key] = existing
     for key, role_ids in groups.items():
         defense_style, share, kinds = key
-        style, _ = CombatStyle.objects.get_or_create(
+        style = found[key] or CombatStyle.objects.create(
             name=names[key],
-            defaults={
-                "description": "",
-                "defense_style": defense_style,
-                "armor_share_tenths": share,
-            },
+            description="",
+            defense_style=defense_style,
+            armor_share_tenths=share,
         )
         for kind in kinds:
             CombatStyleGear.objects.get_or_create(style=style, gear_archetype=kind)
