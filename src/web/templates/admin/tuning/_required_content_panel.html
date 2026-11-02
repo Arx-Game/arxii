@@ -37,7 +37,9 @@
       <td>{{ row.dependency.consumer }}</td>
       <td>{{ row.dependency.consequence }}</td>
       <td>
-        {% if row.result.missing %}
+        {% if row.result.flagged %}
+        {% for flagged in row.result.flagged %}{% if flagged.url %}<a href="{{ flagged.url }}">{{ flagged.text }}</a>{% else %}{{ flagged.text }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% elif row.result.missing %}
         {{ row.result.missing|join:", " }}
         {% endif %}
         {% if row.result.detail %}
@@ -74,7 +76,9 @@
       <td>{{ row.dependency.consumer }}</td>
       <td>{{ row.dependency.consequence }}</td>
       <td>
-        {% if row.result.missing %}
+        {% if row.result.flagged %}
+        {% for flagged in row.result.flagged %}{% if flagged.url %}<a href="{{ flagged.url }}">{{ flagged.text }}</a>{% else %}{{ flagged.text }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% elif row.result.missing %}
         {{ row.result.missing|join:", " }}
         {% endif %}
         {% if row.result.detail %}

@@ -10924,7 +10924,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   database row) gets registered, and `collect_required_content()` probes the live
   database for each one, since no repo artifact can answer the question (ADR-0238).
   Each row links to the admin changelist where its rows are authored
-  (`links.admin_changelist_url`, #3831). See
+  (`links.admin_changelist_url`, #3831); a probe can link each row it names through
+  `ProbeResult.flagged` (`FlaggedRow`, #4906). The five missing combat content flags
+  (`tuning/combat_role_flags.py`, #4906) have their own page, `admin_combat_content`. See
   `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via

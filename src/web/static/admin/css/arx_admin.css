@@ -94,6 +94,19 @@
     white-space: normal;
 }
 
+/* The Missing combat content row's open flag count (#4906), a pill like the demo's. */
+.combat-roles-flagdot {
+    display: inline-block;
+    min-width: 1.4rem;
+    padding: 0 4px;
+    text-align: center;
+    border-radius: 9px;
+    background: var(--message-warning-bg);
+    color: var(--body-fg);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
 /* Sized to the row's text, so the picker never makes its row taller than the others. */
 .combat-roles-picker select,
 .combat-roles-picker .button {

@@ -1306,6 +1306,12 @@ the techniques the vow rides, and warns before a save that changes what live hol
 It is opened from a "Vow page" column and object tool on `CovenantRole` and the Combat
 roles panel's vow picker. See `src/web/admin/CLAUDE.md` "Vow page".
 
+Five Required content flags (#4906, `web/admin/tuning/combat_role_flags.py`) list a vow
+with no picks, a holder over budget at a level, a pick with no payload row, and conditions
+that are landed but never read or read but never landed, each linked to the vow page or
+the condition's combo map, on the Missing combat content page (`_combat_content/`). Flags
+only; nothing is refused for them.
+
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —
