@@ -36,13 +36,17 @@ from world.areas.worldmap.models import (
     TerrainPip,
 )
 from world.areas.worldmap.services import (
+    MAX_FOOTPRINT_PIPS_PER_CALL,
     WorldMapServiceError,
+    _rows_at,
+    clear_footprint,
     create_region_map,
     footprint_of,
     holder_at,
     import_region_map_file,
     paint_terrain,
     region_read,
+    restore_pips,
     set_footprint,
 )
 
@@ -292,6 +296,76 @@ class FootprintServiceTests(TestCase):
         assert county.pips == [(1, 1), (2, 1)]
         assert county.seat == (2, 1)
         assert county.holder_org_id is None
+
+    def test_carve_reports_each_pips_prior_and_new_holder(self) -> None:
+        set_footprint(area=self.kingdom, add=[(3, 3)])
+        change = set_footprint(area=self.county, add=[(3, 3), (4, 3)])
+        assert sorted(change.changed) == [
+            (3, 3, self.kingdom.pk, self.county.pk),
+            (4, 3, None, self.county.pk),
+        ]
+        change = set_footprint(area=self.county, remove=[(3, 3)])
+        assert change.changed == ((3, 3, self.county.pk, self.kingdom.pk),)
+        change = set_footprint(area=self.kingdom, remove=[(3, 3)])
+        assert change.changed == ((3, 3, self.kingdom.pk, None),)
+        # a pip already inside and a skipped pip are not changes
+        other = AreaFactory(name="Other2", level=AreaLevel.COUNTY, parent=self.kingdom)
+        change = set_footprint(area=other, add=[(4, 3)])
+        assert change.changed == ()
+
+    def test_clear_takes_a_domains_own_pips_off_everywhere_and_keeps_its_children(self) -> None:
+        set_footprint(area=self.county, add=[(1, 1), (2, 1), (30, 30)])  # (30, 30) is off this map
+        set_footprint(area=self.barony, add=[(2, 1)])
+        change = clear_footprint(area=self.county)
+        assert change.removed == 2
+        assert sorted(change.changed) == [
+            (1, 1, self.county.pk, self.kingdom.pk),
+            (30, 30, self.county.pk, self.kingdom.pk),
+        ]
+        assert holder_at(2, 1) == self.barony
+        assert holder_at(1, 1) == self.kingdom
+        change = clear_footprint(area=self.kingdom)
+        assert holder_at(1, 1) is None
+        assert change.changed == ((1, 1, self.kingdom.pk, None), (30, 30, self.kingdom.pk, None))
+        with self.assertRaises(WorldMapServiceError):
+            clear_footprint(
+                area=AreaFactory(name="Ward2", level=AreaLevel.WARD, parent=self.barony)
+            )
+
+    def test_restore_puts_pips_back_with_their_prior_holders(self) -> None:
+        duchy = AreaFactory(name="Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
+        county = AreaFactory(name="County2", level=AreaLevel.COUNTY, parent=duchy)
+        set_footprint(area=self.kingdom, add=[(6, 6), (7, 6)])
+        change = set_footprint(area=county, add=[(6, 6), (7, 6), (8, 6)])
+        # an inverse carve would hand (6, 6) to the duchy; a restore hands it to the kingdom
+        before = [(x, y, prior) for x, y, prior, _after in change.changed]
+        assert restore_pips(pips=before) == 3
+        assert holder_at(6, 6) == self.kingdom
+        assert holder_at(8, 6) is None
+        after = [(x, y, new) for x, y, _prior, new in change.changed]
+        assert restore_pips(pips=after) == 3
+        assert holder_at(8, 6) == county
+        assert AreaFootprintPip.objects.filter(x=6, y=6).count() == 1
+        assert restore_pips(pips=[(6, 6, self.kingdom.pk), (6, 6, self.kingdom.pk)]) == 1
+        assert holder_at(6, 6) == self.kingdom
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=[(6, 6, AreaFactory(name="W3", level=AreaLevel.WARD).pk)])
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=[(6, 6, 999999)])
+
+    def test_restore_refuses_more_pips_than_one_call_takes(self) -> None:
+        too_many = [(x % 300, x // 300, None) for x in range(MAX_FOOTPRINT_PIPS_PER_CALL + 1)]
+        with self.assertRaises(WorldMapServiceError):
+            restore_pips(pips=too_many)
+        assert restore_pips(pips=too_many[:MAX_FOOTPRINT_PIPS_PER_CALL]) == 0
+
+    def test_rows_at_fetches_only_the_pips_asked_for(self) -> None:
+        # (1, 1) and (2, 2) are asked for; (1, 2) and (2, 1) share their x and y sets
+        set_footprint(area=self.kingdom, add=[(1, 1), (2, 2), (1, 2), (2, 1)])
+        with self.assertNumQueries(1):
+            rows = _rows_at({(1, 1), (2, 2), (9, 9)})
+        assert set(rows) == {(1, 1), (2, 2)}
+        assert list(rows) == [(1, 1), (2, 2)]
 
 
 class RegionMapApiTests(TestCase):

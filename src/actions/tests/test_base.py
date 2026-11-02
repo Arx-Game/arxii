@@ -741,6 +741,8 @@ class ActionRegistryTests(TestCase):
             # #3983 — Almanach de Catenys: staff house builder.
             "atlas_create_region_map",
             "atlas_carve_footprint",
+            "atlas_clear_footprint",
+            "atlas_restore_footprint",
             "atlas_paint_terrain",
             "almanach_plant_rung",
             "almanach_batch_unclaimed",

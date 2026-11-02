@@ -104,6 +104,8 @@ export interface WorldBuilderActionInput {
 const REGION_MAP_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([
   'atlas_create_region_map',
   'atlas_carve_footprint',
+  'atlas_clear_footprint',
+  'atlas_restore_footprint',
   'atlas_paint_terrain',
 ]);
 
