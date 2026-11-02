@@ -76,11 +76,12 @@ def _probe_holder_over_budget() -> ProbeResult:
     ``validate_character_focus_pick`` refuses a save with; a row gets past that check by
     a later price or budget change. A secondary vow gets no picks and a left membership
     counts for nothing, so neither is read. Two queries: the choices, and the limits of
-    every pick they name, priced through ``price_for`` (the formula ``pick_price`` runs).
+    every pick they name, summed per level by ``spent_by_membership_level`` (the kit view's
+    sum too, #4918).
     """
     from web.admin.vow_builder.live import focus_pick_budget  # noqa: PLC0415
-    from world.covenants.focus_picks import price_for  # noqa: PLC0415
-    from world.covenants.models import CharacterVowFocusPick, VowFocusPickLimit  # noqa: PLC0415
+    from world.covenants.focus_picks import spent_by_membership_level  # noqa: PLC0415
+    from world.covenants.models import CharacterVowFocusPick  # noqa: PLC0415
 
     budget = focus_pick_budget()
     choices = list(
@@ -90,16 +91,10 @@ def _probe_holder_over_budget() -> ProbeResult:
             "character_role__character_sheet__character", "character_role__covenant_role", "pick"
         )
     )
-    limits: dict[int, list[VowFocusPickLimit]] = defaultdict(list)
-    pick_ids = {choice.pick_id for choice in choices}
-    for limit in VowFocusPickLimit.objects.filter(pick_id__in=pick_ids) if pick_ids else ():
-        limits[limit.pick_id].append(limit)
-    totals: dict[tuple[int, int], int] = defaultdict(int)
-    memberships: dict[int, CharacterCovenantRole] = {}
-    for choice in choices:
-        key = (choice.character_role_id, choice.pick.pick_level)
-        totals[key] += price_for(choice.pick.value, limits[choice.pick_id])
-        memberships[choice.character_role_id] = choice.character_role
+    totals = spent_by_membership_level(choices)
+    memberships: dict[int, CharacterCovenantRole] = {
+        choice.character_role_id: choice.character_role for choice in choices
+    }
     changelist = reverse("admin:arxii_charactervowfocuspick_changelist")
     over: list[tuple[str, int, FlaggedRow]] = []
     for (membership_id, level), total in totals.items():

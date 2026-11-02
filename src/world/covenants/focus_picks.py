@@ -16,7 +16,8 @@ has each holder chosen" for every reader in one query, and
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from math import prod
 from typing import TYPE_CHECKING
 
@@ -27,10 +28,10 @@ from world.covenants.constants import (
     FOCUS_PICK_LIMIT_FREQUENCY_FULL,
     FOCUS_PICK_REDUCTION_LIMIT_KINDS,
 )
-from world.covenants.models import CharacterVowFocusPick, VowFocusPickConfig
+from world.covenants.models import CharacterVowFocusPick, VowFocusPickConfig, VowFocusPickLimit
 
 if TYPE_CHECKING:
-    from world.covenants.models import CharacterCovenantRole, VowFocusPick, VowFocusPickLimit
+    from world.covenants.models import CharacterCovenantRole, VowFocusPick
 
 #: The lowest price any pick can cost, however many limits it carries.
 MIN_PICK_PRICE = 1
@@ -71,6 +72,27 @@ def price_for(value: int, limits: Iterable[VowFocusPickLimit]) -> int:
     )
     scaled = value * prod(frequencies) // FOCUS_PICK_LIMIT_FREQUENCY_FULL ** len(frequencies)
     return max(MIN_PICK_PRICE, scaled - reductions)
+
+
+def spent_by_membership_level(
+    choices: Sequence[CharacterVowFocusPick],
+) -> dict[tuple[int, int], int]:
+    """What each membership has spent at each pick level, keyed ``(character_role_id, level)``.
+
+    ``choices`` carry their ``pick`` (select_related by the caller). Each pick is priced
+    through ``price_for``, the formula ``pick_price`` runs, from one query for the limits
+    of every pick the choices name (none when there are no choices). Shared by the Holder
+    over budget flag and the kit view (#4918), so both sum a level the same way.
+    """
+    pick_ids = {choice.pick_id for choice in choices}
+    limits: dict[int, list[VowFocusPickLimit]] = defaultdict(list)
+    for limit in VowFocusPickLimit.objects.filter(pick_id__in=pick_ids) if pick_ids else ():
+        limits[limit.pick_id].append(limit)
+    totals: dict[tuple[int, int], int] = defaultdict(int)
+    for choice in choices:
+        key = (choice.character_role_id, choice.pick.pick_level)
+        totals[key] += price_for(choice.pick.value, limits[choice.pick_id])
+    return dict(totals)
 
 
 def chosen_pick_ids_by_holder(holder_ids: Iterable[int]) -> dict[int, set[int]]:
