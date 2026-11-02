@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -238,7 +238,12 @@ describe('ImbuePanel', () => {
   it('leads to the sheet to choose picks when the imbue opened a vow pick level', () => {
     const message = 'You complete the rite, imbuing Quicksilver.\nVow level 2: 4 pts of new picks.';
     const mockMutate = vi.fn((_vars, options: { onSuccess: (result: unknown) => void }) =>
-      options.onSuccess({ success: true, message, opened_pick_levels: [2] })
+      options.onSuccess({
+        success: true,
+        message,
+        opened_pick_levels: [2],
+        new_picks: [{ level: 2, points: 4 }],
+      })
     );
     vi.mocked(magicQueries.useImbueThread).mockReturnValue(
       makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
@@ -256,7 +261,12 @@ describe('ImbuePanel', () => {
 
     fireEvent.click(screen.getByTestId('imbue-button'));
 
-    expect(screen.getByText(/Vow level 2: 4 pts of new picks\./)).toBeInTheDocument();
+    const row = screen.getByTestId('imbue-new-picks');
+    expect(row).toHaveTextContent('Vow level 2: 4 pts of new picks');
+    expect(within(row).getByText('4 pts').tagName).toBe('B');
+    // The message's own new-picks line is drawn once, in the row, not again above it.
+    expect(screen.getAllByText(/Vow level 2/)).toHaveLength(1);
+    expect(screen.getByText('You complete the rite, imbuing Quicksilver.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Choose picks' })).toHaveAttribute(
       'href',
       '/characters/42?section=ties'
@@ -279,5 +289,30 @@ describe('ImbuePanel', () => {
     fireEvent.click(screen.getByTestId('imbue-button'));
 
     expect(screen.queryByRole('link', { name: 'Choose picks' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'a climb from shown 1 to 2',
+      { levels_gained: 10, new_level: 20 },
+      '1 level gained, now level 2',
+    ],
+    ['an imbue within shown level 1', { levels_gained: 3, new_level: 15 }, 'Now level 1'],
+  ])('reads shown levels for %s', (_case, stored, expected) => {
+    const mockMutate = vi.fn((_vars, options: { onSuccess: (result: unknown) => void }) =>
+      options.onSuccess({ success: true, blocked_by: 'NONE', ...stored })
+    );
+    vi.mocked(magicQueries.useImbueThread).mockReturnValue(
+      makeMutation({ mutate: mockMutate }) as unknown as ReturnType<
+        typeof magicQueries.useImbueThread
+      >
+    );
+    render(<ImbuePanel thread={makeThread()} balance={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    fireEvent.click(screen.getByTestId('imbue-button'));
+
+    expect(screen.getByTestId('imbue-levels-gained')).toHaveTextContent(expected);
   });
 });

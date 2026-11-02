@@ -164,11 +164,11 @@ class PerformRitualAction(Action):
         result_line = _service_result_line(result)
         if result_line:
             msg = f"{msg} {result_line}"
-        opened = _picks_opened(sheet, kwargs.get("thread"), result)
-        if opened:
-            from world.covenants.focus_picks import new_picks_lines  # noqa: PLC0415
+        from world.covenants.focus_picks import new_picks  # noqa: PLC0415
 
-            msg = "\n".join([msg, *new_picks_lines(opened)])
+        opened = new_picks(_picks_opened(sheet, kwargs.get("thread"), result))
+        if opened:
+            msg = "\n".join([msg, *(row.line for row in opened)])
         return ActionResult(
             success=True,
             message=msg,
@@ -176,7 +176,8 @@ class PerformRitualAction(Action):
                 "execution_kind": ritual.execution_kind,
                 "result": result,
                 "spectacular": bool(pool_gate is not None and pool_gate.spectacular),
-                "opened_pick_levels": opened,
+                "opened_pick_levels": [row.level for row in opened],
+                "new_picks": opened,
             },
         )
 

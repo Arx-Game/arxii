@@ -45,7 +45,7 @@ from world.covenants.models import (
     VowFocusPickConfig,
     VowFocusPickLimit,
 )
-from world.covenants.types import VowPickCatalog, VowPickEntry, VowPickLevel
+from world.covenants.types import NewPicks, VowPickCatalog, VowPickEntry, VowPickLevel
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -541,11 +541,15 @@ def opened_pick_levels(before: int, after: int) -> list[int]:
     return list(range(before + 1, min(after, VOW_FOCUS_PICK_MAX_LEVEL) + 1))
 
 
+def new_picks(levels: Iterable[int]) -> list[NewPicks]:
+    """Each opened pick level with the points it gives: the budget per level."""
+    budget = focus_pick_budget()
+    return [NewPicks(level=level, points=budget) for level in levels]
+
+
 def new_picks_lines(levels: Iterable[int]) -> list[str]:
     """One "Vow level 2: 4 pts of new picks." line per opened pick level."""
-    budget = focus_pick_budget()
-    unit = "pt" if budget == 1 else "pts"
-    return [f"Vow level {level}: {budget} {unit} of new picks." for level in levels]
+    return [opened.line for opened in new_picks(levels)]
 
 
 def picks_opened_by_imbuing(

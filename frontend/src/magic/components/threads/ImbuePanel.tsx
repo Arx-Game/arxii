@@ -2,7 +2,8 @@
  * ImbuePanel — spend resonance to advance a Thread.
  *
  * Shows a stepper for `amount` (0..balance). Amount=0 is valid (probes blocked_by).
- * On success, displays an inline summary of levels_gained, new_level, and blocked_by.
+ * On success, displays the shown levels climbed and the shown level (threads are stored
+ * x10), and blocked_by.
  * On error, shows the typed user_message inline. When the imbue opened new vow pick
  * levels (#4929), "Choose picks" leads to the character's sheet, where they are chosen.
  */
@@ -22,20 +23,29 @@ interface ImbuePanelProps {
   onResult?: (result: ImbueResponse) => void;
 }
 
-/** The result's lines; a vow's new-picks lines ("Vow level 2: 4 pts of new picks.") end it. */
-function messageLines(result: ImbueResponse): string[] {
-  return (result.message ?? '').split('\n').filter(Boolean);
-}
-
-function newPicksLines(result: ImbueResponse): string[] {
-  const count = result.opened_pick_levels?.length ?? 0;
-  return count > 0 ? messageLines(result).slice(-count) : [];
-}
-
+/**
+ * The rite's own lines. The message ends with a vow's new-picks lines (telnet reads them
+ * there); the web draws those from `new_picks` instead, with the points in bold.
+ */
 function riteLines(result: ImbueResponse): string[] {
-  const count = result.opened_pick_levels?.length ?? 0;
-  const lines = messageLines(result);
+  const count = result.new_picks?.length ?? 0;
+  const lines = (result.message ?? '').split('\n').filter(Boolean);
   return count > 0 ? lines.slice(0, -count) : lines;
+}
+
+function pointsLabel(points: number): string {
+  return `${points} ${points === 1 ? 'pt' : 'pts'}`;
+}
+
+/**
+ * The shown level and how many shown levels the imbue climbed. Threads are stored x10
+ * (#4585), so `levels_gained` and `new_level` are never the numbers a player reads.
+ */
+function shownClimb(result: ImbueResponse): { level: number; gained: number } | null {
+  if (result.new_level === undefined) return null;
+  const level = Math.floor(result.new_level / 10);
+  const before = Math.floor((result.new_level - (result.levels_gained ?? 0)) / 10);
+  return { level, gained: level - before };
 }
 
 /** The sheet's Ties section, where the vow's picks are chosen. */
@@ -55,6 +65,7 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
   const [lastResult, setLastResult] = useState<ImbueResponse | null>(null);
 
   const { mutate, isPending, error, isError } = useImbueThread();
+  const climb = lastResult ? shownClimb(lastResult) : null;
 
   const handleDecrement = () => setAmount((a) => Math.max(0, a - 1));
   const handleIncrement = () => setAmount((a) => Math.min(balance, a + 1));
@@ -132,28 +143,32 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
               {riteLines(lastResult).join('\n')}
             </p>
           )}
-          {newPicksLines(lastResult).length > 0 && (
+          {(lastResult.new_picks?.length ?? 0) > 0 && (
             <div
               className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary py-1 pl-3"
               data-testid="imbue-new-picks"
             >
-              <span className="whitespace-pre-line">{newPicksLines(lastResult).join('\n')}</span>
+              <span className="flex flex-col">
+                {lastResult.new_picks?.map((opened) => (
+                  <span key={opened.level}>
+                    Vow level {opened.level}: <b>{pointsLabel(opened.points)}</b> of new picks
+                  </span>
+                ))}
+              </span>
               <ChoosePicksLink characterSheetId={characterSheetId} />
             </div>
           )}
-          {lastResult.levels_gained !== undefined && (
+          {climb && (
             <p data-testid="imbue-levels-gained">
-              <span className="font-medium">{lastResult.levels_gained}</span>{' '}
-              {lastResult.levels_gained === 1 ? 'level' : 'levels'} gained
-              {lastResult.new_level !== undefined && (
+              {climb.gained > 0 ? (
                 <>
-                  {' '}
-                  &mdash; now level{' '}
-                  <span className="font-medium tabular-nums">
-                    {(lastResult.new_level / 10).toFixed(0)}
-                  </span>
+                  <span className="font-medium">{climb.gained}</span>{' '}
+                  {climb.gained === 1 ? 'level' : 'levels'} gained, now level{' '}
                 </>
+              ) : (
+                'Now level '
               )}
+              <span className="font-medium tabular-nums">{climb.level}</span>
             </p>
           )}
           {lastResult.blocked_by && lastResult.blocked_by !== 'NONE' && (

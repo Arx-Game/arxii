@@ -54,6 +54,22 @@ class FiredVowEffect:
 
 
 @dataclass(frozen=True)
+class NewPicks:
+    """A pick level an imbue or a joining opened, and the points it gives (#4929).
+
+    The web draws it as "Vow level 2: **4 pts** of new picks."; telnet reads ``line``.
+    """
+
+    level: int
+    points: int
+
+    @property
+    def line(self) -> str:
+        unit = "pt" if self.points == 1 else "pts"
+        return f"Vow level {self.level}: {self.points} {unit} of new picks."
+
+
+@dataclass(frozen=True)
 class VowPickEntry:
     """One focus pick as its vow holder sees it in the pick catalog (#4929).
 

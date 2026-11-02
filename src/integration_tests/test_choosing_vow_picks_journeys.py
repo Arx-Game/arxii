@@ -367,7 +367,20 @@ class ImbuingOpensNewPicks(_ImbuingCase):
 
         thread.refresh_from_db()
         self.assertEqual(thread.level, 20)
+        # The shown level (stored 20 shows 2), never the stored climb of 10.
+        self.assertIn(f"{thread.name} is now level 2.", told)
         self.assertIn("Vow level 2: 4 pts of new picks.", told)
+
+    def test_an_imbue_within_a_level_names_no_new_level(self) -> None:
+        thread = self.vow_thread(1)
+
+        told = self.imbue_by_telnet(thread, self.ready(thread, 10, 15))
+
+        thread.refresh_from_db()
+        self.assertEqual(thread.level, 15)
+        self.assertIn(f"You complete the rite, imbuing {thread.name}.", told)
+        self.assertNotIn("is now level", told)
+        self.assertNotIn("new picks", told)
 
     def test_the_web_finisher_says_so_and_names_the_level(self) -> None:
         thread = self.vow_thread(1)
@@ -385,7 +398,9 @@ class ImbuingOpensNewPicks(_ImbuingCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
+        self.assertIn(f"{thread.name} is now level 2.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [2])
+        self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
 
     def test_a_service_imbuing_rite_says_so_on_telnet_and_the_web(self) -> None:
         """A staff-authored SERVICE variant of the rite carries the same line on both."""
@@ -409,6 +424,7 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [2])
+        self.assertEqual(response.json()["new_picks"], [{"level": 2, "points": 4}])
 
         told = self.telnet(
             self.ysmay,

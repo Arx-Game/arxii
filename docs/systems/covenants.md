@@ -1348,9 +1348,12 @@ All in `world.covenants.focus_picks`:
   `PerformRitualAction` for a staff-authored SERVICE imbuing rite (which therefore says the
   same lines on telnet and the web; `spend_resonance_for_imbuing` now absorbs the `ritual=`
   the dispatch forwards, without which every SERVICE imbuing rite raised). The web finisher
-  and the SERVICE branch return the levels as `opened_pick_levels`, and the Imbue panel
-  shows the lines in their own row with "Choose picks" to the sheet's Ties section
-  (`?section=ties`). `announce_open_vow_picks` is called by `add_member`,
+  and the SERVICE branch return the levels as `opened_pick_levels` and as `new_picks`
+  (`NewPicks`: level and points, whose `line` is the telnet text), and the Imbue panel
+  draws them in their own row, the points in bold, with "Choose picks" to the sheet's Ties
+  section (`?section=ties`). The rite's line names a climb in shown levels ("Quicksilver
+  is now level 2."), as does the panel's summary: threads are stored x10, so
+  `ThreadImbueResult.levels_gained` and `new_level` are never the numbers a player reads. `announce_open_vow_picks` is called by `add_member`,
   `assign_covenant_role`, `change_role` and the founders of `create_covenant`: a member
   whose vow thread already stands at a level is sent the same lines as a COVENANT narrative
   message once the joining commits (`transaction.on_commit`, so a rite rolled back tells

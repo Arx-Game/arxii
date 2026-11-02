@@ -160,6 +160,8 @@ export interface ImbueResponse {
   blocked_by?: string;
   /** Vow pick levels this imbue of a vow thread opened (#4929); empty for any other. */
   opened_pick_levels?: number[];
+  /** Each opened pick level and the points it gives, drawn "Vow level 2: **4 pts** of new picks". */
+  new_picks?: { level: number; points: number }[];
 }
 
 // ---------------------------------------------------------------------------

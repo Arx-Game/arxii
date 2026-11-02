@@ -1537,6 +1537,7 @@ class RitualPerformView(APIView):
                 "message": finisher_result.message,
                 # The vow's new focus pick levels (#4929), for the web's "Choose picks".
                 "opened_pick_levels": finisher_result.data.get("opened_pick_levels", []),
+                "new_picks": [asdict(row) for row in finisher_result.data.get("new_picks", [])],
             },
             status=status.HTTP_200_OK,
         )
@@ -1605,6 +1606,9 @@ class RitualPerformView(APIView):
                 # A staff-authored SERVICE imbuing rite's new vow pick levels (#4929); the
                 # action's line already says them, as the canonical finisher's does.
                 payload["opened_pick_levels"] = action_result.data.get("opened_pick_levels", [])
+                payload["new_picks"] = [
+                    asdict(row) for row in action_result.data.get("new_picks", [])
+                ]
             payload["result"] = (
                 asdict(result, dict_factory=_model_ref_dict)
                 if dataclasses.is_dataclass(result)
