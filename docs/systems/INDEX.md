@@ -8021,7 +8021,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     Covenants never dissolve from attrition (#2992, ADR-0042 amendment — the covenant
     persists at any active-member count, including zero); `kick_member` raises
     `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
-  - `is_gear_compatible(character, role, archetype) -> bool` (#4975, through the combat style)
+  - `style_gear_reach(character).allows(role, archetype) -> bool` (`world.covenants.style_fit`,
+    #4975, through the combat style)
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`)
   - **Rank management** — all require `actor.rank.can_manage_ranks=True`:

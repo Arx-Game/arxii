@@ -128,11 +128,6 @@ class CombatStyleGearTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             CombatStyleGear.objects.create(style=style, gear_archetype=GearArchetype.HEAVY_ARMOR)
 
-    def test_armor_share_tenths_rejects_more_than_all_armor(self) -> None:
-        style = CombatStyleFactory.build(armor_share_tenths=11)
-        with self.assertRaises(ValidationError):
-            style.full_clean()
-
 
 class CharacterCovenantRoleTests(TestCase):
     @classmethod

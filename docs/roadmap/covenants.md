@@ -288,8 +288,9 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     - `clear_engaged_membership(*, membership)` — idempotent un-engage.
     - `clear_engaged_for_type(*, character_sheet, covenant_type)` —
       bulk un-engage by type.
-  - `is_gear_compatible(character, role, archetype)` (#4975) — reads the character's combat
-    style (clothing and jewelry always; weapon and armor kinds need the style's kind and vow).
+  - `style_gear_reach(character).allows(role, archetype)` (`world.covenants.style_fit`, #4975)
+    — reads the character's combat style (clothing and jewelry always; weapon and armor kinds
+    need the style's kind and vow).
   - **Rank ladder (#1027):** all require `actor.rank.can_manage_ranks=True`;
     raise `NotAuthorizedToManageRanksError` otherwise. The lock-out invariant
     (`_assert_keeps_a_manager`) is applied atomically inside each operation.
@@ -437,7 +438,7 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
 
 - **Items** (`world.items`):
   - `GearArchetype` enum lives in `world.items.constants`; `CombatStyleGear` keys on it (#4975).
-  - `is_gear_compatible()` is the gate consulted by the gear×role math.
+  - `StyleGearReach.allows()` is the gate consulted by the gear×role math.
 
 - **Combat** (`world.combat`):
   - `CombatParticipant.covenant_role` FK → `CovenantRole`.
@@ -974,7 +975,7 @@ until slices 2 to 7. What was built:
   <n>" and listing every role in the group; kinds a style cannot hold are skipped and counted
   in its output. `0366` (schema) dropped the tables. Staff fill the placeholders out.
 - A character's defense style and armor share come from their `CombatStyle` only
-  (`defense_style_for`; no style: no defense style, all armor counts). `is_gear_compatible`
+  (`defense_style_for`; no style: no defense style, all armor counts). `style_gear_reach`
   takes the character: clothing, jewelry and other kinds always fit, a weapon or armor kind
   fits when the style lists the kind and the held vow. See ADR-4975.
 - Not built: a cap on how much mitigation worn sources give per style (additive-source

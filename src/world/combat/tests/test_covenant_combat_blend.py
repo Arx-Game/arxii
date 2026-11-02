@@ -10,7 +10,7 @@ Four test classes:
 
 Design notes on the blend (#1174):
   - apply_equipped_armor_soak splits worn armor into compatible vs incompatible buckets via
-    _split_armor_soak_by_compatibility (one bucket per ``is_gear_compatible`` test, which
+    _split_armor_soak_by_compatibility (one bucket per ``StyleGearReach.allows`` test, which
     reads the character's combat style).
   - The resonant pool (_resonant_armor_soak) = eager CharacterModifier total +
     equipment_walk_total_unblended(sheet, armor_soak_target); the latter sums facet + mantle +

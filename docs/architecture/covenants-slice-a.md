@@ -8,10 +8,9 @@ state of the codebase after Slice A landed. Subsequent slices extended the schem
 Authority Axes" for the full two-axis model. `CovenantRole.is_leadership` was
 removed by #1027 and no longer exists.
 > **Superseded in part by #4975 (slice 3 of #4844, ADR-4975).** `GearArchetypeCompatibility`
-> and the `is_gear_compatible(role, archetype)` signature below no longer exist: gear
+> and the `is_gear_compatible(role, archetype)` function below no longer exist: gear
 > compatibility is read from the character's combat style
-> (`world.covenants.style_fit.style_gear_reach`, `is_gear_compatible(character, role,
-> archetype)`). The rest of this document stands as the Slice A record.
+> (`world.covenants.style_fit.style_gear_reach(character).allows(role, archetype)`). The rest of this document stands as the Slice A record.
 
 **Branch:** TBD (e.g. `covenants-slice-a-entity`)
 **Related:**
@@ -148,7 +147,7 @@ This is a runtime context concept distinct from membership, and it is **scoped p
 | Surface | Slice A change | Engagement check |
 |---|---|---|
 | Modifier pipeline (`covenant_role_bonus` in `world/mechanics/services.py:310`) | Refactored to iterate `currently_engaged_roles()` and SUM bonuses across engaged roles (additive stacking) | Iterates engaged-flagged rows |
-| Gear compatibility (`is_gear_compatible(role, archetype)`) | Function signature unchanged; callers iterate engaged roles when they need stacking | Caller-driven |
+| Gear compatibility (`is_gear_compatible(role, archetype)`, since replaced by `StyleGearReach.allows`) | Function signature unchanged; callers iterate engaged roles when they need stacking | Caller-driven |
 | Combat speed_rank | Already encounter-scoped via `CombatParticipant.covenant_role` (set when joining combat); no change needed. Slice E decides combat-side precedence between Durance and Battle for war contexts | Already explicit |
 | Thread pull eligibility (`_anchor_in_action` in `world/magic/services/resonance.py:282`) | Remove COVENANT_ROLE from `_ALWAYS_IN_ACTION_KINDS`; add explicit engagement check arm — pull allowed if **any** engaged membership row matches the Thread's anchored role | Explicit (new arm; ANY-match) |
 | Thread anchor cap (`compute_anchor_cap` COVENANT_ROLE arm) | **No change** — Thread caps are persistent character properties, not active bonuses; max-across-covenants per §3.5 | None |

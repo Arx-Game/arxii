@@ -1060,20 +1060,6 @@ def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole 
     return engaged[0]
 
 
-def is_gear_compatible(character: Character, role: CovenantRole, archetype: str) -> bool:
-    """Whether ``role``'s bonuses add to ``character``'s gear of this kind (#4975).
-
-    Clothing, jewelry and other kinds are always compatible (owner ruling, 2026-11-02).
-    A weapon or armor kind is compatible only when the character's combat style fights
-    with that kind and lists the vow (a sub-role counts by its anchor); with no style it
-    is not. One call reads the style's kinds and vows; a caller checking many pieces
-    builds ``world.covenants.style_fit.style_gear_reach`` once and asks ``allows``.
-    """
-    from world.covenants.style_fit import style_gear_reach  # noqa: PLC0415
-
-    return style_gear_reach(character).allows(role, archetype)
-
-
 @transaction.atomic
 def create_covenant_via_session(*, session: RitualSession) -> Covenant:
     """Dispatched on FORMATION fire. Unpacks the session into create_covenant args.

@@ -77,11 +77,13 @@ def _split_armor_soak_by_compatibility(
         if hasattr(character, "covenant_roles")
         else []
     )
-    reach = style_gear_reach(character) if engaged_roles else None
+    pieces = list(_equipped_armor_soak_pieces(character))
+    # The reach costs queries: build it only when there is armor to test and a vow to test with.
+    reach = style_gear_reach(character) if engaged_roles and pieces else None
     compat_soak = incompat_soak = 0
     compat_pieces: list[ItemInstance] = []
     incompat_pieces: list[ItemInstance] = []
-    for inst, soak in _equipped_armor_soak_pieces(character):
+    for inst, soak in pieces:
         archetype = inst.template.gear_archetype
         if reach is not None and any(reach.allows(role, archetype) for role in engaged_roles):
             compat_soak += soak

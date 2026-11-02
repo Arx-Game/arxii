@@ -1068,10 +1068,13 @@ def covenant_role_bonus(
     if not engaged_roles:
         return 0
 
-    character_level = level_override if level_override is not None else sheet.current_level
+    counted = _role_bonus_gear(char.equipped_items, target)
+    if not counted:
+        return 0
+
     from world.covenants.style_fit import style_gear_reach  # noqa: PLC0415
 
-    counted = _role_bonus_gear(char.equipped_items, target)
+    character_level = level_override if level_override is not None else sheet.current_level
     reach = style_gear_reach(char)
     total = 0
     for role in engaged_roles:

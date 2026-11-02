@@ -3833,7 +3833,6 @@
 - `get_court_grant_config() -> 'CourtGrantConfig' - Get-or-create the Court grant negotiation config singleton (pk=1).`
 - `get_mentor_bond_config() -> 'MentorBondConfig' - Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' - Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
-- `is_gear_compatible(character: 'Character', role: 'CovenantRole', archetype: 'str') -> 'bool' - Whether ``role``'s bonuses add to ``character``'s gear of this kind (#4975).`
 - `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' - Remove a member by rank authority. Soft-ends the target. Covenants never`
 - `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' - A member voluntarily leaves a covenant. Soft-ends the membership. Covenants`
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' - Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`

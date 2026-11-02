@@ -1335,7 +1335,7 @@ class CombatStyleGearContentExportTests(TestCase):
         self.root = Path(self.tmp.name)
 
     def test_combat_style_gear_round_trip(self) -> None:
-        from world.covenants.factories import CombatStyleFactory
+        from world.covenants.factories import CombatStyleFactory, CovenantRoleFactory
         from world.covenants.models import CombatStyleGear
         from world.items.constants import GearArchetype
 
@@ -1344,6 +1344,8 @@ class CombatStyleGearContentExportTests(TestCase):
             style=style,
             gear_archetype=GearArchetype.HEAVY_ARMOR,
         )
+        listed_role = CovenantRoleFactory(slug="round-trip-listed-vow")
+        style.compatible_roles.add(listed_role)
 
         result = export_to_content_repo(self.root)
         assert result.errors == []
@@ -1372,6 +1374,16 @@ class CombatStyleGearContentExportTests(TestCase):
         gear.refresh_from_db()
         assert gear.style_id == style.pk
         assert gear.gear_archetype == GearArchetype.HEAVY_ARMOR
+        # The style's listed vows are exported on its own record, by the role's natural key,
+        # and survive the round trip.
+        style_path = self.root / "fixtures" / "covenants" / "combatstyle.json"
+        style_records = json.loads(style_path.read_text(encoding="utf-8"))
+        assert [r["fields"]["compatible_roles"] for r in style_records] == [
+            [["round-trip-listed-vow"]]
+        ]
+        # The style's listed vows ride its own record and survive the round trip.
+        style.refresh_from_db()
+        assert list(style.compatible_roles.all()) == [listed_role]
 
 
 class ExportAdditionGateTests(TestCase):

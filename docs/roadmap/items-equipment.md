@@ -60,7 +60,7 @@ What shipped:
 - **Covenant gear compatibility** — `GearArchetypeCompatibility` model (dropped by #4975:
   compatibility is now read from the character's combat style, ADR-4975),
   `CharacterCovenantRole`, `CharacterCovenantRoleHandler`, `assign_covenant_role`,
-  `end_covenant_role`, `is_gear_compatible` services; read-only API at
+  `end_covenant_role` services; read-only API at
   `/api/covenants/gear-compatibilities/` (removed in #4975) and `/api/covenants/character-roles/`
 - **FACET + COVENANT_ROLE `TargetKind` values** on `Thread`, with typed FKs
   `target_facet` and `target_covenant_role`; anchor cap formulas in

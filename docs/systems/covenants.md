@@ -546,7 +546,8 @@ ADR-0213 for the rationale.
   and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
   `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`.
   Same no-attrition-dissolve rule as `leave_covenant` (#2992, ADR-0042 amendment).
-- `is_gear_compatible(character, role, archetype) -> bool` (#4975) — whether the role's
+- `style_gear_reach(character).allows(role, archetype) -> bool` (`world.covenants.style_fit`,
+  #4975) — whether the role's
   bonuses add to the character's gear of this kind, read from their combat style (clothing,
   jewelry and other kinds always; a weapon or armor kind when the style lists the kind and
   the vow). See "Defense styles + gear compatibility through the combat style" below.
@@ -1562,8 +1563,10 @@ without) and answers `StyleGearReach.allows(role, archetype)` per piece. A kind 
 and other kinds fit every style and vow (owner ruling 2026-11-02, no style can forbid
 them). A weapon or armor kind is compatible only when the style lists the kind AND lists
 the held vow in `compatible_roles` (a sub-role counts by its anchor); with no style none is.
-`is_gear_compatible(character, role, archetype)` (`world.covenants.services`) is the
-one-shot form; `covenant_role_bonus` and the armor split build the reach once per walk.
+`style_gear_reach(character)` (`world.covenants.style_fit`) builds the reach (two queries
+for a styled character, none without a style) and `StyleGearReach.allows(role, archetype)`
+answers per piece; `covenant_role_bonus` and the armor split build it once per walk, and only
+when something is worn.
 
 `apply_equipped_armor_soak` (`world.combat.services`, #1174) splits worn armor into the
 compatible and incompatible buckets through that reach (PRIMARY vows only, #2641), then

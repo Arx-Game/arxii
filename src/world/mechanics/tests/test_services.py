@@ -699,7 +699,7 @@ class CovenantRoleBonusTests(TestCase):
         EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
-        # Style fights with the kind and lists the vow, so is_gear_compatible is True
+        # Style fights with the kind and lists the vow, so the style reach allows it
         give_combat_style(
             sheet, roles=[assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
