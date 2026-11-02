@@ -4,10 +4,13 @@
  *
  * Three modes. Select: a click on a footprint opens its panel (name, tier,
  * holder, the link to its Almanach page); a drag pans. Carve: pick a rung from
- * the realm's ladder (or plant one, the way the Almanach does) and drag pips
- * into its footprint; shift-drag takes them out. Paint: drag pips to a terrain.
- * Every write dispatches a registry action through `useWorldBuilderAction`;
- * the upload is the one multipart endpoint. Alt-drag pans in any mode.
+ * the realm's ladder (or plant one, the way the Almanach does) and give it pips
+ * with one of three tools (#4905): Brush drags a square of pips (shift takes them
+ * out), Fill floods a landmass from a click, Loop fills the land inside a drawn
+ * line. Paint: brush pips to a terrain. Every write dispatches a registry action
+ * through `useWorldBuilderAction`; the upload is the one multipart endpoint.
+ * Alt-drag pans in any mode. Only the domain being carved draws an outline;
+ * neighbours are shading.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -32,6 +35,7 @@ import {
   zoomAround,
   type LatticeView,
 } from './latticeState';
+import { EMPTY_HISTORY, type CarveHistory } from './carveHistory';
 import {
   PIP_PX,
   TERRAIN_COLORS,
@@ -41,9 +45,12 @@ import {
   pipKey,
   regionBounds,
 } from './regionMapCanvas';
+import { BRUSH_WIDTHS, brushPips, type BrushWidth, type Pip } from './regionMapFill';
 
 type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
+type CarveTool = 'brush' | 'fill' | 'loop';
+const TOOL_LABELS: Record<CarveTool, string> = { brush: 'Brush', fill: 'Fill', loop: 'Loop' };
 
 const WHEEL_ZOOM_RATE = 0.0015;
 
@@ -76,6 +83,9 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const [realmId, setRealmId] = useState<number | null>(null);
   const [carveTitleId, setCarveTitleId] = useState<number | null>(null);
   const [paintTerrain, setPaintTerrain] = useState<string>('plain');
+  const [tool, setTool] = useState<CarveTool>('brush');
+  const [brushWidth, setBrushWidth] = useState<BrushWidth>(1);
+  const [history] = useState<CarveHistory>(EMPTY_HISTORY);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [pendingRemove, setPendingRemove] = useState(false);
   const [plantOpen, setPlantOpen] = useState(false);
@@ -120,6 +130,12 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const bounds = data ? regionBounds(data.region) : null;
   const canvasW = bounds ? bounds.width * PIP_PX : 0;
   const canvasH = bounds ? bounds.height * PIP_PX : 0;
+  const insideRegion = ([x, y]: Pip) =>
+    bounds != null &&
+    x >= bounds.x0 &&
+    y >= bounds.y0 &&
+    x < bounds.x0 + bounds.width &&
+    y < bounds.y0 + bounds.height;
 
   // A region never looked at before opens fitted to the viewport; a remembered view stays.
   const fittedRef = useRef<number | null>(null);
@@ -145,15 +161,6 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     setView((prev) => zoomAround(prev, factor, cx, cy));
   };
 
-  // ---- drawing ----
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !data) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    drawRegionMap(ctx, data, { pending, pendingRemove, selectedAreaId });
-  }, [data, pending, pendingRemove, selectedAreaId]);
-
   const selected: RegionMapFootprint | null = useMemo(
     () => data?.footprints.find((f) => f.area_id === selectedAreaId) ?? null,
     [data, selectedAreaId]
@@ -162,6 +169,24 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
   );
+  // The one footprint that draws an edge: the domain being carved, or the selected one.
+  const outlineAreaIds = useMemo(() => {
+    if (mode === 'carve') {
+      const target = data?.footprints.find((f) => f.title_id === carveTitleId);
+      return new Set(target ? [target.area_id] : []);
+    }
+    if (mode === 'select' && selectedAreaId != null) return new Set([selectedAreaId]);
+    return new Set<number>();
+  }, [carveTitleId, data, mode, selectedAreaId]);
+
+  // ---- drawing ----
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !data) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    drawRegionMap(ctx, data, { pending, pendingRemove, selectedAreaId, outlineAreaIds });
+  }, [data, outlineAreaIds, pending, pendingRemove, selectedAreaId]);
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
@@ -177,10 +202,12 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     const remove = event.shiftKey;
     let moved = false;
     const dragged = new Set<string>();
+    const brushing = mode === 'paint' || tool === 'brush';
     const addPip = (clientX: number, clientY: number) => {
       const pip = pipAt(data.region, view, rect, clientX, clientY);
       if (!pip) return;
-      dragged.add(pipKey(pip[0], pip[1]));
+      const pips = brushing ? brushPips(pip, brushWidth).filter(insideRegion) : [pip];
+      for (const [x, y] of pips) dragged.add(pipKey(x, y));
       setPending(new Set(dragged));
       setPendingRemove(remove);
     };
@@ -288,6 +315,21 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   }
   const { region } = data;
   const miles = region.width_cells * 100;
+  const brushWidthSelect = (
+    <select
+      className="h-8 rounded-md border bg-background px-2 text-sm"
+      value={brushWidth}
+      onChange={(event) => setBrushWidth(Number(event.target.value) as BrushWidth)}
+      aria-label="brush width"
+      data-testid="brush-width"
+    >
+      {BRUSH_WIDTHS.map((width) => (
+        <option key={width} value={width}>
+          {width}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <section className="flex h-full min-h-0 flex-col" data-testid="region-map-page">
@@ -337,19 +379,22 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           </Button>
         ))}
         {mode === 'paint' && (
-          <select
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            value={paintTerrain}
-            onChange={(event) => setPaintTerrain(event.target.value)}
-            aria-label="terrain"
-            data-testid="paint-terrain"
-          >
-            {data.terrains.map((terrain) => (
-              <option key={terrain} value={terrain}>
-                {terrain}
-              </option>
-            ))}
-          </select>
+          <>
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={paintTerrain}
+              onChange={(event) => setPaintTerrain(event.target.value)}
+              aria-label="terrain"
+              data-testid="paint-terrain"
+            >
+              {data.terrains.map((terrain) => (
+                <option key={terrain} value={terrain}>
+                  {terrain}
+                </option>
+              ))}
+            </select>
+            {brushWidthSelect}
+          </>
         )}
         {mode === 'carve' && (
           <>
@@ -396,6 +441,29 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
               onClick={() => setPlantOpen((open) => !open)}
             >
               Create domain
+            </Button>
+            <span className="mx-1 h-6 border-l" aria-hidden="true" />
+            {(['brush', 'fill', 'loop'] as const).map((t) => (
+              <Button
+                key={t}
+                type="button"
+                size="sm"
+                variant={tool === t ? 'default' : 'outline'}
+                aria-pressed={tool === t}
+                onClick={() => setTool(t)}
+              >
+                {TOOL_LABELS[t]}
+              </Button>
+            ))}
+            {tool === 'brush' && brushWidthSelect}
+            <Button type="button" size="sm" variant="ghost" disabled={history.undo.length === 0}>
+              Undo
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={history.redo.length === 0}>
+              Redo
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={carveTitleId == null}>
+              Clear
             </Button>
           </>
         )}

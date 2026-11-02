@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -7,6 +7,17 @@ import type { RegionMapPips } from '../../types';
 import { RegionMapPage } from '../RegionMapPage';
 
 const mutateAsync = vi.fn();
+
+// jsdom has no PointerEvent, so pointer events carry no clientX/clientY without this.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+    }
+  }
+  // @ts-expect-error jsdom doesn't implement PointerEvent
+  window.PointerEvent = PointerEventPolyfill;
+}
 
 vi.mock('../../queries', () => ({
   useRegionMapPipsQuery: vi.fn(),
@@ -86,6 +97,8 @@ describe('RegionMapPage', () => {
     // jsdom has no 2D context; the page guards for null and draws nothing here.
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     mutateAsync.mockReset();
+    mutateAsync.mockResolvedValue({ success: true, message: '', data: { changed: [] } });
+    window.localStorage.clear();
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
       data: payload,
       isLoading: false,
@@ -120,6 +133,43 @@ describe('RegionMapPage', () => {
     expect(screen.getByTestId('carve-domain')).toHaveValue('100');
     await user.click(screen.getByRole('button', { name: 'Create domain' }));
     expect(screen.getByTestId('plant-form')).toHaveTextContent('under Salvation');
+  });
+
+  it('offers brush, fill and loop in carve mode, brush first, with nothing to undo', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    expect(screen.queryByRole('button', { name: 'Fill' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    expect(screen.getByRole('button', { name: 'Brush' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Fill' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('brush-width')).toHaveValue('1');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Fill' }));
+    expect(screen.queryByTestId('brush-width')).not.toBeInTheDocument();
+  });
+
+  it('paints a brush square of the chosen width into the domain', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+    await user.selectOptions(screen.getByTestId('brush-width'), '3');
+    const viewport = screen.getByTestId('region-map-viewport');
+    // zoom 1, no pan, a zero rect: a pip is 6px, so (33, 33) is pip (5, 5)
+    fireEvent.pointerDown(viewport, { clientX: 33, clientY: 33, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 33, clientY: 33 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const { key, kwargs } = mutateAsync.mock.calls[0][0];
+    expect(key).toBe('atlas_carve_footprint');
+    expect(kwargs.title_id).toBe(100);
+    const add = kwargs.add as [number, number][];
+    expect(add).toHaveLength(9);
+    expect(add).toContainEqual([4, 4]);
+    expect(add).toContainEqual([6, 6]);
   });
 
   it('shows the loading and error states', () => {
