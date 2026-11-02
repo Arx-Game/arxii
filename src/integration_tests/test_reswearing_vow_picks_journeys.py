@@ -14,6 +14,7 @@ picks may cost no more than the budget.
 from __future__ import annotations
 
 from django.utils import timezone
+from evennia.objects.models import ObjectDB
 
 from integration_tests.harness import JourneyCase
 from web.admin.tuning.required_content import (
@@ -38,6 +39,7 @@ from world.covenants.models import CharacterVowFocusPick, VowFocusPick, VowFocus
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.items.services.materialize import materialize_item_game_object
+from world.magic.exceptions import HedgeInaccessibleError
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -147,7 +149,8 @@ class ReswearingBetweenFights(_ReswearCase):
         told = self.telnet(self.ysmay, "vow reswear quick recovery=Feint and Vanish")
 
         self.assertIn(
-            "You give up Quick Recovery and take Feint and Vanish. Level 1: 4 of 4. 3 AP spent.",
+            f"You perform {RITE}. You give up Quick Recovery and take Feint and Vanish. "
+            "Level 1: 4 of 4. 3 AP spent.",
             told,
         )
         self.assertEqual(self.chosen_names(), {"Strike from the Flank", "Feint and Vanish"})
@@ -171,6 +174,7 @@ class ReswearingBetweenFights(_ReswearCase):
         CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
         item = ItemInstanceFactory(template=token, holder_character_sheet=self.sheet)
         materialize_item_game_object(item, self.sheet)
+        item_pk, object_pk = item.pk, item.game_object_id
 
         options = self.options()
         self.assertEqual(options.status_code, 200, options.content)
@@ -190,8 +194,10 @@ class ReswearingBetweenFights(_ReswearCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(self.chosen_names(), {"Strike from the Flank", "Feint and Vanish"})
         self.assertEqual(CharacterAnima.objects.get(character=self.sheet).current, 6)
-        row = ItemInstance.objects.filter(pk=item.pk).values("destroyed_at", "quantity").first()
-        self.assertTrue(row is None or row["destroyed_at"] is not None or row["quantity"] <= 0)
+        # A token with no history is deleted outright, its game object with it.
+        self.assertFalse(ItemInstance.objects.filter(pk=item_pk).exists())
+        self.assertFalse(ObjectDB.objects.filter(pk=object_pk).exists())
+        self.assertNotIn(item_pk, [carried.pk for carried in self.ysmay.carried_items.all()])
 
 
 class ReswearingRefused(_ReswearCase):
@@ -293,6 +299,17 @@ class TheDialogsOptions(_ReswearCase):
         )
         told = self.telnet(self.ysmay, "vow reswear Quick Recovery=Feint and Vanish")
         self.assertIn(NO_RITE, told)
+
+
+class ANonMagicalHolder(_ReswearCase):
+    def test_a_rite_she_cannot_perform_is_not_offered(self) -> None:
+        hobb = self.make_player("Hobb", room=self.room)  # no aura: no magical profile
+        engage_vow_with_thread(hobb.sheet_data, self.vow, covenant=self.covenant, thread_level=1)
+
+        options = self.options(hobb).json()
+
+        self.assertIsNone(options["ritual_id"])
+        self.assertEqual(options["unavailable_reason"], HedgeInaccessibleError.user_message)
 
 
 class RequiredContentForTheRite(JourneyCase):

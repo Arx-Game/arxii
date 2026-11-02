@@ -171,8 +171,9 @@ class ReswearResult:
 class ReswearOptions:
     """What the sheet's Re-swearing dialog needs before it performs the rite (#4940).
 
-    ``ritual_id`` is null while staff have not authored the rite, and then
-    ``unavailable_reason`` says so. ``components`` names what the rite asks for;
+    ``ritual_id`` is null while staff have not authored the rite or the character cannot
+    perform it (no magical profile for a non-hedge rite), and ``unavailable_reason`` says
+    why. ``components`` names what the rite asks for;
     ``component_ids`` are the carried items that pay it, which the dialog sends with the
     perform (empty when the character carries too little, and the rite refuses with why).
     """

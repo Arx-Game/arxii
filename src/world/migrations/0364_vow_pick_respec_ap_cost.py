@@ -17,6 +17,7 @@ class Migration(migrations.Migration):
                 default=3,
                 help_text="Action points the Rite of Re-swearing takes from the weekly pool.",
                 validators=[django.core.validators.MinValueValidator(1)],
+                verbose_name="Respec AP cost",
             ),
         ),
     ]

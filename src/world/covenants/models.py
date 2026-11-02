@@ -1458,6 +1458,7 @@ class VowFocusPickConfig(SharedMemoryModel):
     respec_ap_cost = models.PositiveSmallIntegerField(
         default=VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT,
         validators=[MinValueValidator(1)],
+        verbose_name="Respec AP cost",
         help_text="Action points the Rite of Re-swearing takes from the weekly pool.",
     )
     updated_at = models.DateTimeField(auto_now=True)

@@ -864,21 +864,31 @@ def reswear_options(sheet: CharacterSheet) -> ReswearOptions:
     telnet offers everything carried; empty when they do not cover the rite.
     """
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.magic.exceptions import RitualComponentError  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        HedgeInaccessibleError,
+        RitualComponentError,
+    )
     from world.magic.services.ritual_components import (  # noqa: PLC0415
         resolve_ritual_components,
     )
+    from world.magic.services.ritual_pool import ritual_visible_to  # noqa: PLC0415
 
     config = VowFocusPickConfig.objects.cached_singleton() or VowFocusPickConfig()
     ritual = reswear_ritual()
+    # The perform's own visibility rule: a rite the character cannot perform is not offered.
+    reason = ""
     if ritual is None:
+        reason = NO_RESWEAR_RITE_MESSAGE
+    elif not ritual_visible_to(sheet, ritual):
+        reason = HedgeInaccessibleError.user_message
+    if ritual is None or reason:
         return ReswearOptions(
             ritual_id=None,
             ap_cost=config.respec_ap_cost,
             anima_cost=0,
             components=[],
             component_ids=[],
-            unavailable_reason=NO_RESWEAR_RITE_MESSAGE,
+            unavailable_reason=reason,
         )
     requirements = list(
         ritual.requirements.select_related("item_template", "min_touchstone_tier").order_by("pk")
