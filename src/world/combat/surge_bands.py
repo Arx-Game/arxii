@@ -57,6 +57,51 @@ def _condition_problems(
     return problems
 
 
+def _band_problems(
+    band: "SurgeDegreeBand",
+    feeding: set[int],
+    bare: "SurgeDegreeBand | None",
+    fed: "SurgeDegreeBand | None",
+    best: tuple["SurgeDegreeBand | None", "SurgeDegreeBand | None"],
+) -> list[str]:
+    """Compare a band with the best strictly lower outcomes."""
+    top_intensity, top_control = best
+    problems = _condition_problems(band, feeding, bare=bare, fed=fed)
+    if top_intensity is not None and band.intensity < top_intensity.intensity:
+        problems.append(
+            f"{_pair(band, top_intensity)}, so its intensity cannot be lower ({band.intensity})."
+        )
+    if top_control is not None and band.control_change < top_control.control_change:
+        problems.append(f"{_pair(band, top_control)}, so its control change cannot be lower.")
+    return problems
+
+
+BandBaseline = tuple[
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+]
+
+
+def _update_lower_bands(
+    tier: list["SurgeDegreeBand"], feeding: set[int], baseline: BandBaseline
+) -> BandBaseline:
+    """Carry the strongest values from this tier into comparisons with higher tiers."""
+    top_intensity, top_control, bare, fed = baseline
+    for band in tier:
+        feeds = band.condition_id in feeding
+        if top_intensity is None or band.intensity > top_intensity.intensity:
+            top_intensity = band
+        if top_control is None or band.control_change > top_control.control_change:
+            top_control = band
+        if bare is None and (band.condition_id is None or feeds):
+            bare = band
+        if fed is None and feeds:
+            fed = band
+    return top_intensity, top_control, bare, fed
+
+
 def validate_surge_bands(
     bands: Sequence["SurgeDegreeBand"],
     *,
@@ -88,26 +133,10 @@ def validate_surge_bands(
         tier = [band for band in ordered[index:] if band.outcome.success_level == level]
         index += len(tier)
         for band in tier:
-            problems.extend(_condition_problems(band, feeding, bare=bare, fed=fed))
-            if top_intensity is not None and band.intensity < top_intensity.intensity:
-                problems.append(
-                    f"{_pair(band, top_intensity)}, so its intensity cannot be lower "
-                    f"({band.intensity})."
-                )
-            if top_control is not None and band.control_change < top_control.control_change:
-                problems.append(
-                    f"{_pair(band, top_control)}, so its control change cannot be lower."
-                )
-        for band in tier:
-            feeds = band.condition_id in feeding
-            if top_intensity is None or band.intensity > top_intensity.intensity:
-                top_intensity = band
-            if top_control is None or band.control_change > top_control.control_change:
-                top_control = band
-            if bare is None and (band.condition_id is None or feeds):
-                bare = band
-            if fed is None and feeds:
-                fed = band
+            problems.extend(_band_problems(band, feeding, bare, fed, (top_intensity, top_control)))
+        top_intensity, top_control, bare, fed = _update_lower_bands(
+            tier, feeding, (top_intensity, top_control, bare, fed)
+        )
     return problems
 
 

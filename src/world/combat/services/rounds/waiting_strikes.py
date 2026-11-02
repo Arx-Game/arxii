@@ -250,6 +250,34 @@ def _fire_waiter(
     return False, None
 
 
+def _eligible_waiters(
+    encounter: CombatEncounter, mover: Combatant, reason: str, defenders: Iterable[Combatant]
+) -> Iterable[CombatRoundAction | CombatOpponentMove]:
+    """Yield eligible waiters in order, rechecking each after earlier strikes."""
+    defender_keys = {(type(d), d.pk) for d in defenders}
+
+    def defends(waiter: Combatant) -> bool:
+        return reason != WaitingStrikeReason.ATTACKING or (type(waiter), waiter.pk) in (
+            defender_keys
+        )
+
+    # PC waiting strikes answer only an NPC mover (a PC's strike is aimed at an opponent).
+    pc_rows = (
+        [a for a in _pc_waiters(encounter) if defends(a.participant)]
+        if isinstance(mover, CombatOpponent)
+        else []
+    )
+    npc_rows = [m for m in _npc_waiters(encounter) if defends(m.opponent)]
+    for waiter in [*pc_rows, *npc_rows]:
+        eligible = (
+            _pc_waiter_eligible(waiter, mover)
+            if isinstance(waiter, CombatRoundAction)
+            else _npc_waiter_eligible(waiter, mover)
+        )
+        if eligible:
+            yield waiter
+
+
 def fire_waiting_strikes(  # noqa: PLR0913 - the resolve loop's check seams ride along
     encounter: CombatEncounter,
     mover: Combatant,
@@ -276,29 +304,8 @@ def fire_waiting_strikes(  # noqa: PLR0913 - the resolve loop's check seams ride
     result = StrikeResult()
     if is_stopped(mover):
         return result
-    defender_keys = {(type(d), d.pk) for d in defenders}
-
-    def defends(waiter: Combatant) -> bool:
-        return reason != WaitingStrikeReason.ATTACKING or (type(waiter), waiter.pk) in (
-            defender_keys
-        )
-
-    # PC waiting strikes answer only an NPC mover (a PC's strike is aimed at an opponent).
-    pc_rows = (
-        [a for a in _pc_waiters(encounter) if defends(a.participant)]
-        if isinstance(mover, CombatOpponent)
-        else []
-    )
-    npc_rows = [m for m in _npc_waiters(encounter) if defends(m.opponent)]
     announced = False
-    for waiter in [*pc_rows, *npc_rows]:
-        eligible = (
-            _pc_waiter_eligible(waiter, mover)
-            if isinstance(waiter, CombatRoundAction)
-            else _npc_waiter_eligible(waiter, mover)
-        )
-        if not eligible:
-            continue
+    for waiter in _eligible_waiters(encounter, mover, reason, defenders):
         if before_fire is not None and not announced:
             before_fire()
         announced = True

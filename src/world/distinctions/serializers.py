@@ -164,6 +164,13 @@ class DistinctionListSerializer(serializers.ModelSerializer):
             {"text": f"Comes with {item_grant.item_template.name}"}
             for item_grant in obj.cached_item_grants
         )
+        result.extend(self._finalization_effects_summary(obj))
+        return result
+
+    @staticmethod
+    def _finalization_effects_summary(obj: Distinction) -> list[dict]:
+        """Describe grants applied when character creation is finalized."""
+        result = []
         # The finalize-time grants of #4852 (slice 6 of #4813), each a reverse one-to-one
         # the list viewset select_relates, so no extra query per row.
         prestige = obj.prestige_grant_or_none

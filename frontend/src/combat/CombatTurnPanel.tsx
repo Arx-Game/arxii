@@ -102,6 +102,60 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
 /** Enough rows for one round's rolls by one character (#4884). */
 const LAST_ROUND_PAGE_SIZE = 20;
 
+type ConsequenceOutcomes = NonNullable<ReturnType<typeof useConsequenceOutcomes>['data']>;
+
+/** Keep the most recent round (or the latest interaction for older records), oldest first. */
+function lastRoundOutcomes(outcomes: ConsequenceOutcomes | undefined): ConsequenceOutcomes {
+  const latest = outcomes?.[0];
+  if (!latest) return [];
+  return (outcomes ?? [])
+    .filter((row) =>
+      latest.combat_round != null
+        ? row.combat_round === latest.combat_round
+        : row === latest ||
+          (latest.combat_interaction_id != null &&
+            row.combat_interaction_id === latest.combat_interaction_id)
+    )
+    .reverse();
+}
+
+function AudereActiveStrip({ active, state }: { active: boolean; state: string | null }) {
+  if (!active) return null;
+  return (
+    <div
+      className="rounded-md border border-fuchsia-500/60 bg-fuchsia-500/10 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-800 dark:bg-fuchsia-950/40 dark:text-fuchsia-300"
+      data-testid="audere-active-strip"
+    >
+      {state === 'audere_majora' ? 'Audere Majora' : 'Audere'}
+    </div>
+  );
+}
+
+function StandoffCards({
+  encounter,
+  encounterId,
+  characterId,
+}: {
+  encounter: EncounterDetail;
+  encounterId: number;
+  characterId: number;
+}) {
+  return (
+    <>
+      {encounter.standoff ? (
+        <StandoffCard
+          standoff={encounter.standoff}
+          encounterId={encounterId}
+          characterId={characterId}
+        />
+      ) : null}
+      {encounter.standoff_summary ? (
+        <StandoffSummaryCard summary={encounter.standoff_summary} />
+      ) : null}
+    </>
+  );
+}
+
 export function CombatTurnPanel({
   encounterId,
   characterId,
@@ -132,18 +186,7 @@ export function CombatTurnPanel({
     page_size: LAST_ROUND_PAGE_SIZE,
   });
   const latestOutcome = consequenceOutcomes?.[0] ?? null;
-  const latestOutcomes =
-    latestOutcome === null
-      ? []
-      : (consequenceOutcomes ?? [])
-          .filter((row) =>
-            latestOutcome.combat_round != null
-              ? row.combat_round === latestOutcome.combat_round
-              : row === latestOutcome ||
-                (latestOutcome.combat_interaction_id != null &&
-                  row.combat_interaction_id === latestOutcome.combat_interaction_id)
-          )
-          .reverse();
+  const latestOutcomes = lastRoundOutcomes(consequenceOutcomes);
 
   // Collapse state — all sections start expanded.
   const [collapsed, setCollapsed] = useState<Record<SectionName, boolean>>(DEFAULT_COLLAPSE_STATE);
@@ -288,14 +331,7 @@ export function CombatTurnPanel({
       />
 
       {/* Active-Audere strip: visible while either Audere ceremony runs. */}
-      {isCeremonyActive ? (
-        <div
-          className="rounded-md border border-fuchsia-500/60 bg-fuchsia-500/10 px-3 py-1.5 text-center text-xs font-bold uppercase tracking-[0.3em] text-fuchsia-800 dark:bg-fuchsia-950/40 dark:text-fuchsia-300"
-          data-testid="audere-active-strip"
-        >
-          {audereState === 'audere_majora' ? 'Audere Majora' : 'Audere'}
-        </div>
-      ) : null}
+      <AudereActiveStrip active={isCeremonyActive} state={audereState} />
 
       {/* Duel: lethal-risk acknowledgement banner — shown above all other duel controls
           so the participant cannot miss it. Hides itself after dispatching acknowledge_risk.
@@ -319,18 +355,7 @@ export function CombatTurnPanel({
         </button>
       )}
       {/* Standoff (#4145): the pre-round card, present only before round 1. */}
-      {encounter.standoff ? (
-        <StandoffCard
-          standoff={encounter.standoff}
-          encounterId={encounterId}
-          characterId={characterId}
-        />
-      ) : null}
-
-      {/* An onlooker (#4354) sees the public summary instead of the per-player card. */}
-      {encounter.standoff_summary ? (
-        <StandoffSummaryCard summary={encounter.standoff_summary} />
-      ) : null}
+      <StandoffCards encounter={encounter} encounterId={encounterId} characterId={characterId} />
 
       {/* A standoff is pre-round: its card is the whole panel until round one begins. */}
       {encounter.standoff || encounter.standoff_summary ? null : (

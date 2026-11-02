@@ -324,6 +324,45 @@ function submitDialog({
   });
 }
 
+function dialogCopy(
+  mode: AddDialogProps['mode'],
+  roomShape: boolean,
+  matchedUnplacedArea: AddDialogAreaOption | null,
+  chosenLevelLabel: string | undefined
+) {
+  let copy = MODE_COPY[mode];
+  if (roomShape && mode === 'areas') {
+    copy = { ...MODE_COPY.rooms, placeholder: 'The City Center' };
+  } else if (matchedUnplacedArea) {
+    // Placing an existing area: its own level names it, not the square's default.
+    copy = {
+      title: `Place ${matchedUnplacedArea.name}`,
+      nameLabel: `${matchedUnplacedArea.levelLabel} name`,
+      placeholder: MODE_COPY.areas.placeholder,
+    };
+  } else if (mode === 'areas' && chosenLevelLabel) {
+    copy = {
+      title: `New ${chosenLevelLabel.toLowerCase()}`,
+      nameLabel: `${chosenLevelLabel} name`,
+      placeholder: MODE_COPY.areas.placeholder,
+    };
+  }
+
+  return copy;
+}
+
+/** Find an exact match and up to four suggestions for an enabled destination type. */
+function matchingOptions<T extends { name: string }>(options: T[], name: string, enabled: boolean) {
+  if (!enabled) return { match: null, suggestions: [] };
+  const normalized = name.toLowerCase();
+  return {
+    match: options.find((option) => option.name.toLowerCase() === normalized) ?? null,
+    suggestions: normalized
+      ? options.filter((option) => option.name.toLowerCase().includes(normalized)).slice(0, 4)
+      : [],
+  };
+}
+
 export function AddDialog({
   mode,
   open,
@@ -399,46 +438,22 @@ export function AddDialog({
   // Exit mode's implicit fork — an exact (case-insensitive) name match means
   // "link to that room," anything else means "dig a new one by that name."
   const trimmedDestination = name.trim();
-  const matched =
+  const { match: matched, suggestions } = matchingOptions(
+    roomOptions,
+    trimmedDestination,
     mode === 'exit'
-      ? (roomOptions.find(
-          (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
-        ) ?? null)
-      : null;
-  const suggestions =
-    mode === 'exit' && trimmedDestination !== ''
-      ? roomOptions
-          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
-          .slice(0, 4)
-      : [];
-
-  // Rooms mode's fork — a name that exactly matches an unplaced room of this
-  // area means "place that room here," anything else means "dig a new one."
-  const matchedUnplaced = roomShape
-    ? (unplacedOptions.find(
-        (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
-      ) ?? null)
-    : null;
-  const unplacedSuggestions =
-    roomShape && trimmedDestination !== ''
-      ? unplacedOptions
-          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
-          .slice(0, 4)
-      : [];
-  // Areas mode's twin (#4084): a name that exactly matches a child area with no position
-  // means "place that area here," anything else means "create a new one."
+  );
+  const { match: matchedUnplaced, suggestions: unplacedSuggestions } = matchingOptions(
+    unplacedOptions,
+    trimmedDestination,
+    roomShape
+  );
   const areaShape = mode === 'areas' && !roomShape;
-  const matchedUnplacedArea = areaShape
-    ? (unplacedAreaOptions.find(
-        (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
-      ) ?? null)
-    : null;
-  const unplacedAreaSuggestions =
-    areaShape && trimmedDestination !== ''
-      ? unplacedAreaOptions
-          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
-          .slice(0, 4)
-      : [];
+  const { match: matchedUnplacedArea, suggestions: unplacedAreaSuggestions } = matchingOptions(
+    unplacedAreaOptions,
+    trimmedDestination,
+    areaShape
+  );
 
   const submit = () => {
     submitDialog({
@@ -463,23 +478,7 @@ export function AddDialog({
     onOpenChange(false);
   };
 
-  let copy = MODE_COPY[mode];
-  if (roomShape && mode === 'areas') {
-    copy = { ...MODE_COPY.rooms, placeholder: 'The City Center' };
-  } else if (matchedUnplacedArea) {
-    // Placing an existing area: its own level names it, not the square's default.
-    copy = {
-      title: `Place ${matchedUnplacedArea.name}`,
-      nameLabel: `${matchedUnplacedArea.levelLabel} name`,
-      placeholder: MODE_COPY.areas.placeholder,
-    };
-  } else if (mode === 'areas' && chosenLevelLabel) {
-    copy = {
-      title: `New ${chosenLevelLabel.toLowerCase()}`,
-      nameLabel: `${chosenLevelLabel} name`,
-      placeholder: MODE_COPY.areas.placeholder,
-    };
-  }
+  const copy = dialogCopy(mode, roomShape, matchedUnplacedArea, chosenLevelLabel);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

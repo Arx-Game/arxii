@@ -319,6 +319,38 @@ function BundledPriceLine({
   return <span className="cost">{item.cost_per_rank}</span>;
 }
 
+function partitionOffers(offers: VisibleOffer[], firstLook: boolean, foldUnder: number) {
+  let atRest = offers;
+  let folded: VisibleOffer[] = [];
+  if (firstLook && offers.length >= foldUnder) {
+    const pinned = offers.filter((o) => o.first_look);
+    atRest = pinned.length > 0 ? pinned : offers.slice(0, FIRST_LOOK_FALLBACK);
+    folded =
+      pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(FIRST_LOOK_FALLBACK);
+  }
+  return { atRest, folded };
+}
+
+function groupOffers(
+  atRest: VisibleOffer[],
+  groupBy: ChapterOffersProps['groupBy']
+): [string, VisibleOffer[]][] {
+  const grouped = new Map<string, VisibleOffer[]>();
+  for (const offer of atRest) {
+    const key = groupBy ? groupBy(offer) : '';
+    const list = grouped.get(key) ?? [];
+    list.push(offer);
+    grouped.set(key, list);
+  }
+  const groups: [string, VisibleOffer[]][] = [
+    ...[...grouped.entries()].filter(([key]) => key !== ''),
+    ...[...grouped.entries()].filter(([key]) => key === ''),
+  ];
+  if (groups.length === 0) groups.push(['', []]);
+
+  return groups;
+}
+
 export function ChapterOffers({
   draft,
   chapter,
@@ -479,29 +511,11 @@ export function ChapterOffers({
   // The fold (#3709): the Beginning's pinned lines show at rest; when none is
   // pinned the first three by the server's order stand in; everything else waits
   // under one "See N more" line. A short block never folds.
-  let atRest = offers;
-  let folded: VisibleOffer[] = [];
-  if (firstLook && offers.length >= foldUnder) {
-    const pinned = offers.filter((o) => o.first_look);
-    atRest = pinned.length > 0 ? pinned : offers.slice(0, FIRST_LOOK_FALLBACK);
-    folded =
-      pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(FIRST_LOOK_FALLBACK);
-  }
+  const { atRest, folded } = partitionOffers(offers, firstLook, foldUnder);
   const seeMore = (wordSeeMore ?? 'See {count} more').replace('{count}', String(folded.length));
   // The groups (#4874): headings in first-seen order, the ungrouped cards last under
   // none; without `groupBy` one unnamed group holds every card at rest.
-  const grouped = new Map<string, VisibleOffer[]>();
-  for (const offer of atRest) {
-    const key = groupBy ? groupBy(offer) : '';
-    const list = grouped.get(key) ?? [];
-    list.push(offer);
-    grouped.set(key, list);
-  }
-  const groups: [string, VisibleOffer[]][] = [
-    ...[...grouped.entries()].filter(([key]) => key !== ''),
-    ...[...grouped.entries()].filter(([key]) => key === ''),
-  ];
-  if (groups.length === 0) groups.push(['', []]);
+  const groups = groupOffers(atRest, groupBy);
 
   const renderOffer = (offer: VisibleOffer) => {
     const entry = entryByOfferId.get(offer.offer_id);

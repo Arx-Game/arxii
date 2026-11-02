@@ -295,6 +295,48 @@ function valenceTitle(valence: number): string | undefined {
   return undefined;
 }
 
+function NarrationUnit({ interaction }: { interaction: Interaction }) {
+  if (interaction.narrates) {
+    const isPrivate = interaction.receiver_persona_ids.length > 0;
+    if (isPrivate) {
+      return (
+        <div
+          role="note"
+          data-testid="pose-unit-narration-private"
+          className="my-1.5 max-w-[85%] rounded-r-md border-l-2 border-primary bg-primary/10 px-3 py-2"
+        >
+          <p className="text-sm italic text-foreground">
+            &ldquo;
+            <FormattedContent content={interaction.content} />
+            &rdquo;
+          </p>
+          <NarratedEventTag
+            narrates={interaction.narrates}
+            receiverPersonaIds={interaction.receiver_persona_ids}
+          />
+        </div>
+      );
+    }
+    return (
+      <div
+        role="note"
+        data-testid="pose-unit-narration"
+        className="my-1.5 max-w-[85%] border-l-2 border-border pl-2"
+      >
+        <p className="text-sm italic text-muted-foreground">
+          <FormattedContent content={interaction.content} />
+        </p>
+        <NarratedEventTag
+          narrates={interaction.narrates}
+          receiverPersonaIds={interaction.receiver_persona_ids}
+        />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export function PoseUnit({
   interaction,
   sceneId,
@@ -425,43 +467,7 @@ export function PoseUnit({
   // The receiver-scoped leg (mode 'whisper', the private vision) renders as
   // its own tinted block. Theme tokens only — never the demo's literal amber.
   // -------------------------------------------------------------------------
-  if (interaction.narrates) {
-    const isPrivate = interaction.receiver_persona_ids.length > 0;
-    if (isPrivate) {
-      return (
-        <div
-          role="note"
-          data-testid="pose-unit-narration-private"
-          className="my-1.5 max-w-[85%] rounded-r-md border-l-2 border-primary bg-primary/10 px-3 py-2"
-        >
-          <p className="text-sm italic text-foreground">
-            &ldquo;
-            <FormattedContent content={interaction.content} />
-            &rdquo;
-          </p>
-          <NarratedEventTag
-            narrates={interaction.narrates}
-            receiverPersonaIds={interaction.receiver_persona_ids}
-          />
-        </div>
-      );
-    }
-    return (
-      <div
-        role="note"
-        data-testid="pose-unit-narration"
-        className="my-1.5 max-w-[85%] border-l-2 border-border pl-2"
-      >
-        <p className="text-sm italic text-muted-foreground">
-          <FormattedContent content={interaction.content} />
-        </p>
-        <NarratedEventTag
-          narrates={interaction.narrates}
-          receiverPersonaIds={interaction.receiver_persona_ids}
-        />
-      </div>
-    );
-  }
+  if (interaction.narrates) return <NarrationUnit interaction={interaction} />;
 
   // -------------------------------------------------------------------------
   // State 1 + 2: POSE (with or without linked actions): one prose line (#4128).

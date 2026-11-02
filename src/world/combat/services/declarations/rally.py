@@ -173,6 +173,18 @@ def _resolve_rally(
     Whatever the roll, the ally then gets a rolled surge (#4737): the Rally check's outcome
     picks the band, so a better rally never surges the ally less.
     """
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+    surge_tuning = surge_tuning_for(SurgeTriggerKind.RALLIED, warn=False)
+    # An inactive check type counts as unset, the same rule Taunt follows.
+    if surge_tuning is not None and surge_tuning.check_type.is_active:
+        _resolve_tuned_rally(participant, action, surge_tuning)
+    return outcome
+
+
+def _resolve_tuned_rally(
+    participant: CombatParticipant, action: CombatRoundAction, surge_tuning: SurgeTuning
+) -> None:
+    """Apply the effects of a rally when its check is configured."""
     from world.combat.constants import (  # noqa: PLC0415
         RALLY_BASE_DIFFICULTY,
         RALLY_GREAT_SUCCESS_LEVEL,
@@ -182,12 +194,6 @@ def _resolve_rally(
     )
     from world.conditions.services import apply_condition  # noqa: PLC0415
 
-    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
-
-    surge_tuning = surge_tuning_for(SurgeTriggerKind.RALLIED, warn=False)
-    # An inactive check type counts as unset, the same rule Taunt follows.
-    if surge_tuning is None or not surge_tuning.check_type.is_active:
-        return outcome
     rally_result = roll_social_check(
         participant,
         surge_tuning.check_type,
@@ -233,5 +239,3 @@ def _resolve_rally(
         _surge_rallied_ally(
             participant, ally, rally_result.outcome, surge_tuning, RALLY_BASE_DIFFICULTY
         )
-
-    return outcome

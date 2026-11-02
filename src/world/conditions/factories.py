@@ -145,6 +145,15 @@ class UnconsciousConditionFactory(ConditionTemplateFactory):
     name = UNCONSCIOUS_CONDITION_NAME
 
 
+def _designate_bleeding_out(obj, create, _extracted, **_kwargs):
+    """Point an unset bleed-out designation at a created factory object."""
+    if not create:
+        return
+    from world.vitals.peril_designations import designate_unset_peril_conditions
+
+    designate_unset_peril_conditions(bleed_out=obj)
+
+
 class BleedingOutConditionFactory(ConditionTemplateFactory):
     """Seed factory for the 'Bleeding Out' condition mechanism (Task 5 / #595).
 
@@ -156,14 +165,7 @@ class BleedingOutConditionFactory(ConditionTemplateFactory):
     name = BLEED_OUT_SEED_TEMPLATE_NAME
     has_progression = True
 
-    @factory.post_generation
-    def designate(obj, create, extracted, **kwargs):  # noqa: N805 - factory_boy hook
-        """Point an unset ``VitalsConsequenceConfig.bleed_out_condition`` here (#4739)."""
-        if not create:
-            return
-        from world.vitals.peril_designations import designate_unset_peril_conditions
-
-        designate_unset_peril_conditions(bleed_out=obj)
+    designate = factory.PostGeneration(_designate_bleeding_out)
 
 
 class PoisonedConditionFactory(ConditionTemplateFactory):

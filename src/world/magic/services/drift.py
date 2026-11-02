@@ -369,6 +369,23 @@ def qualifying_components(
     )[target.pk]
 
 
+def _component_mode(
+    item: ItemInstance,
+    target_id: int,
+    target_facets: set[int],
+    facets_by_item: dict[int, set[int]],
+    keepsake_ids: set[int],
+) -> ComponentMode | None:
+    """Select the strongest qualifying route for an item and target."""
+    if item.template.tied_resonance_id == target_id:
+        return ComponentMode.MATERIAL
+    if facets_by_item.get(item.pk, set()) & target_facets:
+        return ComponentMode.FACET
+    if item.pk in keepsake_ids:
+        return ComponentMode.KEEPSAKE
+    return None
+
+
 def qualifying_components_by_target(
     sheet: CharacterSheet,
     targets: Iterable[Resonance],
@@ -416,15 +433,9 @@ def qualifying_components_by_target(
         target_facets = facets_by_target[target.pk]
         qualifying: list[QualifyingComponent] = []
         for item in live:
-            if item.template.tied_resonance_id == target.pk:
-                mode = ComponentMode.MATERIAL
-            elif facets_by_item.get(item.pk, set()) & target_facets:
-                mode = ComponentMode.FACET
-            elif item.pk in keepsake_ids:
-                mode = ComponentMode.KEEPSAKE
-            else:
-                continue
-            qualifying.append(QualifyingComponent(item=item, mode=mode))
+            mode = _component_mode(item, target.pk, target_facets, facets_by_item, keepsake_ids)
+            if mode is not None:
+                qualifying.append(QualifyingComponent(item=item, mode=mode))
         qualifying.sort(key=lambda component: route_rank[component.mode])
         result[target.pk] = qualifying
     return result

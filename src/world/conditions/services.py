@@ -4604,6 +4604,22 @@ def batch_chronic_effect_tick() -> ChronicTickSummary:
     return summary
 
 
+def _remove_expired_settled_effects(
+    instances: list[ConditionInstance], now: datetime, summary: SettledTickSummary
+) -> list[ConditionInstance]:
+    """Remove expired non-allegiance effects and return the surviving rows."""
+    live: list[ConditionInstance] = []
+    for instance in instances:
+        if instance.expires_at > now:
+            live.append(instance)
+        elif not instance.condition.sets_allegiance and remove_condition(
+            instance.target, instance.condition, include_suppressed=True
+        ):
+            summary.removed += 1
+            _breath_ran_out(instance.target, instance.condition)
+    return live
+
+
 def settled_effects_tick() -> SettledTickSummary:
     """Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).
 
@@ -4641,15 +4657,7 @@ def settled_effects_tick() -> SettledTickSummary:
         .select_related("condition", "current_stage", "target")
     )
 
-    live: list[ConditionInstance] = []
-    for instance in instances:
-        if instance.expires_at > now:
-            live.append(instance)
-        elif not instance.condition.sets_allegiance and remove_condition(
-            instance.target, instance.condition, include_suppressed=True
-        ):
-            summary.removed += 1
-            _breath_ran_out(instance.target, instance.condition)
+    live = _remove_expired_settled_effects(instances, now, summary)
 
     # DoT rows hang off the template or its stage; load them once for every survivor.
     rows: list[ConditionDamageOverTime] = list(

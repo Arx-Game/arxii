@@ -36,6 +36,11 @@ class PerilDesignationTests(TestCase):
         ConditionInstanceFactory(target=sheet.character, condition=ConditionTemplateFactory())
         self.assertFalse(has_acute_peril(sheet))
 
+    def test_building_a_factory_does_not_set_a_designation(self) -> None:
+        bleed = BleedingOutConditionFactory.build()
+        self.assertIsNone(bleed.pk)
+        self.assertIsNone(bleed_out_condition_id())
+
     def test_factory_designates_and_a_rename_changes_nothing(self) -> None:
         bleed = BleedingOutConditionFactory()
         bleed.name = "Lifeblood Ebbing"

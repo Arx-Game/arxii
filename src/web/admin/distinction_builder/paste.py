@@ -426,6 +426,30 @@ def table_digest(rows: list[RowSpec]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+def _create_effects(
+    row: RowSpec, distinction: Distinction, contributor: ContentContributor
+) -> None:
+    """Create and stamp the effects in a confirmed table row."""
+    for fx in row.effects:
+        target_id = fx.target_id
+        if target_id is None:
+            target = ensure_skill_target(Trait.objects.get(pk=fx.skill_trait_id))
+            if target is None:
+                # Only when a same-named target appeared in another category
+                # between the preview and the confirm; the batch rolls back.
+                msg = f"no modifier target could be made for {fx.label!r}"
+                raise ValueError(msg)
+            target_id = target.pk
+        effect = DistinctionEffect.objects.create(
+            distinction=distinction,
+            target_id=target_id,
+            value_per_rank=fx.value,
+            grants_immunity_to_negative=fx.immune,
+            description=fx.label,
+        )
+        stamp_written(effect, contributor)
+
+
 def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: int) -> int:
     """Create every ``create`` row's distinction, effects, offer lines and pins; one transaction."""
     created = 0
@@ -443,24 +467,7 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                 asks_figure_name=row.asks_figure_name,
             )
             stamp_written(distinction, contributor)
-            for fx in row.effects:
-                target_id = fx.target_id
-                if target_id is None:
-                    target = ensure_skill_target(Trait.objects.get(pk=fx.skill_trait_id))
-                    if target is None:
-                        # Only when a same-named target appeared in another category
-                        # between the preview and the confirm; the batch rolls back.
-                        msg = f"no modifier target could be made for {fx.label!r}"
-                        raise ValueError(msg)
-                    target_id = target.pk
-                effect = DistinctionEffect.objects.create(
-                    distinction=distinction,
-                    target_id=target_id,
-                    value_per_rank=fx.value,
-                    grants_immunity_to_negative=fx.immune,
-                    description=fx.label,
-                )
-                stamp_written(effect, contributor)
+            _create_effects(row, distinction, contributor)
             if row.prestige is not None:
                 DistinctionPrestigeGrant.objects.create(
                     distinction=distinction, amount=row.prestige

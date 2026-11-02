@@ -681,6 +681,16 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    def _taunt_extra_errors(self) -> dict[str, str]:
+        """Report effects that a taunt cannot carry."""
+        extras = {
+            "defense_check_type": self.defense_check_type_id is not None,
+            "on_hit_consequence_pool": self.on_hit_consequence_pool_id is not None,
+            "conditions_applied": self.pk is not None and self.conditions_applied.exists(),
+        }
+        message = "A taunt applies nothing but the surge: clear this or clear taunt_potency."
+        return {field_name: message for field_name, is_set in extras.items() if is_set}
+
     def clean(self) -> None:
         """Validate clash prerequisites and the authored outcome lines (#3554)."""
         from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
@@ -700,16 +710,7 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 "A taunt does no damage: set base_damage to 0 or clear taunt_potency."
             )
         if self.taunt_potency is not None:
-            taunt_extras = {
-                "defense_check_type": self.defense_check_type_id is not None,
-                "on_hit_consequence_pool": self.on_hit_consequence_pool_id is not None,
-                "conditions_applied": self.pk is not None and self.conditions_applied.exists(),
-            }
-            for field_name, is_set in taunt_extras.items():
-                if is_set:
-                    errors[field_name] = (
-                        "A taunt applies nothing but the surge: clear this or clear taunt_potency."
-                    )
+            errors.update(self._taunt_extra_errors())
         try:
             validate_outcome_narration(self.hit_narration, "hit_narration")
         except ValidationError as exc:

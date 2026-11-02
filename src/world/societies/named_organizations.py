@@ -227,6 +227,13 @@ def _apply_named_reaction(
     return new_value - before if new_value is not None and new_value != before else None
 
 
+def _reaction_is_covert(reaction: NamedReaction, reach: str) -> bool:
+    """Whether a harmed organization waits for the act to be exposed."""
+    return reaction.role == NamedOrganizationRole.HARMED and (
+        reaction.only_if_exposed or reach == NamedActReach.PRIVATE
+    )
+
+
 def react_to_named_organizations(  # noqa: PLR0913 - keyword-only; each is a distinct input
     *,
     persona: Persona,
@@ -256,8 +263,7 @@ def react_to_named_organizations(  # noqa: PLR0913 - keyword-only; each is a dis
         total = reaction_total(reaction, archetypes)
         if total == 0:
             continue
-        harmed = reaction.role == NamedOrganizationRole.HARMED
-        if harmed and (reaction.only_if_exposed or reach == NamedActReach.PRIVATE):
+        if _reaction_is_covert(reaction, reach):
             covert.append((reaction.organization, -total))
         elif reach == NamedActReach.OPEN:
             change = _apply_named_reaction(persona, reaction, total, legend_entry, mission_deed)

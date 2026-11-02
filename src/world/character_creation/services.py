@@ -3699,6 +3699,21 @@ def _origin_slot_lines(slots: list[CharacterOriginSlot]) -> list[str]:
     return lines
 
 
+def _origin_stage_lines(label: str, rows: list[CharacterOriginSlot], paragraph: str) -> list[str]:
+    """Render one stage and its known beats."""
+    if rows and all(row.unknown for row in rows):
+        return [f"{label}: unknown", ""]
+    lines = [label, paragraph, ""] if paragraph else []
+    for row in rows:
+        if row.unknown:
+            continue
+        lines.append(f"{label}: {row.beat.name}")
+        if row.value:
+            lines.append(row.value)
+        lines.append("")
+    return lines
+
+
 def _origin_beat_lines(
     beats: list[CharacterOriginSlot], stages: dict[str, str] | None = None
 ) -> list[str]:
@@ -3720,18 +3735,7 @@ def _origin_beat_lines(
     for stage in sorted(set(by_stage) | set(stages), key=lambda v: LIFE_STAGE_ORDER.get(v, 99)):
         rows = by_stage.get(stage, [])
         label = LifeStage(stage).label if stage in LifeStage.values else stage
-        if rows and all(row.unknown for row in rows):
-            lines.extend((f"{label}: unknown", ""))
-            continue
-        if stages.get(stage):
-            lines.extend((label, stages[stage], ""))
-        for row in rows:
-            if row.unknown:
-                continue
-            lines.append(f"{label}: {row.beat.name}")
-            if row.value:
-                lines.append(row.value)
-            lines.append("")
+        lines.extend(_origin_stage_lines(label, rows, stages.get(stage, "")))
     return lines
 
 

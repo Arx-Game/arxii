@@ -322,6 +322,33 @@ type DispatchFn = (params: DispatchActionRequest) => Promise<DispatchResult>;
 
 type DispatchJob = () => Promise<DispatchResult>;
 
+/** Stop on the first refused declaration, preserving an already committed pull. */
+async function runDispatchJobs(
+  jobs: DispatchJob[],
+  pullJob: DispatchJob | null,
+  onPullCommitted: () => void
+): Promise<string | null> {
+  for (const job of jobs) {
+    const result = await job();
+    if (isDispatchFailure(result)) return result.message ?? 'Submit failed. Try again.';
+    if (job === pullJob) onPullCommitted();
+  }
+  return null;
+}
+
+/** READY-paced encounters resolve only after the participant is marked ready. */
+async function markReadyIfNeeded(
+  paceMode: string | undefined,
+  dispatchAction: ReturnType<typeof useDispatchPlayerAction>['mutateAsync']
+): Promise<string | null> {
+  if (paceMode !== 'ready') return null;
+  const result = await dispatchAction({
+    ref: { backend: 'registry', registry_key: 'combat_ready' },
+    kwargs: {},
+  });
+  return isDispatchFailure(result) ? (result.message ?? 'Submit failed. Try again.') : null;
+}
+
 /** The pull a submit sends: the selection plus the burn, or null for none (#4736). */
 interface PullDispatch {
   selection: PullSelection;
@@ -2490,43 +2517,20 @@ export function YourTurn({
     let pullJob: DispatchJob | null = null;
     if (pull !== null) pullJob = pullRidesClash ? clashJob : focusedJob;
 
-    const dispatchJobs: DispatchJob[] = [
-      ...(focusedJob ? [focusedJob] : []),
-      ...passiveJobs,
-      ...(clashJob ? [clashJob] : []),
-    ];
+    const dispatchJobs = [focusedJob, ...passiveJobs, clashJob].filter(
+      (job): job is DispatchJob => job !== null
+    );
 
     try {
-      for (const job of dispatchJobs) {
-        const result = await job();
-        // The dispatch endpoint always resolves 200 for a business-rule
-        // rejection (only a structural ref error is a 400) — success:false
-        // must be checked explicitly, or an honest-failure job would silently
-        // flip the local `submitted`/ready state (#2423).
-        if (isDispatchFailure(result)) {
-          setSubmitError(result.message ?? 'Submit failed. Try again.');
-          return;
-        }
-        if (job === pullJob) setPullCommitted(true);
+      const jobError = await runDispatchJobs(dispatchJobs, pullJob, () => setPullCommitted(true));
+      if (jobError !== null) {
+        setSubmitError(jobError);
+        return;
       }
-      // PaceMode.READY early-resolution (#3067): `declare_action` resets
-      // `is_ready=False` on every declaration, so submitting alone never
-      // marks the participant ready — a READY-pace encounter would then
-      // wait out the TIMED-style sweep instead of resolving the instant
-      // everyone's in. Dispatch the same `combat_ready` registry action the
-      // REST `ready` endpoint / telnet `combat ready` use, mirroring
-      // `ReadyAction.execute` -> `maybe_resolve_on_ready`. Only meaningful in
-      // READY pace — TIMED resolves on its timer and MANUAL waits for the GM,
-      // so this is skipped for both to leave their behavior unchanged.
-      if (encounter?.pace_mode === 'ready') {
-        const readyResult = await dispatchAction({
-          ref: { backend: 'registry', registry_key: 'combat_ready' },
-          kwargs: {},
-        });
-        if (isDispatchFailure(readyResult)) {
-          setSubmitError(readyResult.message ?? 'Submit failed. Try again.');
-          return;
-        }
+      const readyError = await markReadyIfNeeded(encounter?.pace_mode, dispatchAction);
+      if (readyError !== null) {
+        setSubmitError(readyError);
+        return;
       }
       setSubmitted(true);
       // Refresh the encounter (carries the server's is_ready) and the "Last

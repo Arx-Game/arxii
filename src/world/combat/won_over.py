@@ -339,6 +339,15 @@ def won_over_rows(
     there). A surviving body whose hold is gone keeps its row, with no badge and
     no actions.
     """
+    if snapshot is None:
+        snapshot = won_over_snapshot(encounter)
+    return [_won_over_row(opponent, viewer, snapshot) for opponent in snapshot.opponents]
+
+
+def _won_over_row(
+    opponent: CombatOpponent, viewer: CharacterSheet, snapshot: WonOverSnapshot
+) -> WonOverRow:
+    """Build one viewer-specific digest row from the shared snapshot."""
     from world.npc_services.allegiance import (  # noqa: PLC0415
         ALLEGIANCE_HOLD_KINDS,
         actor_holds_sway_present,
@@ -346,78 +355,66 @@ def won_over_rows(
         won_over_verb,
     )
 
-    if snapshot is None:
-        snapshot = won_over_snapshot(encounter)
-
     viewer_char = viewer.character
     viewer_char_id = viewer.character_id
     charm_kinds = frozenset({Allegiance.ALLY_OF_CASTER})
-    rows: list[WonOverRow] = []
-    for opponent in snapshot.opponents:
-        instance = snapshot.designations[opponent.pk]
-        instances = snapshot.instances.get(opponent.pk, [])
-        live = designating_instance(instances)
-        # No live hold (body deleted, or the hold ended in cleanup): nothing to act on.
-        body = opponent.objectdb if opponent.objectdb_id is not None and live else None
+    instance = snapshot.designations[opponent.pk]
+    instances = snapshot.instances.get(opponent.pk, [])
+    live = designating_instance(instances)
+    # No live hold (body deleted, or the hold ended in cleanup): nothing to act on.
+    body = opponent.objectdb if opponent.objectdb_id is not None and live else None
 
-        persona_id = opponent.persona_id
-        present = opponent.objectdb_id is not None and opponent.objectdb.location is not None
-        current = live or instance
-        is_source = current.source_character_id == viewer_char_id
-        charmer_is_viewer = (
-            is_source and current.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
-        )
-        visible_condition = (
-            current
-            if body is not None and (current.condition.is_visible_to_others or is_source)
-            else None
-        )
-        # Decision 19: the same bind-window predicate telnet's `companion promote`
-        # and `promote_summon_to_companion` consult (#4091 fix round 1) — a charm
-        # alone is not enough; the charmer must still be in the room. Reuses the
-        # snapshot's instances to stay batched. Computed once and exposed on the
-        # row as `bind_window_open` (viewer-independent, unlike `can_bind`) so a
-        # web surface can tell "nobody can bind this" (Turned/Calmed, or the
-        # charmer left) from "someone else charmed it" without matching on verb
-        # text (#4091 demo-fidelity fix round).
-        window_open = body is not None and _window_open(opponent, instances)
+    persona_id = opponent.persona_id
+    present = opponent.objectdb_id is not None and opponent.objectdb.location is not None
+    current = live or instance
+    is_source = current.source_character_id == viewer_char_id
+    charmer_is_viewer = is_source and current.condition.sets_allegiance == Allegiance.ALLY_OF_CASTER
+    visible_condition = (
+        current
+        if body is not None and (current.condition.is_visible_to_others or is_source)
+        else None
+    )
+    # Decision 19: the same bind-window predicate telnet's `companion promote`
+    # and `promote_summon_to_companion` consult (#4091 fix round 1) — a charm
+    # alone is not enough; the charmer must still be in the room. Reuses the
+    # snapshot's instances to stay batched. Computed once and exposed on the
+    # row as `bind_window_open` (viewer-independent, unlike `can_bind`) so a
+    # web surface can tell "nobody can bind this" (Turned/Calmed, or the
+    # charmer left) from "someone else charmed it" without matching on verb
+    # text (#4091 demo-fidelity fix round).
+    window_open = body is not None and _window_open(opponent, instances)
 
-        rows.append(
-            WonOverRow(
-                opponent_id=opponent.pk,
-                name=opponent.name,
-                verb=won_over_verb(instance.condition.sets_allegiance),
-                source_label=snapshot.source_labels[opponent.pk],
-                nameless=opponent.objectdb_is_ephemeral,
-                persona_id=persona_id,
-                present=present,
-                condition=visible_condition,
-                holds_until_settled=current.condition.default_duration_type == DurationType.ROUNDS,
-                strength=current.effective_severity,
-                can_bind=window_open and charmer_is_viewer,
-                # The ONE shared presence+hold predicate (``actor_holds_sway_present``)
-                # also used by the persona menu, telnet and the action prerequisites
-                # (#4091 task 12; take-into-service gated the same way in the final
-                # review: the button showed while the action refused).
-                can_take_into_service=(
-                    body is not None
-                    and persona_id is not None
-                    and charmer_is_viewer
-                    and actor_holds_sway_present(
-                        viewer_char, body, kinds=charm_kinds, instances=instances
-                    )
-                ),
-                can_send_away=(
-                    body is not None
-                    and actor_holds_sway_present(
-                        viewer_char, body, kinds=ALLEGIANCE_HOLD_KINDS, instances=instances
-                    )
-                ),
-                can_settle=body is not None and persona_id is not None and present,
-                bind_window_open=window_open,
+    return WonOverRow(
+        opponent_id=opponent.pk,
+        name=opponent.name,
+        verb=won_over_verb(instance.condition.sets_allegiance),
+        source_label=snapshot.source_labels[opponent.pk],
+        nameless=opponent.objectdb_is_ephemeral,
+        persona_id=persona_id,
+        present=present,
+        condition=visible_condition,
+        holds_until_settled=current.condition.default_duration_type == DurationType.ROUNDS,
+        strength=current.effective_severity,
+        can_bind=window_open and charmer_is_viewer,
+        # The ONE shared presence+hold predicate (``actor_holds_sway_present``)
+        # also used by the persona menu, telnet and the action prerequisites
+        # (#4091 task 12; take-into-service gated the same way in the final
+        # review: the button showed while the action refused).
+        can_take_into_service=(
+            body is not None
+            and persona_id is not None
+            and charmer_is_viewer
+            and actor_holds_sway_present(viewer_char, body, kinds=charm_kinds, instances=instances)
+        ),
+        can_send_away=(
+            body is not None
+            and actor_holds_sway_present(
+                viewer_char, body, kinds=ALLEGIANCE_HOLD_KINDS, instances=instances
             )
-        )
-    return rows
+        ),
+        can_settle=body is not None and persona_id is not None and present,
+        bind_window_open=window_open,
+    )
 
 
 def _source_label(instance: ConditionInstance, source_names: dict[int, str]) -> str:
