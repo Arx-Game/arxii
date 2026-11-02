@@ -7,6 +7,11 @@ import type { RegionMapPips } from '../../types';
 import { RegionMapPage } from '../RegionMapPage';
 
 const mutateAsync = vi.fn();
+const toastError = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => toastError(...args), success: vi.fn() },
+}));
 
 // jsdom has no PointerEvent, so pointer events carry no clientX/clientY without this.
 if (typeof window.PointerEvent === 'undefined') {
@@ -108,6 +113,7 @@ describe('RegionMapPage', () => {
     // jsdom has no 2D context; the page guards for null and draws nothing here.
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     mutateAsync.mockReset();
+    toastError.mockReset();
     mutateAsync.mockResolvedValue({ success: true, message: '', data: { changed: [] } });
     window.localStorage.clear();
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
@@ -151,13 +157,15 @@ describe('RegionMapPage', () => {
     renderWithProviders(<RegionMapPage regionId={1} />);
     expect(screen.queryByRole('button', { name: 'Fill' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
     expect(screen.getByRole('button', { name: 'Brush' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Fill' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'Loop' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('brush-width')).toHaveValue('1');
     expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Fill' }));
     expect(screen.queryByTestId('brush-width')).not.toBeInTheDocument();
   });
@@ -337,6 +345,27 @@ describe('RegionMapPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(lastCall()).toEqual({ key: 'atlas_clear_footprint', kwargs: { title_id: 100 } });
+  });
+
+  it('refuses a carve gesture until a domain is picked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    for (const name of ['Brush', 'Fill', 'Loop']) {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    }
+    const viewport = screen.getByTestId('region-map-viewport');
+    fireEvent.pointerDown(viewport, { clientX: 9, clientY: 3, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 9, clientY: 3 });
+    expect(toastError).toHaveBeenCalledWith('Pick a domain to carve.');
+    expect(toastError).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+    for (const name of ['Brush', 'Fill', 'Loop']) {
+      expect(screen.getByRole('button', { name })).toBeEnabled();
+    }
   });
 
   it('shows the loading and error states', () => {
