@@ -1,0 +1,17 @@
+{
+  "reviewed_commit": "615c8ef805c71a5722ecee6b6af01956674c9219",
+  "http_status": 400,
+  "body": {
+    "detail": "You have not chosen that pick."
+  },
+  "snapshot": {
+    "action_points": 7,
+    "anima": 10,
+    "tokens_of_the_vow_held": 0,
+    "chosen_picks": [
+      "Bleeding Cut",
+      "Feint and Vanish",
+      "Strike from the Flank"
+    ]
+  }
+}
