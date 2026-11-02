@@ -36,6 +36,11 @@ They do not use the command system, dispatchers, or handlers.
   REGISTRY backend, `target_type=SELF`; resolves pending Mage Scars via library
   template or scratch authoring. Shared by telnet `CmdMageScar` and the web
   `PendingAlterationViewSet.resolve`, #1490;
+  `covenants.py`: the covenant lifecycle actions and, since #4929,
+  `ChooseVowFocusPickAction` (key `"choose_vow_focus_pick"`, REGISTRY, `target_type=SELF`;
+  kwargs `pick_id` (web) or `pick_name` (telnet), optional `covenant_id`; resolves the pick
+  among the actor's own vows and wraps `world.covenants.focus_picks.choose_vow_focus_pick`;
+  shared by telnet `vow pick` and the sheet's Choose button);
   `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
   `CmdRitual` and the web `RitualPerformView`, #1331;

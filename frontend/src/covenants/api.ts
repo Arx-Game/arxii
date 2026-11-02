@@ -574,3 +574,45 @@ export async function withdrawCovenantFunds(
     throw new Error(message ?? 'Failed to withdraw covenant funds.');
   return message ?? 'Funds withdrawn.';
 }
+
+// ---------------------------------------------------------------------------
+// Vow focus picks (#4929): read the holder's catalog, choose through dispatch.
+// ---------------------------------------------------------------------------
+
+export type VowPickCatalog = components['schemas']['VowPickCatalog'];
+export type VowPickLevel = components['schemas']['VowPickLevel'];
+export type VowPickEntry = components['schemas']['VowPickEntry'];
+
+/**
+ * GET /api/covenants/character-roles/vow-picks/?character_sheet={sheetId}
+ * Every pick each primary vow offers, by level. Self-only server-side.
+ */
+export async function getVowPicks(sheetId: number): Promise<VowPickCatalog[]> {
+  const query = new URLSearchParams({ character_sheet: String(sheetId) });
+  const res = await apiFetch(withQuery(`${CHARACTER_ROLES_URL}/vow-picks/`, query));
+  if (!res.ok) return readErrorDetail(res, 'Failed to load vow picks.');
+  return res.json() as Promise<VowPickCatalog[]>;
+}
+
+/**
+ * Dispatch ChooseVowFocusPickAction as the character itself. The action looks the
+ * pick up among the character's own vows; a refusal (HTTP 200, `success: false`)
+ * throws with the rule's own message.
+ */
+export async function chooseVowPick(
+  characterId: number,
+  covenantId: number,
+  pickId: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'choose_vow_focus_pick' },
+      kwargs: { covenant_id: covenantId, pick_id: pickId },
+    }),
+  });
+  const { success, message } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(message ?? 'Failed to choose the pick.');
+  return message ?? 'Pick chosen.';
+}

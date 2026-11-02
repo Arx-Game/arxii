@@ -115,7 +115,9 @@ holder. Every reader of those rows (the cast-time added effects, the situational
 `world.mechanics.services.vow_stat_scaling_bonus`) skips a pick row for a holder who did not choose
 that pick. A pick's price comes from its `value` and its limits (`VowFocusPickLimit`, priced by
 `world.covenants.focus_picks.pick_price`) and must fit the per-level budget
-(`VowFocusPickConfig`). A character's choice is a `CharacterVowFocusPick` on their membership; a
+(`VowFocusPickConfig`). A character's choice is a `CharacterVowFocusPick` on their membership,
+which the holder makes themselves (`choose_vow_focus_pick`, #4929) from the sheet or with `vow
+pick`; budget left unspent at a level waits for a later pick; a
 secondary vow gets none. A sub-role holder chooses from the anchor's catalog and the sub-role's.
 _Avoid_: talent, feat, perk (a situational perk is one kind of payload a pick can carry),
 specialization (that is the resonance sub-role).

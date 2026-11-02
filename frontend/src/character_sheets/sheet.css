@@ -1059,3 +1059,97 @@
   width: 100%;
   max-width: 48rem;
 }
+
+/*
+ * Vow picks on the Covenant block (#4929, demo screen 8): each pick level with a meter of
+ * its budget, then its picks. A chosen pick is marked in the accent, a pick that cannot be
+ * taken now is dimmed with its reason, and an open one carries its Choose button.
+ */
+.vowpicks-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.vowpicks-level {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--sheet-hair);
+  padding-top: 0.5rem;
+}
+.vowpicks-level-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.vowpicks-spend {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.vowpicks-meter {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+.vowpicks-meter i {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 1px solid hsl(var(--border));
+}
+.vowpicks-meter i.on {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+}
+.vowpicks-locked-note {
+  font-style: italic;
+}
+.vowpicks-entry {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr auto;
+  column-gap: 0.5rem;
+  row-gap: 0.15rem;
+  align-items: baseline;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--sheet-hair);
+}
+.vowpicks-mark {
+  color: hsl(var(--muted-foreground));
+}
+.vowpicks-chosen .vowpicks-mark {
+  color: hsl(var(--accent));
+}
+.vowpicks-locked {
+  opacity: 0.55;
+}
+.vowpicks-gloss,
+.vowpicks-mech,
+.vowpicks-choose {
+  grid-column: 2 / 4;
+}
+.vowpicks-gloss {
+  color: hsl(var(--muted-foreground));
+}
+.vowpicks-mech {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+.vowpicks-choose {
+  display: flex;
+  justify-content: flex-end;
+}
+.vowpicks-error {
+  color: hsl(var(--destructive));
+}
+/* A sub-role holder's level groups its picks under the anchor vow's and the sub-role's name. */
+.vowpicks-vow {
+  font-family: var(--sheet-caps);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin: 0.5rem 0 0;
+}

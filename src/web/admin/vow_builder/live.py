@@ -17,7 +17,11 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from world.covenants.added_effect_summary import summarize_vow_added_effect
+from world.covenants.added_effect_summary import (
+    summarize_situational_perk,
+    summarize_stat_scaling,
+    summarize_vow_added_effect,
+)
 from world.covenants.added_effects import (
     effect_rides_technique,
     payload_prefetches,
@@ -28,14 +32,13 @@ from world.covenants.constants import (
     FOCUS_PICK_LIMIT_FREQUENCY_FULL,
     VOW_FOCUS_PICK_MAX_LEVEL,
 )
-from world.covenants.focus_picks import pick_price
+from world.covenants.focus_picks import focus_pick_budget, pick_price
 from world.covenants.models import (
     CharacterVowFocusPick,
     CovenantRole,
     CovenantRoleTechniqueSpecialty,
     VowAddedEffect,
     VowFocusPick,
-    VowFocusPickConfig,
     VowFocusPickLimit,
     VowSituationalPerk,
     VowSituationalPerkRung,
@@ -198,14 +201,6 @@ def description_clause(text: str) -> str:
     return first
 
 
-def focus_pick_budget() -> int:
-    """The budget per pick level, read without creating the config row on a GET."""
-    config = VowFocusPickConfig.objects.cached_singleton()
-    if config is None:
-        return VowFocusPickConfig().budget_per_level
-    return config.budget_per_level
-
-
 def role_picks(role: CovenantRole) -> list[VowFocusPick]:
     """The vow's picks by level then name.
 
@@ -329,26 +324,6 @@ def add_url(model_name: str, role: CovenantRole, pick: VowFocusPick | None = Non
     return f"{reverse(f'admin:arxii_{model_name}_add')}?{query}"
 
 
-def _perk_summary(
-    perk: VowSituationalPerk, situations: list[str], rungs: list[VowSituationalPerkRung]
-) -> str:
-    parts = [perk.get_beneficiary_display(), perk.get_effect_kind_display()]
-    if situations:
-        parts.append(f"when {' and '.join(situations)}")
-    parts.append(f"{perk.magnitude_tenths} tenths")
-    summary = f"{perk.name}: {', '.join(parts)}"
-    for rung in rungs:
-        summary += (
-            f" · rung {rung.rung_number}: {rung.get_extra_situation_display()}, "
-            f"{rung.magnitude_tenths} tenths"
-        )
-    return summary
-
-
-def _scaling_summary(scaling: VowStatScaling) -> str:
-    return f"{scaling.modifier_target.name} {scaling.bonus_per_level:+d} per thread level"
-
-
 def payload_summaries(role: CovenantRole) -> dict[int | None, list[PayloadLine]]:
     """Every payload row of the vow keyed by its focus pick's pk (``None`` is the base vow)."""
     lines: dict[int | None, list[PayloadLine]] = {}
@@ -377,7 +352,9 @@ def payload_summaries(role: CovenantRole) -> dict[int | None, list[PayloadLine]]
         lines.setdefault(perk.focus_pick_id, []).append(
             PayloadLine(
                 kind="Situational perk",
-                summary=_perk_summary(perk, situations.get(perk.pk, []), rungs.get(perk.pk, [])),
+                summary=summarize_situational_perk(
+                    perk, situations.get(perk.pk, []), rungs.get(perk.pk, [])
+                ),
                 change_url=_change_url("vowsituationalperk", perk.pk),
             )
         )
@@ -386,7 +363,7 @@ def payload_summaries(role: CovenantRole) -> dict[int | None, list[PayloadLine]]
         lines.setdefault(scaling.focus_pick_id, []).append(
             PayloadLine(
                 kind="Stat scaling",
-                summary=_scaling_summary(scaling),
+                summary=summarize_stat_scaling(scaling),
                 change_url=_change_url("vowstatscaling", scaling.pk),
             )
         )

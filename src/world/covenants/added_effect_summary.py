@@ -1,4 +1,4 @@
-"""The plain-words line staff read for a vow added effect (#4581).
+"""The plain-words lines read for a vow's payload rows (#4581).
 
 Built only from the row's own fields: enum labels, the names of the rows it points
 at, and the payload clauses a technique sentence uses. It never reads free prose, so
@@ -22,7 +22,12 @@ from world.magic.services.technique_effects import (
 )
 
 if TYPE_CHECKING:
-    from world.covenants.models import VowAddedEffect
+    from world.covenants.models import (
+        VowAddedEffect,
+        VowSituationalPerk,
+        VowSituationalPerkRung,
+        VowStatScaling,
+    )
 
 NOTHING_YET = "Adds nothing yet."
 
@@ -66,3 +71,28 @@ def summarize_vow_added_effect(effect: VowAddedEffect) -> str:
         treatments=[treatment_payload(row) for row in effect.cached_treatments],
     )
     return f"{head}: {' '.join(clauses) or NOTHING_YET}"
+
+
+def summarize_situational_perk(
+    perk: VowSituationalPerk, situations: list[str], rungs: list[VowSituationalPerkRung]
+) -> str:
+    """One line for a situational perk: who gains it, what, when, and its rungs.
+
+    Shared by the vow page (#4880) and the holder's pick catalog (#4929).
+    """
+    parts = [perk.get_beneficiary_display(), perk.get_effect_kind_display()]
+    if situations:
+        parts.append(f"when {' and '.join(situations)}")
+    parts.append(f"{perk.magnitude_tenths} tenths")
+    summary = f"{perk.name}: {', '.join(parts)}"
+    for rung in rungs:
+        summary += (
+            f" · rung {rung.rung_number}: {rung.get_extra_situation_display()}, "
+            f"{rung.magnitude_tenths} tenths"
+        )
+    return summary
+
+
+def summarize_stat_scaling(scaling: VowStatScaling) -> str:
+    """One line for a stat scaling: the target and its bonus per thread level."""
+    return f"{scaling.modifier_target.name} {scaling.bonus_per_level:+d} per thread level"

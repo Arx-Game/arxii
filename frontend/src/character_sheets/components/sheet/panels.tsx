@@ -24,6 +24,7 @@ import { LanguagesSection } from '@/character_sheets/components/LanguagesSection
 import { LocationsTab } from '@/locations/components/LocationsTab';
 import { RelationshipsSection } from '@/components/character';
 import { CovenantRoles, ReputationTab } from '@/reputation/components/ReputationTab';
+import { VowPicksPanel } from '@/covenants/components/VowPicksPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { StaffSecretsPanel } from '@/secrets/components/StaffSecretsPanel';
@@ -142,6 +143,8 @@ export function TiesPanel({
             <CovenantRoles covenants={covenants} />
           </Stack>
         )}
+        {/* The vow picks (#4929) are the owner's own: what they chose and may choose. */}
+        {isMyCharacter && covenants.length > 0 && <VowPicksPanel sheetId={sheetId} />}
       </Stack>
     </div>
   );

@@ -7946,7 +7946,13 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,
     `ENEMIES_WITH_CONDITION_PROPERTY_NEARBY`, `TARGET_LOW_HEALTH` (evaluators stubbed
     False until slice 3). Services in `world.covenants.focus_picks`: `pick_price`,
-    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`. See
+    `price_for`, `shown_vow_level`, `validate_character_focus_pick`, `vow_focus_pick_config`,
+    `focus_pick_budget`, `choosable_role_ids`. Players choose their own picks since #4929
+    [BUILT & WIRED]: `choose_vow_focus_pick`, `resolve_pick_for_choice`,
+    `vow_pick_catalogs` (`VowPickCatalog`/`VowPickLevel`/`VowPickEntry`), `pick_effect_lines`,
+    `limits_line`, `new_picks_lines`, `picks_opened_by_imbuing`, `announce_open_vow_picks`;
+    `VowFocusPickRefusedError`; `ChooseVowFocusPickAction` (`choose_vow_focus_pick`); `GET
+    /api/covenants/character-roles/vow-picks/`; telnet `vow picks` / `vow pick`. See
     `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),
