@@ -180,6 +180,16 @@ def _resolve_opponent_pre_apply(
     return _try_guardian_shield_opponent(opponent, raw_damage, damage_type, source_sheet)
 
 
+def _record_opponent_damage_threat(
+    opponent: CombatOpponent, source_sheet: CharacterSheet | None, damage: int
+) -> None:
+    """Record threat and duel interference only for damage from a character."""
+    if source_sheet is None or damage <= 0:
+        return
+    _accumulate_damage_threat(opponent, source_sheet, damage)
+    _maybe_trigger_lock_interference(opponent, source_sheet)
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -321,11 +331,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Threat accumulation: damage dealt -> ThreatRecord increment (#2020).
     # Only post-soak, post-resistance damage (damage_through) contributes — the
     # real signal of who is hurting the NPC. No source_sheet = no threat record.
-    if source_sheet is not None and damage_through > 0:
-        _accumulate_damage_threat(opponent, source_sheet, damage_through)
-        # Interference beat (#2020/#3447): a non-locked PC landing damage on a
-        # locked opponent fires the duel-interference drama for the locked duelist.
-        _maybe_trigger_lock_interference(opponent, source_sheet)
+    _record_opponent_damage_threat(opponent, source_sheet, damage_through)
     del source_sheet
 
     return OpponentDamageResult(

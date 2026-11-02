@@ -76,6 +76,32 @@ def _band_problems(
     return problems
 
 
+BandBaseline = tuple[
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+    "SurgeDegreeBand | None",
+]
+
+
+def _update_lower_bands(
+    tier: list["SurgeDegreeBand"], feeding: set[int], baseline: BandBaseline
+) -> BandBaseline:
+    """Carry the strongest values from this tier into comparisons with higher tiers."""
+    top_intensity, top_control, bare, fed = baseline
+    for band in tier:
+        feeds = band.condition_id in feeding
+        if top_intensity is None or band.intensity > top_intensity.intensity:
+            top_intensity = band
+        if top_control is None or band.control_change > top_control.control_change:
+            top_control = band
+        if bare is None and (band.condition_id is None or feeds):
+            bare = band
+        if fed is None and feeds:
+            fed = band
+    return top_intensity, top_control, bare, fed
+
+
 def validate_surge_bands(
     bands: Sequence["SurgeDegreeBand"],
     *,
@@ -108,16 +134,9 @@ def validate_surge_bands(
         index += len(tier)
         for band in tier:
             problems.extend(_band_problems(band, feeding, bare, fed, (top_intensity, top_control)))
-        for band in tier:
-            feeds = band.condition_id in feeding
-            if top_intensity is None or band.intensity > top_intensity.intensity:
-                top_intensity = band
-            if top_control is None or band.control_change > top_control.control_change:
-                top_control = band
-            if bare is None and (band.condition_id is None or feeds):
-                bare = band
-            if fed is None and feeds:
-                fed = band
+        top_intensity, top_control, bare, fed = _update_lower_bands(
+            tier, feeding, (top_intensity, top_control, bare, fed)
+        )
     return problems
 
 

@@ -90,6 +90,22 @@ const ADDRESSING_MODES: ReadonlySet<string> = new Set(['pose', 'emit']);
  */
 const PARSING_VERBS: ReadonlySet<string> = new Set(['pose', 'emit', 'say']);
 
+/** Keep retries in their original speech mode, even after the live mode changes. */
+function resolveSpeechMode(
+  composerMode: ComposerMode | undefined,
+  draft: Pick<Draft, 'status' | 'mode'>,
+  hasExplicitCommandOverride: boolean
+) {
+  const liveSpeechMode: DraftMode | null =
+    !hasExplicitCommandOverride &&
+    composerMode &&
+    EXECUTE_ACTION_SPEECH_MODES.has(composerMode.command)
+      ? { command: composerMode.command, targets: composerMode.targets }
+      : null;
+  const resolvedSpeechMode = draft.status !== 'clean' && draft.mode ? draft.mode : liveSpeechMode;
+  return { liveSpeechMode, resolvedSpeechMode };
+}
+
 /**
  * Builds the socket line for a read composer line given the active composer
  * mode. A command (`/look`, `@desc ...`, `+friend ...`, #3857/#4346) goes as
@@ -591,15 +607,21 @@ export function CommandInput({
       : null;
 
   const handleSubmit = useCallback(() => {
-    if (!ready || submittingRef.current) return;
-    if (replyRefusal && !replyRefusal.reachable) return;
-    if (tagRefusal && !tagRefusal.reachable) return;
     const trimmed = draft.content.trim();
-    if (!trimmed) return;
-    if (draft.content.length > MAX_POSE_LENGTH) {
-      toast.error(`Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`);
-      return;
+    function isSendable(): boolean {
+      if (!ready || submittingRef.current) return false;
+      if (replyRefusal && !replyRefusal.reachable) return false;
+      if (tagRefusal && !tagRefusal.reachable) return false;
+      if (!trimmed) return false;
+      if (draft.content.length > MAX_POSE_LENGTH) {
+        toast.error(
+          `Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`
+        );
+        return false;
+      }
+      return true;
     }
+    if (!isSendable()) return;
 
     // #3760 Task 10 — say/whisper/tt candidate mode from the LIVE composer
     // selection right now. Only relevant when the active mode itself is
@@ -634,27 +656,11 @@ export function CommandInput({
     // literal character (#3857, #4346). The structured dispatches below carry
     // this; history and the in-flight record keep the line as typed.
     const spoken = composerLine.kind === 'prose' ? composerLine.spoken : trimmed;
-    const liveSpeechMode: DraftMode | null =
-      !hasExplicitCommandOverride &&
-      composerMode &&
-      EXECUTE_ACTION_SPEECH_MODES.has(composerMode.command)
-        ? { command: composerMode.command, targets: composerMode.targets }
-        : null;
-    // #3760 Task 11 critical fix — an untouched `pending`/`rejected`/`unknown`
-    // draft (nothing has gone through `setContent` since the original
-    // attempt, which is what `draft.status !== 'clean'` implies here — see
-    // `beginSend`'s doc comment for the precise, ref-based version of this
-    // same check) MUST dispatch under the mode it was ORIGINALLY composed in,
-    // never whatever mode happens to be live right now — a stranded whisper
-    // reopened on the room tab, or a mode switch mid-session without editing
-    // the text, must not silently redispatch as a public say/pose. This is
-    // the SAME rule `beginSend()` applies for `clientRequestId` reuse,
-    // applied here so the caller can decide WHICH dispatch branch to take
-    // before calling it (a plain Send, Retry, and "Resume & retry" — every
-    // path that can reach `handleSubmit` — all resolve through this one spot,
-    // never a live `composerMode` prop read separately at dispatch time).
-    const resolvedSpeechMode: DraftMode | null =
-      draft.status !== 'clean' && draft.mode ? draft.mode : liveSpeechMode;
+    const { liveSpeechMode, resolvedSpeechMode } = resolveSpeechMode(
+      composerMode,
+      draft,
+      hasExplicitCommandOverride
+    );
     // The mode actually driving this send: prefer the resolved speech mode
     // (say/whisper/tt, live or preserved); fall back to the live composerMode
     // for a genuine pose/explicit-override send, where there is no stored
@@ -729,67 +735,71 @@ export function CommandInput({
     // EXECUTE_ACTION_SPEECH_MODES's comment. `resolvedSpeechMode` (not a live
     // composerMode read) decides which branch fires, per the critical-fix
     // comment above `resolvedSpeechMode`'s own declaration.
-    switch (resolvedSpeechMode?.command) {
-      case 'say': {
-        const clientRequestId = beginSend(liveSpeechMode);
-        pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        executeAction(character, 'say', { text: spoken, client_request_id: clientRequestId });
-        submittingRef.current = false;
-        return;
-      }
-
-      case 'whisper': {
-        // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
-        // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
-        // it cannot resolve a target by name. `resolvedSpeechMode.targets`
-        // only ever carries persona display names (see `ComposerMode.targets`
-        // doc comment), so the name is resolved against `roomCharacters`
-        // (which carries a `dbref`, unlike `sceneDetail.participants`) to a
-        // `target_id`. When it can't be resolved (target not in this room's
-        // character list — e.g. a scene participant who has since left),
-        // fall through to the legacy `send()` path below rather than crash or
-        // silently drop the whisper.
-        const whisperTargetName = resolvedSpeechMode.targets[0];
-        const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
-        const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
-        if (whisperTargetId > 0) {
+    function dispatchStructuredSpeech(): boolean {
+      switch (resolvedSpeechMode?.command) {
+        case 'say': {
           const clientRequestId = beginSend(liveSpeechMode);
           pendingSpeechRef.current = { clientRequestId, text: trimmed };
-          executeAction(character, 'whisper', {
-            text: spoken,
-            target_id: whisperTargetId,
-            client_request_id: clientRequestId,
-          });
+          executeAction(character, 'say', { text: spoken, client_request_id: clientRequestId });
           submittingRef.current = false;
-          return;
+          return true;
         }
-        break;
-      }
 
-      case 'tt': {
-        // tt (tabletalk) rides the `pose` registry action, scoped to the
-        // viewer's current Place via the `place` kwarg (PoseAction.execute(),
-        // `src/actions/definitions/communication.py` — resolves an int pk
-        // itself and verifies real PlacePresence, mirroring the established
-        // `_resolve_room()` REST/WS-dispatch pattern). `currentPlaceId` comes
-        // from the composition root's places query (`GamePage`/
-        // `SceneDetailPage`); when it's not resolved (not currently at a
-        // place, or the query hasn't loaded), fall through to the legacy
-        // `send()` path below rather than risk a room-wide broadcast.
-        if (currentPlaceId != null) {
-          const clientRequestId = beginSend(liveSpeechMode);
-          pendingSpeechRef.current = { clientRequestId, text: trimmed };
-          executeAction(character, 'pose', {
-            text: spoken,
-            place: currentPlaceId,
-            client_request_id: clientRequestId,
-          });
-          submittingRef.current = false;
-          return;
+        case 'whisper': {
+          // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
+          // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
+          // it cannot resolve a target by name. `resolvedSpeechMode.targets`
+          // only ever carries persona display names (see `ComposerMode.targets`
+          // doc comment), so the name is resolved against `roomCharacters`
+          // (which carries a `dbref`, unlike `sceneDetail.participants`) to a
+          // `target_id`. When it can't be resolved (target not in this room's
+          // character list — e.g. a scene participant who has since left),
+          // fall through to the legacy `send()` path below rather than crash or
+          // silently drop the whisper.
+          const whisperTargetName = resolvedSpeechMode.targets[0];
+          const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
+          const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
+          if (whisperTargetId > 0) {
+            const clientRequestId = beginSend(liveSpeechMode);
+            pendingSpeechRef.current = { clientRequestId, text: trimmed };
+            executeAction(character, 'whisper', {
+              text: spoken,
+              target_id: whisperTargetId,
+              client_request_id: clientRequestId,
+            });
+            submittingRef.current = false;
+            return true;
+          }
+          break;
         }
-        break;
+
+        case 'tt': {
+          // tt (tabletalk) rides the `pose` registry action, scoped to the
+          // viewer's current Place via the `place` kwarg (PoseAction.execute(),
+          // `src/actions/definitions/communication.py` — resolves an int pk
+          // itself and verifies real PlacePresence, mirroring the established
+          // `_resolve_room()` REST/WS-dispatch pattern). `currentPlaceId` comes
+          // from the composition root's places query (`GamePage`/
+          // `SceneDetailPage`); when it's not resolved (not currently at a
+          // place, or the query hasn't loaded), fall through to the legacy
+          // `send()` path below rather than risk a room-wide broadcast.
+          if (currentPlaceId != null) {
+            const clientRequestId = beginSend(liveSpeechMode);
+            pendingSpeechRef.current = { clientRequestId, text: trimmed };
+            executeAction(character, 'pose', {
+              text: spoken,
+              place: currentPlaceId,
+              client_request_id: clientRequestId,
+            });
+            submittingRef.current = false;
+            return true;
+          }
+          break;
+        }
       }
+      return false;
     }
+    if (dispatchStructuredSpeech()) return;
 
     // Determine submission path. The REST path (submit_pose) is now the
     // canonical route for scene poses: it carries scene_id explicitly and the
@@ -810,7 +820,9 @@ export function CommandInput({
     const hasDetachments = detachedSet.size > 0;
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
 
-    if (usesRestSubmit) {
+    const typedTargets = composerLine.kind === 'prose' ? composerLine.targets : [];
+
+    function submitScenePose(sceneId: string, personaId: number) {
       // The action is correlated to this prose request and runs only after the
       // prose is accepted. This prevents an action from firing when the pose
       // is rejected, and lets retries reuse the same correlation id.
@@ -837,7 +849,6 @@ export function CommandInput({
       // and stay in the text, since a name the key match misses (a worn face, a
       // multi-word name) would otherwise vanish from the pose. Once each, without
       // case: two spellings of one person would write the same target row twice.
-      const typedTargets = composerLine.kind === 'prose' ? composerLine.targets : [];
       const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
@@ -911,6 +922,10 @@ export function CommandInput({
           }
           submittingRef.current = false;
         });
+      return;
+    }
+    if (usesRestSubmit) {
+      submitScenePose(sceneId, personaId);
       return;
     }
 

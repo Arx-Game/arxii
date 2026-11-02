@@ -412,9 +412,203 @@ function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCent
   );
 }
 
+/** Keep the historical reader and browser navigation in sync. */
+function usePlayReference() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [reference, setReference] = useState<{
+    kind: string;
+    key: string;
+    title: string;
+    poseId?: string;
+    timestamp?: string;
+  } | null>(() => {
+    const kind = searchParams.get('referenceKind');
+    const key = searchParams.get('referenceKey');
+    return kind && key
+      ? {
+          kind,
+          key,
+          title: searchParams.get('referenceTitle') ?? key,
+          poseId: searchParams.get('referencePose') ?? undefined,
+          timestamp: searchParams.get('referenceTimestamp') ?? undefined,
+        }
+      : null;
+  });
+  // React Router updates searchParams on browser back/forward. Keep the
+  // historical reader synchronized with that URL rather than only its opener.
+  useEffect(() => {
+    const kind = searchParams.get('referenceKind');
+    const key = searchParams.get('referenceKey');
+    setReference(
+      kind && key
+        ? {
+            kind,
+            key,
+            title: searchParams.get('referenceTitle') ?? key,
+            poseId: searchParams.get('referencePose') ?? undefined,
+            timestamp: searchParams.get('referenceTimestamp') ?? undefined,
+          }
+        : null
+    );
+  }, [searchParams]);
+
+  const openReference = useCallback(
+    (next: { kind: string; key: string; title: string; poseId?: string; timestamp?: string }) => {
+      setReference(next);
+      setSearchParams((current) => {
+        const params = new URLSearchParams(current);
+        params.set('referenceKind', next.kind);
+        params.set('referenceKey', next.key);
+        if (next.poseId) params.set('referencePose', next.poseId);
+        else params.delete('referencePose');
+        if (next.timestamp) params.set('referenceTimestamp', next.timestamp);
+        else params.delete('referenceTimestamp');
+        params.delete('referenceTitle');
+        return params;
+      });
+    },
+    [setSearchParams]
+  );
+  const returnToLive = useCallback(() => {
+    setReference(null);
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      params.delete('referenceKind');
+      params.delete('referenceKey');
+      params.delete('referencePose');
+      params.delete('referenceTimestamp');
+      params.delete('referenceTitle');
+      return params;
+    });
+  }, [setSearchParams]);
+  const referenceSceneId = reference?.key.startsWith('scene:') ? reference.key.slice(6) : undefined;
+  const {
+    data: referencePage,
+    error: referenceError,
+    isPending: referenceLoading,
+    refetch: refetchReference,
+  } = useQuery<PlayPage<Interaction>>({
+    queryKey: [
+      'play-reference',
+      reference?.kind,
+      reference?.key,
+      reference?.poseId,
+      reference?.timestamp,
+    ],
+    queryFn: () =>
+      reference?.poseId
+        ? fetchPlayContext({
+            id: reference.poseId,
+            scene: referenceSceneId,
+            timestamp: reference.timestamp,
+            conversation: reference.key,
+            from: reference.timestamp
+              ? (() => {
+                  const start = new Date(reference.timestamp);
+                  start.setDate(start.getDate() - 90);
+                  return start.toISOString();
+                })()
+              : undefined,
+          }).then((context) => ({
+            results: context.results,
+            before: context.before,
+            after: context.after,
+            snapshot: new Date().toISOString(),
+          }))
+        : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key }),
+    enabled: Boolean(reference),
+  });
+  const referenceStatus =
+    referenceError instanceof PlayFetchError ? referenceError.status : undefined;
+  const referenceUnavailable = referenceStatus === 403 || referenceStatus === 404;
+  const referenceRetryable = Boolean(referenceError) && !referenceUnavailable;
+  return {
+    reference,
+    openReference,
+    returnToLive,
+    referenceSceneId,
+    referencePage,
+    referenceLoading: Boolean(reference && referenceLoading),
+    refetchReference,
+    referenceUnavailable: Boolean(reference && referenceUnavailable),
+    referenceRetryable: Boolean(reference && referenceRetryable),
+  };
+}
+
+function useSceneCombatState(sceneId: number | undefined) {
+  // RoomHeader combat/battle badges (#2157) — GamePage is the composition root,
+  // so it calls both hooks once here and threads the derived booleans down
+  // through FocusPanel -> RoomPanel -> RoomHeader.
+  const { data: activeEncounter } = useEncounterForScene(sceneId ?? 0);
+
+  // #3761 — CombatRail's GM tab and outcome-dismiss need the full SceneDetail
+  // (viewer_can_gm specifically), which the websocket-derived `sceneData`
+  // (a lighter SceneSummary) doesn't carry. Only fetched once an encounter
+  // actually exists, mirroring SceneDetailPage.tsx's own plain useQuery shape.
+  const { data: combatSceneDetail } = useQuery<SceneDetail>({
+    queryKey: ['scene', String(sceneId ?? '')],
+    queryFn: () => fetchScene(String(sceneId)),
+    enabled: activeEncounter != null && sceneId != null,
+  });
+
+  const { data: activeBattle } = useBattleForSceneQuery(sceneId ?? null);
+  const hasActiveEncounter = activeEncounter != null;
+  const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
+
+  // Final-review Finding I1 — ported from SceneDetailPage.tsx (#3551): the
+  // scene's active-encounter poll (useEncounterForScene, 15s interval) drops
+  // a completed encounter from its result, which would otherwise unmount
+  // CombatRail (and its outcome banner) before the player can see/dismiss
+  // it. lingeringEncounterId remembers the last real encounter id and keeps
+  // the rail mounted on it until CombatRail's onDismissOutcome fires;
+  // dismissedEncounterId hides the rail immediately on dismiss rather than
+  // waiting up to 15s for the next poll. Deliberately does NOT feed
+  // `hasActiveEncounter` (the banner/nav-icon signal stays the raw "an
+  // encounter genuinely exists" boolean) — only the rail itself lingers.
+  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  const encounterId = activeEncounter?.id ?? 0;
+  const prevSceneIdForEncounterRef = useRef(sceneId ?? 0);
+  useEffect(() => {
+    const currentSceneId = sceneId ?? 0;
+    if (prevSceneIdForEncounterRef.current !== currentSceneId) {
+      prevSceneIdForEncounterRef.current = currentSceneId;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
+    if (encounterId > 0) {
+      setLingeringEncounterId(encounterId);
+    }
+  }, [sceneId, encounterId]);
+  const railEncounterId = encounterId || lingeringEncounterId;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  return {
+    activeEncounter,
+    combatSceneDetail,
+    hasActiveEncounter,
+    hasActiveBattle,
+    railEncounterId,
+    showCombatRail,
+    setDismissedEncounterId,
+    setLingeringEncounterId,
+  };
+}
+
+function scenePlacesRoomId(sceneId: string | undefined, room: { id: number } | null) {
+  return sceneId && room ? String(room.id) : undefined;
+}
+
+function activeConversationRail(active: boolean, props: ComponentProps<typeof ConversationRail>) {
+  return active ? <ConversationRail {...props} /> : undefined;
+}
+
+function combatMapId(show: boolean, id: number): number | undefined {
+  return show ? id : undefined;
+}
+
 export function GamePage() {
   const account = useAccount();
-  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { connect, resume, disconnect } = useGameSocket();
   // #3774 -- the game screen is the one place that polls this. Focus and the
@@ -524,53 +718,16 @@ export function GamePage() {
   const sceneId = sceneData ? String(sceneData.id) : undefined;
   const roomName = sceneData?.name ?? roomData?.name ?? 'Room';
 
-  // RoomHeader combat/battle badges (#2157) — GamePage is the composition root,
-  // so it calls both hooks once here and threads the derived booleans down
-  // through FocusPanel -> RoomPanel -> RoomHeader.
-  const { data: activeEncounter } = useEncounterForScene(sceneData?.id ?? 0);
-
-  // #3761 — CombatRail's GM tab and outcome-dismiss need the full SceneDetail
-  // (viewer_can_gm specifically), which the websocket-derived `sceneData`
-  // (a lighter SceneSummary) doesn't carry. Only fetched once an encounter
-  // actually exists, mirroring SceneDetailPage.tsx's own plain useQuery shape.
-  const { data: combatSceneDetail } = useQuery<SceneDetail>({
-    queryKey: ['scene', String(sceneData?.id ?? '')],
-    queryFn: () => fetchScene(String(sceneData?.id)),
-    enabled: activeEncounter != null && sceneData?.id != null,
-  });
-
-  const { data: activeBattle } = useBattleForSceneQuery(sceneData?.id ?? null);
-  const hasActiveEncounter = activeEncounter != null;
-  const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
-
-  // Final-review Finding I1 — ported from SceneDetailPage.tsx (#3551): the
-  // scene's active-encounter poll (useEncounterForScene, 15s interval) drops
-  // a completed encounter from its result, which would otherwise unmount
-  // CombatRail (and its outcome banner) before the player can see/dismiss
-  // it. lingeringEncounterId remembers the last real encounter id and keeps
-  // the rail mounted on it until CombatRail's onDismissOutcome fires;
-  // dismissedEncounterId hides the rail immediately on dismiss rather than
-  // waiting up to 15s for the next poll. Deliberately does NOT feed
-  // `hasActiveEncounter` (the banner/nav-icon signal stays the raw "an
-  // encounter genuinely exists" boolean) — only the rail itself lingers.
-  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
-  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
-  const encounterId = activeEncounter?.id ?? 0;
-  const prevSceneIdForEncounterRef = useRef(sceneData?.id ?? 0);
-  useEffect(() => {
-    const currentSceneId = sceneData?.id ?? 0;
-    if (prevSceneIdForEncounterRef.current !== currentSceneId) {
-      prevSceneIdForEncounterRef.current = currentSceneId;
-      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
-      setDismissedEncounterId(0);
-      return;
-    }
-    if (encounterId > 0) {
-      setLingeringEncounterId(encounterId);
-    }
-  }, [sceneData?.id, encounterId]);
-  const railEncounterId = encounterId || lingeringEncounterId;
-  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  const {
+    activeEncounter,
+    combatSceneDetail,
+    hasActiveEncounter,
+    hasActiveBattle,
+    railEncounterId,
+    showCombatRail,
+    setDismissedEncounterId,
+    setLingeringEncounterId,
+  } = useSceneCombatState(sceneData?.id);
 
   // GamePage is the composition root (#2156): it calls the scene-feed +
   // threading hooks once for the active session's scene and feeds both the
@@ -742,113 +899,17 @@ export function GamePage() {
   // drawer GamePage already owns, not just PoseUnit's own avatar click.
   const cardContextValue = useMemo(() => ({ openCharacterCard: setCardPersona }), []);
   const [replyTarget, setReplyTarget] = useState<Interaction | null>(null);
-  const [reference, setReference] = useState<{
-    kind: string;
-    key: string;
-    title: string;
-    poseId?: string;
-    timestamp?: string;
-  } | null>(() => {
-    const kind = searchParams.get('referenceKind');
-    const key = searchParams.get('referenceKey');
-    return kind && key
-      ? {
-          kind,
-          key,
-          title: searchParams.get('referenceTitle') ?? key,
-          poseId: searchParams.get('referencePose') ?? undefined,
-          timestamp: searchParams.get('referenceTimestamp') ?? undefined,
-        }
-      : null;
-  });
-  // React Router updates searchParams on browser back/forward. Keep the
-  // historical reader synchronized with that URL rather than only its opener.
-  useEffect(() => {
-    const kind = searchParams.get('referenceKind');
-    const key = searchParams.get('referenceKey');
-    setReference(
-      kind && key
-        ? {
-            kind,
-            key,
-            title: searchParams.get('referenceTitle') ?? key,
-            poseId: searchParams.get('referencePose') ?? undefined,
-            timestamp: searchParams.get('referenceTimestamp') ?? undefined,
-          }
-        : null
-    );
-  }, [searchParams]);
-
-  const openReference = useCallback(
-    (next: { kind: string; key: string; title: string; poseId?: string; timestamp?: string }) => {
-      setReference(next);
-      setSearchParams((current) => {
-        const params = new URLSearchParams(current);
-        params.set('referenceKind', next.kind);
-        params.set('referenceKey', next.key);
-        if (next.poseId) params.set('referencePose', next.poseId);
-        else params.delete('referencePose');
-        if (next.timestamp) params.set('referenceTimestamp', next.timestamp);
-        else params.delete('referenceTimestamp');
-        params.delete('referenceTitle');
-        return params;
-      });
-    },
-    [setSearchParams]
-  );
-  const returnToLive = useCallback(() => {
-    setReference(null);
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current);
-      params.delete('referenceKind');
-      params.delete('referenceKey');
-      params.delete('referencePose');
-      params.delete('referenceTimestamp');
-      params.delete('referenceTitle');
-      return params;
-    });
-  }, [setSearchParams]);
-  const referenceSceneId = reference?.key.startsWith('scene:') ? reference.key.slice(6) : undefined;
   const {
-    data: referencePage,
-    error: referenceError,
-    isPending: referenceLoading,
-    refetch: refetchReference,
-  } = useQuery<PlayPage<Interaction>>({
-    queryKey: [
-      'play-reference',
-      reference?.kind,
-      reference?.key,
-      reference?.poseId,
-      reference?.timestamp,
-    ],
-    queryFn: () =>
-      reference?.poseId
-        ? fetchPlayContext({
-            id: reference.poseId,
-            scene: referenceSceneId,
-            timestamp: reference.timestamp,
-            conversation: reference.key,
-            from: reference.timestamp
-              ? (() => {
-                  const start = new Date(reference.timestamp);
-                  start.setDate(start.getDate() - 90);
-                  return start.toISOString();
-                })()
-              : undefined,
-          }).then((context) => ({
-            results: context.results,
-            before: context.before,
-            after: context.after,
-            snapshot: new Date().toISOString(),
-          }))
-        : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key }),
-    enabled: Boolean(reference),
-  });
-  const referenceStatus =
-    referenceError instanceof PlayFetchError ? referenceError.status : undefined;
-  const referenceUnavailable = referenceStatus === 403 || referenceStatus === 404;
-  const referenceRetryable = Boolean(referenceError) && !referenceUnavailable;
+    reference,
+    openReference,
+    returnToLive,
+    referenceSceneId,
+    referencePage,
+    referenceLoading,
+    refetchReference,
+    referenceUnavailable,
+    referenceRetryable,
+  } = usePlayReference();
 
   const handleWhisper = useCallback(
     (name: string) => {
@@ -901,7 +962,7 @@ export function GamePage() {
   // not the scene id. (`SceneDetailPage` passes the scene id, which is a
   // pre-existing latent bug in the places query on that page — left
   // untouched here; see the task report.)
-  const placesRoomId = sceneId && roomData ? String(roomData.id) : undefined;
+  const placesRoomId = scenePlacesRoomId(sceneId, roomData);
 
   // #3810: `placesData` is kept ONLY to resolve a display NAME for the current
   // place (cosmetic, used only in the pre-emptive refusal's hint text). The
@@ -1079,9 +1140,9 @@ export function GamePage() {
     reference,
     targetPoseId: reference?.poseId,
     onReturnToLive: returnToLive,
-    referenceUnavailable: Boolean(reference && referenceUnavailable),
-    referenceLoading: Boolean(reference && referenceLoading),
-    referenceRetryable: Boolean(reference && referenceRetryable),
+    referenceUnavailable,
+    referenceLoading,
+    referenceRetryable,
     onRetryReference: () => refetchReference(),
     ...placeWidgets(placesRoomId, active, currentPlaceId, activeCharacterId, account.id),
     pendingAttachments: sceneId ? (
@@ -1108,25 +1169,21 @@ export function GamePage() {
               onJumpToCombat={jumpToCombat}
             />
           }
-          rail={
-            activeSession ? (
-              <ConversationRail
-                accountId={account.id}
-                groups={railGroups}
-                selectedKey={activeThreadTab}
-                onSelect={handleRailSelect}
-                personActions={personActions}
-                find={findText}
-                onFindChange={setFindText}
-              />
-            ) : undefined
-          }
+          rail={activeConversationRail(Boolean(activeSession), {
+            accountId: account.id,
+            groups: railGroups,
+            selectedKey: activeThreadTab,
+            onSelect: handleRailSelect,
+            personActions,
+            find: findText,
+            onFindChange: setFindText,
+          })}
           center={
             <GameCenter
               sceneId={sceneId}
               accountId={account.id}
               gameWindow={gameWindowProps}
-              mapEncounterId={showCombatRail ? railEncounterId : undefined}
+              mapEncounterId={combatMapId(showCombatRail, railEncounterId)}
             />
           }
           sidebar={

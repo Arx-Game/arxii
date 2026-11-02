@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -59,6 +59,67 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
+
+function EncounterChooser({
+  encounters,
+  encounterId,
+  onSelect,
+}: {
+  encounters: NonNullable<ReturnType<typeof useEncounterForScene>['encounters']>;
+  encounterId: number;
+  onSelect: (id: number) => void;
+}) {
+  return encounters.length > 1 ? (
+    <div className="mb-2 flex flex-wrap gap-1" data-testid="encounter-chooser">
+      <span className="self-center px-1 text-xs text-muted-foreground">Encounters:</span>
+      {encounters.map((entry) => (
+        <button
+          key={entry.id}
+          type="button"
+          onClick={() => onSelect(entry.id)}
+          className={cn(
+            'rounded border px-2 py-1 text-xs',
+            entry.id === encounterId
+              ? 'border-primary bg-primary/10 font-semibold'
+              : 'border-border'
+          )}
+          aria-pressed={entry.id === encounterId}
+        >
+          #{entry.id} · {(entry.encounter_type ?? 'encounter').replace(/_/g, ' ')}
+        </button>
+      ))}
+    </div>
+  ) : null;
+}
+
+function SceneToolsRegion({
+  activeEncounter,
+  isActive,
+  children,
+}: {
+  activeEncounter: boolean;
+  isActive: boolean;
+  children: ReactNode;
+}) {
+  if (!activeEncounter) return children;
+  return (
+    <>
+      {isActive && (
+        <div className="mt-2">
+          <CheckCallPromptCard />
+        </div>
+      )}
+      <Accordion type="single" collapsible className="mt-2" data-testid="scene-tools-accordion">
+        <AccordionItem value="scene-tools" className="border-b-0">
+          <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
+            Scene tools
+          </AccordionTrigger>
+          <AccordionContent>{children}</AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </>
+  );
+}
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -160,28 +221,13 @@ export function SceneDetailPage() {
   }, [sceneIdNum, encounterId]);
   const railEncounterId = encounterId || lingeringEncounterId;
   const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
-  const encounterChooser =
-    activeEncounterList.length > 1 ? (
-      <div className="mb-2 flex flex-wrap gap-1" data-testid="encounter-chooser">
-        <span className="self-center px-1 text-xs text-muted-foreground">Encounters:</span>
-        {activeEncounterList.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => setSelectedEncounterId(entry.id)}
-            className={cn(
-              'rounded border px-2 py-1 text-xs',
-              entry.id === encounterId
-                ? 'border-primary bg-primary/10 font-semibold'
-                : 'border-border'
-            )}
-            aria-pressed={entry.id === encounterId}
-          >
-            #{entry.id} · {(entry.encounter_type ?? 'encounter').replace(/_/g, ' ')}
-          </button>
-        ))}
-      </div>
-    ) : null;
+  const encounterChooser = (
+    <EncounterChooser
+      encounters={activeEncounterList}
+      encounterId={encounterId}
+      onSelect={setSelectedEncounterId}
+    />
+  );
   const handleDismissOutcome = useCallback(() => {
     setDismissedEncounterId(railEncounterId);
     setLingeringEncounterId(0);
@@ -413,30 +459,9 @@ export function SceneDetailPage() {
             rest of the stack folds behind one closed "Scene tools" accordion so
             the feed and composer sit under the title. Idle renders today's
             stack unchanged. */}
-            {hasActiveEncounter ? (
-              <>
-                {isActive && (
-                  <div className="mt-2">
-                    <CheckCallPromptCard />
-                  </div>
-                )}
-                <Accordion
-                  type="single"
-                  collapsible
-                  className="mt-2"
-                  data-testid="scene-tools-accordion"
-                >
-                  <AccordionItem value="scene-tools" className="border-b-0">
-                    <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
-                      Scene tools
-                    </AccordionTrigger>
-                    <AccordionContent>{sceneTools}</AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </>
-            ) : (
-              sceneTools
-            )}
+            <SceneToolsRegion activeEncounter={hasActiveEncounter} isActive={isActive}>
+              {sceneTools}
+            </SceneToolsRegion>
           </div>
 
           {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active

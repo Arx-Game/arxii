@@ -139,6 +139,43 @@ def _npc_outgoing_damage(opponent: CombatOpponent, npc_action: CombatOpponentAct
     )
 
 
+def _record_critical_npc_harm(
+    target_participant: CombatParticipant,
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    *,
+    death_eligible: bool,
+    permanent_wound_eligible: bool,
+) -> None:
+    """Record a notable NPC's critical harm when the target has a persona."""
+    # Nemesis/toxic-NPC-bond regard hook (#2039): a notable (persona-backed)
+    # NPC opponent critically harming a PC (death- or permanent-wound-eligible
+    # hit) records an NPC_HARMED_PC_INTEREST regard event. A mook/persona-less
+    # opponent's hit — or any non-critical hit from a notable NPC — is
+    # deliberately a no-op: no NpcRegard row is ever created for it.
+    if opponent.persona_id is not None and (death_eligible or permanent_wound_eligible):
+        from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
+        from world.npc_services.regard import (  # noqa: PLC0415
+            get_regard_event_config,
+            record_npc_regard_event,
+        )
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        try:
+            pc_persona = target_participant.character_sheet.primary_persona
+        except Persona.DoesNotExist:
+            pc_persona = None
+        if pc_persona is not None:
+            cfg = get_regard_event_config()
+            record_npc_regard_event(
+                holder_persona=opponent.persona,
+                target=pc_persona,
+                amount=cfg.combat_harm_amount,
+                reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
+                source_npc_combat_action=npc_action,
+            )
+
+
 def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution needs full context
     target_participant: CombatParticipant,
     *,
@@ -230,34 +267,13 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
     if npc_action.threat_entry.sends_flying and dmg_result.damage_dealt > 0:
         _trigger_sent_flying(target_participant, npc_action, dmg_result.damage_dealt)
 
-    # Nemesis/toxic-NPC-bond regard hook (#2039): a notable (persona-backed)
-    # NPC opponent critically harming a PC (death- or permanent-wound-eligible
-    # hit) records an NPC_HARMED_PC_INTEREST regard event. A mook/persona-less
-    # opponent's hit — or any non-critical hit from a notable NPC — is
-    # deliberately a no-op: no NpcRegard row is ever created for it.
-    if opponent.persona_id is not None and (
-        dmg_result.death_eligible or dmg_result.permanent_wound_eligible
-    ):
-        from world.npc_services.constants import NpcRegardEventReason  # noqa: PLC0415
-        from world.npc_services.regard import (  # noqa: PLC0415
-            get_regard_event_config,
-            record_npc_regard_event,
-        )
-        from world.scenes.models import Persona  # noqa: PLC0415
-
-        try:
-            pc_persona = target_participant.character_sheet.primary_persona
-        except Persona.DoesNotExist:
-            pc_persona = None
-        if pc_persona is not None:
-            cfg = get_regard_event_config()
-            record_npc_regard_event(
-                holder_persona=opponent.persona,
-                target=pc_persona,
-                amount=cfg.combat_harm_amount,
-                reason=NpcRegardEventReason.NPC_HARMED_PC_INTEREST,
-                source_npc_combat_action=npc_action,
-            )
+    _record_critical_npc_harm(
+        target_participant,
+        opponent,
+        npc_action,
+        death_eligible=dmg_result.death_eligible,
+        permanent_wound_eligible=dmg_result.permanent_wound_eligible,
+    )
 
     # Collect condition applications for bulk apply
     if dmg_result.damage_dealt > 0 and conditions:
