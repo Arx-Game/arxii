@@ -498,7 +498,7 @@ class VowFocusPickAdmin(admin.ModelAdmin):
 class VowFocusPickConfigAdmin(admin.ModelAdmin):
     """Singleton focus pick budget per pick level (#4759)."""
 
-    list_display = ("pk", "budget_per_level", "updated_at", "updated_by")
+    list_display = ("pk", "budget_per_level", "respec_ap_cost", "updated_at", "updated_by")
     autocomplete_fields = ["updated_by"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
