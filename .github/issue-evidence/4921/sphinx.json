@@ -1,0 +1,64 @@
+{
+  "ysmay-quicksilver": {
+    "rest": {
+      "url": "/api/covenants/roles/sphinx/?role=3",
+      "status": 200,
+      "body": {
+        "tier": "takes",
+        "role_name": "Quicksilver",
+        "demands": [],
+        "shopping_list": [],
+        "style": {
+          "style_name": "The Daring Dance",
+          "suits": true
+        }
+      }
+    },
+    "telnet": "|wSphinx of Black Quartz, judge my vow: Quicksilver.|n\nThe vow will take.\nYour style suits it."
+  },
+  "ysmay-bulwark": {
+    "rest": {
+      "url": "/api/covenants/roles/sphinx/?role=4",
+      "status": 200,
+      "body": {
+        "tier": "takes",
+        "role_name": "Bulwark",
+        "demands": [],
+        "shopping_list": [],
+        "style": {
+          "style_name": "The Daring Dance",
+          "suits": false
+        }
+      }
+    },
+    "telnet": "|wSphinx of Black Quartz, judge my vow: Bulwark.|n\nThe vow will take.\nYour style does not suit it: no style benefits while it is active."
+  },
+  "hobb-quicksilver": {
+    "rest": {
+      "url": "/api/covenants/roles/sphinx/?role=3",
+      "status": 200,
+      "body": {
+        "tier": "takes",
+        "role_name": "Quicksilver",
+        "demands": [],
+        "shopping_list": [],
+        "style": null
+      }
+    },
+    "telnet": "|wSphinx of Black Quartz, judge my vow: Quicksilver.|n\nThe vow will take."
+  },
+  "hobb-bulwark": {
+    "rest": {
+      "url": "/api/covenants/roles/sphinx/?role=4",
+      "status": 200,
+      "body": {
+        "tier": "takes",
+        "role_name": "Bulwark",
+        "demands": [],
+        "shopping_list": [],
+        "style": null
+      }
+    },
+    "telnet": "|wSphinx of Black Quartz, judge my vow: Bulwark.|n\nThe vow will take."
+  }
+}

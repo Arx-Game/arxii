@@ -1,0 +1,89 @@
+[
+  {
+    "id": 1,
+    "name": "The Daring Dance",
+    "description": "Never where the blow lands. Light steel, lighter cloth, and a partner who keeps them looking the other way.",
+    "defense_style": "evasion",
+    "defense_style_display": "Evasion",
+    "armor_share_tenths": 3,
+    "hit_stat_name": "agility",
+    "weapon_kinds": [
+      {
+        "value": "melee_one_hand",
+        "label": "One-Handed Melee"
+      },
+      {
+        "value": "thrown",
+        "label": "Thrown"
+      }
+    ],
+    "armor_kinds": [
+      {
+        "value": "light_armor",
+        "label": "Light Armor"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "The Iron Mask",
+    "description": "Plate under the finery, and the patience to let it work.",
+    "defense_style": "gear_soak",
+    "defense_style_display": "Mitigation",
+    "armor_share_tenths": 10,
+    "hit_stat_name": "strength",
+    "weapon_kinds": [
+      {
+        "value": "melee_two_hand",
+        "label": "Two-Handed Melee"
+      },
+      {
+        "value": "shield",
+        "label": "Shield"
+      }
+    ],
+    "armor_kinds": [
+      {
+        "value": "medium_armor",
+        "label": "Medium Armor"
+      },
+      {
+        "value": "heavy_armor",
+        "label": "Heavy Armor"
+      },
+      {
+        "value": "shield",
+        "label": "Shield"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Veil and Needle",
+    "description": "A ward held close, a thin blade behind it.",
+    "defense_style": "barrier",
+    "defense_style_display": "Barrier",
+    "armor_share_tenths": 6,
+    "hit_stat_name": "perception",
+    "weapon_kinds": [
+      {
+        "value": "melee_one_hand",
+        "label": "One-Handed Melee"
+      },
+      {
+        "value": "ranged",
+        "label": "Ranged"
+      }
+    ],
+    "armor_kinds": [
+      {
+        "value": "light_armor",
+        "label": "Light Armor"
+      },
+      {
+        "value": "robe",
+        "label": "Robe"
+      }
+    ]
+  }
+]

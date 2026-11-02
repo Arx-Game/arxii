@@ -1,0 +1,12 @@
+{
+  "add_to_roster_response": {
+    "character_id": 1,
+    "message": "Character added to roster."
+  },
+  "sheet.combat_style": "The Daring Dance",
+  "CharacterSkillValue": 20,
+  "CharacterTraitValue": 20,
+  "expected_style_skill_value": 20,
+  "pool_total_spent_across_skills": 30,
+  "occult_value": 10
+}
