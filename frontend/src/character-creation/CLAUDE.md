@@ -163,7 +163,15 @@ character-creation/
         │                         #   to draft_data.recent_history; a beginning that
         │                         #   strikes every stage shows its struck_stages_text
         │                         #   where the stages would be, over the box, with no
-        │                         #   footer. Replaces BeatsBlock.
+        │                         #   footer. Replaces BeatsBlock. The suggested life
+        │                         #   (#4867, slice 7 of #4813): once the beats load, an
+        │                         #   effect calls useLoadDefaultLife when the draft has a
+        │                         #   beginning its draft_data.life_loaded_for stamp does
+        │                         #   not name (a ref stops a second call per mount; the
+        │                         #   server's stamp is the durable guard); a "Start blank"
+        │                         #   button in the footer calls useClearLife. Both hooks
+        │                         #   replace the draft cache and refetch the distinctions,
+        │                         #   beats, Backgrounds offers and CG points.
         ├── UpbringingPrompts.tsx # Route prompts; `scope: 'any'` renders the pick-lists
         │                         #   asked on every path (a general write-in never
         │                         #   renders, #4395), `scope: 'path'` renders below the
