@@ -16,7 +16,7 @@ damage; an applied condition costs the evaluator's per-row lookups each time.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -31,7 +31,8 @@ from world.covenants.added_effects import (
     techniques_by_function,
 )
 from world.covenants.models import VowAddedEffect
-from world.magic.models import Technique
+from world.magic.constants import TechniqueFunction
+from world.magic.models import Technique, TechniqueFunctionTag
 from world.magic.services import de_valuation, technique_power_eval
 from world.magic.services.technique_effects import technique_payload_prefetches
 
@@ -120,6 +121,8 @@ class TechniquePreview:
     lines: list[PreviewLine]
     #: Blank for a technique with no action template: the fight simulator cannot cast it.
     simulator_url: str
+    #: Where its best with-vow figure ranks among same-level techniques of its function.
+    rank: str = ""
 
 
 @dataclass(frozen=True)
@@ -136,6 +139,55 @@ class VowPreview:
     more: int
     explanation: str = EXPLANATION
     not_priced: str = NOT_PRICED
+
+
+def ordinal(number: int) -> str:
+    """``1st``, ``2nd``, ``3rd``, ``4th``, ``11th``, ``12th``, ``13th``, ``21st``."""
+    if number % 100 in (11, 12, 13):
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
+
+
+def catalog_rank(technique_id: int, best: int, peers: Mapping[int, float]) -> tuple[int, int]:
+    """``(rank, of)``: ``best`` against ``peers`` (technique pk to baseline DE, rounded).
+
+    The technique counts once, at ``best``, whether or not it is in ``peers``; a tie
+    shares the better rank.
+    """
+    others = [round(de) for pk, de in peers.items() if pk != technique_id]
+    return 1 + sum(1 for de in others if de > best), len(others) + 1
+
+
+def rank_line(rank: int, of: int, *, level: int, function: str) -> str:
+    """The rank row's text, or the single-technique line when nothing compares."""
+    label = str(TechniqueFunction(function).label).lower()
+    if of == 1:
+        return f"Catalog rank: the only level {level} {label} technique"
+    return f"Catalog rank, level {level} {label} techniques: {ordinal(rank)} of {of}"
+
+
+def _rank_function(riding: Sequence[VowAddedEffect], functions: set[str]) -> str:
+    """The function the vow rides the technique by, first in ``TechniqueFunction`` order."""
+    ridden_by = {e.function for e in riding} & functions
+    return next(f for f in TechniqueFunction.values if f in ridden_by)
+
+
+def _peer_figures(
+    wanted: set[tuple[int, str]], catalog: Mapping[int, float]
+) -> dict[tuple[int, str], dict[int, float]]:
+    """Each ``(level, function)``'s catalog techniques and baseline DE: one query."""
+    peers: dict[tuple[int, str], dict[int, float]] = {key: {} for key in wanted}
+    rows = TechniqueFunctionTag.objects.filter(
+        function__in={function for _level, function in wanted},
+        technique__level__in={level for level, _function in wanted},
+    ).values_list("technique_id", "function", "technique__level")
+    for technique_id, function, level in rows:
+        key = (level, function)
+        if key in peers and technique_id in catalog:
+            peers[key][technique_id] = catalog[technique_id]
+    return peers
 
 
 def simulator_url(technique: Technique, role: CovenantRole) -> str:
@@ -176,9 +228,13 @@ def vow_power_preview(role: CovenantRole) -> VowPreview:
     The techniques are the ones the vow's added effects ride (the effect rows of
     "Techniques this vow rides"). Per technique: no vow; the base vow (rows with no focus
     pick that ride it); then each pick with a row riding it, as the base plus that pick.
+    Last, a catalog rank row: the technique's best with-vow figure (base plus its
+    strongest pick) against the baseline DE of every catalog technique of the same
+    ``level`` carrying the function the vow rides it by (the first in ``TechniqueFunction``
+    order), from the Techniques panel's cached catalog evaluation.
     One query for the effects (four payload prefetches), one for the function tags, one
-    plus the payload prefetches for the priced techniques, one for the picks, then the
-    evaluator's own cost per figure.
+    plus the payload prefetches for the priced techniques, one for the picks, one for the
+    rank peers, then the evaluator's own cost per figure.
     """
     from world.covenants.models import VowFocusPick  # noqa: PLC0415
 
@@ -195,17 +251,24 @@ def vow_power_preview(role: CovenantRole) -> VowPreview:
         return VowPreview(level=level, level_note=note, techniques=[], more=0)
     priced = priced_techniques([t.pk for t in shown])
     frame = preview_frame()
+    catalog = {r.technique_id: r.baseline_de for r in technique_analytics.default_catalog_reports()}
+    riding_by = {
+        t.pk: [e for e in effects if effect_rides_technique(e, priced[t.pk], functions[t.pk])]
+        for t in shown
+    }
+    rank_keys = {
+        t.pk: (priced[t.pk].level, _rank_function(riding_by[t.pk], functions[t.pk])) for t in shown
+    }
+    peers = _peer_figures(set(rank_keys.values()), catalog)
     previews = []
     for listed in shown:
         technique = priced[listed.pk]
-        riding = [
-            e for e in effects if effect_rides_technique(e, technique, functions[technique.pk])
-        ]
+        riding = riding_by[technique.pk]
         base = [e for e in riding if e.focus_pick_id is None]
         lines = [
-            PreviewLine(label="no vow", de=preview_de(technique, frame)),
+            PreviewLine(label="No vow", de=preview_de(technique, frame)),
             PreviewLine(
-                label=f"with base vow, level {level}",
+                label=f"With base vow, level {level}",
                 de=preview_de(technique, frame, base, level),
             ),
         ]
@@ -214,10 +277,12 @@ def vow_power_preview(role: CovenantRole) -> VowPreview:
             if own:
                 lines.append(
                     PreviewLine(
-                        label=f"with {pick.name}",
+                        label=f"With {pick.name}",
                         de=preview_de(technique, frame, [*base, *own], level),
                     )
                 )
+        key = rank_keys[technique.pk]
+        rank, of = catalog_rank(technique.pk, max(line.de for line in lines[1:]), peers[key])
         previews.append(
             TechniquePreview(
                 name=technique.name,
@@ -226,6 +291,7 @@ def vow_power_preview(role: CovenantRole) -> VowPreview:
                 simulator_url=(
                     simulator_url(technique, role) if technique.action_template_id else ""
                 ),
+                rank=rank_line(rank, of, level=key[0], function=key[1]),
             )
         )
     return VowPreview(

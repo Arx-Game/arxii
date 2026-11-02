@@ -207,6 +207,17 @@ def default_context_and_reference() -> tuple[EvalContext, ReferenceFrame]:
     return context, reference
 
 
+def default_catalog_reports() -> list[TechniquePowerReport]:
+    """Every catalog technique's report at the panel's default knobs (#4930).
+
+    The Techniques panel's own corpus (``_evaluate_corpus``): read from its cache for the
+    current catalog revision, else evaluated once and cached exactly as the panel does.
+    The vow page's catalog rank compares against these baseline figures.
+    """
+    reports, _reference, _evaluated_at = _evaluate_corpus(TechniqueAnalyticsParams())
+    return reports
+
+
 def _is_zero_value(report: TechniquePowerReport) -> bool:
     """True when a report has nothing priced: baseline_de is 0 and every valuation is 0."""
     return report.baseline_de == 0 and all(v.value == 0 for v in report.valuations)
