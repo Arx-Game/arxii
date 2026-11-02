@@ -190,20 +190,18 @@ function line(a: Pip, b: Pip): Pip[] {
   return out;
 }
 
-/**
- * The land inside a drawn loop, the path's own pips included. Consecutive samples are
- * joined with a line and the path closes back to its start, so a fast drag at low zoom
- * leaves no gap; the exterior is flooded from the region's border and everything else
- * is inside.
- */
-export function loopInterior(data: RegionMapPips, path: Pip[]): Pip[] {
-  if (path.length === 0) return [];
-  const grid = gridOf(data);
+/** The pips a drawn path covers: consecutive samples joined by a line, closed to its start. */
+function rasterizePath(path: Pip[]): Set<string> {
   const onPath = new Set<string>();
   for (let i = 0; i < path.length; i += 1) {
     const next = path[(i + 1) % path.length];
     for (const [x, y] of line(path[i], next)) onPath.add(pipKey(x, y));
   }
+  return onPath;
+}
+
+/** Every pip reachable from the region's border without crossing the path. */
+function exteriorOf(grid: Grid, onPath: Set<string>): Set<string> {
   const exterior = new Set<string>();
   const offPath = (x: number, y: number) => !onPath.has(pipKey(x, y));
   const x1 = grid.x0 + grid.width - 1;
@@ -215,9 +213,22 @@ export function loopInterior(data: RegionMapPips, path: Pip[]): Pip[] {
     if (exterior.has(pipKey(start[0], start[1]))) continue;
     for (const [x, y] of flood(grid, start, offPath)) exterior.add(pipKey(x, y));
   }
+  return exterior;
+}
+
+/**
+ * The land inside a drawn loop, the path's own pips included. Consecutive samples are
+ * joined with a line and the path closes back to its start, so a fast drag at low zoom
+ * leaves no gap; the exterior is flooded from the region's border and everything else
+ * is inside.
+ */
+export function loopInterior(data: RegionMapPips, path: Pip[]): Pip[] {
+  if (path.length === 0) return [];
+  const grid = gridOf(data);
+  const exterior = exteriorOf(grid, rasterizePath(path));
   const out: Pip[] = [];
-  for (let y = grid.y0; y <= y1; y += 1) {
-    for (let x = grid.x0; x <= x1; x += 1) {
+  for (let y = grid.y0; y < grid.y0 + grid.height; y += 1) {
+    for (let x = grid.x0; x < grid.x0 + grid.width; x += 1) {
       if (!exterior.has(pipKey(x, y)) && grid.landAt(x, y)) out.push([x, y]);
     }
   }
