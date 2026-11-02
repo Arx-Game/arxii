@@ -60976,8 +60976,11 @@ components:
           description: If True, anyone with the code can claim. If False, only the
             invited_email may claim.
         invited_email:
-          type: string
-          format: email
+          oneOf:
+          - type: string
+            format: email
+          - type: string
+            maxLength: 0
         claimed_at:
           type: string
           format: date-time
@@ -61015,8 +61018,11 @@ components:
           description: If True, anyone with the code can claim. If False, only the
             invited_email may claim.
         invited_email:
-          type: string
-          format: email
+          oneOf:
+          - type: string
+            format: email
+          - type: string
+            maxLength: 0
       required:
       - roster_entry
     GMStandoffView:
@@ -82341,10 +82347,13 @@ components:
           description: Minimum character level to enter this path (1, 3, 6, 11, 16,
             21 typical)
         icon_url:
-          type: string
-          format: uri
           description: URL for path icon/image
-          maxLength: 200
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
         icon_name:
           type: string
           description: Lucide icon name (e.g., 'swords', 'eye', 'message-circle')
@@ -82419,10 +82428,13 @@ components:
           type: boolean
           description: Whether this path is available for selection
         icon_url:
-          type: string
-          format: uri
           description: URL for path icon/image
-          maxLength: 200
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
         icon_name:
           type: string
           description: Lucide icon name (e.g., 'swords', 'eye', 'message-circle')
@@ -82489,10 +82501,13 @@ components:
           description: Minimum character level to enter this path (1, 3, 6, 11, 16,
             21 typical)
         icon_url:
-          type: string
-          format: uri
           description: URL for path icon/image
-          maxLength: 200
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
         icon_name:
           type: string
           description: Lucide icon name (e.g., 'swords', 'eye', 'message-circle')
@@ -83287,9 +83302,12 @@ components:
             * `temporary` - Temporary
             * `alternate` - Alternate
         thumbnail_url:
-          type: string
-          format: uri
-          maxLength: 500
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 500
+          - type: string
+            maxLength: 0
         thumbnail_media_url:
           type: string
           nullable: true

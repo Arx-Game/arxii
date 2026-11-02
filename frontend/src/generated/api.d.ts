@@ -35265,7 +35265,6 @@ export interface components {
       expires_at?: string | null;
       /** @description If True, anyone with the code can claim. If False, only the invited_email may claim. */
       is_public?: boolean;
-      /** Format: email */
       invited_email?: string;
       /** Format: date-time */
       readonly claimed_at: string | null;
@@ -35279,7 +35278,6 @@ export interface components {
       expires_at?: string | null;
       /** @description If True, anyone with the code can claim. If False, only the invited_email may claim. */
       is_public?: boolean;
-      /** Format: email */
       invited_email?: string;
     };
     /** @description Everything a GM sees of a standoff (``services/gm_view.py``). GM and staff only. */
@@ -46938,10 +46936,7 @@ export interface components {
       stage: components['schemas']['StageEnum'];
       /** @description Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical) */
       minimum_level: number;
-      /**
-       * Format: uri
-       * @description URL for path icon/image
-       */
+      /** @description URL for path icon/image */
       icon_url?: string;
       /** @description Lucide icon name (e.g., 'swords', 'eye', 'message-circle') */
       icon_name?: string;
@@ -46984,10 +46979,7 @@ export interface components {
       minimum_level: number;
       /** @description Whether this path is available for selection */
       is_active?: boolean;
-      /**
-       * Format: uri
-       * @description URL for path icon/image
-       */
+      /** @description URL for path icon/image */
       icon_url?: string;
       /** @description Lucide icon name (e.g., 'swords', 'eye', 'message-circle') */
       icon_name?: string;
@@ -47018,10 +47010,7 @@ export interface components {
       stage: components['schemas']['StageEnum'];
       /** @description Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical) */
       minimum_level: number;
-      /**
-       * Format: uri
-       * @description URL for path icon/image
-       */
+      /** @description URL for path icon/image */
       icon_url?: string;
       /** @description Lucide icon name (e.g., 'swords', 'eye', 'message-circle') */
       icon_name?: string;
@@ -47396,7 +47385,6 @@ export interface components {
        * @default temporary
        */
       persona_type: components['schemas']['PersonaTypeEnum'];
-      /** Format: uri */
       thumbnail_url?: string;
       readonly thumbnail_media_url: string | null;
       readonly roster_entry: {
