@@ -74,7 +74,7 @@ jobs:
 
           # GitHub closes every issue or PR a closing keyword names when this merges
           # (#4903: "the bot fixed #4866" closed an open PR). Edit the body to fix.
-          from tools.closing_keywords import stray_references
+          from tools.closing_keywords import crowded_closing_lines, stray_references
 
           stray = stray_references(body, issue_number)
           if stray:
@@ -82,6 +82,13 @@ jobs:
                   f"The PR body names other issues after a closing keyword: {stray}. "
                   f"Merging would close them. Only #{issue_number} may follow close/fix/"
                   "resolve; reword the rest (e.g. 'on #N', 'renumbered #N')."
+              )
+          # GitHub closes only the first reference on a line (#4922): one per line.
+          crowded = crowded_closing_lines(body)
+          if crowded:
+              raise SystemExit(
+                  f"The PR body tries to close several issues on one line: {crowded}. "
+                  "GitHub closes only the first; put each Closes #N on its own line."
               )
           PY
       - name: Validate labeled review evidence
