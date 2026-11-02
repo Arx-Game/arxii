@@ -1,0 +1,17 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "d97150191a353ea3366066b41b3de51157635600",
+  "data": {
+    "what": "covenant_role_bonus(sheet, weapon_damage) for an engaged covenant role whose bonus is pinned to 10 and gear stat to 0 (as the repo's own unit test pins them), with the weapon worn over one or two slots",
+    "two_handed_weapon_in_two_slots": {
+      "slots_the_weapon_fills": 2,
+      "role_bonus": 10,
+      "covenant_role_bonus_total": 20
+    },
+    "control_one_handed_weapon_in_one_slot": {
+      "slots_the_weapon_fills": 1,
+      "role_bonus": 10,
+      "covenant_role_bonus_total": 10
+    }
+  }
+}

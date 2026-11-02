@@ -1,0 +1,64 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "web dispatch of the registered action market_sell_fence (the fence's action)",
+    "items_before": [
+      {
+        "item_id": 27,
+        "name": "Khati Claws",
+        "natural_weapon": true,
+        "equipped_at": [
+          "left_hand/skin",
+          "right_hand/skin"
+        ],
+        "in_hands_of": "Ysmay"
+      },
+      {
+        "item_id": 28,
+        "name": "Old Dagger",
+        "natural_weapon": false,
+        "equipped_at": [],
+        "in_hands_of": "Ysmay"
+      }
+    ],
+    "control_sale_of_a_plain_dagger": {
+      "request": "market_sell_fence item_name='Old Dagger'",
+      "response": {
+        "success": true,
+        "message": "The fence counts out 40 coppers for Old Dagger. No names."
+      },
+      "items_after": [
+        {
+          "item_id": 27,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    },
+    "claws_sale": {
+      "request": "market_sell_fence item_name='Khati Claws'",
+      "response": {
+        "success": false,
+        "message": "That is part of the body and cannot be removed."
+      },
+      "items_after_the_refusal": [
+        {
+          "item_id": 27,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    }
+  }
+}

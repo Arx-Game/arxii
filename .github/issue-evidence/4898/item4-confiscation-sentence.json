@@ -1,0 +1,45 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "SERVICE CALL ONLY: world.justice.sentences.schedule_sentence(case), the post-verdict dispatcher the trial pipeline calls for a CONFISCATION sentence; no player command runs it",
+    "sentence": "CONFISCATION against a held accused",
+    "before": {
+      "carried_objects": [
+        "Khati Claws",
+        "Traveller's Pack"
+      ],
+      "items": [
+        {
+          "item_id": 33,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "TestChar_9"
+        }
+      ]
+    },
+    "after": {
+      "carried_objects": [
+        "Khati Claws"
+      ],
+      "pack_now_in": "test_object_14",
+      "brig_room_is_that_room": true,
+      "items": [
+        {
+          "item_id": 33,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "TestChar_9"
+        }
+      ]
+    }
+  }
+}

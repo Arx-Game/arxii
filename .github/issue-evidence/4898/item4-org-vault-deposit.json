@@ -1,0 +1,63 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "web dispatch of the registered action vault_deposit, in a room with a bank",
+    "items_before": [
+      {
+        "item_id": 19,
+        "name": "Khati Claws",
+        "natural_weapon": true,
+        "equipped_at": [
+          "left_hand/skin",
+          "right_hand/skin"
+        ],
+        "in_hands_of": "Ysmay"
+      },
+      {
+        "item_id": 20,
+        "name": "Signet Ring",
+        "natural_weapon": false,
+        "equipped_at": [],
+        "in_hands_of": "Ysmay"
+      }
+    ],
+    "control_deposit_of_a_signet_ring": {
+      "response": {
+        "success": true,
+        "message": "Signet Ring is now in House Coffers's vault."
+      },
+      "items_after": [
+        {
+          "item_id": 19,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    },
+    "claws_deposit": {
+      "request": "vault_deposit item_instance_id=19",
+      "response": {
+        "success": false,
+        "message": "That is part of the body and cannot be removed."
+      },
+      "items_after_the_refusal": [
+        {
+          "item_id": 19,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    }
+  }
+}

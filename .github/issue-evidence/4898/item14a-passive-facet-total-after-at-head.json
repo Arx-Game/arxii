@@ -1,0 +1,19 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "what": "passive_facet_bonuses(sheet, 'Strike: base damage') for one worn piece carrying a Wolf facet (+2 a shown level, thread level 10), worn over several slots",
+    "plate_armour_torso_and_left_arm": {
+      "slots_the_piece_fills": 2,
+      "passive_facet_bonus_total": 2
+    },
+    "two_handed_sword_both_hands": {
+      "slots_the_piece_fills": 2,
+      "passive_facet_bonus_total": 2
+    },
+    "control_one_handed_sword_one_slot": {
+      "slots_the_piece_fills": 1,
+      "passive_facet_bonus_total": 2
+    }
+  }
+}

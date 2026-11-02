@@ -1,0 +1,65 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "REST POST /api/items/inventory/<id>/recycle/ as the owner (the wardrobe's Recycle button; recycle_item is not a web-dispatch action)",
+    "items_before": [
+      {
+        "item_id": 17,
+        "name": "Khati Claws",
+        "natural_weapon": true,
+        "equipped_at": [
+          "left_hand/skin",
+          "right_hand/skin"
+        ],
+        "in_hands_of": "Ysmay"
+      },
+      {
+        "item_id": 18,
+        "name": "Cracked Buckler",
+        "natural_weapon": false,
+        "equipped_at": [],
+        "in_hands_of": "Ysmay"
+      }
+    ],
+    "control_recycle_of_a_plain_buckler": {
+      "status": 200,
+      "body": {
+        "salvaged": []
+      },
+      "items_after": [
+        {
+          "item_id": 17,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    },
+    "claws_recycle": {
+      "request": "POST /api/items/inventory/17/recycle/",
+      "status": 400,
+      "body": {
+        "non_field_errors": [
+          "That is part of the body and cannot be removed."
+        ]
+      },
+      "items_after_the_refusal": [
+        {
+          "item_id": 17,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        }
+      ]
+    }
+  }
+}

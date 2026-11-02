@@ -1,0 +1,84 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "SERVICE CALL ONLY: fulfill_boon(boon). A boon row naming the claws cannot be created through the ask (it is refused at ask time, see item4-boon-ask.json), so the row was written directly, standing for one that predates the refusal",
+    "items_before": {
+      "target": [
+        {
+          "item_id": 31,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Ysmay"
+        },
+        {
+          "item_id": 32,
+          "name": "Old Dagger",
+          "natural_weapon": false,
+          "equipped_at": [],
+          "in_hands_of": "Ysmay"
+        }
+      ],
+      "asker": []
+    },
+    "control_fulfilment_of_a_dagger_boon": {
+      "returned": true,
+      "items_after": {
+        "target": [
+          {
+            "item_id": 31,
+            "name": "Khati Claws",
+            "natural_weapon": true,
+            "equipped_at": [
+              "left_hand/skin",
+              "right_hand/skin"
+            ],
+            "in_hands_of": "Ysmay"
+          }
+        ],
+        "asker": [
+          {
+            "item_id": 32,
+            "name": "Old Dagger",
+            "natural_weapon": false,
+            "equipped_at": [],
+            "in_hands_of": "Hobb"
+          }
+        ]
+      }
+    },
+    "claws_boon": {
+      "raised_validation_error": [
+        "That is part of the body and cannot be removed."
+      ],
+      "boon_fulfilled_at": "None",
+      "items_after": {
+        "target": [
+          {
+            "item_id": 31,
+            "name": "Khati Claws",
+            "natural_weapon": true,
+            "equipped_at": [
+              "left_hand/skin",
+              "right_hand/skin"
+            ],
+            "in_hands_of": "Ysmay"
+          }
+        ],
+        "asker": [
+          {
+            "item_id": 32,
+            "name": "Old Dagger",
+            "natural_weapon": false,
+            "equipped_at": [],
+            "in_hands_of": "Hobb"
+          }
+        ]
+      }
+    }
+  }
+}

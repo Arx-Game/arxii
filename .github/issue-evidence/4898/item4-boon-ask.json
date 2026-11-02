@@ -1,0 +1,91 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "REST POST to the scene action-requests endpoint as the asker's account (the ask UI's submit); pointer knowledge faked as the repo's boon tests do",
+    "items_before": [
+      {
+        "item_id": 29,
+        "name": "Khati Claws",
+        "natural_weapon": true,
+        "equipped_at": [
+          "left_hand/skin",
+          "right_hand/skin"
+        ],
+        "in_hands_of": "Ysmay"
+      },
+      {
+        "item_id": 30,
+        "name": "Old Dagger",
+        "natural_weapon": false,
+        "equipped_at": [],
+        "in_hands_of": "Ysmay"
+      }
+    ],
+    "control_ask_for_a_plain_dagger": {
+      "request": "POST /api/action-requests/ {'scene': 3, 'initiator_persona': 18, 'target_persona': 19, 'action_key': 'boon', 'boon': {'kind': 'held_item', 'item_instance_id': 30}}",
+      "status": 201,
+      "body": {
+        "id": 1,
+        "scene": 3,
+        "initiator_persona": 18,
+        "initiator_name": "Hobb",
+        "target_persona": 19,
+        "target_name": "Ysmay",
+        "action_key": "boon",
+        "action_template": null,
+        "technique": null,
+        "technique_name": null,
+        "delivery": "",
+        "status": "pending",
+        "difficulty_choice": "normal",
+        "resolved_difficulty": null,
+        "result_interaction": null,
+        "action_interaction": null,
+        "strain_commitment": 0,
+        "combat_risk_level": null,
+        "combat_stakes": null,
+        "boon": {
+          "kind": "held_item",
+          "sum_tier": "",
+          "amount": 0,
+          "item_name": "Old Dagger",
+          "deed_text": "",
+          "material_category_name": null
+        },
+        "resist_only": false,
+        "resist_check_name": null,
+        "created_at": "2026-11-02T01:02:09.864571Z",
+        "resolved_at": null
+      }
+    },
+    "claws_ask": {
+      "request": "POST /api/action-requests/ {'scene': 3, 'initiator_persona': 18, 'target_persona': 19, 'action_key': 'boon', 'boon': {'kind': 'held_item', 'item_instance_id': 29}}",
+      "status": 400,
+      "body": {
+        "detail": [
+          "That is part of the body and cannot be removed."
+        ]
+      }
+    },
+    "items_after": [
+      {
+        "item_id": 29,
+        "name": "Khati Claws",
+        "natural_weapon": true,
+        "equipped_at": [
+          "left_hand/skin",
+          "right_hand/skin"
+        ],
+        "in_hands_of": "Ysmay"
+      },
+      {
+        "item_id": 30,
+        "name": "Old Dagger",
+        "natural_weapon": false,
+        "equipped_at": [],
+        "in_hands_of": "Ysmay"
+      }
+    ]
+  }
+}

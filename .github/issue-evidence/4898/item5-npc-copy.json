@@ -1,0 +1,63 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "REST POST /api/roster/npcs/<id>/copy-section/ as the owning GM, section=powers: Captain Vael takes Mirelle's powers (she has no gift)",
+    "before": {
+      "Captain Vael (clawed)": {
+        "items_held": [
+          {
+            "item_id": 58,
+            "name": "Khati Claws",
+            "natural_weapon": true,
+            "equipped_at": [
+              "left_hand/skin",
+              "right_hand/skin"
+            ],
+            "in_hands_of": "Captain Vael"
+          }
+        ],
+        "claws_rows_anywhere": [
+          {
+            "item_id": 58,
+            "holder": "Sheet for Captain Vael",
+            "destroyed": false,
+            "has_game_object": true
+          }
+        ],
+        "gift_rows": [
+          [
+            "Khati Claws",
+            "character_creation"
+          ]
+        ]
+      },
+      "Mirelle (no gift)": {
+        "items_held": [],
+        "claws_rows_anywhere": [
+          {
+            "item_id": 58,
+            "holder": "Sheet for Captain Vael",
+            "destroyed": false,
+            "has_game_object": true
+          }
+        ],
+        "gift_rows": []
+      }
+    },
+    "request": "POST /api/roster/npcs/38/copy-section/ {'source_entry': 39, 'section': 'powers'}",
+    "status": 200,
+    "after": {
+      "Captain Vael": {
+        "items_held": [],
+        "claws_rows_anywhere": [],
+        "gift_rows": []
+      },
+      "Mirelle": {
+        "items_held": [],
+        "claws_rows_anywhere": [],
+        "gift_rows": []
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "reviewed_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "ran_at_commit": "59e7cea70c67ec37057f24b75308f29e6ed10824",
+  "data": {
+    "seam": "Django admin, CharacterGift change list's delete action (confirmation page, then POST post=yes)",
+    "before": {
+      "items_held": [
+        {
+          "item_id": 52,
+          "name": "Khati Claws",
+          "natural_weapon": true,
+          "equipped_at": [
+            "left_hand/skin",
+            "right_hand/skin"
+          ],
+          "in_hands_of": "Hobb"
+        }
+      ],
+      "claws_rows_anywhere": [
+        {
+          "item_id": 52,
+          "holder": "Sheet for Hobb",
+          "destroyed": false,
+          "has_game_object": true
+        }
+      ],
+      "gift_rows": [
+        [
+          "Khati Claws",
+          "gm_grant"
+        ]
+      ]
+    },
+    "confirmation_page_status": 200,
+    "request": "POST /admin/arxii/charactergift/35/delete/ post=yes",
+    "status": 302,
+    "state_after": {
+      "items_held": [],
+      "claws_rows_anywhere": [],
+      "gift_rows": []
+    }
+  }
+}
