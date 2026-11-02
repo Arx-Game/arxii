@@ -67,6 +67,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     looks: [],
     plate_ink: 'ember',
     worn: [],
+    natural_weapons: [],
     mentors: [],
     domains: [],
     keyring: [],
