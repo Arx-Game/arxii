@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "body": {
+    "backend": "registry",
+    "deferred": false,
+    "message": "You take Read the Feint. Level 2: 4 of 4.",
+    "data": {
+      "pick_id": 28,
+      "membership_id": 9
+    },
+    "success": true
+  }
+}

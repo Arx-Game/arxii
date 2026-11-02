@@ -1,0 +1,54 @@
+{
+  "04-telnet-vow-picks-raw": {
+    "raw": "|wQuicksilver|n, vow level 2.\nLevel 1: 4 of 4.\n  - Feint and Vanish, 2 pts. |x(costs more than is left)|n One step in, two steps gone.\n      Evasion +1 per thread level \u00b7 Timing limit: a round you attack, met 5 times in 10\n  - Light on Your Feet, 4 pts. |x(costs more than is left)|n Always a step further than they think.\n      Evasion +1 per thread level \u00b7 no limits\n  |g*|n Quick Recovery, 2 pts. Chosen. You are back on your feet before they turn.\n      Defense +1 per thread level \u00b7 Timing limit: the round after a hit, met 5 times in 10\n  |g*|n Strike from the Flank, 2 pts. Chosen. Your cut lands harder on someone already busy with an ally.\n      Damage +1 per thread level \u00b7 Target limit: an ally is engaging them, met 6 times in 10\nLevel 2: 3 of 4.\n  |g*|n Bleeding Cut, 3 pts. Chosen. A shallow cut that keeps opening.\n      Damage +1 per thread level \u00b7 Cost limit: 1 anima per use, price less 1\n  - Read the Feint, 1 pt. You see the second blade coming.\n      Defense +1 per thread level \u00b7 Target limit: a boss, met 3 times in 10\n  - Through the Gap, 4 pts. |x(costs more than is left)|n Where the shield is not.\n      Accuracy +1 per thread level \u00b7 no limits\nLevel 3: opens at vow level 3.\n  - Hold the Line, 4 pts. |x(opens at vow level 3)|n Plant your feet and let them come.\n      no limits\n  - Last Stand, 2 pts. |x(opens at vow level 3)|n When the others have fallen.\n      no limits\n  - Silver Rain, 4 pts. |x(opens at vow level 3)|n A flurry no guard can follow.\n      no limits",
+    "plain": "Quicksilver, vow level 2.\nLevel 1: 4 of 4.\n  - Feint and Vanish, 2 pts. (costs more than is left) One step in, two steps gone.\n      Evasion +1 per thread level \u00b7 Timing limit: a round you attack, met 5 times in 10\n  - Light on Your Feet, 4 pts. (costs more than is left) Always a step further than they think.\n      Evasion +1 per thread level \u00b7 no limits\n  * Quick Recovery, 2 pts. Chosen. You are back on your feet before they turn.\n      Defense +1 per thread level \u00b7 Timing limit: the round after a hit, met 5 times in 10\n  * Strike from the Flank, 2 pts. Chosen. Your cut lands harder on someone already busy with an ally.\n      Damage +1 per thread level \u00b7 Target limit: an ally is engaging them, met 6 times in 10\nLevel 2: 3 of 4.\n  * Bleeding Cut, 3 pts. Chosen. A shallow cut that keeps opening.\n      Damage +1 per thread level \u00b7 Cost limit: 1 anima per use, price less 1\n  - Read the Feint, 1 pt. You see the second blade coming.\n      Defense +1 per thread level \u00b7 Target limit: a boss, met 3 times in 10\n  - Through the Gap, 4 pts. (costs more than is left) Where the shield is not.\n      Accuracy +1 per thread level \u00b7 no limits\nLevel 3: opens at vow level 3.\n  - Hold the Line, 4 pts. (opens at vow level 3) Plant your feet and let them come.\n      no limits\n  - Last Stand, 2 pts. (opens at vow level 3) When the others have fallen.\n      no limits\n  - Silver Rain, 4 pts. (opens at vow level 3) A flurry no guard can follow.\n      no limits"
+  },
+  "05-telnet-vow-pick-raw": {
+    "raw": "You take Read the Feint. Level 2: 4 of 4.",
+    "plain": "You take Read the Feint. Level 2: 4 of 4."
+  },
+  "06-telnet-vow-pick-over-budget-raw": {
+    "raw": "'Through the Gap' costs 4, and this character has already spent 4 of the 4 points for level 2 picks.",
+    "plain": "'Through the Gap' costs 4, and this character has already spent 4 of the 4 points for level 2 picks."
+  },
+  "07-telnet-other-refusals-raw": {
+    "raw": "You have already chosen Read the Feint.\n---\nYour vow offers no pick named Dance of Knives.\n---\n'Hold the Line' is a level 3 pick, and this character's vow is at level 2.",
+    "plain": "You have already chosen Read the Feint.\n---\nYour vow offers no pick named Dance of Knives.\n---\n'Hold the Line' is a level 3 pick, and this character's vow is at level 2."
+  },
+  "12-other-character-telnet-raw": {
+    "raw": "You hold no vow with focus picks.",
+    "plain": "You hold no vow with focus picks."
+  },
+  "22-subrole-telnet-vow-picks-raw": {
+    "raw": "|wQuicksilver Duelist|n, vow level 3.\nLevel 1: 4 of 4.\n Quicksilver:\n  - Feint and Vanish, 2 pts. |x(costs more than is left)|n One step in, two steps gone.\n      Evasion +1 per thread level \u00b7 Timing limit: a round you attack, met 5 times in 10\n  - Light on Your Feet, 4 pts. |x(costs more than is left)|n Always a step further than they think.\n      Evasion +1 per thread level \u00b7 no limits\n  - Quick Recovery, 2 pts. |x(costs more than is left)|n You are back on your feet before they turn.\n      Defense +1 per thread level \u00b7 Timing limit: the round after a hit, met 5 times in 10\n  |g*|n Strike from the Flank, 2 pts. Chosen. Your cut lands harder on someone already busy with an ally.\n      Damage +1 per thread level \u00b7 Target limit: an ally is engaging them, met 6 times in 10\n Quicksilver Duelist:\n  |g*|n Riposte, 2 pts. Chosen. Answer a parried blow with your own.\n      no limits\nLevel 2: 0 of 4.\n Quicksilver:\n  - Bleeding Cut, 3 pts. A shallow cut that keeps opening.\n      Damage +1 per thread level \u00b7 Cost limit: 1 anima per use, price less 1\n  - Read the Feint, 1 pt. You see the second blade coming.\n      Defense +1 per thread level \u00b7 Target limit: a boss, met 3 times in 10\n  - Through the Gap, 4 pts. Where the shield is not.\n      Accuracy +1 per thread level \u00b7 no limits\n Quicksilver Duelist:\n  - Measured Distance, 2 pts. Keep exactly one blade's length.\n      no limits\nLevel 3: 0 of 4.\n Quicksilver:\n  - Hold the Line, 4 pts. Plant your feet and let them come.\n      no limits\n  - Last Stand, 2 pts. When the others have fallen.\n      no limits\n  - Silver Rain, 4 pts. A flurry no guard can follow.\n      no limits",
+    "plain": "Quicksilver Duelist, vow level 3.\nLevel 1: 4 of 4.\n Quicksilver:\n  - Feint and Vanish, 2 pts. (costs more than is left) One step in, two steps gone.\n      Evasion +1 per thread level \u00b7 Timing limit: a round you attack, met 5 times in 10\n  - Light on Your Feet, 4 pts. (costs more than is left) Always a step further than they think.\n      Evasion +1 per thread level \u00b7 no limits\n  - Quick Recovery, 2 pts. (costs more than is left) You are back on your feet before they turn.\n      Defense +1 per thread level \u00b7 Timing limit: the round after a hit, met 5 times in 10\n  * Strike from the Flank, 2 pts. Chosen. Your cut lands harder on someone already busy with an ally.\n      Damage +1 per thread level \u00b7 Target limit: an ally is engaging them, met 6 times in 10\n Quicksilver Duelist:\n  * Riposte, 2 pts. Chosen. Answer a parried blow with your own.\n      no limits\nLevel 2: 0 of 4.\n Quicksilver:\n  - Bleeding Cut, 3 pts. A shallow cut that keeps opening.\n      Damage +1 per thread level \u00b7 Cost limit: 1 anima per use, price less 1\n  - Read the Feint, 1 pt. You see the second blade coming.\n      Defense +1 per thread level \u00b7 Target limit: a boss, met 3 times in 10\n  - Through the Gap, 4 pts. Where the shield is not.\n      Accuracy +1 per thread level \u00b7 no limits\n Quicksilver Duelist:\n  - Measured Distance, 2 pts. Keep exactly one blade's length.\n      no limits\nLevel 3: 0 of 4.\n Quicksilver:\n  - Hold the Line, 4 pts. Plant your feet and let them come.\n      no limits\n  - Last Stand, 2 pts. When the others have fallen.\n      no limits\n  - Silver Rain, 4 pts. A flurry no guard can follow.\n      no limits"
+  },
+  "32-telnet-imbue-no-crossing-raw": {
+    "raw": "You complete the rite, imbuing Quicksilver.",
+    "plain": "You complete the rite, imbuing Quicksilver."
+  },
+  "33-telnet-imbue-crossing-2-to-3-raw": {
+    "raw": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 3.\nVow level 3: 4 pts of new picks.",
+    "plain": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 3.\nVow level 3: 4 pts of new picks."
+  },
+  "34-telnet-imbue-past-level-3-raw": {
+    "raw": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 4.",
+    "plain": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 4."
+  },
+  "35-telnet-imbue-crossing-1-to-2-raw": {
+    "raw": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 2.\nVow level 2: 4 pts of new picks.",
+    "plain": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 2.\nVow level 2: 4 pts of new picks."
+  },
+  "36-telnet-imbue-non-vow-thread-raw": {
+    "raw": "You complete the rite, imbuing Moth Silk. Moth Silk is now level 2.",
+    "plain": "You complete the rite, imbuing Moth Silk. Moth Silk is now level 2."
+  },
+  "40-joining-fresh-joiner-told-raw": {
+    "raw": "You have joined ritual session #1.",
+    "plain": "You have joined ritual session #1."
+  },
+  "41-joining-woven-level-2-joiner-told-raw": {
+    "raw": "You have joined ritual session #2.\n|R[NARRATIVE]|n Vow level 1: 4 pts of new picks.\nVow level 2: 4 pts of new picks.",
+    "plain": "You have joined ritual session #2.\n[NARRATIVE] Vow level 1: 4 pts of new picks.\nVow level 2: 4 pts of new picks."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "http_status": 200,
+  "body": {
+    "ritual_id": 2,
+    "execution_kind": "CEREMONY",
+    "result": {
+      "resonance_spent": 5500,
+      "developed_points_added": 5500,
+      "levels_gained": 10,
+      "new_level": 20,
+      "new_developed_points": 0,
+      "blocked_by": "NONE",
+      "blocked_requirement_messages": []
+    },
+    "message": "You complete the rite, imbuing Quicksilver. Quicksilver is now level 2.\nVow level 2: 4 pts of new picks.",
+    "opened_pick_levels": [
+      2
+    ],
+    "new_picks": [
+      {
+        "level": 2,
+        "points": 4
+      }
+    ]
+  }
+}

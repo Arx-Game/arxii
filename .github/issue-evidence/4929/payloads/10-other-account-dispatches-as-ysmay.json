@@ -1,0 +1,6 @@
+{
+  "http_status": 403,
+  "body": {
+    "detail": "You do not have permission to perform this action."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "http_status": 200,
+  "body": {
+    "backend": "registry",
+    "deferred": false,
+    "message": "'Through the Gap' costs 4, and this character has already spent 4 of the 4 points for level 2 picks.",
+    "data": null,
+    "success": false
+  }
+}

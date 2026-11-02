@@ -1,0 +1,28 @@
+{
+  "riposte": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Riposte. Level 1: 2 of 4.",
+      "data": {
+        "pick_id": 11,
+        "membership_id": 7
+      },
+      "success": true
+    }
+  },
+  "flank": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Strike from the Flank. Level 1: 4 of 4.",
+      "data": {
+        "pick_id": 1,
+        "membership_id": 7
+      },
+      "success": true
+    }
+  }
+}

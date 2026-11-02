@@ -1,0 +1,178 @@
+{
+  "http_status": 200,
+  "body": [
+    {
+      "membership_id": 9,
+      "covenant_id": 7,
+      "covenant": "The Quicksilver Hall",
+      "vow": "Quicksilver",
+      "vow_level": 2,
+      "vows": [
+        "Quicksilver"
+      ],
+      "levels": [
+        {
+          "level": 1,
+          "is_open": true,
+          "budget": 4,
+          "spent": 4,
+          "left": 0,
+          "picks": [
+            {
+              "id": 26,
+              "vow": "Quicksilver",
+              "name": "Feint and Vanish",
+              "description": "One step in, two steps gone.",
+              "price": 2,
+              "effects": [
+                "Evasion +1 per thread level"
+              ],
+              "limits": "Timing limit: a round you attack, met 5 times in 10",
+              "chosen": false,
+              "locked_reason": "costs more than is left",
+              "choosable": false
+            },
+            {
+              "id": 25,
+              "vow": "Quicksilver",
+              "name": "Light on Your Feet",
+              "description": "Always a step further than they think.",
+              "price": 4,
+              "effects": [
+                "Evasion +1 per thread level"
+              ],
+              "limits": "no limits",
+              "chosen": false,
+              "locked_reason": "costs more than is left",
+              "choosable": false
+            },
+            {
+              "id": 24,
+              "vow": "Quicksilver",
+              "name": "Quick Recovery",
+              "description": "You are back on your feet before they turn.",
+              "price": 2,
+              "effects": [
+                "Defense +1 per thread level"
+              ],
+              "limits": "Timing limit: the round after a hit, met 5 times in 10",
+              "chosen": true,
+              "locked_reason": "",
+              "choosable": false
+            },
+            {
+              "id": 23,
+              "vow": "Quicksilver",
+              "name": "Strike from the Flank",
+              "description": "Your cut lands harder on someone already busy with an ally.",
+              "price": 2,
+              "effects": [
+                "Damage +1 per thread level"
+              ],
+              "limits": "Target limit: an ally is engaging them, met 6 times in 10",
+              "chosen": true,
+              "locked_reason": "",
+              "choosable": false
+            }
+          ]
+        },
+        {
+          "level": 2,
+          "is_open": true,
+          "budget": 4,
+          "spent": 4,
+          "left": 0,
+          "picks": [
+            {
+              "id": 27,
+              "vow": "Quicksilver",
+              "name": "Bleeding Cut",
+              "description": "A shallow cut that keeps opening.",
+              "price": 3,
+              "effects": [
+                "Damage +1 per thread level"
+              ],
+              "limits": "Cost limit: 1 anima per use, price less 1",
+              "chosen": true,
+              "locked_reason": "",
+              "choosable": false
+            },
+            {
+              "id": 28,
+              "vow": "Quicksilver",
+              "name": "Read the Feint",
+              "description": "You see the second blade coming.",
+              "price": 1,
+              "effects": [
+                "Defense +1 per thread level"
+              ],
+              "limits": "Target limit: a boss, met 3 times in 10",
+              "chosen": true,
+              "locked_reason": "",
+              "choosable": false
+            },
+            {
+              "id": 29,
+              "vow": "Quicksilver",
+              "name": "Through the Gap",
+              "description": "Where the shield is not.",
+              "price": 4,
+              "effects": [
+                "Accuracy +1 per thread level"
+              ],
+              "limits": "no limits",
+              "chosen": false,
+              "locked_reason": "costs more than is left",
+              "choosable": false
+            }
+          ]
+        },
+        {
+          "level": 3,
+          "is_open": false,
+          "budget": 4,
+          "spent": 0,
+          "left": 4,
+          "picks": [
+            {
+              "id": 30,
+              "vow": "Quicksilver",
+              "name": "Hold the Line",
+              "description": "Plant your feet and let them come.",
+              "price": 4,
+              "effects": [],
+              "limits": "no limits",
+              "chosen": false,
+              "locked_reason": "opens at vow level 3",
+              "choosable": false
+            },
+            {
+              "id": 31,
+              "vow": "Quicksilver",
+              "name": "Last Stand",
+              "description": "When the others have fallen.",
+              "price": 2,
+              "effects": [],
+              "limits": "no limits",
+              "chosen": false,
+              "locked_reason": "opens at vow level 3",
+              "choosable": false
+            },
+            {
+              "id": 32,
+              "vow": "Quicksilver",
+              "name": "Silver Rain",
+              "description": "A flurry no guard can follow.",
+              "price": 4,
+              "effects": [],
+              "limits": "no limits",
+              "chosen": false,
+              "locked_reason": "opens at vow level 3",
+              "choosable": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

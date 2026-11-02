@@ -1,0 +1,71 @@
+{
+  "flank": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Strike from the Flank. Level 1: 2 of 4.",
+      "data": {
+        "pick_id": 13,
+        "membership_id": 8
+      },
+      "success": true
+    }
+  },
+  "recovery": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Quick Recovery. Level 1: 4 of 4.",
+      "data": {
+        "pick_id": 14,
+        "membership_id": 8
+      },
+      "success": true
+    }
+  },
+  "light_over_budget": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "'Light on Your Feet' costs 4, and this character has already spent 4 of the 4 points for level 1 picks.",
+      "data": null,
+      "success": false
+    }
+  },
+  "level3_pick_refused": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "'Hold the Line' is a level 3 pick, and this character's vow is at level 2.",
+      "data": null,
+      "success": false
+    }
+  },
+  "bleeding": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Bleeding Cut. Level 2: 3 of 4.",
+      "data": {
+        "pick_id": 17,
+        "membership_id": 8
+      },
+      "success": true
+    }
+  },
+  "recovery_again": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You have already chosen Quick Recovery.",
+      "data": null,
+      "success": false
+    }
+  }
+}
