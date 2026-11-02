@@ -33,7 +33,15 @@ vi.mock('@/almanach/queries', () => ({
   useRealms: vi.fn(() => ({ data: { results: [{ id: 1, name: 'Luxen' }] } })),
   useLadder: vi.fn(() => ({
     data: {
-      rows: [{ title_id: 100, name: 'Salvation', tier: 'county', house_name: 'House Stellaris' }],
+      rows: [
+        {
+          title_id: 100,
+          name: 'Salvation',
+          tier: 'county',
+          house_name: 'House Stellaris',
+          parent_title_id: null,
+        },
+      ],
       unclaimed_by_tier: {},
     },
     refetch: vi.fn(),
@@ -277,6 +285,17 @@ describe('RegionMapPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Redo' })).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
     expect(mutateAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it('swallows a failed carve request and leaves nothing to undo', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockRejectedValue(new Error('The action failed.'));
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    click(9, 3);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(screen.getByTestId('region-map-page')).toBeInTheDocument();
   });
 
   it('clears the domain behind a confirmation', async () => {

@@ -308,16 +308,21 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           toast.error('Pick a domain to carve.');
           return;
         }
+        // Every batch that landed is undoable, even when a later batch is refused or
+        // the request fails, so the entry is pushed whatever way the loop ends.
         const changed: PipChange[] = [];
-        for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
-          const result = await runAction({
-            key: 'atlas_carve_footprint',
-            kwargs: { title_id: carveTitleId, [remove ? 'remove' : 'add']: part },
-          });
-          if (result.success === false) break;
-          changed.push(...parseChanged(result.data));
+        try {
+          for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
+            const result = await runAction({
+              key: 'atlas_carve_footprint',
+              kwargs: { title_id: carveTitleId, [remove ? 'remove' : 'add']: part },
+            });
+            if (result.success === false) break;
+            changed.push(...parseChanged(result.data));
+          }
+        } finally {
+          setHistory((h) => pushEntry(h, { titleId: carveTitleId, changed }));
         }
-        setHistory((h) => pushEntry(h, { titleId: carveTitleId, changed }));
       } else if (mode === 'paint') {
         await runAction({
           key: 'atlas_paint_terrain',
