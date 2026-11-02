@@ -1,0 +1,16 @@
+[
+  {
+    "id": 12,
+    "name": "Talons",
+    "gift_name": "Blood of the Hunt",
+    "from_species": true,
+    "damage": 5,
+    "damage_type": "Slashing",
+    "facets": [
+      "Keenness",
+      "Sharpness"
+    ],
+    "facets_used": 2,
+    "facet_capacity": 3
+  }
+]

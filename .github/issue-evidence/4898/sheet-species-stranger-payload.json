@@ -1,0 +1,94 @@
+{
+  "id": 49,
+  "can_edit": false,
+  "identity": {
+    "name": "Hobb",
+    "fullname": "Hobb",
+    "concept": "Prevent account.",
+    "quote": "Run candidate fine.",
+    "age": 22,
+    "birthday": "Enduring 14 (7/14)",
+    "chronological_age": null,
+    "biological_age": null,
+    "withered_years": null,
+    "gender": null,
+    "pronouns": {
+      "subject": "they",
+      "object": "them",
+      "possessive": "their"
+    },
+    "species": null,
+    "heritage": null,
+    "beginnings": [],
+    "family": null,
+    "tarot_card": null,
+    "origin": null,
+    "path": null,
+    "worship": null,
+    "worship_sincere": null,
+    "current_mood": null,
+    "vacancy": null
+  },
+  "appearance": {
+    "height_inches": null,
+    "height_band": null,
+    "build": null,
+    "description": "",
+    "form_traits": []
+  },
+  "staff_edit": null,
+  "stats": {},
+  "skills": [],
+  "path": null,
+  "distinctions": [],
+  "magic": null,
+  "story": {
+    "background": "Four these politics maintain physical. Center walk catch election member.",
+    "origin_story_state": "not_started",
+    "origin_slots": []
+  },
+  "goals": [],
+  "beats": [],
+  "standing": {
+    "memberships": [],
+    "reputations": []
+  },
+  "covenants": [],
+  "actor_sheet": {
+    "never_do": "City attention involve yeah information away.",
+    "protect": "Six their perhaps like simply.",
+    "fear": "Turn out generation challenge part expert site.",
+    "enemy_public_line": "",
+    "enemy": null,
+    "introductions": []
+  },
+  "personas": [
+    {
+      "id": 24,
+      "name": "Hobb",
+      "thumbnail": null
+    }
+  ],
+  "theming": {
+    "aura": null
+  },
+  "profile_picture": null,
+  "viewer_is_friend": false,
+  "current_residence": null,
+  "looks": [],
+  "plate_ink": "ember",
+  "worn": [
+    {
+      "id": 12,
+      "name": "Talons",
+      "description": "A Khati Claws.",
+      "is_hidden": false
+    }
+  ],
+  "natural_weapons": [],
+  "mentors": [],
+  "domains": [],
+  "keyring": [],
+  "ties": [],
+  "ties_ap_this_week": null
+}

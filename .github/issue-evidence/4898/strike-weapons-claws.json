@@ -1,0 +1,14 @@
+[
+  {
+    "item_instance_id": 8,
+    "name": "Talons",
+    "gear_kind": "Unarmed",
+    "strike_skill": "Unarmed Combat"
+  },
+  {
+    "item_instance_id": null,
+    "name": "bare hands",
+    "gear_kind": "Unarmed",
+    "strike_skill": "Unarmed Combat"
+  }
+]

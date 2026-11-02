@@ -1,0 +1,13 @@
+[
+  {
+    "id": 11,
+    "name": "Talons",
+    "gift_name": "Blood of the Hunt",
+    "from_species": false,
+    "damage": 5,
+    "damage_type": "",
+    "facets": [],
+    "facets_used": 0,
+    "facet_capacity": 3
+  }
+]

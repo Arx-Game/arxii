@@ -1,0 +1,15 @@
+{
+  "claws": 8,
+  "slots": [
+    [
+      "Talons",
+      "right_hand",
+      "skin"
+    ],
+    [
+      "Talons",
+      "left_hand",
+      "skin"
+    ]
+  ]
+}

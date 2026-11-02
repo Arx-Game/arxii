@@ -1,0 +1,118 @@
+{
+  "id": 49,
+  "can_edit": false,
+  "identity": {
+    "name": "Hobb",
+    "fullname": "Hobb",
+    "concept": "Prevent account.",
+    "quote": "Run candidate fine.",
+    "age": 22,
+    "birthday": "Enduring 14 (7/14)",
+    "chronological_age": null,
+    "biological_age": 22,
+    "withered_years": 0,
+    "gender": null,
+    "pronouns": {
+      "subject": "they",
+      "object": "them",
+      "possessive": "their"
+    },
+    "species": null,
+    "heritage": null,
+    "beginnings": [],
+    "family": null,
+    "tarot_card": null,
+    "origin": null,
+    "path": null,
+    "worship": null,
+    "worship_sincere": null,
+    "current_mood": null,
+    "vacancy": null
+  },
+  "appearance": {
+    "height_inches": null,
+    "height_band": null,
+    "build": null,
+    "description": "",
+    "form_traits": []
+  },
+  "staff_edit": null,
+  "stats": {},
+  "skills": [],
+  "path": null,
+  "distinctions": [],
+  "magic": {
+    "gifts": [
+      {
+        "name": "Blood of the Hunt",
+        "description": "The Khati Claws gift.",
+        "resonances": [
+          "Resonance4"
+        ],
+        "techniques": []
+      }
+    ],
+    "motif": null,
+    "anima_ritual": null,
+    "aura": null,
+    "resonances": [],
+    "ultimates": []
+  },
+  "story": {
+    "background": "Four these politics maintain physical. Center walk catch election member.",
+    "origin_story_state": "not_started",
+    "origin_slots": []
+  },
+  "goals": [],
+  "beats": [],
+  "standing": {
+    "memberships": [],
+    "reputations": []
+  },
+  "covenants": [],
+  "actor_sheet": {
+    "never_do": "City attention involve yeah information away.",
+    "protect": "Six their perhaps like simply.",
+    "fear": "Turn out generation challenge part expert site.",
+    "enemy_public_line": "",
+    "enemy": null,
+    "introductions": []
+  },
+  "personas": [
+    {
+      "id": 24,
+      "name": "Hobb",
+      "thumbnail": null
+    }
+  ],
+  "theming": {
+    "aura": null
+  },
+  "profile_picture": null,
+  "viewer_is_friend": true,
+  "current_residence": null,
+  "looks": [],
+  "plate_ink": "ember",
+  "worn": [],
+  "natural_weapons": [
+    {
+      "id": 12,
+      "name": "Talons",
+      "gift_name": "Blood of the Hunt",
+      "from_species": true,
+      "damage": 5,
+      "damage_type": "Slashing",
+      "facets": [
+        "Keenness",
+        "Sharpness"
+      ],
+      "facets_used": 2,
+      "facet_capacity": 3
+    }
+  ],
+  "mentors": [],
+  "domains": [],
+  "keyring": [],
+  "ties": [],
+  "ties_ap_this_week": 0
+}
