@@ -59,11 +59,21 @@ def test_deliberate_closing_lines_pass():
 
 @pytest.mark.parametrize(
     "line",
-    ["Closes #1, closes #2", "Closes #1, closes #2 and fixes #3.", "- Fixes #1; resolves #2"],
+    [
+        "Closes #1, closes #2",
+        "Closes #1, closes #2 and fixes #3.",
+        "- Fixes #1; resolves #2",
+        "Closes #1 #2 #3",
+        "Fixes #1, #2 and #3",
+    ],
 )
 def test_two_closing_references_on_one_line_are_refused(line: str):
     """GitHub closes only the first reference on a line, so each goes on its own (#4922)."""
     assert crowded_closing_lines(f"Summary\n{line}\nCloses #9") == [line]
+
+
+def test_one_close_beside_a_plain_mention_is_not_crowded():
+    assert crowded_closing_lines("Closes #4892 (the sibling of #4878 stays open)") == []
 
 
 def test_the_work_s_own_issue_and_plain_mentions_pass():

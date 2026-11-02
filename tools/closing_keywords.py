@@ -38,6 +38,11 @@ _SCISSORS = "# ------------------------ >8 ------------------------"
 _CLOSING_LINE_FILLER = re.compile(r"^[\s,;.&*-]*(?:and[\s,;.&]*)*$", re.IGNORECASE)
 
 
+# A closing reference followed straight away by more numbers: "Closes #1 #2", "Fixes #1, #2".
+_LISTED_AFTER_CLOSE = re.compile(
+    STRAY.pattern + r"(?:\s*(?:,|;|&|\band\b)?\s*#\d+)+", re.IGNORECASE
+)
+
 # A labelled close: "- Fixes #3679: hub models are blind ..." (colon straight after it).
 _LABELLED_CLOSE = re.compile(r"^\s*(?:[-*]\s+)?" + STRAY.pattern + r":\s", re.IGNORECASE)
 
@@ -74,12 +79,17 @@ def stray_references(text: str, allowed: str | None) -> list[str]:
 
 
 def crowded_closing_lines(text: str) -> list[str]:
-    """Lines holding two or more closing references (#4922).
+    """Lines that try to close two or more issues (#4922).
 
-    GitHub closes only the first reference on such a line, so `Closes #1, closes #2`
-    leaves #2 open; each closing keyword goes on a line of its own.
+    GitHub closes only the first reference on such a line: two keywords comma-separated,
+    or one keyword followed by a list of numbers, both leave the rest open. Each closing
+    keyword goes on a line of its own.
     """
-    return [line.strip() for line in text.splitlines() if len(STRAY.findall(line)) > 1]
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if len(STRAY.findall(line)) > 1 or _LISTED_AFTER_CLOSE.search(line)
+    ]
 
 
 def message_text(raw: str) -> str:
@@ -128,25 +138,27 @@ def _current_branch() -> str:
 def check_commit_message(path: str) -> int:
     text = message_text(Path(path).read_text(encoding="utf-8"))
     allowed = branch_issue(_current_branch())
-    crowded = crowded_closing_lines(text)
-    if crowded:
-        print("Commit rejected: one closing keyword per line (#4922).", file=sys.stderr)
-        for line in crowded:
-            print(f"  {line!r}", file=sys.stderr)
-        print("GitHub closes only the first one on a line; put each on its own.", file=sys.stderr)
-        return 1
     found = stray_references(text, allowed)
-    if not found:
+    if found:
+        target = f"#{allowed}, this branch's issue" if allowed else "nothing (no issue in the name)"
+        print(
+            "Commit rejected: GitHub closes what a closing keyword names (#4903).", file=sys.stderr
+        )
+        for phrase in found:
+            print(f"  {phrase!r}", file=sys.stderr)
+        print(
+            f"On this branch a closing keyword may name {target}. Reword the rest, e.g.\n"
+            "'the bot renumbered #4866' or 'on #4866', not 'fixed #4866'.",
+            file=sys.stderr,
+        )
+        return 1
+    crowded = crowded_closing_lines(text)
+    if not crowded:
         return 0
-    target = f"#{allowed}, this branch's issue" if allowed else "nothing (no issue in the name)"
-    print("Commit rejected: GitHub closes what a closing keyword names (#4903).", file=sys.stderr)
-    for phrase in found:
-        print(f"  {phrase!r}", file=sys.stderr)
-    print(
-        f"On this branch a closing keyword may name {target}. Reword the rest, e.g.\n"
-        "'the bot renumbered #4866' or 'on #4866', not 'fixed #4866'.",
-        file=sys.stderr,
-    )
+    print("Commit rejected: one closing keyword per line (#4922).", file=sys.stderr)
+    for line in crowded:
+        print(f"  {line!r}", file=sys.stderr)
+    print("GitHub closes only the first one on a line; put each on its own.", file=sys.stderr)
     return 1
 
 
