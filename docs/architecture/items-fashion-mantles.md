@@ -13,6 +13,15 @@
 > document depends on the relationships shape; it stays as the record of the design as
 > drafted.
 
+> **Superseded in part by #4975 (slice 3 of #4844, ADR-4975), 2026-11-02.**
+> `GearArchetypeCompatibility` (sections 4.4 and 5.6, the factories and the build order below)
+> was dropped. Whether a role's bonus adds to a piece of gear is now read from the character's
+> combat style: clothing, jewelry and other kinds always add, and a weapon or armor kind adds
+> only when the style lists the kind and the held vow. `style_gear_reach(character)`
+> (`world.covenants.style_fit`) builds the reach and `.allows(role, archetype)` answers per
+> piece; `is_gear_compatible` below is the removed draft. The design below stays as
+> drafted.
+
 ## 1. Summary
 
 This spec is the items-system unblocker. It wires together five tightly-coupled

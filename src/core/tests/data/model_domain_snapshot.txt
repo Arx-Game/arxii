@@ -299,7 +299,6 @@ arxii.covenantriterolepackage covenants
 arxii.covenantrole covenants
 arxii.covenantroleblendconfig magic
 arxii.covenantrolebonus covenants
-arxii.covenantroledefenseprofile covenants
 arxii.covenantrolegiftgrant covenants
 arxii.covenantroletechniquespecialty covenants
 arxii.crafteditemrecipe items
@@ -439,7 +438,6 @@ arxii.gangturfdetails societies
 arxii.gangturfreputationaward societies
 arxii.gangturftierthreshold societies
 arxii.garmentmitigation items
-arxii.geararchetypecompatibility covenants
 arxii.gemdetails items
 arxii.gemgrade items
 arxii.geminstancedetails items

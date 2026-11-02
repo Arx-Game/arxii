@@ -9,7 +9,6 @@ from world.covenants.models import (
     CovenantRank,
     CovenantRite,
     CovenantRole,
-    GearArchetypeCompatibility,
 )
 
 
@@ -73,11 +72,3 @@ class CovenantRankFilter(django_filters.FilterSet):
     class Meta:
         model = CovenantRank
         fields = ["covenant", "can_invite", "can_kick", "can_manage_ranks"]
-
-
-class GearArchetypeCompatibilityFilter(django_filters.FilterSet):
-    """Filter compatibility rows by role or archetype."""
-
-    class Meta:
-        model = GearArchetypeCompatibility
-        fields = ["covenant_role", "gear_archetype"]

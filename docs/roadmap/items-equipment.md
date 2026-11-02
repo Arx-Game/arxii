@@ -57,10 +57,11 @@ What shipped:
 - **Outfit resonance trickle** — `outfit_daily_trickle_for_character(sheet) -> int`
   issues `ResonanceGrant` rows (OUTFIT_TRICKLE source, `outfit_item_facet` typed FK);
   `resonance_daily_tick()` now wires outfit trickle alongside residence trickle
-- **Covenant gear compatibility** — `GearArchetypeCompatibility` model,
+- **Covenant gear compatibility** — `GearArchetypeCompatibility` model (dropped by #4975:
+  compatibility is now read from the character's combat style, ADR-4975),
   `CharacterCovenantRole`, `CharacterCovenantRoleHandler`, `assign_covenant_role`,
-  `end_covenant_role`, `is_gear_compatible` services; read-only API at
-  `/api/covenants/gear-compatibilities/` and `/api/covenants/character-roles/`
+  `end_covenant_role` services; read-only API at
+  `/api/covenants/gear-compatibilities/` (removed in #4975) and `/api/covenants/character-roles/`
 - **FACET + COVENANT_ROLE `TargetKind` values** on `Thread`, with typed FKs
   `target_facet` and `target_covenant_role`; anchor cap formulas in
   `compute_anchor_cap` (Spec D §6.1, §6.3)
@@ -175,8 +176,10 @@ Follow-up filed: thread defensive-magnitude tuning.
 Covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174.
 
 Worn armor is now split into role-compatible and role-incompatible buckets by
-`_split_armor_soak_by_compatibility` (per `GearArchetypeCompatibility` row existence for
-each engaged role × gear archetype pair). The *resonant soak pool* is computed by
+`_split_armor_soak_by_compatibility` (per engaged role × gear archetype pair, read through
+the character's combat style since #4975: clothing and jewelry always fit, a weapon or armor
+kind fits when the style lists the kind and the vow; this was `GearArchetypeCompatibility` row
+existence before the table was dropped). The *resonant soak pool* is computed by
 `_resonant_armor_soak` = eager `CharacterModifier` total + `equipment_walk_total_unblended`,
 where the latter sums facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) +
 mantle + motif-style (role base × character level, pooled once per character). Final formula in `apply_equipped_armor_soak`:

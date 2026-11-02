@@ -20,10 +20,8 @@ from world.covenants.models import (
     CovenantRiteRolePackage,
     CovenantRole,
     CovenantRoleBonus,
-    CovenantRoleDefenseProfile,
     CovenantRoleGiftGrant,
     CovenantRoleTechniqueSpecialty,
-    GearArchetypeCompatibility,
     InsightTableEntry,
     MentorBondConfig,
     SecondaryVowConfig,
@@ -49,11 +47,6 @@ class CovenantRoleTechniqueSpecialtyInline(admin.TabularInline):
     model = CovenantRoleTechniqueSpecialty
     formset = OneRowPerFormSet
     extra = 1
-
-
-class CovenantRoleDefenseProfileInline(admin.StackedInline):
-    model = CovenantRoleDefenseProfile
-    extra = 0
 
 
 def _price_display(obj: VowFocusPick | None) -> str:
@@ -137,7 +130,6 @@ class CovenantRoleAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     inlines = [
         CovenantRoleTechniqueSpecialtyInline,
-        CovenantRoleDefenseProfileInline,
         VowFocusPickInline,
         VowAddedEffectInline,
     ]
@@ -152,13 +144,6 @@ class CovenantRoleAdmin(admin.ModelAdmin):
 class CovenantRoleTechniqueSpecialtyAdmin(admin.ModelAdmin):
     list_display = ("function", "covenant_role", "multiplier_tenths")
     list_filter = ("function",)
-    autocomplete_fields = ("covenant_role",)
-
-
-@admin.register(CovenantRoleDefenseProfile)
-class CovenantRoleDefenseProfileAdmin(admin.ModelAdmin):
-    list_display = ("covenant_role", "style", "gear_additive_tenths")
-    list_filter = ("style",)
     autocomplete_fields = ("covenant_role",)
 
 
@@ -270,16 +255,6 @@ class WeaknessPoolEntryAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 # #3831
 # ---------------------------------------------------------------------------
-
-
-@admin.register(GearArchetypeCompatibility)
-class GearArchetypeCompatibilityAdmin(admin.ModelAdmin):
-    """#3831 - which covenant roles are compatible with which gear archetypes."""
-
-    list_display = ("covenant_role", "gear_archetype")
-    list_filter = ("gear_archetype",)
-    search_fields = ("covenant_role__name",)
-    autocomplete_fields = ("covenant_role",)
 
 
 @admin.register(VowStatScaling)
@@ -550,10 +525,10 @@ class CombatStyleGearInline(admin.TabularInline):
 class CombatStyleAdmin(admin.ModelAdmin):
     """How a character was taught to fight with magic (#4759, #4884).
 
-    Give a character a style on their character sheet. It replaces the vow's
-    defense profile. The style's skill and hit stat count on the Strike, technique
-    hit and defense rolls while the character's weapon, armor and vow are the
-    style's; otherwise the skill lapses.
+    Give a character a style on their character sheet. It sets their defense style
+    and how much of their armor counts. The style's skill and hit stat count on the
+    Strike, technique hit and defense rolls while the character's weapon, armor and
+    vow are the style's; otherwise the skill lapses.
     """
 
     list_display = ("name", "skill", "hit_stat", "defense_style", "armor_share_tenths")

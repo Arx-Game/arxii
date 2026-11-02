@@ -1,10 +1,9 @@
-"""How a character defends: their combat style, else their vow's defense profile (#4759).
+"""How a character defends: their combat style (#4759, #4975).
 
 ``defense_style_for`` is the one resolver. A character's ``CombatStyle``
-(``CharacterSheet.combat_style``) wins; with no style, the highest-tenths engaged
-PRIMARY vow's ``CovenantRoleDefenseProfile`` governs, chosen the way
-``gear_additive_fraction`` always chose; with neither there is no defense style and
-all armor counts, which is the behavior before #4759.
+(``CharacterSheet.combat_style``) sets the defense style and how much of their armor
+counts; with no style there is no defense style and all armor counts, which is the
+behavior before #4759.
 
 The three defense styles change how an NPC's blow lands on a PC
 (``world.combat.services.npc.npc_attack.resolve_npc_attack``):
@@ -39,73 +38,29 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.checks.models import CheckType
     from world.checks.types import ExtraTraitTerm
-    from world.covenants.models import CovenantRoleDefenseProfile
 
-#: All armor counts: the share with no style and no vow profile (legacy behavior).
+#: All armor counts: the share with no style (legacy behavior).
 FULL_ARMOR_SHARE_TENTHS = 10
 
 
 class DefenseResolution(NamedTuple):
-    """A character's defense style and armor share, and where they came from.
+    """A character's defense style and armor share.
 
-    ``style`` is a ``DefenseStyle`` value, or None when the character has neither a
-    combat style nor an engaged vow profile. ``from_combat_style`` is True when the
-    character's own ``CombatStyle`` set it: a style's share counts against all worn
-    armor, while a vow profile's share keeps its #2533 reach (the vow-compatible armor
-    only).
+    ``style`` is a ``DefenseStyle`` value, or None when the character has no combat
+    style. The share scales all worn armor.
     """
 
     style: str | None
     armor_share_tenths: int
-    from_combat_style: bool
-
-
-def engaged_primary_defense_profile(character: object) -> CovenantRoleDefenseProfile | None:
-    """The engaged PRIMARY vow profile that governs defense, or None (#2533).
-
-    Per engaged (resolved) role: the sub-role's own profile, else its anchor's. The
-    profile with the most gear-friendly ``gear_additive_tenths`` wins (the first on a
-    tie); gear is physical and counts once. A secondary vow never governs defense
-    (#2641).
-    """
-    from world.covenants.models import CovenantRoleDefenseProfile  # noqa: PLC0415
-
-    if not hasattr(character, "covenant_roles"):
-        return None
-    engaged_roles = character.covenant_roles.currently_engaged_primary_roles()
-    if not engaged_roles:
-        return None
-    role_pks: set[int] = set()
-    for role in engaged_roles:
-        role_pks.add(role.pk)
-        if role.parent_role_id is not None:
-            role_pks.add(role.parent_role_id)
-    profiles_by_role_id = {
-        profile.covenant_role_id: profile
-        for profile in CovenantRoleDefenseProfile.objects.filter(covenant_role_id__in=role_pks)
-    }
-    best: CovenantRoleDefenseProfile | None = None
-    for role in engaged_roles:
-        profile = profiles_by_role_id.get(role.pk)
-        if profile is None and role.parent_role_id is not None:
-            profile = profiles_by_role_id.get(role.parent_role_id)
-        if profile is not None and (
-            best is None or profile.gear_additive_tenths > best.gear_additive_tenths
-        ):
-            best = profile
-    return best
 
 
 def defense_style_for(character: object) -> DefenseResolution:
-    """How this character defends: combat style, then vow profile, then legacy."""
+    """How this character defends: their combat style, else the legacy no-style default."""
     sheet = character.character_sheet if hasattr(character, "character_sheet") else None
     style = sheet.combat_style if sheet is not None else None
     if style is not None:
-        return DefenseResolution(style.defense_style, style.armor_share_tenths, True)
-    profile = engaged_primary_defense_profile(character)
-    if profile is not None:
-        return DefenseResolution(profile.style, profile.gear_additive_tenths, False)
-    return DefenseResolution(None, FULL_ARMOR_SHARE_TENTHS, False)
+        return DefenseResolution(style.defense_style, style.armor_share_tenths)
+    return DefenseResolution(None, FULL_ARMOR_SHARE_TENTHS)
 
 
 @dataclass(frozen=True)

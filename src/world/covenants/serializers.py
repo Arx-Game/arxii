@@ -15,7 +15,6 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRole,
     CovenantRoleTechniqueSpecialty,
-    GearArchetypeCompatibility,
 )
 from world.covenants.services import resolve_effective_role
 
@@ -512,24 +511,6 @@ class ReswearOptionsSerializer(serializers.Serializer):
     components = serializers.ListField(child=serializers.CharField(), read_only=True)
     component_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
     unavailable_reason = serializers.CharField(read_only=True, allow_blank=True)
-
-
-class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
-    """Read-only serializer for GearArchetypeCompatibility join rows."""
-
-    gear_archetype_display = serializers.CharField(
-        source="get_gear_archetype_display", read_only=True
-    )
-
-    class Meta:
-        model = GearArchetypeCompatibility
-        fields = [
-            "id",
-            "covenant_role",
-            "gear_archetype",
-            "gear_archetype_display",
-        ]
-        read_only_fields = fields
 
 
 # ---------------------------------------------------------------------------

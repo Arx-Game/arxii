@@ -5115,17 +5115,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="Tradition",
         ),
         ContentDependency(
-            key="gear-archetype-compatibility",
-            label="Gear archetype compatibility",
-            tier=DependencyTier.TUNING,
-            consumer="world/covenants/services.py:1015 is_gear_compatible()",
-            consequence=(
-                "A covenant role's stats and its gear archetype's stats never stack - "
-                "compatibility never authored means never compatible."
-            ),
-            probe=AnyRowProbe(label="GearArchetypeCompatibility"),
-        ),
-        ContentDependency(
             key="covenant-rite-role-packages",
             label="Covenant rite role packages",
             tier=DependencyTier.TUNING,

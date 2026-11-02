@@ -1443,8 +1443,8 @@ the sheet facts beside them, the combat style among them (slice 7, #4932).
   `CharacterVowFocusPick` changelist searched by the character's key.
 - **Sheet** - Path . Gift (newest path history row, gift names), each live vow (linked to its
   vow page, shown level, "not engaged" chip; secondary vows labelled), and Defense: the
-  primary vow's `CovenantRoleDefenseProfile` style (the resolved sub-role's own, else its
-  anchor's, `engaged_primary_defense_profile`'s rule), or "No defense profile". Then Style
+  defense type of the sheet's combat style (#4975, the same for every vow held), or "No combat
+  style". Then Style
   (#4932): the sheet's `combat_style` linked to its change page, then per held primary vow
   " . works with <vow>" or " . not a style for <vow>: its skill does not count on attack and
   defense rolls" (just " . not a style for <vow>" for a style with no active skill), the

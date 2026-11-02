@@ -301,8 +301,8 @@ class CharacterSheetAdmin(admin.ModelAdmin):
             "Combat Style (#4759)",
             {
                 "fields": ("combat_style",),
-                "description": "How this character fights with magic. It replaces the "
-                "vow's defense profile; blank keeps the vow's.",
+                "description": "How this character fights with magic. It sets their defense "
+                "style and how much of their armor counts; blank means no defense style.",
             },
         ),
         (

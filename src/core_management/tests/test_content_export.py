@@ -826,47 +826,6 @@ class CovenantRoleContentExportTests(TestCase):
         assert sub_role.resonance_id == original_resonance_id
         assert sub_role.unlock_thread_level == 2
 
-    def test_covenant_role_defense_profile_round_trips(self) -> None:
-        """CovenantRoleDefenseProfile (#2533) survives export -> import via its NK.
-
-        NK is ``["covenant_role"]`` (the FK's own natural key, a single-element
-        list holding the role's slug) — unexercised until now.
-        """
-        from world.covenants.constants import DefenseStyle
-        from world.covenants.factories import CovenantRoleDefenseProfileFactory, CovenantRoleFactory
-
-        role = CovenantRoleFactory(name="Defense Profile Role", slug="defense-profile-role")
-        profile = CovenantRoleDefenseProfileFactory(
-            covenant_role=role,
-            style=DefenseStyle.EVASION,
-            gear_additive_tenths=3,
-        )
-
-        result = export_to_content_repo(self.root)
-        assert result.errors == []
-
-        profile_path = self.root / "fixtures" / "covenants" / "covenantroledefenseprofile.json"
-        assert profile_path.exists()
-
-        records = json.loads(profile_path.read_text(encoding="utf-8"))
-        assert len(records) == 1
-        record = records[0]
-        assert "pk" not in record
-        assert record["fields"]["covenant_role"] == ["defense-profile-role"]
-        assert record["fields"]["style"] == DefenseStyle.EVASION
-        assert record["fields"]["gear_additive_tenths"] == 3
-
-        from core_management.content_fixtures import build_all, load_entries
-
-        load_result = build_all(self.root)
-        created, _updated, _ = load_entries(load_result)
-        assert created == 0, f"Round-trip created {created} new records (expected 0)"
-
-        profile.refresh_from_db()
-        assert profile.covenant_role_id == role.pk
-        assert profile.style == DefenseStyle.EVASION
-        assert profile.gear_additive_tenths == 3
-
 
 class VowSituationalPerkContentExportTests(TestCase):
     """Round-trip coverage for the situational-perk authoring models (#2536).
@@ -1361,12 +1320,13 @@ class CovenantRoleBonusContentExportTests(TestCase):
         assert bonus.bonus_per_level == 3
 
 
-class GearArchetypeCompatibilityContentExportTests(TestCase):
-    """Round-trip coverage for GearArchetypeCompatibility (#2533).
+class CombatStyleGearContentExportTests(TestCase):
+    """Round-trip coverage for CombatStyleGear (#4884).
 
-    ``covenants.geararchetypecompatibility`` was added to ``CONTENT_MODELS`` with
-    natural key ``["covenant_role", "gear_archetype"]`` — an existence-only join
-    (Spec D §4.4), so the only FK-in-NK to exercise is ``covenant_role``.
+    ``covenants.combatstylegear`` is in ``CONTENT_MODELS`` with natural key
+    ``["style", "gear_archetype"]`` - an existence-only join, so the only FK-in-NK to
+    exercise is ``style``. It replaced ``GearArchetypeCompatibility``'s round-trip
+    test when that table was retired (#4975).
     """
 
     def setUp(self) -> None:
@@ -1374,38 +1334,34 @@ class GearArchetypeCompatibilityContentExportTests(TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def test_gear_archetype_compatibility_round_trip(self) -> None:
-        from world.covenants.factories import CovenantRoleFactory
-        from world.covenants.models import GearArchetypeCompatibility
+    def test_combat_style_gear_round_trip(self) -> None:
+        from world.covenants.factories import CombatStyleFactory, CovenantRoleFactory
+        from world.covenants.models import CombatStyleGear
         from world.items.constants import GearArchetype
 
-        role = CovenantRoleFactory(
-            name="Round Trip Shieldbearer",
-            slug="round-trip-shieldbearer",
-            shield_weight=1,
-            crown_weight=0,
-        )
-        role.full_clean()
-        compat = GearArchetypeCompatibility.objects.create(
-            covenant_role=role,
+        style = CombatStyleFactory(name="Round Trip Shieldwork")
+        gear = CombatStyleGear.objects.create(
+            style=style,
             gear_archetype=GearArchetype.HEAVY_ARMOR,
         )
+        listed_role = CovenantRoleFactory(slug="round-trip-listed-vow")
+        style.compatible_roles.add(listed_role)
 
         result = export_to_content_repo(self.root)
         assert result.errors == []
 
-        compat_path = self.root / "fixtures" / "covenants" / "geararchetypecompatibility.json"
-        assert compat_path.exists()
+        gear_path = self.root / "fixtures" / "covenants" / "combatstylegear.json"
+        assert gear_path.exists()
 
-        records = json.loads(compat_path.read_text(encoding="utf-8"))
+        records = json.loads(gear_path.read_text(encoding="utf-8"))
         assert len(records) == 1
         record = records[0]
         assert "pk" not in record
 
-        # FK-in-NK: covenant_role serializes as a natural-key list, not a raw pk.
-        role_key = record["fields"]["covenant_role"]
-        assert isinstance(role_key, list)
-        assert role_key == ["round-trip-shieldbearer"]
+        # FK-in-NK: style serializes as a natural-key list, not a raw pk.
+        style_key = record["fields"]["style"]
+        assert isinstance(style_key, list)
+        assert style_key == ["Round Trip Shieldwork"]
 
         assert record["fields"]["gear_archetype"] == GearArchetype.HEAVY_ARMOR
 
@@ -1415,9 +1371,19 @@ class GearArchetypeCompatibilityContentExportTests(TestCase):
         created, _updated, _ = load_entries(load_result)
         assert created == 0, f"Round-trip created {created} new records (expected 0)"
 
-        compat.refresh_from_db()
-        assert compat.covenant_role_id == role.pk
-        assert compat.gear_archetype == GearArchetype.HEAVY_ARMOR
+        gear.refresh_from_db()
+        assert gear.style_id == style.pk
+        assert gear.gear_archetype == GearArchetype.HEAVY_ARMOR
+        # The style's listed vows are exported on its own record, by the role's natural key,
+        # and survive the round trip.
+        style_path = self.root / "fixtures" / "covenants" / "combatstyle.json"
+        style_records = json.loads(style_path.read_text(encoding="utf-8"))
+        assert [r["fields"]["compatible_roles"] for r in style_records] == [
+            [["round-trip-listed-vow"]]
+        ]
+        # The style's listed vows ride its own record and survive the round trip.
+        style.refresh_from_db()
+        assert list(style.compatible_roles.all()) == [listed_role]
 
 
 class ExportAdditionGateTests(TestCase):

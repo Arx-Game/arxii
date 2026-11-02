@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
@@ -48,7 +47,6 @@ from world.covenants.models import (
     CovenantRiteInstance,
     CovenantRiteParticipant,
     CovenantRole,
-    GearArchetypeCompatibility,
     MentorBond,
     MentorBondConfig,
     SecondaryVowConfig,
@@ -706,7 +704,7 @@ def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kic
 def _anchor_role_id(role: CovenantRole) -> int:
     """The role's ANCHOR pk — itself for a primary role, ``parent_role_id`` for a
     sub-role. Shared by every anchor-normalization call site in this module
-    (mirrors the inline idiom ``gear_additive_fraction`` already uses)."""
+    (the same anchor rule ``style_fit`` applies to a style's vows)."""
     return role.parent_role_id if role.parent_role_id is not None else role.pk
 
 
@@ -1060,42 +1058,6 @@ def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole 
         if role.covenant_type == CovenantType.BATTLE:
             return role
     return engaged[0]
-
-
-def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
-    """Return True if a row exists in GearArchetypeCompatibility for this pair.
-
-    Existence-only join lookup. Row present = role bonuses add to mundane gear
-    stats on that archetype. Row absent = incompatible (max(role, gear) per
-    slot). GearArchetypeCompatibility is authored content (SharedMemoryModel
-    lookup table); identity-map cache makes repeated calls cheap.
-    """
-    return GearArchetypeCompatibility.objects.filter(
-        covenant_role=role,
-        gear_archetype=archetype,
-    ).exists()
-
-
-def gear_additive_fraction(character: object) -> Decimal:
-    """MAX gear-additive fraction across engaged PRIMARY roles' defense profiles (#2533).
-
-    Profile resolution per engaged (resolved) role: the sub-role's own profile
-    when present, else the anchor's. No engaged role has a profile → Decimal(1)
-    (legacy fully-additive behavior, byte-identical). Gear is physical and
-    counts once — the most gear-friendly engaged vow governs (multi-vow
-    stacking lives on the vow side, never by re-counting armor). PRIMARY-only
-    (#2641, Layer 3 — chassis): a secondary vow's defense profile never
-    substitutes for gear. The profile choice is
-    ``world.covenants.defense.engaged_primary_defense_profile``, which
-    ``defense_style_for`` (#4759) also falls back on when a character has no
-    combat style.
-    """
-    from world.covenants.defense import engaged_primary_defense_profile  # noqa: PLC0415
-
-    profile = engaged_primary_defense_profile(character)
-    if profile is None:
-        return Decimal(1)
-    return Decimal(profile.gear_additive_tenths) / 10
 
 
 @transaction.atomic

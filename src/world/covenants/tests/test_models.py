@@ -8,17 +8,18 @@ from django.utils import timezone
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CommandTier, CovenantType
 from world.covenants.factories import (
+    CombatStyleFactory,
     CovenantFactory,
     CovenantRankFactory,
     CovenantRoleFactory,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CombatStyleGear,
     Covenant,
     CovenantRank,
     CovenantRiteParticipant,
     CovenantRole,
-    GearArchetypeCompatibility,
 )
 from world.items.constants import GearArchetype
 
@@ -118,26 +119,14 @@ class CovenantRoleTests(TestCase):
         role.full_clean()  # must not raise
 
 
-class GearArchetypeCompatibilityTests(TestCase):
-    def test_create(self) -> None:
-        role = CovenantRoleFactory()
-        row = GearArchetypeCompatibility.objects.create(
-            covenant_role=role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
-        )
-        self.assertEqual(row.covenant_role, role)
+class CombatStyleGearTests(TestCase):
+    """The weapon and armor kinds a style fights with (the table that replaced #4975's join)."""
 
-    def test_unique_role_archetype(self) -> None:
-        role = CovenantRoleFactory()
-        GearArchetypeCompatibility.objects.create(
-            covenant_role=role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
-        )
-        with self.assertRaises(IntegrityError):
-            GearArchetypeCompatibility.objects.create(
-                covenant_role=role,
-                gear_archetype=GearArchetype.HEAVY_ARMOR,
-            )
+    def test_unique_style_archetype(self) -> None:
+        style = CombatStyleFactory()
+        CombatStyleGear.objects.create(style=style, gear_archetype=GearArchetype.HEAVY_ARMOR)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatStyleGear.objects.create(style=style, gear_archetype=GearArchetype.HEAVY_ARMOR)
 
 
 class CharacterCovenantRoleTests(TestCase):

@@ -10,7 +10,8 @@ Four test classes:
 
 Design notes on the blend (#1174):
   - apply_equipped_armor_soak splits worn armor into compatible vs incompatible buckets via
-    _split_armor_soak_by_compatibility (one bucket per GearArchetypeCompatibility existence check).
+    _split_armor_soak_by_compatibility (one bucket per ``StyleGearReach.allows`` test, which
+    reads the character's combat style).
   - The resonant pool (_resonant_armor_soak) = eager CharacterModifier total +
     equipment_walk_total_unblended(sheet, armor_soak_target); the latter sums facet + mantle +
     motif-style + covenant_role_base_total (role base × level, un-blended, once per character).
@@ -31,7 +32,7 @@ from world.combat.factories import (
 from world.combat.services import _combat_target_bonus, apply_equipped_armor_soak
 from world.covenants.factories import (
     CovenantRoleBonusFactory,
-    GearArchetypeCompatibilityFactory,
+    give_combat_style,
     make_engaged_member,
 )
 from world.items.constants import (
@@ -48,7 +49,7 @@ class CovenantWeaponDamageFullChainTests(TestCase):
     """(a) Full-chain: get_modifier_total(sheet, weapon_damage_target) includes role bonus."""
 
     def test_compatible_weapon_modifier_total_equals_role_bonus(self) -> None:
-        """With seeded target, engaged role, compatible weapon + compat row, level 2:
+        """With seeded target, engaged role, compatible weapon + combat style listing it, level 2:
         get_modifier_total = character_level * bonus_per_level (marginal role bonus only).
 
         For compatible gear, covenant_role_bonus returns role_bonus stacked ON TOP of the
@@ -91,10 +92,9 @@ class CovenantWeaponDamageFullChainTests(TestCase):
         )
         char.equipped_items.invalidate()
 
-        # Compatible archetype row → role_bonus stacks on top of what combat already counts.
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        # A style fighting with the weapon kind and listing the vow → role_bonus stacks on top.
+        give_combat_style(
+            sheet, roles=[membership.covenant_role], kinds=[GearArchetype.MELEE_ONE_HAND]
         )
 
         total = get_modifier_total(sheet, weapon_damage_target)
@@ -151,10 +151,9 @@ class CovenantArmorSoakSeamTests(TestCase):
             bonus_per_level=2,
         )
 
-        # Compatible archetype row for LIGHT_ARMOR → role_bonus stacks on top.
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.LIGHT_ARMOR,
+        # A style wearing LIGHT_ARMOR and listing the vow → role_bonus stacks on top.
+        give_combat_style(
+            sheet, roles=[membership.covenant_role], kinds=[GearArchetype.LIGHT_ARMOR]
         )
 
         self._equip_armor(char, base_soak=3)
@@ -195,9 +194,8 @@ class CovenantArmorSoakSeamTests(TestCase):
             modifier_target=armor_soak_target,
             bonus_per_level=2,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.LIGHT_ARMOR,
+        give_combat_style(
+            sheet_c, roles=[membership.covenant_role], kinds=[GearArchetype.LIGHT_ARMOR]
         )
         self._equip_armor(char_c, base_soak=3, name="CovArmor")
 

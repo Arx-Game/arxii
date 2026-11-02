@@ -1,7 +1,7 @@
 """FactoryBoy factories for covenant models."""
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import factory
 from factory import django as factory_django
@@ -34,9 +34,7 @@ from world.covenants.models import (
     CovenantRiteRolePackage,
     CovenantRole,
     CovenantRoleBonus,
-    CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
-    GearArchetypeCompatibility,
     InsightTableEntry,
     MentorBond,
     MentorBondConfig,
@@ -66,6 +64,8 @@ CONDITION_TEMPLATE_FACTORY = "world.conditions.factories.ConditionTemplateFactor
 PRIMARY_STAT_DESCRIPTION = "Primary character statistics."
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.conditions.models import CapabilityType, ConditionTemplate
@@ -122,17 +122,6 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
         return self.parent_role.covenant_type
 
 
-class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
-    """Factory for GearArchetypeCompatibility."""
-
-    class Meta:
-        model = GearArchetypeCompatibility
-        django_get_or_create = ("covenant_role", "gear_archetype")
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    gear_archetype = GearArchetype.HEAVY_ARMOR
-
-
 class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
     """Factory for CovenantRoleTechniqueSpecialty (#2443)."""
 
@@ -143,18 +132,6 @@ class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     function = TechniqueFunction.DAMAGE_BUFF_SELF
     multiplier_tenths = 10
-
-
-class CovenantRoleDefenseProfileFactory(factory_django.DjangoModelFactory):
-    """Factory for CovenantRoleDefenseProfile (#2533)."""
-
-    class Meta:
-        model = CovenantRoleDefenseProfile
-        django_get_or_create = ("covenant_role",)
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    style = DefenseStyle.GEAR_SOAK
-    gear_additive_tenths = 10
 
 
 class VowSituationalPerkFactory(factory_django.DjangoModelFactory):
@@ -1595,3 +1572,25 @@ class CombatStyleGearFactory(factory_django.DjangoModelFactory):
 
     style = factory.SubFactory(CombatStyleFactory)
     gear_archetype = GearArchetype.MELEE_ONE_HAND
+
+
+def give_combat_style(
+    sheet: "CharacterSheet",
+    *,
+    roles: "Iterable[CovenantRole]" = (),
+    kinds: "Iterable[str]" = (),
+    **style_fields: Any,
+) -> CombatStyle:
+    """Teach ``sheet`` a new combat style that fights with ``kinds`` and lists ``roles`` (#4975).
+
+    The style counts all armor (``armor_share_tenths=10``) unless ``style_fields`` say
+    otherwise; the rest of ``style_fields`` go to ``CombatStyleFactory``. A character's
+    gear compatibility, armor share and defense type all come from this one style.
+    """
+    style = CombatStyleFactory(**{"armor_share_tenths": 10, **style_fields})
+    for kind in kinds:
+        CombatStyleGearFactory(style=style, gear_archetype=kind)
+    style.compatible_roles.add(*roles)
+    sheet.combat_style = style
+    sheet.save(update_fields=["combat_style"])
+    return style

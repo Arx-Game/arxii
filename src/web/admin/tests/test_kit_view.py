@@ -24,6 +24,7 @@ from web.admin.tests.test_distinction_builder import (
 )
 from web.admin.tests.test_kit_view_live import KitLiveCase, _know, _technique
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import DefenseStyle
 from world.covenants.factories import (
     CharacterVowFocusPickFactory,
     CombatStyleFactory,
@@ -101,6 +102,10 @@ class KitPageTest(KitPageCase):
         )
 
     def test_the_sheet_module_names_path_gift_vow_and_defense(self) -> None:
+        self.sheet.combat_style = CombatStyleFactory(
+            name="Page Evasion Style", defense_style=DefenseStyle.EVASION
+        )
+        self.sheet.save()
         body = self.get(self.url())
         self.assertIn("<td>Tomes &middot; Storms</td>", body)
         vow_url = reverse("admin_vow_builder", args=[self.vow.pk])
@@ -288,7 +293,7 @@ class KitViewStylingTest(KitPageCase):
 
 
 #: The whole request for one primary vow with picks and techniques the vow adds to: the
-#: session and user, the sheet, the kit reads (``test_kit_view_live.KIT_QUERIES``, 26) and
+#: session and user, the sheet, the kit reads (``test_kit_view_live.KIT_QUERIES``, 25) and
 #: the admin chrome (``each_context``'s one existence check per config singleton). See
 #: ``KitPageTest.test_query_count_stays_flat_as_the_kit_grows``.
-PAGE_QUERIES = 78
+PAGE_QUERIES = 77

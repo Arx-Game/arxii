@@ -1,8 +1,9 @@
 """End-to-end integration tests for gear compatibility pipeline (Spec D §5.6).
 
-Pipeline: CharacterSheet + CovenantRole + GearArchetypeCompatibility (for compatible archetype
-only) → patch placeholder helpers (role_base_bonus_for_target, item_mundane_stat_for_target) →
-call get_modifier_total(sheet, target) → assert marginal blend branching.
+Pipeline: CharacterSheet + CovenantRole + a combat style (fighting with the compatible archetype
+only, listing the vow) → patch placeholder helpers (role_base_bonus_for_target,
+item_mundane_stat_for_target) → call get_modifier_total(sheet, target) → assert marginal
+blend branching.
 
 Math reference (§5.6 marginal blend — combat already counts the gear's base stat):
   compatible gear:   role_bonus  (role stacks on top of gear combat already provides)
@@ -35,7 +36,7 @@ class GearCompatibilityPipelineTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
-            GearArchetypeCompatibilityFactory,
+            give_combat_style,
         )
         from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
         from world.items.factories import (
@@ -88,10 +89,9 @@ class GearCompatibilityPipelineTests(TestCase):
             equipment_layer=EquipmentLayer.BASE,
         )
 
-        # 6. GearArchetypeCompatibility for HEAVY_ARMOR only — RANGED intentionally absent
-        GearArchetypeCompatibilityFactory(
-            covenant_role=cls.assignment.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        # 6. A combat style fighting with HEAVY_ARMOR only and listing the vow — RANGED absent
+        give_combat_style(
+            cls.sheet, roles=[cls.assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
 
         # 7. Invalidate caches so both equipped items are visible
@@ -108,7 +108,7 @@ class GearCompatibilityPipelineTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
-            GearArchetypeCompatibilityFactory,
+            give_combat_style,
         )
         from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
@@ -124,9 +124,8 @@ class GearCompatibilityPipelineTests(TestCase):
         EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
 
-        GearArchetypeCompatibilityFactory(
-            covenant_role=assignment.covenant_role,
-            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        give_combat_style(
+            sheet, roles=[assignment.covenant_role], kinds=[GearArchetype.HEAVY_ARMOR]
         )
         return sheet
 
@@ -148,7 +147,7 @@ class GearCompatibilityPipelineTests(TestCase):
         item = ItemInstanceFactory(template=cls.incompat_template)
         EquippedItemFactory(character=char.sheet_data, item_instance=item)
         char.equipped_items.invalidate()
-        # No GearArchetypeCompatibility row — RANGED is intentionally absent
+        # No combat style — RANGED is intentionally incompatible
         return sheet
 
     # ------------------------------------------------------------------

@@ -9,4 +9,4 @@ is how a Path or Gift casts, a Path and a character choose the two separately, a
 manner has no defense to carry. We give up deriving defense from the vow alone, which kept one
 fewer thing to author per character, so that two holders of one tank vow can defend differently.
 
-> Status: accepted · Source: #4759 (owner rulings 2026-10-27 to 10-31), slice 1 #4805
+> Status: accepted; the vow-profile half (a character with no style keeps the profile) is superseded by ADR-4975, which dropped `CovenantRoleDefenseProfile` and gives a character with no style no defense style and all armor · Source: #4759 (owner rulings 2026-10-27 to 10-31), slice 1 #4805

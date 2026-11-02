@@ -706,8 +706,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   skill value, a Tradition with no style skips the step, and the Sphinx's verdict says
   whether the style suits the vow on the endpoint and the `sphinx` verb
   (`test_style_in_creation_journeys.py`).
-  **Known gaps (later #4844 slices):** vow gear
-  compatibility still keyed to the vow (slice 3); production has no
+  **Vow tables retired (#4975, slice 3) SHIPPED:** `CovenantRoleDefenseProfile` and
+  `GearArchetypeCompatibility` are dropped (data migration 0365 moved every row onto a
+  placeholder combat style for staff to fill out; 0366 dropped the tables). A character's
+  defense style and armor share come from their style only (no style: no defense style, all
+  armor counts), and gear compatibility reads the style's weapon and armor kinds plus the held
+  vow; clothing and jewelry always fit (ADR-4975). Not built: a cap on how much mitigation
+  worn sources give per style.
+  **Known gaps (later #4844 slices):** production has no
   Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
   a plain message until staff author them (Required content `strike-check-types`); the
   breakdown's skill rating is read when shown, not stored with the roll; a Strike's damage roll
@@ -956,7 +962,9 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   `CovenantRoleDefenseProfile.gear_additive_tenths` fraction — `gear_additive_fraction(character)`
   (MAX fraction across engaged roles) scales the compatible bucket in
   `apply_equipped_armor_soak`, once, so a vow whose defense style isn't gear can dial down how
-  much armor stacks on top of it. `VowGearScaling` (the never-seeded per-archetype gear
+  much armor stacks on top of it (#4975 moved both onto the character's `CombatStyle`: its
+  defense style and `armor_share_tenths` scale all worn armor, and the profile table and
+  `gear_additive_fraction` are gone, ADR-4975). `VowGearScaling` (the never-seeded per-archetype gear
   multiplier short-circuited to 0 by #2529) is removed — subsumed by the single authored
   fraction. **Layer 4** (#2536, ADR-0151/0152/0153, all three slices shipped — Layer 4, and the
   four-layer model, is now complete): the deterministic-situational-perk machinery — "the point

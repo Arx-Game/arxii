@@ -34,8 +34,8 @@ from world.covenants.constants import MentorBondAdjusted
 from world.covenants.factories import (
     CovenantFactory,
     CovenantRoleBonusFactory,
-    GearArchetypeCompatibilityFactory,
     MentorBondFactory,
+    give_combat_style,
     make_engaged_member,
     seed_mentor_bond_defaults,
 )
@@ -111,9 +111,8 @@ class MentorSuppressedCombatBonusTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            mentor_sheet, roles=[membership.covenant_role], kinds=[GearArchetype.MELEE_ONE_HAND]
         )
         _equip_weapon(mentor_char)
 
@@ -140,9 +139,10 @@ class MentorSuppressedCombatBonusTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=unbonded_membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            unbonded_sheet,
+            roles=[unbonded_membership.covenant_role],
+            kinds=[GearArchetype.MELEE_ONE_HAND],
         )
         _equip_weapon(unbonded_char)
 
@@ -184,9 +184,8 @@ class SidekickElevatedCombatBonusTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            sidekick_sheet, roles=[membership.covenant_role], kinds=[GearArchetype.MELEE_ONE_HAND]
         )
         _equip_weapon(sidekick_char)
 
@@ -213,9 +212,10 @@ class SidekickElevatedCombatBonusTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=unbonded_membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            unbonded_sheet,
+            roles=[unbonded_membership.covenant_role],
+            kinds=[GearArchetype.MELEE_ONE_HAND],
         )
         _equip_weapon(unbonded_char)
 
@@ -251,9 +251,8 @@ class UnbondedCombatBonusUnchangedTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            sheet, roles=[membership.covenant_role], kinds=[GearArchetype.MELEE_ONE_HAND]
         )
         _equip_weapon(char)
 
@@ -293,9 +292,8 @@ class NonCombatPathUnchangedTests(TestCase):
             modifier_target=self.weapon_damage_target,
             bonus_per_level=BONUS_PER_LEVEL,
         )
-        GearArchetypeCompatibilityFactory(
-            covenant_role=membership.covenant_role,
-            gear_archetype=GearArchetype.MELEE_ONE_HAND,
+        give_combat_style(
+            sidekick_sheet, roles=[membership.covenant_role], kinds=[GearArchetype.MELEE_ONE_HAND]
         )
         _equip_weapon(sidekick_char)
 

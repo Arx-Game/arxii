@@ -176,7 +176,6 @@ CONFIG_TABLE_MODELS = (
     # world/covenants/models.py
     "CourtGrantConfig",
     "MentorBondConfig",
-    "GearArchetypeCompatibility",
     "CovenantRiteRolePackage",
     "CovenantRoleGiftGrant",
     "InsightTableEntry",

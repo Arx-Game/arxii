@@ -13,8 +13,8 @@ vow scales a maneuver with a ``VowStatScaling`` row on a maneuver effect target 
 
 The former archetype-keyed "gear scaling" equipment-effectiveness multiplier model and
 its always-0 consumer function (#2022) were removed by #2533 — replaced by the
-defense-profile gear-substitution fraction at the armor-soak seam (see
-``world.covenants.services.gear_additive_fraction`` and
+combat style's armor share at the armor-soak seam (see
+``world.covenants.defense.defense_style_for`` and
 ``world.combat.tests.test_armor_soak_role_gate``).
 """
 

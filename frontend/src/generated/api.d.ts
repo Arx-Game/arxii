@@ -8225,40 +8225,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/covenants/gear-compatibilities/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
-    get: operations['covenants_gear_compatibilities_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/covenants/gear-compatibilities/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
-    get: operations['covenants_gear_compatibilities_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/covenants/level-thresholds/': {
     parameters: {
       query?: never;
@@ -35536,45 +35502,6 @@ export interface components {
      * @enum {string}
      */
     GameSessionStateEnum: 'open' | 'resolved' | 'abandoned';
-    /** @description Read-only serializer for GearArchetypeCompatibility join rows. */
-    GearArchetypeCompatibility: {
-      readonly id: number;
-      readonly covenant_role: number;
-      readonly gear_archetype: components['schemas']['GearArchetypeEnum'];
-      readonly gear_archetype_display: string;
-    };
-    /**
-     * @description * `light_armor` - Light Armor
-     *     * `medium_armor` - Medium Armor
-     *     * `heavy_armor` - Heavy Armor
-     *     * `robe` - Robe
-     *     * `melee_one_hand` - One-Handed Melee
-     *     * `melee_two_hand` - Two-Handed Melee
-     *     * `ranged` - Ranged
-     *     * `thrown` - Thrown
-     *     * `shield` - Shield
-     *     * `lance` - Lance
-     *     * `unarmed` - Unarmed
-     *     * `jewelry` - Jewelry
-     *     * `clothing` - Clothing
-     *     * `other` - Other
-     * @enum {string}
-     */
-    GearArchetypeEnum:
-      | 'light_armor'
-      | 'medium_armor'
-      | 'heavy_armor'
-      | 'robe'
-      | 'melee_one_hand'
-      | 'melee_two_hand'
-      | 'ranged'
-      | 'thrown'
-      | 'shield'
-      | 'lance'
-      | 'unarmed'
-      | 'jewelry'
-      | 'clothing'
-      | 'other';
     /**
      * @description Read-only cost + shatter-risk quote for a potential gem-cut attempt.
      *
@@ -65665,80 +65592,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Covenant'];
-        };
-      };
-    };
-  };
-  covenants_gear_compatibilities_list: {
-    parameters: {
-      query?: {
-        covenant_role?: number;
-        /**
-         * @description * `light_armor` - Light Armor
-         *     * `medium_armor` - Medium Armor
-         *     * `heavy_armor` - Heavy Armor
-         *     * `robe` - Robe
-         *     * `melee_one_hand` - One-Handed Melee
-         *     * `melee_two_hand` - Two-Handed Melee
-         *     * `ranged` - Ranged
-         *     * `thrown` - Thrown
-         *     * `shield` - Shield
-         *     * `lance` - Lance
-         *     * `unarmed` - Unarmed
-         *     * `jewelry` - Jewelry
-         *     * `clothing` - Clothing
-         *     * `other` - Other
-         */
-        gear_archetype?:
-          | 'clothing'
-          | 'heavy_armor'
-          | 'jewelry'
-          | 'lance'
-          | 'light_armor'
-          | 'medium_armor'
-          | 'melee_one_hand'
-          | 'melee_two_hand'
-          | 'other'
-          | 'ranged'
-          | 'robe'
-          | 'shield'
-          | 'thrown'
-          | 'unarmed';
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GearArchetypeCompatibility'][];
-        };
-      };
-    };
-  };
-  covenants_gear_compatibilities_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this gear archetype compatibility. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GearArchetypeCompatibility'];
         };
       };
     };
