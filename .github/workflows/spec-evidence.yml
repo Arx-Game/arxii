@@ -74,8 +74,15 @@ jobs:
 
           # GitHub closes every issue or PR a closing keyword names when this merges
           # (#4903: "the bot fixed #4866" closed an open PR). Edit the body to fix.
-          from tools.closing_keywords import stray_references
+          from tools.closing_keywords import crowded_closing_lines, stray_references
 
+          # GitHub closes only the first reference on a line (#4922): one per line.
+          crowded = crowded_closing_lines(body)
+          if crowded:
+              raise SystemExit(
+                  f"The PR body has more than one closing keyword on a line: {crowded}. "
+                  "GitHub closes only the first; put each Closes #N on its own line."
+              )
           stray = stray_references(body, issue_number)
           if stray:
               raise SystemExit(

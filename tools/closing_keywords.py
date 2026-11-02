@@ -7,7 +7,9 @@ closed ApostateCD's open PR #4866, unmerged, the moment #4899 merged.
 
 Used by the commit-msg hook (tools/githooks/commit-msg) with the branch's issue as
 the one allowed target, and by spec-evidence.yml on the PR body with the PR's own
-``Closes #N``. Standard library only, so the hook runs without a venv.
+``Closes #N``. Both also refuse a line holding two closing references (#4922): GitHub
+closes only the first, so each goes on its own line. Standard library only, so the hook
+runs without a venv.
 
     python3 tools/closing_keywords.py commit-msg <message-file>
 """
@@ -43,8 +45,9 @@ _LABELLED_CLOSE = re.compile(r"^\s*(?:[-*]\s+)?" + STRAY.pattern + r":\s", re.IG
 def _is_closing_line(line: str) -> bool:
     """A deliberate close: a line of nothing but closing references, or a labelled one.
 
-    `Closes #1`, `Closes #1, closes #2`, `- Fixes #3679: what it fixes`. Not a sentence
-    that happens to hold a keyword: "Do not close #3751" closed #3751 (#3955).
+    `Closes #1`, `- Fixes #3679: what it fixes`. Not a sentence that happens to hold a
+    keyword: "Do not close #3751" closed #3751 (#3955). A line holding two references is
+    still a closing line here; ``crowded_closing_lines`` is what refuses it.
     """
     if not STRAY.search(line):
         return False
@@ -68,6 +71,15 @@ def stray_references(text: str, allowed: str | None) -> list[str]:
         for m in STRAY.finditer(line)
         if m["number"] != allowed
     ]
+
+
+def crowded_closing_lines(text: str) -> list[str]:
+    """Lines holding two or more closing references (#4922).
+
+    GitHub closes only the first reference on such a line, so `Closes #1, closes #2`
+    leaves #2 open; each closing keyword goes on a line of its own.
+    """
+    return [line.strip() for line in text.splitlines() if len(STRAY.findall(line)) > 1]
 
 
 def message_text(raw: str) -> str:
@@ -116,6 +128,13 @@ def _current_branch() -> str:
 def check_commit_message(path: str) -> int:
     text = message_text(Path(path).read_text(encoding="utf-8"))
     allowed = branch_issue(_current_branch())
+    crowded = crowded_closing_lines(text)
+    if crowded:
+        print("Commit rejected: one closing keyword per line (#4922).", file=sys.stderr)
+        for line in crowded:
+            print(f"  {line!r}", file=sys.stderr)
+        print("GitHub closes only the first one on a line; put each on its own.", file=sys.stderr)
+        return 1
     found = stray_references(text, allowed)
     if not found:
         return 0
