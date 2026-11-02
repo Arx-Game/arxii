@@ -1,5 +1,0 @@
-{
-  "reviewed_commit": "615c8ef805c71a5722ecee6b6af01956674c9219",
-  "note": "the options endpoint answers in a fight too; only performing is refused",
-  "http_status": 200
-}
