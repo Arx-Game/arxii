@@ -186,6 +186,7 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
         public = {d["name"]: d for d in response.data["distinctions"]}
         self.assertIn("Spoiled", public)
         self.assertNotIn("Hard scrabble", public)
+        self.assertFalse(public["Spoiled"]["is_cover"])
         staff = self.api(AccountFactory(is_staff=True))
         response = staff.get(f"/api/character-sheets/{sheet.pk}/")
         self.assertEqual(response.status_code, 200, response.content)

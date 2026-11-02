@@ -166,8 +166,9 @@ character-creation/
         │                         #   first name; Next walks down and into the next stage);
         │                         #   Unknown is a mark on the stage (every beat unknown in one
         │                         #   PATCH); the secret marks under a grid, the Cover story box
-        │                         #   on a one-of row (the no-cost card stands as cover until a
-        │                         #   click on another card; clicking the real pick drops both)
+        │                         #   on a one-of row (the no-cost card is saved as the cover when
+        │                         #   the secret is marked, until a click on another card;
+        │                         #   clicking the real pick drops both)
         │                         #   and a cover select on an any row; a figure's name input
         │                         #   on a picked person card; Description (Optional) per stage
         │                         #   (draft_data.stage_descriptions); the `.leafwrap` layout

@@ -328,7 +328,7 @@ describe('LifeGrids', () => {
     await user.click(within(early).getByRole('button', { name: 'Secret: Patient' }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
       draftId: draft.id,
-      data: { draft_data: { beats: { '1': { secret_offer_ids: [10] } } } },
+      data: { draft_data: { beats: { '1': { secret_offer_ids: [10], cover_offer_id: 12 } } } },
     });
 
     draft = createMockDraft({ draft_data: { beats: { '1': { secret_offer_ids: [10] } } } });

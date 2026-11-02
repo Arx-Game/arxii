@@ -246,6 +246,15 @@ export function LifeGrids({ draft, copy }: Props) {
     return picks;
   };
   const isOneOf = (beat: BeatPoolEntry) => beat.allowance === 1 && !beat.allowance_is_points;
+  // With no cover chosen on a one-of row its no-cost card (Unremarkable) stands as the
+  // cover; marking a secret saves it, so finalize holds what the player was shown.
+  const defaultCoverOf = (beat: BeatPoolEntry): number | null => {
+    const pickedIds = new Set(picksOf(beat).map((p) => p.offer.offer_id));
+    const card = beat.answer_offer_ids
+      .map((id) => offerById.get(id))
+      .find((o) => o !== undefined && !pickedIds.has(o.offer_id) && o.cost_per_rank === 0);
+    return card?.offer_id ?? null;
+  };
   const coverName = (beat: BeatPoolEntry): string => {
     const cover = stateOf(beat).cover_offer_id;
     if (typeof cover === 'number' && offerById.has(cover)) return offerById.get(cover)!.name;
@@ -272,13 +281,17 @@ export function LifeGrids({ draft, copy }: Props) {
   const setStageUnknown = (pool: BeatPoolEntry[], on: boolean) =>
     patchBeats(new Map(pool.map((b) => [b.beat_id, { unknown: on }])));
   const toggleSecret = (beat: BeatPoolEntry, offerId: number) => {
-    const current = stateOf(beat).secret_offer_ids ?? [];
+    const state = stateOf(beat);
+    const current = state.secret_offer_ids ?? [];
     const next = current.includes(offerId)
       ? current.filter((id) => id !== offerId)
       : [...current, offerId];
+    const saveDefault =
+      next.length > 0 && isOneOf(beat) && typeof state.cover_offer_id !== 'number';
     patch(beat, {
       secret_offer_ids: next,
       ...(next.length === 0 && { cover_offer_id: null }),
+      ...(saveDefault && { cover_offer_id: defaultCoverOf(beat) }),
     });
   };
   const setCover = (beat: BeatPoolEntry, offerId: number | null) =>
@@ -361,8 +374,7 @@ export function LifeGrids({ draft, copy }: Props) {
     const unpicked = beat.answer_offer_ids
       .map((id) => offerById.get(id))
       .filter((o): o is VisibleOffer => o !== undefined && !pickedIds.has(o.offer_id));
-    // With no cover chosen the row's no-cost card (Unremarkable) stands as the cover.
-    const defaultCover = unpicked.find((o) => o.cost_per_rank === 0)?.offer_id ?? null;
+    const defaultCover = defaultCoverOf(beat);
     return (
       <article key={beat.beat_id} className="sec" data-open={open} aria-label={beat.name}>
         <button

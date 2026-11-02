@@ -889,7 +889,8 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     Sensitive distinctions are *relocated* into Secrets (criminal / scandalous kinds, or a
     player-gated one): they drop off this public list and surface on the secret tab once learned.
     A non-privileged viewer sees only the non-secret entries; the owner / staff see all, with
-    ``is_secret`` flagging which are gated. Expects ``sheet.distinctions`` prefetched with
+    ``is_secret`` flagging which are gated and ``is_cover`` which stand in for one (a stranger
+    reads a cover as any held card). Expects ``sheet.distinctions`` prefetched with
     ``select_related("distinction")`` so the secret state resolves query-free.
     """
     return [
@@ -900,7 +901,9 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             notes=cd.notes,
             is_secret=cd.is_secret,
             is_from_glimpse=cd.from_glimpse_id is not None,
-            is_cover=cd.is_cover,
+            # The cover flag names the secret it stands in for (#4875 review): a stranger
+            # reads the cover as a held card and nothing more.
+            is_cover=privileged and cd.is_cover,
             feature=_feature_name(cd),
         )
         for cd in sheet.cached_distinctions
