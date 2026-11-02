@@ -21,6 +21,7 @@ export const covenantKeys = {
   subroles: (parentRoleId: number) => [...covenantKeys.all, 'subroles', parentRoleId] as const,
   ranks: (covenantId: number) => [...covenantKeys.all, 'ranks', covenantId] as const,
   gmRequest: (covenantId: number) => [...covenantKeys.all, 'gm-request', covenantId] as const,
+  vowPicks: (sheetId: number) => [...covenantKeys.all, 'vow-picks', sheetId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -302,6 +303,31 @@ export function useWithdrawCovenantFunds(covenantId: number, actorCharacterId: n
     mutationFn: (amount: number) => api.withdrawCovenantFunds(actorCharacterId, covenantId, amount),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Vow focus picks (#4929)
+// ---------------------------------------------------------------------------
+
+/** Every pick each of the character's primary vows offers, by level. Own character only. */
+export function useVowPicks(sheetId: number, enabled = true) {
+  return useQuery({
+    queryKey: covenantKeys.vowPicks(sheetId),
+    queryFn: () => api.getVowPicks(sheetId),
+    enabled: enabled && sheetId > 0,
+  });
+}
+
+/** Choose a pick through the action dispatch, then re-read the catalog. */
+export function useChooseVowPick(sheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ covenantId, pickId }: { covenantId: number; pickId: number }) =>
+      api.chooseVowPick(sheetId, covenantId, pickId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.vowPicks(sheetId) }).catch(() => {});
     },
   });
 }

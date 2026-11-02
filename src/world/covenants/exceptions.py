@@ -519,3 +519,19 @@ class CovenantTreasuryTransferError(CovenantTreasuryError):
             "The covenant treasury transfer could not be completed.",
         }
     )
+
+
+class VowFocusPickRefusedError(CovenantError):
+    """A vow holder's focus pick choice the rules refuse (#4929).
+
+    The message names the rule that refused it (the vow's level, the level's budget,
+    a pick already chosen), the way the admin's validation does.
+    """
+
+    user_message = "That pick cannot be chosen."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That pick cannot be chosen."})
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)

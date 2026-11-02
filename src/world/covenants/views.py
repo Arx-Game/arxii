@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from web.api.permissions import MayPlayCatalogSheet, query_character_sheet_id
 from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
     CannotTransferToDepartedMemberError,
@@ -61,6 +62,7 @@ from world.covenants.serializers import (
     ReorderRanksRequestSerializer,
     SphinxVerdictSerializer,
     TransferTopRequestSerializer,
+    VowPickCatalogSerializer,
 )
 from world.covenants.services import (
     assign_rank,
@@ -133,6 +135,30 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
             character_sheet__roster_entry__tenures__end_date__isnull=True,
             character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+    @extend_schema(responses=VowPickCatalogSerializer(many=True))
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="vow-picks",
+        pagination_class=None,
+        permission_classes=[IsAuthenticated, MayPlayCatalogSheet],
+    )
+    def vow_picks(self, request: Request) -> Response:
+        """GET /api/covenants/character-roles/vow-picks/?character_sheet=<id>
+
+        Every focus pick each of the character's primary vows offers, by level, with
+        the chosen ones marked and the locked ones saying why (#4929). Read-only and
+        self-only: a player reads only a character they play now; staff read any.
+        Choosing goes through the action dispatch (``choose_vow_focus_pick``). Who may
+        read is ``MayPlayCatalogSheet`` (a 400 for a malformed id, a 404 for a sheet the
+        requester may not play).
+        """
+        from world.covenants.focus_picks import vow_pick_catalogs  # noqa: PLC0415
+
+        # One sheet's catalog, not a filtered list of rows: not a FilterSet fit.
+        sheet = get_object_or_404(CharacterSheet, pk=query_character_sheet_id(request))
+        return Response(VowPickCatalogSerializer(vow_pick_catalogs(sheet), many=True).data)
 
     @action(
         detail=True,

@@ -963,6 +963,21 @@ until slices 2 to 7. What was built:
   `src/integration_tests/test_combat_style_journeys.py`.
 - Left for slice 3: `is_gear_compatible` still reads the vow's gear table.
 
+### Players choose vow picks (#4929, slice 6 of #4844) - SHIPPED
+
+- A vow holder sees every pick each primary vow offers by level (the anchor's and the
+  sub-role's together), chosen ones marked and locked ones with why, and each level's spend
+  against its budget: the sheet's Covenant block (owner only), `GET
+  /api/covenants/character-roles/vow-picks/`, and telnet `vow picks`.
+- Choosing (`choose_vow_focus_pick` through `ChooseVowFocusPickAction`, the sheet's Choose
+  button or `vow pick <name>`) runs the admin's rules, plus a held vow and no repeat; over
+  budget, above the vow level, a secondary vow and a pick already chosen are refused with the
+  rule. Unspent budget waits; changing a pick is slice 7's rite.
+- Imbuing a vow thread into a new pick level says "Vow level 2: 4 pts of new picks." on
+  telnet and the web (with "Choose picks" to the sheet); joining with a vow thread already at
+  a level is told the same. No migration. Journeys:
+  `src/integration_tests/test_choosing_vow_picks_journeys.py`.
+
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
 Vows scale combat maneuvers through the same `VowStatScaling` rows they use for stats, and

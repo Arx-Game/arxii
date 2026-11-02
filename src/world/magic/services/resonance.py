@@ -464,6 +464,7 @@ def spend_resonance_for_imbuing(
     character_sheet: CharacterSheet,
     thread: Thread,
     amount: int,
+    **_ritual_dispatch_kwargs: object,  # ritual dispatch also forwards ``ritual=``
 ) -> ThreadImbueResult:
     """Deduct resonance balance and greedily advance thread level.
 

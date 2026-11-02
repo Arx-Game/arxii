@@ -55,7 +55,7 @@ def _probe_vow_no_picks() -> ProbeResult:
     """A vow with no focus pick to choose: none of its own, and none on its anchor.
 
     A sub-role holder chooses from the anchor vow's catalog as well as the sub-role's
-    own (``focus_picks._choosable_role_ids``), so a sub-role whose anchor has picks is
+    own (``focus_picks.choosable_role_ids``), so a sub-role whose anchor has picks is
     not flagged. Two queries.
     """
     from world.covenants.models import CovenantRole, VowFocusPick  # noqa: PLC0415

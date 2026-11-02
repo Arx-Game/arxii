@@ -150,6 +150,7 @@ from actions.definitions.consent_preferences import (
 )
 from actions.definitions.covenants import (
     AssignCovenantRankAction,
+    ChooseVowFocusPickAction,
     DepositCovenantFundsAction,
     DisengageCovenantMembershipAction,
     EngageCovenantMembershipAction,
@@ -978,6 +979,7 @@ _ALL_ACTIONS: list[Action] = [
     StandDownBattleCovenantAction(),
     DepositCovenantFundsAction(),
     WithdrawCovenantFundsAction(),
+    ChooseVowFocusPickAction(),
     CreateEventAction(),
     ScheduleEventAction(),
     StartEventAction(),

@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery, useWearLook } from '../queries';
 import { useBrowsingIdentity } from '../useBrowsingIdentity';
@@ -51,7 +51,11 @@ export function CharacterSheetPage() {
   const { data: entry, isLoading } = useRosterEntryQuery(entryId);
   const { data: myEntries } = useMyRosterEntriesQuery();
   const account = useAccount();
-  const [section, setSection] = useState<SheetSection>('sheet');
+  // "Choose picks" after an imbue opens the Ties section, where the vow picks are (#4929).
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState<SheetSection>(
+    searchParams.get('section') === 'ties' ? 'ties' : 'sheet'
+  );
   const [addingLook, setAddingLook] = useState(false);
 
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;

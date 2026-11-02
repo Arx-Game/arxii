@@ -37,6 +37,7 @@ from world.covenants.exceptions import (
     SecondaryVowSameAnchorError,
     SecondaryVowThreadExceedsPrimaryError,
 )
+from world.covenants.focus_picks import announce_open_vow_picks
 from world.covenants.models import (
     CharacterCovenantRole,
     CourtGrantConfig,
@@ -223,7 +224,7 @@ def _create_founder_memberships(
             founder_rank = top_rank
         else:
             founder_rank = base_rank
-        CharacterCovenantRole.objects.create(
+        row = CharacterCovenantRole.objects.create(
             character_sheet=founder.character_sheet,
             covenant=cov,
             covenant_role=founder.role,
@@ -232,6 +233,7 @@ def _create_founder_memberships(
             sworn_as=resolve_sworn_face(founder.character_sheet, None),
         )
         founder.character_sheet.character.covenant_roles.invalidate()
+        announce_open_vow_picks(row)
 
 
 def _notify_founders_covenant_sworn(founders: Sequence[CovenantFounder]) -> None:
@@ -404,6 +406,8 @@ def add_member(
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
+    # A rejoin, or a vow whose thread was woven before, already has pick levels open.
+    announce_open_vow_picks(row)
     return row
 
 
@@ -491,6 +495,7 @@ def change_role(
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(membership.character_sheet)
+    announce_open_vow_picks(new_row)
     return new_row
 
 
@@ -596,6 +601,7 @@ def assign_covenant_role(
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(character_sheet)
+    announce_open_vow_picks(row)
     return row
 
 
