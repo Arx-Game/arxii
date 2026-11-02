@@ -24,6 +24,7 @@ from integration_tests.harness import JourneyCase
 from integration_tests.test_strike_journeys import BARE_HANDS_DAMAGE, _StrikeField
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.combat.services import resolve_round
 from world.combat.services.declarations.strike import strike_weapon_options
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.factories import (
@@ -419,6 +420,25 @@ class StrikingWithClaws(_ClawedField):
         told = self.telnet(self.hobb, f"strike bandit with {CLAWS}")
 
         self.assertIn(f"You ready a strike at Bandit with your {CLAWS}.", told)
+
+    def test_the_room_hears_the_claws_named_with_no_article(self) -> None:
+        wren = self.wren
+        self.connect_telnet(self.hobb)
+        self.connect_telnet(wren)
+        self.watch(wren)
+        self.telnet(self.hobb, f"strike bandit with {CLAWS}")
+
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            self.forced_rolls("Success", "Success"),
+        ):
+            resolve_round(self.encounter)
+
+        self.assertTold(self.hobb, f"You strike Bandit with your {CLAWS}.")
+        self.assertTold(
+            wren, f"Hobb strikes Bandit with {CLAWS}. A fair hit: {CLAWS_DAMAGE} damage."
+        )
+        self.assertNotTold(wren, f"with a {CLAWS}")
 
     def test_a_facet_on_the_claws_reaches_the_strike(self) -> None:
         wolf = FacetFactory(name="Wolf")
