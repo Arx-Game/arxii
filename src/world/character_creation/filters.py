@@ -9,6 +9,7 @@ import django_filters
 from world.character_creation.models import DraftMarking
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path
+from world.covenants.models import CombatStyle
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.species.models import Species
 
@@ -102,6 +103,26 @@ class CGGiftOptionFilter(django_filters.FilterSet):
 
     def filter_noop(self, queryset: QuerySet[Gift], name: str, value: int) -> QuerySet[Gift]:
         """No-op — the view's ``get_queryset`` already narrowed by draft_id."""
+        return queryset
+
+
+class CGCombatStyleOptionFilter(django_filters.FilterSet):
+    """Declares ``draft_id`` for the CG combat style list's schema (#4921).
+
+    Resolution happens in ``CGCombatStyleOptionViewSet.get_queryset``; see
+    ``CGGiftOptionFilter`` above for why.
+    """
+
+    draft_id = django_filters.NumberFilter(method="filter_noop")
+
+    class Meta:
+        model = CombatStyle
+        fields = ["draft_id"]
+
+    def filter_noop(
+        self, queryset: QuerySet[CombatStyle], name: str, value: int
+    ) -> QuerySet[CombatStyle]:
+        """No-op: the view's ``get_queryset`` already narrowed by draft_id."""
         return queryset
 
 

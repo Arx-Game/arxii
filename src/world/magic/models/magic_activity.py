@@ -12,9 +12,9 @@ from django.db import models
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import MagicActivity
 from world.magic.skill_choices import (
-    MAGIC_SKILL_CHOICES,
-    MAGIC_SKILL_ERROR_MESSAGES,
-    MAGIC_SKILL_HELP,
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
 )
 
 
@@ -35,9 +35,9 @@ class MagicActivitySkill(SharedMemoryModel):
         "arxii.Skill",
         on_delete=models.PROTECT,
         related_name="magic_activity_rows",
-        limit_choices_to=MAGIC_SKILL_CHOICES,
-        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
-        help_text=f"The skill added to every roll of this activity. {MAGIC_SKILL_HELP}",
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+        help_text=f"The skill added to every roll of this activity. {MAGIC_PICKER_SKILL_HELP}",
     )
     weight = models.DecimalField(
         max_digits=4,

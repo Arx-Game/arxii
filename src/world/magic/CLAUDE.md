@@ -360,8 +360,11 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
 - **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
   `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
 - **Anima Check:** the character-creation pick excludes MAGIC-category skills.
-- **Magic skills only (#4547):** the four pickers share `limit_choices_to=MAGIC_SKILL_CHOICES`
-  (`skill_choices.py`), so admin and `full_clean()` take Magic-category skills only. No seeder
+- **Magic skills only (#4547):** the four pickers share
+  `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`skill_choices.py`), so admin and `full_clean()`
+  take Magic-category skills only, and never a combat style's own skill (#4921): that one is
+  trained in creation and added by the style. `CombatStyle.clean()` refuses the reverse, a style
+  taking a skill a picker already adds. `CombatStyle.skill` itself keeps `MAGIC_SKILL_CHOICES`. No seeder
   names, creates or weights a skill for magic; a new magic check type weights its stat and lets
   the roll add skills. Sanctum ritual configs take their skill from the `RITUAL_WORKING` mapping
   (tests call `map_ritual_working_skill()` first).

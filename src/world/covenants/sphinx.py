@@ -12,7 +12,8 @@ Two entry points:
 
 - ``judge_vow`` — one character × one role → a three-tier ``SphinxVerdict``
   (``SphinxTier.TAKES``/``DORMANT``/``NOT_YET``), the player-facing verdict
-  (REST endpoint + ``sphinx`` telnet command).
+  (REST endpoint + ``sphinx`` telnet command), with a style line saying whether the
+  character's combat style lists the vow (#4921).
 - ``audit_vow_coverage`` — every active anchor role × every active Tradition →
   "which vows are swearable today, per tradition" (the staff coverage-audit
   instrument; validation-plan instrument 2). Deliberately narrower than
@@ -39,6 +40,7 @@ from world.covenants.models import (
     VowSituationalPerkSituation,
 )
 from world.covenants.perks.constants import SITUATION_CREATOR_FUNCTIONS, PerkBeneficiary
+from world.covenants.style_fit import style_lists_vow
 from world.magic.models import (
     CharacterGift,
     CharacterTechnique,
@@ -91,13 +93,29 @@ class SphinxShoppingItem:
 
 
 @dataclass(frozen=True)
+class SphinxStyleLine:
+    """Whether the character's combat style suits the vow (#4921).
+
+    ``suits`` is False when the style does not list the vow: while it is active the
+    style gives no benefits. It never blocks the vow.
+    """
+
+    style_name: str
+    suits: bool
+
+
+@dataclass(frozen=True)
 class SphinxVerdict:
-    """The Sphinx's full verdict for one character × one role (#2640)."""
+    """The Sphinx's full verdict for one character × one role (#2640).
+
+    ``style`` is None for a character with no combat style (#4921).
+    """
 
     tier: str
     role_name: str
     demands: list[SphinxDemand] = field(default_factory=list)
     shopping_list: list[SphinxShoppingItem] = field(default_factory=list)
+    style: SphinxStyleLine | None = None
 
 
 @dataclass(frozen=True)
@@ -404,7 +422,16 @@ def judge_vow(sheet: CharacterSheet, role: CovenantRole) -> SphinxVerdict:
         role_name=role.name,
         demands=demands,
         shopping_list=shopping_list,
+        style=_style_line(sheet, role),
     )
+
+
+def _style_line(sheet: CharacterSheet, role: CovenantRole) -> SphinxStyleLine | None:
+    """The style line for ``sheet``'s combat style and ``role``, or None with no style."""
+    style = sheet.combat_style
+    if style is None:
+        return None
+    return SphinxStyleLine(style_name=style.name, suits=style_lists_vow(style, role))
 
 
 def _tradition_function_pools(tradition_ids: list[int]) -> dict[int, set[str]]:

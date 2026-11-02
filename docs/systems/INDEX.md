@@ -7935,7 +7935,12 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `CombatStyleGear` (NK `(style, gear_archetype)`)). `world.covenants.style_fit`
     (`style_fit_for_attack`, `style_fit_for_defense`, `StyleFit`, `StyleLapse`) puts the
     style skill on Strike, technique hit and PC defense rolls while the weapon, armor and
-    vow are on the style [BUILT & WIRED].
+    vow are on the style [BUILT & WIRED]. Since #4921 a player chooses the style in
+    creation (`CharacterDraft.selected_combat_style`, `GET
+    /api/character-creation/combat-styles/`, `world.character_creation.magic_training`:
+    `taught_styles`, `training_skills`, `reconcile_combat_style`) and the Sphinx's
+    `SphinxVerdict.style` (`SphinxStyleLine`, `style_fit.style_lists_vow`) says whether it
+    suits a vow [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /
     `VowStatScaling`. `SituationRequirementMixin.condition_property` (FK
     `Property`) and Situations `TARGET_HAS_CONDITION_PROPERTY`,

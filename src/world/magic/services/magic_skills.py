@@ -38,8 +38,10 @@ def magic_category_skills() -> QuerySet[Skill]:
     creation (the skills a Tradition's schooling stance lifts at finalize, the points a
     draft may not spend on them), the Anima Check filter, which excludes them so a
     skill is never counted twice in a magical roll (#4450, #4457), and the Required
-    content dashboard. ``MAGIC_SKILL_CHOICES`` is the same filter the four magic skill
-    pickers offer and accept (#4547); this adds the active flag.
+    content dashboard. ``MAGIC_SKILL_CHOICES`` is its filter; this adds the active flag.
+    It holds every combat style's own skill too: the four magic skill pickers offer
+    ``MAGIC_PICKER_SKILL_CHOICES``, which leaves those out (#4547, #4921), and character
+    creation trains only the chosen style's (``magic_training.training_skills``).
     """
     return Skill.objects.filter(MAGIC_SKILL_CHOICES, is_active=True)
 

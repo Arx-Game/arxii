@@ -362,7 +362,8 @@ Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 **Combat style** (#4759, ADR-4759):
 How a character was taught to fight with magic (`CombatStyle` on `CharacterSheet.combat_style`):
 a Defense Style and an armor share that replace the vow's Defense Profile, and (#4884) a style
-skill, a hit stat, its Traditions, vows and gear kinds. _Avoid_: technique
+skill, a hit stat, its Traditions, vows and gear kinds; chosen in creation from the
+Tradition's styles (#4921). _Avoid_: technique
 style (`TechniqueStyle`, how a Path or Gift casts).
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 

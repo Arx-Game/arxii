@@ -651,10 +651,13 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 
 **Magic skills only (#4547).** These skills are bespoke Magic skills (trait category MAGIC) that
 staff make and point each roll at. They are never skills a character picks anywhere else, so a
-cast never counts one skill twice. The four pickers below share `limit_choices_to=MAGIC_SKILL_CHOICES`
-(`world/magic/skill_choices.py`): the admin form and its autocomplete offer only Magic skills, and
-`full_clean()` refuses any other with `MAGIC_SKILL_ERROR_MESSAGES` (`ForeignKey.validate` applies
-the filter, so no separate `clean()` check). The filter follows the category, never a name, and
+cast never counts one skill twice. The four pickers below share
+`limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`world/magic/skill_choices.py`): the admin form and
+its autocomplete offer only Magic skills that are no combat style's own skill (#4921: a style's
+skill is trained in creation and added by the style), and `full_clean()` refuses any other with
+`MAGIC_PICKER_SKILL_ERROR_MESSAGES` (`ForeignKey.validate` applies the filter, so no separate
+`clean()` check). `CombatStyle.skill` keeps the plain `MAGIC_SKILL_CHOICES`, and
+`CombatStyle.clean()` refuses a skill one of the pickers already adds. The filter follows the category, never a name, and
 keeps an inactive Magic skill valid (it adds no term). `magic_category_skills()` reads the same
 filter plus the active flag. A cross-table rule like this cannot be a database constraint, so
 existing rows that point at another skill stay as they are until staff repoint them. No seeder
