@@ -1,0 +1,38 @@
+{
+  "reviewed_commit": "d9cc6da10ccd35cb27d08b295f4130eabca5494b",
+  "request": "GET /admin/_ops/required-content/ as a staff superuser",
+  "rites_made_through": "the Ritual admin add form, both choosing the Rite of Re-swearing service",
+  "rite_ids_and_names": [
+    [
+      14,
+      "Rite of Re-swearing"
+    ],
+    [
+      15,
+      "Second Re-swearing"
+    ]
+  ],
+  "before_any_rite": {
+    "http_status": 200,
+    "reswear_text": [
+      {
+        "table": "Missing - Required",
+        "dependency": "Rite of Re-swearing",
+        "consumer": "world/covenants/focus_picks.py reswear_ritual(), reswear_vow_pick(); the sheet's Change picks dialog and vow reswear",
+        "consequence": "No ritual changes a chosen vow pick: the sheet's Change picks dialog says so and vow reswear refuses, so a vow holder keeps every pick they chose until staff make it on the Ritual admin page, choosing the Rite of Re-swearing service, with its anima and components.",
+        "missing_column": "the Rite of Re-swearing No ritual changes a chosen vow pick: no SERVICE ritual has the service path world.covenants.focus_picks.reswear_vow_pick."
+      }
+    ]
+  },
+  "http_status": 200,
+  "reswear_row_text": [
+    {
+      "table": "Missing - Tuning",
+      "dependency": "Only one Rite of Re-swearing",
+      "consumer": "world/covenants/focus_picks.py reswear_ritual() (lowest pk wins)",
+      "consequence": "The sheet and vow reswear only ever perform the first rite with the Re-swearing service path, with that one's anima and components; a second row is reachable by name through the ritual command only.",
+      "missing_column": "Second Re-swearing 2 rituals change a chosen vow pick; the sheet and vow reswear perform only Rite of Re-swearing. Remove or repoint: Second Re-swearing."
+    }
+  ],
+  "mentions_both_names": true
+}

@@ -1,0 +1,366 @@
+{
+  "dark-desktop-theme-class": "dark",
+  "dark-desktop-clearance": {
+    "closeLeft": 943,
+    "tagRight": 919,
+    "gapPx": 24
+  },
+  "dark-desktop-open": {
+    "before": "Level 1 before4 of 4 · Quick Recovery, Strike from the Flank",
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "cost": "Cost3 AP from this week · 10 anima · Token of the Vow",
+    "disabled": [
+      {
+        "t": "◆Quick Recovery2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Strike from the Flank2 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◇Bleeding Cut3 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◆Feint and Vanish2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Light on Your Feet4 ptscosts more than is left",
+        "d": true,
+        "pressed": "false"
+      }
+    ],
+    "performDisabled": false
+  },
+  "dark-desktop-over-budget-click": {
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "pressed": [
+      "◆Quick Recovery2 pts",
+      "◆Feint and Vanish2 pts"
+    ]
+  },
+  "dark-desktop-level2": {
+    "before": "Level 2 before3 of 4 · Bleeding Cut",
+    "after": "Level 2 after4 of 4 · Through the Gap"
+  },
+  "dark-desktop-performed": [
+    {
+      "character_sheet_id": 22,
+      "ritual_id": 6,
+      "kwargs": {
+        "old_pick_id": 40,
+        "new_pick_id": 41,
+        "covenant_id": 6
+      },
+      "components": [
+        6
+      ]
+    }
+  ],
+  "dark-desktop-after-text": "You perform Rite of Re-swearing. You give up Quick Recovery and take Feint and Vanish. Level 1: 4 of 4. 3 AP spent.",
+  "dark-desktop-unavailable-no-rite": {
+    "tag": "OUTPUT",
+    "text": "No ritual can change a chosen vow pick yet.",
+    "color": "rgb(161, 161, 170)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-desktop-unavailable-hedge": {
+    "tag": "OUTPUT",
+    "text": "The deeper mysteries of this rite are closed to you.",
+    "color": "rgb(161, 161, 170)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-desktop-refused-fight": {
+    "text": "You cannot re-swear a vow pick during a fight.",
+    "color": "rgb(230, 101, 101)",
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-desktop-refused-ap": {
+    "text": "The rite takes 3 action points, and you have 2.",
+    "color": "rgb(230, 101, 101)",
+    "bg": "rgb(9, 9, 11)"
+  },
+  "light-desktop-theme-class": "light",
+  "light-desktop-clearance": {
+    "closeLeft": 943,
+    "tagRight": 919,
+    "gapPx": 24
+  },
+  "light-desktop-open": {
+    "before": "Level 1 before4 of 4 · Quick Recovery, Strike from the Flank",
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "cost": "Cost3 AP from this week · 10 anima · Token of the Vow",
+    "disabled": [
+      {
+        "t": "◆Quick Recovery2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Strike from the Flank2 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◇Bleeding Cut3 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◆Feint and Vanish2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Light on Your Feet4 ptscosts more than is left",
+        "d": true,
+        "pressed": "false"
+      }
+    ],
+    "performDisabled": false
+  },
+  "light-desktop-over-budget-click": {
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "pressed": [
+      "◆Quick Recovery2 pts",
+      "◆Feint and Vanish2 pts"
+    ]
+  },
+  "light-desktop-level2": {
+    "before": "Level 2 before3 of 4 · Bleeding Cut",
+    "after": "Level 2 after4 of 4 · Through the Gap"
+  },
+  "light-desktop-performed": [
+    {
+      "character_sheet_id": 22,
+      "ritual_id": 6,
+      "kwargs": {
+        "old_pick_id": 40,
+        "new_pick_id": 41,
+        "covenant_id": 6
+      },
+      "components": [
+        6
+      ]
+    }
+  ],
+  "light-desktop-after-text": "You perform Rite of Re-swearing. You give up Quick Recovery and take Feint and Vanish. Level 1: 4 of 4. 3 AP spent.",
+  "light-desktop-unavailable-no-rite": {
+    "tag": "OUTPUT",
+    "text": "No ritual can change a chosen vow pick yet.",
+    "color": "rgb(113, 113, 122)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-desktop-unavailable-hedge": {
+    "tag": "OUTPUT",
+    "text": "The deeper mysteries of this rite are closed to you.",
+    "color": "rgb(113, 113, 122)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-desktop-refused-fight": {
+    "text": "You cannot re-swear a vow pick during a fight.",
+    "color": "rgb(239, 68, 68)",
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-desktop-refused-ap": {
+    "text": "The rite takes 3 action points, and you have 2.",
+    "color": "rgb(239, 68, 68)",
+    "bg": "rgb(255, 255, 255)"
+  },
+  "dark-phone-theme-class": "dark",
+  "dark-phone-clearance": {
+    "closeLeft": 357,
+    "tagRight": 333,
+    "gapPx": 24
+  },
+  "dark-phone-open": {
+    "before": "Level 1 before4 of 4 · Quick Recovery, Strike from the Flank",
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "cost": "Cost3 AP from this week · 10 anima · Token of the Vow",
+    "disabled": [
+      {
+        "t": "◆Quick Recovery2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Strike from the Flank2 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◇Bleeding Cut3 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◆Feint and Vanish2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Light on Your Feet4 ptscosts more than is left",
+        "d": true,
+        "pressed": "false"
+      }
+    ],
+    "performDisabled": false
+  },
+  "dark-phone-over-budget-click": {
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "pressed": [
+      "◆Quick Recovery2 pts",
+      "◆Feint and Vanish2 pts"
+    ]
+  },
+  "dark-phone-level2": {
+    "before": "Level 2 before3 of 4 · Bleeding Cut",
+    "after": "Level 2 after4 of 4 · Through the Gap"
+  },
+  "dark-phone-performed": [
+    {
+      "character_sheet_id": 22,
+      "ritual_id": 6,
+      "kwargs": {
+        "old_pick_id": 40,
+        "new_pick_id": 41,
+        "covenant_id": 6
+      },
+      "components": [
+        6
+      ]
+    }
+  ],
+  "dark-phone-after-text": "You perform Rite of Re-swearing. You give up Quick Recovery and take Feint and Vanish. Level 1: 4 of 4. 3 AP spent.",
+  "dark-phone-unavailable-no-rite": {
+    "tag": "OUTPUT",
+    "text": "No ritual can change a chosen vow pick yet.",
+    "color": "rgb(161, 161, 170)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-phone-unavailable-hedge": {
+    "tag": "OUTPUT",
+    "text": "The deeper mysteries of this rite are closed to you.",
+    "color": "rgb(161, 161, 170)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-phone-refused-fight": {
+    "text": "You cannot re-swear a vow pick during a fight.",
+    "color": "rgb(230, 101, 101)",
+    "bg": "rgb(9, 9, 11)"
+  },
+  "dark-phone-refused-ap": {
+    "text": "The rite takes 3 action points, and you have 2.",
+    "color": "rgb(230, 101, 101)",
+    "bg": "rgb(9, 9, 11)"
+  },
+  "light-phone-theme-class": "light",
+  "light-phone-clearance": {
+    "closeLeft": 357,
+    "tagRight": 333,
+    "gapPx": 24
+  },
+  "light-phone-open": {
+    "before": "Level 1 before4 of 4 · Quick Recovery, Strike from the Flank",
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "cost": "Cost3 AP from this week · 10 anima · Token of the Vow",
+    "disabled": [
+      {
+        "t": "◆Quick Recovery2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Strike from the Flank2 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◇Bleeding Cut3 pts",
+        "d": false,
+        "pressed": "false"
+      },
+      {
+        "t": "◆Feint and Vanish2 pts",
+        "d": false,
+        "pressed": "true"
+      },
+      {
+        "t": "◇Light on Your Feet4 ptscosts more than is left",
+        "d": true,
+        "pressed": "false"
+      }
+    ],
+    "performDisabled": false
+  },
+  "light-phone-over-budget-click": {
+    "after": "Level 1 after4 of 4 · Feint and Vanish, Strike from the Flank",
+    "pressed": [
+      "◆Quick Recovery2 pts",
+      "◆Feint and Vanish2 pts"
+    ]
+  },
+  "light-phone-level2": {
+    "before": "Level 2 before3 of 4 · Bleeding Cut",
+    "after": "Level 2 after4 of 4 · Through the Gap"
+  },
+  "light-phone-performed": [
+    {
+      "character_sheet_id": 22,
+      "ritual_id": 6,
+      "kwargs": {
+        "old_pick_id": 40,
+        "new_pick_id": 41,
+        "covenant_id": 6
+      },
+      "components": [
+        6
+      ]
+    }
+  ],
+  "light-phone-after-text": "You perform Rite of Re-swearing. You give up Quick Recovery and take Feint and Vanish. Level 1: 4 of 4. 3 AP spent.",
+  "light-phone-unavailable-no-rite": {
+    "tag": "OUTPUT",
+    "text": "No ritual can change a chosen vow pick yet.",
+    "color": "rgb(113, 113, 122)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-phone-unavailable-hedge": {
+    "tag": "OUTPUT",
+    "text": "The deeper mysteries of this rite are closed to you.",
+    "color": "rgb(113, 113, 122)",
+    "display": "block",
+    "performDisabled": true,
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-phone-refused-fight": {
+    "text": "You cannot re-swear a vow pick during a fight.",
+    "color": "rgb(239, 68, 68)",
+    "bg": "rgb(255, 255, 255)"
+  },
+  "light-phone-refused-ap": {
+    "text": "The rite takes 3 action points, and you have 2.",
+    "color": "rgb(239, 68, 68)",
+    "bg": "rgb(255, 255, 255)"
+  }
+}
