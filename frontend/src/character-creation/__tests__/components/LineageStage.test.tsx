@@ -43,6 +43,9 @@ import type { FamilyPath } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
+  // The suggested life (#4867): the grids' load and Start blank hooks read these.
+  loadDefaultLife: vi.fn(),
+  clearLife: vi.fn(),
   getFamilies: vi.fn(),
   getClaimableTitles: vi.fn().mockResolvedValue([]),
   getHouseClaim: vi.fn().mockResolvedValue(null),
@@ -149,7 +152,8 @@ describe('LineageStage', () => {
 
   describe('The route comes with the beginning (#4395)', () => {
     it('names the staff gap when the beginning has no route, and still mounts the life', async () => {
-      vi.mocked(api.getDraftBeats).mockResolvedValueOnce([
+      // Every call, not once: the suggested life's load (#4867) refetches the beats.
+      vi.mocked(api.getDraftBeats).mockResolvedValue([
         {
           beat_id: 1,
           name: 'The household',

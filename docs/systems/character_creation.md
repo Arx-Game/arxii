@@ -876,9 +876,11 @@ beginning's id. `POST drafts/<id>/load-default-life/` runs it once per beginning
 guards a life the player edited or cleared; a changed beginning loads again);
 `POST drafts/<id>/clear-life/` ("Start blank") drops the Backgrounds picks and
 `draft_data.beats`, keeps the stamp and the other chapters' picks. The Distinction Builder's
-pin save is a diff (a kept pin keeps its flag; it used to `set()` the through rows). The leaf
-calls the load when the life first opens for a beginning the stamp does not name (the
-frontend half). **Allowance (#4395, career points since #4829):**
+pin save is a diff (a kept pin keeps its flag; it used to `set()` the through rows). On the
+leaf (#4867) `LifeGrids` calls the load once the beats have loaded for a beginning the stamp
+does not name (`useLoadDefaultLife`; a ref stops a second call per mount) and a "Start
+blank" button in its footer calls `useClearLife`; both replace the draft cache and refetch
+the distinctions, beats, Backgrounds offers and CG points. **Allowance (#4395, career points since #4829):**
 `beat_allowance` is one answer on a one-of beat, any number on any-that-apply, and on a
 beat whose `picks_scale_with_age` is on `age_pick_allowance(age)` career points: one at or
 under `AGE_PICKS_FROM_AGE` (19), one more per `AGE_PICKS_YEARS_PER_PICK` (5) full years

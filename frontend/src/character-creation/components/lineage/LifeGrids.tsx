@@ -31,12 +31,14 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import {
   characterCreationKeys,
+  useClearLife,
   useDraftBeats,
   useDraftOffers,
+  useLoadDefaultLife,
   useUpdateDraft,
 } from '../../queries';
 import {
@@ -105,6 +107,21 @@ export function LifeGrids({ draft, copy }: Props) {
   // first section), `null` is folded shut.
   const [openStage, setOpenStage] = useState<string | null | undefined>(undefined);
   const [openBeat, setOpenBeat] = useState<number | null | undefined>(undefined);
+  // The suggested life (#4865): loaded once when the grids first open for a beginning the
+  // draft's stamp does not name. The server's stamp is the durable guard (a life the player
+  // edited or cleared never reloads); the ref only stops a second call in one mount.
+  const loadLife = useLoadDefaultLife(draft.id);
+  const clearLife = useClearLife(draft.id);
+  const loadedForRef = useRef<number | null>(null);
+  const beginningId = draft.selected_beginnings?.id ?? null;
+  const loadedFor = draft.draft_data.life_loaded_for ?? null;
+  const { mutate: loadMutate } = loadLife;
+  useEffect(() => {
+    if (isLoading || beginningId === null) return;
+    if (loadedFor === beginningId || loadedForRef.current === beginningId) return;
+    loadedForRef.current = beginningId;
+    loadMutate();
+  }, [isLoading, beginningId, loadedFor, loadMutate]);
 
   const byStage = useMemo(() => {
     const groups = new Map<string, BeatPoolEntry[]>();
@@ -573,6 +590,14 @@ export function LifeGrids({ draft, copy }: Props) {
         {recentHistoryBox}
         <div className="life-foot">
           <span>{foot}</span>
+          <button
+            type="button"
+            className="btn-small"
+            disabled={loadLife.isPending || clearLife.isPending}
+            onClick={() => clearLife.mutate()}
+          >
+            {copy?.beats_start_blank ?? 'Start blank'}
+          </button>
         </div>
         <div className="testament">
           {testamentLines.length > 0
