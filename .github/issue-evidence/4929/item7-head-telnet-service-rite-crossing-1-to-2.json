@@ -1,9 +1,0 @@
-{
-  "reviewed_commit": "901c39c083c887ce5864672b528b2b40db092726",
-  "label": "head",
-  "command": "ritual Quick Imbuing thread=THREAD amount=AMOUNT",
-  "thread_stored_level_before": 10,
-  "amount": 5500,
-  "outcome": "returned",
-  "value": "You perform Quick Imbuing.\nVow level 2: 4 pts of new picks."
-}
