@@ -254,7 +254,12 @@ def _run_pre_apply_interceptors(
     return None
 
 
-def apply_damage_to_participant(  # noqa: C901, PLR0913
+def _health_fraction(health: int, maximum: int) -> float:
+    """Return nonnegative health as a fraction of a positive maximum."""
+    return max(0.0, health / maximum) if maximum > 0 else 0.0
+
+
+def apply_damage_to_participant(  # noqa: PLR0913
     participant: CombatParticipant,
     damage: int,
     *,
@@ -409,10 +414,7 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
     # knockout/death classification further down share. vitals.health is untouched
     # by anything above this line, so this is safe to read early.
     health_before = vitals.health
-    if vitals.max_health > 0:
-        health_before_pct = max(0.0, health_before / vitals.max_health)
-    else:
-        health_before_pct = 0.0
+    health_before_pct = _health_fraction(health_before, vitals.max_health)
 
     # Condition-damage interactions (#2018). Final percentage multiplier on
     # net damage, after resistance + armor soak. May consume/transform conditions.
@@ -430,10 +432,7 @@ def apply_damage_to_participant(  # noqa: C901, PLR0913
     vitals.health -= effective_damage
     health_after = vitals.health
 
-    if vitals.max_health > 0:
-        health_pct = max(0.0, health_after / vitals.max_health)
-    else:
-        health_pct = 0.0
+    health_pct = _health_fraction(health_after, vitals.max_health)
 
     knockout_eligible = (
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD

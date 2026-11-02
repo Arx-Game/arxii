@@ -295,9 +295,11 @@ def beat_marks(draft: CharacterDraft) -> BeatMarks:
             cover[beat_id] = cover_id
         raw_figures = state.get(BEAT_FIGURES) or {}
         if isinstance(raw_figures, dict):
-            for key, name in raw_figures.items():
-                if isinstance(name, str) and name.strip() and str(key).isdecimal():
-                    figures[int(key)] = name.strip()
+            figures.update(
+                (int(key), name.strip())
+                for key, name in raw_figures.items()
+                if isinstance(name, str) and name.strip() and str(key).isdecimal()
+            )
     return BeatMarks(secret=secret, cover=cover, figures=figures)
 
 
@@ -445,6 +447,15 @@ def age_scaled_points_spent(draft: CharacterDraft) -> list[tuple[str, int]]:
     ]
 
 
+def _schooling_opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
+    """Check whether the draft's schooling opens the offered stance."""
+    line = ctx["slate_line"]
+    max_rank = schooling_max_rank(line.state) if line is not None else None
+    if max_rank is None or offer.schooling_line_id is None:
+        return False
+    return offer.schooling_line.rank <= max_rank
+
+
 def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     """Whether the draft has satisfied this offer's opener.
 
@@ -464,11 +475,7 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         # The state decides how many stances it opens (#4457): a living tradition all
         # three, an orphaned one ranks 0 and 1, a self-taught one none. A line saved
         # without its schooling stance (the database does not require one) is never open.
-        line = ctx["slate_line"]
-        max_rank = schooling_max_rank(line.state) if line is not None else None
-        if max_rank is None or offer.schooling_line_id is None:
-            return False
-        return offer.schooling_line.rank <= max_rank
+        return _schooling_opener_satisfied(offer, ctx)
     if chapter == OfferChapter.ACTORS_SHEET:
         # The question is always on the leaf; the prompt only says which block (#3709).
         return bool(offer.prompt)

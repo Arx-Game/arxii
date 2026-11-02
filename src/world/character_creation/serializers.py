@@ -2413,21 +2413,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = "beats must be a dictionary"
             raise serializers.ValidationError({"beats": msg})
         for beat_id, state in beats.items():
-            if not isinstance(beat_id, str) or not beat_id.isdecimal():
-                msg = "beats keys must be beat ids as strings"
+            self._validate_beat_state(beat_id, state)
+
+    def _validate_beat_state(self, beat_id: str, state: object) -> None:
+        """Validate one beat and its marks."""
+        if not isinstance(beat_id, str) or not beat_id.isdecimal():
+            msg = "beats keys must be beat ids as strings"
+            raise serializers.ValidationError({"beats": msg})
+        if not isinstance(state, dict):
+            msg = "each beat is a dictionary"
+            raise serializers.ValidationError({"beats": msg})
+        for flag in ("taken", "unknown"):
+            if flag in state and not isinstance(state[flag], bool):
+                msg = f"beats.{flag} must be true or false"
                 raise serializers.ValidationError({"beats": msg})
-            if not isinstance(state, dict):
-                msg = "each beat is a dictionary"
-                raise serializers.ValidationError({"beats": msg})
-            for flag in ("taken", "unknown"):
-                if flag in state and not isinstance(state[flag], bool):
-                    msg = f"beats.{flag} must be true or false"
-                    raise serializers.ValidationError({"beats": msg})
-            line = state.get("line", "")
-            if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
-                msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
-                raise serializers.ValidationError({"beats": msg})
-            self._validate_beat_marks(state)
+        line = state.get("line", "")
+        if not isinstance(line, str) or len(line) > BEAT_LINE_MAX_LENGTH:
+            msg = f"a beat's line is text of at most {BEAT_LINE_MAX_LENGTH} characters"
+            raise serializers.ValidationError({"beats": msg})
+        self._validate_beat_marks(state)
 
     @staticmethod
     def _validate_beat_marks(state: dict) -> None:

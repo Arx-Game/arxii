@@ -8,6 +8,7 @@ one more per decade; a Sleeper-style Beginning keeps one beat.
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
+from rest_framework import serializers
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
@@ -29,6 +30,7 @@ from world.character_creation.models import CharacterOriginSlot
 from world.character_creation.offers import (
     BeatConflict,
     age_pick_allowance,
+    beat_marks,
     beat_pick_conflicts,
     beat_pool,
     beats_for,
@@ -37,6 +39,7 @@ from world.character_creation.offers import (
     visible_offers,
     youngest_age_for_points,
 )
+from world.character_creation.serializers import CharacterDraftSerializer
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.character_sheets.factories import CharacterSheetFactory
@@ -639,3 +642,36 @@ class LifeBeatAdminTest(TestCase):
         self.assertEqual(offer.arrives_as, OfferArrival.CHOICE)
         self.assertEqual(offer.name, "Patient")
         self.assertEqual([e.beginning_id for e in beat.exclusions.all()], [self.beginning.pk])
+
+
+class BeatDraftValidationTests(TestCase):
+    """Draft beat data remains safe to read after validation."""
+
+    def test_valid_marks_are_preserved_and_normalized_when_read(self):
+        data = {
+            "beats": {
+                "12": {
+                    "taken": True,
+                    "line": "A memory",
+                    "secret_offer_ids": [3],
+                    "cover_offer_id": 4,
+                    "figures": {"5": "  A friend  "},
+                }
+            }
+        }
+        validated = CharacterDraftSerializer().validate_draft_data(data)
+        draft = CharacterDraftFactory(draft_data=validated)
+        marks = beat_marks(draft)
+        self.assertEqual(marks.secret, {12: {3}})
+        self.assertEqual(marks.cover, {12: 4})
+        self.assertEqual(marks.figures, {5: "A friend"})
+
+    def test_malformed_beat_shapes_are_rejected(self):
+        for beats in (
+            {"bad": {}},
+            {"12": []},
+            {"12": {"taken": "yes"}},
+            {"12": {"figures": {"bad": "Name"}}},
+        ):
+            with self.subTest(beats=beats), self.assertRaises(serializers.ValidationError):
+                CharacterDraftSerializer().validate_draft_data({"beats": beats})

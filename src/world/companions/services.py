@@ -589,6 +589,23 @@ def _is_charmed_by_caster(opponent, caster_character) -> bool:
 
 
 @transaction.atomic
+def _consume_promotion_charm(combat_opponent, caster_character) -> None:
+    """Consume the caster's charm after a successful promotion."""
+    from world.conditions.constants import Allegiance  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
+
+    if combat_opponent.objectdb is None:
+        return
+    instance = allegiance_sourced_by(
+        combat_opponent.objectdb,
+        caster_character,
+        kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
+    )
+    if instance is not None:
+        remove_condition(combat_opponent.objectdb, instance.condition)
+
+
 def promote_summon_to_companion(
     *,
     caster_sheet: CharacterSheet,
@@ -642,9 +659,6 @@ def promote_summon_to_companion(
     from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
     from world.combat.won_over import bind_window_open  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
-    from world.conditions.constants import Allegiance  # noqa: PLC0415
-    from world.conditions.services import remove_condition  # noqa: PLC0415
-    from world.npc_services.allegiance import allegiance_sourced_by  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     caster_character = caster_sheet.character
@@ -709,14 +723,8 @@ def promote_summon_to_companion(
     )
 
     # --- Consume charm on the charmed-enemy path ---
-    if charm_applied and combat_opponent.objectdb is not None:
-        instance = allegiance_sourced_by(
-            combat_opponent.objectdb,
-            caster_character,
-            kinds=frozenset({Allegiance.ALLY_OF_CASTER}),
-        )
-        if instance is not None:
-            remove_condition(combat_opponent.objectdb, instance.condition)
+    if charm_applied:
+        _consume_promotion_charm(combat_opponent, caster_character)
 
     # The fresh CompanionObject above replaces the nameless body entirely; a
     # won-over opponent's bind window closes on a successful bind (Decision 19).
