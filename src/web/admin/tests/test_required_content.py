@@ -2201,3 +2201,79 @@ class TestDesignationProbes(TestCase):
         result = _probe_for(key).resolve(None)
         self.assertFalse(result.present)
         self.assertEqual(result.missing, ("Rallied / Probe Failure: Probe Fury",))
+
+
+class TestNaturalWeaponTemplatesProbe(TestCase):
+    """#4898: a gift's natural weapon template must be Unarmed, skin-layer and untracked."""
+
+    KEY = "natural-weapon-templates"
+
+    def _claws(self, **template_kwargs: object) -> object:
+        from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+        from world.items.factories import ItemTemplateFactory, TemplateSlotFactory
+        from world.magic.factories import GiftFactory
+
+        defaults = {
+            "name": "Probe Claws",
+            "gear_archetype": GearArchetype.UNARMED,
+            "base_weapon_damage": 4,
+        }
+        template = ItemTemplateFactory(**{**defaults, **template_kwargs})
+        for region in (BodyRegion.LEFT_HAND, BodyRegion.RIGHT_HAND):
+            TemplateSlotFactory(
+                template=template, body_region=region, equipment_layer=EquipmentLayer.SKIN
+            )
+        GiftFactory(name="Probe Clawed", kind=GiftKind.MINOR, natural_weapon_template=template)
+        return template
+
+    def test_present_when_no_gift_names_one(self) -> None:
+        self.assertTrue(_probe_for(self.KEY).resolve(None).present)
+
+    def test_present_for_a_well_authored_template(self) -> None:
+        self._claws()
+        self.assertTrue(_probe_for(self.KEY).resolve(None).present)
+
+    def test_lists_each_fault(self) -> None:
+        from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+        from world.items.factories import TemplateSlotFactory
+
+        template = self._claws(gear_archetype=GearArchetype.MELEE_ONE_HAND, max_durability=30)
+        TemplateSlotFactory(
+            template=template, body_region=BodyRegion.HEAD, equipment_layer=EquipmentLayer.BASE
+        )
+        result = _probe_for(self.KEY).resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(
+            result.missing,
+            (
+                "Probe Claws: gear kind is One-Handed Melee, not Unarmed; a slot is off the "
+                "skin layer, so it collides with worn gear; durability is tracked, so it can "
+                "break",
+            ),
+        )
+
+    def test_lists_a_template_named_by_two_gifts(self) -> None:
+        from world.magic.factories import GiftFactory
+
+        template = self._claws()
+        GiftFactory(name="Probe Vulpi", kind=GiftKind.MINOR, natural_weapon_template=template)
+
+        result = _probe_for(self.KEY).resolve(None)
+
+        self.assertEqual(
+            result.missing,
+            (
+                "Probe Claws: named by more than one gift (Probe Clawed, Probe Vulpi), so a "
+                "holder of both gets a second pair that cannot be worn",
+            ),
+        )
+
+    def test_lists_a_template_with_no_slots(self) -> None:
+        from world.items.constants import GearArchetype
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import GiftFactory
+
+        template = ItemTemplateFactory(name="Probe Bite", gear_archetype=GearArchetype.UNARMED)
+        GiftFactory(name="Probe Fanged", kind=GiftKind.MINOR, natural_weapon_template=template)
+        result = _probe_for(self.KEY).resolve(None)
+        self.assertEqual(result.missing, ("Probe Bite: it has no slots, so it is never equipped",))

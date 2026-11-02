@@ -6,6 +6,7 @@ from evennia.accounts.models import AccountDB
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.request import Request
 from rest_framework.views import APIView
+from rest_framework.viewsets import GenericViewSet
 
 from world.magic.models import Thread
 from world.magic.models.sessions import RitualSession
@@ -135,3 +136,25 @@ class IsStaffOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return bool(request.user.is_staff)
+
+
+#: The router's own create/update/delete actions. A viewset's custom ``@action`` writes
+#: (an aura's glimpse picks, say) are not among them and keep their own gates.
+BASE_WRITE_ACTIONS = frozenset({"create", "update", "partial_update", "destroy"})
+
+
+class IsStaffForBaseWrites(BasePermission):
+    """Any authenticated user may read; only staff may use the raw create, update and delete.
+
+    For a character-data viewset whose rows the game writes through services (a gift is
+    gained through ``grant_gift_to_character``, anima through its rituals), so a player
+    who could write the row directly would skip every rule (#4898). Custom ``@action``
+    routes are untouched.
+    """
+
+    def has_permission(self, request: Request, view: GenericViewSet) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if view.action in BASE_WRITE_ACTIONS:
+            return bool(request.user.is_staff)
+        return True

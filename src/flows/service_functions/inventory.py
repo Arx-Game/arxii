@@ -22,6 +22,8 @@ from world.items.exceptions import (
     ItemFixedInPlace,
     ItemPlacedNotEquippable,
     ItemTooLarge,
+    NaturalWeaponInTheWay,
+    NaturalWeaponNotRemovable,
     NoDropLocation,
     NotAContainer,
     NotEquipped,
@@ -295,8 +297,19 @@ def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -
     transaction.on_commit(_run)
 
 
+def _refuse_natural_weapon(item: ItemState) -> None:
+    """A natural weapon (#4898) never leaves its holder: refuse with the plain reason.
+
+    Runs first in every removal check so the player reads why, not a reach or
+    possession message.
+    """
+    if item.is_natural_weapon():
+        raise NaturalWeaponNotRemovable
+
+
 def validate_pick_up(character: CharacterState, item: ItemState) -> None:
     """Check existing reach and layered take rules without mutation."""
+    _refuse_natural_weapon(item)
     if not item.can_take(taker=character):
         raise NotReachable
     denial = _take_denial(character.obj.character_sheet, item.instance)
@@ -306,6 +319,7 @@ def validate_pick_up(character: CharacterState, item: ItemState) -> None:
 
 def validate_drop(character: CharacterState, item: ItemState) -> VaultDetails | None:
     """Check possession, room and capacity, returning the actual deposit vault."""
+    _refuse_natural_weapon(item)
     if not item.can_drop(dropper=character):
         raise NotInPossession
     if character.obj.location is None:
@@ -389,6 +403,7 @@ def drop(character: CharacterState, item: ItemState) -> None:
 
 def validate_give(giver: CharacterState, recipient: CharacterState, item: ItemState) -> None:
     """Check existing recipient-specific transfer permission without mutation."""
+    _refuse_natural_weapon(item)
     if not item.can_give(giver=giver, recipient=recipient):
         raise NotInPossession
     if recipient.obj.location != giver.obj.location:
@@ -443,6 +458,7 @@ def validate_equip(character: CharacterState, item: ItemState) -> None:
     """Check existing equipment permission and placement without mutation."""
     if not item.can_equip(wearer=character):
         raise NotInPossession
+    _refuse_displacing_natural_weapon(character, item)
     # A slotless legacy equip remains its existing no-op, including placement.
     if item.instance.template.cached_slots:
         from world.items.polish_services import can_equip_item  # noqa: PLC0415
@@ -451,8 +467,30 @@ def validate_equip(character: CharacterState, item: ItemState) -> None:
             raise ItemPlacedNotEquippable
 
 
+def _refuse_displacing_natural_weapon(character: CharacterState, item: ItemState) -> None:
+    """Equipping never pushes a natural weapon out of its slot (#4898).
+
+    ``equip`` swaps out whatever fills each of the item's slots; a natural weapon there
+    refuses the whole equip instead. Slot conflict is exact (region and layer), so claws
+    at the hands' skin layer sit beside gloves or a sword at the base layer.
+    """
+    slots = {(s.body_region, s.equipment_layer) for s in item.instance.template.cached_slots}
+    if not slots:
+        return
+    rows = EquippedItem.objects.filter(character=character.obj.sheet_data).exclude(
+        item_instance=item.instance
+    )
+    for row in rows.select_related("item_instance"):
+        if (row.body_region, row.equipment_layer) not in slots:
+            continue
+        if ItemState(row.item_instance, context=character.context).is_natural_weapon():
+            raise NaturalWeaponInTheWay
+
+
 def validate_unequip(character: CharacterState, item: ItemState) -> None:
     """Check actual equipment membership using the CharacterSheet relation."""
+    if not item.can_unequip(wearer=character):
+        raise NaturalWeaponNotRemovable
     if not item.instance.equipped_slots.filter(character=character.obj.sheet_data).exists():
         raise NotEquipped
 
@@ -507,6 +545,7 @@ def unequip(character: CharacterState, item: ItemState) -> None:
 
 def validate_put_in_item(character: CharacterState, item: ItemState) -> None:
     """Check the physical source and direct possession without a destination."""
+    _refuse_natural_weapon(item)
     if item.instance.game_object is None:
         raise NotInPossession
     if item.instance.game_object.location != character.obj:
@@ -515,6 +554,7 @@ def validate_put_in_item(character: CharacterState, item: ItemState) -> None:
 
 def validate_put_in(character: CharacterState, item: ItemState, container: ItemState) -> None:
     """Check existing insertion gates in their original service order."""
+    _refuse_natural_weapon(item)
     if item.instance.game_object is None:
         raise NotInPossession
     if container.instance.game_object is None:
@@ -772,6 +812,7 @@ def _unconscious_holder_reachable(character: CharacterState, item: ItemState) ->
 
 def validate_steal(character: CharacterState, item: ItemState) -> None:
     """Check the existing Steal reach exception and target consent without mutation."""
+    _refuse_natural_weapon(item)
     if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
         raise NotReachable
     if not steal_permitted(character.obj.character_sheet, item.instance):

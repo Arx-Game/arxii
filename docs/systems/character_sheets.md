@@ -118,6 +118,20 @@ things are the most visible things a character has. `_build_mentors` returns the
 owner and staff only, matching the covenant roles it sits beside, because a Mentor's Vow
 is sworn inside a covenant.
 
+**`natural_weapons`** (#4898) is the owner's and staff's: claws, a bite or horns a gift
+gave the character (`ItemInstance.natural_weapon_gift`, see docs/systems/items.md "Natural
+weapons"); every other viewer gets an empty list. `_build_natural_weapons` returns one
+`NaturalWeaponEntry` per weapon: `id`, `name`, `gift_name`, `from_species` (the
+`CharacterGift.origin` is a species grant), `damage` (the item's `effective_weapon_damage`,
+quality applied), `damage_type` (its name, blank for none), `facets` (attached facet names),
+`facets_used` (the crafted ones, which `facet_capacity` limits) and `facet_capacity`. One
+query when the character has none, three when it has some, however many. For the owner and
+staff `_build_worn` leaves a natural weapon out of Wearing, since its own block shows it;
+anyone else still sees it there as a thing worn on the skin. Physical draws it as the
+Natural weapons block (`NaturalWeapons.tsx`): the name, an Unarmed tag, "From the species
+gift X." or "From the gift X.", and one line of damage, facets ("Keenness, 1 of 1") and
+"cannot be taken from you".
+
 Threads under Magic reuse the existing thread list endpoint, narrowed to one character by
 `ThreadFilter.owner` (#3898) — the list is account-scoped, so without it an account with
 alts read every character's threads on whichever sheet it opened.

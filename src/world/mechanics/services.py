@@ -80,7 +80,7 @@ if TYPE_CHECKING:
     from world.classes.models import Aspect
     from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
-    from world.items.models import ItemInstance
+    from world.items.models import EquippedItem, ItemInstance
     from world.mechanics.engagement import CharacterEngagement
     from world.skills.models import Skill
 
@@ -1029,7 +1029,8 @@ def covenant_role_bonus(
     "engaged" with the covenant where they hold the role. Multiple engaged
     roles (e.g., one Durance + one Battle) stack additively.
 
-    Per slot (marginal blend — combat already counts the gear's base stat directly):
+    Per slot for armor, per piece for a weapon (#4898), as a marginal blend (combat already
+    counts the gear's base stat directly):
     - Compatible gear (GearArchetypeCompatibility row exists): role_bonus stacks on top.
     - Incompatible gear (no row): max(0, role_bonus - gear_stat) — only the role's
       surplus beyond what the gear already provides; never negative.
@@ -1054,10 +1055,6 @@ def covenant_role_bonus(
         Integer total of all engaged-primary-covenant-role contributions across
         equipped items.
     """
-    from world.covenants.services import (  # noqa: PLC0415
-        is_gear_compatible,
-    )
-
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
     # Character typeclass handlers. Skip the walk gracefully.
@@ -1068,24 +1065,52 @@ def covenant_role_bonus(
         return 0
 
     character_level = level_override if level_override is not None else sheet.current_level
+    counted = _role_bonus_gear(char.equipped_items, target)
     total = 0
     for role in engaged_roles:
         role_bonus = role_base_bonus_for_target(role, target, character_level)
-        for equipped in char.equipped_items:
-            item = equipped.item_instance
-            if not _carries_gear_stat(item, target):
-                continue  # a ring or cloak adds no weapon damage or soak: no repeat (#4757)
-            gear_stat = item_mundane_stat_for_target(item, target)
-            archetype = item.template.gear_archetype
-            if is_gear_compatible(role, archetype):
-                total += (
-                    role_bonus  # compatible: role bonus stacks on the gear combat already counts
-                )
-            else:
-                total += max(
-                    0, role_bonus - gear_stat
-                )  # incompatible: only the role's surplus over gear
+        total += sum(_role_gear_share(role, role_bonus, item, target) for item in counted)
     return total
+
+
+def _role_bonus_gear(
+    equipped_items: Iterable[EquippedItem], target: ModifierTarget
+) -> list[ItemInstance]:
+    """The worn items a covenant role's bonus for ``target`` is blended over, in wear order.
+
+    Only gear carrying ``target``'s stat counts: a ring or cloak adds no weapon damage or
+    soak, so it repeats no bonus (#4757). A weapon counts once however many slots it fills
+    (#4898): claws on both hands or a two-handed greatsword are one weapon. Armor stays per
+    slot, as its soak is (``effective_soak_from_armor`` sums worn rows).
+    """
+    from world.items.constants import WEAPON_DAMAGE_TARGET_NAME  # noqa: PLC0415
+
+    once_per_piece = target.name == WEAPON_DAMAGE_TARGET_NAME
+    counted: list[ItemInstance] = []
+    seen: set[int] = set()
+    for equipped in equipped_items:
+        item = equipped.item_instance
+        if not _carries_gear_stat(item, target):
+            continue
+        if once_per_piece:
+            if item.pk in seen:
+                continue
+            seen.add(item.pk)
+        counted.append(item)
+    return counted
+
+
+def _role_gear_share(
+    role: CovenantRole, role_bonus: int, item: ItemInstance, target: ModifierTarget
+) -> int:
+    """One worn item's share of ``role``'s bonus: the whole bonus on compatible gear, which
+    combat already counts the stat of, else only the role's surplus over the gear's stat."""
+    from world.covenants.services import is_gear_compatible  # noqa: PLC0415
+
+    gear_stat = item_mundane_stat_for_target(item, target)
+    if is_gear_compatible(role, item.template.gear_archetype):
+        return role_bonus
+    return max(0, role_bonus - gear_stat)
 
 
 def covenant_role_base_total(sheet: object, target: ModifierTarget) -> int:

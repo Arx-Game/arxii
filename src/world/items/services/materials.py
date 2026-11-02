@@ -132,6 +132,7 @@ def gather_consumable_pks(
             for inst in available_list
             if inst.quantity > 0
             and inst.destroyed_at is None
+            and inst.natural_weapon_gift_id is None  # part of the body (#4898)
             and _matches_requirement(inst, req, category_id)
             and meets_quality_tier(inst, req)
             and inst.pk not in allocated_pks
@@ -176,6 +177,9 @@ def consume_materials(allocations: list[tuple[ItemInstance, int]]) -> None:
 
     with transaction.atomic():
         for inst, amount in allocations:
+            if inst.natural_weapon_gift_id is not None:
+                # A natural weapon (#4898) is never spent; skip rather than raise.
+                continue
             inst.quantity -= amount
             if inst.quantity <= 0:
                 # #4099: a used-up stack goes through the canonical destroy rule, never a

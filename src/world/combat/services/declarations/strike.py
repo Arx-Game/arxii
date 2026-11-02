@@ -38,6 +38,7 @@ from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAc
 from world.combat.types import ActionOutcome, StrikeWeapon
 from world.fatigue.constants import EffortLevel
 from world.items.constants import WEAPON_ARCHETYPES, GearArchetype
+from world.items.services.natural_weapons import is_natural_weapon
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -397,7 +398,8 @@ def strike_narration(  # noqa: PLR0913 - one narration line, its parts
     """The line a Strike is told in: second person for the striker, third for the room.
 
     ``damage`` None is a miss. "You strike Bandit with your rapier. A good hit: 11 damage."
-    and "Hobb strikes Bandit with a rapier. A good hit: 11 damage."
+    and "Hobb strikes Bandit with a rapier. A good hit: 11 damage." Bare hands and a
+    natural weapon take no article: "Hobb strikes Bandit with Talons."
     """
     from core.text import with_indefinite_article  # noqa: PLC0415
 
@@ -408,7 +410,7 @@ def strike_narration(  # noqa: PLR0913 - one narration line, its parts
         subject, verb = actor, "strikes"
         with_weapon = (
             f"with {weapon.name}"
-            if weapon.is_bare_hands
+            if weapon.item_instance is None or is_natural_weapon(weapon.item_instance)
             else f"with {with_indefinite_article(weapon.name)}"
         )
     if damage is None:

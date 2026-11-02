@@ -80,7 +80,7 @@ and the 5-axis Thread model no longer exist.
 | `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. Typed by many hands, so it drifts; three guards share one spelling rule, `services.facets.facet_key` (#4197, ADR-4197): a picker shows the near-matches (`GET /api/magic/facets/near/`) before it offers to create, `POST /api/magic/facets/` (staff) answers a spelling that already resolves with `matched: true` instead of a near-duplicate, and the admin action **Merge into...** (`merge_facets`) repoints every binding to a survivor and retires the losers as aliases. | `name` (unique), `description` |
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount x item quality x attachment quality x max(1, shown thread level)` per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount` (non-zero); unique per `(facet, target)` |
-| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`, the **supported set**, a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
 | `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick), optional OneToOne `modifier_target`. Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne. Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
@@ -5159,7 +5159,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 | `/effect-types/` | GET | List effect types |
 | `/restrictions/` | GET | List DESIGN-kind restrictions only (the builder catalog); PRICE-kind rows never appear here (#4099 final fix) |
 | `/facets/` | GET | List facets (flat vocabulary, #3776) |
-| `/gifts/` | GET | List all gifts |
+| `/gifts/` | GET (POST/PATCH/DELETE staff only, #4898) | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |
 
 **Note:** The `/thread-types/` endpoint was removed as part of Spec A —
@@ -5167,15 +5167,19 @@ the legacy ThreadType lookup no longer exists.
 
 ### Character Data (Filtered to owned characters)
 
+Reads are scoped to the characters the account plays (staff see all). The router's own
+create, update and delete on these rows are staff-only (`IsStaffForBaseWrites`,
+`world/magic/permissions.py`, #4898): the game writes them through services, and no web
+client flow writes them directly.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/character-auras/` | GET/POST | Character aura data |
-| `/character-resonances/` | GET | Character resonances (balance + lifetime_earned per Spec A §2.2; create/delete via service functions, not REST mutations) |
-| `/character-gifts/` | GET/POST/DELETE | Character's acquired gifts |
-| `/character-anima/` | GET/POST/PATCH | Character anima pool (`band` — qualitative `anima_band_for` word, #1446) |
-| `/character-anima-rituals/` | GET/POST/PATCH/DELETE | Character's rituals |
-| `/character-facets/` | GET/POST/PATCH/DELETE | Character facet assignments |
-| `/techniques/` | GET/POST/PATCH | Character techniques |
+| `/character-auras/` | GET (POST/PATCH/DELETE staff only) | Character aura data |
+| `/character-auras/{id}/set-glimpse-tags/`, `set-glimpse-prose/`, `link-glimpse-distinction/`, `unlink-glimpse-distinction/` | POST | The player's own Glimpse edits (the web client's aura writers) |
+| `/character-resonances/` | GET (POST/PATCH/DELETE staff only) | Character resonances (balance + lifetime_earned per Spec A §2.2; players change them through service functions, not REST mutations) |
+| `/character-gifts/` | GET (POST/PATCH/DELETE staff only) | Character's acquired gifts. Players gain gifts through `grant_gift_to_character`; a staff DELETE also takes the gift's natural weapon (#4898) |
+| `/character-anima/` | GET (POST/PATCH/DELETE staff only) | Character anima pool (`band`, the qualitative `anima_band_for` word, #1446) |
+| `/techniques/` | GET (POST/PATCH/DELETE staff only) | Character techniques |
 | `/techniques/author/` | POST | Author a technique via `AuthorTechniqueAction`; 201/400/403 |
 | `/techniques/price/` | POST | Dry-run budget breakdown (read-only) |
 

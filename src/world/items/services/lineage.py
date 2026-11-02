@@ -22,9 +22,12 @@ if TYPE_CHECKING:
 
 
 def validate_worked_from(source: ItemInstance, *, crafter: CharacterSheet) -> None:
-    """The source must be a piece in play that the crafter holds."""
+    """The source must be a piece in play that the crafter holds, never a natural weapon."""
     if source.destroyed_at is not None or source.holder_character_sheet_id != crafter.pk:
         raise WorkedFromUnavailable
+    from world.items.services.natural_weapons import require_removable  # noqa: PLC0415
+
+    require_removable(source)
 
 
 def work_in_item(

@@ -619,6 +619,75 @@ def _probe_audere_majora_thresholds() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _natural_weapon_template_faults(
+    template: object, layers: list[str], gift_names: list[str]
+) -> list[str]:
+    """What is wrong with one gift's natural weapon template, if anything (#4898).
+
+    ``layers`` is the equipment layer of each of the template's slots; ``gift_names`` the
+    gifts naming it.
+    """
+    from world.items.constants import EquipmentLayer, GearArchetype  # noqa: PLC0415
+
+    faults: list[str] = []
+    if template.gear_archetype != GearArchetype.UNARMED:
+        faults.append(f"gear kind is {template.get_gear_archetype_display()}, not Unarmed")
+    if not layers:
+        faults.append("it has no slots, so it is never equipped")
+    elif any(layer != EquipmentLayer.SKIN for layer in layers):
+        faults.append("a slot is off the skin layer, so it collides with worn gear")
+    if template.max_durability:
+        faults.append("durability is tracked, so it can break")
+    if len(gift_names) > 1:
+        faults.append(
+            f"named by more than one gift ({', '.join(gift_names)}), so a holder of both "
+            "gets a second pair that cannot be worn"
+        )
+    return faults
+
+
+def _probe_natural_weapon_templates() -> ProbeResult:
+    """Every gift's natural weapon template is one the Strike and the body can carry.
+
+    Consumer: `world/items/services/natural_weapons.py provision_natural_weapon()` and
+    `world/combat/services/declarations/strike.py strike_weapon_for_item()`. A template
+    that is not Unarmed is struck on another weapon's skill (or not offered at all); one
+    with no slots is never equipped; one off the skin layer is skipped where worn gear
+    already sits; one with tracked durability breaks, and nobody can replace it. One
+    named by two gifts makes a second marked pair for a holder of both, which the first
+    pair keeps out of its slots. Present when no gift names a natural weapon.
+    """
+    from world.items.models import ItemTemplate, TemplateSlot  # noqa: PLC0415
+    from world.magic.models import Gift  # noqa: PLC0415
+
+    templates = list(
+        ItemTemplate.objects.filter(natural_weapon_gifts__isnull=False).distinct().order_by("name")
+    )
+    layers: dict[int, list[str]] = {template.pk: [] for template in templates}
+    for template_id, layer in TemplateSlot.objects.filter(template_id__in=layers).values_list(
+        "template_id", "equipment_layer"
+    ):
+        layers[template_id].append(layer)
+    gift_names: dict[int, list[str]] = {template.pk: [] for template in templates}
+    for template_id, name in (
+        Gift.objects.filter(natural_weapon_template_id__in=layers)
+        .order_by("name")
+        .values_list("natural_weapon_template_id", "name")
+    ):
+        gift_names[template_id].append(name)
+    missing = tuple(
+        f"{template.name}: {'; '.join(faults)}"
+        for template in templates
+        if (
+            faults := _natural_weapon_template_faults(
+                template, layers[template.pk], gift_names[template.pk]
+            )
+        )
+    )
+    detail = f"Natural weapon template(s) to fix: {' | '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _probe_spectacle_reaction_lines() -> ProbeResult:
     """A generic witness line exists for every reaction a display can draw (#4147).
 
@@ -3024,6 +3093,21 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "is refused: the strike skill it rolls has no check type."
             ),
             probe=NamedRowsProbe(label="CheckType", names=STRIKE_CHECK_TYPE_NAMES),
+        ),
+        ContentDependency(
+            key="natural-weapon-templates",
+            label="Natural weapon templates: Unarmed, skin-layer slots, no durability, one gift",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/items/services/natural_weapons.py provision_natural_weapon(); "
+                "world/combat/services/declarations/strike.py strike_weapon_for_item()"
+            ),
+            consequence=(
+                "A gift's claws are struck on the wrong skill or not offered to the Strike, "
+                "never equipped, pushed aside by worn gear, break for good, or come twice."
+            ),
+            probe=CustomProbe(fn=_probe_natural_weapon_templates),
+            admin_model="ItemTemplate",
         ),
         ContentDependency(
             key="concentration-check-type",

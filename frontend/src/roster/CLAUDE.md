@@ -27,6 +27,9 @@ character's pictures live in its sheet's Gallery tab (#4151); the data layer for
 - **Character Applications**: Apply for available roster characters
 - **Character Sheets**: Detailed character information and demographics
 - **Gallery**: a character's pictures and looks, on the sheet (#4151)
+- **Natural weapons**: Physical's block for claws or a bite a gift gave the character
+  (#4898, `character_sheets/components/sheet/NaturalWeapons.tsx`), drawn from the sheet
+  payload's `natural_weapons`, which only the owner and staff receive
 - **Tenure System**: Character ownership history tracking
 - **Search and Filtering**: Advanced roster browsing capabilities
 

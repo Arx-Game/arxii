@@ -92,6 +92,66 @@ shirt, jacket, cloak all on the torso) and multi-region items (full plate create
 EquippedItem rows for torso, both arms, etc.). The unique constraint
 `(character, body_region, equipment_layer)` enforces one item per slot.
 
+### Natural weapons (#4898, slice 4 of #4844) [BUILT & WIRED]
+A gift may name a natural weapon (`Gift.natural_weapon_template`, a nullable PROTECT FK to an
+Unarmed `ItemTemplate`, edited on the gift's admin page). Gaining the gift makes one instance of the
+template, held by the character, placed on them (no room needed) and equipped at every
+`TemplateSlot` the template declares: `provision_natural_weapon(sheet, gift)`
+(`world/items/services/natural_weapons.py`), called from `grant_gift_to_character` (CG
+finalize, species gifts, path grants, training, NPC copy) and from the covenant role grant,
+which mints `CharacterGift` itself. The made item carries the marker
+`ItemInstance.natural_weapon_gift` (PROTECT FK to the gift, readonly in admin). It is
+idempotent: the character's in-play item marked with that gift is kept and only its missing
+slots are filled. A bought, crafted or traded copy of the template carries no marker, is never
+adopted, and is ordinary gear. Staff author the
+template at the skin layer of its region (claws: both hands; a bite: head), so a sword or
+gloves at the base layer equip beside it.
+
+`is_natural_weapon(item)` reads the marker (no query). That one predicate gates every
+removal path, with the refusal `NaturalWeaponNotRemovable` ("That is part of the body and
+cannot be removed."):
+
+| Path | How it is gated |
+|---|---|
+| unequip, drop, give, steal, get, put in (telnet and web) | `ItemState.can_unequip/can_drop/can_give/can_take` and each `validate_*` in `flows/service_functions/inventory.py` |
+| equip of another item into its slot | `NaturalWeaponInTheWay` ("Something that is part of the body is already there."), in `validate_equip` |
+| undress, apply outfit | undress leaves it on; an outfit piece that would displace it refuses through `equip` |
+| trade stake and execution | `stake_item` front gate; `can_give` at execution |
+| fence sale | `sell_to_fence` front gate (`MarketServiceError`) |
+| org vault deposit | `deposit_item_to_vault` front gate; `release_item_for_custody` |
+| boon held-item ask and fulfilment | `_validate_held_item_ask`, `_fulfill_held_item` (`ValidationError`) |
+| estate bequest, delivery, residuary sweep | the bequest serializer refuses it; delivery and the sweep leave it with the body |
+| confiscation sentence | `apply_confiscation` leaves it on the body |
+| stake forfeit | `_write_item_forfeit` logs and skips it |
+| worked into a new piece | `validate_worked_from` |
+| shrine sacrifice, ceremony offering, rite gift | `_validate_sacrifice_items` (`SacrificeRefused`), `record_offering` (`CeremonyError`), `read_rite_gifts` (`RiteGiftIsPartOfTheBody`) |
+| recycle | `recycle_item` refuses it before any salvage is made |
+| project item contribution | `add_contribution` refuses it; construction completion skips one |
+| material spend | `gather_consumable_pks` never picks one; `consume_materials` skips one |
+| any other use-up (evidence disposal, coin, gems) | `destroy_consumed_item_instance` refuses it first |
+| any other holder change or unequip | backstops in `set_item_holder` and `unequip_item` |
+
+Losing the gift is the one way it comes off: `deprovision_natural_weapon(sheet, gift)` clears
+the marker and hands the item to `destroy_consumed_item_instance`. It runs where
+`CharacterGift` rows are deleted: an NPC copy of Powers (`roster/services/npc_copy.py`), the
+beta reset wipe of play-time gifts, the `CharacterGift` admin and the character-gifts API
+delete. Deleting the body runs `deprovision_all_natural_weapons(sheet)`: the `Character`
+typeclass's `at_object_delete` and the `CharacterSheet` admin's delete actions. Staff admin edits are not gated (staff power). A natural weapon covers no skin:
+`covered_regions` skips it, so claws do not shade the hands from the sun or hide a marking.
+Its quality, facets and fittings use the ordinary item paths; a faceted piece counts once
+however many slots it fills (`CharacterEquipmentHandler.item_facets_for`), and so does a
+weapon's covenant role bonus for weapon damage (`covenant_role_bonus`; armor stays per slot,
+as its soak is summed per worn row). It is struck like
+any equipped Unarmed weapon (see the Strike in `docs/systems/INDEX.md`), listed before bare
+hands; the room hears it named with no article ("Hobb strikes Bandit with Khati Claws.").
+The owner and staff read it on the character sheet's Physical section in its own Natural
+weapons block (the sheet payload's `natural_weapons`, see docs/systems/character_sheets.md),
+which takes it out of their Wearing list; everyone else sees it under Wearing. The Required
+content row `natural-weapon-templates` lists a natural weapon template
+that is not Unarmed, has no slots, has a slot off the skin layer, tracks durability, or is
+named by more than one gift (a holder of both would get a second pair that cannot be worn;
+there is no runtime guard).
+
 ### Outfits + Telnet/Action layer (#1866)
 `Outfit`/`OutfitSlot` are a named saved arrangement of items in body slots
 (`items/models.py`) — a wardrobe-stored look a character can define once and

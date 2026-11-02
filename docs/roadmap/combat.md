@@ -693,8 +693,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   PC defense roll against an NPC blow is recorded on the NPC action's Narrator interaction
   and shown to the defender as "Defense against <attacker>" with the defense skill, the style
   skill or its lapse, and "Armor, N of 10".
+  **Natural weapons (#4898, slice 4) SHIPPED:** a gift names an Unarmed item template
+  (`Gift.natural_weapon_template`); gaining the gift (creation finalize, a species, path,
+  training or role grant) makes and equips it once at the skin layer; every removal path
+  refuses it ("That is part of the body and cannot be removed."); it is a Strike weapon
+  before bare hands on Unarmed Attack with its own damage, takes facets like any piece, and
+  covers no skin (`test_natural_weapons_journeys.py`).
   **Known gaps (later #4844 slices):** vow gear
-  compatibility still keyed to the vow (slice 3); natural weapons (slice 4); production has no
+  compatibility still keyed to the vow (slice 3); production has no
   Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with
   a plain message until staff author them (Required content `strike-check-types`); the
   breakdown's skill rating is read when shown, not stored with the roll; a Strike's damage roll

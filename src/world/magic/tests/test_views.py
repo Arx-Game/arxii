@@ -223,7 +223,8 @@ class GiftViewSetTest(APITestCase):
 
     def test_create_gift(self):
         """Test creating a gift via API."""
-        self.client.force_authenticate(user=self.user)
+        # Catalog writes are staff work (#4898); a player's are refused.
+        self.client.force_authenticate(user=self.staff_user)
         url = reverse("magic:gift-list")
         data = {
             "name": "Test New Gift",
@@ -236,7 +237,8 @@ class GiftViewSetTest(APITestCase):
 
     def test_update_gift(self):
         """Test updating a gift via API."""
-        self.client.force_authenticate(user=self.user)
+        # Catalog writes are staff work (#4898); a player's are refused.
+        self.client.force_authenticate(user=self.staff_user)
         gift = GiftFactory()
         gift.resonances.add(self.resonance)
         url = reverse("magic:gift-detail", args=[gift.pk])
@@ -251,7 +253,8 @@ class GiftViewSetTest(APITestCase):
 
     def test_delete_gift(self):
         """Test deleting a gift via API."""
-        self.client.force_authenticate(user=self.user)
+        # Catalog writes are staff work (#4898); a player's are refused.
+        self.client.force_authenticate(user=self.staff_user)
         gift = GiftFactory()
         url = reverse("magic:gift-detail", args=[gift.pk])
         response = self.client.delete(url)

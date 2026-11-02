@@ -581,6 +581,8 @@ export interface CharacterSheetPayload {
   plate_ink: PlateInk;
   /** #3898 — what the character has on, as the layer walk says anyone would see it. */
   worn: CharacterSheetWorn[];
+  /** #4898 — claws, a bite or horns a gift gave them. Empty for anyone but the owner and staff. */
+  natural_weapons: CharacterSheetNaturalWeapon[];
   /** #3898 — active Mentor's Vow bonds. Empty for anyone but the owner and staff. */
   mentors: CharacterSheetMentor[];
   /** #3901 — land the character's organizations hold. Empty for anyone but the owner. */
@@ -745,6 +747,24 @@ export interface CharacterSheetWorn {
   name: string;
   description: string;
   is_hidden: boolean;
+}
+
+/**
+ * Mirrors `world.character_sheets.types.NaturalWeaponEntry` (#4898) — one natural weapon.
+ * `from_species` is true when the gift came as a species grant. `facets_used` counts the
+ * crafted facets, the ones `facet_capacity` limits.
+ */
+export interface CharacterSheetNaturalWeapon {
+  id: number;
+  name: string;
+  gift_name: string;
+  from_species: boolean;
+  damage: number;
+  /** The damage type's name, blank when it has none. */
+  damage_type: string;
+  facets: string[];
+  facets_used: number;
+  facet_capacity: number;
 }
 
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {

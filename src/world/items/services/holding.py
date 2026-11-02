@@ -30,7 +30,14 @@ def set_item_holder(
     gift, an inheritance), when one is written; it is None for a move that writes none.
     Saves with ``update_fields`` (ADR-0008); the caller owns the transaction and writes
     ``event`` BEFORE calling so the pointer can be set.
+
+    Raises ``NaturalWeaponNotRemovable`` when the item is its holder's natural weapon and
+    ``sheet`` is anyone else (#4898): no transfer path moves claws off their owner.
     """
+    if sheet is None or sheet.pk != item.holder_character_sheet_id:
+        from world.items.services.natural_weapons import require_removable  # noqa: PLC0415
+
+        require_removable(item)
     item.holder_character_sheet = sheet
     item.held_since = timezone.now()
     item.holding_event = event

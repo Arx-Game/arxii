@@ -141,15 +141,29 @@ class CharacterEquipmentHandler:
     def __iter__(self) -> Iterator[EquippedItem]:
         return iter(self._equipped)
 
-    def iter_item_facets(self) -> Iterable[ItemFacet]:
+    def _worn_pieces(self) -> list[ItemInstance]:
+        """Each worn item once, however many slots it fills (#4898).
+
+        A facet is attached to the piece, not to a slot: claws on both hands or plate
+        over torso and arms carry one Wolf, so it counts once.
+        """
+        seen: set[int] = set()
+        pieces: list[ItemInstance] = []
         for equipped in self._equipped:
-            yield from equipped.item_instance.cached_item_facets
+            if equipped.item_instance_id not in seen:
+                seen.add(equipped.item_instance_id)
+                pieces.append(equipped.item_instance)
+        return pieces
+
+    def iter_item_facets(self) -> Iterable[ItemFacet]:
+        for piece in self._worn_pieces():
+            yield from piece.cached_item_facets
 
     def item_facets_for(self, facet: Facet) -> list[ItemFacet]:
         return [
             item_facet
-            for equipped in self._equipped
-            for item_facet in equipped.item_instance.cached_item_facets
+            for piece in self._worn_pieces()
+            for item_facet in piece.cached_item_facets
             if item_facet.facet_id == facet.pk
         ]
 

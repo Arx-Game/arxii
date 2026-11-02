@@ -2129,7 +2129,7 @@
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Main check resolution function.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
-- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '', skill_rating: int | None = None, snapshot: 'RollSnapshot | None' = None) -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
+- `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, action_interaction: 'Interaction | None' = None, summary: str = '', skill_rating: int | None = None, snapshot: 'RollSnapshot | None' = None, combat_round: int | None = None, combat_roll_kind: str | None = None) -> world.checks.outcome_models.ConsequenceOutcome - Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 - `resolve_standing(roller_points: 'int', target_points: 'int', *, ranks: 'Sequence[CheckRank] | None' = None) -> 'CheckStanding' - Band positions, the slide and the chart for one check, without rolling.`
 
 
@@ -2949,7 +2949,7 @@
 - `remove_participant(participant: 'CombatParticipant', *, by_gm: 'bool' = False) -> 'None' - Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' - Validate declared cast positions against the encounter's room + technique reach.`
 - `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', cast_check: 'CastCheck', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' - Route a damage-path combat technique through use_technique.`
-- `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None) -> 'DefenseResult' - Resolve one NPC attack against one PC via a defensive check.`
+- `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None, interaction_factory: 'Callable[[], Interaction] | None' = None) -> 'DefenseResult' - Resolve one NPC attack against one PC via a defensive check.`
 - `resolve_round(encounter: 'CombatEncounter', *, defense_check_fn: 'PerformCheckFn | None' = None, defense_check_type: 'CheckType | None' = None, offense_check_fn: 'PerformCheckFn | None' = None) -> 'RoundResolutionResult' - Orchestrate a full combat round: detect combos -> resolve -> consequences.`
 - `revert_combo_upgrade(action: 'CombatRoundAction') -> 'None' - Remove a combo upgrade from a round action, reverting to normal.`
 - `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' - Roll Concentration once to set a sustained action's absorption budget (#2705).`
@@ -5067,6 +5067,7 @@
   - silhouette -> items.Silhouette [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - holding_event -> items.OwnershipEvent [FK] (nullable)
+  - natural_weapon_gift -> magic.Gift [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
@@ -5165,6 +5166,7 @@
   - clues_about <- clues.Clue
   - clue_triggers <- clues.ItemClueTrigger
   - codex_entries_about <- codex.CodexEntry
+  - natural_weapon_gifts <- magic.Gift
   - price_requirements <- magic.PriceComponentRequirement
   - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
@@ -6105,6 +6107,7 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - technique_skill -> skills.Skill [FK] (nullable)
+  - natural_weapon_template -> items.ItemTemplate [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
@@ -6128,6 +6131,7 @@
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - granted_companions <- companions.Companion
   - species_grants <- species.SpeciesGiftGrant
+  - natural_weapon_items <- items.ItemInstance
   - capability_project_details <- societies.OrganizationCapabilityProjectDetails
 
 ### GiftAcquisitionConfig

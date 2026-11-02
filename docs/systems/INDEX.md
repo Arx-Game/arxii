@@ -7175,6 +7175,21 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Natural weapons (#4898, slice 4 of #4844):** `Gift.natural_weapon_template` (nullable FK
+  to an Unarmed `ItemTemplate`, PROTECT) and the marker `ItemInstance.natural_weapon_gift`
+  (nullable FK to `Gift`, PROTECT, `related_name="natural_weapon_items"`, readonly in admin).
+  `world/items/services/natural_weapons.py`: `provision_natural_weapon(sheet, gift)`
+  (idempotent, never adopts a plain copy; called from `grant_gift_to_character` and the
+  covenant role grant), `deprovision_natural_weapon(sheet, gift)` (losing the gift: NPC
+  copy, beta reset, gift admin and API delete), `deprovision_all_natural_weapons(sheet)`
+  (deleting the body: `Character.at_object_delete`, the sheet admin), `is_natural_weapon(item)` (the marker, no query), `require_removable`.
+  Exceptions `NaturalWeaponNotRemovable`, `NaturalWeaponInTheWay`. Every removal path refuses
+  one (backstops in `unequip_item`, `set_item_holder` and `destroy_consumed_item_instance`);
+  `covered_regions` skips it; Required content `natural-weapon-templates`. The character
+  sheet payload's `natural_weapons` (`NaturalWeaponEntry`, owner and staff only; the
+  weapon then leaves their Wearing list) feeds the Physical section's Natural weapons
+  block. See docs/systems/items.md ("Natural weapons").
+
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
   (template check-bonus + default-Property authoring; `checks/services.py`'s
   `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
@@ -8567,7 +8582,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `declare_strike(participant, opponent, item_instance=None)` (refuses a weapon not equipped, a
   strike skill with no check type, an opponent out of reach: ranged and thrown reach the room,
   every other Strike its own position or the next), `strike_weapon_options(character)`
-  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, then bare hands),
+  (`StrikeWeapon` in `world/combat/types.py`: each equipped weapon-kind item, a natural weapon
+  from a gift among them (#4898), then bare hands),
   `strike_check_type`, `_resolve_strike` (in `_STANDALONE_MANEUVER_RESOLVERS`; a Strike still
   draws waiting strikes). The hit roll is `CombatTechniqueResolver.roll_check_with_breakdown`
   with `strike_weapon` set (the chosen weapon's gear kind and `weapon_stat_for` stat, never the
@@ -8589,7 +8605,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   empty. The web Last Outcome card renders every roll of the latest action as those rows. The
   room is told "Hobb strikes Bandit with a rapier. A good hit: 11 damage." and the striker's
   telnet "You strike Bandit with your rapier. ..." instead (`broadcast_action_outcome`'s
-  `telnet_exclude`; `core.text.with_indefinite_article`). Action
+  `telnet_exclude`; `core.text.with_indefinite_article`). Bare hands and a natural weapon
+  take no article ("Hobb strikes Bandit with Khati Claws."). Action
   `StrikeAction` (`combat_strike`; `opponent_id`, `weapon_id` or `weapon_name`), telnet `strike
   <opp> [with <weapon>]` and `combat strike`, web: Strike is the first pick in the focused
   `ActionDeclarationCard` row (`leadingPick`), its `StrikeControl` "With" row fed by the own

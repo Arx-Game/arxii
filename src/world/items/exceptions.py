@@ -479,6 +479,28 @@ class VaultFull(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"The vault is full."})
 
 
+class NaturalWeaponNotRemovable(InventoryError):
+    """Raised when anything would take a natural weapon off its holder (#4898).
+
+    Claws, a bite or horns from a gift are part of the character: they are never
+    unequipped, dropped, given, traded, stolen, sold, stored, offered or used up.
+    """
+
+    user_message = "That is part of the body and cannot be removed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That is part of the body and cannot be removed."}
+    )
+
+
+class NaturalWeaponInTheWay(InventoryError):
+    """Raised when equipping an item would push a natural weapon out of its slot (#4898)."""
+
+    user_message = "Something that is part of the body is already there."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Something that is part of the body is already there."}
+    )
+
+
 class ItemFixedInPlace(InventoryError):
     """Raised when plain take targets an item anchored as an active room decoration (#2991).
 

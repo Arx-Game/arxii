@@ -614,6 +614,29 @@ class WornEntry(TypedDict):
     is_hidden: bool
 
 
+class NaturalWeaponEntry(TypedDict):
+    """One natural weapon the character holds, for the sheet's Physical section (#4898).
+
+    Claws, a bite or horns a gift gave them (``ItemInstance.natural_weapon_gift``): struck
+    on Unarmed, never removable. Owner and staff only, like the rest of the sheet's own
+    mechanics. ``from_species`` is True when the gift reached the character as a species
+    grant (``CharacterGift.origin``). ``damage`` is the item's effective weapon damage
+    (quality applied); ``damage_type`` is its damage type's name, blank when it has none.
+    ``facets`` are the attached facets' names; ``facets_used`` counts the crafted ones,
+    which are what ``facet_capacity`` limits (inherent facets do not count).
+    """
+
+    id: int
+    name: str
+    gift_name: str
+    from_species: bool
+    damage: int
+    damage_type: str
+    facets: list[str]
+    facets_used: int
+    facet_capacity: int
+
+
 class ProfileTextField(models.TextChoices):
     """Prose fields covered by version history (#2631, widened to every prose field in #3988).
 

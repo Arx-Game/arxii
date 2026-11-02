@@ -401,7 +401,12 @@ def _estate_has_assets(sheet: CharacterSheet) -> bool:
     from world.items.models import ItemInstance  # noqa: PLC0415
     from world.locations.models import LocationOwnership  # noqa: PLC0415
 
-    if ItemInstance.objects.in_play().filter(holder_character_sheet=sheet).exists():
+    # A natural weapon stays with the body (#4898), so it is no asset of the estate.
+    if (
+        ItemInstance.objects.in_play()
+        .filter(holder_character_sheet=sheet, natural_weapon_gift__isnull=True)
+        .exists()
+    ):
         return True
     purse = CharacterPurse.objects.filter(character_sheet=sheet).first()
     if purse is not None and purse.balance > 0:
@@ -563,9 +568,13 @@ def _deliver_specific_item(
 
     Returns the item id for the sweep to skip, or None on ademption.
     """
+    from world.items.services.natural_weapons import is_natural_weapon  # noqa: PLC0415
+
     item = bequest.item
     if item is None or item.holder_character_sheet_id != sheet.pk:
         return None  # ademption — the estate no longer owns it
+    if is_natural_weapon(item):
+        return None  # a natural weapon stays with the body (#4898); nothing to deliver
     recipient_persona = bequest.recipient_persona
     target = _first_eligible_recipient(item, recipient_persona, heir_persona)
     if target is None:
@@ -758,11 +767,13 @@ def _sweep_residuary_items(
     """Flip or clear each undelivered item in the estate."""
     from world.items.models import ItemInstance  # noqa: PLC0415
 
-    # #4099: a soft-deleted item keeps its holder; never hand one to an heir.
+    # #4099: a soft-deleted item keeps its holder; never hand one to an heir. A natural
+    # weapon stays with the body (#4898): it is neither inherited nor left as loot.
     items = (
         ItemInstance.objects.in_play()
         .filter(holder_character_sheet=sheet)
         .exclude(pk__in=delivered_item_ids)
+        .filter(natural_weapon_gift__isnull=True)
     )
     for item in items:
         if heir_persona is not None and _persona_can_receive_item(heir_persona, item):

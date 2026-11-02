@@ -491,6 +491,26 @@ class Character(ObjectParent, DefaultCharacter):
             return False
         return persona.legend_murmur.has_murmurable_deeds
 
+    def at_object_delete(self) -> bool:
+        """Before the character goes, take away its natural weapons (#4898).
+
+        The sheet and its gifts cascade away with the character while its items survive
+        held by nobody; a natural weapon left that way could never be picked up and
+        would keep its gift from being deleted.
+        """
+        if not super().at_object_delete():
+            return False
+        from world.items.services.natural_weapons import (
+            deprovision_all_natural_weapons,
+        )
+
+        try:
+            sheet = self.sheet_data
+        except ObjectDoesNotExist:
+            return True
+        deprovision_all_natural_weapons(sheet)
+        return True
+
     def at_pre_puppet(self, account, session=None, **kwargs):
         """Give a character with nowhere to be a home before Evennia restores them (#3818).
 

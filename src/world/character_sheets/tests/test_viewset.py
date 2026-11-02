@@ -2922,8 +2922,10 @@ class TestCharacterSheetQueryCount(TestCase):
         # shares it) and cleared by any target save, so it is warmed here rather than
         # counted. With no skill target in this fixture the pass issues no query of
         # its own; a skill with a bonus costs two more plus one per such skill.
+        # +1 (#4898): the natural weapons read, owner and staff only. A sheet with none
+        # stops at that one query; one with some pays two more (facets, gift origins).
         ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
-        with self.assertNumQueries(58):
+        with self.assertNumQueries(59):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
