@@ -43,7 +43,10 @@ They do not use the command system, dispatchers, or handlers.
   shared by telnet `vow pick` and the sheet's Choose button);
   `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
-  `CmdRitual` and the web `RitualPerformView`, #1331;
+  `CmdRitual` and the web `RitualPerformView`, #1331; its `_precheck` refuses, before
+  components and anima are spent, a thread retune (`check_thread_resonance_change`) and a
+  Rite of Re-swearing (`world.covenants.focus_picks.check_reswear`, #4940) that would fail,
+  and `_service_result_line` appends either result's `message`;
   `drift_correction.py` (#4733): `PerformDriftCorrectionAction` (`"perform_drift_correction"`)
   and `DeclineDriftCorrectionAction` (`"decline_drift_correction"`), REGISTRY, `target_type=SELF`,
   `category="magic"`; each checks the offer belongs to the actor's sheet, and the rite also

@@ -1240,7 +1240,8 @@ decides defense" under Combat Seams).
   `description`. One limit per kind per pick. `clean()` refuses a reduction on a frequency
   kind and a frequency other than 10 on `EXPOSURE`/`COST`, so no authored number is ignored.
 - **`VowFocusPickConfig`** (singleton pk=1, like `SecondaryVowConfig`) - `budget_per_level`
-  (default 4). Lazy-created by `focus_picks.vow_focus_pick_config()`.
+  (default 4) and `respec_ap_cost` (default 3, at least 1: the action points the Rite of
+  Re-swearing takes, #4940). Lazy-created by `focus_picks.vow_focus_pick_config()`.
 - **`CharacterVowFocusPick`** (play state) - `character_role` (FK `CharacterCovenantRole`,
   CASCADE, `related_name="focus_picks"`), `pick` (CASCADE), `chosen_at`; unique
   `(character_role, pick)`. `clean()` runs `validate_character_focus_pick`.
@@ -1321,7 +1322,9 @@ All in `world.covenants.focus_picks`:
   `validate_character_focus_pick` (primary vow, the pick in the vow's or its anchor's or
   grown sub-role's catalog via `choosable_role_ids`, level reached, the level's budget) and
   raises `VowFocusPickRefusedError` with the rule's own message. There is no un-choose:
-  unspent budget waits, and changing a chosen pick is the Rite of Re-swearing (slice 7).
+  unspent budget waits, and changing a chosen pick is the Rite of Re-swearing (below). The
+  membership lock is a filtered `select_for_update()` (a `get()` would be answered by the
+  identity map without the lock).
 - `resolve_pick_for_choice(sheet, pick_id=|pick_name=, covenant_id=)` finds the pick among
   the caller's own active memberships only, so no client-sent id reaches another character's
   membership. `ChooseVowFocusPickAction` (key `choose_vow_focus_pick`, REGISTRY) wraps both;
@@ -1369,14 +1372,51 @@ All in `world.covenants.focus_picks`:
 - `focus_pick_budget()` reads the budget without creating the config row (moved here from
   the vow page, which re-exports it).
 
+### The Rite of Re-swearing (#4940, slice 7 of #4844) [BUILT & WIRED]
+
+Also in `world.covenants.focus_picks`. The only way to change a chosen pick.
+
+- The rite is a staff-authored SERVICE `Ritual` whose `service_function_path` is
+  `RESWEAR_SERVICE_PATH` (`world.covenants.focus_picks.reswear_vow_pick`); `reswear_ritual()`
+  finds it (lowest pk). Its anima requirement and components apply through
+  `PerformRitualAction` as for any SERVICE ritual. Kwargs: `old_pick_id`, `new_pick_id`,
+  optional `covenant_id`.
+- `check_reswear(sheet, old_pick_id=, new_pick_id=, covenant_id=)` writes nothing and is called
+  by `PerformRitualAction._precheck` before components and anima are spent. It refuses
+  (`VowFocusPickRefusedError`, caught by the action) a character in a fight (`in_a_fight`: an
+  ACTIVE participant in a live combat encounter or battle), a missing id, a pick the caller has
+  not chosen (looked up among their own choices only), a left or secondary vow, a pick the vow
+  does not offer (`choosable_role_ids`), one already chosen, one of another level, a swap whose
+  new price exceeds what giving up the old leaves of the level's budget, and an action point
+  pool short of `respec_ap_cost`.
+- `reswear_vow_pick` (atomic) runs the check, locks the membership, runs it again, deletes the
+  given-up `CharacterVowFocusPick`, validates the new one with `validate_character_focus_pick`
+  and saves it, then `ActionPointPool.spend(respec_ap_cost)`. It returns `ReswearResult`
+  (`types.py`), whose `message` ("You give up Quick Recovery and take Feint and Vanish. Level
+  1: 4 of 4. 3 AP spent.") `PerformRitualAction._service_result_line` appends to "You perform
+  <rite>." for telnet and the web alike.
+- `reswear_options(sheet)` (`ReswearOptions`) serves `GET
+  /api/covenants/character-roles/reswear-options/?character_sheet=<id>` (`MayPlayCatalogSheet`,
+  like `vow-picks`): the rite's id (null with `unavailable_reason` when none is authored), AP
+  and anima costs, component labels, and `component_ids`, the carried items
+  `resolve_ritual_components` picks to pay it (nothing is written; empty when they do not
+  cover it). The sheet's `ReswearDialog` (`frontend/src/covenants/components/`, opened by the
+  panel's Change picks) posts them to `/api/magic/rituals/perform/`.
+- Telnet `vow reswear <chosen>=<new> [in <covenant>]` (`CmdVow`) resolves the names among the
+  caller's own catalogs and performs the same rite with everything carried.
+- Required content: `reswear-ritual` (REQUIRED), `reswear-ritual-single` and
+  `reswear-ritual-web-payable` (a target-resonance offering, which the rite never names a
+  resonance for) (TUNING).
+
 ### Admin
 
 CovenantRole admin carries a `VowFocusPickInline` with a read-only computed price; the
 `VowFocusPick` admin has its limits inline and the price. `focus_pick` is an autocomplete on
 the added effect, situational perk and vow stat scaling admins, and `condition_property` on the
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
-and `CharacterVowFocusPick` (staff can set or clear a pick there; players choose through
-`choose_vow_focus_pick`) have their own admins; `combat_style` is on the CharacterSheet admin.
+(`budget_per_level`, `respec_ap_cost`) and `CharacterVowFocusPick` (staff can set or clear a
+pick there; players choose through `choose_vow_focus_pick` and change one through the Rite of
+Re-swearing) have their own admins; `combat_style` is on the CharacterSheet admin.
 
 The vow page (`_vow_builder/<pk>/`, #4880, slice 2 of #4843) authors one vow's own fields,
 technique specialties, focus picks by level and each pick's limits in one save, shows every

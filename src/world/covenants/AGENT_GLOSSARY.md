@@ -117,7 +117,10 @@ that pick. A pick's price comes from its `value` and its limits (`VowFocusPickLi
 `world.covenants.focus_picks.pick_price`) and must fit the per-level budget
 (`VowFocusPickConfig`). A character's choice is a `CharacterVowFocusPick` on their membership,
 which the holder makes themselves (`choose_vow_focus_pick`, #4929) from the sheet or with `vow
-pick`; budget left unspent at a level waits for a later pick; a
+pick`; budget left unspent at a level waits for a later pick, and a chosen pick changes only
+through the **Rite of Re-swearing** (a SERVICE ritual, `reswear_vow_pick`, #4940: one pick for
+another of the same level, for `respec_ap_cost` action points plus its anima and components,
+never in a fight); a
 secondary vow gets none. A sub-role holder chooses from the anchor's catalog and the sub-role's.
 _Avoid_: talent, feat, perk (a situational perk is one kind of payload a pick can carry),
 specialization (that is the resonance sub-role).
