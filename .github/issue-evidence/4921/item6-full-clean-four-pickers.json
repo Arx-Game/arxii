@@ -1,0 +1,54 @@
+{
+  "reviewed_commit": "f2d2c3f7108faf27f9782e3ef8d0b1713f03e049",
+  "item": 6,
+  "did": "called full_clean() on an unsaved row of each of the four picker models with technique_skill/skill set to The Daring Dance's skill (a combat style's own)",
+  "results": {
+    "MagicActivitySkill": {
+      "field": "skill",
+      "full_clean_errors": {
+        "skill": [
+          "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
+        ]
+      }
+    },
+    "Path": {
+      "field": "technique_skill",
+      "full_clean_errors": {
+        "description": [
+          "This field cannot be blank."
+        ],
+        "stage": [
+          "This field cannot be null."
+        ],
+        "minimum_level": [
+          "This field cannot be null."
+        ],
+        "technique_skill": [
+          "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
+        ]
+      }
+    },
+    "Gift": {
+      "field": "technique_skill",
+      "full_clean_errors": {
+        "technique_skill": [
+          "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
+        ]
+      }
+    },
+    "Technique": {
+      "field": "skill",
+      "full_clean_errors": {
+        "effect_type": [
+          "This field cannot be null."
+        ],
+        "anima_cost": [
+          "This field cannot be null."
+        ],
+        "skill": [
+          "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "reviewed_commit": "f2d2c3f7108faf27f9782e3ef8d0b1713f03e049",
+  "item": 5,
+  "did": "chose The Daring Dance, then PATCHed draft_data.magic_skills with 20 points on The Iron Mask's skill (another style's) and the rest on Occult; then tried to finalize with the allocation held",
+  "chosen_style": "The Daring Dance",
+  "allocation_sent": {
+    "The Iron Mask skill": 20,
+    "Occult": 10
+  },
+  "write_is_kept_and_flagged_not_refused": true,
+  "patch_response": {
+    "status_code": 200,
+    "draft_data.magic_skills_in_response": {
+      "27": 20,
+      "25": 10
+    },
+    "stage_errors_in_response": {
+      "6": [
+        "Magic skills only"
+      ]
+    }
+  },
+  "stored_draft_data_magic_skills": {
+    "25": 10,
+    "27": 20
+  },
+  "skill_ids": {
+    "The Iron Mask": 27,
+    "Occult": 25,
+    "The Daring Dance": 26
+  },
+  "stage_errors_on_get": {
+    "6": [
+      "Magic skills only"
+    ]
+  },
+  "finalize_service_call_while_held": {
+    "raised": true,
+    "type": "DraftIncompleteError",
+    "message": "Cannot finalize: incomplete stages: Gift",
+    "reason": "Cannot finalize: incomplete stages: Gift"
+  },
+  "submit_while_held": {
+    "status_code": 400,
+    "body": {
+      "detail": "Draft is not complete enough to submit."
+    }
+  },
+  "finalize_while_held": {
+    "status_code": 400,
+    "body": {
+      "detail": "Character creation failed."
+    },
+    "character_sheets_before": 0,
+    "character_sheets_after": 0,
+    "draft_still_exists": true
+  },
+  "contrast_after_correcting_the_allocation": {
+    "patch_status": 200,
+    "stage_errors": {},
+    "finalize_status": 200,
+    "finalize_body": {
+      "character_id": 12,
+      "message": "Character added to roster."
+    }
+  }
+}

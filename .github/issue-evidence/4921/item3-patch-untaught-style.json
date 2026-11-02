@@ -1,0 +1,40 @@
+{
+  "reviewed_commit": "f2d2c3f7108faf27f9782e3ef8d0b1713f03e049",
+  "item": 3,
+  "did": "PATCH the draft's selected_combat_style_id with a style Masque does not teach (The Hollow Crown, taught only by Hollow Court)",
+  "tradition": "Masque",
+  "styles_masque_teaches": [
+    "The Daring Dance",
+    "The Iron Mask"
+  ],
+  "style_patched": {
+    "id": 18,
+    "name": "The Hollow Crown",
+    "taught_by": [
+      "Hollow Court"
+    ]
+  },
+  "first_a_valid_pick": {
+    "status": 200,
+    "selected_combat_style": 16
+  },
+  "refused_with_a_style_already_chosen": {
+    "status_code": 400,
+    "error_body": {
+      "selected_combat_style_id": [
+        "Your tradition does not teach this style."
+      ]
+    },
+    "stored_selected_combat_style_id_after": 16,
+    "style_still_chosen": "The Daring Dance"
+  },
+  "refused_with_no_style_chosen": {
+    "status_code": 400,
+    "error_body": {
+      "selected_combat_style_id": [
+        "Your tradition does not teach this style."
+      ]
+    },
+    "stored_selected_combat_style_id_after": null
+  }
+}

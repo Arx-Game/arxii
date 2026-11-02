@@ -1,0 +1,58 @@
+{
+  "reviewed_commit": "f2d2c3f7108faf27f9782e3ef8d0b1713f03e049",
+  "item": 11,
+  "did": "asked the Sphinx about the sub-role Swift Quicksilver (parent_role Quicksilver) as two characters, over REST and the telnet verb",
+  "sub_role": {
+    "name": "Swift Quicksilver",
+    "id": 9,
+    "parent_role": "Quicksilver"
+  },
+  "results": {
+    "ysmay": {
+      "style": "The Daring Dance",
+      "style_lists": "The Daring Dance lists the anchor vow Quicksilver (and not Swift Quicksilver itself)",
+      "style_listed_vows_in_db": [
+        "Quicksilver"
+      ],
+      "rest": {
+        "url": "/api/covenants/roles/sphinx/?role=9",
+        "status_code": 200,
+        "body": {
+          "tier": "takes",
+          "role_name": "Swift Quicksilver",
+          "demands": [],
+          "shopping_list": [],
+          "style": {
+            "style_name": "The Daring Dance",
+            "suits": true
+          }
+        }
+      },
+      "telnet_command": "sphinx Swift Quicksilver",
+      "telnet_output": "|wSphinx of Black Quartz, judge my vow: Swift Quicksilver.|n\nThe vow will take.\nYour style suits it."
+    },
+    "brom": {
+      "style": "The Iron Mask",
+      "style_lists": "The Iron Mask lists only Bulwark, not Quicksilver",
+      "style_listed_vows_in_db": [
+        "Bulwark"
+      ],
+      "rest": {
+        "url": "/api/covenants/roles/sphinx/?role=9",
+        "status_code": 200,
+        "body": {
+          "tier": "takes",
+          "role_name": "Swift Quicksilver",
+          "demands": [],
+          "shopping_list": [],
+          "style": {
+            "style_name": "The Iron Mask",
+            "suits": false
+          }
+        }
+      },
+      "telnet_command": "sphinx Swift Quicksilver",
+      "telnet_output": "|wSphinx of Black Quartz, judge my vow: Swift Quicksilver.|n\nThe vow will take.\nYour style does not suit it: no style benefits while it is active."
+    }
+  }
+}
