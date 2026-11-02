@@ -705,8 +705,7 @@ export function Lattice({
       suppressClickRef.current = true;
       const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
       const overKey = el?.closest<HTMLElement>('[data-cell-key]')?.dataset.cellKey as
-        | CellKey
-        | undefined;
+        CellKey | undefined;
       if (overKey) resolveDrop(tile, overKey);
     };
 

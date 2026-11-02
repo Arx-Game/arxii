@@ -66,15 +66,7 @@ import {
 import '../almanach.css';
 
 type Leaf =
-  | 'house'
-  | 'family'
-  | 'realm'
-  | 'lands'
-  | 'estate'
-  | 'publish'
-  | 'books'
-  | 'openings'
-  | 'turf';
+  'house' | 'family' | 'realm' | 'lands' | 'estate' | 'publish' | 'books' | 'openings' | 'turf';
 
 function Dash() {
   return <abbr title="none">—</abbr>;

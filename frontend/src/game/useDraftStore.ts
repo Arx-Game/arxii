@@ -232,8 +232,7 @@ export async function reconcileStoredDrafts(
  * which is a text-to-the-wrong-people bug, not a lost-draft one.
  */
 export type DraftScopeSettling =
-  | { provisional: true; conversation: string }
-  | { provisional?: false; conversation?: string };
+  { provisional: true; conversation: string } | { provisional?: false; conversation?: string };
 
 export function useDraftStore(key: DraftKey, settling: DraftScopeSettling = {}) {
   const { provisional = false, conversation } = settling;

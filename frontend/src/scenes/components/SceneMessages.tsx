@@ -98,8 +98,7 @@ export function SceneMessages({
 
   // Group consecutive muted interactions and insert dividers (#2087).
   type RenderItem =
-    | { type: 'interaction'; msg: Interaction }
-    | { type: 'divider'; count: number; ids: number[] };
+    { type: 'interaction'; msg: Interaction } | { type: 'divider'; count: number; ids: number[] };
 
   const items: RenderItem[] = [];
   let mutedRun: Interaction[] = [];

@@ -42,10 +42,7 @@ export function useClaimKudosMutation() {
 // ---------------------------------------------------------------------------
 
 export type UnlockType =
-  | 'class_level'
-  | 'thread_xp_lock'
-  | 'skill_breakthrough'
-  | 'language_breakthrough';
+  'class_level' | 'thread_xp_lock' | 'skill_breakthrough' | 'language_breakthrough';
 
 export const progressionUnlocksKey = (unlockType?: UnlockType) => [
   'progression-unlocks',

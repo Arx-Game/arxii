@@ -105,8 +105,7 @@ export function LookCropper({ picture, moods, ink, isSaving, onSave, onClose }: 
     if (!crop || !scale) return;
     const target = event.target as HTMLElement;
     const handle = (target.closest('[data-handle]') as HTMLElement | null)?.dataset.handle as
-      | Handle
-      | undefined;
+      Handle | undefined;
     if (!handle && !target.closest('[data-crop-box]')) return;
     event.preventDefault();
     drag.current = {

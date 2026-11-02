@@ -66,13 +66,7 @@ export type NpcFormMode = 'quick' | 'detailed';
 
 /** The sections Quick folds into chips; Detailed shows them all. */
 type FoldedSection =
-  | 'identity'
-  | 'background'
-  | 'powers'
-  | 'regard'
-  | 'preferences'
-  | 'notes'
-  | 'lending';
+  'identity' | 'background' | 'powers' | 'regard' | 'preferences' | 'notes' | 'lending';
 
 function settingsForVisibleSections(
   settings: NpcSettingsPatch,

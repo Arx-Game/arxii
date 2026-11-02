@@ -461,8 +461,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
   // hasn't been regenerated on this branch to include can_request_gm (#2119) yet — cast to
   // the hand-extended local type; the backend already serializes the field at runtime.
   const viewerCapabilities: ViewerCapabilities = (membersPage?.results?.[0]?.viewer_capabilities as
-    | ViewerCapabilities
-    | undefined) ?? {
+    ViewerCapabilities | undefined) ?? {
     can_invite: false,
     can_kick: false,
     can_manage_ranks: false,

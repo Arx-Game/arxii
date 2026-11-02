@@ -34,12 +34,7 @@ interface LinkSegment {
 }
 
 export type Segment =
-  | TextSegment
-  | BoldSegment
-  | ItalicSegment
-  | StrikethroughSegment
-  | ColorSegment
-  | LinkSegment;
+  TextSegment | BoldSegment | ItalicSegment | StrikethroughSegment | ColorSegment | LinkSegment;
 
 export type SegmentType = Segment['type'];
 

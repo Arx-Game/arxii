@@ -1230,12 +1230,7 @@ export function getDefaultStats(): Stats {
 // === Application Review System Types ===
 
 export type ApplicationStatus =
-  | 'submitted'
-  | 'in_review'
-  | 'revisions_requested'
-  | 'approved'
-  | 'denied'
-  | 'withdrawn';
+  'submitted' | 'in_review' | 'revisions_requested' | 'approved' | 'denied' | 'withdrawn';
 
 export type CommentType = 'message' | 'status_change';
 

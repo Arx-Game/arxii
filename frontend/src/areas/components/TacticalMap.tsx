@@ -188,35 +188,33 @@ export function TacticalMap({
 
   const flowNodes: Node[] = useMemo(
     () =>
-      nodes.map(
-        (position): PositionMapNodeType => ({
-          id: String(position.id),
-          type: 'position',
-          position: layout.get(position.id) ?? { x: 0, y: 0 },
-          width: NODE_WIDTH,
-          height: NODE_HEIGHT,
-          handles: fallbackHandles(),
-          draggable: false,
-          selectable: false,
-          data: {
-            positionId: position.id,
-            name: position.name,
-            kind: position.kind,
-            occupants: occupantsByPosition.get(position.id) ?? [],
-            // Reuses the eligible-move ring highlight for position-picking
-            // (#2206) — every node is pickable (no reach pre-filter on the
-            // map), so the highlight is on whenever picking is active at all.
-            canMoveHere: moveActionByPositionId.has(position.id) || onPickPosition !== undefined,
-            onClick: handleClick,
-            rampartElement: position.rampart_element,
-            rampartIntegrity: position.rampart_integrity,
-            rampartMaxIntegrity: position.rampart_max_integrity,
-            rampartCrackState: position.rampart_crack_state,
-            isRoofed: position.is_roofed,
-            screensRanged: position.screens_ranged,
-          },
-        })
-      ),
+      nodes.map((position): PositionMapNodeType => ({
+        id: String(position.id),
+        type: 'position',
+        position: layout.get(position.id) ?? { x: 0, y: 0 },
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        handles: fallbackHandles(),
+        draggable: false,
+        selectable: false,
+        data: {
+          positionId: position.id,
+          name: position.name,
+          kind: position.kind,
+          occupants: occupantsByPosition.get(position.id) ?? [],
+          // Reuses the eligible-move ring highlight for position-picking
+          // (#2206) — every node is pickable (no reach pre-filter on the
+          // map), so the highlight is on whenever picking is active at all.
+          canMoveHere: moveActionByPositionId.has(position.id) || onPickPosition !== undefined,
+          onClick: handleClick,
+          rampartElement: position.rampart_element,
+          rampartIntegrity: position.rampart_integrity,
+          rampartMaxIntegrity: position.rampart_max_integrity,
+          rampartCrackState: position.rampart_crack_state,
+          isRoofed: position.is_roofed,
+          screensRanged: position.screens_ranged,
+        },
+      })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition, onGMPlace]
   );

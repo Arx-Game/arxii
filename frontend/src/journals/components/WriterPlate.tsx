@@ -15,9 +15,7 @@ import { PillButton } from './Pill';
 
 /** Which slice of a writer's journal is being read. */
 export type WriterFilter =
-  | { kind: 'all' }
-  | { kind: 'about'; aboutId: number }
-  | { kind: 'reverse' };
+  { kind: 'all' } | { kind: 'about'; aboutId: number } | { kind: 'reverse' };
 
 export interface WriterPlateProps {
   /** CharacterSheet id of the writer. */
