@@ -13,6 +13,7 @@ import type {
   ApplicationComment,
   Beginnings,
   Build,
+  CGCombatStyleOption,
   CGGiftOption,
   CGPointBudget,
   CGPointsBreakdown,
@@ -477,6 +478,15 @@ export async function getCGGifts(draftId: number): Promise<CGGiftOption[]> {
   const res = await apiFetch(`${BASE_URL}/gifts/?draft_id=${draftId}`);
   if (!res.ok) {
     throw new Error('Failed to load gift options');
+  }
+  return res.json();
+}
+
+/** The combat styles the draft's Tradition teaches (#4921); empty when it teaches none. */
+export async function getCGCombatStyles(draftId: number): Promise<CGCombatStyleOption[]> {
+  const res = await apiFetch(`${BASE_URL}/combat-styles/?draft_id=${draftId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load combat styles');
   }
   return res.json();
 }

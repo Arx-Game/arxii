@@ -31,6 +31,8 @@ interface EntryProps {
   onChoose?: () => void;
   /** Omit for a choice the API cannot clear; the chosen mark is then inert. */
   onSetAside?: () => void;
+  /** Lines read in the closed entry too, under the name row (a style's attacks and defends). */
+  profile?: ReactNode;
   children: ReactNode;
 }
 
@@ -45,6 +47,7 @@ export function Entry({
   lead,
   onChoose,
   onSetAside,
+  profile,
   children,
 }: EntryProps) {
   const pressMark = (event: MouseEvent<HTMLButtonElement>) => {
@@ -99,6 +102,7 @@ export function Entry({
               </button>
             )}
           </span>
+          {profile && <span className="entry-profile">{profile}</span>}
         </summary>
         <div className="entry-prose">{children}</div>
       </details>

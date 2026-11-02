@@ -9,10 +9,11 @@
  */
 
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
-import type { OffersResponse } from '../../types';
+import type { CGCombatStyleOption, OffersResponse } from '../../types';
 import {
   createMockDraft,
   mockBeginnings,
@@ -28,16 +29,19 @@ let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
 let glimpseOffers: OffersResponse = { offers: [], closed: [], terms: [] };
 let cgExplanations = mockCGExplanations;
+let combatStyles: CGCombatStyleOption[] = [];
+const updateDraftMutate = vi.fn();
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: cgExplanations }),
   useResonances: () => ({ data: mockResonances, isLoading: false }),
-  useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useUpdateDraft: () => ({ mutate: updateDraftMutate, mutateAsync: vi.fn() }),
   useTraditions: () => ({ data: traditions, isLoading: false }),
   useSelectTradition: () => ({ mutate: vi.fn(), isPending: false }),
   useTraditionPerspectives: () => ({ data: [] }),
   useCGGifts: () => ({ data: [], isLoading: false }),
+  useCGCombatStyles: () => ({ data: combatStyles }),
   useCGTechniqueOptions: () => ({ data: [], isLoading: false }),
   useGlimpseTags: () => ({ data: [], isLoading: false }),
   useDraftOffers: () => ({ data: glimpseOffers, isLoading: false }),
@@ -56,6 +60,8 @@ beforeEach(() => {
   draftDistinctions = [];
   glimpseOffers = { offers: [], closed: [], terms: [] };
   cgExplanations = mockCGExplanations;
+  combatStyles = [];
+  updateDraftMutate.mockReset();
 });
 
 describe('GiftStage (folio)', () => {
@@ -185,6 +191,110 @@ describe('GiftStage (folio)', () => {
       expect(training).toHaveClass('closed');
       expect(training).toHaveTextContent('Choose a gift first');
       expect(training.querySelector('details')).not.toHaveAttribute('open');
+    });
+  });
+
+  describe('the fighting style step (#4921)', () => {
+    const dance: CGCombatStyleOption = {
+      id: 7,
+      name: 'The Daring Dance',
+      description: 'Never where the blow lands.',
+      defense_style: 'evasion',
+      defense_style_display: 'Evasion',
+      armor_share_tenths: 3,
+      hit_stat_name: 'agility',
+      weapon_kinds: [
+        { value: 'melee_one_hand', label: 'One-Handed Melee' },
+        { value: 'thrown', label: 'Thrown' },
+      ],
+      armor_kinds: [{ value: 'light_armor', label: 'Light Armor' }],
+    };
+    const mask: CGCombatStyleOption = {
+      ...dance,
+      id: 8,
+      name: 'The Iron Mask',
+      description: '',
+      defense_style: 'gear_soak',
+      defense_style_display: 'Mitigation',
+      armor_share_tenths: 10,
+      hit_stat_name: null,
+      weapon_kinds: [{ value: 'melee_two_hand', label: 'Two-Handed Melee' }],
+      armor_kinds: [
+        { value: 'medium_armor', label: 'Medium Armor' },
+        { value: 'heavy_armor', label: 'Heavy Armor' },
+      ],
+    };
+    const styledDraft = (styleId: number | null, allocated = 0) =>
+      createMockDraft({
+        selected_path: mockPath,
+        selected_tradition: mockTradition,
+        selected_combat_style: styleId,
+        draft_data: { selected_gift_id: 1, selected_gift_resonance_id: 1 },
+        magic_training: {
+          ...createMockDraft().magic_training,
+          total: 20,
+          required_spend: 20,
+          step: 10,
+          allocated,
+          skills: [{ id: 3, name: 'The Daring Dance', value: allocated, max: 30 }],
+        },
+      });
+    const funnelSteps = () =>
+      Array.from(screen.getByRole('list', { name: 'Gift steps' }).children) as HTMLElement[];
+
+    it("lists the Tradition's styles after the Resonance, with how each attacks and defends", () => {
+      combatStyles = [dance, mask];
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={styledDraft(null)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const steps = funnelSteps();
+      expect(steps).toHaveLength(7);
+      const step = steps[4];
+      expect(step).toHaveTextContent('Fighting style');
+      expect(step).toHaveTextContent('Step 5 of 7');
+      expect(step.querySelector('details')).toHaveAttribute('open');
+      const list = within(step).getByRole('list', { name: 'Fighting styles' });
+      expect(list).toHaveTextContent('one-handed melee, thrown · hits with Agility');
+      expect(list).toHaveTextContent('evasion · light armor, 3 of 10 counts');
+      expect(list).toHaveTextContent('two-handed melee');
+      expect(list).toHaveTextContent('mitigation · medium armor or heavy armor, all of it counts');
+      expect(list).not.toHaveTextContent(/vow/i);
+      // The training waits on the style, whose skill its list holds.
+      expect(steps[5]).toHaveTextContent('Choose a style first');
+      expect(steps[6]).toHaveTextContent('Step 7 of 7');
+    });
+
+    it('saves the chosen style', async () => {
+      combatStyles = [dance, mask];
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={styledDraft(null)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      // The name row's Select mark (the foot door carries the same label).
+      await userEvent.click(screen.getAllByRole('button', { name: 'Select The Iron Mask' })[0]);
+      expect(updateDraftMutate).toHaveBeenCalledWith({
+        draftId: 1,
+        data: { selected_combat_style_id: 8 },
+      });
+    });
+
+    it('reads as chosen and opens the training once a style is picked', () => {
+      combatStyles = [dance, mask];
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={styledDraft(7)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const steps = funnelSteps();
+      expect(steps[4]).toHaveClass('chosen');
+      expect(steps[4].querySelector('details')).not.toHaveAttribute('open');
+      expect(steps[5]).not.toHaveClass('closed');
+      expect(steps[5]).toHaveTextContent('The Daring Dance');
+    });
+
+    it('is absent for a Tradition that teaches no style', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage draft={styledDraft(null)} onRegisterBeforeLeave={vi.fn()} />
+      );
+      expect(screen.queryByText('Fighting style')).not.toBeInTheDocument();
+      expect(funnelSteps()).toHaveLength(6);
     });
   });
 

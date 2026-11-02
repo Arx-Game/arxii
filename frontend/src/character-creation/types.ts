@@ -456,6 +456,8 @@ export interface CharacterDraft {
   build: Build | null;
   selected_path: Path | null;
   selected_tradition: Tradition | null;
+  /** The combat style chosen in the Gift stage, one the Tradition teaches (#4921). */
+  selected_combat_style: number | null;
   public_worship: WorshippedBeingRef | null;
   secret_worship: WorshippedBeingRef | null;
   cg_points_spent: number;
@@ -706,6 +708,30 @@ export interface CGGiftOption {
   codex_entry_id: number | null;
   /** The draft's Tradition teaches this Gift well (a gift grant row, #4659). */
   favored: boolean;
+}
+
+/** One weapon or armor kind a combat style fights with, by its gear label (#4921). */
+export interface CGStyleGearKind {
+  value: string;
+  label: string;
+}
+
+/**
+ * A combat style the draft's Tradition teaches, for the Gift stage's style step (#4921).
+ * From GET /api/character-creation/combat-styles/?draft_id=<id>. How it attacks and
+ * defends; never its vows.
+ */
+export interface CGCombatStyleOption {
+  id: number;
+  name: string;
+  description: string;
+  defense_style: string;
+  defense_style_display: string;
+  /** How much of the character's armor counts, in tenths (10 is all of it). */
+  armor_share_tenths: number;
+  hit_stat_name: string | null;
+  weapon_kinds: CGStyleGearKind[];
+  armor_kinds: CGStyleGearKind[];
 }
 
 /**
@@ -1168,6 +1194,7 @@ export interface CharacterDraftUpdate {
   build_id?: number | null;
   selected_path_id?: number | null;
   selected_tradition_id?: number | null;
+  selected_combat_style_id?: number | null;
   public_worship_id?: number | null;
   secret_worship_id?: number | null;
   second_parent_species_id?: number | null;

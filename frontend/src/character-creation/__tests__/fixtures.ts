@@ -760,6 +760,7 @@ export const mockEmptyDraft: CharacterDraft = {
   build: null,
   selected_path: null,
   selected_tradition: null,
+  selected_combat_style: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stat_bonuses: {},
