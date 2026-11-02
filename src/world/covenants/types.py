@@ -147,3 +147,39 @@ class VowPickCatalog:
     vow_level: int
     vows: list[str]
     levels: list[VowPickLevel]
+
+
+@dataclass(frozen=True)
+class ReswearResult:
+    """What the Rite of Re-swearing changed (#4940): one chosen pick for another.
+
+    ``spent`` and ``budget`` are the level's after the swap; ``message`` is the line the
+    performer reads after "You perform <rite>.", on telnet and the web alike.
+    """
+
+    membership_id: int
+    old_pick_id: int
+    new_pick_id: int
+    level: int
+    spent: int
+    budget: int
+    ap_spent: int
+    message: str
+
+
+@dataclass(frozen=True)
+class ReswearOptions:
+    """What the sheet's Re-swearing dialog needs before it performs the rite (#4940).
+
+    ``ritual_id`` is null while staff have not authored the rite, and then
+    ``unavailable_reason`` says so. ``components`` names what the rite asks for;
+    ``component_ids`` are the carried items that pay it, which the dialog sends with the
+    perform (empty when the character carries too little, and the rite refuses with why).
+    """
+
+    ritual_id: int | None
+    ap_cost: int
+    anima_cost: int
+    components: list[str]
+    component_ids: list[int]
+    unavailable_reason: str

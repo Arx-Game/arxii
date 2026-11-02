@@ -2,8 +2,10 @@
 
 ``vow picks`` lists every pick each primary vow offers, by level, from the same
 ``vow_pick_catalogs`` the character sheet reads. ``vow pick <name>`` chooses one
-through ``ChooseVowFocusPickAction``, the action the web dispatches. No rules live
-here: parse, resolve the covenant name, call the action.
+through ``ChooseVowFocusPickAction``, the action the web dispatches. ``vow reswear
+<old>=<new>`` performs the Rite of Re-swearing (#4940) through ``PerformRitualAction``,
+as the sheet's Change picks dialog does. No rules live here: parse, resolve the names
+the player typed to ids, call the action.
 """
 
 from __future__ import annotations
@@ -19,7 +21,11 @@ if TYPE_CHECKING:
 
 #: The word that names the covenant: ``vow pick Riposte in The Quicksilver Hall``.
 _IN = "in"
-_USAGE = "Usage: vow picks [in <covenant>] | vow pick <name> [in <covenant>]"
+_USAGE = (
+    "Usage: vow picks [in <covenant>] | vow pick <name> [in <covenant>] | "
+    "vow reswear <chosen pick>=<new pick> [in <covenant>]"
+)
+_RESWEAR_USAGE = "Usage: vow reswear <chosen pick>=<new pick> [in <covenant>]"
 
 
 class CmdVow(ArxCommand):
@@ -28,15 +34,19 @@ class CmdVow(ArxCommand):
     Usage:
         vow picks [in <covenant>]       - every pick your vow offers, by level
         vow pick <name> [in <covenant>] - choose a pick within its level's budget
+        vow reswear <chosen>=<new> [in <covenant>]
+                                        - the Rite of Re-swearing: give up a chosen
+                                          pick for another of the same level
 
     A pick opens when your vow reaches its level. Budget you do not spend waits
-    for a later pick. Chosen picks change only through the Rite of Re-swearing.
+    for a later pick. Chosen picks change only through the Rite of Re-swearing,
+    which costs action points from your week and is never performed in a fight.
     """
 
     key = "vow"
     locks = "cmd:all()"
     help_category = "Covenants"
-    action = None  # routes to the list and to ChooseVowFocusPickAction
+    action = None  # routes to the list, ChooseVowFocusPickAction and PerformRitualAction
 
     def func(self) -> None:
         try:
@@ -60,6 +70,8 @@ class CmdVow(ArxCommand):
             if not rest:
                 raise CommandError(_USAGE)
             self._choose(" ".join(rest), covenant_name)
+        elif verb == "reswear":  # noqa: STRING_LITERAL
+            self._reswear(words)
         else:
             raise CommandError(_USAGE)
 
@@ -121,6 +133,83 @@ class CmdVow(ArxCommand):
             covenant_id=self._covenant_id(covenant_name),
         )
         self.msg(result.message)
+
+    def _reswear(self, words: list[str]) -> None:
+        old_name, sep, new_text = " ".join(words).partition("=")
+        new_words = new_text.split()
+        rest, covenant_name = self._parse_in_covenant(new_words)
+        # As with "vow pick": a trailing "in <name>" names a covenant only when it is one.
+        if covenant_name is not None and self._own_covenant_id(covenant_name) is None:
+            rest, covenant_name = new_words, None
+        old_name, new_name = old_name.strip(), " ".join(rest).strip()
+        if not sep or not old_name or not new_name:
+            raise CommandError(_RESWEAR_USAGE)
+        old_id, new_id, covenant_id = self._reswear_ids(
+            old_name, new_name, self._covenant_id(covenant_name)
+        )
+        from actions.definitions.ritual import PerformRitualAction  # noqa: PLC0415
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            NO_RESWEAR_RITE_MESSAGE,
+            reswear_ritual,
+        )
+
+        ritual = reswear_ritual()
+        if ritual is None:
+            raise CommandError(NO_RESWEAR_RITE_MESSAGE)
+        carried = [
+            obj.item_instance_or_none
+            for obj in self.caller.contents
+            if obj.item_instance_or_none is not None
+        ]
+        result = PerformRitualAction().run(
+            actor=self.caller,
+            ritual=ritual,
+            components_provided=carried,
+            old_pick_id=old_id,
+            new_pick_id=new_id,
+            covenant_id=covenant_id,
+        )
+        self.msg(result.message)
+
+    def _reswear_ids(
+        self, old_name: str, new_name: str, covenant_id: int | None
+    ) -> tuple[int, int, int]:
+        """The old pick, new pick and covenant ids, from the names typed, among own vows."""
+        from world.covenants.focus_picks import vow_pick_catalogs  # noqa: PLC0415
+
+        catalogs = [
+            catalog
+            for catalog in vow_pick_catalogs(self._sheet())
+            if covenant_id is None or catalog.covenant_id == covenant_id
+        ]
+        holding = [
+            (catalog, entry)
+            for catalog in catalogs
+            for level in catalog.levels
+            for entry in level.picks
+            if entry.chosen and entry.name.lower() == old_name.lower()
+        ]
+        if not holding:
+            msg = f"You have not chosen a pick named {old_name}."
+            raise CommandError(msg)
+        if len({catalog.covenant_id for catalog, _ in holding}) > 1:
+            names = sorted({catalog.covenant for catalog, _ in holding})
+            msg = f"Which covenant? You chose {old_name} in: {', '.join(names)}."
+            raise CommandError(msg)
+        catalog, old = holding[0]
+        taking = [
+            entry
+            for level in catalog.levels
+            for entry in level.picks
+            if entry.name.lower() == new_name.lower()
+        ]
+        if not taking:
+            msg = f"Your vow offers no pick named {new_name}."
+            raise CommandError(msg)
+        if len(taking) > 1:
+            msg = f"Your vow offers two picks named {new_name}; change it on your sheet."
+            raise CommandError(msg)
+        return old.id, taking[0].id, catalog.covenant_id
 
 
 def _render_catalog(catalog: VowPickCatalog) -> str:

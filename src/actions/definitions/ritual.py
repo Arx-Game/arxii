@@ -67,6 +67,7 @@ class PerformRitualAction(Action):
         from django.db import transaction  # noqa: PLC0415
 
         from world.combat.services import try_declare_sustained_ritual  # noqa: PLC0415
+        from world.covenants.exceptions import VowFocusPickRefusedError  # noqa: PLC0415
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
@@ -153,6 +154,7 @@ class PerformRitualAction(Action):
             HonorRefused,
             UltimateNotLearnable,
             ThreadResonanceChangeError,
+            VowFocusPickRefusedError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -232,15 +234,27 @@ class PerformRitualAction(Action):
     def _precheck(self, ritual: Any, performer_sheet: Any, kwargs: dict[str, Any]) -> None:
         """Refuse a ritual whose service would refuse, before components or anima are spent.
 
-        Only the thread retune (slice 6 of #4672) has such a check today: it is found by its
-        service path, the way the Rite of Honors is. Raises ``ThreadResonanceChangeError``.
+        The thread retune (slice 6 of #4672) and the Rite of Re-swearing (#4940) have such a
+        check; each is found by its service path, the way the Rite of Honors is. Raises
+        ``ThreadResonanceChangeError`` or ``VowFocusPickRefusedError``.
         """
+        from world.covenants.focus_picks import (  # noqa: PLC0415
+            RESWEAR_SERVICE_PATH,
+            check_reswear,
+        )
         from world.magic.services.thread_resonance import (  # noqa: PLC0415
             THREAD_RESONANCE_SERVICE_PATH,
             check_thread_resonance_change,
         )
 
-        if ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
+        if ritual.service_function_path == RESWEAR_SERVICE_PATH:
+            check_reswear(
+                performer_sheet,
+                old_pick_id=kwargs.get("old_pick_id"),
+                new_pick_id=kwargs.get("new_pick_id"),
+                covenant_id=kwargs.get("covenant_id"),
+            )
+        elif ritual.service_function_path == THREAD_RESONANCE_SERVICE_PATH:
             check_thread_resonance_change(
                 performer_sheet,
                 thread=kwargs.get("thread"),
@@ -327,12 +341,13 @@ def _spend_restored_on_raise(components: list[Any], anima: Any) -> Iterator[None
 def _service_result_line(result: Any) -> str:
     """The line a SERVICE ritual's result adds to "You perform X.", or "" when it adds none.
 
-    Only the thread retune carries one today (slice 6 of #4672); the web response returns the
-    same message, so telnet and web read the same words.
+    The thread retune (slice 6 of #4672) and the Rite of Re-swearing (#4940) carry one; the
+    web response returns the same message, so telnet and web read the same words.
     """
+    from world.covenants.types import ReswearResult  # noqa: PLC0415
     from world.magic.types.threads import ThreadResonanceChangeResult  # noqa: PLC0415
 
-    if isinstance(result, ThreadResonanceChangeResult):
+    if isinstance(result, ThreadResonanceChangeResult | ReswearResult):
         return result.message
     return ""
 

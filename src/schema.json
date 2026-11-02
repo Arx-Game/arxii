@@ -11750,6 +11750,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
+  /api/covenants/character-roles/reswear-options/:
+    get:
+      operationId: covenants_character_roles_reswear_options_retrieve
+      description: |-
+        GET /api/covenants/character-roles/reswear-options/?character_sheet=<id>
+
+        The Rite of Re-swearing for the sheet's Change picks dialog (#4940): the rite's
+        id, its action point and anima costs, the components it asks for, and the
+        character's carried items that pay them. Read-only and self-only, the same
+        ``MayPlayCatalogSheet`` rule as ``vow-picks``. Performing goes through
+        ``POST /api/magic/rituals/perform/`` with ``kwargs: {old_pick_id, new_pick_id,
+        covenant_id}`` and ``components: component_ids``.
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReswearOptions'
+          description: ''
   /api/covenants/character-roles/vow-picks/:
     get:
       operationId: covenants_character_roles_vow_picks_list
@@ -87442,6 +87465,45 @@ components:
       - id
       - name
       - power_bonus
+    ReswearOptions:
+      type: object
+      description: |-
+        The Rite of Re-swearing and its costs, for the sheet's dialog (#4940). Read-only.
+
+        ``ritual_id`` is null while no rite is authored (``unavailable_reason`` says so);
+        ``component_ids`` are the carried items that pay the rite's components, to send with
+        the perform.
+      properties:
+        ritual_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        ap_cost:
+          type: integer
+          readOnly: true
+        anima_cost:
+          type: integer
+          readOnly: true
+        components:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        component_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        unavailable_reason:
+          type: string
+          readOnly: true
+      required:
+      - anima_cost
+      - ap_cost
+      - component_ids
+      - components
+      - ritual_id
+      - unavailable_reason
     RewardGroupRuleEnum:
       enum:
       - all_equal
