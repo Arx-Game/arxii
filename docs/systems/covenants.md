@@ -1406,8 +1406,9 @@ Also in `world.covenants.focus_picks`. The only way to change a chosen pick.
   caller's own catalogs and performs the same rite with everything carried.
 - Staff make the rite on the Ritual admin page, choosing "Covenants: Rite of Re-swearing" from
   the registered services (`world.magic.service_rituals`), with its anima and components.
-- Known gap (maintainer, ledger row reswear-holder-only-not-guarded): only the holder should
-  re-swear, but a borrower of a loaned character can perform the rite; no guard, far from MVP.
+- A GM borrowing a lent NPC could perform the rite, but that is not a play path: for players
+  NPCs act only in scenes, and re-swearing is downtime work. No guard (maintainer, ledger row
+  reswear-holder-only-not-guarded).
 - Required content: `reswear-ritual` (REQUIRED), `reswear-ritual-single` and
   `reswear-ritual-web-payable` (a target-resonance offering, which the rite never names a
   resonance for) (TUNING).
