@@ -1,0 +1,33 @@
+{
+  "reviewed_commit": "901c39c083c887ce5864672b528b2b40db092726",
+  "label": "head",
+  "request": "POST /api/magic/rituals/perform/ ritual Quick Imbuing, vow thread stored level 10 to 20",
+  "amount": 5500,
+  "outcome": "returned",
+  "value": {
+    "http_status": 200,
+    "body": {
+      "ritual_id": 3,
+      "execution_kind": "SERVICE",
+      "message": "You perform Quick Imbuing.\nVow level 2: 4 pts of new picks.",
+      "opened_pick_levels": [
+        2
+      ],
+      "new_picks": [
+        {
+          "level": 2,
+          "points": 4
+        }
+      ],
+      "result": {
+        "resonance_spent": 5500,
+        "developed_points_added": 5500,
+        "levels_gained": 10,
+        "new_level": 20,
+        "new_developed_points": 0,
+        "blocked_by": "NONE",
+        "blocked_requirement_messages": []
+      }
+    }
+  }
+}

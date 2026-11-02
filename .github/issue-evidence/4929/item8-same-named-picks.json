@@ -1,0 +1,49 @@
+{
+  "reviewed_commit": "901c39c083c887ce5864672b528b2b40db092726",
+  "setup": "Ysmay holds the sub-role Quicksilver Duelist (anchor Quicksilver) at vow level 2; both the anchor and the sub-role offer a level 1 pick named Riposte",
+  "telnet_runs": [
+    {
+      "label": "two picks of one name across the anchor and the sub-role",
+      "command": "vow pick Riposte",
+      "output_raw": "Your vow offers two picks named Riposte; choose one on your sheet.",
+      "output": "Your vow offers two picks named Riposte; choose one on your sheet."
+    },
+    {
+      "label": "same, lower case",
+      "command": "vow pick riposte",
+      "output_raw": "Your vow offers two picks named riposte; choose one on your sheet.",
+      "output": "Your vow offers two picks named riposte; choose one on your sheet."
+    }
+  ],
+  "picks_chosen_after_the_named_attempts": 0,
+  "catalog_level_1_picks_vow_name_price": [
+    [
+      "Quicksilver",
+      "Riposte",
+      2
+    ],
+    [
+      "Quicksilver Duelist",
+      "Riposte",
+      1
+    ]
+  ],
+  "web_dispatch_choosing_the_sub_role_riposte_by_id": {
+    "http_status": 200,
+    "body": {
+      "backend": "registry",
+      "deferred": false,
+      "message": "You take Riposte. Level 1: 1 of 4.",
+      "data": {
+        "pick_id": 7,
+        "membership_id": 16
+      },
+      "success": true
+    }
+  },
+  "picks_chosen_after_the_id_choice": [
+    "Quicksilver Duelist"
+  ],
+  "anchor_riposte_id": 6,
+  "sub_role_riposte_id": 7
+}

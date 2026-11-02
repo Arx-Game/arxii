@@ -1,0 +1,14 @@
+{
+  "reviewed_commit": "c432b02d53d9f65fed1a14d5893ce6a78c9b4c23",
+  "label": "origin-main",
+  "request": "POST /api/magic/rituals/perform/ ritual Quick Imbuing, vow thread stored level 10 to 20",
+  "amount": 5500,
+  "outcome": "returned",
+  "value": {
+    "http_status": 500,
+    "body": {
+      "error": "Internal server error",
+      "detail": "An unexpected error occurred"
+    }
+  }
+}

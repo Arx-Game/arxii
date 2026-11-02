@@ -1,0 +1,9 @@
+{
+  "reviewed_commit": "901c39c083c887ce5864672b528b2b40db092726",
+  "setup": "Ysmay's Warden vow thread already stands at vow level 2; Wren fires the induction rite and it commits",
+  "error_raised_by_the_fire_command": null,
+  "membership_row_exists_afterwards": true,
+  "ysmay_told_after_the_fire": "\n[NARRATIVE] Vow level 1: 4 pts of new picks.\nVow level 2: 4 pts of new picks.",
+  "contains_new_picks_line": true,
+  "commit_callbacks_run": 1
+}

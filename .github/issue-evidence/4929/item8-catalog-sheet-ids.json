@@ -1,0 +1,158 @@
+{
+  "reviewed_commit": "901c39c083c887ce5864672b528b2b40db092726",
+  "request": "GET /api/covenants/character-roles/vow-picks/?character_sheet=...",
+  "rows": [
+    {
+      "requester": "her own account",
+      "character_sheet": "abc",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "her own account",
+      "character_sheet": "superscript two (U+00B2)",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "her own account",
+      "character_sheet": "missing",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "her own account",
+      "character_sheet": "0",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "her own account",
+      "character_sheet": "empty",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "her own account",
+      "character_sheet": "her sheet id",
+      "http_status": 200,
+      "body": [
+        {
+          "membership_id": 9,
+          "covenant_id": 9,
+          "covenant": "The Quicksilver Hall",
+          "vow": "Quicksilver",
+          "vow_level": 2,
+          "vows": [
+            "Quicksilver"
+          ],
+          "levels": [
+            {
+              "level": 1,
+              "is_open": true,
+              "budget": 4,
+              "spent": 0,
+              "left": 4,
+              "picks": []
+            },
+            {
+              "level": 2,
+              "is_open": true,
+              "budget": 4,
+              "spent": 0,
+              "left": 4,
+              "picks": [
+                {
+                  "id": 1,
+                  "vow": "Quicksilver",
+                  "name": "Read the Feint",
+                  "description": "",
+                  "price": 1,
+                  "effects": [],
+                  "limits": "no limits",
+                  "chosen": false,
+                  "locked_reason": "",
+                  "choosable": true
+                }
+              ]
+            },
+            {
+              "level": 3,
+              "is_open": false,
+              "budget": 4,
+              "spent": 0,
+              "left": 4,
+              "picks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "abc",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "superscript two (U+00B2)",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "missing",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "0",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "empty",
+      "http_status": 400,
+      "body": {
+        "detail": "character_sheet is required."
+      }
+    },
+    {
+      "requester": "another account",
+      "character_sheet": "her sheet id",
+      "http_status": 404,
+      "body": {
+        "detail": "Not found."
+      }
+    },
+    {
+      "requester": "no login",
+      "character_sheet": "her sheet id",
+      "http_status": 403,
+      "body": {
+        "detail": "Authentication credentials were not provided."
+      }
+    }
+  ]
+}

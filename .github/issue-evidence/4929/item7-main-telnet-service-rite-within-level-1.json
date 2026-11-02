@@ -1,0 +1,26 @@
+{
+  "reviewed_commit": "c432b02d53d9f65fed1a14d5893ce6a78c9b4c23",
+  "label": "origin-main",
+  "command": "ritual Quick Imbuing thread=THREAD amount=AMOUNT",
+  "thread_stored_level_before": 10,
+  "amount": 1500,
+  "outcome": "raised",
+  "exception_type": "TypeError",
+  "exception_message": "spend_resonance_for_imbuing() got an unexpected keyword argument 'ritual'",
+  "traceback_tail": [
+    "  File \"/workspaces/arxii/.claude/worktrees/dfr-4929-r3-main/src/commands/command.py\", line 277, in _execute",
+    "    result = self.action.run(actor=self.caller, **kwargs)",
+    "  File \"/workspaces/arxii/.claude/worktrees/dfr-4929-r3-main/src/actions/base.py\", line 457, in run",
+    "    context.result = self.execute(actor, context=context, **context.kwargs)",
+    "                     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "  File \"/workspaces/arxii/.claude/worktrees/dfr-4929-r3-main/src/actions/definitions/ritual.py\", line 140, in execute",
+    "    result = dispatch_ritual(ritual=ritual, performer_sheet=sheet, **kwargs)",
+    "  File \"/workspaces/arxii/.claude/worktrees/dfr-4929-r3-main/src/world/magic/services/ritual_dispatch.py\", line 47, in dispatch_ritual",
+    "    return _dispatch_service(ritual, performer_sheet, kwargs)",
+    "  File \"/workspaces/arxii/.claude/worktrees/dfr-4929-r3-main/src/world/magic/services/ritual_dispatch.py\", line 67, in _dispatch_service",
+    "    return func(character_sheet=sheet, ritual=ritual, **kwargs)",
+    "  File \"/home/vscode/.local/share/uv/python/cpython-3.13.16-linux-x86_64-gnu/lib/python3.13/contextlib.py\", line 85, in inner",
+    "    return func(*args, **kwds)",
+    "TypeError: spend_resonance_for_imbuing() got an unexpected keyword argument 'ritual'"
+  ]
+}
