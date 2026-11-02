@@ -126,7 +126,9 @@ How a character was taught to fight with magic (`CombatStyle`, `CharacterSheet.c
 vow's Defense Profile for that character; a character with none keeps the profile (ADR-4759).
 Since #4884 it also has a **style skill** (its own Magic skill), a **hit stat** (the stat a
 Strike hits with), the Traditions that teach it, the vows it works with and its weapon and
-armor kinds (`CombatStyleGear`).
+armor kinds (`CombatStyleGear`). Since #4921 a player chooses it in character creation from
+the styles her Tradition teaches (`CharacterDraft.selected_combat_style`; the Gift stage's step
+reads "Fighting style", the demo's label), and the Sphinx says whether it suits a vow.
 _Avoid_: technique style (`TechniqueStyle` is how a Path or Gift casts, a different thing),
 fighting stance, defense profile (that is the vow's fallback row).
 

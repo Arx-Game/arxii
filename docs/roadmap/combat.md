@@ -699,6 +699,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   refuses it ("That is part of the body and cannot be removed."); it is a Strike weapon
   before bare hands on Unarmed Attack with its own damage, takes facets like any piece, and
   covers no skin (`test_natural_weapons_journeys.py`).
+  **Style in creation and the Sphinx (#4921, slice 5) SHIPPED:** the Gift stage lists the
+  styles the Tradition teaches with how each attacks and defends (never its vows), the
+  player chooses one and trains its skill from the Tradition's pool (the only style skill on
+  the training list; no magic skill picker offers one), finalize writes the style and the
+  skill value, a Tradition with no style skips the step, and the Sphinx's verdict says
+  whether the style suits the vow on the endpoint and the `sphinx` verb
+  (`test_style_in_creation_journeys.py`).
   **Known gaps (later #4844 slices):** vow gear
   compatibility still keyed to the vow (slice 3); production has no
   Thrown Attack or Unarmed Attack check type, so a thrown or bare-handed Strike is refused with

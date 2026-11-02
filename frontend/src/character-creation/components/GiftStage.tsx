@@ -1,10 +1,10 @@
 /**
  * Stage 6: Gift (#3630).
  *
- * The Gift funnel — Tradition, Gift, Techniques, Resonance, fighting style (#4921, only
+ * The Gift funnel (Tradition, Gift, Techniques, Resonance, fighting style (#4921, only
  * for a Tradition that teaches one), magical training (#4659, only for a draft with
  * training; after the Resonance, whose affinity its bonus reads, and the style, whose
- * skill it lists), Anima Check — as nested index entries: each step is an `Entry` in an `EntryList`,
+ * skill it lists), Anima Check) as nested index entries: each step is an `Entry` in an `EntryList`,
  * closed and unreadable (`gated`) until the step before it is done, and its
  * own body holds that step's picker. Motif is a field below the funnel;
  * the Glimpse is mounted via `GlimpseSection` (#2427; folio-grammar

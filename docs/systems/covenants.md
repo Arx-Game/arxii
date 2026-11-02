@@ -633,6 +633,13 @@ vow the Sphinx warned about).
     something the character can actually go and learn. Replaced the former
     `can_learn_technique` path-style filter, which both recommended techniques from
     unowned gifts and hid ones the character's own path had granted (ADR-0167).
+  - `SphinxVerdict.style` (#4921, slice 5 of #4844) - a `SphinxStyleLine` (`style_name`,
+    `suits`) for a character with a `CharacterSheet.combat_style`, None without one.
+    `suits` is `style_fit.style_lists_vow(style, role)`: the style's `compatible_roles` hold
+    the role or, for a sub-role, its anchor (the same rule the roll's vow lapse uses). The
+    endpoint returns it as `style`; the `sphinx` verb adds "Your style suits it." or "Your
+    style does not suit it: no style benefits while it is active." after the tier line. It
+    never blocks the vow.
 - **`SITUATION_CREATOR_FUNCTIONS: dict[str, frozenset[str]]`** (`world.covenants.perks.constants`)
   — code-defined: which `TechniqueFunction` casts can CREATE each DB-state `Situation` (the
   `TARGET_DISTRACTED`/`TARGET_SWAYED_BY_ALLY` provenance mapping run in reverse). v1 rows:
@@ -1250,7 +1257,11 @@ decides defense" under Combat Seams).
   (`ARMOR_ARCHETYPES`) its defense profile; its choices are those two sets only
   (`COMBAT_STYLE_GEAR_CHOICES`), never jewelry, clothing or other gear. The style admin page edits them all (gear kinds
   as an inline). Required content (TUNING): a style with no skill, no hit stat or no weapon
-  kind, and an active Tradition that teaches no style.
+  kind, and an active Tradition that teaches no style. Since #4921 (slice 5) a player chooses
+  the style in character creation from the styles her Tradition teaches
+  (`CharacterDraft.selected_combat_style`, see `character_creation.md`), and
+  `CombatStyle.clean()` refuses a skill a magic skill picker (Path, Gift, technique or
+  magical activity) already adds.
 
 ### Price and choice rules (`world.covenants.focus_picks`)
 
