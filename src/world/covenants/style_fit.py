@@ -109,12 +109,29 @@ def _lists(listed: set[int], role: CovenantRole) -> bool:
     return role.pk in listed or role.parent_role_id in listed
 
 
+def styles_listing_vow(role: CovenantRole) -> set[int]:
+    """The pk of every style that lists ``role``'s vow, in one query (#4932).
+
+    The batched form of ``style_lists_vow``: a style lists a sub-role when it lists the
+    sub-role or its anchor. The vow page reads it for every style at once.
+    """
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+
+    vow_ids = {role.pk} if role.parent_role_id is None else {role.pk, role.parent_role_id}
+    return set(
+        CombatStyle.objects.filter(compatible_roles__in=vow_ids)
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+
+
 def style_lists_vow(style: CombatStyle, role: CovenantRole) -> bool:
     """Whether ``style`` lists ``role``'s vow; a sub-role counts by its anchor (#4921).
 
-    The Sphinx's style line reads it; the roll's lapse test is the same rule.
+    The Sphinx's style line and the kit view read it; the roll's lapse test is the same
+    rule.
     """
-    return _lists(set(style.compatible_roles.values_list("pk", flat=True)), role)
+    return style.pk in styles_listing_vow(role)
 
 
 def _unlisted_vow(style: CombatStyle, character: Character) -> CovenantRole | None:
