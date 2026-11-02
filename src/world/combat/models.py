@@ -681,6 +681,16 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    def _taunt_extra_errors(self) -> dict[str, str]:
+        """Report effects that a taunt cannot carry."""
+        extras = {
+            "defense_check_type": self.defense_check_type_id is not None,
+            "on_hit_consequence_pool": self.on_hit_consequence_pool_id is not None,
+            "conditions_applied": self.pk is not None and self.conditions_applied.exists(),
+        }
+        message = "A taunt applies nothing but the surge: clear this or clear taunt_potency."
+        return {field_name: message for field_name, is_set in extras.items() if is_set}
+
     def clean(self) -> None:
         """Validate clash prerequisites and the authored outcome lines (#3554)."""
         from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
@@ -2318,16 +2328,6 @@ class SustainedAction(SharedMemoryModel):
                 name="sustainedaction_technique_payload",
             ),
         ]
-
-    def _taunt_extra_errors(self) -> dict[str, str]:
-        """Report effects that a taunt cannot carry."""
-        extras = {
-            "defense_check_type": self.defense_check_type_id is not None,
-            "on_hit_consequence_pool": self.on_hit_consequence_pool_id is not None,
-            "conditions_applied": self.pk is not None and self.conditions_applied.exists(),
-        }
-        message = "A taunt applies nothing but the surge: clear this or clear taunt_potency."
-        return {field_name: message for field_name, is_set in extras.items() if is_set}
 
     def clean(self) -> None:
         """Mirror the DB payload CheckConstraints so form/admin validation fails early."""
