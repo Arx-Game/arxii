@@ -6,7 +6,12 @@ import os
 from pathlib import Path
 import subprocess
 
-from closing_keywords import branch_issue, message_text, stray_references
+from closing_keywords import (
+    branch_issue,
+    crowded_closing_lines,
+    message_text,
+    stray_references,
+)
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,10 +50,20 @@ def test_prose_that_names_another_issue_is_caught(line: str, own: str):
 def test_deliberate_closing_lines_pass():
     """A PR closing several SonarCloud issues lists them; that must keep working."""
     body = (
-        "Closes #4685\nCloses #4686\n- Closes #4687\nCloses #1, closes #2 and fixes #3.\n"
+        "Closes #4685\nCloses #4686\n- Closes #4687\nfixes #3.\n"
         "- Fixes #3679: several staff-authored hub models are blind to their relations\n"
     )
     assert stray_references(body, "4685") == []
+    assert crowded_closing_lines(body) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["Closes #1, closes #2", "Closes #1, closes #2 and fixes #3.", "- Fixes #1; resolves #2"],
+)
+def test_two_closing_references_on_one_line_are_refused(line: str):
+    """GitHub closes only the first reference on a line, so each goes on its own (#4922)."""
+    assert crowded_closing_lines(f"Summary\n{line}\nCloses #9") == [line]
 
 
 def test_the_work_s_own_issue_and_plain_mentions_pass():
@@ -94,6 +109,15 @@ def test_the_hook_rejects_the_incident_and_accepts_its_rewording(tmp_path: Path)
     accepted = _commit(
         tmp_path / "again", "Fix the dedupe\n\nCloses #4903. The bot renumbered #4866."
     )
+    assert accepted.returncode == 0, accepted.stderr
+
+
+def test_the_hook_refuses_two_closes_on_one_line_and_accepts_them_split(tmp_path: Path):
+    rejected = _commit(tmp_path, "Two fixes\n\nCloses #4903, closes #2")
+    assert rejected.returncode != 0
+    assert "one closing keyword per line" in rejected.stderr
+
+    accepted = _commit(tmp_path / "again", "Two fixes\n\nCloses #4903\nCloses #2")
     assert accepted.returncode == 0, accepted.stderr
 
 
