@@ -787,6 +787,10 @@ export interface CharacterSheetCombatStyle {
   /** The style's own skill, blank when it has none. */
   skill_name: string;
   skill_value: number;
+  /** The character's active Tradition when it teaches the style, else the first that does. */
+  tradition_name: string | null;
+  /** The vows the style works with, in name order (the sheet shows them; creation never). */
+  vows: string[];
 }
 
 export async function fetchCharacterSheet(sheetId: number): Promise<CharacterSheetPayload> {

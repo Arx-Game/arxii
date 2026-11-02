@@ -96,7 +96,7 @@ describe('SheetPanel', () => {
     expect(document.querySelector('a[href^="/orgs/"]')).toBeNull();
   });
 
-  it('shows the fighting style with how it attacks and defends and its skill value (#4921)', () => {
+  it('shows the fighting style card: tradition, attacks, defends, vows and its skill (#4921)', () => {
     const sheet = payload({ family: null });
     sheet.combat_style = {
       id: 3,
@@ -111,19 +111,48 @@ describe('SheetPanel', () => {
         { value: 'thrown', label: 'Thrown' },
       ],
       armor_kinds: [{ value: 'light_armor', label: 'Light Armor' }],
-      skill_name: 'The Daring Dance',
+      skill_name: 'The Daring Dance Skill',
       skill_value: 30,
+      tradition_name: 'Masque',
+      vows: ['Quicksilver', 'Warden'],
     };
     renderSheet(sheet);
     expect(screen.getByText('Fighting style')).toBeInTheDocument();
     expect(screen.getByText('Evasion')).toBeInTheDocument();
     expect(screen.getByText('Never where the blow lands.')).toBeInTheDocument();
-    expect(
-      screen.getByText('Attacks: one-handed melee, thrown · hits with Agility')
-    ).toBeInTheDocument();
-    expect(screen.getByText('Defends: evasion · light armor, 3 of 10 counts')).toBeInTheDocument();
-    expect(screen.getByText('The Daring Dance 30')).toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent(/vow/i);
+    const row = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling;
+    expect(row('Tradition')).toHaveTextContent('Masque');
+    expect(row('Attacks')).toHaveTextContent('one-handed melee, thrown · hits with Agility');
+    expect(row('Defends')).toHaveTextContent('evasion · light armor, 3 of 10 counts');
+    // The sheet shows the style's vows (demo screen 6); creation never does.
+    expect(row('Vows')).toHaveTextContent('Quicksilver, Warden');
+    expect(row('The Daring Dance Skill')).toHaveTextContent('30');
+  });
+
+  it('drops the Tradition and Vows rows when the style has neither', () => {
+    const sheet = payload({ family: null });
+    sheet.combat_style = {
+      id: 4,
+      name: 'Stillwater Hand',
+      description: '',
+      defense_style: 'evasion',
+      defense_style_display: 'Evasion',
+      armor_share_tenths: 0,
+      hit_stat_name: null,
+      weapon_kinds: [{ value: 'unarmed', label: 'Unarmed' }],
+      armor_kinds: [],
+      skill_name: '',
+      skill_value: 0,
+      tradition_name: null,
+      vows: [],
+    };
+    renderSheet(sheet);
+    expect(screen.getByText('Stillwater Hand')).toBeInTheDocument();
+    expect(screen.queryByText('Tradition', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Vows', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.getByText('Attacks', { selector: 'dt' }).nextElementSibling).toHaveTextContent(
+      'unarmed'
+    );
   });
 
   it('has no fighting style block without a style (or for a stranger)', () => {

@@ -2203,9 +2203,11 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
     """The character's combat style (#4921): owner and staff only, None without one.
 
     The style rides the sheet's own query (``_COMBAT_STYLE_SELECT_RELATED``), so a sheet
-    with no style pays nothing. One with a style pays two plain queries, its gear kinds and
-    the character's value in its skill: plain reads, not a sheet prefetch, since an
-    idmapper-shared sheet skips a ``to_attr`` prefetch that already ran once.
+    with no style pays nothing. One with a style pays four plain queries, fixed however
+    many kinds, Traditions or vows it has: its gear kinds, the character's value in its
+    skill, the Tradition to name (the character's active one first) and its vows. Plain
+    reads, not a sheet prefetch, since an idmapper-shared sheet skips a ``to_attr``
+    prefetch that already ran once.
     """
     style = sheet.combat_style
     if style is None:
@@ -2224,6 +2226,21 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
             .values_list("value", flat=True)
             .first()
         ) or 0
+    from django.db.models import Exists, OuterRef  # noqa: PLC0415
+
+    from world.magic.models import CharacterTradition, Tradition  # noqa: PLC0415
+
+    held_tradition = CharacterTradition.objects.filter(
+        character=sheet, tradition=OuterRef("pk"), left_at__isnull=True
+    )
+    tradition = (
+        Tradition.objects.filter(combat_styles=style)
+        .annotate(held=Exists(held_tradition))
+        .order_by("-held", "sort_order", "name")
+        .values_list("name", flat=True)
+        .first()
+    )
+    vows = list(style.compatible_roles.order_by("name").values_list("name", flat=True))
     return CombatStyleSection(
         id=style.pk,
         name=style.name,
@@ -2236,6 +2253,8 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
         armor_kinds=armor_kinds(held),
         skill_name=skill.name if skill is not None else "",
         skill_value=skill_value,
+        tradition_name=tradition,
+        vows=vows,
     )
 
 

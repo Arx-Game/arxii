@@ -645,7 +645,10 @@ class CombatStyleSection(TypedDict):
     attacks and defends), never its vows. ``weapon_kinds`` and ``armor_kinds`` are
     ``GearKindLabel`` rows (``world.covenants.style_profile``). ``skill_name`` is the
     style's own skill, blank when it has none; ``skill_value`` is the character's value in
-    it, 0 when untrained.
+    it, 0 when untrained. ``tradition_name`` is the character's active Tradition when it
+    teaches the style, else the first Tradition that does, None when none does; ``vows``
+    are the names of the style's ``compatible_roles`` in name order (the sheet, unlike
+    character creation, shows them, as the approved demo's screen 6 does).
     """
 
     id: int
@@ -659,6 +662,8 @@ class CombatStyleSection(TypedDict):
     armor_kinds: list[GearKindLabel]
     skill_name: str
     skill_value: int
+    tradition_name: str | None
+    vows: list[str]
 
 
 class ProfileTextField(models.TextChoices):

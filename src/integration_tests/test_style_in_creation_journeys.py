@@ -229,6 +229,8 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
         )
         sheet.roster_entry.invalidate_tenure_cache()
         url = f"/api/character-sheets/{sheet.pk}/"
+        # Another Tradition teaches the style too and sorts first; the sheet names hers.
+        self.dance.taught_by.add(TraditionFactory(name="A First School", sort_order=0))
 
         response = self.api(owner).get(url)
 
@@ -251,9 +253,11 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
                 "armor_kinds": [{"value": GearArchetype.LIGHT_ARMOR, "label": "Light Armor"}],
                 "skill_name": "The Daring Dance",
                 "skill_value": total,
+                "tradition_name": self.tradition.name,
+                # The sheet shows the style's vows; creation never does.
+                "vows": ["Quicksilver"],
             },
         )
-        self.assertNotIn("Quicksilver", str(style))
 
         stranger = self.api(AccountFactory()).get(url)
         self.assertEqual(stranger.status_code, 200, stranger.content)
