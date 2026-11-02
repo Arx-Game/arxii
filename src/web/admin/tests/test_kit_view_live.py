@@ -220,15 +220,21 @@ class AbsentPartsTest(KitLiveCase):
 class QueryCountTest(KitLiveCase):
     """The reads do not grow with techniques, added effects or picks."""
 
+    _made = 0
+
     def _holder(self, *, techniques: int, picks: int):
+        # Each call names its rows apart: two calls of one size would otherwise reuse a pick
+        # and add a second identical effect on it, which Postgres's scope constraint refuses.
+        QueryCountTest._made += 1
+        run = QueryCountTest._made
         sheet = CharacterSheetFactory()
         membership = engage_vow_with_thread(sheet, self.vow, covenant=self.covenant, thread_level=2)
         for index in range(techniques):
-            technique = _technique(f"Count {picks} {index}", TechniqueFunction.STRIKE)
+            technique = _technique(f"Count {run} {index}", TechniqueFunction.STRIKE)
             _know(sheet, technique)
         for index in range(picks):
             pick = VowFocusPickFactory(
-                covenant_role=self.vow, name=f"Count pick {picks} {index}", pick_level=1
+                covenant_role=self.vow, name=f"Count pick {run} {index}", pick_level=1
             )
             CharacterVowFocusPickFactory(character_role=membership, pick=pick)
             VowAddedEffectFactory(
