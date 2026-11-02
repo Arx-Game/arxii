@@ -23,7 +23,6 @@ interface IdentityStageProps {
 }
 
 interface IdentityFormValues {
-  first_name: string;
   concept: string;
   quote: string;
   background: string;
@@ -45,9 +44,8 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     });
   };
 
-  const { register, watch, getValues, reset, formState } = useForm<IdentityFormValues>({
+  const { register, getValues, reset, formState } = useForm<IdentityFormValues>({
     defaultValues: {
-      first_name: draftData.first_name ?? '',
       concept: draftData.concept ?? '',
       quote: draftData.quote ?? '',
       background: draftData.background ?? '',
@@ -82,7 +80,8 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     return onRegisterBeforeLeave(saveFields) ?? undefined;
   }, [onRegisterBeforeLeave, saveFields]);
 
-  const localFirstName = watch('first_name');
+  // The first name is asked on the Origin leaf (#4874); this stage shows how it renders.
+  const localFirstName = draftData.first_name ?? '';
   const familyName = draft.family?.name ?? '';
   const fullNamePreview = composeFullName(localFirstName, familyName, '');
 
@@ -117,19 +116,10 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       aside={rail}
     >
       <h2 className="section-h">{copy?.identity_name_heading ?? 'Name'}</h2>
-      <Field
-        id="first_name"
-        label="First name"
-        hint="2-20 characters, letters only, first letter will be capitalized."
-      >
-        <input
-          id="first_name"
-          type="text"
-          {...register('first_name')}
-          placeholder="Enter first name"
-          maxLength={20}
-        />
-      </Field>
+      <p className="ledger-line" data-testid="identity-name">
+        {fullNamePreview ||
+          (copy?.identity_name_missing ?? 'No first name yet; it is asked on the first page.')}
+      </p>
 
       <h2 className="section-h">{copy?.identity_concept_heading ?? 'Concept'}</h2>
       <Field id="concept" label="Character concept">

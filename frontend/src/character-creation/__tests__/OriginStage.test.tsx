@@ -49,6 +49,30 @@ function renderOrigin(draft = mockEmptyDraft) {
 }
 
 describe('OriginStage', () => {
+  it('asks the first name above the realms and saves it on blur, by itself (#4874)', async () => {
+    const user = userEvent.setup();
+    renderOrigin({ ...mockDraftWithArea, draft_data: { first_name: 'Marisol' } });
+    const name = screen.getByLabelText('First name');
+    expect(name).toHaveValue('Marisol');
+    expect(name).toHaveAttribute('maxlength', '20');
+    expect(name.closest('.field')).not.toBeNull();
+    // The field sits before the realms, and the rail lists the name first.
+    const realms = screen.getByRole('list', { name: 'Starting realms' });
+    expect(name.compareDocumentPosition(realms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('term').map((dt) => dt.textContent)).toEqual(['Name', 'Origin']);
+    // Leaving it unchanged saves nothing; a new name saves alone, trimmed.
+    await user.click(name);
+    await user.tab();
+    expect(mutate).not.toHaveBeenCalled();
+    await user.clear(name);
+    await user.type(name, ' Teodora ');
+    await user.tab();
+    expect(mutate).toHaveBeenCalledWith({
+      draftId: mockDraftWithArea.id,
+      data: { draft_data: { first_name: 'Teodora' } },
+    });
+  });
+
   it('opens with the one question and no other copy before the entries', async () => {
     renderOrigin();
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(

@@ -5,7 +5,6 @@
  */
 
 import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { IdentityStage } from '../../components/IdentityStage';
 import {
@@ -30,25 +29,17 @@ vi.mock('../../api', () => ({
 
 describe('IdentityStage', () => {
   describe('Character Name Section', () => {
-    it('displays first name input field', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(screen.getByLabelText(/first name/i)).toBeInTheDocument();
-    });
-
-    it('shows current first name value', () => {
+    // The first name is asked on the Origin leaf (#4874, ruled 2026-10-19); this stage
+    // shows how the name renders and asks for nothing.
+    it('shows the name as a line, never as a field', () => {
       const queryClient = createTestQueryClient();
 
       renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
         queryClient,
       });
 
-      const input = screen.getByLabelText(/first name/i) as HTMLInputElement;
-      expect(input.value).toBe('Testchar');
+      expect(screen.queryByLabelText(/first name/i)).toBeNull();
+      expect(screen.getByTestId('identity-name')).toHaveTextContent('Testchar Valardin');
     });
 
     it('displays full name preview with family name', () => {
@@ -61,7 +52,7 @@ describe('IdentityStage', () => {
       // The preview moved from an inline "Full name:" paragraph to the record
       // rail's "Name" row (#3630); the rail lists chosen values only.
       expect(screen.getByText('Name', { selector: 'dt' })).toBeInTheDocument();
-      expect(screen.getByText('Testchar Valardin')).toBeInTheDocument();
+      expect(screen.getAllByText('Testchar Valardin').length).toBeGreaterThan(0);
     });
 
     it('shows only first name when no family', () => {
@@ -73,17 +64,20 @@ describe('IdentityStage', () => {
 
       renderWithCharacterCreationProviders(<IdentityStage draft={orphanDraft} />, { queryClient });
 
-      expect(screen.getByText('Testchar')).toBeInTheDocument();
+      expect(screen.getByTestId('identity-name')).toHaveTextContent('Testchar');
     });
 
-    it('displays character limit hint', () => {
+    it('says where the name is asked when there is none yet', () => {
       const queryClient = createTestQueryClient();
 
       renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
         queryClient,
       });
 
-      expect(screen.getByText(/2-20 characters/i)).toBeInTheDocument();
+      expect(screen.getByTestId('identity-name')).toHaveTextContent(
+        'No first name yet; it is asked on the first page.'
+      );
+      expect(screen.queryByText('Name', { selector: 'dt' })).toBeNull();
     });
   });
 
@@ -143,25 +137,6 @@ describe('IdentityStage', () => {
     });
   });
 
-  describe('User Interaction', () => {
-    it('allows typing in first name field', async () => {
-      const user = userEvent.setup();
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      const input = screen.getByLabelText(/first name/i);
-      await user.clear(input);
-      await user.type(input, 'NewName');
-
-      // The input accepts typing (mutation will handle persistence)
-      // We verify it's not disabled and accepts input
-      expect(input).not.toBeDisabled();
-    });
-  });
-
   describe('Page Header', () => {
     it('displays stage title and description', () => {
       const queryClient = createTestQueryClient();
@@ -177,7 +152,7 @@ describe('IdentityStage', () => {
   });
 
   describe('Folio markup', () => {
-    it('renders the four writing fields on the field idiom and the name in the rail', () => {
+    it('renders the writing fields on the field idiom and the name as a line and in the rail', () => {
       const queryClient = createTestQueryClient();
       const draft = createMockDraft({ draft_data: { first_name: 'Sharlotte' } });
 
@@ -186,11 +161,14 @@ describe('IdentityStage', () => {
       // Sentence case (#3630): interface chrome is plain, and only the first
       // word is capitalised. The other blocks in this file query the same
       // labels case-insensitively, so they are unaffected.
-      for (const label of ['First name', 'Character concept', 'Character quote']) {
+      for (const label of ['Character concept', 'Character quote']) {
         expect(screen.getByLabelText(label).closest('.field')).not.toBeNull();
       }
+      // The first name is asked on the Origin leaf (#4874); here it is a line, not a field.
+      expect(screen.queryByLabelText('First name')).toBeNull();
+      expect(screen.getByTestId('identity-name')).toHaveTextContent('Sharlotte');
       expect(screen.getByRole('heading', { name: 'Your choices so far' })).toBeInTheDocument();
-      expect(screen.getByText('Sharlotte')).toBeInTheDocument();
+      expect(screen.getAllByText('Sharlotte').length).toBeGreaterThan(0);
     });
   });
 });
