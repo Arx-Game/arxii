@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -45,6 +46,10 @@ if TYPE_CHECKING:
     from world.societies.models import Organization
 
 Pip = tuple[int, int]
+# One pip a write touched: (x, y, holder before, holder after); None is open ground.
+PipChange = tuple[int, int, int | None, int | None]
+# A pip and the holder to give it: (x, y, area id), None for open ground.
+PipHolder = tuple[int, int, int | None]
 
 MAX_MAP_FILE_BYTES = 64 * 1024 * 1024
 MAX_WIDTH_CELLS = 100
@@ -307,12 +312,15 @@ def _is_ancestor(candidate: Area, area: Area) -> bool:
 class FootprintChange:
     """What one carve wrote (#4317): pips taken or moved into the area, pips given up,
     and the pips it left alone because another domain held them (on add) or a
-    descendant stood on them (on remove), with those holders' names for the message."""
+    descendant stood on them (on remove), with those holders' names for the message.
+    ``changed`` names every pip whose holder moved, before and after, so a staff
+    undo can put each one back with its prior holder (#4905)."""
 
     added: int = 0
     removed: int = 0
     skipped: int = 0
     skipped_holders: tuple[str, ...] = ()
+    changed: tuple[PipChange, ...] = ()
 
 
 def set_footprint(
@@ -332,25 +340,122 @@ def set_footprint(
     if not to_add and not to_remove:
         return FootprintChange()
     if area.level < AreaLevel.BARONY:
-        msg = "Only a barony or a larger domain has a footprint."
-        raise WorldMapServiceError(msg)
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
     skipped: dict[str, int] = {}
+    changed: list[PipChange] = []
     with transaction.atomic():
-        added = _claim(area, to_add, skipped) if to_add else 0
-        removed = _release(area, to_remove, skipped) if to_remove else 0
+        added = _claim(area, to_add, skipped, changed) if to_add else 0
+        removed = _release(area, to_remove, skipped, changed) if to_remove else 0
     return FootprintChange(
         added=added,
         removed=removed,
         skipped=sum(skipped.values()),
         skipped_holders=tuple(sorted(skipped)),
+        changed=tuple(changed),
     )
 
 
+_NO_FOOTPRINT_BELOW_BARONY = "Only a barony or a larger domain has a footprint."
+_NO_SUCH_AREA = "No such area."
+
+
+def clear_footprint(*, area: Area) -> FootprintChange:
+    """Take every pip the area itself holds off the map, on every region map (#4905):
+    its own rows go to its ladder parent, or to open ground when it has none. A
+    descendant's rows stay where they are, the same rule as shrinking. ``changed``
+    names every row moved so the staff undo can put the footprint back."""
+    if area.level < AreaLevel.BARONY:
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
+    parent = _ladder_parent(area)
+    changed: list[PipChange] = []
+    with transaction.atomic():
+        rows = list(AreaFootprintPip.objects.filter(area=area).order_by("y", "x"))
+        if parent is not None:
+            for row in rows:
+                changed.append((row.x, row.y, area.pk, parent.pk))
+                row.area = parent
+            if rows:
+                AreaFootprintPip.objects.bulk_update_with_reason(
+                    rows,
+                    ["area"],
+                    batch_size=5000,
+                    reason="clear moves rows loaded in this transaction",
+                )
+        else:
+            changed.extend((row.x, row.y, area.pk, None) for row in rows)
+            if rows:
+                AreaFootprintPip.objects.filter(pk__in=[row.pk for row in rows]).delete()
+    return FootprintChange(removed=len(rows), changed=tuple(changed))
+
+
+def _wanted_holders(pips: Iterable[PipHolder]) -> tuple[dict[Pip, int | None], dict[int, Area]]:
+    """The pips a restore names, deduped (last wins) and capped, with their areas loaded;
+    refuses an area that does not exist or sits below BARONY."""
+    wanted: dict[Pip, int | None] = {}
+    for x, y, area_id in pips:
+        wanted[(x, y)] = area_id
+        if len(wanted) > MAX_FOOTPRINT_PIPS_PER_CALL:
+            msg = f"At most {MAX_FOOTPRINT_PIPS_PER_CALL} pips in one call."
+            raise WorldMapServiceError(msg)
+    area_ids = {area_id for area_id in wanted.values() if area_id is not None}
+    areas = {a.pk: a for a in Area.objects.filter(pk__in=area_ids)}
+    if len(areas) != len(area_ids):
+        raise WorldMapServiceError(_NO_SUCH_AREA)
+    if any(area.level < AreaLevel.BARONY for area in areas.values()):
+        raise WorldMapServiceError(_NO_FOOTPRINT_BELOW_BARONY)
+    return wanted, areas
+
+
+def restore_pips(*, pips: Iterable[PipHolder]) -> int:
+    """Give each pip the holder named for it, or open ground for None (#4905). This is
+    the staff undo and redo: a carve or clear reports every pip's holder before and
+    after, and restoring one column puts the map back in a state it has already been
+    in, so no containment rule is checked beyond the staff gate on the action. The
+    last entry wins for a pip named twice; the call is capped like a carve. Refuses
+    an area that does not exist or sits below BARONY. Returns the rows written."""
+    wanted, areas = _wanted_holders(pips)
+    if not wanted:
+        return 0
+    with transaction.atomic():
+        held = _rows_at(set(wanted))
+        to_delete: list[int] = []
+        to_move: list[AreaFootprintPip] = []
+        fresh: list[AreaFootprintPip] = []
+        for pip, area_id in wanted.items():
+            row = held.get(pip)
+            if area_id is None:
+                if row is not None:
+                    to_delete.append(row.pk)
+            elif row is None:
+                fresh.append(AreaFootprintPip(area=areas[area_id], x=pip[0], y=pip[1]))
+            elif row.area_id != area_id:
+                row.area = areas[area_id]
+                to_move.append(row)
+        if to_delete:
+            AreaFootprintPip.objects.filter(pk__in=to_delete).delete()
+        if to_move:
+            AreaFootprintPip.objects.bulk_update_with_reason(
+                to_move,
+                ["area"],
+                batch_size=5000,
+                reason="restore moves rows loaded in this transaction",
+            )
+        AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
+    return len(to_delete) + len(to_move) + len(fresh)
+
+
 def _rows_at(pips: set[Pip]) -> dict[Pip, AreaFootprintPip]:
-    rows = AreaFootprintPip.objects.filter(
-        x__in={p[0] for p in pips}, y__in={p[1] for p in pips}
-    ).select_related("area")
-    return {(r.x, r.y): r for r in rows if (r.x, r.y) in pips}
+    """The footprint rows at exactly ``pips``, in ``(y, x)`` order. One query, one
+    ``x`` list per row of the map, so a set that spans regions (a cleared realm's
+    undo) never loads the whole band its x and y ranges would cover."""
+    by_y: dict[int, list[int]] = {}
+    for x, y in pips:
+        by_y.setdefault(y, []).append(x)
+    rows_q = Q()
+    for y, xs in by_y.items():
+        rows_q |= Q(y=y, x__in=xs)
+    rows = AreaFootprintPip.objects.filter(rows_q).select_related("area").order_by("y", "x")
+    return {(r.x, r.y): r for r in rows}
 
 
 def _skip(skipped: dict[str, int], holder: Area, fallback: str) -> None:
@@ -358,10 +463,11 @@ def _skip(skipped: dict[str, int], holder: Area, fallback: str) -> None:
     skipped[name] = skipped.get(name, 0) + 1
 
 
-def _claim(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
+def _claim(area: Area, pips: set[Pip], skipped: dict[str, int], changed: list[PipChange]) -> int:
     """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
     down to this area; a pip held by this area or a descendant is already inside;
-    any other holder's pip is skipped and counted against that holder's name."""
+    any other holder's pip is skipped and counted against that holder's name.
+    Every row taken or moved is appended to ``changed`` with its prior holder."""
     held = _rows_at(pips)
     moving: list[AreaFootprintPip] = []
     for row in held.values():
@@ -369,6 +475,7 @@ def _claim(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
         if holder.pk == area.pk or _is_ancestor(area, holder):
             continue  # already inside this footprint
         if _is_ancestor(holder, area):
+            changed.append((row.x, row.y, holder.pk, area.pk))
             row.area = area
             moving.append(row)
             continue
@@ -377,15 +484,21 @@ def _claim(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
         AreaFootprintPip.objects.bulk_update_with_reason(
             moving, ["area"], batch_size=5000, reason="carve moves rows loaded in this transaction"
         )
-    fresh = [AreaFootprintPip(area=area, x=x, y=y) for (x, y) in pips if (x, y) not in held]
+    fresh = [
+        AreaFootprintPip(area=area, x=x, y=y)
+        for (x, y) in sorted(pips, key=lambda p: (p[1], p[0]))
+        if (x, y) not in held
+    ]
+    changed.extend((row.x, row.y, None, area.pk) for row in fresh)
     AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
     return len(fresh) + len(moving)
 
 
-def _release(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
+def _release(area: Area, pips: set[Pip], skipped: dict[str, int], changed: list[PipChange]) -> int:
     """Take ``pips`` out of ``area``: its own rows go to its ladder parent, or to open
     ground when it has none; a descendant's row is skipped and counted against that
-    descendant's name; anyone else's is left alone."""
+    descendant's name; anyone else's is left alone. Every row handed up or deleted
+    is appended to ``changed`` with where it went."""
     held = _rows_at(pips)
     parent = _ladder_parent(area)
     to_parent: list[AreaFootprintPip] = []
@@ -394,9 +507,11 @@ def _release(area: Area, pips: set[Pip], skipped: dict[str, int]) -> int:
         holder = row.area
         if holder.pk == area.pk:
             if parent is not None:
+                changed.append((row.x, row.y, area.pk, parent.pk))
                 row.area = parent
                 to_parent.append(row)
             else:
+                changed.append((row.x, row.y, area.pk, None))
                 to_open.append(row.pk)
             continue
         if _is_ancestor(area, holder):

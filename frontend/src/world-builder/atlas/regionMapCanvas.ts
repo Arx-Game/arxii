@@ -102,6 +102,12 @@ export interface DrawOptions {
   pending?: Set<string>;
   pendingRemove?: boolean;
   selectedAreaId?: number | null;
+  /**
+   * Footprints to draw an edge around (#4905): the one being carved, or the one
+   * selected. Every other footprint is shading only, so neighbours read as colour
+   * fields while staff work.
+   */
+  outlineAreaIds?: ReadonlySet<number>;
   showLabels?: boolean;
 }
 
@@ -210,24 +216,24 @@ function drawFootprints(
 ) {
   // footprints: largest first so a barony draws over its county
   for (const footprint of footprints) {
-    const selected = options.selectedAreaId === footprint.area_id;
-    ctx.fillStyle = holderColor(footprint.holder_org_id, selected ? 0.65 : 0.45);
+    const outlined = options.outlineAreaIds?.has(footprint.area_id) ?? false;
+    const emphasised = outlined || options.selectedAreaId === footprint.area_id;
+    ctx.fillStyle = holderColor(footprint.holder_org_id, emphasised ? 0.65 : 0.45);
     for (const [x, y] of footprint.pips) {
       ctx.fillRect((x - b.x0) * PIP_PX, (y - b.y0) * PIP_PX, PIP_PX, PIP_PX);
     }
-    drawFootprintOutline(ctx, footprint, b, selected);
+    if (outlined) drawFootprintOutline(ctx, footprint, b);
   }
 }
 
 function drawFootprintOutline(
   ctx: CanvasRenderingContext2D,
   footprint: RegionMapFootprint,
-  b: RegionBounds,
-  selected: boolean
+  b: RegionBounds
 ) {
   const own = new Set(footprint.pips.map(([x, y]) => pipKey(x, y)));
-  ctx.strokeStyle = selected ? '#1a140c' : 'rgba(26, 20, 12, 0.75)';
-  ctx.lineWidth = selected ? 2 : 1;
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = 2;
   ctx.beginPath();
   for (const [x, y] of footprint.pips) {
     const px = (x - b.x0) * PIP_PX;

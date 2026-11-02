@@ -1,6 +1,6 @@
 """Staff world-map actions (#4242): the Atlas's region maps, footprints and paint.
 
-Three REGISTRY actions, ``category="almanach"`` like the ladder verbs they sit
+Five REGISTRY actions, ``category="almanach"`` like the ladder verbs they sit
 beside, ``target_type=SELF``, gated by ``StaffOnlyPrerequisite`` — the shared
 ``action.run()`` seam the Atlas's region-map view dispatches through. Each is a
 thin wrapper over ``world.areas.worldmap.services``; every refusal is a plain
@@ -8,7 +8,10 @@ thin wrapper over ``world.areas.worldmap.services``; every refusal is a plain
 ``user_message``, never ``str(exc)``. The one write that is not here is the
 file upload, a multipart endpoint on the region-maps API (a file does not
 travel in action kwargs). Create Domain from the map is ``almanach_plant_rung``
-followed by ``atlas_carve_footprint``; nothing here mints a rung.
+followed by ``atlas_carve_footprint``; nothing here mints a rung. A carve and a
+clear report every pip's holder before and after (``changed``), and
+``atlas_restore_footprint`` writes one of those columns back: that pair is the
+page's undo and redo (#4905, ADR-4905).
 """
 
 from __future__ import annotations
@@ -42,6 +45,22 @@ def _pip_list(value: Any) -> list[tuple[int, int]] | None:
             return None
         try:
             out.append((int(item[0]), int(item[1])))
+        except (TypeError, ValueError):
+            return None
+    return out
+
+
+def _pip_holder_list(value: Any) -> list[tuple[int, int, int | None]] | None:
+    """Kwarg ``[[x, y, area_id | null], ...]`` as triples, or None when it is not that shape."""
+    if not isinstance(value, (list, tuple)):
+        return None
+    out: list[tuple[int, int, int | None]] = []
+    for item in value:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:  # noqa: PLR2004
+            return None
+        try:
+            holder = None if item[2] is None else int(item[2])
+            out.append((int(item[0]), int(item[1]), holder))
         except (TypeError, ValueError):
             return None
     return out
@@ -179,7 +198,86 @@ class AtlasCarveFootprintAction(_AtlasMapAction):
                 "added": change.added,
                 "removed": change.removed,
                 "skipped": change.skipped,
+                "changed": [list(pip) for pip in change.changed],
             },
+        )
+
+
+@dataclass
+class AtlasClearFootprintAction(_AtlasMapAction):
+    """Take every pip a domain itself holds off the map, on every region map (#4905).
+
+    Kwargs: ``area_id`` or ``title_id``. The result's ``changed`` lists each pip with
+    its holder before and after, the shape ``atlas_restore_footprint`` takes back.
+    """
+
+    key: str = "atlas_clear_footprint"
+    name: str = "Clear Footprint"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.worldmap.services import (  # noqa: PLC0415
+            WorldMapServiceError,
+            clear_footprint,
+        )
+
+        area = _carve_target(kwargs)
+        if area is None:
+            return ActionResult(success=False, message=_NO_SUCH_AREA)
+        try:
+            change = clear_footprint(area=area)
+        except WorldMapServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        name = area.name or "The domain"
+        return ActionResult(
+            success=True,
+            message=f"{name}: {change.removed} pips cleared.",
+            data={
+                "area_id": area.pk,
+                "removed": change.removed,
+                "changed": [list(pip) for pip in change.changed],
+            },
+        )
+
+
+@dataclass
+class AtlasRestoreFootprintAction(_AtlasMapAction):
+    """Put pips back with the holders named for them: the page's undo and redo (#4905).
+
+    Kwargs: ``pips`` as a list of ``[x, y, area_id | null]`` (null is open ground).
+    """
+
+    key: str = "atlas_restore_footprint"
+    name: str = "Restore Footprint"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.worldmap.services import (  # noqa: PLC0415
+            WorldMapServiceError,
+            restore_pips,
+        )
+
+        pips = _pip_holder_list(kwargs.get("pips"))
+        if pips is None:
+            return ActionResult(success=False, message="Pips are lists of [x, y, holder].")
+        try:
+            restored = restore_pips(pips=pips)
+        except WorldMapServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"{restored} pips restored.",
+            data={"restored": restored},
         )
 
 

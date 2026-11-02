@@ -58,6 +58,8 @@ export type WorldBuilderActionKey =
   | 'staff_remove_portal_anchor'
   | 'atlas_create_region_map'
   | 'atlas_carve_footprint'
+  | 'atlas_clear_footprint'
+  | 'atlas_restore_footprint'
   | 'atlas_paint_terrain';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */

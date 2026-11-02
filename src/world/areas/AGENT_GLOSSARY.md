@@ -175,7 +175,10 @@ lies within its parent by construction. Carving inside an ancestor moves the row
 shrinking hands it back up; a parent cannot take back a pip a child stands on; a drag
 skips what it cannot take and says so (#4317). Water is in one like land: a realm's
 footprint includes its territorial waters (ruling, 2026-10-12). Carved and grown by
-`atlas_carve_footprint`, never by the generator.
+`atlas_carve_footprint`, never by the generator; the page's Fill and Loop tools take land
+only and Brush takes water on purpose (#4905). Every carve and clear reports each pip's
+holder before and after, and the staff undo **restores** those holders
+(`atlas_restore_footprint`) rather than inverting the carve (ADR-4905).
 _Avoid_: territory (the control stat axis, ADR-0319), bounds, extent.
 
 **Open ground** (#4242):
