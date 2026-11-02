@@ -642,45 +642,6 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, CreditedContent,
         return f"{self.name} ({self.get_covenant_type_display()})"
 
 
-class GearArchetypeCompatibilityManager(NaturalKeyManager):
-    """Manager for GearArchetypeCompatibility with natural key support."""
-
-
-class GearArchetypeCompatibility(NaturalKeyMixin, SharedMemoryModel):
-    """Existence-only join: which roles are compatible with which archetypes.
-
-    Spec D §4.4. Row present = role bonuses add to mundane gear stats on
-    that archetype. Row absent = incompatible (max(role, gear) per slot).
-    """
-
-    covenant_role = models.ForeignKey(
-        COVENANT_ROLE_MODEL,
-        on_delete=models.CASCADE,
-        related_name="gear_compatibilities",
-    )
-    gear_archetype = models.CharField(
-        max_length=20,
-        choices=GearArchetype.choices,
-    )
-
-    objects = GearArchetypeCompatibilityManager()
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["covenant_role", "gear_archetype"],
-                name="covenants_unique_role_archetype_compat",
-            ),
-        ]
-
-    class NaturalKeyConfig:
-        fields = ["covenant_role", "gear_archetype"]
-        dependencies = [COVENANT_ROLE_MODEL]
-
-    def __str__(self) -> str:
-        return f"{self.covenant_role.name} compatible with {self.get_gear_archetype_display()}"
-
-
 class CovenantRank(SharedMemoryModel):
     """A per-covenant administrative authority tier (the rank ladder).
 
@@ -1206,56 +1167,6 @@ class CovenantRoleTechniqueSpecialty(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
-class CovenantRoleDefenseProfileManager(NaturalKeyManager):
-    """Manager for CovenantRoleDefenseProfile with natural key support."""
-
-
-class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
-    """Per-role defense style + gear-substitution tuning (#2533, Layer 3).
-
-    One row per ``CovenantRole`` — including sub-roles. This model imposes no
-    parent/sub-role constraint: whether a sub-role's row replaces or extends
-    its parent's defense profile is a resolution-time decision (Task 3's
-    resolution helper), not a model-level restriction.
-
-    ``style`` is the vow's ``DefenseStyle`` (how it defends). Combat resolution
-    reads ``gear_additive_tenths`` when blending the vow's own defense with the
-    character's COMPATIBLE armor soak: 10 (the default) keeps the legacy
-    fully-additive behavior; lower values dial gear soak down for roles whose
-    defense style is meant to substitute for gear rather than stack with it.
-    """
-
-    covenant_role = models.OneToOneField(
-        CovenantRole,
-        on_delete=models.CASCADE,
-        related_name="defense_profile",
-    )
-    style = models.CharField(
-        max_length=20,
-        choices=DefenseStyle.choices,
-        help_text="How this role's vow defends (#2533).",
-    )
-    gear_additive_tenths = models.PositiveIntegerField(
-        default=10,
-        help_text=(
-            "Fraction of COMPATIBLE armor soak that stays additive with the vow's "
-            "own defense; 10 = fully additive (legacy behavior)."
-        ),
-    )
-
-    objects = CovenantRoleDefenseProfileManager()
-
-    class Meta:
-        ordering = ["covenant_role__slug"]
-
-    class NaturalKeyConfig:
-        fields = ["covenant_role"]
-        dependencies = [COVENANT_ROLE_MODEL]
-
-    def __str__(self) -> str:
-        return f"{self.covenant_role.name}: {self.get_style_display()}"
-
-
 # =============================================================================
 # Vow focus picks and combat styles (#4759 slice 1)
 # =============================================================================
@@ -1534,10 +1445,10 @@ class CombatStyleManager(NaturalKeyManager):
 class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """How a character was taught to fight with magic (#4759).
 
-    A character's combat style (``CharacterSheet.combat_style``) replaces their
-    vow's ``CovenantRoleDefenseProfile``: it sets the defense style (evasion,
-    barrier or mitigation) and how much of their armor counts. A character with
-    no style keeps the vow profile's behavior. Not a ``TechniqueStyle``, which is
+    A character's combat style (``CharacterSheet.combat_style``) sets the defense
+    style (evasion, barrier or mitigation) and how much of their armor counts; it
+    replaced the vow's per-role defense profile (#4975). A character with no style
+    has no defense style, and all their armor counts. Not a ``TechniqueStyle``, which is
     how a Path or Gift casts; a Path and a character choose those separately
     (ADR-4759).
     """
@@ -1662,7 +1573,7 @@ class CombatStyleGearManager(NaturalKeyManager):
 class CombatStyleGear(NaturalKeyMixin, SharedMemoryModel):
     """One weapon or armor kind a combat style fights with (#4884).
 
-    Existence-only, the same shape as ``GearArchetypeCompatibility``. The style's
+    Existence-only: row present means the style fights with that kind. The style's
     weapon kinds (``WEAPON_ARCHETYPES``) are its attack profile and its armor kinds
     (``ARMOR_ARCHETYPES``) its defense profile: attacking with a weapon kind not
     listed, or wearing an armor kind not listed, lapses the style skill

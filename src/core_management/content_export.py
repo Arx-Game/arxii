@@ -171,7 +171,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantrite",
         "covenants.covenantriterolepackage",
         "covenants.covenantrolebonus",
-        "covenants.covenantroledefenseprofile",
         "covenants.covenantrolegiftgrant",
         "covenants.covenantroletechniquespecialty",
         # #4759: a vow's focus pick catalog and its limits, and combat styles.
@@ -180,7 +179,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.combatstylegear",
         "covenants.vowfocuspick",
         "covenants.vowfocuspicklimit",
-        "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
         "covenants.weaknesspoolentry",
         "covenants.vowaddedeffect",

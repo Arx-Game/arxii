@@ -9,7 +9,6 @@ from world.covenants.views import (
     CovenantRiteViewSet,
     CovenantRoleViewSet,
     CovenantViewSet,
-    GearArchetypeCompatibilityViewSet,
 )
 
 router = DefaultRouter()
@@ -18,14 +17,9 @@ router.register(
     CharacterCovenantRoleViewSet,
     basename="character-covenant-role",
 )
-router.register(
-    "gear-compatibilities",
-    GearArchetypeCompatibilityViewSet,
-    basename="gear-compatibility",
-)
 # Registered at "covenants" → /api/covenants/covenants/ (doubled path mirrors the
-# existing sibling scheme: character-roles, gear-compatibilities, covenants all live
-# under the /api/covenants/ prefix).
+# existing sibling scheme: character-roles, covenants all live under the
+# /api/covenants/ prefix).
 router.register(
     "covenants",
     CovenantViewSet,

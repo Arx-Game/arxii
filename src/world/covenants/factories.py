@@ -34,9 +34,7 @@ from world.covenants.models import (
     CovenantRiteRolePackage,
     CovenantRole,
     CovenantRoleBonus,
-    CovenantRoleDefenseProfile,
     CovenantRoleTechniqueSpecialty,
-    GearArchetypeCompatibility,
     InsightTableEntry,
     MentorBond,
     MentorBondConfig,
@@ -124,17 +122,6 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
         return self.parent_role.covenant_type
 
 
-class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
-    """Factory for GearArchetypeCompatibility."""
-
-    class Meta:
-        model = GearArchetypeCompatibility
-        django_get_or_create = ("covenant_role", "gear_archetype")
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    gear_archetype = GearArchetype.HEAVY_ARMOR
-
-
 class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
     """Factory for CovenantRoleTechniqueSpecialty (#2443)."""
 
@@ -145,18 +132,6 @@ class CovenantRoleTechniqueSpecialtyFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     function = TechniqueFunction.DAMAGE_BUFF_SELF
     multiplier_tenths = 10
-
-
-class CovenantRoleDefenseProfileFactory(factory_django.DjangoModelFactory):
-    """Factory for CovenantRoleDefenseProfile (#2533)."""
-
-    class Meta:
-        model = CovenantRoleDefenseProfile
-        django_get_or_create = ("covenant_role",)
-
-    covenant_role = factory.SubFactory(CovenantRoleFactory)
-    style = DefenseStyle.GEAR_SOAK
-    gear_additive_tenths = 10
 
 
 class VowSituationalPerkFactory(factory_django.DjangoModelFactory):

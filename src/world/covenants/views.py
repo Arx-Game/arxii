@@ -32,7 +32,6 @@ from world.covenants.filters import (
     CovenantRankFilter,
     CovenantRiteFilter,
     CovenantRoleFilter,
-    GearArchetypeCompatibilityFilter,
 )
 from world.covenants.handlers import can_engage_membership
 from world.covenants.models import (
@@ -42,7 +41,6 @@ from world.covenants.models import (
     CovenantRank,
     CovenantRite,
     CovenantRole,
-    GearArchetypeCompatibility,
 )
 from world.covenants.permissions import (
     CanKickFromCovenant,
@@ -58,7 +56,6 @@ from world.covenants.serializers import (
     CovenantRolePassivePowerSerializer,
     CovenantRoleSerializer,
     CovenantSerializer,
-    GearArchetypeCompatibilitySerializer,
     ReorderRanksRequestSerializer,
     ReswearOptionsSerializer,
     SphinxVerdictSerializer,
@@ -329,20 +326,6 @@ class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
         verdict = judge_vow(sheet, role)
         return Response(SphinxVerdictSerializer(verdict).data)
-
-
-class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only ViewSet for authored covenant×archetype compatibility rows."""
-
-    queryset = GearArchetypeCompatibility.objects.select_related("covenant_role").order_by(
-        "covenant_role__name",
-        "gear_archetype",
-    )
-    serializer_class = GearArchetypeCompatibilitySerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # Authored lookup table — small, no pagination needed.
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = GearArchetypeCompatibilityFilter
 
 
 def _build_role_power_row(

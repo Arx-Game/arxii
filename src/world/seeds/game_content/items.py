@@ -6,14 +6,14 @@ Exports:
   audacity tiers (#2029)
 - ``seed_items_dev()`` — master orchestrator for the items cluster
 
-The canonical covenant-role × gear-archetype compatibility matrix (formerly
+The canonical covenant-role x gear-archetype compatibility matrix (formerly
 ``seed_gear_archetype_compatibility()`` here, keyed on three placeholder
-CovenantRole rows — ``sword-vanguard``/``shield-bulwark``/``crown-luminary``)
-was retired: the 13 real Durance covenant vows are now lore-repo content
-(``covenants.covenantrole``/``covenants.geararchetypecompatibility`` are
-``CONTENT_MODELS``), and the placeholders collided with them on the
-``(covenant_type, name)`` unique constraint. ``GearArchetypeCompatibility``
-rows are authored in the lore repo now.
+CovenantRole rows - ``sword-vanguard``/``shield-bulwark``/``crown-luminary``)
+was retired: the 13 real Durance covenant vows are now lore-repo content, and the
+placeholders collided with them on the ``(covenant_type, name)`` unique constraint.
+The ``GearArchetypeCompatibility`` table itself is gone (#4975): which gear a
+character's vow counts for now comes from their combat style's ``CombatStyleGear``
+rows and the vows the style lists.
 """
 
 from __future__ import annotations

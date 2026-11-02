@@ -6,7 +6,7 @@ be registered in `core_management.content_export.CONTENT_MODELS` — the recipe
 family had no lore-authorable production data path at all. These tests mirror
 the export -> load_entries round-trip pattern used across
 `core_management/tests/test_content_export.py` (e.g.
-`GearArchetypeCompatibilityContentExportTests`), scoped to the four crafting
+`CombatStyleGearContentExportTests`), scoped to the four crafting
 models.
 """
 

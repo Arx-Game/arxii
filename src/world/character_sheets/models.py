@@ -582,8 +582,9 @@ class CharacterSheet(SharedMemoryModel):
         ),
     )
 
-    # How this character was taught to fight with magic (#4759). Replaces the vow's
-    # defense profile; null keeps the vow profile's behavior.
+    # How this character was taught to fight with magic (#4759). Sets their defense
+    # style and armor share; null means no defense style (the vow's per-role defense
+    # profile it replaced was retired in #4975).
     combat_style = models.ForeignKey(
         "arxii.CombatStyle",
         null=True,
