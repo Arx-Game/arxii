@@ -71,9 +71,9 @@ class CmdSphinx(ArxCommand):
             lines.extend(self._style_line(verdict))
             lines.extend(self._answered_lines(verdict))
         elif verdict.tier == SphinxTier.DORMANT:
-            lines.extend(self._style_line(verdict))
             lines.append("The vow would lie dormant in places:")
             lines.extend(self._uncovered_lines(verdict))
+            lines.extend(self._style_line(verdict))
         else:
             lines.append("The vow will not take. Yet.")
             lines.extend(self._style_line(verdict))
