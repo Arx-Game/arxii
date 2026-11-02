@@ -1143,6 +1143,10 @@
 .vowpicks-error {
   color: hsl(var(--destructive));
 }
+/* The theme's destructive red is too dark to read on the dark sheet (2:1); lift it to about 6:1. */
+.dark .vowpicks-error {
+  color: hsl(0 72% 65%);
+}
 /* A sub-role holder's level groups its picks under the anchor vow's and the sub-role's name. */
 .vowpicks-vow {
   font-family: var(--sheet-caps);
@@ -1165,6 +1169,8 @@
 .vowpicks-rite-head {
   border-bottom: 1px solid var(--sheet-hair);
   padding-bottom: 0.5rem;
+  /* Clear of the dialog's close button. */
+  padding-right: 2rem;
 }
 .vowpicks-two {
   display: grid;
