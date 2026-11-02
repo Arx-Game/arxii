@@ -38,7 +38,9 @@ character-creation/
 │   └── ConfirmDialog.tsx    # Native <dialog> confirm for record-clearing choices
 └── components/
     ├── index.ts             # Component exports
-    ├── OriginStage.tsx      # Stage 1: Area selection
+    ├── OriginStage.tsx      # Stage 1: Area selection; since #4874 the first name is asked
+    │                        #   here too (a Field above the realms, saved on blur by itself,
+    │                        #   listed first in the rail), so the life reads the name
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
     ├── LineageStage.tsx     # Stage 3: the beginning's route (#3617; the Upbringing pick
     │                        #   retired in #4395, the route comes with the beginning),
@@ -65,7 +67,8 @@ character-creation/
     │                        #   column (forms.HeightBand, #3675 fix round 1) when staff
     │                        #   wrote one - e.g. what opens a band players cannot normally
     │                        #   take - never a name match against a literal band name.
-    ├── IdentityStage.tsx    # Stage 9: Identity
+    ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, background, worship); the
+    │                        #   name is a read-only line since #4874, asked on Origin
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
     │                        #   numbered goals by horizon, the priced enemy, The Introductions.
     │                        #   Directly under the three questions mounts this chapter's own
@@ -148,7 +151,22 @@ character-creation/
         │                         #   select under each parent's gender in LineageStage
         │                         #   (ParentFateRow; draft_data.line_parent_fate /
         │                         #   other_parent_fate)
-        ├── LifeGrids.tsx         # The life as grids by stage (#4395, the #4124 beats):
+        ├── LifeGrids.tsx         # The life as an accordion (#4874, slice 9 of #4813, built
+        │                         #   against the demo): one fold per stage (heading + "N of
+        │                         #   M" or Unknown, one open at a time, a click on the open one
+        │                         #   folds it), one section per beat inside (a closed one reads
+        │                         #   its answers with signed points or the prompt with the
+        │                         #   first name; Next walks down and into the next stage);
+        │                         #   Unknown is a mark on the stage (every beat unknown in one
+        │                         #   PATCH); the secret marks under a grid, the Cover story box
+        │                         #   on a one-of row (the no-cost card stands as cover until a
+        │                         #   click on another card; clicking the real pick drops both)
+        │                         #   and a cover select on an any row; a figure's name input
+        │                         #   on a picked person card; Description (Optional) per stage
+        │                         #   (draft_data.stage_descriptions); the `.leafwrap` layout
+        │                         #   with the sticky ledger rail; the testament paragraph.
+        │                         #   Earlier shape, still true underneath: grids by stage
+        │                         #   (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
         │                         #   stage is absent), each beat a `ChapterOffers`
         │                         #   `layout="grid"` of its `backgrounds` offers picked
@@ -216,6 +234,18 @@ character-creation/
         └── InheritedFactsPanel.tsx # Read-only aspects/features/liege facet panel for a
                                   #   claimed staff family (#3648)
 ```
+
+## ChapterOffers, the life page's props (#4874)
+
+`ChapterOffers` (`components/offers/`) grew five props for the life page and keeps every
+default for the other chapters: `groupBy` splits a grid under `.group-h` headings
+("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
+as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
+mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
+button, so no nested button) whose click opens one `.popover` through a portal to `body`
+with the definition from the response's `terms`; `interceptPick` runs before a click
+changes a pick and `coverOfferId` draws that card dashed (the cover flow);
+`secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
 
 ## Key Features
 
