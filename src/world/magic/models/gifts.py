@@ -15,9 +15,9 @@ from world.items.constants import GearArchetype
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 from world.magic.skill_choices import (
-    MAGIC_SKILL_CHOICES,
-    MAGIC_SKILL_ERROR_MESSAGES,
-    MAGIC_SKILL_HELP,
+    MAGIC_PICKER_SKILL_CHOICES,
+    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+    MAGIC_PICKER_SKILL_HELP,
 )
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
@@ -122,13 +122,13 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="technique_skill_gifts",
-        limit_choices_to=MAGIC_SKILL_CHOICES,
-        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
         help_text=(
             "Minor Gifts only (#4450): the skill added to every cast of this Gift's "
             "techniques. A technique's own skill, if set, wins. A Major Gift's "
             "techniques take the caster's Path technique skill instead. Blank = this "
-            f"Gift adds no skill. {MAGIC_SKILL_HELP}"
+            f"Gift adds no skill. {MAGIC_PICKER_SKILL_HELP}"
         ),
     )
     # The gift points at the item primitive (ADR-0010). The weapon made from it carries

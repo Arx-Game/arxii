@@ -46,6 +46,7 @@ from world.character_creation.constants import (
     TieKind,
     schooling_max_rank,
 )
+from world.character_creation.magic_training import reconcile_combat_style
 from world.character_creation.models import (
     AGE_MAX,
     AGE_MIN,
@@ -85,6 +86,7 @@ from world.character_creation.services import (
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
+from world.covenants.models import CombatStyle
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.constants import IC_MONTH_NAMES
@@ -624,6 +626,72 @@ class CGGiftOptionSerializer(serializers.ModelSerializer):
         The view passes the favored Gift ids in context (one query for the list).
         """
         return obj.pk in self.context.get("favored_gift_ids", frozenset())
+
+
+class CGStyleGearKindSerializer(serializers.Serializer):
+    """One weapon or armor kind a style fights with, by its ``GearArchetype`` label."""
+
+    value = serializers.CharField(read_only=True)
+    label = serializers.CharField(read_only=True)
+
+
+class CGCombatStyleOptionSerializer(serializers.ModelSerializer):
+    """A combat style the draft's Tradition teaches, for the Gift stage's style step (#4921).
+
+    Backs ``GET /api/character-creation/combat-styles/?draft_id=<id>``. How the style
+    attacks (its weapon kinds and hit stat) and defends (defense style, armor kinds and
+    armor share). Never its vows: character creation never mentions covenant vows. The
+    view passes each style's gear kinds as ``gear_by_style`` in context, one query for
+    the list.
+    """
+
+    defense_style_display = serializers.CharField(
+        source="get_defense_style_display", read_only=True
+    )
+    hit_stat_name = serializers.SerializerMethodField()
+    weapon_kinds = serializers.SerializerMethodField()
+    armor_kinds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CombatStyle
+        fields = [
+            "id",
+            "name",
+            "description",
+            "defense_style",
+            "defense_style_display",
+            "armor_share_tenths",
+            "hit_stat_name",
+            "weapon_kinds",
+            "armor_kinds",
+        ]
+        read_only_fields = fields
+
+    def get_hit_stat_name(self, obj: CombatStyle) -> str | None:
+        return obj.hit_stat.name if obj.hit_stat is not None else None
+
+    def _kinds(self, obj: CombatStyle, wanted: frozenset[str]) -> list[dict[str, str]]:
+        """The style's kinds in ``wanted``, in ``GearArchetype`` order, with their labels."""
+        from world.items.constants import GearArchetype  # noqa: PLC0415
+
+        held = set(self.context.get("gear_by_style", {}).get(obj.pk, []))
+        return [
+            {"value": value, "label": label}
+            for value, label in GearArchetype.choices
+            if value in held and value in wanted
+        ]
+
+    @extend_schema_field(CGStyleGearKindSerializer(many=True))
+    def get_weapon_kinds(self, obj: CombatStyle) -> list[dict[str, str]]:
+        from world.items.constants import WEAPON_ARCHETYPES  # noqa: PLC0415
+
+        return self._kinds(obj, WEAPON_ARCHETYPES)
+
+    @extend_schema_field(CGStyleGearKindSerializer(many=True))
+    def get_armor_kinds(self, obj: CombatStyle) -> list[dict[str, str]]:
+        from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+
+        return self._kinds(obj, ARMOR_ARCHETYPES)
 
 
 class CGTechniqueOptionSerializer(serializers.ModelSerializer):
@@ -1447,6 +1515,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # The Gift stage's style step (#4921): one of the styles the Tradition teaches.
+    selected_combat_style = serializers.PrimaryKeyRelatedField(read_only=True)
+    selected_combat_style_id = serializers.PrimaryKeyRelatedField(
+        queryset=CombatStyle.objects.all(),
+        source="selected_combat_style",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # Whether account has existing characters (for advanced CG options)
     has_existing_characters = serializers.SerializerMethodField()
     # CG points computed fields
@@ -1534,6 +1611,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_path_id",
             "selected_tradition",
             "selected_tradition_id",
+            "selected_combat_style",
+            "selected_combat_style_id",
             "public_worship",
             "public_worship_id",
             "secret_worship",
@@ -1623,7 +1702,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.DictField())
     def get_magic_training(self, obj: CharacterDraft) -> dict:
         """The Magic-skill training pool, its fit bonuses and the skills to spend it on."""
-        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+        from world.character_creation.magic_training import training_skills  # noqa: PLC0415
         from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
         pool = obj.magic_training_pool
@@ -1638,7 +1717,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         skills = [
             {"id": skill.pk, "name": skill.name, "value": value_of(skill.pk), "max": max_value}
-            for skill in magic_category_skills().select_related("trait").order_by("trait__name")
+            for skill in training_skills(obj).select_related("trait").order_by("trait__name")
         ]
         return {
             "base_sources": [
@@ -1866,6 +1945,21 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         return value
 
+    def validate_selected_combat_style_id(self, value):
+        """A style the draft's Tradition teaches (#4921); the PATCH's own Tradition wins."""
+        if value is None:
+            return value
+        tradition_id = None
+        tradition_key = "selected_tradition_id"
+        if tradition_key in self.initial_data:
+            tradition_id = self.initial_data.get(tradition_key)
+        elif self.instance is not None:
+            tradition_id = self.instance.selected_tradition_id
+        if not tradition_id or not value.taught_by.filter(pk=tradition_id).exists():
+            msg = "Your tradition does not teach this style."
+            raise serializers.ValidationError(msg)
+        return value
+
     def validate_age(self, value):
         """Validate age against ``age_bounds`` for the draft's species and heritage (#3663).
 
@@ -1981,6 +2075,22 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         else:
             instance.family_path = ""
 
+        self._reconcile_vacancy_claims(instance, validated_data)
+
+        incoming = validated_data.pop("draft_data", None)
+        if incoming is not None:
+            validated_data["draft_data"] = {**instance.draft_data, **incoming}
+        restyled = {"selected_tradition", "selected_combat_style"} & validated_data.keys()
+        instance = super().update(instance, validated_data)
+        if restyled:
+            # A style the Tradition does not teach is cleared, and another style's
+            # skill drops out of the training allocation (#4921).
+            reconcile_combat_style(instance)
+        return instance
+
+    @staticmethod
+    def _reconcile_vacancy_claims(instance: CharacterDraft, validated_data: dict) -> None:
+        """A Vacancy supplies its own kin link; a changed family drops the Vacancy."""
         vacancy = validated_data.get("selected_vacancy", _UNSET)
         if vacancy is not _UNSET and vacancy is not None:
             # A Vacancy supplies its own kin link; a manual claim would double it.
@@ -1989,11 +2099,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         family = validated_data.get("family", _UNSET)
         if family is not _UNSET and family != instance.family and instance.selected_vacancy_id:
             validated_data.setdefault("selected_vacancy", None)
-
-        incoming = validated_data.pop("draft_data", None)
-        if incoming is not None:
-            validated_data["draft_data"] = {**instance.draft_data, **incoming}
-        return super().update(instance, validated_data)
 
     def _validate_stats(self, stats) -> None:
         """Each named stat is a real stat, an integer, and inside the allowed band."""

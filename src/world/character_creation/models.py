@@ -1635,6 +1635,16 @@ class CharacterDraft(SharedMemoryModel):
         related_name="+",
         help_text="Selected magical tradition (gates magic template).",
     )
+    # The Gift stage's style step (#4921): one of the styles the selected Tradition
+    # teaches. Choosing another Tradition clears a style it does not teach.
+    selected_combat_style = models.ForeignKey(
+        "arxii.CombatStyle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Selected combat style, one the selected tradition teaches.",
+    )
 
     # Stage 7: Appearance
     height_band = models.ForeignKey(
@@ -1950,8 +1960,8 @@ class CharacterDraft(SharedMemoryModel):
         Computed on every call, never memoised (drafts are idmapper-shared). The fit
         bonuses only apply on top of some training (``base > 0``).
         """
+        from world.character_creation.magic_training import training_skills  # noqa: PLC0415
         from world.magic.models import Gift, Resonance  # noqa: PLC0415
-        from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
         from world.magic.services.teaching_fit import (  # noqa: PLC0415
             get_teaching_config,
             teaching_fit,
@@ -1981,7 +1991,8 @@ class CharacterDraft(SharedMemoryModel):
         budget = SkillPointBudget.get_active_budget()
         total = base + gift_bonus + affinity_bonus
         total -= total % budget.points_per_tier
-        required_spend = min(total, magic_category_skills().count() * budget.max_skill_value)
+        # The skills it can go on: a style skill only when it is the chosen style's (#4921).
+        required_spend = min(total, training_skills(self).count() * budget.max_skill_value)
         return MagicTrainingPool(
             base=base,
             gift_bonus=gift_bonus,

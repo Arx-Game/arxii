@@ -540,6 +540,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill outside the magic category, which
        magical rolls add as terms) — the character's Anima Check.
+
+    Between 4 and 5, a Tradition that teaches a combat style needs one of its styles
+    chosen (#4921).
     """
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
@@ -601,6 +604,10 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     if not resonance_id or not Resonance.objects.filter(pk=resonance_id).exists():
         return ["Select a gift resonance"]
 
+    style_error = _combat_style_error(draft)
+    if style_error:
+        return [style_error]
+
     stat_id = draft.draft_data.get("anima_check_stat_id")
     skill_id = draft.draft_data.get("anima_check_skill_id")
     stat_valid = (
@@ -630,6 +637,21 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
     return _magic_skill_allocation_errors(draft)
 
 
+def _combat_style_error(draft: CharacterDraft) -> str | None:
+    """A Tradition that teaches a style needs one of its styles chosen (#4921).
+
+    A Tradition that teaches none skips the step.
+    """
+    from world.character_creation.magic_training import taught_styles  # noqa: PLC0415
+
+    styles = taught_styles(draft)
+    if draft.selected_combat_style_id is None:
+        return "Choose a combat style" if styles.exists() else None
+    if not styles.filter(pk=draft.selected_combat_style_id).exists():
+        return "Choose a combat style your tradition teaches"
+    return None
+
+
 def _parse_magic_allocation(raw: object) -> dict[int, int] | None:
     """``draft_data["magic_skills"]`` as {skill id: value}, or None when malformed."""
     if raw in (None, {}):
@@ -651,7 +673,7 @@ def _parse_magic_allocation(raw: object) -> dict[int, int] | None:
 
 def _magic_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
     """The Magic skill allocation spends exactly the training pool, in tiers (#4659)."""
-    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+    from world.character_creation.magic_training import training_skills  # noqa: PLC0415
     from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
     allocation = _parse_magic_allocation(draft.draft_data.get("magic_skills"))
@@ -663,7 +685,8 @@ def _magic_skill_allocation_errors(draft: CharacterDraft) -> list[str]:
     budget = SkillPointBudget.get_active_budget()
     step = budget.points_per_tier
     maximum = budget.max_skill_value
-    if set(allocation) - set(magic_category_skills().values_list("pk", flat=True)):
+    # Another style's skill is not on the list: only the chosen style's is (#4921).
+    if set(allocation) - set(training_skills(draft).values_list("pk", flat=True)):
         return ["Magic skills only"]
     if any(v < 0 or v > maximum or v % step for v in allocation.values()):
         return [f"Magic skill values go in steps of {step} up to {maximum}"]
