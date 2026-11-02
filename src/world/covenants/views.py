@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db.models import Prefetch, QuerySet
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -145,21 +146,21 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         self-only: a player reads only a character they play now; staff read any.
         Choosing goes through the action dispatch (``choose_vow_focus_pick``).
         """
+        from web.api.permissions import account_may_play  # noqa: PLC0415
         from world.covenants.focus_picks import vow_pick_catalogs  # noqa: PLC0415
 
         # One sheet's catalog, not a filtered list of rows: not a FilterSet fit.
         sheet_param = request.query_params.get("character_sheet", "")  # noqa: USE_FILTERSET
-        if not sheet_param.isdigit():
+        sheet_id = int(sheet_param) if sheet_param.isascii() and sheet_param.isdigit() else 0
+        if not sheet_id:
             return Response(
                 {"detail": "character_sheet is required."}, status=status.HTTP_400_BAD_REQUEST
             )
-        sheets = CharacterSheet.objects.filter(pk=int(sheet_param))
-        if not request.user.is_staff:
-            sheets = sheets.filter(
-                roster_entry__tenures__end_date__isnull=True,
-                roster_entry__tenures__player_data__account=request.user,
-            )
-        sheet = get_object_or_404(sheets.distinct())
+        # Whoever may act as the character through the dispatch may read its picks: the
+        # same rule (a begun tenure, a borrowed NPC yes, a lent one no); staff read any.
+        if not request.user.is_staff and not account_may_play(request.user, sheet_id):
+            raise Http404
+        sheet = get_object_or_404(CharacterSheet, pk=sheet_id)
         return Response(VowPickCatalogSerializer(vow_pick_catalogs(sheet), many=True).data)
 
     @action(

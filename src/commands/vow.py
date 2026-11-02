@@ -30,7 +30,7 @@ class CmdVow(ArxCommand):
         vow pick <name> [in <covenant>] - choose a pick within its level's budget
 
     A pick opens when your vow reaches its level. Budget you do not spend waits
-    for a later pick.
+    for a later pick. Chosen picks change only through the Rite of Re-swearing.
     """
 
     key = "vow"
@@ -48,11 +48,17 @@ class CmdVow(ArxCommand):
         tokens = (self.args or "").split()
         if not tokens:
             raise CommandError(_USAGE)
-        verb, rest = tokens[0].lower(), tokens[1:]
-        rest, covenant_name = self._parse_in_covenant(rest)
+        verb, words = tokens[0].lower(), tokens[1:]
+        rest, covenant_name = self._parse_in_covenant(words)
         if verb == "picks":  # noqa: STRING_LITERAL
             self._list(covenant_name)
-        elif verb == "pick" and rest:  # noqa: STRING_LITERAL
+        elif verb == "pick" and words:  # noqa: STRING_LITERAL
+            # "Cut in Two" is a pick's name, not "Cut" in a covenant called "Two": a trailing
+            # "in <name>" names a covenant only when the caller is in one by that name.
+            if covenant_name is not None and self._own_covenant_id(covenant_name) is None:
+                rest, covenant_name = words, None
+            if not rest:
+                raise CommandError(_USAGE)
             self._choose(" ".join(rest), covenant_name)
         else:
             raise CommandError(_USAGE)
@@ -73,17 +79,24 @@ class CmdVow(ArxCommand):
             raise CommandError(msg)
         return sheet
 
-    def _covenant_id(self, covenant_name: str | None) -> int | None:
-        """The id of the caller's covenant named *covenant_name*, or None when not named."""
-        if covenant_name is None:
-            return None
+    def _own_covenant_id(self, covenant_name: str) -> int | None:
+        """The id of the caller's active covenant named *covenant_name*, or None."""
         from world.covenants.selectors import get_active_memberships  # noqa: PLC0415
 
         for membership in get_active_memberships(character_sheet=self._sheet()):
             if membership.covenant.name.lower() == covenant_name.lower():
                 return membership.covenant_id
-        msg = f"You are not a member of a covenant named '{covenant_name}'."
-        raise CommandError(msg)
+        return None
+
+    def _covenant_id(self, covenant_name: str | None) -> int | None:
+        """The id of the caller's covenant named *covenant_name*, or None when not named."""
+        if covenant_name is None:
+            return None
+        covenant_id = self._own_covenant_id(covenant_name)
+        if covenant_id is None:
+            msg = f"You are not a member of a covenant named '{covenant_name}'."
+            raise CommandError(msg)
+        return covenant_id
 
     def _list(self, covenant_name: str | None) -> None:
         from world.covenants.focus_picks import vow_pick_catalogs  # noqa: PLC0415

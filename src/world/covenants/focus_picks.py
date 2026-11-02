@@ -513,8 +513,11 @@ def resolve_pick_for_choice(
         (m, pick) for pick in found for m in memberships if pick.covenant_role_id in role_ids[m.pk]
     ]
     if len(holders) > 1:
-        names = ", ".join(sorted({m.covenant.name for m, _ in holders}))
-        msg = f"Which covenant? Your vows offering it are in: {names}."
+        names = sorted({m.covenant.name for m, _ in holders})
+        if len(names) == 1:
+            msg = f"Your vow offers two picks named {pick_name}; choose one on your sheet."
+        else:
+            msg = f"Which covenant? Your vows offering it are in: {', '.join(names)}."
         raise VowFocusPickRefusedError(msg)
     return holders[0]
 
@@ -570,7 +573,8 @@ def announce_open_vow_picks(membership: CharacterCovenantRole) -> None:
 
     A rejoin, or a vow whose thread was woven before, starts above level 0; a fresh
     joiner has no vow thread yet, so they are told nothing here and hear of their
-    first picks when imbuing opens them.
+    first picks when imbuing opens them. Sent once the joining commits, so a join
+    that a later step of the same rite rolls back tells them nothing.
     """
     if membership.is_secondary:
         return
@@ -580,8 +584,9 @@ def announce_open_vow_picks(membership: CharacterCovenantRole) -> None:
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    send_narrative_message(
-        recipients=[membership.character_sheet],
-        body=" ".join(lines),
-        category=NarrativeCategory.COVENANT,
+    sheet = membership.character_sheet
+    transaction.on_commit(
+        lambda: send_narrative_message(
+            recipients=[sheet], body="\n".join(lines), category=NarrativeCategory.COVENANT
+        )
     )

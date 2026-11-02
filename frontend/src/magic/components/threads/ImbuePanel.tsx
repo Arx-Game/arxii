@@ -22,6 +22,22 @@ interface ImbuePanelProps {
   onResult?: (result: ImbueResponse) => void;
 }
 
+/** The result's lines; a vow's new-picks lines ("Vow level 2: 4 pts of new picks.") end it. */
+function messageLines(result: ImbueResponse): string[] {
+  return (result.message ?? '').split('\n').filter(Boolean);
+}
+
+function newPicksLines(result: ImbueResponse): string[] {
+  const count = result.opened_pick_levels?.length ?? 0;
+  return count > 0 ? messageLines(result).slice(-count) : [];
+}
+
+function riteLines(result: ImbueResponse): string[] {
+  const count = result.opened_pick_levels?.length ?? 0;
+  const lines = messageLines(result);
+  return count > 0 ? lines.slice(0, -count) : lines;
+}
+
 /** The sheet's Ties section, where the vow's picks are chosen. */
 function ChoosePicksLink({ characterSheetId }: { characterSheetId: number }) {
   const { data: entries } = useMyRosterEntriesQuery();
@@ -111,11 +127,19 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
       {/* Success summary */}
       {lastResult && lastResult.success && (
         <div className="space-y-1 rounded-md bg-muted p-3 text-sm" data-testid="imbue-result">
-          {lastResult.message && (
-            <p className="whitespace-pre-line text-muted-foreground">{lastResult.message}</p>
+          {riteLines(lastResult).length > 0 && (
+            <p className="whitespace-pre-line text-muted-foreground">
+              {riteLines(lastResult).join('\n')}
+            </p>
           )}
-          {(lastResult.opened_pick_levels?.length ?? 0) > 0 && (
-            <ChoosePicksLink characterSheetId={characterSheetId} />
+          {newPicksLines(lastResult).length > 0 && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-primary py-1 pl-3"
+              data-testid="imbue-new-picks"
+            >
+              <span className="whitespace-pre-line">{newPicksLines(lastResult).join('\n')}</span>
+              <ChoosePicksLink characterSheetId={characterSheetId} />
+            </div>
           )}
           {lastResult.levels_gained !== undefined && (
             <p data-testid="imbue-levels-gained">

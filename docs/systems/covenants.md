@@ -1339,12 +1339,20 @@ All in `world.covenants.focus_picks`:
   <covenant>]`.
 - `new_picks_lines(levels)` ("Vow level 2: 4 pts of new picks.") and `opened_pick_levels`
   (only levels 1 to 3). `picks_opened_by_imbuing` is read by `ImbueAction` (the line is
-  appended to its message and the levels ride `data["opened_pick_levels"]`; the web finisher
-  and a SERVICE-kind imbuing rite return them as `opened_pick_levels`, and the Imbue panel
-  then links "Choose picks" to the sheet's Ties section). `announce_open_vow_picks` is called
-  by `add_member` and `assign_covenant_role`: a joiner whose vow thread already stands at a
-  level is sent the same lines as a COVENANT narrative message; a fresh joiner has no vow
-  thread and is told nothing until imbuing opens level 1.
+  appended to its message and the levels ride `data["opened_pick_levels"]`), and by
+  `PerformRitualAction` for a staff-authored SERVICE imbuing rite (which therefore says the
+  same lines on telnet and the web; `spend_resonance_for_imbuing` now absorbs the `ritual=`
+  the dispatch forwards, without which every SERVICE imbuing rite raised). The web finisher
+  and the SERVICE branch return the levels as `opened_pick_levels`, and the Imbue panel
+  shows the lines in their own row with "Choose picks" to the sheet's Ties section
+  (`?section=ties`). `announce_open_vow_picks` is called by `add_member`,
+  `assign_covenant_role`, `change_role` and the founders of `create_covenant`: a member
+  whose vow thread already stands at a level is sent the same lines as a COVENANT narrative
+  message once the joining commits (`transaction.on_commit`, so a rite rolled back tells
+  nothing); a fresh joiner has no vow thread and is told nothing until imbuing opens level 1.
+- The catalog read and the dispatch share one rule for who may act as a character:
+  `web.api.permissions.account_may_play` (`IsCharacterOwner`'s rule: a begun tenure, a
+  borrowed NPC yes, a lent one no).
 - `focus_pick_budget()` reads the budget without creating the config row (moved here from
   the vow page, which re-exports it).
 

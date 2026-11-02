@@ -30,17 +30,20 @@ function Meter({ budget, spent }: { budget: number; spent: number }) {
 
 function PickRow({
   pick,
+  levelOpen,
   onChoose,
   pending,
 }: {
   pick: VowPickEntry;
+  /** Only a level not yet open is dimmed; an open level's over-budget pick just says so. */
+  levelOpen: boolean;
   onChoose: () => void;
   pending: boolean;
 }) {
   const mechanics = [...pick.effects, pick.limits, pick.locked_reason].filter(Boolean).join(' · ');
   let state = 'open';
   if (pick.chosen) state = 'chosen';
-  else if (pick.locked_reason) state = 'locked';
+  else if (!levelOpen) state = 'locked';
   return (
     <div className={`vowpicks-entry vowpicks-${state}`} data-testid="vow-pick">
       <span className="vowpicks-mark" aria-label={pick.chosen ? 'Chosen' : undefined}>
@@ -88,7 +91,13 @@ function LevelBlock({
         )}
       </div>
       {level.picks.map((pick) => (
-        <PickRow key={pick.id} pick={pick} pending={pending} onChoose={() => onChoose(pick.id)} />
+        <PickRow
+          key={pick.id}
+          pick={pick}
+          levelOpen={level.is_open}
+          pending={pending}
+          onChoose={() => onChoose(pick.id)}
+        />
       ))}
     </div>
   );
@@ -118,6 +127,7 @@ function VowBlock({ catalog, sheetId }: { catalog: VowPickCatalog; sheetId: numb
           pending={choose.isPending}
         />
       ))}
+      <p className="refsheet-note">Chosen picks change only through the Rite of Re-swearing.</p>
       {choose.isError && (
         <p className="refsheet-note vowpicks-error" role="alert">
           {choose.error.message}

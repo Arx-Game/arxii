@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VowPickCatalog } from '../../api';
@@ -134,6 +137,10 @@ describe('VowPicksPanel', () => {
       within(pickRow('Light on Your Feet')).getByText('no limits · costs more than is left')
     ).toBeInTheDocument();
     expect(pickRow('Last Stand')).toHaveClass('vowpicks-locked');
+    expect(pickRow('Light on Your Feet')).not.toHaveClass('vowpicks-locked');
+    expect(
+      screen.getByText('Chosen picks change only through the Rite of Re-swearing.')
+    ).toBeInTheDocument();
     expect(pickRow('Strike from the Flank')).toHaveClass('vowpicks-chosen');
     expect(screen.getAllByRole('button', { name: 'Choose' })).toHaveLength(1);
   });
@@ -155,5 +162,24 @@ describe('VowPicksPanel', () => {
     const { container } = render(<VowPicksPanel sheetId={5} />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('has a sheet.css rule for every vowpicks class it draws', () => {
+    mockQueries([CATALOG]);
+    const { container } = render(<VowPicksPanel sheetId={5} />);
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(
+      path.resolve(here, '..', '..', '..', 'character_sheets', 'sheet.css'),
+      'utf8'
+    );
+    const drawn = new Set<string>();
+    container.querySelectorAll('[class]').forEach((node) => {
+      node.classList.forEach((name) => {
+        if (name.startsWith('vowpicks-') && name !== 'vowpicks-open') drawn.add(name);
+      });
+    });
+
+    expect(drawn.size).toBeGreaterThan(5);
+    for (const name of drawn) expect(css).toContain(`.${name}`);
   });
 });

@@ -1,5 +1,7 @@
 """Shared API permission classes."""
 
+from typing import Any
+
 from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import APIView
@@ -21,16 +23,25 @@ class IsCharacterOwner(permissions.BasePermission):
         character_id = view.kwargs.get("character_id")
         if character_id is None:
             return False
-        try:
-            entries = request.user.cached_roster_entries
-        except AttributeError:
-            return False
-        entry = next((e for e in entries if e.character_sheet_id == int(character_id)), None)
-        if entry is None:
-            return False
-        tenure = entry.current_tenure
-        if tenure is not None and tenure.player_data.account_id == request.user.pk:
-            # The account's own character: only once its tenure has begun.
-            return tenure.start_date is not None
-        # Someone else holds it, so an ACTIVE loan to this account put it in the list.
-        return True
+        return account_may_play(request.user, int(character_id))
+
+
+def account_may_play(user: Any, character_id: int) -> bool:
+    """Whether a non-staff ``user`` may play the character ``character_id`` now (#4418).
+
+    ``IsCharacterOwner``'s rule, shared with a read that must answer the same
+    question for a character named in its query (the vow picks catalog, #4929).
+    """
+    try:
+        entries = user.cached_roster_entries
+    except AttributeError:
+        return False
+    entry = next((e for e in entries if e.character_sheet_id == character_id), None)
+    if entry is None:
+        return False
+    tenure = entry.current_tenure
+    if tenure is not None and tenure.player_data.account_id == user.pk:
+        # The account's own character: only once its tenure has begun.
+        return tenure.start_date is not None
+    # Someone else holds it, so an ACTIVE loan to this account put it in the list.
+    return True

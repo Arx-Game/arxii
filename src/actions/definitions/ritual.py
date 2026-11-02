@@ -164,6 +164,11 @@ class PerformRitualAction(Action):
         result_line = _service_result_line(result)
         if result_line:
             msg = f"{msg} {result_line}"
+        opened = _picks_opened(sheet, kwargs.get("thread"), result)
+        if opened:
+            from world.covenants.focus_picks import new_picks_lines  # noqa: PLC0415
+
+            msg = "\n".join([msg, *new_picks_lines(opened)])
         return ActionResult(
             success=True,
             message=msg,
@@ -171,6 +176,7 @@ class PerformRitualAction(Action):
                 "execution_kind": ritual.execution_kind,
                 "result": result,
                 "spectacular": bool(pool_gate is not None and pool_gate.spectacular),
+                "opened_pick_levels": opened,
             },
         )
 
@@ -328,6 +334,22 @@ def _service_result_line(result: Any) -> str:
     if isinstance(result, ThreadResonanceChangeResult):
         return result.message
     return ""
+
+
+def _picks_opened(sheet: Any, thread: Any, result: Any) -> list[int]:
+    """The vow pick levels a staff-authored SERVICE imbuing rite opened (#4929).
+
+    The canonical Rite of Imbuing says so through its ``imbue`` finisher; a SERVICE
+    variant returns the imbue result here, so telnet and the web read the same lines.
+    """
+    from world.magic.models import Thread  # noqa: PLC0415
+    from world.magic.types.threads import ThreadImbueResult  # noqa: PLC0415
+
+    if not isinstance(result, ThreadImbueResult) or not isinstance(thread, Thread):
+        return []
+    from world.covenants.focus_picks import picks_opened_by_imbuing  # noqa: PLC0415
+
+    return picks_opened_by_imbuing(sheet, thread, result)
 
 
 def _anima_ritual_message(ritual: Any, outcome: Any) -> str:

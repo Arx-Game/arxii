@@ -34,13 +34,14 @@ from world.covenants.factories import (
     engage_vow_with_thread,
 )
 from world.covenants.models import CharacterCovenantRole, CharacterVowFocusPick, VowFocusPick
-from world.magic.constants import TargetKind
+from world.magic.constants import IMBUING_SERVICE_PATH, TargetKind
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CovenantInductionRitualFactory,
     ImbuingRitualFactory,
     ResonanceFactory,
+    RitualFactory,
     ThreadFactory,
 )
 from world.magic.models import CharacterResonance, Thread, ThreadLevelUnlock
@@ -188,6 +189,14 @@ class ChoosingWithinTheBudget(_VowHolderCase):
         told = self.telnet(self.ysmay, "vow pick Read the Feint")
         self.assertIn("You take Read the Feint. Level 2: 4 of 4.", told)
         self.assertEqual(self.chosen_names(), {"Bleeding Cut", "Read the Feint"})
+
+    def test_a_pick_with_in_in_its_name_and_a_named_covenant(self) -> None:
+        self.pick("Cut in Two", level=2, value=1)
+
+        told = self.telnet(self.ysmay, "vow pick Cut in Two")
+        self.assertIn("You take Cut in Two. Level 2: 1 of 4.", told)
+        told = self.telnet(self.ysmay, "vow pick Bleeding Cut in The Quicksilver Hall")
+        self.assertIn("You take Bleeding Cut. Level 2: 4 of 4.", told)
 
     def test_a_pick_above_her_level_or_chosen_twice_is_refused(self) -> None:
         above = self.web(self.ysmay, CHOOSE, pick_id=self.stand.pk)
@@ -350,6 +359,35 @@ class ImbuingOpensNewPicks(_ImbuingCase):
         self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
         self.assertEqual(response.json()["opened_pick_levels"], [2])
 
+    def test_a_service_imbuing_rite_says_so_on_telnet_and_the_web(self) -> None:
+        """A staff-authored SERVICE variant of the rite carries the same line on both."""
+        quick = RitualFactory(name="Quick Imbuing", service_function_path=IMBUING_SERVICE_PATH)
+        thread = self.vow_thread(1)
+
+        told = self.telnet(
+            self.ysmay,
+            f"ritual Quick Imbuing thread={thread.pk} amount={self.ready(thread, 10, 15)}",
+        )
+        self.assertNotIn("new picks", told)
+        response = self.api(self.account_of(self.ysmay)).post(
+            "/api/magic/rituals/perform/",
+            {
+                "ritual_id": quick.pk,
+                "character_sheet_id": self.sheet.pk,
+                "kwargs": {"thread_id": thread.pk, "amount": self.ready(thread, 15, 20)},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("Vow level 2: 4 pts of new picks.", response.json()["message"])
+        self.assertEqual(response.json()["opened_pick_levels"], [2])
+
+        told = self.telnet(
+            self.ysmay,
+            f"ritual Quick Imbuing thread={thread.pk} amount={self.ready(thread, 20, 30)}",
+        )
+        self.assertIn("Vow level 3: 4 pts of new picks.", told)
+
     def test_imbuing_past_level_three_opens_nothing_more(self) -> None:
         thread = self.vow_thread(3)
 
@@ -403,7 +441,9 @@ class JoiningWithAVowAlreadyWoven(JourneyCase):
         )
         session = RitualSession.objects.get()
         self.telnet(self.ysmay, f"ritual join {session.pk} role=Warden")
-        self.telnet(self.wren, f"ritual fire {session.pk}")
+        # The joining line is sent once the rite's transaction commits.
+        with self.captureOnCommitCallbacks(execute=True):
+            self.telnet(self.wren, f"ritual fire {session.pk}")
         self.assertTrue(
             CharacterCovenantRole.objects.filter(
                 character_sheet=self.ysmay.sheet_data, covenant_role=self.warden
