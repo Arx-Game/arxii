@@ -1361,7 +1361,9 @@ All in `world.covenants.focus_picks`:
   (the maintainer's "thread first" ruling, ledger row vow-picks-open-with-the-thread).
 - The catalog read and the dispatch share one rule for who may act as a character:
   `web.api.permissions.account_may_play` (`IsCharacterOwner`'s rule: a begun tenure, a
-  borrowed NPC yes, a lent one no).
+  borrowed NPC yes, a lent one no). The read applies it through the
+  `MayPlayCatalogSheet` permission (`query_character_sheet_id`: a missing or malformed
+  `character_sheet` is a 400; a sheet the requester may not play is a 404).
 - `focus_pick_budget()` reads the budget without creating the config row (moved here from
   the vow page, which re-exports it).
 

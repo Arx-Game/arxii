@@ -151,6 +151,15 @@ class ReadingTheCatalog(_VowHolderCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_a_missing_or_malformed_sheet_id_is_refused(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+
+        for query in ({}, {"character_sheet": "abc"}, {"character_sheet": "\u00b2"}):
+            with self.subTest(query=query):
+                response = client.get(CATALOG_URL, query)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json(), {"detail": "character_sheet is required."})
+
 
 class ChoosingWithinTheBudget(_VowHolderCase):
     def test_she_fills_level_one_and_the_next_pick_is_refused(self) -> None:

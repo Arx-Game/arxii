@@ -142,11 +142,7 @@ function VowBlock({ catalog, sheetId }: { catalog: VowPickCatalog; sheetId: numb
           {choose.error.message}
         </p>
       )}
-      {message && !choose.isError && (
-        <p className="refsheet-note" role="status">
-          {message}
-        </p>
-      )}
+      {message && !choose.isError && <output className="refsheet-note block">{message}</output>}
     </Stack>
   );
 }
