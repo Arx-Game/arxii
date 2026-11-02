@@ -498,6 +498,22 @@ class VowPickCatalogSerializer(serializers.Serializer):
     levels = VowPickLevelSerializer(many=True, read_only=True)
 
 
+class ReswearOptionsSerializer(serializers.Serializer):
+    """The Rite of Re-swearing and its costs, for the sheet's dialog (#4940). Read-only.
+
+    ``ritual_id`` is null while no rite is authored (``unavailable_reason`` says so);
+    ``component_ids`` are the carried items that pay the rite's components, to send with
+    the perform.
+    """
+
+    ritual_id = serializers.IntegerField(read_only=True, allow_null=True)
+    ap_cost = serializers.IntegerField(read_only=True)
+    anima_cost = serializers.IntegerField(read_only=True)
+    components = serializers.ListField(child=serializers.CharField(), read_only=True)
+    component_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+    unavailable_reason = serializers.CharField(read_only=True, allow_blank=True)
+
+
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
     """Read-only serializer for GearArchetypeCompatibility join rows."""
 

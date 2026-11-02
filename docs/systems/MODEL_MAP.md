@@ -3820,6 +3820,7 @@
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' - Return the single active CourtPact for (covenant, servant_sheet), or None.`
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole', standing: 'str' = MembershipStanding.CORE, sworn_as: 'Persona | None' = None) -> 'CharacterCovenantRole' - Create a new active membership row. Atomic.`
+- `announce_open_vow_picks(membership: 'CharacterCovenantRole') -> 'None' - Tell a character who just took up a vow which pick levels are already open.`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' - Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None, sworn_as: 'Persona | None' = None) -> 'CharacterCovenantRole' - Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' - Assign a new rank to a member. Requires can_manage_ranks.`
@@ -7014,7 +7015,7 @@
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, character_sheet: 'CharacterSheet | None' = None) -> 'list[ResolvedPullEffect]' - Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' - Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' - Select a control mishap consequence pool based on deficit magnitude.`
-- `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' - Deduct resonance balance and greedily advance thread level.`
+- `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int', **_ritual_dispatch_kwargs: 'object') -> 'ThreadImbueResult' - Deduct resonance balance and greedily advance thread level.`
 - `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '') -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' - Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `strain_to_intensity(*, strain_commitment: 'int', config: 'StrainCurve') -> 'int' - Convert committed anima into a diminishing-return power bonus.`

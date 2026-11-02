@@ -22,6 +22,7 @@ export const covenantKeys = {
   ranks: (covenantId: number) => [...covenantKeys.all, 'ranks', covenantId] as const,
   gmRequest: (covenantId: number) => [...covenantKeys.all, 'gm-request', covenantId] as const,
   vowPicks: (sheetId: number) => [...covenantKeys.all, 'vow-picks', sheetId] as const,
+  reswearOptions: (sheetId: number) => [...covenantKeys.all, 'reswear-options', sheetId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -328,6 +329,28 @@ export function useChooseVowPick(sheetId: number) {
       api.chooseVowPick(sheetId, covenantId, pickId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.vowPicks(sheetId) }).catch(() => {});
+    },
+  });
+}
+
+/** The Rite of Re-swearing's costs and paying items, read while its dialog is open. */
+export function useReswearOptions(sheetId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: covenantKeys.reswearOptions(sheetId),
+    queryFn: () => api.getReswearOptions(sheetId),
+    enabled: enabled && sheetId > 0,
+  });
+}
+
+/** Perform the rite, then re-read the catalog and the rite's paying items. */
+export function useReswearPick(sheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (request: Omit<api.ReswearRequest, 'sheetId'>) =>
+      api.performReswear({ ...request, sheetId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.vowPicks(sheetId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.reswearOptions(sheetId) }).catch(() => {});
     },
   });
 }

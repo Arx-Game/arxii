@@ -433,8 +433,12 @@ actions, backends, and service functions.
   per vow its level, per pick level the spend of the budget, each pick with its price,
   description, effect and limit lines, chosen or locked with why. `vow pick <name> [in
   <covenant>]` runs `ChooseVowFocusPickAction` (the web dispatches the same key). The
-  trailing `in <covenant>` names one of the caller's covenants. Typed in
-  `integration_tests/test_choosing_vow_picks_journeys.py`.
+  trailing `in <covenant>` names one of the caller's covenants. `vow reswear <chosen>=<new>
+  [in <covenant>]` (#4940) resolves both names among the caller's own catalogs and runs
+  `PerformRitualAction` with the Rite of Re-swearing (`reswear_ritual()`), the carried items
+  and `old_pick_id`/`new_pick_id`/`covenant_id`. Typed in
+  `integration_tests/test_choosing_vow_picks_journeys.py` and
+  `integration_tests/test_reswearing_vow_picks_journeys.py`.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute

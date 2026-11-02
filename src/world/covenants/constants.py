@@ -90,6 +90,9 @@ SECONDARY_VOW_POTENCY_TENTHS_DEFAULT = 6
 VOW_FOCUS_PICK_VALUE_DEFAULT = 4
 VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT = 4
 VOW_FOCUS_PICK_MAX_LEVEL = 3
+#: Action points the Rite of Re-swearing takes from the weekly pool (#4940). A
+#: placeholder until staff set it on VowFocusPickConfig.
+VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT = 3
 #: A limit met every time (10 tenths) leaves the price whole.
 FOCUS_PICK_LIMIT_FREQUENCY_FULL = 10
 

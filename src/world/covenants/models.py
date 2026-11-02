@@ -33,6 +33,7 @@ from world.covenants.constants import (
     SECONDARY_VOW_POTENCY_TENTHS_DEFAULT,
     VOW_FOCUS_PICK_BUDGET_PER_LEVEL_DEFAULT,
     VOW_FOCUS_PICK_MAX_LEVEL,
+    VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT,
     VOW_FOCUS_PICK_VALUE_DEFAULT,
     BattleBinding,
     CommandTier,
@@ -1439,7 +1440,8 @@ class VowFocusPickConfig(SharedMemoryModel):
     """Singleton (pk=1): the focus pick budget per pick level (#4759).
 
     A character's chosen picks at one pick level may cost, added up, no more than
-    ``budget_per_level``. Lazy-created through
+    ``budget_per_level``. ``respec_ap_cost`` is what the Rite of Re-swearing, the one
+    way to change a chosen pick, takes from the weekly action points (#4940). Lazy-created through
     ``world.covenants.focus_picks.vow_focus_pick_config()`` with the default, like
     ``SecondaryVowConfig``. Updated in the Django admin.
     """
@@ -1452,6 +1454,12 @@ class VowFocusPickConfig(SharedMemoryModel):
             "Points a character may spend on focus picks at each pick level. The prices "
             "of their chosen picks at one level must add up to no more than this."
         ),
+    )
+    respec_ap_cost = models.PositiveSmallIntegerField(
+        default=VOW_FOCUS_PICK_RESPEC_AP_COST_DEFAULT,
+        validators=[MinValueValidator(1)],
+        verbose_name="Respec AP cost",
+        help_text="Action points the Rite of Re-swearing takes from the weekly pool.",
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

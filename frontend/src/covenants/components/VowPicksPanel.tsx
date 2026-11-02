@@ -6,7 +6,8 @@
  * together, each under its vow's name within the level, beside the level's one shared
  * budget). A chosen pick is marked, a pick that cannot be taken now is dimmed with
  * why, and a pick that can is chosen with its button, through the action dispatch.
- * Budget left unspent simply stays left.
+ * Budget left unspent simply stays left. Change picks opens the Rite of Re-swearing
+ * (ReswearDialog), the one way to give up a chosen pick.
  */
 
 import { Fragment, useState } from 'react';
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Heading, Stack, Tag } from '@/character_sheets/components/sheet/primitives';
 import type { VowPickCatalog, VowPickEntry, VowPickLevel } from '../api';
 import { useChooseVowPick, useVowPicks } from '../queries';
+import { ReswearDialog } from './ReswearDialog';
 
 function points(price: number): string {
   return `${price} ${price === 1 ? 'pt' : 'pts'}`;
@@ -114,6 +116,8 @@ function LevelBlock({
 function VowBlock({ catalog, sheetId }: { catalog: VowPickCatalog; sheetId: number }) {
   const choose = useChooseVowPick(sheetId);
   const [message, setMessage] = useState<string | null>(null);
+  const [reswearing, setReswearing] = useState(false);
+  const anyChosen = catalog.levels.some((level) => level.picks.some((pick) => pick.chosen));
   const onChoose = (pickId: number) => {
     setMessage(null);
     choose.mutate(
@@ -136,7 +140,26 @@ function VowBlock({ catalog, sheetId }: { catalog: VowPickCatalog; sheetId: numb
           pending={choose.isPending}
         />
       ))}
-      <p className="refsheet-note">Chosen picks change only through the Rite of Re-swearing.</p>
+      <div className="vowpicks-rite-foot">
+        <p className="refsheet-note">Chosen picks change only through the Rite of Re-swearing.</p>
+        {anyChosen && (
+          <Button type="button" size="sm" variant="outline" onClick={() => setReswearing(true)}>
+            Change picks
+          </Button>
+        )}
+      </div>
+      {anyChosen && (
+        <ReswearDialog
+          catalog={catalog}
+          sheetId={sheetId}
+          open={reswearing}
+          onOpenChange={setReswearing}
+          onDone={(line) => {
+            choose.reset();
+            setMessage(line);
+          }}
+        />
+      )}
       {choose.isError && (
         <p className="refsheet-note vowpicks-error" role="alert">
           {choose.error.message}

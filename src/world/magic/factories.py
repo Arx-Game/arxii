@@ -1583,6 +1583,23 @@ class DriftCorrectionRiteFactory(RitualFactory):
             )
 
 
+class ReswearRiteFactory(RitualFactory):
+    """Test factory for the Rite of Re-swearing, which changes a chosen vow pick (#4940).
+
+    A SERVICE ritual found by its service path, with no anima or components unless a
+    test adds them. Staff author the real row; this is a test stand-in.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Re-swearing"
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.focus_picks.reswear_vow_pick"
+    flow = None
+
+
 class ThreadRetuneRiteFactory(RitualFactory):
     """Test factory for the rite that moves a thread to another resonance (slice 6 of #4672).
 

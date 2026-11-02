@@ -60,6 +60,7 @@ from world.covenants.serializers import (
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
     ReorderRanksRequestSerializer,
+    ReswearOptionsSerializer,
     SphinxVerdictSerializer,
     TransferTopRequestSerializer,
     VowPickCatalogSerializer,
@@ -159,6 +160,30 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         # One sheet's catalog, not a filtered list of rows: not a FilterSet fit.
         sheet = get_object_or_404(CharacterSheet, pk=query_character_sheet_id(request))
         return Response(VowPickCatalogSerializer(vow_pick_catalogs(sheet), many=True).data)
+
+    @extend_schema(responses=ReswearOptionsSerializer)
+    @action(
+        detail=False,
+        methods=["GET"],
+        url_path="reswear-options",
+        pagination_class=None,
+        permission_classes=[IsAuthenticated, MayPlayCatalogSheet],
+    )
+    def reswear_options(self, request: Request) -> Response:
+        """GET /api/covenants/character-roles/reswear-options/?character_sheet=<id>
+
+        The Rite of Re-swearing for the sheet's Change picks dialog (#4940): the rite's
+        id, its action point and anima costs, the components it asks for, and the
+        character's carried items that pay them. Read-only and self-only, the same
+        ``MayPlayCatalogSheet`` rule as ``vow-picks``. Performing goes through
+        ``POST /api/magic/rituals/perform/`` with ``kwargs: {old_pick_id, new_pick_id,
+        covenant_id}`` and ``components: component_ids``.
+        """
+        from world.covenants.focus_picks import reswear_options  # noqa: PLC0415
+
+        # One sheet's rite costs, not a filtered list of rows: not a FilterSet fit.
+        sheet = get_object_or_404(CharacterSheet, pk=query_character_sheet_id(request))
+        return Response(ReswearOptionsSerializer(reswear_options(sheet)).data)
 
     @action(
         detail=True,

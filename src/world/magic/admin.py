@@ -21,7 +21,7 @@ from world.magic.audere_majora import (
     AudereMajoraFaithVariantAppliedCondition,
     AudereMajoraThreshold,
 )
-from world.magic.constants import GiftKind
+from world.magic.constants import GiftKind, RitualExecutionKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -1706,6 +1706,77 @@ class RitualCheckConfigInline(admin.StackedInline):
     autocomplete_fields = ["stat", "skill", "specialization", "resonance", "check_type"]
 
 
+UNREGISTERED_SERVICE_MESSAGE = "That is not a service a ritual may run."
+NAME_THE_SERVICE_MESSAGE = "Choose the service this ritual runs."
+
+
+class RitualAdminForm(forms.ModelForm):
+    """The Ritual admin form: a SERVICE ritual's service is picked from the registry.
+
+    ``service_function_path`` decides which code a perform runs, so it is a select over
+    ``world.magic.service_rituals.SERVICE_RITUAL_FUNCTIONS``, never free text, and
+    ``clean`` refuses any path not listed there. A row already holding an unlisted path
+    shows it (marked) and may keep it unchanged, so an older rite stays editable. A new
+    ritual made here is a SERVICE ritual: choosing its service sets ``execution_kind``,
+    which stays read-only, as does ``flow``.
+    """
+
+    service_function_path = forms.ChoiceField(required=False, label="Service function path")
+
+    class Meta:
+        model = Ritual
+        # Every editable column; execution_kind and flow are read-only on RitualAdmin.
+        fields = [
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+            "name",
+            "description",
+            "hedge_accessible",
+            "anima_requirement",
+            "glimpse_eligible",
+            "narrative_prose",
+            "input_schema",
+            "service_function_path",
+            "draft_validator_path",
+            "author_account",
+            "site_property",
+            "client_hosted",
+            "participation_rule",
+            "min_participants",
+            "max_participants",
+        ]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        from world.magic.service_rituals import SERVICE_RITUAL_FUNCTIONS  # noqa: PLC0415
+
+        choices = [("", "---------"), *SERVICE_RITUAL_FUNCTIONS.items()]
+        stored = self.instance.service_function_path
+        if stored and stored not in SERVICE_RITUAL_FUNCTIONS:
+            choices.append((stored, f"{stored} (not registered)"))
+        self.fields["service_function_path"].choices = choices
+
+    def clean_service_function_path(self) -> str:
+        from world.magic.service_rituals import is_registered_service  # noqa: PLC0415
+
+        path = self.cleaned_data.get("service_function_path") or ""
+        unchanged = path == self.instance.service_function_path
+        if path and not is_registered_service(path) and not unchanged:
+            raise ValidationError(UNREGISTERED_SERVICE_MESSAGE)
+        if not path and self.instance.pk is None:
+            raise ValidationError(NAME_THE_SERVICE_MESSAGE)
+        return path
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        if self.instance.pk is None and cleaned.get("service_function_path"):
+            # execution_kind is read-only; a ritual made here is a SERVICE ritual.
+            self.instance.execution_kind = RitualExecutionKind.SERVICE
+        return cleaned
+
+
 @admin.register(Ritual)
 class RitualAdmin(admin.ModelAdmin):
     list_display = [
@@ -1719,13 +1790,11 @@ class RitualAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     autocomplete_fields = ["author_account", "flow", "site_property"]
     inlines = [RitualComponentRequirementInline, RitualCheckConfigInline]
-    # Dispatch fields (execution_kind / service_function_path / flow)
-    # determine WHICH code runs when a ritual is performed. Exposing them
-    # as editable is an arbitrary-import RCE vector if a staff cookie is
-    # compromised — admin could rewrite the path to point at any sensitive
-    # service function and trigger it via the ritual UI. Manage these
-    # fields via seed code instead.
-    readonly_fields = ["execution_kind", "service_function_path", "flow"]
+    form = RitualAdminForm
+    # execution_kind and flow decide which code a perform runs and stay read-only. The
+    # service path is a select over the registered service functions (RitualAdminForm),
+    # never free text, so a staff login cannot point a rite at an arbitrary function.
+    readonly_fields = ["execution_kind", "flow"]
 
 
 @admin.register(RitualAnimaContribution)

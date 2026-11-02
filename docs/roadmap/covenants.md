@@ -978,6 +978,26 @@ until slices 2 to 7. What was built:
   a level is told the same. No migration. Journeys:
   `src/integration_tests/test_choosing_vow_picks_journeys.py`.
 
+### Rite of Re-swearing (#4940, slice 7 of #4844) - SHIPPED
+
+- A vow holder gives up one chosen pick for another of the same level through a
+  staff-authored SERVICE ritual (`reswear_vow_pick`, found by `RESWEAR_SERVICE_PATH`). It costs
+  `VowFocusPickConfig.respec_ap_cost` action points from the weekly pool (a placeholder 3,
+  edited on the config's admin page) plus the rite's own anima and components, and has no
+  waiting timer.
+- `check_reswear` runs before anything is spent and refuses: a character in a fight (combat
+  encounter or battle), a pick not chosen, a pick already held, a pick of another level, a swap
+  that leaves the level over its budget, a secondary or left vow, and too few action points.
+  Nothing is spent on a refusal.
+- The sheet's vow picks panel has Change picks, opening the rite (demo screen 9: Give up, Take
+  instead, the level before and after, the cost); `GET
+  /api/covenants/character-roles/reswear-options/` gives it the rite, its costs and the carried
+  items that pay it. Telnet: `vow reswear <chosen>=<new> [in <covenant>]`, or `ritual Rite of
+  Re-swearing old_pick_id=<id> new_pick_id=<id>`.
+- Required content: a missing rite (REQUIRED), a second one, and a target-resonance offering it
+  can never pay (TUNING). Migration `0364_vow_pick_respec_ap_cost`. Journeys:
+  `src/integration_tests/test_reswearing_vow_picks_journeys.py`.
+
 ### Vow scaling of maneuver effects (#4783, ADR-4783-A) - SHIPPED
 
 Vows scale combat maneuvers through the same `VowStatScaling` rows they use for stats, and

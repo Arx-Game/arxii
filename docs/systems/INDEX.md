@@ -7952,7 +7952,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     `vow_pick_catalogs` (`VowPickCatalog`/`VowPickLevel`/`VowPickEntry`), `pick_effect_lines`,
     `limits_line`, `new_picks_lines`, `picks_opened_by_imbuing`, `announce_open_vow_picks`;
     `VowFocusPickRefusedError`; `ChooseVowFocusPickAction` (`choose_vow_focus_pick`); `GET
-    /api/covenants/character-roles/vow-picks/`; telnet `vow picks` / `vow pick`. See
+    /api/covenants/character-roles/vow-picks/`; telnet `vow picks` / `vow pick`. The Rite of
+    Re-swearing since #4940 [BUILT & WIRED]: `reswear_vow_pick` (SERVICE ritual,
+    `RESWEAR_SERVICE_PATH`), `check_reswear`, `reswear_ritual`, `reswear_options`
+    (`ReswearOptions`, `ReswearResult`), `VowFocusPickConfig.respec_ap_cost`; `GET
+    /api/covenants/character-roles/reswear-options/`; telnet `vow reswear`. See
     `covenants.md` "Vow focus picks and combat styles".
   - `CovenantRoleDefenseProfile` (#2533) — one row per `CovenantRole` (OneToOne,
     `related_name="defense_profile"`): `style` (`DefenseStyle`),

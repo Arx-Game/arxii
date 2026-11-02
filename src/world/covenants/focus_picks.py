@@ -45,11 +45,19 @@ from world.covenants.models import (
     VowFocusPickConfig,
     VowFocusPickLimit,
 )
-from world.covenants.types import NewPicks, VowPickCatalog, VowPickEntry, VowPickLevel
+from world.covenants.types import (
+    NewPicks,
+    ReswearOptions,
+    ReswearResult,
+    VowPickCatalog,
+    VowPickEntry,
+    VowPickLevel,
+)
 
 if TYPE_CHECKING:
+    from world.action_points.models import ActionPointPool
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Thread
+    from world.magic.models import Ritual, RitualComponentRequirement, Thread
     from world.magic.types.threads import ThreadImbueResult
 
 #: The lowest price any pick can cost, however many limits it carries.
@@ -245,6 +253,19 @@ def validate_character_focus_pick(choice: CharacterVowFocusPick) -> None:
 # A player choosing their own picks (#4929, slice 6 of #4844)
 
 
+NO_LONGER_HELD_MESSAGE = "You no longer hold this vow."
+
+
+def _lock_held(membership: CharacterCovenantRole) -> bool:
+    """Lock ``membership``'s row; True while the database says the vow is still held.
+
+    A filter, not get(): the identity map would answer get() without the lock. Called
+    inside the caller's transaction, so the lock lasts until it commits.
+    """
+    locked = CharacterCovenantRole.objects.select_for_update().filter(pk=membership.pk)
+    return bool(list(locked.filter(left_at__isnull=True).values_list("pk", flat=True)))
+
+
 def _refusal_text(exc: ValidationError) -> str:
     """The first message of a validator refusal, which names the rule it broke."""
     return next(iter(exc.messages), VowFocusPickRefusedError.user_message)
@@ -266,14 +287,12 @@ def choose_vow_focus_pick(
         VowFocusPickRefusedError: naming the rule the choice breaks.
     """
     with transaction.atomic():
-        held = CharacterCovenantRole.objects.select_for_update().get(pk=membership.pk)
-        if held.left_at is not None:
-            msg = "You no longer hold this vow."
-            raise VowFocusPickRefusedError(msg)
-        if CharacterVowFocusPick.objects.filter(character_role=held, pick=pick).exists():
+        if not _lock_held(membership):
+            raise VowFocusPickRefusedError(NO_LONGER_HELD_MESSAGE)
+        if CharacterVowFocusPick.objects.filter(character_role=membership, pick=pick).exists():
             msg = f"You have already chosen {pick.name}."
             raise VowFocusPickRefusedError(msg)
-        choice = CharacterVowFocusPick(character_role=held, pick=pick)
+        choice = CharacterVowFocusPick(character_role=membership, pick=pick)
         try:
             validate_character_focus_pick(choice)
         except ValidationError as exc:
@@ -600,4 +619,299 @@ def announce_open_vow_picks(membership: CharacterCovenantRole) -> None:
         lambda: send_narrative_message(
             recipients=[sheet], body="\n".join(lines), category=NarrativeCategory.COVENANT
         )
+    )
+
+
+# ---------------------------------------------------------------------------
+# The Rite of Re-swearing: changing a chosen pick (#4940, slice 7 of #4844)
+
+#: The SERVICE ritual staff author for the rite carries this path; it is found by it.
+RESWEAR_SERVICE_PATH = "world.covenants.focus_picks.reswear_vow_pick"
+
+IN_A_FIGHT_MESSAGE = "You cannot re-swear a vow pick during a fight."
+NAME_THE_OLD_PICK_MESSAGE = "Name the chosen pick to give up."
+NAME_THE_NEW_PICK_MESSAGE = "Name the pick to take instead."
+NOT_CHOSEN_MESSAGE = "You have not chosen that pick."
+NO_SUCH_PICK_MESSAGE = "Your vow offers no such pick."
+SECONDARY_VOW_MESSAGE = "This is a secondary vow, and a secondary vow gets no focus picks."
+NO_RESWEAR_RITE_MESSAGE = "No ritual can change a chosen vow pick yet."
+
+
+@dataclass(frozen=True)
+class _Swap:
+    """A swap the rite may make, as ``check_reswear`` found it. Nothing written yet."""
+
+    membership: CharacterCovenantRole
+    old_choice: CharacterVowFocusPick
+    new_pick: VowFocusPick
+    budget: int
+    ap_cost: int
+    ap_pool: ActionPointPool
+
+
+def reswear_ritual() -> Ritual | None:
+    """The authored SERVICE ritual that changes a chosen pick, or None while there is none.
+
+    The lowest pk when staff have made more than one (Required content lists the rest).
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models import Ritual  # noqa: PLC0415
+
+    return (
+        Ritual.objects.filter(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path=RESWEAR_SERVICE_PATH,
+        )
+        .order_by("pk")
+        .first()
+    )
+
+
+def _pick_id(raw: object) -> int | None:
+    """An id kwarg as an int: a JSON number from the web, a typed number from telnet."""
+    if isinstance(raw, bool) or not isinstance(raw, int | str):
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def in_a_fight(sheet: CharacterSheet) -> bool:
+    """True while the character is an active fighter in a combat encounter or a battle."""
+    from world.battles.round_context import resolve_battle_round_context  # noqa: PLC0415
+    from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
+
+    return (
+        resolve_combat_round_context(sheet) is not None
+        or resolve_battle_round_context(sheet) is not None
+    )
+
+
+def _chosen_old_pick(
+    sheet: CharacterSheet, old_pick_id: int, covenant_id: int | None
+) -> CharacterVowFocusPick:
+    """The caller's own choice of the pick to give up, on whichever vow holds it."""
+    choices = CharacterVowFocusPick.objects.filter(
+        character_role__character_sheet=sheet, pick_id=old_pick_id
+    ).select_related("pick", "character_role__covenant", "character_role__covenant_role")
+    if covenant_id is not None:
+        choices = choices.filter(character_role__covenant_id=covenant_id)
+    found = list(choices)
+    if not found:
+        raise VowFocusPickRefusedError(NOT_CHOSEN_MESSAGE)
+    if len(found) > 1:
+        names = sorted(choice.character_role.covenant.name for choice in found)
+        msg = f"Which covenant? You chose it in: {', '.join(names)}."
+        raise VowFocusPickRefusedError(msg)
+    return found[0]
+
+
+def _pick_to_take(
+    membership: CharacterCovenantRole, old: VowFocusPick, new_pick_id: int
+) -> VowFocusPick:
+    """The pick to take instead: offered by the vow, not yet chosen, at ``old``'s level."""
+    new = VowFocusPick.objects.filter(
+        pk=new_pick_id, covenant_role_id__in=choosable_role_ids(membership)
+    ).first()
+    if new is None:
+        raise VowFocusPickRefusedError(NO_SUCH_PICK_MESSAGE)
+    if CharacterVowFocusPick.objects.filter(character_role=membership, pick=new).exists():
+        msg = f"You have already chosen {new.name}."
+        raise VowFocusPickRefusedError(msg)
+    if new.pick_level != old.pick_level:
+        msg = (
+            f"{new.name} is a level {new.pick_level} pick and {old.name} is level "
+            f"{old.pick_level}; a pick changes only for one of the same level."
+        )
+        raise VowFocusPickRefusedError(msg)
+    return new
+
+
+def check_reswear(
+    character_sheet: CharacterSheet,
+    *,
+    old_pick_id: object = None,
+    new_pick_id: object = None,
+    covenant_id: object = None,
+) -> _Swap:
+    """Refuse a swap the Rite of Re-swearing cannot make; return the swap. Writes nothing.
+
+    ``PerformRitualAction`` calls this before it spends the rite's components and anima;
+    ``reswear_vow_pick`` calls it again under the membership's lock. In order it refuses:
+    a character in a fight; no pick named to give up or to take; a pick to give up the
+    caller has not chosen; a vow they have left or a secondary vow; a pick their vow does
+    not offer; one already chosen; one of another level; a swap that leaves the level
+    over its budget; and too few action points for ``respec_ap_cost``.
+
+    Raises:
+        VowFocusPickRefusedError: naming the rule the swap breaks.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    if in_a_fight(character_sheet):
+        raise VowFocusPickRefusedError(IN_A_FIGHT_MESSAGE)
+    old_id = _pick_id(old_pick_id)
+    if old_id is None:
+        raise VowFocusPickRefusedError(NAME_THE_OLD_PICK_MESSAGE)
+    new_id = _pick_id(new_pick_id)
+    if new_id is None:
+        raise VowFocusPickRefusedError(NAME_THE_NEW_PICK_MESSAGE)
+    old_choice = _chosen_old_pick(character_sheet, old_id, _pick_id(covenant_id))
+    membership = old_choice.character_role
+    old = old_choice.pick
+    if membership.left_at is not None:
+        raise VowFocusPickRefusedError(NO_LONGER_HELD_MESSAGE)
+    if membership.is_secondary:
+        raise VowFocusPickRefusedError(SECONDARY_VOW_MESSAGE)
+    new = _pick_to_take(membership, old, new_id)
+    config = vow_focus_pick_config()
+    left = config.budget_per_level - spent_at_level(membership, old.pick_level) + pick_price(old)
+    price = pick_price(new)
+    if price > left:
+        msg = (
+            f"{new.name} costs {price}; giving up {old.name} leaves {left} of the "
+            f"{config.budget_per_level} points for level {old.pick_level} picks."
+        )
+        raise VowFocusPickRefusedError(msg)
+    ap_cost = config.respec_ap_cost
+    pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
+    if pool is None or not pool.can_afford(ap_cost):
+        have = pool.current if pool is not None else 0
+        msg = f"The rite takes {ap_cost} action points, and you have {have}."
+        raise VowFocusPickRefusedError(msg)
+    return _Swap(
+        membership=membership,
+        old_choice=old_choice,
+        new_pick=new,
+        budget=config.budget_per_level,
+        ap_cost=ap_cost,
+        ap_pool=pool,
+    )
+
+
+@transaction.atomic
+def reswear_vow_pick(
+    character_sheet: CharacterSheet,
+    *,
+    old_pick_id: object = None,
+    new_pick_id: object = None,
+    covenant_id: object = None,
+    **_ritual_dispatch_kwargs: object,  # ritual dispatch also forwards ``ritual=``
+) -> ReswearResult:
+    """Swap one chosen pick for another of the same level, for the rite's action points.
+
+    The SERVICE function of the Rite of Re-swearing (#4940). Locks the membership row,
+    checks the swap again under the lock (``check_reswear``), deletes the given-up
+    choice, runs the admin's own rules on the new one (``validate_character_focus_pick``)
+    and saves it, then spends ``respec_ap_cost`` from the weekly pool. One transaction:
+    a refusal at any step leaves the picks and the pool as they were. The rite's anima
+    and components are spent by ``PerformRitualAction`` around this.
+
+    Raises:
+        VowFocusPickRefusedError: naming the rule the swap breaks.
+    """
+    ids = {"old_pick_id": old_pick_id, "new_pick_id": new_pick_id, "covenant_id": covenant_id}
+    swap = check_reswear(character_sheet, **ids)
+    if not _lock_held(swap.membership):
+        raise VowFocusPickRefusedError(NO_LONGER_HELD_MESSAGE)
+    # Again under the lock: a swap or a choice sent at the same moment may have landed.
+    swap = check_reswear(character_sheet, **ids)
+    old = swap.old_choice.pick
+    swap.old_choice.delete()
+    choice = CharacterVowFocusPick(character_role=swap.membership, pick=swap.new_pick)
+    try:
+        validate_character_focus_pick(choice)
+    except ValidationError as exc:
+        raise VowFocusPickRefusedError(_refusal_text(exc)) from exc
+    choice.save()
+    if not swap.ap_pool.spend(swap.ap_cost):
+        msg = f"The rite takes {swap.ap_cost} action points, and you have {swap.ap_pool.current}."
+        raise VowFocusPickRefusedError(msg)
+    level = old.pick_level
+    spent = spent_at_level(swap.membership, level)
+    return ReswearResult(
+        membership_id=swap.membership.pk,
+        old_pick_id=old.pk,
+        new_pick_id=swap.new_pick.pk,
+        level=level,
+        spent=spent,
+        budget=swap.budget,
+        ap_spent=swap.ap_cost,
+        message=(
+            f"You give up {old.name} and take {swap.new_pick.name}. Level {level}: "
+            f"{spent} of {swap.budget}. {swap.ap_cost} AP spent."
+        ),
+    )
+
+
+def _requirement_label(requirement: RitualComponentRequirement) -> str:
+    """One component the rite asks for, as the dialog's Cost line names it."""
+    if requirement.item_template_id is not None:
+        name = requirement.item_template.name
+    elif requirement.min_touchstone_tier_id is not None:
+        name = f"an attuned touchstone of {requirement.min_touchstone_tier.name}"
+    else:
+        name = "an offering"
+    return name if requirement.quantity == 1 else f"{name} x{requirement.quantity}"
+
+
+def reswear_options(sheet: CharacterSheet) -> ReswearOptions:
+    """The rite, its costs, and the carried items that pay it, for the sheet's dialog.
+
+    Read-only: the AP pool is not created, nothing is spent. ``component_ids`` are what
+    ``resolve_ritual_components`` picks from the character's carried items, the way
+    telnet offers everything carried; empty when they do not cover the rite.
+    """
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        HedgeInaccessibleError,
+        RitualComponentError,
+    )
+    from world.magic.services.ritual_components import (  # noqa: PLC0415
+        resolve_ritual_components,
+    )
+    from world.magic.services.ritual_pool import ritual_visible_to  # noqa: PLC0415
+
+    config = VowFocusPickConfig.objects.cached_singleton() or VowFocusPickConfig()
+    ritual = reswear_ritual()
+    # The perform's own visibility rule: a rite the character cannot perform is not offered.
+    reason = ""
+    if ritual is None:
+        reason = NO_RESWEAR_RITE_MESSAGE
+    elif not ritual_visible_to(sheet, ritual):
+        reason = HedgeInaccessibleError.user_message
+    if ritual is None or reason:
+        return ReswearOptions(
+            ritual_id=None,
+            ap_cost=config.respec_ap_cost,
+            anima_cost=0,
+            components=[],
+            component_ids=[],
+            unavailable_reason=reason,
+        )
+    requirements = list(
+        ritual.requirements.select_related("item_template", "min_touchstone_tier").order_by("pk")
+    )
+    component_ids: list[int] = []
+    if requirements:
+        carried = list(
+            ItemInstance.objects.filter(
+                holder_character_sheet=sheet, destroyed_at__isnull=True
+            ).select_related("template__resonance_tier")
+        )
+        try:
+            allocations = resolve_ritual_components(
+                ritual=ritual, components=carried, performer_sheet=sheet
+            )
+        except RitualComponentError:
+            allocations = []
+        component_ids = list(dict.fromkeys(item.pk for item, _ in allocations))
+    return ReswearOptions(
+        ritual_id=ritual.pk,
+        ap_cost=config.respec_ap_cost,
+        anima_cost=ritual.anima_requirement,
+        components=[_requirement_label(requirement) for requirement in requirements],
+        component_ids=component_ids,
+        unavailable_reason="",
     )

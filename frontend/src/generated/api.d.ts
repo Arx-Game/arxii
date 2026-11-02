@@ -8068,6 +8068,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/reswear-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/covenants/character-roles/reswear-options/?character_sheet=<id>
+     *
+     *     The Rite of Re-swearing for the sheet's Change picks dialog (#4940): the rite's
+     *     id, its action point and anima costs, the components it asks for, and the
+     *     character's carried items that pay them. Read-only and self-only, the same
+     *     ``MayPlayCatalogSheet`` rule as ``vow-picks``. Performing goes through
+     *     ``POST /api/magic/rituals/perform/`` with ``kwargs: {old_pick_id, new_pick_id,
+     *     covenant_id}`` and ``components: component_ids``.
+     */
+    get: operations['covenants_character_roles_reswear_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/character-roles/vow-picks/': {
     parameters: {
       query?: never;
@@ -49292,6 +49318,21 @@ export interface components {
       readonly allowed_effect_type_ids: number[];
     };
     /**
+     * @description The Rite of Re-swearing and its costs, for the sheet's dialog (#4940). Read-only.
+     *
+     *     ``ritual_id`` is null while no rite is authored (``unavailable_reason`` says so);
+     *     ``component_ids`` are the carried items that pay the rite's components, to send with
+     *     the perform.
+     */
+    ReswearOptions: {
+      readonly ritual_id: number | null;
+      readonly ap_cost: number;
+      readonly anima_cost: number;
+      readonly components: string[];
+      readonly component_ids: number[];
+      readonly unavailable_reason: string;
+    };
+    /**
      * @description * `all_equal` - All Equal
      *     * `by_role` - By Role
      *     * `by_participation` - By Participation
@@ -65602,6 +65643,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_reswear_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReswearOptions'];
         };
       };
     };

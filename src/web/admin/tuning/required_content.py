@@ -2167,6 +2167,88 @@ def _probe_thread_resonance_ritual_web_payable() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_reswear_ritual() -> ProbeResult:
+    """A SERVICE ritual changes a chosen vow pick: the Rite of Re-swearing (#4940).
+
+    Consumer: `world/covenants/focus_picks.py reswear_ritual()`, which finds the rite by
+    its `service_function_path` (`RESWEAR_SERVICE_PATH`). The probe reads the same function.
+    """
+    from world.covenants.focus_picks import (  # noqa: PLC0415
+        RESWEAR_SERVICE_PATH,
+        reswear_ritual,
+    )
+
+    if reswear_ritual() is None:
+        return ProbeResult(
+            present=False,
+            missing=("the Rite of Re-swearing",),
+            detail=(
+                "No ritual changes a chosen vow pick: no SERVICE ritual has the service "
+                f"path {RESWEAR_SERVICE_PATH}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_single_reswear_ritual() -> ProbeResult:
+    """At most one SERVICE ritual carries the Re-swearing service path (#4940).
+
+    Consumer: `reswear_ritual()` hands the sheet's dialog and `vow reswear` the lowest-pk
+    one, while `PerformRitualAction` performs whichever a player names through `ritual`,
+    so a second row is a rite with its own costs that only the `ritual` command reaches.
+    Missing: the names of every row past the first.
+    """
+    from world.covenants.focus_picks import RESWEAR_SERVICE_PATH  # noqa: PLC0415
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models import Ritual  # noqa: PLC0415
+
+    names = list(
+        Ritual.objects.filter(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path=RESWEAR_SERVICE_PATH,
+        )
+        .order_by("pk")
+        .values_list("name", flat=True)
+    )
+    if len(names) > 1:
+        extra = tuple(names[1:])
+        return ProbeResult(
+            present=False,
+            missing=extra,
+            detail=(
+                f"{len(names)} rituals change a chosen vow pick; the sheet and vow reswear "
+                f"perform only {names[0]}. Remove or repoint: {', '.join(extra)}."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_reswear_ritual_web_payable() -> ProbeResult:
+    """The Rite of Re-swearing asks only for components the sheet can pay (#4940).
+
+    Consumer: `reswear_options()` (the `reswear-options` endpoint behind the sheet's
+    Change picks dialog), which pays item-template and touchstone components from what
+    the character carries. A target-resonance offering needs a resonance the rite never
+    names, so every perform of a rite that asks for one is refused, on the web and on
+    telnet. Missing: the rite's name.
+    """
+    from world.covenants.focus_picks import reswear_ritual  # noqa: PLC0415
+
+    ritual = reswear_ritual()
+    if ritual is None:
+        return ProbeResult(present=True)
+    if ritual.requirements.filter(matches_target_resonance=True).exists():
+        return ProbeResult(
+            present=False,
+            missing=(ritual.name,),
+            detail=(
+                f"{ritual.name} asks for a target-resonance offering; the rite names no "
+                "resonance, so it can never be paid."
+            ),
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_standoff_cause_glosses() -> ProbeResult:
     """Every cause other than None has an authored gloss (#4354)."""
     from world.combat.constants import CauseKind  # noqa: PLC0415
@@ -3759,8 +3841,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "No ritual changes a thread's resonance: the Spellbook's Retune thread "
                 "button has no rite to perform and telnet has no rite to name, so no player "
-                "can move a thread to another resonance until staff author the SERVICE "
-                "ritual (and its offering requirements)."
+                "can move a thread to another resonance until staff make the SERVICE "
+                "ritual on the Ritual admin page, choosing the retune service, with its "
+                "offering requirements."
             ),
             probe=CustomProbe(fn=_probe_thread_resonance_ritual),
             admin_model="Ritual",
@@ -3795,6 +3878,52 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "every web retune and can be performed from telnet only."
             ),
             probe=CustomProbe(fn=_probe_thread_resonance_ritual_web_payable),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="reswear-ritual",
+            label="Rite of Re-swearing",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/covenants/focus_picks.py reswear_ritual(), reswear_vow_pick(); "
+                "the sheet's Change picks dialog and vow reswear"
+            ),
+            consequence=(
+                "No ritual changes a chosen vow pick: the sheet's Change picks dialog says "
+                "so and vow reswear refuses, so a vow holder keeps every pick they chose "
+                "until staff make it on the Ritual admin page, choosing the Rite of "
+                "Re-swearing service, with its anima and components."
+            ),
+            probe=CustomProbe(fn=_probe_reswear_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="reswear-ritual-single",
+            label="Only one Rite of Re-swearing",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/focus_picks.py reswear_ritual() (lowest pk wins)",
+            consequence=(
+                "The sheet and vow reswear only ever perform the first rite with the "
+                "Re-swearing service path, with that one's anima and components; a second "
+                "row is reachable by name through the ritual command only."
+            ),
+            probe=CustomProbe(fn=_probe_single_reswear_ritual),
+            admin_model="Ritual",
+        ),
+        ContentDependency(
+            key="reswear-ritual-web-payable",
+            label="Rite of Re-swearing payable",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/covenants/focus_picks.py reswear_options(), frontend "
+                "ReswearDialog (item-template and touchstone components)"
+            ),
+            consequence=(
+                "A Rite of Re-swearing that asks for a target-resonance offering is refused "
+                "on every perform, on the sheet and by telnet, since the rite names no "
+                "resonance to pay it toward."
+            ),
+            probe=CustomProbe(fn=_probe_reswear_ritual_web_payable),
             admin_model="Ritual",
         ),
         ContentDependency(
