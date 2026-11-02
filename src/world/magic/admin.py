@@ -1725,7 +1725,28 @@ class RitualAdminForm(forms.ModelForm):
 
     class Meta:
         model = Ritual
-        fields = "__all__"  # noqa: DJ007 - the admin form shows every authored column
+        # Every editable column; execution_kind and flow are read-only on RitualAdmin.
+        fields = [
+            "written_by",
+            "written_on",
+            "reviewed_by",
+            "reviewed_on",
+            "name",
+            "description",
+            "hedge_accessible",
+            "anima_requirement",
+            "glimpse_eligible",
+            "narrative_prose",
+            "input_schema",
+            "service_function_path",
+            "draft_validator_path",
+            "author_account",
+            "site_property",
+            "client_hosted",
+            "participation_rule",
+            "min_participants",
+            "max_participants",
+        ]
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)

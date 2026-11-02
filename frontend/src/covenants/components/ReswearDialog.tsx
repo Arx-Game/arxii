@@ -153,9 +153,7 @@ export function ReswearDialog({
           </div>
 
           {options?.unavailable_reason ? (
-            <p role="status" className="refsheet-note">
-              {options.unavailable_reason}
-            </p>
+            <output className="refsheet-note block">{options.unavailable_reason}</output>
           ) : null}
 
           {given && level ? (
