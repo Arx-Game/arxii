@@ -1310,14 +1310,52 @@ only when a row it fetched carries a pick, so a vow without picks costs no extra
 
 The Sphinx catalog (`sphinx.py`) still lists every perk on a role, picked or not.
 
+### Players choose their picks (#4929, slice 6 of #4844) [BUILT & WIRED]
+
+All in `world.covenants.focus_picks`:
+
+- `choose_vow_focus_pick(membership, pick)` is the player's writer. It locks the membership
+  row, refuses a vow the character has left and a pick already chosen, then runs
+  `validate_character_focus_pick` (primary vow, the pick in the vow's or its anchor's or
+  grown sub-role's catalog via `choosable_role_ids`, level reached, the level's budget) and
+  raises `VowFocusPickRefusedError` with the rule's own message. There is no un-choose:
+  unspent budget waits, and changing a chosen pick is the Rite of Re-swearing (slice 7).
+- `resolve_pick_for_choice(sheet, pick_id=|pick_name=, covenant_id=)` finds the pick among
+  the caller's own active memberships only, so no client-sent id reaches another character's
+  membership. `ChooseVowFocusPickAction` (key `choose_vow_focus_pick`, REGISTRY) wraps both;
+  the web dispatches it from the sheet, telnet through `vow pick <name> [in <covenant>]`.
+- `vow_pick_catalogs(sheet)` returns one `VowPickCatalog` per active, non-secondary
+  membership (`types.py`: `VowPickCatalog`, `VowPickLevel`, `VowPickEntry`): the shown vow
+  level and, for pick levels 1 to 3, the budget, the spend, and every pick with its price,
+  effect lines (`pick_effect_lines`, the vow page's payload summaries:
+  `summarize_vow_added_effect`, `summarize_situational_perk`, `summarize_stat_scaling` in
+  `added_effect_summary.py`), its limits line (`limits_line`: "Target limit: a boss, met 3
+  times in 10", "Cost limit: ..., price less 1", "no limits"), whether it is chosen and why it
+  is locked ("opens at vow level N", "costs more than is left"). Picks, limits, choices and
+  payload rows are each one query for every membership. Read by `GET
+  /api/covenants/character-roles/vow-picks/?character_sheet=<id>` (read-only; a player reads
+  only a character they play now, staff any; 404 otherwise), the sheet's Covenant block
+  (`frontend/src/covenants/components/VowPicksPanel.tsx`, owner only) and `vow picks [in
+  <covenant>]`.
+- `new_picks_lines(levels)` ("Vow level 2: 4 pts of new picks.") and `opened_pick_levels`
+  (only levels 1 to 3). `picks_opened_by_imbuing` is read by `ImbueAction` (the line is
+  appended to its message and the levels ride `data["opened_pick_levels"]`; the web finisher
+  and a SERVICE-kind imbuing rite return them as `opened_pick_levels`, and the Imbue panel
+  then links "Choose picks" to the sheet's Ties section). `announce_open_vow_picks` is called
+  by `add_member` and `assign_covenant_role`: a joiner whose vow thread already stands at a
+  level is sent the same lines as a COVENANT narrative message; a fresh joiner has no vow
+  thread and is told nothing until imbuing opens level 1.
+- `focus_pick_budget()` reads the budget without creating the config row (moved here from
+  the vow page, which re-exports it).
+
 ### Admin
 
 CovenantRole admin carries a `VowFocusPickInline` with a read-only computed price; the
 `VowFocusPick` admin has its limits inline and the price. `focus_pick` is an autocomplete on
 the added effect, situational perk and vow stat scaling admins, and `condition_property` on the
 situation and rung inlines and the added effect admin. `CombatStyle`, `VowFocusPickConfig`
-and `CharacterVowFocusPick` (staff set picks until a player picker exists) have their own
-admins; `combat_style` is on the CharacterSheet admin.
+and `CharacterVowFocusPick` (staff can set or clear a pick there; players choose through
+`choose_vow_focus_pick`) have their own admins; `combat_style` is on the CharacterSheet admin.
 
 The vow page (`_vow_builder/<pk>/`, #4880, slice 2 of #4843) authors one vow's own fields,
 technique specialties, focus picks by level and each pick's limits in one save, shows every

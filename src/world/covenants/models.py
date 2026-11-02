@@ -1473,8 +1473,9 @@ class VowFocusPickConfig(SharedMemoryModel):
 class CharacterVowFocusPick(SharedMemoryModel):
     """A character's chosen focus pick on one vow membership (#4759).
 
-    Play state, so resettable. Set by staff in the admin for now; there is no
-    player-facing picker yet. ``clean()`` runs the rules in
+    Play state, so resettable. A holder chooses through
+    ``world.covenants.focus_picks.choose_vow_focus_pick`` (#4929); staff can also set
+    one in the admin. ``clean()`` runs the rules in
     ``world.covenants.focus_picks.validate_character_focus_pick``: the pick
     belongs to the held vow (or its anchor, for a sub-role), the membership is
     not a secondary vow, the pick's level is no higher than the shown vow level,

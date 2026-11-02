@@ -516,7 +516,7 @@ class VowFocusPickConfigAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterVowFocusPick)
 class CharacterVowFocusPickAdmin(admin.ModelAdmin):
-    """A character's chosen focus picks, set by staff until a player picker exists (#4759).
+    """A character's chosen focus picks (#4759); players choose their own since #4929.
 
     A save that breaks the level, budget, role or secondary-vow rule is refused
     with the reason (``world.covenants.focus_picks``).

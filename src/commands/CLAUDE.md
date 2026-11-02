@@ -428,6 +428,13 @@ actions, backends, and service functions.
   `CovenantRoleViewSet.sphinx` makes. Typed in `AskingTheSphinx` (tranche 16; the
   hand-built `tests/test_sphinx_command.py` is gone; its no-sheet refusal is unreachable
   through the handler for a played character).
+- **`vow.py`**: `CmdVow` (`vow`, #4929): a vow holder's focus picks. `vow picks [in
+  <covenant>]` prints `world.covenants.focus_picks.vow_pick_catalogs` (the sheet's catalog):
+  per vow its level, per pick level the spend of the budget, each pick with its price,
+  description, effect and limit lines, chosen or locked with why. `vow pick <name> [in
+  <covenant>]` runs `ChooseVowFocusPickAction` (the web dispatches the same key). The
+  trailing `in <covenant>` names one of the caller's covenants. Typed in
+  `integration_tests/test_choosing_vow_picks_journeys.py`.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
