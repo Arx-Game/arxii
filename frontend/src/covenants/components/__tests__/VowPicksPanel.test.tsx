@@ -8,6 +8,8 @@ import type { VowPickCatalog } from '../../api';
 vi.mock('../../queries', () => ({
   useVowPicks: vi.fn(),
   useChooseVowPick: vi.fn(),
+  useReswearOptions: vi.fn(),
+  useReswearPick: vi.fn(),
 }));
 
 import * as queries from '../../queries';
@@ -111,6 +113,16 @@ function mockQueries(data: VowPickCatalog[] | undefined) {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof queries.useChooseVowPick>);
+  vi.mocked(queries.useReswearOptions).mockReturnValue({ data: undefined } as ReturnType<
+    typeof queries.useReswearOptions
+  >);
+  vi.mocked(queries.useReswearPick).mockReturnValue({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useReswearPick>);
 }
 
 function pickRow(name: string): HTMLElement {
@@ -160,6 +172,27 @@ describe('VowPicksPanel', () => {
       { covenantId: 3, pickId: 21 },
       expect.objectContaining({ onSuccess: expect.any(Function) })
     );
+  });
+
+  it('opens the Rite of Re-swearing from Change picks', async () => {
+    mockQueries([CATALOG]);
+    render(<VowPicksPanel sheetId={5} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change picks' }));
+
+    expect(await screen.findByTestId('reswear-dialog')).toBeInTheDocument();
+    expect(screen.getByText('Rite of Re-swearing')).toBeInTheDocument();
+  });
+
+  it('offers no Change picks before any pick is chosen', () => {
+    const unchosen = CATALOG.levels.map((level) => ({
+      ...level,
+      picks: level.picks.map((pick) => ({ ...pick, chosen: false })),
+    }));
+    mockQueries([{ ...CATALOG, levels: unchosen }]);
+    render(<VowPicksPanel sheetId={5} />);
+
+    expect(screen.queryByRole('button', { name: 'Change picks' })).not.toBeInTheDocument();
   });
 
   it('draws nothing for a character with no primary vow', () => {

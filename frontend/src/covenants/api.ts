@@ -11,6 +11,7 @@
 
 import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { parseDispatchBody, readErrorDetail } from '@/lib/errors';
+import { performRitual } from '@/rituals/api';
 import type { components } from '@/generated/api';
 
 // ---------------------------------------------------------------------------
@@ -615,4 +616,49 @@ export async function chooseVowPick(
   const { success, message } = await parseDispatchBody(res);
   if (!res.ok || success === false) throw new Error(message ?? 'Failed to choose the pick.');
   return message ?? 'Pick chosen.';
+}
+
+// ---------------------------------------------------------------------------
+// The Rite of Re-swearing (#4940): read the rite's costs, perform it.
+// ---------------------------------------------------------------------------
+
+export type ReswearOptions = components['schemas']['ReswearOptions'];
+
+/**
+ * GET /api/covenants/character-roles/reswear-options/?character_sheet={sheetId}
+ * The rite, its AP, anima and component costs, and the carried items that pay it.
+ */
+export async function getReswearOptions(sheetId: number): Promise<ReswearOptions> {
+  const query = new URLSearchParams({ character_sheet: String(sheetId) });
+  const res = await apiFetch(withQuery(`${CHARACTER_ROLES_URL}/reswear-options/`, query));
+  if (!res.ok) return readErrorDetail(res, 'Failed to load the Rite of Re-swearing.');
+  return res.json() as Promise<ReswearOptions>;
+}
+
+export interface ReswearRequest {
+  sheetId: number;
+  ritualId: number;
+  covenantId: number;
+  oldPickId: number;
+  newPickId: number;
+  componentIds: number[];
+}
+
+/**
+ * Perform the rite through POST /api/magic/rituals/perform/ (PerformRitualAction).
+ * A refusal (HTTP 400) throws with the rule's own message; success returns the line
+ * telnet prints.
+ */
+export async function performReswear(request: ReswearRequest): Promise<string> {
+  const response = await performRitual({
+    character_sheet_id: request.sheetId,
+    ritual_id: request.ritualId,
+    kwargs: {
+      old_pick_id: request.oldPickId,
+      new_pick_id: request.newPickId,
+      covenant_id: request.covenantId,
+    },
+    components: request.componentIds,
+  });
+  return response.message ?? 'The rite is done.';
 }

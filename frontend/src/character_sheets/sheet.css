@@ -1153,3 +1153,49 @@
   color: hsl(var(--muted-foreground));
   margin: 0.5rem 0 0;
 }
+/*
+ * The Rite of Re-swearing (#4940, demo screen 9): Give up and Take instead side by side,
+ * the level before and after the swap and the cost as ledger lines, then the rite button.
+ */
+.vowpicks-rite {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.vowpicks-rite-head {
+  border-bottom: 1px solid var(--sheet-hair);
+  padding-bottom: 0.5rem;
+}
+.vowpicks-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.25rem;
+}
+.vowpicks-swap {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+.vowpicks-swap:disabled {
+  cursor: default;
+}
+.vowpicks-swap.vowpicks-chosen .refsheet-entry-name {
+  color: hsl(var(--accent));
+}
+.vowpicks-ledger {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  border-top: 1px solid var(--sheet-hair);
+  padding-top: 0.5rem;
+}
+.vowpicks-rite-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
