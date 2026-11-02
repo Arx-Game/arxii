@@ -49,6 +49,7 @@ from world.character_creation.models import (
     DistinctionOffer,
     EnemyReason,
     LifeBeat,
+    OfferFirstLook,
     OriginTemplateSlotChoice,
     SchoolingLine,
 )
@@ -127,6 +128,9 @@ class RowSpec:
     offers: list[OfferSpec] = field(default_factory=list)
     first_look_ids: list[int] = field(default_factory=list)
     first_look_names: list[str] = field(default_factory=list)
+    #: The pins a leading star marked as the beginning's suggested life (#4865).
+    preselected_ids: list[int] = field(default_factory=list)
+    preselected_names: list[str] = field(default_factory=list)
     #: A starting prestige (#4852): the ``+150 prestige`` effect token makes the
     #: ``DistinctionPrestigeGrant`` sidecar, not a modifier effect.
     prestige: int | None = None
@@ -156,6 +160,8 @@ class RowSpec:
             parts.append(f"{len(self.offers)} offer line(s): {offers}")
         if self.first_look_names:
             parts.append(f"pinned for {', '.join(self.first_look_names)}")
+        if self.preselected_names:
+            parts.append(f"suggested for {', '.join(self.preselected_names)}")
         return "; ".join(parts)
 
 
@@ -328,15 +334,22 @@ def _parse_offers(raw: str, row: RowSpec) -> None:
 
 
 def _parse_first_look(raw: str, row: RowSpec) -> None:
-    for name in (n.strip() for n in raw.split(",") if n.strip()):
+    """Beginning names that see the row first; a leading star (``*Reavers``) also makes
+    the pin part of that beginning's suggested life (#4865)."""
+    for token in (n.strip() for n in raw.split(",") if n.strip()):
+        starred = token.startswith("*")
+        name = token.lstrip("*").strip()
         beginning, why = _one(
             Beginnings.objects.filter(name__iexact=name, is_active=True), f"Beginning {name!r}"
         )
         if beginning is None:
             row.fail(why)
-        else:
-            row.first_look_ids.append(beginning.pk)
-            row.first_look_names.append(beginning.name)
+            continue
+        row.first_look_ids.append(beginning.pk)
+        row.first_look_names.append(beginning.name)
+        if starred:
+            row.preselected_ids.append(beginning.pk)
+            row.preselected_names.append(beginning.name)
 
 
 def _parse_row(line_no: int, cells: list[str]) -> RowSpec:
@@ -406,6 +419,7 @@ def table_digest(rows: list[RowSpec]) -> str:
             "prestige": r.prestige,
             "offers": [(o.chapter, o.arrives_as, o.opener_field, o.opener_value) for o in r.offers],
             "pins": r.first_look_ids,
+            "suggested": r.preselected_ids,
         }
         for r in rows
     ]
@@ -461,8 +475,12 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     **{spec.opener_field: spec.opener_value},
                 )
                 stamp_written(offer, contributor)
-                if row.first_look_ids:
-                    offer.first_look.set(row.first_look_ids)
+                OfferFirstLook.objects.bulk_create(
+                    OfferFirstLook(
+                        offer=offer, beginning_id=b, preselected=b in row.preselected_ids
+                    )
+                    for b in row.first_look_ids
+                )
             LogEntry.objects.log_actions(
                 user_id, [distinction], ADDITION, change_message="Added from a table (#3709)"
             )

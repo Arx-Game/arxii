@@ -1022,6 +1022,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>`, first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
+  a leading star on a first-look name (`*Reavers`, #4865) also marks that pin as part of the
+  beginning's suggested life (`OfferFirstLook.preselected`); an
   `unlocked:` token (#4846) names the existing card that unlocks a Final Touches line,
   so a card made earlier in the same table is not found yet; an effect token whose
   target is `prestige` (`+150 prestige`, `-300 prestige`, #4852) makes the card's

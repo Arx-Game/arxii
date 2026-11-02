@@ -122,3 +122,11 @@ grant: the door of #4396, shown to no other draft), `alter_ego` (a hidden person
 names one of the ask's `choices` and a `TieKind`, membership or renown). `final_touches_cards`
 lists the card behind each ask, with its `choices` for the organization asks. _Avoid_: lingering question, door (the officially-dead door is a different shape),
 card effect, grant prompt field (a grant's prompt is derived, never authored).
+
+**Suggested life** (`OfferFirstLook.preselected`, #4865, slice 7 of #4813):
+The cards a beginning starts a newcomer with (ruled 2026-10-19; net zero per beginning, 2026-10-25): its first-look pins flagged `preselected`, loaded as ordinary priced picks by `offers.load_default_life` when the life first opens for that beginning, every card changeable. One starred card per one-of beat stands (the first by the grid's order); an age-scaled beat takes as many as the age's points buy. Authored on the Beginning admin's "Suggested life" inline or by the paste's leading star (`*Reavers`).
+_Avoid_: default life (the plan's working name; the player-facing word is "suggested"), preset, template life, starter pack.
+
+**Start blank** (`offers.clear_life`, the draft's `clear-life` action, #4865):
+The leaf's door out of the suggested life: drops the life's picks and beat states, keeps every other chapter's pick and the `life_loaded_for` stamp, so the suggested life does not return over an emptied one.
+_Avoid_: reset (the whole draft is not reset), clear all.

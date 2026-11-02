@@ -32,7 +32,7 @@ from web.admin.distinction_builder.forms import (
 )
 from web.admin.tuning.views import superuser_required
 from world.character_creation.constants import OfferChapter
-from world.character_creation.models import DistinctionOffer
+from world.character_creation.models import DistinctionOffer, OfferFirstLook
 from world.contributors.models import ContentContributor
 from world.distinctions.models import Distinction, DistinctionEffect
 
@@ -109,16 +109,23 @@ def _set_first_look_pins(offers: DistinctionOfferFormSet) -> None:
     """Write each surviving offer row's "First look for" pins (#3709).
 
     The pins are a through-model M2M (``OfferFirstLook``), declared on ``OfferForm``
-    outside ``Meta.fields`` so ``save_m2m`` never touches them; ``set()`` writes the
-    through rows itself (no extra fields on the through). A deleted row is skipped:
-    its pins went with it.
+    outside ``Meta.fields`` so ``save_m2m`` never touches them. Written as a diff, not a
+    ``set()``: a pin that stays keeps its ``preselected`` flag (#4865, the suggested life,
+    authored on the Beginning admin and by the paste's star), a pin that goes is deleted,
+    a new one is made plain. A deleted row is skipped: its pins went with it.
     """
     for form in offers.forms:
         if not form.is_valid() or form.cleaned_data.get(_DELETE_KEY) or not form.instance.pk:
             continue
         if not form.has_changed() and FIRST_LOOK_FIELD not in form.changed_data:
             continue
-        form.instance.first_look.set(form.cleaned_data.get(FIRST_LOOK_FIELD, []))
+        wanted = {b.pk for b in form.cleaned_data.get(FIRST_LOOK_FIELD, [])}
+        pins = form.instance.pins
+        pins.exclude(beginning_id__in=wanted).delete()
+        present = set(pins.values_list("beginning_id", flat=True))
+        OfferFirstLook.objects.bulk_create(
+            OfferFirstLook(offer=form.instance, beginning_id=b) for b in wanted - present
+        )
 
 
 def _render_page(

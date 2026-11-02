@@ -22,7 +22,10 @@ Character creation is a multi-stage process that guides players through creating
    stage (#4124 beats, #4395 grids: a beginning strikes stages out, an age-scaled beat
    allows career points, one at 19 and one more every five years to 59, spent by rank
    (#4829: pips on the card, the age cannot drop under the points held), a general
-   write-in prompt never shows)
+   write-in prompt never shows; #4865: the beginning's suggested life, its starred
+   first-look pins (`OfferFirstLook.preselected`), loads as picks through
+   `offers.load_default_life` behind the draft's `load-default-life` action, once per
+   beginning (`draft_data.life_loaded_for`), and `clear-life` is Start blank)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
