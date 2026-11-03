@@ -421,6 +421,7 @@ export type AlmanachActionKey =
   | 'almanach_plan_estate'
   | 'almanach_edit_kin'
   | 'almanach_publish'
+  | 'almanach_lay_out'
   // #4239: every family, every person.
   | 'almanach_create_family'
   | 'almanach_found_organization'
