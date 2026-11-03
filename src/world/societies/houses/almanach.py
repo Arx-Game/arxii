@@ -406,20 +406,29 @@ def _reswear_after_move(title: Title, old_liege: Organization | None) -> None:
         family = list(Title.objects.filter(house_id=org_id, seat_domain__area_id__in=area_ids))
         if not family:
             continue
-        family_top = _family_top(family)
         edge = FealtyEdge.objects.filter(vassal_id=org_id).select_related("liege").first()
-        if _oath_is_pledged(family_top, edge):
-            continue
-        if edge is not None and (old_liege is None or edge.liege_id != old_liege.pk):
-            continue  # a foreign oath, not this move's to change
-        new_liege = liege_for_title(family_top)
-        if new_liege is None:
-            if edge is not None:
-                release_fealty(edge)
-        elif (edge is None or edge.liege_id != new_liege.pk) and (
-            edge is not None or _may_swear_to_containment_liege(family_top.house, new_liege)
-        ):
-            swear_fealty(vassal=family_top.house, liege=new_liege)
+        _reswear_one_family(_family_top(family), edge, old_liege)
+
+
+def _reswear_one_family(
+    family_top: Title, edge: FealtyEdge | None, old_liege: Organization | None
+) -> None:
+    """One moved house: a pledged or foreign oath stays; an oath to the old containment
+    liege follows the land to the new one, or is released when there is none."""
+    if _oath_is_pledged(family_top, edge):
+        return
+    if edge is not None and (old_liege is None or edge.liege_id != old_liege.pk):
+        return  # a foreign oath, not this move's to change
+    new_liege = liege_for_title(family_top)
+    if new_liege is None:
+        if edge is not None:
+            release_fealty(edge)
+        return
+    if edge is not None and edge.liege_id == new_liege.pk:
+        return
+    if edge is None and not _may_swear_to_containment_liege(family_top.house, new_liege):
+        return
+    swear_fealty(vassal=family_top.house, liege=new_liege)
 
 
 @transaction.atomic
