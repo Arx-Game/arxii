@@ -79,6 +79,7 @@ import {
   type Pip,
 } from './regionMapFill';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
+import { SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
 
 type MapMode = 'select' | 'carve' | 'paint';
@@ -573,44 +574,17 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           </>
         )}
         {mode === 'select' && (
-          <>
-            <select
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              value={realmId ?? ''}
-              onChange={(event) =>
-                setRealmId(event.target.value ? Number(event.target.value) : null)
-              }
-              aria-label="realm"
-              data-testid="select-realm"
-            >
-              <option value="">Realm…</option>
-              {realms.map((realm) => (
-                <option key={realm.id} value={realm.id}>
-                  {realm.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-8 max-w-xs rounded-md border bg-background px-2 text-sm"
-              value={focusTitleId ?? ''}
-              onChange={(event) => {
-                const id = event.target.value ? Number(event.target.value) : null;
-                setSelectedTitleId(id);
-                setSelectedAreaId(data.footprints.find((f) => f.title_id === id)?.area_id ?? null);
-              }}
-              aria-label="domain"
-              data-testid="select-domain"
-              disabled={realmId == null}
-            >
-              <option value="">Domain…</option>
-              {ladderRows.map((row) => (
-                <option key={row.title_id} value={row.title_id}>
-                  {row.name || `unnamed ${row.tier}`} · {row.tier}
-                  {row.state === 'Titular' || row.state === 'Potential' ? ` · ${row.state}` : ''}
-                </option>
-              ))}
-            </select>
-          </>
+          <SelectPickers
+            realms={realms}
+            realmId={realmId}
+            onRealm={setRealmId}
+            ladderRows={ladderRows}
+            focusTitleId={focusTitleId}
+            onTitle={(id) => {
+              setSelectedTitleId(id);
+              setSelectedAreaId(data.footprints.find((f) => f.title_id === id)?.area_id ?? null);
+            }}
+          />
         )}
         {mode === 'carve' && (
           <>
