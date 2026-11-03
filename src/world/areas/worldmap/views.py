@@ -174,9 +174,23 @@ class RegionMapViewSet(viewsets.ReadOnlyModelViewSet):
                         "title_id": f.title_id,
                         "seat": list(f.seat) if f.seat is not None else None,
                         "pips": [list(p) for p in f.pips],
+                        "charters": list(f.charters),
                     }
                 ).data
                 for f in read.footprints
+            ],
+            "landless_titles": [
+                RegionMapLandlessTitleSerializer(
+                    {
+                        "title_id": t.title_id,
+                        "name": t.name,
+                        "tier": t.tier,
+                        "station": t.station,
+                        "realm_id": t.realm_id,
+                        "fief_ids": list(t.fief_ids),
+                    }
+                ).data
+                for t in read.landless_titles
             ],
         }
         return Response(payload)
