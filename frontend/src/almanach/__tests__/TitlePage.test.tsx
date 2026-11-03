@@ -26,6 +26,8 @@ const doc: RungDocument = {
     seat: 'the Katta seat',
     is_claimable: false,
     chain_top_id: 3,
+    station: 'seated',
+    pledged_liege: { title_id: 8, name: 'Kingdom of Umbros' },
   },
   demesne: {
     domain_id: 30,
@@ -54,12 +56,31 @@ const doc: RungDocument = {
     },
   ],
   vassals: [{ title_id: 4, name: '', held_by: '', demesne: 2, vassals: 0 }],
+  chartered_fiefs: [
+    { title_id: 5, name: 'County of Ash', tier: 'county', basis: 'By the old charter' },
+  ],
+  chartered_by: [{ title_id: 21, name: 'Old Umbros', tier: 'kingdom', basis: '' }],
+  claims: [
+    {
+      claim_id: 1,
+      claimant: 'Sharlotte',
+      claimant_sheet_id: 44,
+      house_id: null,
+      basis: 'The exiled duchess',
+      since: '2026-11-03',
+    },
+  ],
+  chain: [
+    { title_id: null, name: 'Umbros', tier: 'realm' },
+    { title_id: 8, name: 'Kingdom of Umbros', tier: 'kingdom' },
+  ],
 };
 
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
 let currentDoc: RungDocument = doc;
 
 vi.mock('@/world-builder/queries', () => ({
+  useRegionMapsQuery: () => ({ data: [{ id: 6, name: 'Catenys' }] }),
   useRoomSearchQuery: (term: string) => ({
     data:
       term.trim().length >= 2 ? [{ id: 77, name: 'Katta Fields', area_name: 'Fervor' }] : undefined,
@@ -112,11 +133,66 @@ test('the rung page: holder, location, holdings, books, forces, vassals', () => 
   expect(screen.getByText('1,900 c / week')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Forces' })).toBeInTheDocument();
   expect(screen.getByText('Katta household guard')).toBeInTheDocument();
-  const vassals = screen.getByRole('heading', { name: 'Vassals' }).nextElementSibling!;
+  const vassals = screen.getByRole('heading', { name: 'Present Holdings' }).nextElementSibling!;
   expect(within(vassals as HTMLElement).getByText('vacant')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Create vassal domain' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add vacant seats' })).toBeInTheDocument();
   expect(screen.getByText('unsited')).toBeInTheDocument();
+});
+
+test('the rung page: Historical Charter, the claims, the chain up and the door to the map', () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  const charter = screen.getByRole('heading', { name: 'Historical Charter' }).nextElementSibling!;
+  expect(
+    within(charter as HTMLElement).getByRole('link', { name: 'County of Ash' })
+  ).toHaveAttribute('href', '/staff/almanach/titles/5');
+  expect(within(charter as HTMLElement).getByText('By the old charter')).toBeInTheDocument();
+  expect(within(charter as HTMLElement).getByRole('link', { name: 'Old Umbros' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/titles/21'
+  );
+  expect(within(charter as HTMLElement).getByText(/claimed by/)).toHaveTextContent(
+    'claimed by Sharlotte'
+  );
+  expect(within(charter as HTMLElement).getByText('The exiled duchess')).toBeInTheDocument();
+  // the way up: the realm's ladder, then the crown, as links
+  const chain = screen.getByTestId('title-chain');
+  expect(within(chain).getByRole('link', { name: 'Umbros' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/realms/1'
+  );
+  expect(within(chain).getByRole('link', { name: 'Kingdom of Umbros' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/titles/8'
+  );
+  expect(screen.getByText('pledged to Kingdom of Umbros')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'On the map' })).toHaveAttribute(
+    'href',
+    '/staff/world-builder'
+  );
+});
+
+test('a titular rung says so and shows its charter even with nothing held', () => {
+  currentDoc = {
+    ...doc,
+    title: {
+      ...doc.title,
+      name: 'Kingdom of Luxen',
+      station: 'titular',
+      house_id: null,
+      held_by: '',
+    },
+    vassals: [],
+  };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.getByText('Titular')).toBeInTheDocument();
+    const holdings = screen.getByRole('heading', { name: 'Present Holdings' }).nextElementSibling!;
+    expect(within(holdings as HTMLElement).getByText('nothing')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Historical Charter' })).toBeInTheDocument();
+  } finally {
+    currentDoc = doc;
+  }
 });
 
 test('an unnamed rung is named from its own page', async () => {

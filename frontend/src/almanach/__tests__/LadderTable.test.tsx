@@ -91,6 +91,28 @@ const contestedRow = {
   claimant_name: 'Piropa',
 } satisfies LadderRow;
 
+test('a titular or potential rung shows its state where the holder would be', () => {
+  const titular = {
+    ...rows[0],
+    title_id: 90,
+    name: 'Old Inferna',
+    state: 'Titular',
+    claimable: false,
+  };
+  const potential = {
+    ...rows[0],
+    title_id: 91,
+    name: '',
+    is_defined: false,
+    state: 'Potential',
+    claimable: false,
+  };
+  renderWithProviders(<LadderTable rows={[titular, potential]} />);
+  expect(screen.getByText('Titular')).toBeInTheDocument();
+  expect(screen.getByText('Potential')).toBeInTheDocument();
+  expect(screen.queryByText('Unclaimed')).not.toBeInTheDocument();
+});
+
 test('renders states before names, seat marks, and collapses children', async () => {
   renderWithProviders(<LadderTable rows={rows} />);
   expect(screen.getByText('Undefined')).toBeInTheDocument();

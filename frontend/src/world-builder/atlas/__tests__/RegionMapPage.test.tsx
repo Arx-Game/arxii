@@ -45,6 +45,15 @@ vi.mock('@/almanach/queries', () => ({
           tier: 'county',
           house_name: 'House Stellaris',
           parent_title_id: null,
+          state: 'Held',
+        },
+        {
+          title_id: 200,
+          name: 'Kingdom of Luxen',
+          tier: 'kingdom',
+          house_name: '',
+          parent_title_id: null,
+          state: 'Titular',
         },
       ],
       unclaimed_by_tier: {},
@@ -104,6 +113,17 @@ const payload: RegionMapPips = {
         [1, 0],
         [2, 0],
       ],
+      charters: [200],
+    },
+  ],
+  landless_titles: [
+    {
+      title_id: 200,
+      name: 'Kingdom of Luxen',
+      tier: 'kingdom',
+      station: 'titular',
+      realm_id: 1,
+      fief_ids: [100],
     },
   ],
 };
@@ -366,6 +386,25 @@ describe('RegionMapPage', () => {
     for (const name of ['Brush', 'Fill', 'Loop']) {
       expect(screen.getByRole('button', { name })).toBeEnabled();
     }
+  });
+
+  it('selects a landless title in Select mode and draws its Historical Charter as a ghost', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.selectOptions(screen.getByTestId('select-realm'), '1');
+    await user.selectOptions(screen.getByTestId('select-domain'), '200');
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Kingdom of Luxen' })).toBeInTheDocument();
+    expect(within(panel).getByText('Titular')).toBeInTheDocument();
+    expect(within(panel).getByText(/holds nothing/)).toBeInTheDocument();
+    const toggle = within(panel).getByRole('button', { name: 'Historical Charter' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-ghost-pips', '0');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-ghost-pips', '2');
+    expect(within(panel).getByText('Salvation')).toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('shows the loading and error states', () => {

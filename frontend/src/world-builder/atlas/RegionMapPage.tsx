@@ -34,7 +34,7 @@ import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
 import { useRegionMapPipsQuery, useRegionMapUpload, useWorldBuilderAction } from '../queries';
-import type { RegionMapFootprint } from '../types';
+import type { RegionMapFootprint, RegionMapLandlessTitle } from '../types';
 import { regionMapFileUrl } from '../api';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import {
@@ -79,6 +79,7 @@ import {
   type BrushWidth,
   type Pip,
 } from './regionMapFill';
+import { takeMapFocus } from './mapFocus';
 
 type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
@@ -116,6 +117,9 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
 
   const [mode, setMode] = useState<MapMode>('select');
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(focusAreaId);
+  // #4983: a title selected by name, which may hold no land; and its Historical Charter.
+  const [selectedTitleId, setSelectedTitleId] = useState<number | null>(() => takeMapFocus());
+  const [charterOn, setCharterOn] = useState(false);
   const [realmId, setRealmId] = useState<number | null>(null);
   const [carveTitleId, setCarveTitleId] = useState<number | null>(null);
   const [paintTerrain, setPaintTerrain] = useState<string>('plain');
@@ -199,9 +203,35 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   };
 
   const selected: RegionMapFootprint | null = useMemo(
-    () => data?.footprints.find((f) => f.area_id === selectedAreaId) ?? null,
-    [data, selectedAreaId]
+    () =>
+      data?.footprints.find((f) => f.area_id === selectedAreaId) ??
+      (selectedTitleId != null
+        ? (data?.footprints.find((f) => f.title_id === selectedTitleId) ?? null)
+        : null),
+    [data, selectedAreaId, selectedTitleId]
   );
+  const selectedLandless: RegionMapLandlessTitle | null = useMemo(
+    () =>
+      selected == null && selectedTitleId != null
+        ? (data?.landless_titles.find((t) => t.title_id === selectedTitleId) ?? null)
+        : null,
+    [data, selected, selectedTitleId]
+  );
+  const focusTitleId = selected?.title_id ?? selectedLandless?.title_id ?? null;
+  // Historical Charter: every footprint whose title is in the selected title's charter.
+  const charterFootprints = useMemo(
+    () =>
+      focusTitleId == null
+        ? []
+        : (data?.footprints.filter((f) => f.charters.includes(focusTitleId)) ?? []),
+    [data, focusTitleId]
+  );
+  const ghostPips = useMemo(() => {
+    const out = new Set<string>();
+    if (!charterOn) return out;
+    for (const f of charterFootprints) for (const [x, y] of f.pips) out.add(pipKey(x, y));
+    return out;
+  }, [charterFootprints, charterOn]);
   const ladderRows = ladder?.rows ?? [];
   const carveTarget = useMemo(
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
@@ -223,8 +253,14 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     if (!canvas || !data) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    drawRegionMap(ctx, data, { pending, pendingRemove, selectedAreaId, outlineAreaIds });
-  }, [data, outlineAreaIds, pending, pendingRemove, selectedAreaId]);
+    drawRegionMap(ctx, data, {
+      pending,
+      pendingRemove,
+      selectedAreaId,
+      outlineAreaIds,
+      ghostPips,
+    });
+  }, [data, ghostPips, outlineAreaIds, pending, pendingRemove, selectedAreaId]);
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
@@ -279,6 +315,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           const pip = pipAt(data.region, view, rect, upEvent.clientX, upEvent.clientY);
           const hit = pip ? footprintAt(data.footprints, pip[0], pip[1]) : null;
           setSelectedAreaId(hit?.area_id ?? null);
+          setSelectedTitleId(hit?.title_id ?? null);
         }
         return;
       }
@@ -546,6 +583,46 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
             {brushWidthSelect}
           </>
         )}
+        {mode === 'select' && (
+          <>
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={realmId ?? ''}
+              onChange={(event) =>
+                setRealmId(event.target.value ? Number(event.target.value) : null)
+              }
+              aria-label="realm"
+              data-testid="select-realm"
+            >
+              <option value="">Realm…</option>
+              {realms.map((realm) => (
+                <option key={realm.id} value={realm.id}>
+                  {realm.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 max-w-xs rounded-md border bg-background px-2 text-sm"
+              value={focusTitleId ?? ''}
+              onChange={(event) => {
+                const id = event.target.value ? Number(event.target.value) : null;
+                setSelectedTitleId(id);
+                setSelectedAreaId(data.footprints.find((f) => f.title_id === id)?.area_id ?? null);
+              }}
+              aria-label="domain"
+              data-testid="select-domain"
+              disabled={realmId == null}
+            >
+              <option value="">Domain…</option>
+              {ladderRows.map((row) => (
+                <option key={row.title_id} value={row.title_id}>
+                  {row.name || `unnamed ${row.tier}`} · {row.tier}
+                  {row.state === 'Titular' || row.state === 'Potential' ? ` · ${row.state}` : ''}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         {mode === 'carve' && (
           <>
             <select
@@ -697,6 +774,7 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           )}
           data-testid="region-map-viewport"
           data-zoom={view.zoom.toFixed(2)}
+          data-ghost-pips={ghostPips.size}
           onPointerDown={handlePointerDown}
         >
           <canvas
@@ -717,24 +795,56 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           data-testid="region-map-panel"
         >
           <Plate className="h-full rounded-none p-4">
-            {selected ? (
+            {selected || selectedLandless ? (
               <div>
-                <PlateHead as="div">{selected.level_display}</PlateHead>
+                <PlateHead as="div">
+                  {selected ? selected.level_display : (selectedLandless?.tier ?? '')}
+                </PlateHead>
                 <h3 className="theme-heading mt-1 text-lg font-semibold [font-variant:small-caps]">
-                  {selected.name || 'Unnamed'}
+                  {(selected ? selected.name : selectedLandless?.name) || 'Unnamed'}
                 </h3>
+                {selectedLandless && (
+                  <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                    {selectedLandless.station === 'potential' ? 'Potential' : 'Titular'}
+                  </p>
+                )}
                 <p className="mt-1 font-body text-sm italic text-muted-foreground">
-                  {selected.holder_name || 'Unclaimed'} · {selected.pips.length} pips
+                  {selected
+                    ? `${selected.holder_name || 'Unclaimed'} · ${selected.pips.length} pips`
+                    : 'holds nothing'}
                 </p>
-                {selected.title_id != null && (
+                {focusTitleId != null && (
                   <Link
-                    to={`/staff/almanach/titles/${selected.title_id}`}
+                    to={`/staff/almanach/titles/${focusTitleId}`}
                     className="mt-3 inline-block text-sm underline hover:text-primary"
                   >
                     Open in the Almanach
                   </Link>
                 )}
-                {mode === 'carve' && (
+                {focusTitleId != null && (
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={charterOn ? 'default' : 'outline'}
+                      aria-pressed={charterOn}
+                      onClick={() => setCharterOn((on) => !on)}
+                    >
+                      Historical Charter
+                    </Button>
+                    {charterOn && (
+                      <ul className="mt-2 space-y-0.5 text-sm">
+                        {charterFootprints.map((f) => (
+                          <li key={f.area_id}>{f.name || 'Unnamed'}</li>
+                        ))}
+                        {charterFootprints.length === 0 && (
+                          <li className="text-muted-foreground">nothing chartered</li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                {mode === 'carve' && selected && (
                   <Button
                     type="button"
                     size="sm"

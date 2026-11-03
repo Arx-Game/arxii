@@ -37,7 +37,7 @@ function grid(
       pips.push([x, y, isLand(x, y) ? 'plain' : 'water', false]);
     }
   }
-  return { region, terrains: ['water', 'plain'], pips, footprints };
+  return { region, terrains: ['water', 'plain'], pips, footprints, landless_titles: [] };
 }
 
 const island = (x: number, y: number) => x >= 2 && x <= 11 && y >= 2 && y <= 11;
@@ -55,6 +55,7 @@ function footprint(areaId: number, titleId: number, pips: Pip[]): RegionMapFootp
     title_id: titleId,
     seat: null,
     pips,
+    charters: [],
   };
 }
 

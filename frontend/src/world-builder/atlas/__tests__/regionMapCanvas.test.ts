@@ -44,6 +44,7 @@ const footprints: RegionMapFootprint[] = [
       [52, 31],
       [51, 32],
     ],
+    charters: [],
   },
   {
     area_id: 11,
@@ -57,6 +58,7 @@ const footprints: RegionMapFootprint[] = [
     title_id: 101,
     seat: [52, 31],
     pips: [[52, 31]],
+    charters: [],
   },
 ];
 
@@ -135,6 +137,7 @@ const drawingData: RegionMapPips = {
   ],
   // Deliberately child first: painting must still put its county underneath.
   footprints: [footprints[1], footprints[0]],
+  landless_titles: [],
 };
 
 describe('region map drawing', () => {
@@ -171,6 +174,18 @@ describe('region map drawing', () => {
     expect(outlined.context.stroke).toHaveBeenCalledTimes(3);
     // an outlined footprint fills at the emphasised alpha, like a selected one
     expect(outlined.paints[4]).toEqual({ style: holderColor(4, 0.65), rect: [6, 6, 6, 6] });
+  });
+
+  it('draws a charter ghost as a dashed outline over the union, with no fill', () => {
+    const plain = recordingCanvas();
+    drawRegionMap(plain.ctx, drawingData, {});
+    const { ctx, context, paints } = recordingCanvas();
+    drawRegionMap(ctx, drawingData, { ghostPips: new Set(['51,31', '52,31']) });
+    // coast, cell lines, then the ghost
+    expect(context.stroke).toHaveBeenCalledTimes(3);
+    expect(context.setLineDash).toHaveBeenCalledWith([4, 3]);
+    // the ghost is an outline only: every fill is the one the plain draw made
+    expect(paints).toEqual(plain.paints);
   });
 
   it('hides labels on request and draws a removal preview after the seated holdings', () => {

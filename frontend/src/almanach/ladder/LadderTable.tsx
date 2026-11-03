@@ -9,7 +9,7 @@
  * <parent>` meta note — all per the plate's visual contract.
  *
  * A row whose title is held but under active contest (`claimant_name !==
- * ''`, `Title.claimant_org` — final review deferred item 2, ADR-0313) gets
+ * ''`, the first `TitleClaim` on it — final review deferred item 2, ADR-0313, #4983) gets
  * the plate's `cl` row class and its `sworn to` cell reads "claimed by
  * <name>" instead of the normal sworn-to chain; the write path (staking a
  * claim) stays deferred to the hidden-heir work, this is read-only.
@@ -74,6 +74,13 @@ function HeldByCell({ row }: { row: LadderRow }) {
     return (
       <td>
         <span className="chip open">{STATES.unclaimed}</span>
+      </td>
+    );
+  }
+  if (row.state === STATES.titular || row.state === STATES.potential) {
+    return (
+      <td>
+        <span className="chip undef">{row.state}</span>
       </td>
     );
   }
