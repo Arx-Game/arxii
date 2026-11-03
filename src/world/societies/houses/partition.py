@@ -29,6 +29,14 @@ def centroid_land(pips: set[Pip], land: set[Pip]) -> Pip | None:
     return min(candidates, key=lambda p: ((p[0] - cx) ** 2 + (p[1] - cy) ** 2, p))
 
 
+def capital_seed(pips: set[Pip], land: set[Pip], seed_hint: Pip | None) -> Pip | None:
+    """Where the capital's region starts: ``seed_hint`` when it lies on land inside the
+    footprint, else the land nearest the centroid. The same rule ``partition`` uses."""
+    if seed_hint is not None and seed_hint in pips and seed_hint in land:
+        return seed_hint
+    return centroid_land(pips, land)
+
+
 def farthest_pips(region: set[Pip], seat: Pip, count: int) -> list[Pip]:
     """``count`` pips of ``region`` other than ``seat``, farthest first, each as far as
     it can be from the seat and from the ones already picked (farthest-point sampling)."""
@@ -71,7 +79,7 @@ def _components(land: set[Pip]) -> list[set[Pip]]:
 
 def _seeds(land: set[Pip], count: int, seed_hint: Pip | None, pips: set[Pip]) -> list[Pip]:
     """The capital seed, then ``count - 1`` more by farthest-point sampling."""
-    first = seed_hint if seed_hint is not None and seed_hint in land else centroid_land(pips, land)
+    first = capital_seed(pips, land, seed_hint)
     if first is None:
         return []
     return [first, *farthest_pips(land, first, count - 1)]

@@ -275,3 +275,516 @@ def parse_layout(text: str) -> Layout:
             raise LayoutError(index, "a titular kingdom needs a name")
         kingdoms.append(kingdom)
     return Layout(defaults=defaults, kingdoms=kingdoms)
+
+
+# ---------------------------------------------------------------------------
+# The walk: plan a kingdom's children from its line, then write them (or not)
+# ---------------------------------------------------------------------------
+
+import zlib  # noqa: E402 - the grammar above stands on its own; the walk's imports follow
+
+from django.db import transaction  # noqa: E402
+
+from world.areas.models import Area  # noqa: E402
+from world.areas.worldmap.constants import Terrain  # noqa: E402
+from world.areas.worldmap.models import TerrainPip  # noqa: E402
+from world.areas.worldmap.services import footprint_of, set_footprint  # noqa: E402
+from world.character_sheets.models import CharacterSheet  # noqa: E402
+from world.npc_services.models import NameCulture, NameCultureEntry, NamePart  # noqa: E402
+from world.realms.models import Realm  # noqa: E402
+from world.societies.houses.almanach import (  # noqa: E402
+    charter_fief,
+    name_rung,
+    plant_rung,
+    record_claim,
+    rung_area_for_title,
+    set_pledged_liege,
+)
+from world.societies.houses.models import Domain, Title  # noqa: E402
+from world.societies.houses.partition import (  # noqa: E402
+    Pip,
+    capital_seed,
+    farthest_pips,
+    partition,
+)
+from world.societies.houses.services import HousesServiceError  # noqa: E402
+
+CROWN_TIERS = (TitleTier.KINGDOM, TitleTier.EMPIRE)
+COUNTY_POPULATION_PER_PIP = 120
+PROSPERITY_CAPITAL = 65
+PROSPERITY_CHILD = 45
+PLACEHOLDER = "PLACEHOLDER:"
+
+
+class LayoutRefused(HousesServiceError):
+    """The whole layout is refused before anything is planned (no place-name bank)."""
+
+
+@dataclass
+class KingdomReport:
+    name: str
+    line_no: int
+    planted: dict[str, int] = field(default_factory=dict)
+    duchies: list[dict] = field(default_factory=list)
+    names: list[str] = field(default_factory=list)
+    charters: list[str] = field(default_factory=list)
+    claims: list[str] = field(default_factory=list)
+    refusals: list[str] = field(default_factory=list)
+
+    def as_data(self) -> dict:
+        return {
+            "name": self.name,
+            "line_no": self.line_no,
+            "planted": dict(self.planted),
+            "duchies": list(self.duchies),
+            "names": list(self.names),
+            "charters": list(self.charters),
+            "claims": list(self.claims),
+            "refusals": list(self.refusals),
+        }
+
+
+@dataclass
+class LayoutReport:
+    kingdoms: list[KingdomReport] = field(default_factory=list)
+    refusals: list[str] = field(default_factory=list)
+    wrote: bool = False
+
+    def as_data(self) -> dict:
+        return {
+            "kingdoms": [k.as_data() for k in self.kingdoms],
+            "refusals": list(self.refusals),
+            "wrote": self.wrote,
+        }
+
+
+@dataclass
+class _Rung:
+    """One rung the walk will plant or reuse (the crown's own chain members)."""
+
+    tier: str
+    name: str
+    pips: set[Pip]
+    parent: _Rung | None
+    capital: bool = False
+    existing: Title | None = None  # the crown a seated line builds on
+    chain: bool = False  # the parent's own chain member (plant_rung made it with the parent)
+    preexisting: bool = False  # on the crown's own chain: no new title row
+    lore: str = ""
+    claimable: bool | None = None
+    sworn: str | None = None
+    chartered: list[str] = field(default_factory=list)
+    claims: list[tuple[str, str]] = field(default_factory=list)
+    line_no: int = 0
+    title: Title | None = None
+    children: list[_Rung] = field(default_factory=list)
+
+
+class _Names:
+    """The realm's place-name bank, drawn without replacement in a stable order."""
+
+    def __init__(self, realm: Realm, seed: int) -> None:
+        cultures = NameCulture.objects.filter(realm=realm)
+        entries = list(
+            NameCultureEntry.objects.filter(culture__in=cultures, part=NamePart.PLACE).order_by(
+                "-weight", "value"
+            )
+        )
+        if not entries:
+            msg = f"realm {realm.pk} has no PLACE names"
+            raise LayoutRefused(
+                msg,
+                user_message=(
+                    f"{realm.name} has no place-name bank; add Place names to its culture first."
+                ),
+            )
+        taken = set(
+            Title.objects.filter(realm=realm).exclude(name="").values_list("name", flat=True)
+        )
+        values = [e.value for e in entries if e.value not in taken]
+        values.sort(key=lambda v: zlib.crc32(f"{seed}:{v}".encode()))
+        self._pool = values
+        self.drawn: list[str] = []
+
+    def draw(self) -> str:
+        if not self._pool:
+            return ""
+        value = self._pool.pop(0)
+        self.drawn.append(value)
+        return value
+
+
+def _pick(rng_seed: int, salt: str, span: Range) -> int:
+    if span.lo == span.hi:
+        return span.lo
+    return span.lo + zlib.crc32(f"{rng_seed}:{salt}".encode()) % (span.hi - span.lo + 1)
+
+
+def _land_pips(pips: set[Pip]) -> set[Pip]:
+    """The land among ``pips``, read from the terrain inside their bounding box."""
+    if not pips:
+        return set()
+    xs = [x for x, _ in pips]
+    ys = [y for _, y in pips]
+    rows = TerrainPip.objects.filter(
+        x__gte=min(xs), x__lte=max(xs), y__gte=min(ys), y__lte=max(ys)
+    ).values_list("x", "y", "terrain")
+    water = (Terrain.WATER, Terrain.LAKE)
+    return {(x, y) for x, y, terrain in rows if (x, y) in pips and terrain not in water}
+
+
+def _chain_member(crown: Title, tier: str) -> Title | None:
+    return Title.objects.filter(seat_domain_id=crown.seat_domain_id, tier=tier).first()
+
+
+class _Walk:
+    def __init__(self, realm: Realm, layout: Layout, *, write: bool, seed: int) -> None:
+        self.realm = realm
+        self.layout = layout
+        self.write = write
+        self.seed = seed
+        self.names = _Names(realm, seed)
+        self.report = LayoutReport(wrote=write)
+        self.by_name: dict[str, _Rung] = {}
+
+    # -- planning -------------------------------------------------------------------
+
+    def run(self) -> LayoutReport:
+        for line in self.layout.kingdoms:
+            report = KingdomReport(name=line.name, line_no=line.line_no)
+            self.report.kingdoms.append(report)
+            try:
+                root = self._plan_kingdom(line)
+            except LayoutError as exc:
+                report.refusals.append(str(exc))
+                self.report.refusals.append(str(exc))
+                continue
+            self._count(root, report)
+            if self.write:
+                self._write_kingdom(root, report)
+            else:
+                self._report_links(root, report)
+        return self.report
+
+    def _plan_kingdom(self, line: KingdomLine) -> _Rung:
+        if line.station != TitleStation.SEATED:
+            return self._plan_dormant_crown(line)
+        crown = Title.objects.filter(
+            realm=self.realm, tier=TitleTier.KINGDOM, name=line.name
+        ).first()
+        if crown is None:
+            raise LayoutError(line.line_no, f"no kingdom named {line.name} on the ladder")
+        area = rung_area_for_title(crown)
+        chain_duchy = _chain_member(crown, TitleTier.DUCHY)
+        if chain_duchy is None:
+            raise LayoutError(line.line_no, f"{line.name} has no seat chain to build on")
+        beneath = Area.objects.filter(parent=area).exclude(pk=rung_area_for_title(chain_duchy).pk)
+        if beneath.exists():
+            raise LayoutError(line.line_no, f"{line.name} already has rungs beneath it")
+        pips = footprint_of(area)
+        if not pips:
+            raise LayoutError(line.line_no, f"{line.name} has no land drawn yet")
+        land = _land_pips(pips)
+        if not land:
+            raise LayoutError(line.line_no, f"no land inside {line.name}'s outline")
+        root = _Rung(tier=TitleTier.KINGDOM, name=line.name, pips=pips, parent=None, existing=crown)
+        self._apply_words(root, line)
+        defaults = self.layout.defaults
+        capital_w = line.capital or defaults.capital
+        wanted = line.duchies or defaults.duchies or Range(2, 4)
+        count = max(_pick(self.seed, f"{line.line_no}:duchies", wanted), len(line.children) + 1)
+        seat_hint = self._seat_pip(crown, pips)
+        regions = partition(
+            pips, land, count, [capital_w, *([1.0] * (count - 1))], seat_hint, self.seed
+        )
+        if len(regions) < len(line.children) + 1:
+            raise LayoutError(line.line_no, f"{line.name} has too little land for its duchies")
+        children = list(line.children)
+        for index, region in enumerate(regions):
+            capital = index == 0
+            child_line = children.pop(0) if (not capital and children) else None
+            duchy = _Rung(
+                tier=TitleTier.DUCHY,
+                name=(child_line.name if child_line and child_line.name else self.names.draw()),
+                pips=region,
+                parent=root,
+                capital=capital,
+                chain=capital,
+                preexisting=capital,
+                line_no=child_line.line_no if child_line else line.line_no,
+            )
+            if child_line is not None:
+                self._apply_words(duchy, child_line)
+            root.children.append(duchy)
+            self._remember(duchy)
+            self._plan_counties(duchy, child_line, land, seat_hint if capital else None, line)
+        return root
+
+    def _plan_counties(
+        self,
+        duchy: _Rung,
+        child_line: ChildLine | None,
+        land: set[Pip],
+        seat_hint: Pip | None,
+        line: KingdomLine,
+    ) -> None:
+        defaults = self.layout.defaults
+        span = (child_line.counties if child_line else None) or defaults.counties
+        count = _pick(self.seed, f"{duchy.line_no}:{duchy.name}:counties", span)
+        capital_w = line.capital or defaults.capital
+        duchy_land = duchy.pips & land
+        regions = partition(
+            duchy.pips, duchy_land, count, [capital_w, *([1.0] * (count - 1))], seat_hint, self.seed
+        )
+        baronies = _pick(
+            self.seed,
+            f"{duchy.line_no}:{duchy.name}:baronies",
+            (child_line.baronies if child_line else None) or defaults.baronies,
+        )
+        for index, region in enumerate(regions):
+            capital = index == 0
+            county = _Rung(
+                tier=TitleTier.COUNTY,
+                name=(
+                    line.seat if (capital and duchy.capital and line.seat) else self.names.draw()
+                ),
+                pips=region,
+                parent=duchy,
+                capital=capital and duchy.capital,
+                chain=capital,
+                preexisting=capital and duchy.preexisting,
+                line_no=duchy.line_no,
+            )
+            duchy.children.append(county)
+            self._remember(county)
+            self._plan_baronies(county, region & land, seat_hint if capital else None, baronies)
+
+    def _plan_baronies(
+        self, county: _Rung, land: set[Pip], seat_hint: Pip | None, count: int
+    ) -> None:
+        seat = capital_seed(county.pips, land, seat_hint)
+        if seat is None:
+            return
+        # the seat barony stays unnamed: Domain.name is unique, and `seat` named the county
+        county.children.append(
+            _Rung(
+                tier=TitleTier.BARONY,
+                name="",
+                pips={seat},
+                parent=county,
+                capital=county.capital,
+                chain=True,
+                preexisting=county.preexisting,
+            )
+        )
+        for pip in farthest_pips(land, seat, max(0, count - 1)):
+            county.children.append(_Rung(tier=TitleTier.BARONY, name="", pips={pip}, parent=county))
+
+    def _plan_dormant_crown(self, line: KingdomLine) -> _Rung:
+        if line.name and Title.objects.filter(realm=self.realm, name=line.name).exists():
+            raise LayoutError(line.line_no, f"{line.name} is already on the ladder")
+        root = _Rung(
+            tier=TitleTier.KINGDOM, name=line.name, pips=set(), parent=None, line_no=line.line_no
+        )
+        root.lore = line.lore
+        self._apply_words(root, line)
+        for child_line in line.children:
+            duchy = _Rung(
+                tier=TitleTier.DUCHY,
+                name=child_line.name or self.names.draw(),
+                pips=set(),
+                parent=root,
+                line_no=child_line.line_no,
+            )
+            self._apply_words(duchy, child_line)
+            root.children.append(duchy)
+            self._remember(duchy)
+            # a dormant crown's own duchies are what its charter holds
+            root.chartered.append(duchy.name or f"line {child_line.line_no}")
+        self._remember(root)
+        return root
+
+    def _apply_words(self, rung: _Rung, line: KingdomLine | ChildLine) -> None:
+        rung.lore = line.lore
+        rung.sworn = line.sworn
+        rung.chartered = list(line.chartered)
+        rung.claims = list(line.claims)
+        rung.line_no = line.line_no
+        if isinstance(line, ChildLine):
+            rung.claimable = line.claimable
+        if rung.sworn and self._crown_named(rung.sworn) is None:
+            raise LayoutError(line.line_no, f"no crown named {rung.sworn} to swear to")
+        for who, _basis in rung.claims:
+            if self._sheet_named(who) is None:
+                raise LayoutError(line.line_no, f"no character named {who} to claim it")
+
+    def _remember(self, rung: _Rung) -> None:
+        if rung.name:
+            self.by_name[rung.name] = rung
+
+    def _seat_pip(self, crown: Title, pips: set[Pip]) -> Pip | None:
+        barony = _chain_member(crown, TitleTier.BARONY)
+        if barony is None:
+            return None
+        seat_pips = footprint_of(rung_area_for_title(barony)) & pips
+        return min(seat_pips) if seat_pips else None
+
+    def _crown_named(self, name: str) -> Title | None:
+        return Title.objects.filter(name=name, tier__in=CROWN_TIERS).order_by("pk").first()
+
+    @staticmethod
+    def _sheet_named(name: str) -> CharacterSheet | None:
+        return CharacterSheet.objects.filter(character__db_key__iexact=name).first()
+
+    def _count(self, root: _Rung, report: KingdomReport) -> None:
+        def walk(rung: _Rung) -> None:
+            if rung.existing is None and not rung.preexisting:
+                report.planted[rung.tier] = report.planted.get(rung.tier, 0) + 1
+            for child in rung.children:
+                walk(child)
+
+        walk(root)
+        for duchy in root.children:
+            report.duchies.append(
+                {"name": duchy.name, "pips": len(duchy.pips), "capital": duchy.capital}
+            )
+        report.names = (
+            list(self.names.drawn[len(self._names_before) :])
+            if hasattr(self, "_names_before")
+            else list(self.names.drawn)
+        )
+        self._names_before = list(self.names.drawn)
+
+    def _report_links(self, root: _Rung, report: KingdomReport) -> None:
+        def walk(rung: _Rung) -> None:
+            report.charters.extend(f"{rung.name or rung.tier} charters {f}" for f in rung.chartered)
+            report.claims.extend(f"{who} claims {rung.name or rung.tier}" for who, _ in rung.claims)
+            for child in rung.children:
+                walk(child)
+
+        walk(root)
+
+    # -- writing --------------------------------------------------------------------
+
+    def _write_kingdom(self, root: _Rung, report: KingdomReport) -> None:
+        try:
+            with transaction.atomic():
+                self._write_rung(root, report)
+                self._write_links(root, report)
+        except (LayoutError, HousesServiceError) as exc:
+            message = str(exc) if isinstance(exc, LayoutError) else exc.user_message
+            report.refusals.append(message)
+            self.report.refusals.append(message)
+
+    def _write_rung(self, rung: _Rung, report: KingdomReport) -> None:
+        parent_title = rung.parent.title if rung.parent is not None else None
+        if rung.existing is not None:
+            rung.title = rung.existing
+        elif rung.chain:
+            if parent_title is None:
+                raise LayoutError(rung.line_no, f"a {rung.tier} chain member with no parent")
+            member = _chain_member(parent_title, rung.tier)
+            if member is None:
+                raise LayoutError(
+                    rung.line_no, f"{parent_title.name or rung.tier} has no seat chain"
+                )
+            rung.title = member
+            if rung.name and rung.title.name != rung.name:
+                name_rung(rung.title, rung.name)
+        else:
+            rung.title = plant_rung(
+                realm=self.realm,
+                tier=rung.tier,
+                name=rung.name,
+                parent_title=parent_title,
+                station=self._station_for(rung),
+            )
+        if rung.pips and rung.parent is not None:
+            set_footprint(area=rung_area_for_title(rung.title), add=sorted(rung.pips))
+        for child in rung.children:
+            self._write_rung(child, report)
+        self._write_figures(rung)
+        if rung.claimable is not None and rung.title.tier not in CROWN_TIERS:
+            rung.title.is_claimable = rung.claimable
+            rung.title.save(update_fields=["is_claimable"])
+
+    def _station_for(self, rung: _Rung) -> str:
+        top = rung
+        while top.parent is not None:
+            top = top.parent
+        line = next((k for k in self.layout.kingdoms if k.line_no == top.line_no), None)
+        return line.station if line is not None else TitleStation.SEATED
+
+    def _write_figures(self, rung: _Rung) -> None:
+        if rung.title is None:
+            return
+        domain = Domain.objects.filter(pk=rung_area_for_title(rung.title).pk).first()
+        if domain is None:
+            return
+        if rung.tier == TitleTier.COUNTY:
+            domain.population = COUNTY_POPULATION_PER_PIP * len(rung.pips)
+        elif rung.children and rung.tier != TitleTier.BARONY:
+            domain.population = sum(
+                Domain.objects.get(pk=rung_area_for_title(c.title).pk).population
+                for c in rung.children
+                if c.title is not None and c.tier != TitleTier.BARONY
+            )
+        if rung.parent is not None and rung.tier != TitleTier.BARONY:
+            domain.prosperity = PROSPERITY_CAPITAL if rung.capital else PROSPERITY_CHILD
+        if rung.lore:
+            domain.description = rung.lore
+        elif rung.parent is not None or rung.existing is None:
+            parent = rung.parent.name if rung.parent is not None else self.realm.name
+            what = rung.name or f"An undefined {rung.tier}"
+            domain.description = f"{PLACEHOLDER} {what} of {parent}."
+        domain.save(update_fields=["population", "prosperity", "description"])
+
+    def _write_links(self, root: _Rung, report: KingdomReport) -> None:
+        def walk(rung: _Rung) -> None:
+            if rung.title is None:  # a rung the write pass never reached
+                return
+            if rung.sworn:
+                crown = self._crown_named(rung.sworn)
+                if crown is None:
+                    raise LayoutError(rung.line_no, f"no crown named {rung.sworn} to swear to")
+                set_pledged_liege(rung.title, crown)
+            for fief_name in rung.chartered:
+                fief = self._title_named(fief_name)
+                if fief is None:
+                    raise LayoutError(rung.line_no, f"no rung named {fief_name} to charter")
+                charter_fief(
+                    title=rung.title, fief=fief, basis=f"By the layout, line {rung.line_no}"
+                )
+                report.charters.append(f"{rung.name or rung.tier} charters {fief.name}")
+            for who, basis in rung.claims:
+                sheet = self._sheet_named(who)
+                if sheet is None:
+                    raise LayoutError(rung.line_no, f"no character named {who} to claim it")
+                record_claim(title=rung.title, claimant=sheet, basis=basis)
+                report.claims.append(f"{who} claims {rung.name or rung.tier}")
+            for child in rung.children:
+                walk(child)
+
+        walk(root)
+
+    def _title_named(self, name: str) -> Title | None:
+        planned = self.by_name.get(name)
+        if planned is not None and planned.title is not None:
+            return planned.title
+        return Title.objects.filter(realm=self.realm, name=name).order_by("pk").first()
+
+
+def _seed_for(realm: Realm, layout: Layout) -> int:
+    text = "\n".join(f"{k.line_no}:{k.name}:{k.station}:{len(k.children)}" for k in layout.kingdoms)
+    return zlib.crc32(text.encode()) ^ realm.pk
+
+
+def preview_layout(realm: Realm, layout: Layout) -> LayoutReport:
+    """The walk without its writes: what ``lay_out_realm`` would plant, and why not."""
+    return _Walk(realm, layout, write=False, seed=_seed_for(realm, layout)).run()
+
+
+def lay_out_realm(realm: Realm, layout: Layout) -> LayoutReport:
+    """Plant and partition every kingdom line, one transaction per kingdom; a kingdom
+    that is refused rolls back alone and says why in the report."""
+    return _Walk(realm, layout, write=True, seed=_seed_for(realm, layout)).run()
