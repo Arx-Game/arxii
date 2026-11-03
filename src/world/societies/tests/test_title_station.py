@@ -6,10 +6,28 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from world.areas.tests.test_worldmap import tiny_map
+from world.areas.worldmap.services import create_region_map, import_region_map_file, set_footprint
 from world.character_creation.factories import RealmFactory
-from world.societies.houses.almanach import plant_rung
+from world.character_sheets.factories import CharacterSheetFactory
+from world.societies.factories import OrganizationFactory
+from world.societies.houses.almanach import (
+    assign_holder,
+    charter_fief,
+    chartered_extent,
+    move_rung,
+    plant_rung,
+    record_claim,
+    rung_area_for_title,
+    set_pledged_liege,
+    set_station,
+    uncharter_fief,
+    vacate_holder,
+    withdraw_claim,
+)
 from world.societies.houses.constants import TitleStation, TitleTier
-from world.societies.houses.models import CharteredFief
+from world.societies.houses.models import CharteredFief, FealtyEdge, Title, TitleClaim
+from world.societies.houses.services import HousesServiceError
 
 
 class TitleStationTests(TestCase):
@@ -52,3 +70,143 @@ class TitleStationTests(TestCase):
             CharteredFief(title=self.kingdom, fief=far_duchy).full_clean()
         empire = plant_rung(realm=self.realm, tier=TitleTier.EMPIRE, name="The Chimeric Empire")
         CharteredFief(title=empire, fief=far_duchy).full_clean()
+
+
+class ChartersClaimsAndOathsTests(TestCase):
+    """The services that write a title's charter, the claims on it, its station and
+    its pledged liege, and how the oath rules honour them (#4984)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.realm = RealmFactory(name="Luxen")
+        cls.republic_house = OrganizationFactory(name="The Republic of Luxen")
+        cls.throne = OrganizationFactory(name="The Umbral Throne")
+        cls.republic = plant_rung(
+            realm=cls.realm,
+            tier=TitleTier.KINGDOM,
+            name="Republic of Luxen",
+            held_by=cls.republic_house,
+        )
+        cls.old_crown = plant_rung(
+            realm=cls.realm,
+            tier=TitleTier.KINGDOM,
+            name="Kingdom of Luxen",
+            station=TitleStation.TITULAR,
+        )
+        cls.brittany = plant_rung(
+            realm=cls.realm, tier=TitleTier.DUCHY, name="Brittany", parent_title=cls.republic
+        )
+        cls.anjou = plant_rung(
+            realm=cls.realm, tier=TitleTier.DUCHY, name="Anjou", parent_title=cls.republic
+        )
+        cls.empire_realm = RealmFactory(name="Umbros")
+        cls.imperial = plant_rung(
+            realm=cls.empire_realm,
+            tier=TitleTier.EMPIRE,
+            name="The Umbral Empire",
+            held_by=cls.throne,
+        )
+
+    def test_plant_rung_never_leaves_a_crown_or_titular_rung_claimable(self) -> None:
+        assert not self.old_crown.is_claimable
+        assert self.old_crown.station == TitleStation.TITULAR
+        unheld_crown = plant_rung(realm=self.realm, tier=TitleTier.KINGDOM, name="Cinderus")
+        assert not unheld_crown.is_claimable
+        assert all(
+            not t.is_claimable for t in Title.objects.filter(seat_domain=unheld_crown.seat_domain)
+        )
+        assert self.brittany.is_claimable
+        potential = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.DUCHY,
+            name="",
+            parent_title=self.republic,
+            station=TitleStation.POTENTIAL,
+        )
+        assert not potential.is_claimable
+
+    def test_charter_and_uncharter_a_fief_and_read_its_extent(self) -> None:
+        region = create_region_map(name="Testland", anchor_x=0, anchor_y=0, width_cells=2)
+        import_region_map_file(region=region, file_name="t.map", data=tiny_map().encode())
+        set_footprint(area=rung_area_for_title(self.brittany), add=[(1, 1), (2, 1)])
+        set_footprint(area=rung_area_for_title(self.anjou), add=[(5, 5)])
+        charter_fief(title=self.old_crown, fief=self.brittany, basis="Before the revolt")
+        charter_fief(title=self.old_crown, fief=self.anjou)
+        charter_fief(title=self.imperial, fief=self.brittany, basis="Sworn to the throne")
+        assert chartered_extent(self.old_crown) == {(1, 1), (2, 1), (5, 5)}
+        assert chartered_extent(self.imperial) == {(1, 1), (2, 1)}
+        assert chartered_extent(self.brittany) == set()
+        with self.assertRaises(HousesServiceError):
+            charter_fief(title=self.brittany, fief=self.republic)
+        uncharter_fief(title=self.old_crown, fief=self.anjou)
+        assert chartered_extent(self.old_crown) == {(1, 1), (2, 1)}
+        assert [f.fief_id for f in self.old_crown.charter.all()] == [self.brittany.pk]
+
+    def test_record_and_withdraw_a_claim_by_a_person_and_by_a_house(self) -> None:
+        sharlotte = CharacterSheetFactory()
+        claim = record_claim(title=self.old_crown, claimant=sharlotte, basis="The exiled queen")
+        house_claim = record_claim(title=self.brittany, house=self.throne, basis="Carried")
+        assert claim.claimant_id == sharlotte.pk
+        assert claim.house_id is None
+        assert house_claim.house_id == self.throne.pk
+        with self.assertRaises(HousesServiceError):
+            record_claim(title=self.old_crown, claimant=sharlotte)
+        with self.assertRaises(HousesServiceError):
+            record_claim(title=self.old_crown)
+        withdraw_claim(claim)
+        assert not TitleClaim.objects.filter(title=self.old_crown).exists()
+
+    def test_set_station_and_pledged_liege(self) -> None:
+        set_station(self.brittany, TitleStation.TITULAR)
+        self.brittany.refresh_from_db()
+        assert not self.brittany.is_claimable
+        set_station(self.brittany, TitleStation.SEATED)
+        with self.assertRaises(HousesServiceError):
+            set_pledged_liege(self.brittany, self.anjou)  # a duchy is no crown
+        set_pledged_liege(self.brittany, self.imperial)
+        self.brittany.refresh_from_db()
+        assert self.brittany.pledged_liege_id == self.imperial.pk
+        set_pledged_liege(self.brittany, None)
+        self.brittany.refresh_from_db()
+        assert self.brittany.pledged_liege_id is None
+
+    def test_assign_holder_swears_to_the_pledged_crown_when_it_is_held_else_containment(
+        self,
+    ) -> None:
+        dukes = OrganizationFactory(name="House Brittany")
+        set_pledged_liege(self.brittany, self.imperial)
+        assign_holder(self.brittany, dukes)
+        assert FealtyEdge.objects.get(vassal=dukes).liege_id == self.throne.pk
+        # the pledged crown is unheld: containment decides
+        counts = OrganizationFactory(name="House Anjou")
+        set_pledged_liege(self.anjou, self.old_crown)
+        assign_holder(self.anjou, counts)
+        assert FealtyEdge.objects.get(vassal=counts).liege_id == self.republic_house.pk
+
+    def test_vacating_the_container_keeps_a_pledged_oath(self) -> None:
+        dukes = OrganizationFactory(name="House Brittany")
+        set_pledged_liege(self.brittany, self.imperial)
+        assign_holder(self.brittany, dukes)
+        counts = OrganizationFactory(name="House Anjou")
+        assign_holder(self.anjou, counts)
+        vacate_holder(self.republic)
+        assert FealtyEdge.objects.get(vassal=dukes).liege_id == self.throne.pk
+        assert not FealtyEdge.objects.filter(vassal=counts).exists()
+
+    def test_force_move_of_a_held_duchy_reswears_it_and_spares_a_pledged_oath(self) -> None:
+        cinderus_house = OrganizationFactory(name="House Cinderus")
+        cinderus = plant_rung(
+            realm=self.realm, tier=TitleTier.KINGDOM, name="Cinderus", held_by=cinderus_house
+        )
+        counts = OrganizationFactory(name="House Anjou")
+        assign_holder(self.anjou, counts)
+        assert FealtyEdge.objects.get(vassal=counts).liege_id == self.republic_house.pk
+        with self.assertRaises(HousesServiceError):
+            move_rung(self.anjou, cinderus)
+        move_rung(self.anjou, cinderus, force=True)
+        assert FealtyEdge.objects.get(vassal=counts).liege_id == cinderus_house.pk
+        dukes = OrganizationFactory(name="House Brittany")
+        set_pledged_liege(self.brittany, self.imperial)
+        assign_holder(self.brittany, dukes)
+        move_rung(self.brittany, cinderus, force=True)
+        assert FealtyEdge.objects.get(vassal=dukes).liege_id == self.throne.pk

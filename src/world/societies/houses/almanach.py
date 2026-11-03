@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -47,9 +48,18 @@ from world.societies.houses.constants import (
     HoldingChoice,
     KinLink,
     LifeStatus,
+    TitleStation,
     TitleTier,
 )
-from world.societies.houses.models import Domain, DomainHolding, FealtyEdge, LandShape, Title
+from world.societies.houses.models import (
+    CharteredFief,
+    Domain,
+    DomainHolding,
+    FealtyEdge,
+    LandShape,
+    Title,
+    TitleClaim,
+)
 from world.societies.houses.services import (
     HousesServiceError,
     acknowledge_into_family,
@@ -66,6 +76,7 @@ from world.societies.models import Organization, OrganizationRank, Vacancy
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from world.character_sheets.models import CharacterSheet
     from world.realms.models import Realm
 
 UNDEFINED_AREA_NAME = "Undefined"
@@ -208,17 +219,19 @@ def _make_area(*, name: str, tier: str, parent: Area | None, realm: Realm | None
 
 
 @transaction.atomic
-def plant_rung(
+def plant_rung(  # noqa: PLR0913 - keyword-only; one arg per thing a rung is
     *,
     realm: Realm,
     tier: str,
     name: str,
     parent_title: Title | None = None,
     held_by: Organization | None = None,
+    station: str = TitleStation.SEATED,
 ) -> Title:
     """Plant a rung: its Area, a Domain per chain Area, and a Title per
     chain tier, all sharing one seat Domain (the barony at the chain's
-    bottom). Unclaimed (``held_by=None``) rungs are left ``is_claimable``.
+    bottom). An unheld seated rung below the crown is left ``is_claimable``;
+    a crown (KINGDOM, EMPIRE), a titular or a potential rung never is (#4983).
     """
     parent_area = _rung_area(parent_title) if parent_title is not None else None
     if parent_area is not None and TIER_TO_AREA_LEVEL[tier] >= parent_area.level:
@@ -244,6 +257,11 @@ def plant_rung(
     for area in chain_areas[:-1]:
         Domain.objects.create(area=area, name=name if area is top_area else "", owner_org=held_by)
     tiers = (tier, *_CHAIN_BELOW[tier])
+    claimable = (
+        held_by is None
+        and station == TitleStation.SEATED
+        and tier not in (TitleTier.KINGDOM, TitleTier.EMPIRE)
+    )
     titles = [
         Title.objects.create(
             name=name if area is top_area else "",
@@ -251,7 +269,8 @@ def plant_rung(
             realm=realm,
             house=held_by,
             seat_domain=seat_domain,
-            is_claimable=held_by is None,
+            is_claimable=claimable,
+            station=station,
         )
         for rung_tier, area in zip(tiers, chain_areas, strict=True)
     ]
@@ -329,12 +348,15 @@ def delete_rung(title: Title) -> None:
 
 
 @transaction.atomic
-def move_rung(title: Title, new_parent: Title) -> Title:
+def move_rung(title: Title, new_parent: Title, *, force: bool = False) -> Title:
     """Move a rung (its chain, and every rung beneath it) under ``new_parent``.
 
     Refused for a rung that is not its chain's top, one in another realm, a parent
-    that is the rung itself or lies beneath it, a parent of the wrong tier, and any
-    rung whose subtree is held (moving it would change the liege of a held house).
+    that is the rung itself or lies beneath it, a parent of the wrong tier, and,
+    unless ``force``, any rung whose subtree is held (moving it would change the
+    liege of a held house). With ``force`` (staff, an overthrow or a correction,
+    #4983) the held chains beneath whose oath pointed at the old containment liege
+    are re-sworn to the new one; a pledged or foreign oath is left alone.
     """
     from world.areas.services import area_subtree_pks  # noqa: PLC0415
 
@@ -358,12 +380,144 @@ def move_rung(title: Title, new_parent: Title) -> Title:
     held = Title.objects.filter(house__isnull=False).filter(
         seat_domain__area_id__in=subtree
     ) | Title.objects.filter(pk__in=[member.pk for member in family], house__isnull=False)
-    if held.exists():
+    if held.exists() and not force:
         msg = f"title {title.pk} has held rungs in its subtree"
         raise HousesServiceError(msg, user_message="A rung beneath it is held; vacate those first.")
+    old_liege = liege_for_title(title)
     own_area.parent = parent_area
     own_area.save()
+    if held.exists():
+        _reswear_after_move(title, old_liege)
     return title
+
+
+def _reswear_after_move(title: Title, old_liege: Organization | None) -> None:
+    """After a forced move: every held chain top under ``title`` (``title`` itself
+    included) whose oath pointed at ``old_liege`` by containment swears to the new
+    containment liege instead; a pledged or foreign oath stays (#4983)."""
+    own_area = _rung_area(title)
+    area_ids = [own_area.pk, *(a.pk for a in _descendant_areas(own_area))]
+    org_ids = set(
+        Domain.objects.filter(pk__in=area_ids, owner_org__isnull=False)
+        .values_list("owner_org_id", flat=True)
+        .distinct()
+    )
+    for org_id in org_ids:
+        family = list(Title.objects.filter(house_id=org_id, seat_domain__area_id__in=area_ids))
+        if not family:
+            continue
+        family_top = _family_top(family)
+        edge = FealtyEdge.objects.filter(vassal_id=org_id).select_related("liege").first()
+        if _oath_is_pledged(family_top, edge):
+            continue
+        if edge is not None and (old_liege is None or edge.liege_id != old_liege.pk):
+            continue  # a foreign oath, not this move's to change
+        new_liege = liege_for_title(family_top)
+        if new_liege is None:
+            if edge is not None:
+                release_fealty(edge)
+        elif (edge is None or edge.liege_id != new_liege.pk) and (
+            edge is not None or _may_swear_to_containment_liege(family_top.house, new_liege)
+        ):
+            swear_fealty(vassal=family_top.house, liege=new_liege)
+
+
+@transaction.atomic
+def set_station(title: Title, station: str) -> Title:
+    """Say what a title is (#4983): seated, titular or potential. A title that is
+    not seated is never claimable, so the flag drops with it."""
+    if station not in TitleStation.values:
+        msg = f"unknown station {station!r}"
+        raise HousesServiceError(msg, user_message="That is not a station.")
+    title.station = station
+    if station != TitleStation.SEATED:
+        title.is_claimable = False
+    title.full_clean()
+    title.save(update_fields=["station", "is_claimable"])
+    return title
+
+
+@transaction.atomic
+def set_pledged_liege(title: Title, liege: Title | None) -> Title:
+    """Name the crown rung ``title``'s future holder swears to instead of the
+    containing one, or clear it (#4983). Only a KINGDOM or EMPIRE rung may be pledged to."""
+    if liege is not None and liege.tier not in (TitleTier.KINGDOM, TitleTier.EMPIRE):
+        msg = f"title {liege.pk} is a {liege.tier}, not a crown"
+        raise HousesServiceError(msg, user_message="A pledged liege must be a kingdom or empire.")
+    if liege is not None and liege.pk == title.pk:
+        msg = f"title {title.pk} pledged to itself"
+        raise HousesServiceError(msg, user_message="A title cannot pledge to itself.")
+    title.pledged_liege = liege
+    title.save(update_fields=["pledged_liege"])
+    return title
+
+
+@transaction.atomic
+def charter_fief(*, title: Title, fief: Title, basis: str = "") -> CharteredFief:
+    """Record that ``title``'s charter holds ``fief`` (#4983): a lower-tier title in
+    its realm (an empire's charter reaches any realm). Moves no land and no oath."""
+    row = CharteredFief(title=title, fief=fief, basis=basis)
+    try:
+        row.full_clean()
+    except ValidationError as exc:
+        msg = f"charter of {title.pk} cannot hold {fief.pk}: {exc.messages}"
+        raise HousesServiceError(
+            msg, user_message="A charter names only lower-tier titles of its own realm."
+        ) from exc
+    if CharteredFief.objects.filter(title=title, fief=fief).exists():
+        msg = f"charter of {title.pk} already holds {fief.pk}"
+        raise HousesServiceError(msg, user_message="The charter already holds that fief.")
+    row.save()
+    return row
+
+
+@transaction.atomic
+def uncharter_fief(*, title: Title, fief: Title) -> None:
+    """Take ``fief`` out of ``title``'s charter."""
+    deleted, _ = CharteredFief.objects.filter(title=title, fief=fief).delete()
+    if not deleted:
+        msg = f"charter of {title.pk} does not hold {fief.pk}"
+        raise HousesServiceError(msg, user_message="The charter does not hold that fief.")
+
+
+def chartered_extent(title: Title) -> set[tuple[int, int]]:
+    """Every pip inside the fiefs ``title``'s charter holds: the union of their
+    footprints, derived on read and never stored (#4983)."""
+    from world.areas.worldmap.services import footprint_of  # noqa: PLC0415
+
+    pips: set[tuple[int, int]] = set()
+    for row in CharteredFief.objects.filter(title=title).select_related("fief"):
+        pips |= footprint_of(_rung_area(row.fief))
+    return pips
+
+
+@transaction.atomic
+def record_claim(
+    *,
+    title: Title,
+    claimant: CharacterSheet | None = None,
+    house: Organization | None = None,
+    basis: str = "",
+) -> TitleClaim:
+    """Record a person's claim to rule ``title`` (#4983), or a house's carried one.
+    Exactly one claimant; one claim per claimant per title."""
+    if (claimant is None) == (house is None):
+        msg = "a claim names exactly one claimant"
+        raise HousesServiceError(msg, user_message="Name one claimant.")
+    exists = TitleClaim.objects.filter(title=title)
+    exists = (
+        exists.filter(claimant=claimant) if claimant is not None else exists.filter(house=house)
+    )
+    if exists.exists():
+        msg = f"claim on {title.pk} already recorded"
+        raise HousesServiceError(msg, user_message="That claim is already recorded.")
+    return TitleClaim.objects.create(title=title, claimant=claimant, house=house, basis=basis)
+
+
+@transaction.atomic
+def withdraw_claim(claim: TitleClaim) -> None:
+    """Strike a claim."""
+    claim.delete()
 
 
 @transaction.atomic
@@ -442,11 +596,29 @@ def assign_holder(title: Title, house: Organization) -> Title:
         domain.owner_org = house
         domain.save(update_fields=["owner_org"])
     title.refresh_from_db()
-    liege = liege_for_title(title)
+    liege = _pledged_liege_house(title) or liege_for_title(title)
     if liege is not None and liege.pk != house.pk and _may_swear_to_containment_liege(house, liege):
         swear_fealty(vassal=house, liege=liege)
     rehome_vassals(title)
     return title
+
+
+def _pledged_liege_house(title: Title) -> Organization | None:
+    """The house holding the crown ``title`` is pledged to, when that crown is held;
+    None otherwise, and containment decides (#4983)."""
+    pledged = title.pledged_liege
+    if pledged is None or pledged.house_id is None:
+        return None
+    return pledged.house
+
+
+def _oath_is_pledged(vassal_top: Title, edge: FealtyEdge | None) -> bool:
+    """Whether ``edge`` is the oath ``vassal_top``'s pledged liege asked for: such an
+    oath is standing fealty, never moved by interposition or released on a vacancy."""
+    if edge is None:
+        return False
+    pledged = _pledged_liege_house(vassal_top)
+    return pledged is not None and edge.liege_id == pledged.pk
 
 
 @transaction.atomic
@@ -501,6 +673,8 @@ def _resettle_vassals_of(former: Organization, own_area: Area) -> None:
         if not beneath:
             continue
         family_top = _family_top(beneath)
+        if _oath_is_pledged(family_top, edge):
+            continue
         new_liege = liege_for_title(family_top)
         if new_liege is None:
             release_fealty(edge)
@@ -569,6 +743,8 @@ def rehome_vassals(title: Title) -> int:
             continue
         current_edge = FealtyEdge.objects.filter(vassal_id=org_id).first()
         if current_edge is not None and current_edge.liege_id == holder.pk:
+            continue
+        if _oath_is_pledged(family_top, current_edge):
             continue
         if not _may_rehome_to(vassal=family_top.house, holder=holder, current_edge=current_edge):
             continue
