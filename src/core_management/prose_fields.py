@@ -58,7 +58,6 @@ PROSE_FIELD_NAMES = frozenset(
         "capture_cell_description",
         "capture_clue_description",
         "cg_hint",
-        "closed_reason",
         "own_wording",
         "parentage_note",
         "instance_description",

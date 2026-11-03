@@ -57,3 +57,5 @@ would have let a Beginning quietly reprice a drawback out of step with its own
 `Distinction.cost_per_rank`, and given staff two numbers to keep in sync instead of
 one. `own_wording` replaces only the words; the price always reads through to the
 carried/granted `Distinction`.
+
+**Amended by ADR-4979 (2026-11-03).** The route's closed list is honored silently: `closed_reason`, `closed_for` and the chapters' closed hint are gone, and a closed card is absent for the player with nothing in its place.

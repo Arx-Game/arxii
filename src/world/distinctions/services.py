@@ -137,7 +137,7 @@ def _check_exclusions(character: CharacterSheet, distinction: Distinction) -> No
     conflicts = existing_ids & excluded_ids
     if conflicts:
         conflicting = DistinctionModel.objects.filter(id__in=conflicts).first()
-        msg = f"Mutually exclusive with {conflicting.name}."
+        msg = f"Unavailable because mutually exclusive with {conflicting.name}."
         raise DistinctionExclusionError(msg)
 
     parent = distinction.parent_distinction

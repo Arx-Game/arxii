@@ -125,7 +125,9 @@ class BuilderGetTest(BuilderTestCase):
         body = resp.content.decode()
         assert "This route closes" in body
         assert 'id="closes-module"' in body
-        assert "The player reads" in body
+        # The reason line is gone (#4979): a closed card is absent for the player.
+        assert "The player reads" not in body
+        assert "closed_reason" not in body
 
 
 class BuilderAutocompleteWidgetsTest(BuilderTestCase):
@@ -419,15 +421,11 @@ class BuilderSaveTest(BuilderTestCase):
 
         closed = DistinctionFactory(name="Highborn")
         self.client.force_login(self.author)
-        data = self._post_data(
-            closed_distinctions=[str(closed.pk)],
-            closed_reason="The yards do not make those.",
-        )
+        data = self._post_data(closed_distinctions=[str(closed.pk)])
         resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
         assert resp.status_code == 302
         self.template.refresh_from_db()
         assert list(self.template.closed_distinctions.all()) == [closed]
-        assert self.template.closed_reason == "The yards do not make those."
 
     def test_offer_post_with_arrives_as_carried_is_rejected(self):
         """#3675 review minor 1: CARRIED is not an answer's own offer to give."""
@@ -724,29 +722,6 @@ class BuilderLiveTest(BuilderTestCase):
         panel = live.for_template(self.template, self.author)
         assert any(kind == "warn" and "Generational Talent" in text for kind, text in panel.checks)
 
-    def test_closed_distinctions_with_no_reason_is_a_warn_check(self):
-        """#3675: a non-empty closed list with a blank reason is a warn."""
-        from web.admin.upbringing_builder import live
-
-        closed = DistinctionFactory(name="Spoiled")
-        self.template.closed_distinctions.add(closed)
-        assert self.template.closed_reason == ""
-        panel = live.for_template(self.template, self.author)
-        assert any(
-            kind == "warn" and "no line for the player to read" in text
-            for kind, text in panel.checks
-        )
-
-    def test_closed_distinctions_with_a_reason_is_not_a_warn_check(self):
-        from web.admin.upbringing_builder import live
-
-        closed = DistinctionFactory(name="Spoiled")
-        self.template.closed_distinctions.add(closed)
-        self.template.closed_reason = "The yards do not make those."
-        self.template.save(update_fields=["closed_reason"])
-        panel = live.for_template(self.template, self.author)
-        assert not any("no line for the player to read" in text for _, text in panel.checks)
-
     def test_closed_distinctions_rail_count(self):
         from web.admin.upbringing_builder import live
 
@@ -985,7 +960,8 @@ class BuilderDemoFidelityTest(BuilderTestCase):
         )
 
     def test_closed_distinctions_field_has_its_own_label(self):
-        """#3675 review: the sibling closed_reason field already has one."""
+        """#3675 review: the picker carries a label of its own (the reason field it once
+        sat beside is gone, #4979)."""
         body = self._body()
         assert 'for="id_closed_distinctions"' in body
         assert "Distinctions" in body

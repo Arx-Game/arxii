@@ -399,7 +399,6 @@ export function LifeGrids({ draft, copy }: Props) {
               chapter="backgrounds"
               filter={(o) => o.opener_key === `beat:${beat.beat_id}`}
               showOpener={false}
-              showClosed={false}
               firstLook={false}
               layout="grid"
               exclusive={isOneOf(beat)}

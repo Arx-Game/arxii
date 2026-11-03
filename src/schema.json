@@ -5392,8 +5392,9 @@ paths:
   /api/character-creation/drafts/{id}/offers/:
     get:
       operationId: character_creation_drafts_offers_retrieve
-      description: The distinctions this draft can pick in one chapter, and what its
-        route closed.
+      description: |-
+        The distinctions this draft can pick in one chapter. A distinction the route
+        closes is absent, never named (#4979).
       parameters:
       - in: query
         name: chapter
@@ -52541,30 +52542,6 @@ components:
       - phase
       - season
       - year
-    ClosedDistinction:
-      type: object
-      description: A ``world.character_creation.types.ClosedDistinction`` (#3675).
-      properties:
-        distinction_id:
-          type: integer
-        name:
-          type: string
-        reason:
-          type: string
-        opener_labels:
-          type: array
-          items:
-            type: string
-        opener_ids:
-          type: array
-          items:
-            type: integer
-      required:
-      - distinction_id
-      - name
-      - opener_ids
-      - opener_labels
-      - reason
     ClueRevealOfferDetails:
       type: object
       description: |-
@@ -71042,22 +71019,19 @@ components:
       - name
     OffersResponse:
       type: object
-      description: The ``offers``/``closed`` payload the offers action returns (#3675).
+      description: |-
+        The ``offers`` payload the offers action returns (#3675). A distinction the route
+        closes is absent from ``offers`` and named nowhere else (#4979).
       properties:
         offers:
           type: array
           items:
             $ref: '#/components/schemas/VisibleOffer'
-        closed:
-          type: array
-          items:
-            $ref: '#/components/schemas/ClosedDistinction'
         terms:
           type: array
           items:
             $ref: '#/components/schemas/OfferTerm'
       required:
-      - closed
       - offers
       - terms
     OldLevelEnum:

@@ -18,7 +18,6 @@ from world.character_creation.factories import (
     TraditionStateLineFactory,
 )
 from world.character_creation.offers import (
-    closed_for,
     degree_marks,
     offers_for,
     reconcile_offer_picks,
@@ -190,63 +189,15 @@ class OffersForTests(TestCase):
         reconcile_offer_picks(draft)
         assert draft.draft_data["distinctions"] == []
 
-    def test_route_closed_offers_are_hidden_and_listed(self):
-        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+    def test_a_route_closed_distinction_is_absent_from_the_chapter(self):
+        """#4979: a distinction the route closes is left out of ``offers_for`` and named
+        nowhere else; the player sees nothing in its place."""
+        route = OriginTemplateFactory(beginning=self.beginning)
         route.closed_distinctions.add(self.scar)
         draft = self._draft(glimpse_tag_ids=[self.mark.id])
         draft.selected_origin_template = route
         draft.save(update_fields=["selected_origin_template"])
         assert offers_for(draft, OfferChapter.GLIMPSE) == []
-        closed = closed_for(draft, OfferChapter.GLIMPSE)
-        assert [(c.distinction_id, c.reason) for c in closed] == [(self.scar.id, "Not here.")]
-
-    def test_closed_distinction_opener_labels_name_the_tag_that_would_have_opened_it(self):
-        """The demo's "Highborn under Public" case (#3675 fix round 2): a closed
-        distinction's ``opener_labels`` names the picked tag that would have
-        opened it in this chapter, so the chapter mount can print the closed
-        hint once, under that specific pick, instead of under every pick."""
-        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
-        route.closed_distinctions.add(self.scar)
-        draft = self._draft(glimpse_tag_ids=[self.mark.id])
-        draft.selected_origin_template = route
-        draft.save(update_fields=["selected_origin_template"])
-        (closed,) = closed_for(draft, OfferChapter.GLIMPSE)
-        assert closed.opener_labels == ["Mark"]
-
-    def test_closed_distinction_opener_labels_empty_when_the_opener_was_not_picked(self):
-        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
-        route.closed_distinctions.add(self.scar)
-        draft = self._draft()  # Mark never chosen
-        draft.selected_origin_template = route
-        draft.save(update_fields=["selected_origin_template"])
-        (closed,) = closed_for(draft, OfferChapter.GLIMPSE)
-        assert closed.opener_labels == []
-
-    def test_closed_distinction_opener_labels_name_the_section_on_appearance(self):
-        """Appearance lines carry a section opener now (#3709), so the closed hint can
-        print under the section that would have shown the line."""
-        blood = DistinctionFactory(name="Giant's Blood", cost_per_rank=20)
-        DistinctionOfferFactory(
-            distinction=blood,
-            chapter=OfferChapter.APPEARANCE,
-            appearance_section=AppearanceSectionFactory(name="Frame"),
-        )
-        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
-        route.closed_distinctions.add(blood)
-        draft = self._draft()
-        draft.selected_origin_template = route
-        draft.save(update_fields=["selected_origin_template"])
-        (closed,) = closed_for(draft, OfferChapter.APPEARANCE)
-        assert closed.opener_labels == ["Frame"]
-
-    def test_closed_distinction_opener_labels_empty_when_no_offer_in_this_chapter_opens_it(self):
-        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
-        route.closed_distinctions.add(self.scar)  # scar's only offer is chapter=GLIMPSE
-        draft = self._draft(glimpse_tag_ids=[self.mark.id])
-        draft.selected_origin_template = route
-        draft.save(update_fields=["selected_origin_template"])
-        (closed,) = closed_for(draft, OfferChapter.APPEARANCE)
-        assert closed.opener_labels == []
 
     def test_mutual_exclusion_locks_with_reason(self):
         other = DistinctionFactory(name="Other")
@@ -270,7 +221,9 @@ class OffersForTests(TestCase):
         )
         offer = offers_for(draft, OfferChapter.GLIMPSE)[0]
         assert offer.is_locked
-        assert "Other" in offer.lock_reason
+        # The player can swap the blocking pick, so the card stays, disabled, and says why
+        # in the one pattern every lock uses (#4979).
+        assert offer.lock_reason == "Unavailable because mutually exclusive with Other"
 
     def test_mutual_exclusion_query_count_stays_flat_as_offers_grow(self):
         """B2 (#3675 final fix): exclusions are fetched in one flat query, not

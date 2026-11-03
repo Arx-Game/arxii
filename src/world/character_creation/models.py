@@ -829,12 +829,11 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
         "arxii.Distinction",
         blank=True,
         related_name="closed_by_routes",
-        help_text="Distinctions this route never offers, in any chapter (#3675).",
-    )
-    closed_reason = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text="The line the player reads where a closed distinction would have been.",
+        help_text=(
+            "Distinctions this route never offers, in any chapter (#3675). A closed "
+            "distinction is simply absent for the player; nothing is printed in its "
+            "place (#4979)."
+        ),
     )
 
     objects = OriginTemplateManager()

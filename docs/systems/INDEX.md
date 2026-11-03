@@ -1093,7 +1093,7 @@ allocations that convert AP to development points.
 ### Distinctions
 Character advantages and disadvantages. No CG stage of its own since #3675: each CG
 chapter offers the distinctions that belong to it via `character_creation.DistinctionOffer`
-rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
+rows, read through `world.character_creation.offers` (`offers_for`/
 `reconcile_offer_picks`); see the Character Creation section below and
 [distinctions.md](distinctions.md)'s "CG Integration".
 
@@ -3156,16 +3156,17 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   `enemy_degree`/`appearance_section`/`feature_rows`/`beat`/`unlocked_by` (#4846: the Final Touches chapter, the card a draft must hold for the line to show; `Distinction.final_touches_prompt` is the optional question a held card asks there, `final_touches_prompts`), #3709], `first_look` [M2M `Beginnings` through
   `OfferFirstLook`, #3709]) is the one row that says where a distinction is shown, what opens
   it there and how it arrives, read by `world.character_creation
-  .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
+  .offers` (`offers_for`, `reconcile_offer_picks`, `visible_offers`). A
   tradition's slate line (`BeginningTradition.state`, `TraditionState`:
   SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
   (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
   LIVING_MASTERS (ranks 0-2) and TEACHERS_GONE (ranks 0-1, #4457), offers the standard schooling
   set (`SchoolingLine`, each granting a distinction at its rank, priced
   `grants.cost_per_rank * rank`, and granting the Tradition training points a draft spends on Magic skills, #4457, #4659). `OriginTemplate
-  .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
-  chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
-  `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
+  .closed_distinctions` names distinctions a route never offers, in any chapter; a closed one
+  is absent for the player and named nowhere (#4979, ADR-4979). `GET
+  /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
+  `{"offers": [...], "terms": [...]}` for one chapter; `reconcile_offer_picks` runs after every
   draft PATCH, `select-tradition`, and once at the start of every finalize path. Four staff
   admin builders author this surface (Distinction Builder, tradition slate, the Upbringing
   Builder's per-answer offers + route closes, a `GlimpseTag` change-form inline), reachable

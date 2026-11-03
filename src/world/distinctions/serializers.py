@@ -233,7 +233,7 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         # Uses prefetched to_attr list from viewset
         for exc in obj.prefetched_exclusive:
             if exc.id in draft_distinction_ids:
-                return f"Mutually exclusive with {exc.name}"
+                return f"Unavailable because mutually exclusive with {exc.name}"
 
         return None
 

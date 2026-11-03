@@ -27,7 +27,7 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 
 let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
-let glimpseOffers: OffersResponse = { offers: [], closed: [], terms: [] };
+let glimpseOffers: OffersResponse = { offers: [], terms: [] };
 let cgExplanations = mockCGExplanations;
 let combatStyles: CGCombatStyleOption[] = [];
 const updateDraftMutate = vi.fn();
@@ -58,7 +58,7 @@ vi.mock('@/hooks/useDistinctions', () => ({
 beforeEach(() => {
   traditions = [mockTradition];
   draftDistinctions = [];
-  glimpseOffers = { offers: [], closed: [], terms: [] };
+  glimpseOffers = { offers: [], terms: [] };
   cgExplanations = mockCGExplanations;
   combatStyles = [];
   updateDraftMutate.mockReset();
@@ -475,7 +475,6 @@ describe('GiftStage (folio)', () => {
           effects: [],
         },
       ],
-      closed: [],
       terms: [],
     };
     draftDistinctions = [
@@ -530,7 +529,6 @@ describe('GiftStage (folio)', () => {
           effects: [],
         },
       ],
-      closed: [],
       terms: [],
     };
     draftDistinctions = [

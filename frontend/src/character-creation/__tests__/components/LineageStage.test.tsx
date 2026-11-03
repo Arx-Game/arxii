@@ -64,7 +64,7 @@ vi.mock('../../api', () => ({
   getCGPointBudget: vi.fn(),
   // The beats of the life (#4124); an empty pool mounts nothing.
   getDraftBeats: vi.fn().mockResolvedValue([]),
-  getDraftOffers: vi.fn().mockResolvedValue({ offers: [], closed: [] }),
+  getDraftOffers: vi.fn().mockResolvedValue({ offers: [] }),
 }));
 
 describe('LineageStage', () => {
