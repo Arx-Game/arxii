@@ -45,6 +45,7 @@ from world.character_creation.constants import (
     ActorSheetPrompt,
     AnchorSource,
     ApplicationStatus,
+    BeatAudience,
     BeatMode,
     BeatSelection,
     CommentType,
@@ -322,8 +323,8 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         "grant costs into the character-creation points budget.",
     )
     #: #4124: how this Beginning offers the beat library. The library itself is
-    #: shared; a Beginning only excludes (``LifeBeatExclusion``) or, for the one
-    #: Beginning that starts blank, keeps a single beat and marks the rest unknown.
+    #: shared; which Beginnings meet a beat is the beat's own ``offered_to`` and its
+    #: ``LifeBeatExclusion`` list (#4978), never a field here.
     beat_mode = models.CharField(
         max_length=10,
         choices=BeatMode.choices,
@@ -1209,8 +1210,9 @@ class LifeBeatManager(NaturalKeyManager):
 class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One beat of a life, from the shared Backgrounds library (#4124).
 
-    Content model, authored once and offered to every Beginning unless excluded
-    (``LifeBeatExclusion``). A beat is a prompt over priced distinction offers:
+    Content model, authored once and offered to every Beginning except the ones it
+    lists, or to the listed ones alone (``offered_to`` over its ``LifeBeatExclusion``
+    rows, #4978). A beat is a prompt over priced distinction offers:
     its answers are ``DistinctionOffer`` rows in ``OfferChapter.BACKGROUNDS``
     opened by this beat, each a ``CHOICE`` at the distinction's own price; a beat
     grants nothing free, so an Upbringing carries no mechanical power to balance
@@ -1244,6 +1246,20 @@ class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMe
             "ten years after. Off: one of, or any that apply."
         ),
     )
+    #: #4978: what the beat's list of Beginnings (``LifeBeatExclusion`` rows) means.
+    #: "Every beginning except these" is the #4124 default; "Only these" offers the beat
+    #: to the listed Beginnings alone, so a one-beginning beat carries one row and a
+    #: Beginning added later never meets it until listed. Read by ``offers.beat_pool``.
+    offered_to = models.CharField(
+        max_length=20,
+        choices=BeatAudience.choices,
+        default=BeatAudience.EVERY_BUT_LISTED,
+        db_default=BeatAudience.EVERY_BUT_LISTED,
+        help_text=(
+            "What the Beginnings listed under this beat mean: every other Beginning "
+            "meets the beat, or only the listed ones do."
+        ),
+    )
 
     objects = LifeBeatManager()
 
@@ -1275,11 +1291,13 @@ class LifeBeat(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMe
 
 
 class LifeBeatExclusion(NaturalKeyMixin, SharedMemoryModel):
-    """A beat one Beginning does not offer (#4124).
+    """One Beginning on a beat's list (#4124, #4978).
 
-    The library applies to every Beginning by default; this row is the exception.
-    A through row rather than an M2M so the reason can be recorded beside it.
-    Content model (it travels with the beats); natural key is (beat, beginning).
+    The beat's ``offered_to`` says what the list means: under "Every beginning except
+    these" (the default) this row is the exception and the Beginning never meets the beat;
+    under "Only these" the listed Beginnings are the only ones that do. The model keeps
+    its #4124 name. A through row rather than an M2M so the reason can be recorded beside
+    it. Content model (it travels with the beats); natural key is (beat, beginning).
     """
 
     beat = models.ForeignKey(LifeBeat, on_delete=models.CASCADE, related_name="exclusions")
@@ -1287,7 +1305,9 @@ class LifeBeatExclusion(NaturalKeyMixin, SharedMemoryModel):
         Beginnings, on_delete=models.CASCADE, related_name="beat_exclusions"
     )
     reason = models.CharField(
-        max_length=200, blank=True, help_text="Why this Beginning never meets this beat."
+        max_length=200,
+        blank=True,
+        help_text="A staff note on why this Beginning is listed. Players never read it.",
     )
 
     objects = NaturalKeyManager()

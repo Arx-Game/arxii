@@ -858,8 +858,12 @@ rows carry a fate row for every kind.
 
 A character's background is written as **beats** across the stages of a life
 (`LifeStage`: childhood, youth, before the Glimpse, at the Glimpse, since), from one
-shared library (`LifeBeat`, a content model) that every Beginning offers unless a
-`LifeBeatExclusion` says otherwise or the Beginning **strikes the stage out** (#4395:
+shared library (`LifeBeat`, a content model). Each beat lists Beginnings
+(`LifeBeatExclusion` rows) and its `offered_to` (`BeatAudience`, #4978) says what the
+list means: every Beginning except the listed ones meets the beat (the default), or only
+the listed ones do, so a one-beginning beat such as the Misbegotten's "How the Tree's
+children are raised" carries one row and a Beginning added later never meets it until
+listed. A Beginning also misses a beat when it **strikes the stage out** (#4395:
 `strikes_childhood`/`strikes_youth`/`strikes_adulthood`; the Sleeper strikes all three
 and meets the Glimpse row and "what you carry" alone; a struck stage is absent, not
 greyed). The Lineage leaf shows each stage as **grids** (`LifeGrids`, reading A of the

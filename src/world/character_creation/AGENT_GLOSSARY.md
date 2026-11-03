@@ -27,8 +27,14 @@ from the route's `frame_narrative`. _Avoid_: upbringing frame, intro.
 
 **Strike** (`Beginnings.strikes_childhood` / `strikes_youth` / `strikes_adulthood`, #4395):
 A whole stage a beginning leaves out of the life grids; its beats are absent, not greyed
-(`struck_stages()`). A single beat is left out with a `LifeBeatExclusion` instead.
+(`struck_stages()`). A single beat is left out through the beat's own list instead.
 _Avoid_: locked stage, hidden stage.
+
+**Beat audience** (`LifeBeat.offered_to`, `BeatAudience`, #4978):
+What a beat's list of Beginnings (`LifeBeatExclusion` rows) means: "every beginning
+except these" (the default, the #4124 exclusion) or "only these" (the listed Beginnings
+alone meet the beat). Read by `offers.beat_pool`. _Avoid_: whitelist, allow-list,
+inclusion list, exclusive beat.
 
 **Route** (`OriginTemplate`, #3617, #4395):
 The beginning's family-path record (which paths, the parentage, the path-scoped prompts

@@ -26,6 +26,7 @@ from world.character_creation.constants import (
     MAGIC_TRAINING_POINTS_TARGET,
     STAGE_DESCRIPTIONS_KEY,
     ActorSheetPrompt,
+    BeatAudience,
     BeatSelection,
     FinalTouchesPrompt,
     LifeStage,
@@ -180,17 +181,18 @@ RECENT_HISTORY_KEY = "recent_history"
 def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     """Every active library beat this draft's Beginning offers, stage by stage (#4124).
 
-    The library applies to every Beginning unless a ``LifeBeatExclusion`` says
-    otherwise, or the Beginning strikes the beat's whole stage out (#4395: the
-    Sleeper strikes the three stages before the Glimpse; a struck stage is absent,
-    not greyed). With no Beginning picked there is no pool. Called by ``beats_for``
-    and ``_context``.
+    A beat lists Beginnings (``LifeBeatExclusion`` rows) and its ``offered_to`` says
+    what the list means (#4978): every Beginning except the listed ones meets the beat,
+    or only the listed ones do. A Beginning that strikes the beat's whole stage out never
+    meets it either way (#4395: the Sleeper strikes the three stages before the Glimpse;
+    a struck stage is absent, not greyed). With no Beginning picked there is no pool.
+    Called by ``beats_for`` and ``_context``.
     """
     beginning_id = draft.selected_beginnings_id
     if beginning_id is None:
         return []
     struck = draft.selected_beginnings.struck_stages()
-    excluded = set(
+    listed = set(
         LifeBeatExclusion.objects.filter(beginning_id=beginning_id).values_list(
             "beat_id", flat=True
         )
@@ -198,7 +200,8 @@ def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     beats = [
         b
         for b in LifeBeat.objects.filter(is_active=True)
-        if b.pk not in excluded and b.life_stage not in struck
+        if b.life_stage not in struck
+        and (b.pk in listed) == (b.offered_to == BeatAudience.ONLY_LISTED)
     ]
     beats.sort(key=lambda b: (LIFE_STAGE_ORDER.get(b.life_stage, 99), b.sort_order, b.pk))
     return beats
