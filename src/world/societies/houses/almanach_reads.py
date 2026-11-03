@@ -336,7 +336,11 @@ class _RealmGraph:
 def _realm_graph(realm_id: int) -> _RealmGraph | None:
     """One Title query, one Area query, everything else walked in memory.
     ``None`` when the realm has no titles at all."""
-    titles = list(Title.objects.filter(realm_id=realm_id).select_related("house", "seat_domain"))
+    titles = list(
+        Title.objects.filter(realm_id=realm_id).select_related(
+            "house", "seat_domain", "pledged_liege__house"
+        )
+    )
     if not titles:
         return None
     first_claim_by_title: dict[int, TitleClaim] = {}
@@ -392,6 +396,10 @@ def _sworn_to_and_comes_with(
     if not top:
         top_title = graph.titles_by_pk[graph.family_top_by_seat[t.seat_domain_id]]
         return top_title.name, top_title.name
+    # #4983: a pledged crown, when held, is the oath, whatever the land says (the
+    # same rule ``assign_holder`` writes); the pledge is a crown, so it reads as one.
+    if t.pledged_liege_id is not None and t.pledged_liege.house_id is not None:
+        return f"{t.pledged_liege.house.name} (crown)", ""
     liege = graph.liege_title(t.pk)
     if t.house_id is not None:
         if liege is None:

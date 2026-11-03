@@ -96,6 +96,8 @@ def claimable_titles(realm=None) -> list[Title]:
     ``_validate_seat_gates``'s chain-top check the moment it were submitted,
     so it is not a real target here either.
     """
+    from world.societies.houses.almanach_reads import _realm_graph  # noqa: PLC0415
+
     qs = (
         Title.objects.filter(
             is_claimable=True,
@@ -108,15 +110,17 @@ def claimable_titles(realm=None) -> list[Title]:
     )
     if realm is not None:
         qs = qs.filter(realm=realm)
+    candidates = list(qs)
+    # One in-memory graph per realm answers both questions for every candidate (chain
+    # top, nothing unpublished above); a liege walk per title was a query loop (#4983).
+    graphs = {realm_id: _realm_graph(realm_id) for realm_id in {t.realm_id for t in candidates}}
     titles = []
-    for title in qs:
-        if title.seat_domain_id is not None:
-            try:
-                liege = liege_for_title(title)
-            except HousesServiceError:
-                continue
-            if liege is not None and liege.published_at is None:
-                continue
+    for title in candidates:
+        graph = graphs[title.realm_id]
+        if graph is None:
+            continue
+        if not graph.is_top(title) or graph.founder_hidden(title.pk):
+            continue
         titles.append(title)
     return titles
 

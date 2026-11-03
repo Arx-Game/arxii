@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
@@ -54,6 +56,22 @@ vi.mock('@/almanach/queries', () => ({
           house_name: '',
           parent_title_id: null,
           state: 'Titular',
+        },
+        {
+          title_id: 300,
+          name: 'New Crown',
+          tier: 'kingdom',
+          house_name: '',
+          parent_title_id: null,
+          state: 'Unclaimed',
+        },
+        {
+          title_id: 400,
+          name: 'Kingdom of Arvum',
+          tier: 'kingdom',
+          house_name: '',
+          parent_title_id: null,
+          state: 'Potential',
         },
       ],
       unclaimed_by_tier: {},
@@ -124,6 +142,14 @@ const payload: RegionMapPips = {
       station: 'titular',
       realm_id: 1,
       fief_ids: [100],
+    },
+    {
+      title_id: 300,
+      name: 'New Crown',
+      tier: 'kingdom',
+      station: 'seated',
+      realm_id: 1,
+      fief_ids: [],
     },
   ],
 };
@@ -405,6 +431,47 @@ describe('RegionMapPage', () => {
     expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-ghost-pips', '2');
     expect(within(panel).getByText('Salvation')).toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('names no station for a seated crown that only lacks land', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.selectOptions(screen.getByTestId('select-realm'), '1');
+    await user.selectOptions(screen.getByTestId('select-domain'), '300');
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'New Crown' })).toBeInTheDocument();
+    expect(within(panel).queryByText('Titular')).toBeNull();
+    expect(within(panel).queryByText('Potential')).toBeNull();
+    expect(within(panel).getByText(/holds nothing/)).toBeInTheDocument();
+  });
+
+  it('opens a panel for a ladder rung the map payload does not carry', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.selectOptions(screen.getByTestId('select-realm'), '1');
+    await user.selectOptions(screen.getByTestId('select-domain'), '400');
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Kingdom of Arvum' })).toBeInTheDocument();
+    expect(within(panel).getByText('Potential')).toBeInTheDocument();
+    expect(within(panel).getByText(/holds nothing/)).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Open in the Almanach' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/titles/400'
+    );
+  });
+
+  it('keeps the door focus under StrictMode, which runs the initializer twice', async () => {
+    window.sessionStorage.setItem('world-builder-atlas:focus-title', '200');
+    renderWithProviders(
+      <StrictMode>
+        <RegionMapPage regionId={1} />
+      </StrictMode>
+    );
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Kingdom of Luxen' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.sessionStorage.getItem('world-builder-atlas:focus-title')).toBeNull()
+    );
   });
 
   it('takes the focus a title page left and fills both pickers from it', async () => {

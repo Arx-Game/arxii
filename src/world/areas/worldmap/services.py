@@ -682,18 +682,19 @@ def _landless_titles(
 
     if not realm_ids:
         return []
-    titles = list(
-        Title.objects.filter(realm_id__in=realm_ids)
-        .exclude(pk__in={t for t in landed_title_ids if t is not None})
-        .select_related("seat_domain")
-    )
+    landed = {t for t in landed_title_ids if t is not None}
+    # Every title of the realm, landed included: a landed duchy's own county and
+    # barony are its chain, not rungs with no land, so tops are taken before the
+    # landed ones are dropped.
+    titles = list(Title.objects.filter(realm_id__in=realm_ids).select_related("seat_domain"))
     by_seat: dict[int, list[Title]] = {}
     for t in titles:
         if t.seat_domain_id is not None:
             by_seat.setdefault(t.seat_domain_id, []).append(t)
-    tops = {_family_top(group).pk for group in by_seat.values()} | {
-        t.pk for t in titles if t.seat_domain_id is None
-    }
+    tops = (
+        {_family_top(group).pk for group in by_seat.values()}
+        | {t.pk for t in titles if t.seat_domain_id is None}
+    ) - landed
     fiefs: dict[int, list[int]] = {}
     for title_id, fief_id in (
         CharteredFief.objects.filter(title_id__in=tops)

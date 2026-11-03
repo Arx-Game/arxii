@@ -336,6 +336,11 @@ class FootprintServiceTests(TestCase):
         assert landless[old_crown.pk].realm_id == realm.pk
         assert empire.pk in landless
         assert crown.pk not in landless  # it has land through Brittany
+        # Brittany's own county and barony are chain members of a landed title, not rungs
+        # with no land; a seated crown with no pips yet is listed so it can be carved.
+        fresh = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="New Crown")
+        read = region_read(self.region)
+        assert {t.title_id for t in read.landless_titles} == {old_crown.pk, empire.pk, fresh.pk}
 
     def test_carve_reports_each_pips_prior_and_new_holder(self) -> None:
         set_footprint(area=self.kingdom, add=[(3, 3)])

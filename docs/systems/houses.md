@@ -589,9 +589,11 @@ actions telnet would.
 
 - **`plant_rung(..., station=TitleStation.SEATED)`** — a rung planted titular or potential is
   never `is_claimable`.
-- **`set_station(title, station) -> Title`** — a kingdom or empire, or a title that is not
-  seated, loses `is_claimable`; nothing else about the rung moves (a titular title keeps its seat
-  chain and its holder, if any; tooling never restores a dormant crown, staff do).
+- **`set_station(title, station) -> Title`** — sets the whole seat chain (a titular duchy has a
+  titular county and barony); a kingdom or empire, or a title that is not seated, loses
+  `is_claimable`; nothing else about the rung moves (a titular title keeps its seat chain and its
+  holder, if any; tooling never restores a dormant crown, staff do). Refuses a chain-internal
+  member and anything `Title.clean` refuses, as a `HousesServiceError`.
 - **`set_pledged_liege(title, liege | None) -> Title`** — `liege` must be a kingdom or empire and
   not the title itself.
 - **`charter_fief(*, title, fief, basis="") -> CharteredFief`** / **`uncharter_fief(*, title,
@@ -688,7 +690,8 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   direct child chains counts once).
 - **Liege by containment**: a chain-top row's "sworn to" walks `parent_title_id` up to the nearest
   HELD ancestor and reports that house's name; when the row itself is held, a `(crown)` suffix
-  marks a liege that holds the realm's highest present tier.
+  marks a liege that holds the realm's highest present tier. A held `pledged_liege` comes first,
+  on the ladder and on the title page, the rule `assign_holder` writes (#4983).
 - **Re-homing**: `assign_holder`/`rehome_vassals` re-swear any held chain beneath a newly-seated
   title whose nearest held ancestor is now that title's holder — containment, not standing fealty,
   decides who is whose vassal until someone swears otherwise.

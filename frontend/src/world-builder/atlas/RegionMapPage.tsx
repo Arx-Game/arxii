@@ -79,7 +79,22 @@ import {
   type BrushWidth,
   type Pip,
 } from './regionMapFill';
-import { takeMapFocus } from './mapFocus';
+import { clearMapFocus, peekMapFocus } from './mapFocus';
+
+const LANDLESS_STATION_WORDS: Record<string, string> = {
+  titular: 'Titular',
+  potential: 'Potential',
+};
+
+/** Titular or Potential; a seated rung that merely lacks land says nothing. */
+function stationWordFor(
+  landless: RegionMapLandlessTitle | null,
+  row: { state: string } | null
+): string | null {
+  if (landless != null) return LANDLESS_STATION_WORDS[landless.station] ?? null;
+  if (row != null && (row.state === 'Titular' || row.state === 'Potential')) return row.state;
+  return null;
+}
 
 type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
@@ -118,7 +133,8 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const [mode, setMode] = useState<MapMode>('select');
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(focusAreaId);
   // #4983: a title selected by name, which may hold no land; and its Historical Charter.
-  const [selectedTitleId, setSelectedTitleId] = useState<number | null>(() => takeMapFocus());
+  const [selectedTitleId, setSelectedTitleId] = useState<number | null>(() => peekMapFocus());
+  useEffect(() => clearMapFocus(), []);
   const [charterOn, setCharterOn] = useState(false);
   const [realmId, setRealmId] = useState<number | null>(null);
   const [carveTitleId, setCarveTitleId] = useState<number | null>(null);
@@ -217,13 +233,25 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
         : null,
     [data, selected, selectedTitleId]
   );
-  const focusTitleId = selected?.title_id ?? selectedLandless?.title_id ?? null;
+  const ladderRows = useMemo(() => ladder?.rows ?? [], [ladder]);
+  // A rung the payload does not carry at all: a realm with no land on this map.
+  const selectedLadderRow = useMemo(
+    () =>
+      selected == null && selectedLandless == null && selectedTitleId != null
+        ? (ladderRows.find((row) => row.title_id === selectedTitleId) ?? null)
+        : null,
+    [ladderRows, selected, selectedLandless, selectedTitleId]
+  );
+  const focusTitleId =
+    selected?.title_id ?? selectedLandless?.title_id ?? selectedLadderRow?.title_id ?? null;
   // A selection made by title (the door from a title page, a click on a footprint) names
   // a realm too; with no realm picked yet, take the title's, so the domain picker can show it.
   const focusRealmId = selected?.realm_id ?? selectedLandless?.realm_id ?? null;
   useEffect(() => {
     if (realmId == null && focusRealmId != null) setRealmId(focusRealmId);
   }, [focusRealmId, realmId]);
+  // Titular or Potential; a seated rung that merely lacks land says nothing.
+  const stationWord = stationWordFor(selectedLandless, selectedLadderRow);
   // Historical Charter: every footprint whose title is in the selected title's charter.
   const charterFootprints = useMemo(
     () =>
@@ -238,7 +266,6 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     for (const f of charterFootprints) for (const [x, y] of f.pips) out.add(pipKey(x, y));
     return out;
   }, [charterFootprints, charterOn]);
-  const ladderRows = ladder?.rows ?? [];
   const carveTarget = useMemo(
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
@@ -801,17 +828,21 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           data-testid="region-map-panel"
         >
           <Plate className="h-full rounded-none p-4">
-            {selected || selectedLandless ? (
+            {selected || selectedLandless || selectedLadderRow ? (
               <div>
                 <PlateHead as="div">
-                  {selected ? selected.level_display : (selectedLandless?.tier ?? '')}
+                  {selected
+                    ? selected.level_display
+                    : (selectedLandless?.tier ?? selectedLadderRow?.tier ?? '')}
                 </PlateHead>
                 <h3 className="theme-heading mt-1 text-lg font-semibold [font-variant:small-caps]">
-                  {(selected ? selected.name : selectedLandless?.name) || 'Unnamed'}
+                  {(selected
+                    ? selected.name
+                    : (selectedLandless?.name ?? selectedLadderRow?.name)) || 'Unnamed'}
                 </h3>
-                {selectedLandless && (
+                {stationWord && (
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    {selectedLandless.station === 'potential' ? 'Potential' : 'Titular'}
+                    {stationWord}
                   </p>
                 )}
                 <p className="mt-1 font-body text-sm italic text-muted-foreground">

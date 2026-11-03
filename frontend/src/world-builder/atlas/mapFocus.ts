@@ -19,15 +19,26 @@ export function rememberMapFocus(accountId: number | string, regionId: number, t
   }
 }
 
-/** The title a page asked the map to select, read once. */
-export function takeMapFocus(): number | null {
+/**
+ * The title a page asked the map to select. Reading and forgetting are separate
+ * because React runs a state initializer twice under StrictMode: the page reads
+ * in the initializer and forgets in a mount effect.
+ */
+export function peekMapFocus(): number | null {
   try {
     const raw = window.sessionStorage.getItem(FOCUS_KEY);
     if (raw == null) return null;
-    window.sessionStorage.removeItem(FOCUS_KEY);
     const id = Number(raw);
     return Number.isFinite(id) ? id : null;
   } catch {
     return null;
+  }
+}
+
+export function clearMapFocus() {
+  try {
+    window.sessionStorage.removeItem(FOCUS_KEY);
+  } catch {
+    // nothing to forget
   }
 }

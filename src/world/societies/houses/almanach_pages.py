@@ -37,7 +37,7 @@ from world.roster.services.kinship import (
 )
 from world.scenes.constants import PersonaType
 from world.societies.constants import CrimeTier
-from world.societies.houses.almanach import _family_org, liege_for_title
+from world.societies.houses.almanach import _family_org, _pledged_liege_house, liege_for_title
 from world.societies.houses.almanach_reads import (
     _build_rows,
     _realm_graph,
@@ -757,7 +757,7 @@ def rung_document(title: Title) -> RungDocument:
     forces, and the vassal rungs beneath it."""
     graph = _realm_graph(title.realm_id)
     row = _row_for(title, graph) if graph is not None else None
-    liege = liege_for_title(title)
+    liege = _pledged_liege_house(title) or liege_for_title(title)
     law = title.succession_law or (title.house.default_succession_law if title.house_id else None)
     own_area_id = graph.own_area_by_title.get(title.pk) if graph is not None else None
     domain = Domain.objects.filter(pk=own_area_id).select_related("area", "hall").first()

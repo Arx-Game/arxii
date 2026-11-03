@@ -25,9 +25,11 @@ from world.societies.houses.almanach import (
     vacate_holder,
     withdraw_claim,
 )
+from world.societies.houses.almanach_pages import rung_document
+from world.societies.houses.almanach_reads import ladder_for_realm
 from world.societies.houses.constants import TitleStation, TitleTier
 from world.societies.houses.models import CharteredFief, FealtyEdge, Title, TitleClaim
-from world.societies.houses.services import HousesServiceError
+from world.societies.houses.services import HousesServiceError, swear_fealty
 
 
 class TitleStationTests(TestCase):
@@ -52,6 +54,18 @@ class TitleStationTests(TestCase):
         self.duchy.station = TitleStation.SEATED
         self.duchy.is_claimable = True
         self.duchy.full_clean()
+
+    def test_half_filled_rows_fail_validation_not_with_a_crash(self) -> None:
+        realm = RealmFactory(name="Forms")
+        crown = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Crown")
+        with self.assertRaises(ValidationError):
+            CharteredFief(title=crown).full_clean()  # no fief yet: a form error, not a 500
+        with self.assertRaises(ValidationError):
+            TitleClaim(title=crown).full_clean()  # neither claimant nor house
+        with self.assertRaises(ValidationError):
+            TitleClaim(
+                title=crown, claimant=CharacterSheetFactory(), house=OrganizationFactory()
+            ).full_clean()
 
     def test_a_charter_names_lower_tiers_in_its_realm(self) -> None:
         other_realm = RealmFactory(name="Inferna")
@@ -192,6 +206,48 @@ class ChartersClaimsAndOathsTests(TestCase):
         vacate_holder(self.republic)
         assert FealtyEdge.objects.get(vassal=dukes).liege_id == self.throne.pk
         assert not FealtyEdge.objects.filter(vassal=counts).exists()
+
+    def test_the_ladder_and_the_page_report_a_pledged_oath(self) -> None:
+        dukes = OrganizationFactory(name="House Brittany")
+        set_pledged_liege(self.brittany, self.imperial)
+        assign_holder(self.brittany, dukes)
+        rows = {r.title_id: r for r in ladder_for_realm(self.realm).rows}
+        assert rows[self.brittany.pk].sworn_to == "The Umbral Throne (crown)"
+        assert rung_document(self.brittany).title["sworn_to"] == "The Umbral Throne"
+        # an unheld pledged rung says who its future holder will answer to
+        set_pledged_liege(self.anjou, self.imperial)
+        rows = {r.title_id: r for r in ladder_for_realm(self.realm).rows}
+        assert rows[self.anjou.pk].sworn_to == "The Umbral Throne (crown)"
+
+    def test_rehome_vassals_spares_a_pledged_oath_when_the_container_is_reseated(self) -> None:
+        swear_fealty(vassal=self.republic_house, liege=self.throne)
+        dukes = OrganizationFactory(name="House Brittany")
+        set_pledged_liege(self.brittany, self.imperial)
+        assign_holder(self.brittany, dukes)
+        vacate_holder(self.republic)
+        assign_holder(self.republic, self.republic_house)
+        assert FealtyEdge.objects.get(vassal=dukes).liege_id == self.throne.pk
+
+    def test_set_station_covers_the_chain_and_refuses_cleanly(self) -> None:
+        set_station(self.brittany, TitleStation.TITULAR)
+        chain = Title.objects.filter(seat_domain_id=self.brittany.seat_domain_id)
+        assert {t.station for t in chain} == {TitleStation.TITULAR}
+        assert not any(t.is_claimable for t in chain)
+        inner = chain.get(tier=TitleTier.COUNTY)
+        with self.assertRaises(HousesServiceError):
+            set_station(inner, TitleStation.SEATED)
+        self.old_crown.is_claimable = True  # forced by hand, past the model's own rule
+        self.old_crown.save(update_fields=["is_claimable"])
+        set_station(self.old_crown, TitleStation.SEATED)
+        self.old_crown.refresh_from_db()
+        assert self.old_crown.station == TitleStation.SEATED
+        assert not self.old_crown.is_claimable
+
+    def test_a_second_charter_of_the_same_fief_says_so(self) -> None:
+        charter_fief(title=self.old_crown, fief=self.brittany)
+        with self.assertRaises(HousesServiceError) as caught:
+            charter_fief(title=self.old_crown, fief=self.brittany)
+        assert caught.exception.user_message == "The charter already holds that fief."
 
     def test_force_move_of_a_held_duchy_reswears_it_and_spares_a_pledged_oath(self) -> None:
         cinderus_house = OrganizationFactory(name="House Cinderus")

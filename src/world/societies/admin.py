@@ -1339,6 +1339,7 @@ class CharteredFiefInline(admin.TabularInline):
 
     model = CharteredFief
     fk_name = "title"
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ("fief",)
 
@@ -1347,6 +1348,7 @@ class TitleClaimInline(admin.TabularInline):
     """Who claims a title (#4983)."""
 
     model = TitleClaim
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ("claimant", "house")
 

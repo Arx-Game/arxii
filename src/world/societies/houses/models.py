@@ -394,6 +394,8 @@ class CharteredFief(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.fief_id is None or self.title_id is None:
+            raise ValidationError({"fief": "A charter names a title and a fief."})
         if TITLE_TIER_RANK[self.fief.tier] >= TITLE_TIER_RANK[self.title.tier]:
             raise ValidationError({"fief": "A charter names only lower-tier titles."})
         if self.fief.realm_id != self.title.realm_id and self.title.tier != TitleTier.EMPIRE:
@@ -427,6 +429,12 @@ class TitleClaim(SharedMemoryModel):
     )
     basis = models.CharField(max_length=200, blank=True, help_text="On what basis.")
     since = models.DateField(auto_now_add=True)
+
+    def clean(self) -> None:
+        super().clean()
+        if (self.claimant_id is None) == (self.house_id is None):
+            msg = "A claim names one claimant: a character or a house."
+            raise ValidationError(msg)
 
     class Meta:
         ordering = ["title", "since", "pk"]

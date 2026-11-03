@@ -429,11 +429,20 @@ def set_station(title: Title, station: str) -> Title:
     if station not in TitleStation.values:
         msg = f"unknown station {station!r}"
         raise HousesServiceError(msg, user_message="That is not a station.")
-    title.station = station
-    if station != TitleStation.SEATED:
-        title.is_claimable = False
-    title.full_clean()
-    title.save(update_fields=["station", "is_claimable"])
+    # the whole seat chain is one rung: a titular duchy has a titular county and barony
+    family = _require_chain_top(title)
+    for member in family:
+        member.station = station
+        if station != TitleStation.SEATED or member.tier in (TitleTier.KINGDOM, TitleTier.EMPIRE):
+            member.is_claimable = False
+        try:
+            member.full_clean()
+        except ValidationError as exc:
+            msg = f"title {member.pk} cannot be {station}: {exc.messages}"
+            raise HousesServiceError(
+                msg, user_message="That title cannot take that station."
+            ) from exc
+        member.save(update_fields=["station", "is_claimable"])
     return title
 
 
@@ -456,6 +465,9 @@ def set_pledged_liege(title: Title, liege: Title | None) -> Title:
 def charter_fief(*, title: Title, fief: Title, basis: str = "") -> CharteredFief:
     """Record that ``title``'s charter holds ``fief`` (#4983): a lower-tier title in
     its realm (an empire's charter reaches any realm). Moves no land and no oath."""
+    if CharteredFief.objects.filter(title=title, fief=fief).exists():
+        msg = f"charter of {title.pk} already holds {fief.pk}"
+        raise HousesServiceError(msg, user_message="The charter already holds that fief.")
     row = CharteredFief(title=title, fief=fief, basis=basis)
     try:
         row.full_clean()
@@ -464,9 +476,6 @@ def charter_fief(*, title: Title, fief: Title, basis: str = "") -> CharteredFief
         raise HousesServiceError(
             msg, user_message="A charter names only lower-tier titles of its own realm."
         ) from exc
-    if CharteredFief.objects.filter(title=title, fief=fief).exists():
-        msg = f"charter of {title.pk} already holds {fief.pk}"
-        raise HousesServiceError(msg, user_message="The charter already holds that fief.")
     row.save()
     return row
 

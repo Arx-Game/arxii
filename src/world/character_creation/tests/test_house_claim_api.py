@@ -161,6 +161,30 @@ class HouseClaimApiTests(TestCase):
         self.assertNotIn(titular.pk, ids)
         self.assertNotIn(inner.pk, ids)
 
+    def test_house_titles_query_count_does_not_grow_with_the_catalogue(self):
+        """#4983: one realm graph per realm, never a liege walk per title."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import plant_rung
+        from world.societies.houses.constants import TitleTier
+
+        realm = RealmFactory(name="Count Realm")
+        kingdom = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Count Crown")
+        plant_rung(realm=realm, tier=TitleTier.DUCHY, name="Duchy 0", parent_title=kingdom)
+        with CaptureQueriesContext(connection) as one:
+            self.client.get("/api/character-creation/house-titles/")
+        for i in range(1, 7):
+            plant_rung(realm=realm, tier=TitleTier.DUCHY, name=f"Duchy {i}", parent_title=kingdom)
+        with CaptureQueriesContext(connection) as seven:
+            response = self.client.get("/api/character-creation/house-titles/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = response.data["results"] if isinstance(response.data, dict) else response.data
+        self.assertEqual(len([t for t in titles if t["name"].startswith("Duchy")]), 7)
+        # the identity map may spare a query on the second read; it never adds one per title
+        self.assertLessEqual(len(seven), len(one))
+
     def test_house_titles_say_what_a_god_option_is_and_where_it_opens(self):
         """#4205: an option that IS a god carries the being and opens its page."""
         from world.codex.factories import CodexEntryFactory
