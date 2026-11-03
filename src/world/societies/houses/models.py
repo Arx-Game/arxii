@@ -9,6 +9,7 @@ civ stats) and feed the existing streams→treasury spine. Marriage pacts are
 union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
 """
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -25,6 +26,7 @@ from world.societies.houses.constants import (
     IC_DAY_MIN,
     IC_MONTH_MAX,
     IC_MONTH_MIN,
+    TITLE_TIER_RANK,
     ClaimKinRelation,
     CrisisAudience,
     CrisisIntelSource,
@@ -43,6 +45,7 @@ from world.societies.houses.constants import (
     SuccessionDerivation,
     SuccessionGenderTiebreak,
     SuccessionOrdering,
+    TitleStation,
     TitleTier,
 )
 
@@ -278,6 +281,26 @@ class Title(SharedMemoryModel):
         related_name="claimed_titles",
         help_text="A house that claims this title while another holds it (#3983).",
     )
+    station = models.CharField(
+        max_length=12,
+        choices=TitleStation.choices,
+        default=TitleStation.SEATED,
+        help_text=(
+            "Seated: a working rung. Titular: dormant, keeps its charter, holds no land, "
+            "never claimable. Potential: an unnamed slot in unorganised land (#4983)."
+        ),
+    )
+    pledged_liege = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pledged_vassals",
+        help_text=(
+            "The crown rung a future holder swears to instead of the containing one "
+            "(north Luxen's duchies to the Imperial throne, #4983)."
+        ),
+    )
     holder = models.ForeignKey(
         _KINSPERSON_FK,
         on_delete=models.SET_NULL,
@@ -338,6 +361,106 @@ class Title(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """A crown is never a CG slot, and neither is a title that is not seated
+        (#4983, owner ruling 2026-11-03: CG defines ducal and lower only)."""
+        super().clean()
+        if not self.is_claimable:
+            return
+        if self.tier in (TitleTier.KINGDOM, TitleTier.EMPIRE):
+            raise ValidationError({"is_claimable": "A kingdom or empire is never claimable."})
+        if self.station != TitleStation.SEATED:
+            raise ValidationError({"is_claimable": "Only a seated title can be claimable."})
+
+
+class CharteredFief(SharedMemoryModel):
+    """One lower-tier title a title's charter holds or historically held (#4983).
+
+    A kingdom's charter names duchies, a duchy's names counties, and several titles
+    may charter the same fief, each with its own border: the union of its fiefs'
+    footprints, derived on read and never stored. The land tree (``Area.parent``)
+    stays the de facto picture; a charter moves no land and no oath by itself.
+    """
+
+    title = models.ForeignKey("arxii.Title", on_delete=models.CASCADE, related_name="charter")
+    fief = models.ForeignKey("arxii.Title", on_delete=models.CASCADE, related_name="chartered_by")
+    basis = models.CharField(
+        max_length=200, blank=True, help_text="By what right or history the charter holds it."
+    )
+
+    class Meta:
+        ordering = ["title", "fief"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["title", "fief"], name="houses_charter_one_row_per_fief"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} charters {self.fief}"
+
+    def clean(self) -> None:
+        super().clean()
+        if TITLE_TIER_RANK[self.fief.tier] >= TITLE_TIER_RANK[self.title.tier]:
+            raise ValidationError({"fief": "A charter names only lower-tier titles."})
+        if self.fief.realm_id != self.title.realm_id and self.title.tier != TitleTier.EMPIRE:
+            raise ValidationError({"fief": "Only an empire's charter reaches into another realm."})
+
+
+class TitleClaim(SharedMemoryModel):
+    """A person's claim to rule a title (#4983): "I should be the ruler of this
+    barony, county, duchy, kingdom or empire", at any tier, on an active or a
+    dormant title, several claimants per title. ``house`` carries the one-house
+    contested-title claims ADR-0313 kept on ``Title.claimant_org`` before this table;
+    a new claim names a character.
+    """
+
+    title = models.ForeignKey("arxii.Title", on_delete=models.CASCADE, related_name="title_claims")
+    claimant = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="title_claims",
+        help_text="The character who claims the title.",
+    )
+    house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="title_claims",
+        help_text="A house's claim, carried from the contested-title field (ADR-0313).",
+    )
+    basis = models.CharField(max_length=200, blank=True, help_text="On what basis.")
+    since = models.DateField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title", "since", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(claimant__isnull=False, house__isnull=True)
+                    | models.Q(claimant__isnull=True, house__isnull=False)
+                ),
+                name="houses_title_claim_one_claimant",
+            ),
+            models.UniqueConstraint(
+                fields=["title", "claimant"],
+                condition=models.Q(claimant__isnull=False),
+                name="houses_title_claim_once_per_person",
+            ),
+            models.UniqueConstraint(
+                fields=["title", "house"],
+                condition=models.Q(house__isnull=False),
+                name="houses_title_claim_once_per_house",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        who = self.claimant or self.house
+        return f"{who} claims {self.title}"
 
 
 class LandShape(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
