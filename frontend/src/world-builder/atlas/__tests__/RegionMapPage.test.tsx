@@ -407,6 +407,18 @@ describe('RegionMapPage', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('takes the focus a title page left and fills both pickers from it', async () => {
+    window.sessionStorage.setItem('world-builder-atlas:focus-title', '200');
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Kingdom of Luxen' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('select-realm')).toHaveValue('1'));
+    expect(screen.getByTestId('select-domain')).toHaveValue('200');
+    expect(screen.getByTestId('select-domain')).toBeEnabled();
+    // read once: a reload keeps the user's own selection, not the door's
+    expect(window.sessionStorage.getItem('world-builder-atlas:focus-title')).toBeNull();
+  });
+
   it('shows the loading and error states', () => {
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
       data: undefined,

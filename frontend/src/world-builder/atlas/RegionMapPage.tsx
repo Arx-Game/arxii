@@ -218,6 +218,12 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     [data, selected, selectedTitleId]
   );
   const focusTitleId = selected?.title_id ?? selectedLandless?.title_id ?? null;
+  // A selection made by title (the door from a title page, a click on a footprint) names
+  // a realm too; with no realm picked yet, take the title's, so the domain picker can show it.
+  const focusRealmId = selected?.realm_id ?? selectedLandless?.realm_id ?? null;
+  useEffect(() => {
+    if (realmId == null && focusRealmId != null) setRealmId(focusRealmId);
+  }, [focusRealmId, realmId]);
   // Historical Charter: every footprint whose title is in the selected title's charter.
   const charterFootprints = useMemo(
     () =>
