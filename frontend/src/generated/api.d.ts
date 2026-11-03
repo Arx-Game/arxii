@@ -49699,6 +49699,18 @@ export interface components {
       vassals: {
         [key: string]: unknown;
       }[];
+      chartered_fiefs: {
+        [key: string]: unknown;
+      }[];
+      chartered_by: {
+        [key: string]: unknown;
+      }[];
+      claims: {
+        [key: string]: unknown;
+      }[];
+      chain: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.

@@ -88437,8 +88437,32 @@ components:
           items:
             type: object
             additionalProperties: {}
+        chartered_fiefs:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        chartered_by:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        claims:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        chain:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
       required:
       - books
+      - chain
+      - chartered_by
+      - chartered_fiefs
+      - claims
       - demesne
       - forces
       - holdings

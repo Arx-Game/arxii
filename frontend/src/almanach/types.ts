@@ -375,6 +375,13 @@ export type AlmanachActionKey =
   | 'almanach_remove_holding'
   | 'almanach_delete_rung'
   | 'almanach_move_rung'
+  // #4983: charters, claims, station, pledged liege.
+  | 'almanach_charter_fief'
+  | 'almanach_uncharter_fief'
+  | 'almanach_record_claim'
+  | 'almanach_withdraw_claim'
+  | 'almanach_set_station'
+  | 'almanach_set_pledged_liege'
   | 'almanach_vacate_holder'
   | 'almanach_edit_house'
   | 'almanach_swear'
