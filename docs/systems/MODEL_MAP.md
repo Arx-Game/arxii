@@ -7841,6 +7841,7 @@
 **Foreign Keys:**
   - area -> areas.Area [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
+  - realm -> realms.Realm [FK] (nullable)
 **Pointed to by:**
   - entries <- npc_services.NameCultureEntry
 
@@ -8471,6 +8472,7 @@
   - recognition_rules <- societies.HouseRecognitionRule
   - titles <- societies.Title
   - house_templates <- societies.HouseTemplate
+  - name_cultures <- npc_services.NameCulture
   - market_squares <- items.MarketSquare
   - testament_sections <- realms.RealmTestamentSection
 

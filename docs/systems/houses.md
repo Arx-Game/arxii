@@ -604,6 +604,64 @@ actions telnet would.
   **`withdraw_claim(claim)`** — exactly one of character or house; one claim per person or house
   per title (partial unique constraints).
 
+### Laying out a realm (#4983 slice 2, #4986)
+
+The owner draws each kingdom's outline on the region map; `world/societies/houses/layout.py`
+reads a few typed lines and plants and partitions the ladder beneath. One entry per line,
+fields split on `|`, a kingdom's duchy lines indented by two spaces:
+
+```
+realm | counties 2-6 | baronies 1-4 | capital x1.5
+kingdom Umbros | seat Umbros | duchies 5 | capital x2
+kingdom East Cinderus | titular | lore The Daeva remnant ...
+  duchy Ashfall | counties 3
+  duchy Embermarch | sworn Cinderus
+kingdom | potential
+```
+
+- **`parse_layout(text) -> Layout`** — the grammar: `realm` sets defaults (ranges inclusive,
+  drawn deterministically per run; counties default 2-4, baronies 1-2, capital x1.5); a
+  `kingdom <name>` line names a drawn KINGDOM rung already on the ladder; `titular` and
+  `potential` plant a landless crown instead (an unnamed line must be `potential`); words:
+  `duchies`/`counties`/`baronies N|A-B`, `capital xW`, `seat <name>` (names the crown's own
+  chain county), `held` / `claimable` on a duchy line (`is_claimable` off or on), `sworn
+  <crown>` (`pledged_liege`, any realm, KINGDOM or EMPIRE), `chartered <a>, <b>`
+  (`CharteredFief` rows, names from this layout or the ladder), `claimed by <character> |
+  basis <text>` (a `TitleClaim`), `lore <text>` (the seat `Domain.description`). Every error
+  is a `LayoutError` whose text starts `line N:`.
+- **`partition(pips, land, count, weights, seed_hint, rng_seed)`** (`partition.py`, pure) —
+  weighted multi-source region growing over 4-connected land: the capital's seed is the
+  crown's seat pip when it lies inside, else the land nearest the centroid; the rest by
+  farthest-point sampling; unreachable land (another island) joins the nearest region; water
+  inside the outline goes to the region it touches most, so a realm keeps its waters (#4317).
+  Fewer regions come back than asked when the land is short; never an empty one. No
+  `random`: the tie-break is a crc32 of the seed and the pip.
+- **`preview_layout(realm, layout)` / `lay_out_realm(realm, layout) -> LayoutReport`** — the
+  same walk, the second writing one transaction per kingdom (a refused kingdom rolls back
+  alone and says why in its `KingdomReport.refusals`). The crown's own seat chain is the
+  capital child at every tier (its duchy takes the capital weight, its county the `seat`
+  name); every other duchy and county is planted with `plant_rung`, land goes down with
+  `set_footprint` (containment moves the kingdom's rows down), every county's seat barony
+  takes the county's seed pip and extra baronies the pips farthest from it. Refused whole: a
+  kingdom not on the ladder, one with no land drawn, one that already has rungs beneath its
+  own chain, a titular or potential name already on the ladder, a `sworn` crown or a
+  `claimed by` character that does not exist. The whole layout is refused (`LayoutRefused`)
+  when the realm's culture has no PLACE names.
+- **Names** — `NameCulture.realm` links a culture to its realm (#4986, the seed links the five);
+  `NameCultureEntry` rows of the `NamePart.PLACE` part are the bank. Every duchy and county
+  takes one, drawn without replacement in a stable per-run order (names already on the
+  realm's ladder are skipped); when the bank runs dry the rung is planted unnamed (the
+  ladder's Undefined), never with a repeat. The seat barony stays unnamed: `Domain.name` is
+  unique.
+- **Figures** — county population `120 * pips`, summed upward through duchy and kingdom;
+  prosperity 65 on the capital child, 45 on the others; every generated `Domain.description`
+  starts with `PLACEHOLDER:` so the lore pass finds them; a `lore` word replaces it.
+- **Action** `almanach_lay_out` (`realm_id`, `layout`, `commit`; staff only): `commit=false`
+  previews; `data` carries `LayoutReport.as_data()`. The realm ladder page's **lay out…**
+  button opens `LayOutDialog` (`frontend/src/almanach/ladder/LayOutDialog.tsx`): a textarea,
+  Preview renders the report per kingdom, Lay out plants and refetches the ladder and the
+  region maps; the last text is kept per realm in `localStorage`.
+
 ### House record
 
 - **`set_house_state(house, state)`** — the house's `HouseState` lifecycle standing.
@@ -864,7 +922,7 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Twenty-three REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+Twenty-four REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
 `StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`, with `station`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
@@ -886,6 +944,8 @@ held subtree and re-swears it, #4983) (#4617), `AlmanachSetStationAction` (`alma
 `title_id` + `fief_title_id` + `basis`), `AlmanachUncharterFiefAction` (`almanach_uncharter_fief`),
 `AlmanachRecordClaimAction` (`almanach_record_claim`, `title_id` + `sheet_id` or `house_id` +
 `basis`), `AlmanachWithdrawClaimAction` (`almanach_withdraw_claim`, `claim_id`) (#4983),
+`AlmanachLayOutAction` (`almanach_lay_out`, `realm_id` + `layout` + `commit`; see "Laying out a
+realm" above) (#4986),
 `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,
