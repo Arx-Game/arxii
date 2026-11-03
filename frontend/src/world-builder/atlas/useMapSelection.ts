@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import type { LadderRow } from '@/almanach/types';
 import type { RegionMapFootprint, RegionMapLandlessTitle, RegionMapPips } from '../types';
+import { pipKey } from './regionMapCanvas';
 
 const LANDLESS_STATION_WORDS: Record<string, string> = {
   titular: 'Titular',
@@ -23,6 +24,8 @@ interface MapSelectionInput {
   ladderRows: LadderRow[];
   selectedAreaId: number | null;
   selectedTitleId: number | null;
+  /** Historical Charter on: the chartered footprints' pips become the ghost. */
+  charterOn: boolean;
 }
 
 /**
@@ -36,6 +39,7 @@ export function useMapSelection({
   ladderRows,
   selectedAreaId,
   selectedTitleId,
+  charterOn,
 }: MapSelectionInput) {
   const selected: RegionMapFootprint | null = useMemo(() => {
     const byArea = data?.footprints.find((f) => f.area_id === selectedAreaId) ?? null;
@@ -61,6 +65,12 @@ export function useMapSelection({
     if (focusTitleId == null) return [];
     return data?.footprints.filter((f) => f.charters.includes(focusTitleId)) ?? [];
   }, [data, focusTitleId]);
+  const ghostPips = useMemo(() => {
+    const out = new Set<string>();
+    if (!charterOn) return out;
+    for (const f of charterFootprints) for (const [x, y] of f.pips) out.add(pipKey(x, y));
+    return out;
+  }, [charterFootprints, charterOn]);
   return {
     selected,
     selectedLandless,
@@ -69,5 +79,6 @@ export function useMapSelection({
     focusRealmId,
     stationWord,
     charterFootprints,
+    ghostPips,
   };
 }

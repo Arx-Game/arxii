@@ -213,16 +213,11 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     focusRealmId,
     stationWord,
     charterFootprints,
-  } = useMapSelection({ data, ladderRows, selectedAreaId, selectedTitleId });
+    ghostPips,
+  } = useMapSelection({ data, ladderRows, selectedAreaId, selectedTitleId, charterOn });
   useEffect(() => {
     if (realmId == null && focusRealmId != null) setRealmId(focusRealmId);
   }, [focusRealmId, realmId]);
-  const ghostPips = useMemo(() => {
-    const out = new Set<string>();
-    if (!charterOn) return out;
-    for (const f of charterFootprints) for (const [x, y] of f.pips) out.add(pipKey(x, y));
-    return out;
-  }, [charterFootprints, charterOn]);
   const carveTarget = useMemo(
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
