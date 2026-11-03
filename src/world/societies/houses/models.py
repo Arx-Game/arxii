@@ -273,14 +273,6 @@ class Title(SharedMemoryModel):
         related_name="titles",
         help_text="The house currently holding this title.",
     )
-    claimant_org = models.ForeignKey(
-        _ORG_FK,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="claimed_titles",
-        help_text="A house that claims this title while another holds it (#3983).",
-    )
     station = models.CharField(
         max_length=12,
         choices=TitleStation.choices,

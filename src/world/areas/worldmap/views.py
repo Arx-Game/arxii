@@ -101,6 +101,18 @@ class RegionMapFootprintSerializer(serializers.Serializer):
     title_id = serializers.IntegerField(allow_null=True)
     seat = serializers.ListField(child=serializers.IntegerField(), allow_null=True)
     pips = serializers.ListField(child=serializers.ListField(child=serializers.IntegerField()))
+    charters = serializers.ListField(child=serializers.IntegerField())
+
+
+class RegionMapLandlessTitleSerializer(serializers.Serializer):
+    """A realm title on the map that holds no land de facto (#4983)."""
+
+    title_id = serializers.IntegerField()
+    name = serializers.CharField(allow_blank=True)
+    tier = serializers.CharField()
+    station = serializers.CharField()
+    realm_id = serializers.IntegerField()
+    fief_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 class RegionMapPipsSerializer(serializers.Serializer):
@@ -110,6 +122,7 @@ class RegionMapPipsSerializer(serializers.Serializer):
     terrains = serializers.ListField(child=serializers.CharField())
     pips = serializers.ListField(child=serializers.ListField())
     footprints = RegionMapFootprintSerializer(many=True)
+    landless_titles = RegionMapLandlessTitleSerializer(many=True)
 
 
 class RegionMapUploadInputSerializer(serializers.Serializer):

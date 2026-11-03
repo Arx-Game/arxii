@@ -48778,6 +48778,16 @@ export interface components {
       title_id: number | null;
       seat: number[] | null;
       pips: number[][];
+      charters: number[];
+    };
+    /** @description A realm title on the map that holds no land de facto (#4983). */
+    RegionMapLandlessTitle: {
+      title_id: number;
+      name: string;
+      tier: string;
+      station: string;
+      realm_id: number;
+      fief_ids: number[];
     };
     /** @description The region-map view's payload: ``pips`` rows are ``[x, y, terrain, river]``. */
     RegionMapPips: {
@@ -48785,6 +48795,7 @@ export interface components {
       terrains: string[];
       pips: unknown[][];
       footprints: components['schemas']['RegionMapFootprint'][];
+      landless_titles: components['schemas']['RegionMapLandlessTitle'][];
     };
     RegionMapUpload: {
       readonly id: number;
@@ -60449,8 +60460,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

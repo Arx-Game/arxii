@@ -9,7 +9,7 @@ is ground on a map, connectivity stays exits (ADR-0120).
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import gzip
 from typing import TYPE_CHECKING
 
@@ -566,6 +566,23 @@ class FootprintRead:
     title_id: int | None
     seat: Pip | None
     pips: list[Pip]
+    # #4983: the titles whose charters name this footprint's title (ids), so the
+    # map can draw any title's chartered extent from rows it already holds.
+    charters: list[int] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LandlessTitleRead:
+    """A title of a realm on this map that holds no land de facto (titular,
+    potential): the map's domain picker lists it and its charter can still be
+    drawn as a ghost (#4983)."""
+
+    title_id: int
+    name: str
+    tier: str
+    station: str
+    realm_id: int
+    fief_ids: list[int]
 
 
 @dataclass(frozen=True)
@@ -573,6 +590,7 @@ class RegionRead:
     region: RegionMap
     pips: list[tuple[int, int, str, bool]]
     footprints: list[FootprintRead]
+    landless_titles: list[LandlessTitleRead] = field(default_factory=list)
 
 
 def region_read(region: RegionMap) -> RegionRead:
@@ -606,10 +624,12 @@ def region_read(region: RegionMap) -> RegionRead:
             node = node.parent
     titles = _title_by_area(areas.values())
     seats = _seat_by_area(areas, by_area)
+    charters = _charters_by_title(set(titles.values()))
     footprints = []
     for area_id, area_pips in by_area.items():
         area = areas[area_id]
         org = _holder_of(area)
+        title_id = titles.get(area.pk)
         footprints.append(
             FootprintRead(
                 area_id=area.pk,
@@ -620,13 +640,79 @@ def region_read(region: RegionMap) -> RegionRead:
                 realm_id=area.realm_id,
                 holder_org_id=org.pk if org is not None else None,
                 holder_name=org.name if org is not None else "",
-                title_id=titles.get(area.pk),
+                title_id=title_id,
                 seat=seats.get(area.pk),
                 pips=area_pips,
+                charters=charters.get(title_id, []) if title_id is not None else [],
             )
         )
     footprints.sort(key=lambda f: (f.level, f.name))
-    return RegionRead(region=region, pips=pips, footprints=footprints)
+    realm_ids = {a.realm_id for a in areas.values() if a.realm_id is not None}
+    return RegionRead(
+        region=region,
+        pips=pips,
+        footprints=footprints,
+        landless_titles=_landless_titles(realm_ids, {f.title_id for f in footprints}),
+    )
+
+
+def _charters_by_title(title_ids: set[int]) -> dict[int, list[int]]:
+    """For each footprint title, the ids of the titles whose charters hold it (#4983)."""
+    from world.societies.houses.models import CharteredFief  # noqa: PLC0415
+
+    out: dict[int, list[int]] = {}
+    for fief_id, title_id in (
+        CharteredFief.objects.filter(fief_id__in=title_ids)
+        .order_by("fief_id", "title_id")
+        .values_list("fief_id", "title_id")
+    ):
+        out.setdefault(fief_id, []).append(title_id)
+    return out
+
+
+def _landless_titles(
+    realm_ids: set[int], landed_title_ids: set[int | None]
+) -> list[LandlessTitleRead]:
+    """The realms' titles on this map that hold no land de facto and are not seat
+    chains of one that does: titular and potential rungs, with their charters (#4983).
+    A seated chain-top rung with no pips yet is listed too, so a fresh crown can be
+    picked and carved."""
+    from world.societies.houses.almanach import _family_top  # noqa: PLC0415
+    from world.societies.houses.models import CharteredFief, Title  # noqa: PLC0415
+
+    if not realm_ids:
+        return []
+    titles = list(
+        Title.objects.filter(realm_id__in=realm_ids)
+        .exclude(pk__in={t for t in landed_title_ids if t is not None})
+        .select_related("seat_domain")
+    )
+    by_seat: dict[int, list[Title]] = {}
+    for t in titles:
+        if t.seat_domain_id is not None:
+            by_seat.setdefault(t.seat_domain_id, []).append(t)
+    tops = {_family_top(group).pk for group in by_seat.values()} | {
+        t.pk for t in titles if t.seat_domain_id is None
+    }
+    fiefs: dict[int, list[int]] = {}
+    for title_id, fief_id in (
+        CharteredFief.objects.filter(title_id__in=tops)
+        .order_by("title_id", "fief_id")
+        .values_list("title_id", "fief_id")
+    ):
+        fiefs.setdefault(title_id, []).append(fief_id)
+    return [
+        LandlessTitleRead(
+            title_id=t.pk,
+            name=t.name,
+            tier=t.tier,
+            station=t.station,
+            realm_id=t.realm_id,
+            fief_ids=fiefs.get(t.pk, []),
+        )
+        for t in sorted(titles, key=lambda t: (t.tier, t.name))
+        if t.pk in tops
+    ]
 
 
 def _holder_of(area: Area) -> Organization | None:

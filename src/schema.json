@@ -5914,8 +5914,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -86492,8 +86491,13 @@ components:
             type: array
             items:
               type: integer
+        charters:
+          type: array
+          items:
+            type: integer
       required:
       - area_id
+      - charters
       - holder_name
       - holder_org_id
       - level
@@ -86503,6 +86507,31 @@ components:
       - pips
       - realm_id
       - seat
+      - title_id
+    RegionMapLandlessTitle:
+      type: object
+      description: A realm title on the map that holds no land de facto (#4983).
+      properties:
+        title_id:
+          type: integer
+        name:
+          type: string
+        tier:
+          type: string
+        station:
+          type: string
+        realm_id:
+          type: integer
+        fief_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - fief_ids
+      - name
+      - realm_id
+      - station
+      - tier
       - title_id
     RegionMapPips:
       type: object
@@ -86524,8 +86553,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RegionMapFootprint'
+        landless_titles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionMapLandlessTitle'
       required:
       - footprints
+      - landless_titles
       - pips
       - region
       - terrains

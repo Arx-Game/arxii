@@ -297,6 +297,46 @@ class FootprintServiceTests(TestCase):
         assert county.seat == (2, 1)
         assert county.holder_org_id is None
 
+    def test_region_read_carries_charters_and_landless_titles(self) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import (
+            charter_fief,
+            plant_rung,
+            rung_area_for_title,
+        )
+        from world.societies.houses.constants import TitleStation, TitleTier
+
+        realm = RealmFactory(name="Luxen")
+        crown = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Republic of Luxen")
+        brittany = plant_rung(
+            realm=realm, tier=TitleTier.DUCHY, name="Brittany", parent_title=crown
+        )
+        old_crown = plant_rung(
+            realm=realm,
+            tier=TitleTier.KINGDOM,
+            name="Kingdom of Luxen",
+            station=TitleStation.TITULAR,
+        )
+        empire = plant_rung(
+            realm=realm,
+            tier=TitleTier.EMPIRE,
+            name="The Chimeric Empire",
+            station=TitleStation.TITULAR,
+        )
+        charter_fief(title=old_crown, fief=brittany)
+        charter_fief(title=empire, fief=brittany)
+        set_footprint(area=rung_area_for_title(brittany), add=[(1, 1), (2, 1)])
+        read = region_read(self.region)
+        duchy = next(f for f in read.footprints if f.name == "Brittany")
+        assert sorted(duchy.charters) == sorted([old_crown.pk, empire.pk])
+        landless = {t.title_id: t for t in read.landless_titles}
+        assert landless[old_crown.pk].name == "Kingdom of Luxen"
+        assert landless[old_crown.pk].station == TitleStation.TITULAR
+        assert landless[old_crown.pk].fief_ids == [brittany.pk]
+        assert landless[old_crown.pk].realm_id == realm.pk
+        assert empire.pk in landless
+        assert crown.pk not in landless  # it has land through Brittany
+
     def test_carve_reports_each_pips_prior_and_new_holder(self) -> None:
         set_footprint(area=self.kingdom, add=[(3, 3)])
         change = set_footprint(area=self.county, add=[(3, 3), (4, 3)])

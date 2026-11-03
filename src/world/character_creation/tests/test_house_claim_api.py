@@ -128,6 +128,39 @@ class HouseClaimApiTests(TestCase):
         self.assertEqual(fortitude["being_name"], "")
         self.assertIsNone(fortitude["target_entry_id"])
 
+    def test_house_titles_drop_crowns_titular_and_chain_internal(self):
+        """#4983: no kingdom, no titular or potential rung and no seat chain's inner
+        rung is ever an undefined house a player may define; the duchy itself is."""
+        from world.character_creation.factories import RealmFactory
+        from world.societies.houses.almanach import plant_rung
+        from world.societies.houses.constants import TitleStation, TitleTier
+        from world.societies.houses.models import Title
+
+        realm = RealmFactory(name="Picker Realm")
+        kingdom = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Picker Crown")
+        kingdom.is_claimable = True  # forced by hand: the filter must still drop it
+        kingdom.save(update_fields=["is_claimable"])
+        duchy = plant_rung(
+            realm=realm, tier=TitleTier.DUCHY, name="Picker Duchy", parent_title=kingdom
+        )
+        titular = plant_rung(
+            realm=realm,
+            tier=TitleTier.DUCHY,
+            name="Old Duchy",
+            parent_title=kingdom,
+            station=TitleStation.TITULAR,
+        )
+        inner = Title.objects.get(seat_domain=duchy.seat_domain, tier=TitleTier.COUNTY)
+        self.assertTrue(inner.is_claimable, "plant_rung marks the inner county claimable")
+        response = self.client.get("/api/character-creation/house-titles/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = response.data["results"] if isinstance(response.data, dict) else response.data
+        ids = {t["id"] for t in titles}
+        self.assertIn(duchy.pk, ids)
+        self.assertNotIn(kingdom.pk, ids)
+        self.assertNotIn(titular.pk, ids)
+        self.assertNotIn(inner.pk, ids)
+
     def test_house_titles_say_what_a_god_option_is_and_where_it_opens(self):
         """#4205: an option that IS a god carries the being and opens its page."""
         from world.codex.factories import CodexEntryFactory

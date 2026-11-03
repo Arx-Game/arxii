@@ -42,6 +42,8 @@ from world.societies.houses.constants import (
     TITLE_TIER_RANK,
     ClaimKinRelation,
     HouseClaimStatus,
+    TitleStation,
+    TitleTier,
 )
 from world.societies.houses.models import (
     Domain,
@@ -94,9 +96,16 @@ def claimable_titles(realm=None) -> list[Title]:
     ``_validate_seat_gates``'s chain-top check the moment it were submitted,
     so it is not a real target here either.
     """
-    qs = Title.objects.filter(
-        is_claimable=True, house__isnull=True, holder__isnull=True
-    ).select_related("realm", "seat_domain")
+    qs = (
+        Title.objects.filter(
+            is_claimable=True,
+            house__isnull=True,
+            holder__isnull=True,
+            station=TitleStation.SEATED,
+        )
+        .exclude(tier__in=(TitleTier.KINGDOM, TitleTier.EMPIRE))
+        .select_related("realm", "seat_domain")
+    )
     if realm is not None:
         qs = qs.filter(realm=realm)
     titles = []

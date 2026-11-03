@@ -36,10 +36,12 @@ realm, ordered by the Area's ancestry depth then name.
   ``comes_with`` carries the top's NAME, which is "" for an undefined top,
   so name-matching silently failed for exactly the rows the founder most
   needs to see grouped (#3983 review I5). ``comes_with`` stays display-only.
-- ``claimant_name`` is ``Title.claimant_org``'s name, "" when nothing
-  contests the title: the contested-title row the plate draws as
-  "Brasa · Cinderus · Luxen · claimed · Piropa" (ADR-0313). The write path
-  belongs to the hidden-heir work; this is the read.
+- ``claimant_name`` is the first ``TitleClaim`` on the title (a character's
+  name, or the house a carried contested-title claim came from), "" when
+  nobody claims it: the contested-title row the plate draws as
+  "Brasa · Cinderus · Luxen · claimed · Piropa" (ADR-0313, extended by #4983).
+- ``state`` is Titular or Potential for a rung whose ``station`` says so,
+  else Held/Unclaimed; ``station`` rides along raw (#4983).
 - ``is_seat_of`` fires only for a BARONY-tier, held, non-top row: it names
   the house holding the higher rung whose seat this barony is.
 - ``demesne``: a held row counts BARONY-tier titles in its own Area subtree
@@ -103,13 +105,19 @@ from world.societies.houses.almanach import (
     _family_top,
     household_position_label,
 )
-from world.societies.houses.constants import TIER_TO_AREA_LEVEL, TITLE_TIER_RANK, TitleTier
+from world.societies.houses.constants import (
+    TIER_TO_AREA_LEVEL,
+    TITLE_TIER_RANK,
+    TitleStation,
+    TitleTier,
+)
 from world.societies.houses.models import (
     Domain,
     DomainHolding,
     HouseTemplate,
     NobiliaryParticle,
     Title,
+    TitleClaim,
 )
 from world.societies.houses.services import realm_for_house, resolve_particle
 from world.societies.models import Organization, Vacancy
@@ -142,6 +150,7 @@ class LadderRow:
     comes_with: str
     chain_top_id: int
     claimant_name: str
+    station: str
 
 
 @dataclass
@@ -288,6 +297,7 @@ class _RealmGraph:
     depth_by_area: dict[int, int]
     children_by_area: dict[int | None, list[int]]
     top_tier_house_ids: set[int]
+    first_claim_by_title: dict[int, TitleClaim]
 
     def is_top(self, t: Title) -> bool:
         """Whether ``t`` is the highest-tier title sharing its seat (its
@@ -326,13 +336,16 @@ class _RealmGraph:
 def _realm_graph(realm_id: int) -> _RealmGraph | None:
     """One Title query, one Area query, everything else walked in memory.
     ``None`` when the realm has no titles at all."""
-    titles = list(
-        Title.objects.filter(realm_id=realm_id).select_related(
-            "house", "seat_domain", "claimant_org"
-        )
-    )
+    titles = list(Title.objects.filter(realm_id=realm_id).select_related("house", "seat_domain"))
     if not titles:
         return None
+    first_claim_by_title: dict[int, TitleClaim] = {}
+    for claim in (
+        TitleClaim.objects.filter(title__realm_id=realm_id)
+        .select_related("house", "claimant__character")
+        .order_by("title_id", "since", "pk")
+    ):
+        first_claim_by_title.setdefault(claim.title_id, claim)
 
     parent_by_area, level_by_area, children_by_area, depth_by_area = _area_maps(realm_id)
     own_area_by_title = _own_rung_areas(titles, parent_by_area, level_by_area)
@@ -368,6 +381,7 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
         depth_by_area=depth_by_area,
         children_by_area=children_by_area,
         top_tier_house_ids=top_tier_house_ids,
+        first_claim_by_title=first_claim_by_title,
     )
 
 
@@ -445,7 +459,7 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
         parent_title_id=parent_id,
         house_id=t.house_id,
         house_name=t.house.name if t.house_id is not None else "",
-        state="Held" if t.house_id is not None else "Unclaimed",
+        state=_state_word(t),
         is_seat_of=is_seat_of,
         sworn_to=sworn_to,
         demesne=_demesne_for(t, graph, own_area_id),
@@ -454,8 +468,28 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
         seat_domain_id=t.seat_domain_id,
         comes_with=comes_with,
         chain_top_id=graph.family_top_by_seat.get(t.seat_domain_id, t.pk),
-        claimant_name=t.claimant_org.name if t.claimant_org_id is not None else "",
+        claimant_name=claimant_label(graph.first_claim_by_title.get(t.pk)),
+        station=t.station,
     )
+
+
+def _state_word(t: Title) -> str:
+    """Held or Unclaimed for a seated rung; a titular or potential rung says so (#4983)."""
+    if t.station != TitleStation.SEATED:
+        return str(TitleStation(t.station).label)
+    return "Held" if t.house_id is not None else "Unclaimed"
+
+
+def claimant_label(claim: TitleClaim | None) -> str:
+    """How a claim's claimant is named: the character, or the house a carried
+    contested-title claim came from (ADR-0313); "" for no claim, the one-name
+    "claimed by" cell the ladder plate draws."""
+    if claim is None:
+        return ""
+    if claim.claimant_id is not None:
+        character = claim.claimant.character
+        return character.key if character is not None else f"sheet {claim.claimant_id}"
+    return claim.house.name if claim.house_id is not None else ""
 
 
 def _build_rows(realm_id: int, *, for_founder: bool = False) -> tuple[list[LadderRow], dict]:
