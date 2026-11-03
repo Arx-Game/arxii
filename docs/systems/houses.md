@@ -42,7 +42,22 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 - **`Title`** — first-class: name, tier (`TitleTier`:
   empire/kingdom/duchy/march/county/barony — #3091's six-step ladder), realm,
   house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots),
-  authorable holder styles (`holder_style_male/female/neutral`, #3261).
+  authorable holder styles (`holder_style_male/female/neutral`, #3261),
+  `station` (`TitleStation`: seated/titular/potential, #4983 — a titular title is
+  a crown nobody sits today, a potential one a crown nobody has yet worn; only a
+  seated title below kingdom may be `is_claimable`, enforced by `Title.clean`) and
+  `pledged_liege` (FK → a crown `Title`; the crown a rung's oath goes to when
+  land would say otherwise, read first by `assign_holder`).
+- **`CharteredFief`** (#4983) — `title` → `fief`: the fiefs a title's charter
+  covers, its historical holdings, independent of who holds them today; the
+  fief's rank is below the title's and in the same realm unless the title is an
+  empire. The charter's border on the map is the union of its fiefs' footprints,
+  derived on read (`chartered_extent`), never drawn.
+- **`TitleClaim`** (#4983) — a claim to rule a title, at any tier, on a seated or a
+  dormant title, several per title: `claimant` (→ `CharacterSheet`) or `house`
+  (→ `Organization`, exactly one; the house form carries what ADR-0313's
+  `Title.claimant_org` held before migration 0369 dropped it), `basis`, `since`.
+  A claim changes nothing about who holds the title.
 - **`Domain`** - decorates an `Area` at any level (the #1884 demo seed uses
   `AreaLevel.REGION`; a ladder rung's own chain uses the tier-appropriate
   `BARONY`/`COUNTY`/`DUCHY`/... level via `TIER_TO_AREA_LEVEL`, #3983; no
@@ -565,6 +580,27 @@ actions telnet would.
   own loose barony lying inside one of its vassals' counties — and a house whose real fealty is
   elsewhere entirely both stay HELD, not sworn; the first would invert the tree and the second's
   primary `FealtyEdge` (and its tithe) is not this rung's to delete. Returns the count moved.
+  An oath to a `pledged_liege` is never re-homed by land (#4983).
+- **`move_rung(title, new_parent, *, force=False) -> Title`** — reparents a rung's `Area`; a held
+  subtree moves only with `force=True`, after which `_reswear_after_move` re-swears the moved
+  chains by containment, pledged oaths excepted (#4983).
+
+### Station, charters and claims (#4983, ADR-4983)
+
+- **`plant_rung(..., station=TitleStation.SEATED)`** — a rung planted titular or potential is
+  never `is_claimable`.
+- **`set_station(title, station) -> Title`** — a kingdom or empire, or a title that is not
+  seated, loses `is_claimable`; nothing else about the rung moves (a titular title keeps its seat
+  chain and its holder, if any; tooling never restores a dormant crown, staff do).
+- **`set_pledged_liege(title, liege | None) -> Title`** — `liege` must be a kingdom or empire and
+  not the title itself.
+- **`charter_fief(*, title, fief, basis="") -> CharteredFief`** / **`uncharter_fief(*, title,
+  fief)`** — the fief's rank is below the title's; same realm unless `title` is an empire.
+- **`chartered_extent(title) -> set[Pip]`** — the union of the chartered fiefs' footprints, the
+  map's Historical Charter ghost.
+- **`record_claim(title, *, claimant=None, house=None, basis="") -> TitleClaim`** /
+  **`withdraw_claim(claim)`** — exactly one of character or house; one claim per person or house
+  per title (partial unique constraints).
 
 ### House record
 
@@ -609,7 +645,8 @@ actions telnet would.
   with no `seat_domain` is always its own top, #4237): that is what a client keys chain
   membership on, because `comes_with` carries the top's NAME and is
   therefore `""` for an undefined top — exactly the rows a founder claiming an undefined slot most
-  needs grouped. `claimant_name` is `Title.claimant_org`'s name (`""` when nothing contests it).
+  needs grouped. `claimant_name` is the first `TitleClaim` on the rung, the character's key or
+  the house's name (`""` when nothing contests it); `station` rides on every row (#4983).
   `for_founder=True` hides any rung whose own house, or any held house above it, isn't published
   yet — an unclaimed rung stays visible as long as nothing unpublished sits above it.
 - **`document_for_house(house, *, viewer, staff) -> HouseDocument`** — the whole Almanach house
@@ -624,12 +661,24 @@ actions telnet would.
 
 Both reads share one in-memory pass over the realm's `Title`/`Area` graph (`_realm_graph`,
 `_build_rows`) rather than per-row queries — the area-closure materialized view is Postgres-only
-and unavailable on the SQLite test tier.
+and unavailable on the SQLite test tier. The graph also loads the realm's claims once
+(`first_claim_by_title`).
+
+- **`rung_document(title) -> RungDocument`** (`almanach_pages.py`) gains `chartered_fiefs`,
+  `chartered_by`, `claims` and `chain` (the realm first, then every chain top above, nearest
+  last) and the title block carries `station` and `pledged_liege` (#4983). On the title page
+  these are **Present Holdings** (the vassals table, "nothing" when a titular title holds no
+  land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
+  "claimed by X" line), the chain rail above, and an "On the map" door that opens the Atlas on
+  the first region map with this title selected (`world-builder/atlas/mapFocus.ts`).
 
 ### Ladder rules
 
-- **State**: `Held` when a rung has a house, else `Unclaimed`. `is_defined` (has a name) and
-  holding are independent axes — an undefined rung can still be `Held`.
+- **State**: `Titular` or `Potential` when the rung's `station` says so, else `Held` when a rung
+  has a house, else `Unclaimed`. `is_defined` (has a name) and holding are independent axes — an
+  undefined rung can still be `Held`. The house creator's picker (`claimable_titles`) offers only
+  seated titles below kingdom, never a chain-internal rung; no kingdom or empire is ever claimable
+  in character creation (#4983).
 - **Seat / demesne**: every rung's title carries a seat chain down to the barony at its bottom
   (`plant_rung`); "demesne" counts BARONY-tier titles a house holds anywhere in its own Area
   subtree — a barony seated inside a vassal's own county is still the house's own land (Decision
@@ -648,9 +697,9 @@ and unavailable on the SQLite test tier.
 
 `Organization.house_state` (`HouseState`: `standing`/`in_exile`/`extinct`/`gentry`) is the house's
 lifecycle standing, set by `set_house_state` — recorded once on the house itself, never inferred
-from individual members' `OrganizationMembership.exiled_at` rows (ADR-0313). `Title.claimant_org`
-lets a second house stake a claim on a title another house currently holds without touching who
-actually holds it (schema only — no service resolves a claim yet). `Organization.published_at`
+from individual members' `OrganizationMembership.exiled_at` rows (ADR-0313). A second house's
+claim on a title another house holds is a `TitleClaim` row with `house` set (#4983 moved it off
+`Title.claimant_org`); no service presses a claim into a holder change yet. `Organization.published_at`
 (null = draft) is the Almanach's own visibility flag, set/cleared by `publish_house`/
 `unpublish_house` — see "Ladder rules" above for how a `for_founder` read hides unpublished rungs.
 
@@ -812,8 +861,8 @@ itself.
 
 ### Actions (`actions/definitions/almanach.py`)
 
-Seventeen REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
-`StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`),
+Twenty-three REGISTRY actions, `category="almanach"`, `target_type=SELF`, all gated
+`StaffOnlyPrerequisite`: `AlmanachPlantRungAction` (`almanach_plant_rung`, with `station`),
 `AlmanachBatchUnclaimedAction` (`almanach_batch_unclaimed`), `AlmanachNameRungAction`
 (`almanach_name_rung`), `AlmanachAssignHolderAction` (`almanach_assign_holder`, kwargs `title_id`,
 `org_id`: `almanach.assign_holder`, seating an existing house on a rung's whole chain, vacant or
@@ -827,7 +876,13 @@ refused while the stream has uncollected income or is still referenced) (#4616),
 chain's Titles, Domains and Areas, refused while held, with rungs, holdings or rooms beneath, or
 when something else still points at the land) and `AlmanachMoveRungAction` (`almanach_move_rung`,
 `title_id` + `parent_title_id`: `almanach.move_rung` reparents the rung's Area, refused for another
-realm, a parent that is the rung or beneath it, a wrong tier, or a held subtree) (#4617),
+realm, a parent that is the rung or beneath it, a wrong tier, or a held subtree; `force` moves a
+held subtree and re-swears it, #4983) (#4617), `AlmanachSetStationAction` (`almanach_set_station`,
+`title_id` + `station`), `AlmanachSetPledgedLiegeAction` (`almanach_set_pledged_liege`, `title_id`
++ `liege_title_id`, empty to release), `AlmanachCharterFiefAction` (`almanach_charter_fief`,
+`title_id` + `fief_title_id` + `basis`), `AlmanachUncharterFiefAction` (`almanach_uncharter_fief`),
+`AlmanachRecordClaimAction` (`almanach_record_claim`, `title_id` + `sheet_id` or `house_id` +
+`basis`), `AlmanachWithdrawClaimAction` (`almanach_withdraw_claim`, `claim_id`) (#4983),
 `AlmanachEditHouseAction` (`almanach_edit_house` — charter fields, house
 state, succession law default, and a wholesale `OrganizationFacet`/`OrganizationFeature`/
 `OrganizationObservance` replace; an `observances` row is `{ic_month, ic_day, name, lore}`,

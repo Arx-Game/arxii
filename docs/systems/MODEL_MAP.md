@@ -1706,6 +1706,7 @@
   - protected_by_recognition_evidence <- societies.LegendRecognitionEvidence
   - crown_votes <- societies.CrownVote
   - org_obligations <- societies.OrganizationObligation
+  - title_claims <- societies.TitleClaim
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
@@ -9793,6 +9794,11 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
 
+### CharteredFief
+**Foreign Keys:**
+  - title -> societies.Title [FK]
+  - fief -> societies.Title [FK]
+
 ### CovenantLegendCredit
 **Foreign Keys:**
   - entry -> societies.LegendEntry [FK]
@@ -10264,7 +10270,7 @@
   - fealty <- societies.FealtyEdge
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
-  - claimed_titles <- societies.Title
+  - title_claims <- societies.TitleClaim
   - domains <- societies.Domain
   - owned_holdings <- societies.DomainHolding
   - org_crises <- societies.DomainCrisis
@@ -10561,14 +10567,24 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
   - house -> societies.Organization [FK] (nullable)
-  - claimant_org -> societies.Organization [FK] (nullable)
+  - pledged_liege -> societies.Title [FK] (nullable)
   - holder -> roster.Kinsperson [FK] (nullable)
   - seat_domain -> societies.Domain [FK] (nullable)
   - succession_law -> societies.SuccessionLaw [FK] (nullable)
 **Pointed to by:**
   - coronation_ceremonies <- ceremonies.Ceremony
   - coronations <- ceremonies.Coronation
+  - pledged_vassals <- societies.Title
+  - charter <- societies.CharteredFief
+  - chartered_by <- societies.CharteredFief
+  - title_claims <- societies.TitleClaim
   - claims <- societies.HouseClaim
+
+### TitleClaim
+**Foreign Keys:**
+  - title -> societies.Title [FK]
+  - claimant -> character_sheets.CharacterSheet [FK] (nullable)
+  - house -> societies.Organization [FK] (nullable)
 
 ### Turf
 **Foreign Keys:**
