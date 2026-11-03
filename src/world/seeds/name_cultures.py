@@ -303,13 +303,25 @@ _CULTURES: dict[str, tuple[str | None, list[str], list[str]]] = {
 }
 
 
+# The realm each culture names (#4983): the layout tool draws a realm's place names
+# from its culture, so the link is by realm, not by a room's area.
+_CULTURE_REALMS: dict[str, str] = {
+    "Umbran": "Umbros",
+    "Luxenne": "Luxen",
+    "Ariwnese": "Ariwn",
+    "Aythirn": "Aythirmok",
+    "Infernal": "Inferna",
+}
+
+
 def ensure_name_cultures() -> int:
-    """Seed the regional name pools. Idempotent; re-links areas on re-run.
+    """Seed the regional name pools. Idempotent; re-links areas and realms on re-run.
 
     Given/surname split: entries whose value appears in the surname list
     seed as SURNAME; everything else as GIVEN. Returns entries ensured.
     """
     from world.areas.models import Area  # noqa: PLC0415
+    from world.realms.models import Realm  # noqa: PLC0415
 
     ensured = 0
     for culture_name, (area_name, given_names, surnames) in _CULTURES.items():
@@ -319,6 +331,12 @@ def ensure_name_cultures() -> int:
             if area is not None:
                 culture.area = area
                 culture.save(update_fields=["area"])
+        realm_name = _CULTURE_REALMS.get(culture_name)
+        if realm_name and culture.realm_id is None:
+            realm = Realm.objects.filter(name=realm_name).first()
+            if realm is not None:
+                culture.realm = realm
+                culture.save(update_fields=["realm"])
         for value in given_names:
             _, created = NameCultureEntry.objects.get_or_create(
                 culture=culture, part=NamePart.GIVEN, value=value
