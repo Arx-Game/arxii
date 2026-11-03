@@ -225,7 +225,8 @@ class GMAwardDistinctionActionTests(TestCase):
         result = self._run(actor)
 
         assert result.success is False
-        assert "Mutually exclusive" in result.message
+        # The one lock pattern (#4979): the player could swap the blocking pick.
+        assert "Unavailable because mutually exclusive with" in result.message
         assert not CharacterDistinction.objects.filter(
             character=self.target.sheet_data, distinction=self.distinction
         ).exists()
