@@ -28,12 +28,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { useQueryClient } from '@tanstack/react-query';
+
+import { worldBuilderKeys } from '@/world-builder/queries';
 import { useAlmanachMutation, useCharter, useHouses, useLadder, useRealms } from './queries';
 import { buildLadderTree, crownSwornTo, defaultPressedTier, levelBarTiers } from './ladder/tree';
 import { LevelBar } from './ladder/LevelBar';
 import { LadderTable } from './ladder/LadderTable';
 import { PlantRungDialog } from './ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from './ladder/BatchUnclaimedDialog';
+import { LayOutDialog, type LayoutReport } from './ladder/LayOutDialog';
 import { HouseDocument } from './document/HouseDocument';
 import { FrontPage } from './front/FrontPage';
 import { PersonPage } from './person/PersonPage';
@@ -114,10 +118,20 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
 
   const [plantOpen, setPlantOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [layOutOpen, setLayOutOpen] = useState(false);
   const [selectedTitleId, setSelectedTitleId] = useState<number | null>(null);
 
   const plantMutation = useAlmanachMutation('almanach_plant_rung');
   const batchMutation = useAlmanachMutation('almanach_batch_unclaimed');
+  const layOutMutation = useAlmanachMutation('almanach_lay_out');
+  const queryClient = useQueryClient();
+  const sendLayout = async (layout: string, commit: boolean) => {
+    const result = await layOutMutation.mutateAsync({ realm_id: realmId, layout, commit });
+    if (commit && result.success !== false) {
+      queryClient.invalidateQueries({ queryKey: worldBuilderKeys.regionMaps() });
+    }
+    return result.success === false ? null : (result.data as LayoutReport | undefined);
+  };
 
   const { data: charter } = useCharter(realmId);
   const houses = housesPayload?.results ?? [];
@@ -234,6 +248,9 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             >
               batch unclaimed…
             </button>
+            <button type="button" className="btn ghost" onClick={() => setLayOutOpen(true)}>
+              lay out…
+            </button>
           </div>
         </main>
         <aside className="record">
@@ -308,6 +325,14 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
             setSelectedTitleId(newTitleId);
           }
         }}
+      />
+      <LayOutDialog
+        open={layOutOpen}
+        realmId={realmId}
+        realmName={realm?.name ?? ''}
+        onClose={() => setLayOutOpen(false)}
+        onPreview={(layout) => sendLayout(layout, false)}
+        onLayOut={(layout) => sendLayout(layout, true)}
       />
       {selectedRow && (
         <BatchUnclaimedDialog
