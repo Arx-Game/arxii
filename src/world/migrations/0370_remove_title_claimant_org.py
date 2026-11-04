@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0368_title_pledged_liege_title_station_charteredfief_and_more"),
+        ("arxii", "0369_title_pledged_liege_title_station_charteredfief_and_more"),
     ]
 
     operations = [

@@ -101,13 +101,25 @@ class BeginningEnemyOfferInline(admin.TabularInline):
 
 
 class BeatExclusionForBeginningInline(admin.TabularInline):
-    """The library beats this Beginning never meets (#4124); the rest apply."""
+    """The library beats that list this Beginning (#4124, #4978): excluded from a beat
+    offered to every beginning except these, offered by a beat offered only to these.
+    Which it is shows in the beat's own "Who meets it", read-only here."""
 
     model = LifeBeatExclusion
     formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["beat"]
-    fields = ["beat", "reason"]
+    fields = ["beat", "beat_offered_to", "reason"]
+    readonly_fields = ["beat_offered_to"]
+    verbose_name = "Life beat listing this Beginning"
+    verbose_name_plural = "Life beats listing this Beginning"
+
+    @admin.display(description="Who meets it")
+    def beat_offered_to(self, obj: LifeBeatExclusion) -> str:
+        """The listed beat's audience, so a staffer reads what this row does to it."""
+        if obj.pk is None:
+            return ""
+        return str(obj.beat.get_offered_to_display())
 
 
 class SuggestedLifeInline(admin.TabularInline):
@@ -316,13 +328,16 @@ class BeatAnswerInline(admin.TabularInline):
 
 
 class BeatExclusionInline(admin.TabularInline):
-    """The Beginnings that never meet this beat (#4124); every other Beginning does."""
+    """The beat's list of Beginnings (#4124, #4978): the ones that never meet it, or, when
+    the beat's "Who meets it" says "Only these", the only ones that do."""
 
     model = LifeBeatExclusion
     formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["beginning"]
     fields = ["beginning", "reason"]
+    verbose_name = "Listed Beginning"
+    verbose_name_plural = "Beginnings listed (read as Who meets it says)"
 
 
 @admin.register(LifeBeat)
@@ -344,6 +359,16 @@ class LifeBeatAdmin(admin.ModelAdmin):
     inlines = [BeatAnswerInline, BeatExclusionInline]
     fieldsets = [
         (None, {"fields": ["name", "life_stage", "prompt", "selection", "picks_scale_with_age"]}),
+        (
+            "Who meets it",
+            {
+                "fields": ["offered_to"],
+                "description": (
+                    "The Beginnings listed in the rows below are read the way this says: "
+                    "every other Beginning meets the beat, or only the listed ones do."
+                ),
+            },
+        ),
         ("Listing", {"fields": ["sort_order", "is_active"]}),
         CREDIT_FIELDSET,
     ]

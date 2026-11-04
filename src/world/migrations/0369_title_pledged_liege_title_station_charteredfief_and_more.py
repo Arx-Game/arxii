@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0367_alter_charactersheet_combat_style_and_more"),
+        ("arxii", "0368_lifebeat_offered_to"),
     ]
 
     operations = [
