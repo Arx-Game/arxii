@@ -124,16 +124,6 @@ dropped_for_conflict() {
   [ "$last" = "RemovedFromMergeQueueEvent merge_conflict" ]
 }
 
-evidence_required() {
-  local issue
-  issue="$(pr_field "$1" body \
-    | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)"
-  [ -n "$issue" ] || return 1
-  local labels
-  labels="$(gh api "repos/$REPO/issues/$issue/labels" --paginate --jq '.[].name')" || return 1
-  grep -qx "review:evidence-required" <<< "$labels"
-}
-
 # A refusal is deduplicated on the head SHA AND the status. The head is often the
 # bot's own fix commit, whose resolved comment names that same SHA, and matching on
 # the SHA alone silently swallowed the refusal that followed it (#4897).
@@ -180,14 +170,8 @@ push_resolved() {
   fi
 
   if dropped_for_conflict "$pr"; then
-    if evidence_required "$pr"; then
-      rearm="Not re-armed: this PR carries review evidence, whose revision has to be restated (\`sync-evidence-revision.sh\`) before \`enqueue-pr.sh\`."
-    else
-      gh pr merge "$pr" --repo "$REPO" --auto --squash || return 1
-      rearm="The merge queue had dropped this PR for the conflict, so auto-merge is re-armed."
-    fi
-  elif evidence_required "$pr"; then
-    rearm="This PR carries review evidence: restate its revision with \`sync-evidence-revision.sh\`."
+    gh pr merge "$pr" --repo "$REPO" --auto --squash || return 1
+    rearm="The merge queue had dropped this PR for the conflict, so auto-merge is re-armed."
   fi
   {
     echo "$MARKER sha=$(git rev-parse HEAD) status=resolved -->"
@@ -202,6 +186,8 @@ push_resolved() {
     fi
     echo
     echo "Pull before your next push: \`git pull --ff-only\`. If you ran \`migrate\` on this branch, first run \`arx manage migrate arxii $(jq -r .base_tip "$mine")\`, because the old migration names will be gone after the pull."
+    echo
+    echo "Review evidence keeps its original reviewed revision: the evidence check independently reproduces this migration update before carrying it forward. To recover an older failed check, run the Recover migration evidence action on main; re-running the old CI run uses its old checker."
     if [ -n "$rearm" ]; then echo; echo "$rearm"; fi
   } > "$SCRATCH/body.md"
   gh pr comment "$pr" --repo "$REPO" --body-file "$SCRATCH/body.md" || return 1

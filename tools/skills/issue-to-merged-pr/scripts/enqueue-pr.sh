@@ -70,7 +70,8 @@ if evidence_required "$ISSUE_LABELS" "$ISSUE_BODY_TEXT"; then
     echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
     exit 1
   fi
-  REVIEWED_SHA=$(git -C "$BRANCH_WT" rev-parse HEAD^1)
+  REVIEWED_SHA=$(python3 "$BRANCH_WT/tools/review_evidence_revision.py" \
+    --repo "$BRANCH_WT" "$(git -C "$BRANCH_WT" rev-parse HEAD)")
   if [[ -n "$EVIDENCE_URL" ]]; then
     if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
       echo "ERROR: evidence URL must be a GitHub issue or PR comment URL." >&2

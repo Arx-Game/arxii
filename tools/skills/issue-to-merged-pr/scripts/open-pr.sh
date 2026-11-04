@@ -146,7 +146,7 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     echo "ERROR: issue #$ISSUE requires review evidence; set PR_EVIDENCE_FILE or PR_EVIDENCE_URL." >&2
     exit 1
   fi
-  REVIEWED_SHA=$(git rev-parse HEAD^1)
+  REVIEWED_SHA=$(python3 tools/review_evidence_revision.py "$(git rev-parse HEAD)")
   if [[ -n "$EVIDENCE_URL" ]]; then
     if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
       echo "ERROR: PR_EVIDENCE_URL must be a GitHub issue or PR comment URL." >&2

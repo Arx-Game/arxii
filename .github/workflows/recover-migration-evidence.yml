@@ -1,0 +1,45 @@
+name: Recover migration evidence
+
+# Re-running an old pull_request run uses its old workflow and scripts. This
+# dispatch instead uses current main to validate already-updated PR heads.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'One PR number (blank = all open migration bot heads)'
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: write
+
+concurrency:
+  group: recover-migration-evidence
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate and publish evidence on unchanged PR heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY_PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "$ONLY_PR" ]]; then
+            [[ "$ONLY_PR" =~ ^[0-9]+$ ]] || { echo 'pr must be a number'; exit 1; }
+            args+=(--pr "$ONLY_PR")
+          fi
+          # Trusted main scripts only. PR migrations/docs are data; no PR Python,
+          # hooks, dependency install, graph loading, or linters run with this token.
+          python3 tools/recover_migration_evidence.py --publish "${args[@]}"

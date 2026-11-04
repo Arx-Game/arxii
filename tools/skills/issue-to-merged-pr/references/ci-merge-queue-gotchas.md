@@ -45,8 +45,9 @@ tip and proves the result: main's files untouched, each file's AST unchanged exc
 its `arxii` dependency, one graph leaf, no missing migrations. The workflow then
 pushes the merge, re-arms auto-merge if the queue dropped the PR for the conflict,
 and comments `<!-- migration-auto-rebase sha=<sha> status=resolved -->`. So
-`git pull --ff-only` before your next push. A PR with review evidence is not
-re-armed: restate the evidence revision, then `enqueue-pr.sh`. If you ran `migrate`
+`git pull --ff-only` before your next push. Review evidence retains its original
+revision across independently reproduced migration updates (#4990); it no longer
+needs a manual restatement. If you ran `migrate`
 on the branch, first migrate back to the base tip the comment names, because the old
 names are gone after the pull. It refuses, with a `status=refused` comment naming
 the reason, in these cases:
@@ -63,6 +64,26 @@ On a refusal, apply the manual recipe below, then have the reorder reviewed (the
 runs the PR code and records the tree. `push` holds the PAT, runs no PR code, and
 pushes only an identical re-derived tree. To
 re-run it for one PR: `gh workflow run migration-conflict-rebase.yml -f pr=<N>`.
+
+**Recover already-updated PRs (#4990).** Re-running the old Spec evidence run
+uses the old checker. After this fix reaches main, run:
+
+```bash
+gh workflow run recover-migration-evidence.yml           # all open bot-headed PRs
+gh workflow run recover-migration-evidence.yml -f pr=4985 # one PR
+```
+
+The action uses trusted main tooling, replays the transformation from both parents
+with hooks disabled and no PR Python execution, and requires the whole tree to
+match. Repeated verified updates are peeled back to the original head's evidence
+revision. The existing report, verdict and ledger checks still apply. Results are
+published as `review-evidence` on the unchanged live head; no report or branch is
+edited. Non-bot heads are skipped; a failed proof or report needs individual
+inspection. The same dry-run is available locally:
+
+```bash
+uv run python tools/recover_migration_evidence.py --repository Arx-Game/arxii
+```
 
 **The manual fix is `rebase_migration`, not hand-renumbering.**
 django-linear-migrations (the thing that makes `max_migration.txt` conflict
