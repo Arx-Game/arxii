@@ -1642,10 +1642,13 @@ class ClaimableTitleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ClaimableTitleSerializer
 
     def get_queryset(self) -> QuerySet:
+        from world.societies.houses.creator import claimable_titles  # noqa: PLC0415
         from world.societies.houses.models import Title  # noqa: PLC0415
 
+        # #4983: the one rule (``claimable_titles``): seated, below the crown, a chain
+        # top, with a published liege. A flag forced by hand never lists a kingdom.
         return (
-            Title.objects.filter(is_claimable=True, house__isnull=True, holder__isnull=True)
+            Title.objects.filter(pk__in=[t.pk for t in claimable_titles()])
             .select_related("realm", "seat_domain")
             .order_by("realm", "tier", "name")
         )

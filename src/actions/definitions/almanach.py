@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.kwarg_parsing import truthy_kwarg
 from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
 from actions.types import ActionResult, TargetType
 
@@ -410,13 +411,242 @@ class AlmanachMoveRungAction(_AlmanachAction):
         if title is None or parent is None:
             return ActionResult(success=False, message=_NO_SUCH_TITLE)
         try:
-            title = move_rung(title, parent)
+            title = move_rung(title, parent, force=truthy_kwarg(kwargs.get("force")))
         except HousesServiceError as exc:
             return _refusal(exc)
         return ActionResult(
             success=True,
             message=f"{title.name or 'The rung'} moved under {parent.name or 'its new parent'}.",
             data={"title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachSetStationAction(_AlmanachAction):
+    """Say what a title is: seated, titular or potential (#4983).
+
+    Kwargs: ``title_id``, ``station``. A title that is not seated stops being claimable.
+    """
+
+    key: str = "almanach_set_station"
+    name: str = "Set Title Station"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import set_station  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        try:
+            title = set_station(title, str(kwargs.get("station") or ""))
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{title.name or 'The rung'} is {title.get_station_display().lower()}.",
+            data={"title_id": title.pk, "station": title.station},
+        )
+
+
+@dataclass
+class AlmanachSetPledgedLiegeAction(_AlmanachAction):
+    """Name the crown a title's future holder swears to, or clear it (#4983).
+
+    Kwargs: ``title_id``, ``liege_title_id`` (null clears).
+    """
+
+    key: str = "almanach_set_pledged_liege"
+    name: str = "Set Pledged Liege"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import set_pledged_liege  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        liege = None
+        if kwargs.get("liege_title_id") is not None:
+            liege = Title.objects.filter(pk=kwargs.get("liege_title_id")).first()
+            if liege is None:
+                return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        try:
+            title = set_pledged_liege(title, liege)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        label = title.name or "The rung"
+        message = (
+            f"{label} is pledged to {liege.name or 'that crown'}."
+            if liege is not None
+            else f"{label} is pledged to no crown."
+        )
+        return ActionResult(success=True, message=message, data={"title_id": title.pk})
+
+
+@dataclass
+class AlmanachCharterFiefAction(_AlmanachAction):
+    """Record that a title's charter holds a lower-tier title (#4983).
+
+    Kwargs: ``title_id``, ``fief_title_id``, ``basis``.
+    """
+
+    key: str = "almanach_charter_fief"
+    name: str = "Charter a Fief"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import charter_fief  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        fief = Title.objects.filter(pk=kwargs.get("fief_title_id")).first()
+        if title is None or fief is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        try:
+            row = charter_fief(title=title, fief=fief, basis=str(kwargs.get("basis") or ""))
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{title.name or 'The title'}'s charter holds {fief.name or 'the fief'}.",
+            data={"charter_id": row.pk, "title_id": title.pk, "fief_title_id": fief.pk},
+        )
+
+
+@dataclass
+class AlmanachUncharterFiefAction(_AlmanachAction):
+    """Take a fief out of a title's charter (#4983). Kwargs: ``title_id``, ``fief_title_id``."""
+
+    key: str = "almanach_uncharter_fief"
+    name: str = "Uncharter a Fief"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import uncharter_fief  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        fief = Title.objects.filter(pk=kwargs.get("fief_title_id")).first()
+        if title is None or fief is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        try:
+            uncharter_fief(title=title, fief=fief)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        return ActionResult(
+            success=True,
+            message=f"{fief.name or 'The fief'} left {title.name or 'the title'}'s charter.",
+            data={"title_id": title.pk, "fief_title_id": fief.pk},
+        )
+
+
+@dataclass
+class AlmanachRecordClaimAction(_AlmanachAction):
+    """Record a claim to rule a title (#4983): a character's (``sheet_id``) or, for a
+    carried contested-title claim, a house's (``house_id``). Kwargs also ``title_id``, ``basis``.
+    """
+
+    key: str = "almanach_record_claim"
+    name: str = "Record a Claim"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.societies.houses.almanach import record_claim  # noqa: PLC0415
+        from world.societies.houses.models import Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        title = Title.objects.filter(pk=kwargs.get("title_id")).first()
+        if title is None:
+            return ActionResult(success=False, message=_NO_SUCH_TITLE)
+        sheet = None
+        house = None
+        if kwargs.get("sheet_id") is not None:
+            sheet = CharacterSheet.objects.filter(pk=kwargs.get("sheet_id")).first()
+            if sheet is None:
+                return ActionResult(success=False, message="No such character.")
+        if kwargs.get("house_id") is not None:
+            house = Organization.objects.filter(pk=kwargs.get("house_id")).first()
+            if house is None:
+                return ActionResult(success=False, message="No such house.")
+        try:
+            claim = record_claim(
+                title=title, claimant=sheet, house=house, basis=str(kwargs.get("basis") or "")
+            )
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        from world.societies.houses.almanach_reads import claimant_label  # noqa: PLC0415
+
+        return ActionResult(
+            success=True,
+            message=f"{claimant_label(claim)} claims {title.name or 'the title'}.",
+            data={"claim_id": claim.pk, "title_id": title.pk},
+        )
+
+
+@dataclass
+class AlmanachWithdrawClaimAction(_AlmanachAction):
+    """Strike a claim (#4983). Kwargs: ``claim_id``."""
+
+    key: str = "almanach_withdraw_claim"
+    name: str = "Withdraw a Claim"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.almanach import withdraw_claim  # noqa: PLC0415
+        from world.societies.houses.almanach_reads import claimant_label  # noqa: PLC0415
+        from world.societies.houses.models import TitleClaim  # noqa: PLC0415
+
+        claim = (
+            TitleClaim.objects.filter(pk=kwargs.get("claim_id"))
+            .select_related("title", "house", "claimant__character")
+            .first()
+        )
+        if claim is None:
+            return ActionResult(success=False, message="No such claim.")
+        label = f"{claimant_label(claim)}'s claim on {claim.title.name or 'the title'}"
+        title_id = claim.title_id
+        withdraw_claim(claim)
+        return ActionResult(
+            success=True, message=f"{label} withdrawn.", data={"title_id": title_id}
         )
 
 

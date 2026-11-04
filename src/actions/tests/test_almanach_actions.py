@@ -15,6 +15,7 @@ from actions.definitions.almanach import (
     AlmanachAddHoldingAction,
     AlmanachAssignHolderAction,
     AlmanachBatchUnclaimedAction,
+    AlmanachCharterFiefAction,
     AlmanachDeleteRungAction,
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
@@ -24,11 +25,16 @@ from actions.definitions.almanach import (
     AlmanachPlanEstateAction,
     AlmanachPlantRungAction,
     AlmanachPublishAction,
+    AlmanachRecordClaimAction,
     AlmanachRemoveHoldingAction,
     AlmanachRenameHoldingAction,
+    AlmanachSetPledgedLiegeAction,
+    AlmanachSetStationAction,
     AlmanachSiteHoldingAction,
     AlmanachSwearAction,
+    AlmanachUncharterFiefAction,
     AlmanachVacateHolderAction,
+    AlmanachWithdrawClaimAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.areas.factories import AreaFactory
@@ -430,6 +436,108 @@ class AlmanachActionTests(TestCase):
     def test_player_is_refused_delete_and_move_rung(self) -> None:
         assert not AlmanachDeleteRungAction().run(self.player, title_id=1).success
         assert not AlmanachMoveRungAction().run(self.player, title_id=1, parent_title_id=2).success
+
+    def test_staff_charter_fiefs_record_claims_set_station_and_pledge_a_liege(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.societies.houses.constants import TitleStation
+        from world.societies.houses.models import CharteredFief, FealtyEdge, TitleClaim
+
+        old_crown = self._vacant(TitleTier.KINGDOM, "Old Inferna", None)
+        fervor = self._vacant(TitleTier.DUCHY, "Fervor", self.kingdom)
+        result = AlmanachSetStationAction().run(
+            self.staff, title_id=old_crown.pk, station=TitleStation.TITULAR
+        )
+        assert result.success, result.message
+        old_crown.refresh_from_db()
+        assert old_crown.station == TitleStation.TITULAR
+        assert (
+            not AlmanachSetStationAction()
+            .run(self.staff, title_id=old_crown.pk, station="dormant")
+            .success
+        )
+
+        result = AlmanachCharterFiefAction().run(
+            self.staff, title_id=old_crown.pk, fief_title_id=fervor.pk, basis="Before the conquest"
+        )
+        assert result.success, result.message
+        assert CharteredFief.objects.filter(title=old_crown, fief=fervor).exists()
+        assert (
+            not AlmanachCharterFiefAction()
+            .run(self.staff, title_id=fervor.pk, fief_title_id=old_crown.pk)
+            .success
+        )
+        result = AlmanachUncharterFiefAction().run(
+            self.staff, title_id=old_crown.pk, fief_title_id=fervor.pk
+        )
+        assert result.success, result.message
+        assert not CharteredFief.objects.filter(title=old_crown).exists()
+
+        sharlotte = CharacterSheetFactory()
+        result = AlmanachRecordClaimAction().run(
+            self.staff, title_id=old_crown.pk, sheet_id=sharlotte.pk, basis="The exiled queen"
+        )
+        assert result.success, result.message
+        claim = TitleClaim.objects.get(pk=result.data["claim_id"])
+        assert claim.claimant_id == sharlotte.pk
+        assert not AlmanachRecordClaimAction().run(self.staff, title_id=old_crown.pk).success
+        result = AlmanachWithdrawClaimAction().run(self.staff, claim_id=claim.pk)
+        assert result.success, result.message
+        assert not TitleClaim.objects.filter(pk=claim.pk).exists()
+
+        result = AlmanachSetPledgedLiegeAction().run(
+            self.staff, title_id=fervor.pk, liege_title_id=self.kingdom.pk
+        )
+        assert result.success, result.message
+        fervor.refresh_from_db()
+        assert fervor.pledged_liege_id == self.kingdom.pk
+        assert (
+            not AlmanachSetPledgedLiegeAction()
+            .run(self.staff, title_id=fervor.pk, liege_title_id=fervor.pk)
+            .success
+        )
+        result = AlmanachSetPledgedLiegeAction().run(
+            self.staff, title_id=fervor.pk, liege_title_id=None
+        )
+        assert result.success, result.message
+        fervor.refresh_from_db()
+        assert fervor.pledged_liege_id is None
+        assert not FealtyEdge.objects.filter(vassal__name="nobody").exists()
+
+    def test_force_move_reparents_a_held_duchy(self) -> None:
+        from world.societies.houses.almanach import assign_holder, rung_area_for_title
+        from world.societies.houses.models import FealtyEdge
+
+        other_crown_house = OrganizationFactory(name="Cinderus")
+        cinderus = plant_rung(
+            realm=self.realm, tier=TitleTier.KINGDOM, name="Cinderus", held_by=other_crown_house
+        )
+        duchy = self._vacant(TitleTier.DUCHY, "Ash", self.kingdom)
+        dukes = OrganizationFactory(name="House Ash")
+        assign_holder(duchy, dukes)
+        refused = AlmanachMoveRungAction().run(
+            self.staff, title_id=duchy.pk, parent_title_id=cinderus.pk
+        )
+        assert not refused.success
+        result = AlmanachMoveRungAction().run(
+            self.staff, title_id=duchy.pk, parent_title_id=cinderus.pk, force=True
+        )
+        assert result.success, result.message
+        assert rung_area_for_title(duchy).parent_id == rung_area_for_title(cinderus).pk
+        assert FealtyEdge.objects.get(vassal=dukes).liege_id == other_crown_house.pk
+
+    def test_player_is_refused_the_charter_and_claim_verbs(self) -> None:
+        for action, kwargs in (
+            (AlmanachCharterFiefAction(), {"title_id": self.kingdom.pk, "fief_title_id": 0}),
+            (AlmanachUncharterFiefAction(), {"title_id": self.kingdom.pk, "fief_title_id": 0}),
+            (AlmanachRecordClaimAction(), {"title_id": self.kingdom.pk, "house_id": self.crown.pk}),
+            (AlmanachWithdrawClaimAction(), {"claim_id": 0}),
+            (AlmanachSetStationAction(), {"title_id": self.kingdom.pk, "station": "titular"}),
+            (
+                AlmanachSetPledgedLiegeAction(),
+                {"title_id": self.kingdom.pk, "liege_title_id": None},
+            ),
+        ):
+            assert not action.run(self.player, **kwargs).success
 
     def test_vacate_holder_returns_the_chain_to_unheld_and_claimable(self) -> None:
         _, duchy = self._duchy_held_by("Katta")

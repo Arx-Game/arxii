@@ -325,6 +325,9 @@ export interface RungDocument {
     seat: string;
     is_claimable: boolean;
     chain_top_id: number;
+    /** #4983: seated, titular or potential; the crown a future holder swears to. */
+    station: string;
+    pledged_liege: { title_id: number; name: string } | null;
   };
   demesne: {
     domain_id: number;
@@ -347,6 +350,34 @@ export interface RungDocument {
   books: AlmanachBooks;
   forces: AlmanachForceRow[];
   vassals: AlmanachRealmRowSummary[];
+  /** #4983: Historical Charter (what it holds, who holds it), the claims, the way up. */
+  chartered_fiefs: AlmanachCharterRow[];
+  chartered_by: AlmanachCharterRow[];
+  claims: AlmanachClaimRow[];
+  chain: AlmanachChainLink[];
+}
+
+export interface AlmanachCharterRow {
+  title_id: number;
+  name: string;
+  tier: string;
+  basis: string;
+}
+
+export interface AlmanachClaimRow {
+  claim_id: number;
+  claimant: string;
+  claimant_sheet_id: number | null;
+  house_id: number | null;
+  basis: string;
+  since: string;
+}
+
+/** One step up from a rung: the realm (`title_id` null) or a chain-top rung above it. */
+export interface AlmanachChainLink {
+  title_id: number | null;
+  name: string;
+  tier: string;
 }
 
 export interface FamilyDocument {
@@ -375,6 +406,13 @@ export type AlmanachActionKey =
   | 'almanach_remove_holding'
   | 'almanach_delete_rung'
   | 'almanach_move_rung'
+  // #4983: charters, claims, station, pledged liege.
+  | 'almanach_charter_fief'
+  | 'almanach_uncharter_fief'
+  | 'almanach_record_claim'
+  | 'almanach_withdraw_claim'
+  | 'almanach_set_station'
+  | 'almanach_set_pledged_liege'
   | 'almanach_vacate_holder'
   | 'almanach_edit_house'
   | 'almanach_swear'

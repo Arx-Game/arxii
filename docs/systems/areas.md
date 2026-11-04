@@ -250,7 +250,10 @@ map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a 
 **API** (`worldmap/views.py`, on the world-builder router, `IsAdminUser`):
 `GET /api/world-builder/region-maps/`, `GET .../<id>/`, `GET .../<id>/pips/` (the
 `region_read` payload: `pips` rows are `[x, y, terrain, river]`, `footprints` carry
-`holder_org_id`, `title_id` for the Almanach link, `seat`), `POST .../<id>/upload/`
+`holder_org_id`, `title_id` for the Almanach link, `seat`, and `charters`, the ids of the titles
+whose charters hold this footprint's title; `landless_titles` lists the realm rungs with no land
+on the map, titular and potential crowns, each with `station` and `fief_ids`, #4983),
+`POST .../<id>/upload/`
 (multipart `file`; the one write that is not an action), `GET .../<id>/file/` (the latest
 upload, decompressed, under its original name).
 
@@ -274,6 +277,14 @@ shading, since the owner ruled there are no enclaves to disambiguate. The rail's
 New region form carries a continent choice: a new CONTINENT rung by the region's name
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.
+
+Select mode (#4983) carries a realm and a domain picker over the realm ladder, so a title with
+no land, a titular or potential crown, can be selected; its panel reads "holds nothing", links
+the Almanach page, and a **Historical Charter** toggle (`aria-pressed`) ghosts the union of the
+footprints whose `charters` name the selected title, a dashed outline over the de facto shading,
+never a fill (`drawRegionMap`'s `ghostPips`; the viewport exposes `data-ghost-pips`). The
+Almanach title page's "On the map" door writes the Atlas's last-location key and a one-shot
+`sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
 
 ## AreaClosure Materialized View
 

@@ -302,6 +302,11 @@ class RungDocumentSerializer(serializers.Serializer):
     books = serializers.DictField()
     forces = serializers.ListField(child=serializers.DictField())
     vassals = serializers.ListField(child=serializers.DictField())
+    # #4983: Historical Charter (what it holds, who holds it), the claims, the way up.
+    chartered_fiefs = serializers.ListField(child=serializers.DictField())
+    chartered_by = serializers.ListField(child=serializers.DictField())
+    claims = serializers.ListField(child=serializers.DictField())
+    chain = serializers.ListField(child=serializers.DictField())
 
 
 class FamilyDocumentSerializer(serializers.Serializer):

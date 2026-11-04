@@ -108,6 +108,11 @@ export interface DrawOptions {
    * fields while staff work.
    */
   outlineAreaIds?: ReadonlySet<number>;
+  /**
+   * A title's Historical Charter (#4983): the union of its chartered fiefs' pips, drawn
+   * as a dashed ghost outline over the de facto shading, never filled.
+   */
+  ghostPips?: ReadonlySet<string>;
   showLabels?: boolean;
 }
 
@@ -133,8 +138,43 @@ export function drawRegionMap(
   drawCellLines(ctx, b);
   const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   drawFootprints(ctx, footprints, b, options);
+  drawGhost(ctx, b, options);
   drawSeatsAndNames(ctx, footprints, b, options);
   drawPendingPips(ctx, b, options);
+}
+
+/** The outer edge of a set of pips, as a dashed line (#4983). */
+function drawGhost(ctx: CanvasRenderingContext2D, b: RegionBounds, options: DrawOptions) {
+  const ghost = options.ghostPips;
+  if (!ghost || ghost.size === 0) return;
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (const key of ghost) {
+    const [x, y] = key.split(',').map(Number);
+    const px = (x - b.x0) * PIP_PX;
+    const py = (y - b.y0) * PIP_PX;
+    if (!ghost.has(pipKey(x, y - 1))) {
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + PIP_PX, py);
+    }
+    if (!ghost.has(pipKey(x, y + 1))) {
+      ctx.moveTo(px, py + PIP_PX);
+      ctx.lineTo(px + PIP_PX, py + PIP_PX);
+    }
+    if (!ghost.has(pipKey(x - 1, y))) {
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, py + PIP_PX);
+    }
+    if (!ghost.has(pipKey(x + 1, y))) {
+      ctx.moveTo(px + PIP_PX, py);
+      ctx.lineTo(px + PIP_PX, py + PIP_PX);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 type RegionBounds = ReturnType<typeof regionBounds>;

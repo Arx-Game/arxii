@@ -1295,6 +1295,7 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    CharteredFief,
     Domain,
     DomainCrisisType,
     DomainCrisisTypeOption,
@@ -1320,6 +1321,7 @@ from world.societies.houses.models import (  # noqa: E402
     StatureBand,
     SuccessionLaw,
     Title,
+    TitleClaim,
 )
 
 
@@ -1332,15 +1334,35 @@ class SuccessionLawAdmin(admin.ModelAdmin):
     search_fields = ("name", "description")
 
 
+class CharteredFiefInline(admin.TabularInline):
+    """What a title's charter holds (#4983)."""
+
+    model = CharteredFief
+    fk_name = "title"
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ("fief",)
+
+
+class TitleClaimInline(admin.TabularInline):
+    """Who claims a title (#4983)."""
+
+    model = TitleClaim
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ("claimant", "house")
+
+
 @admin.register(Title)
 class TitleAdmin(admin.ModelAdmin):
     """#3831 - landed/dynastic titles staff mint and assign holders to."""
 
-    list_display = ("name", "tier", "realm", "house", "holder", "is_claimable")
-    list_filter = ("tier", "realm", "is_claimable")
+    list_display = ("name", "tier", "realm", "station", "house", "holder", "is_claimable")
+    list_filter = ("tier", "realm", "station", "is_claimable")
     search_fields = ("name",)
     list_select_related = ("realm", "house", "holder")
-    autocomplete_fields = ("house", "holder")
+    autocomplete_fields = ("house", "holder", "pledged_liege")
+    inlines = (CharteredFiefInline, TitleClaimInline)
 
 
 @admin.register(EdictKind)

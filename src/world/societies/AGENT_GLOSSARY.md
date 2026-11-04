@@ -196,14 +196,45 @@ _Avoid_: legitimacy check (wedlock is one input, not the concept), auto-enrollme
 Candidate derivation + ordering for a title (`SuccessionLaw`): house default on the org, per-title override (Imperial Tanistry). The ordering rule ranks; `gender_tiebreak` (#4201) breaks a tie in the rule's measure and never outranks it. Runs on the omniscient public record; an empty candidate list is a succession crisis — story fuel, deliberately unresolved.
 _Avoid_: heir formula, inheritance rule (that's estates/wills, #1985).
 
-**Contested Title** (`Title.claimant_org`, #3983):
-A `Title` a second house has staked a claim on while another house currently holds it —
-`Title.house` stays the incumbent; `claimant_org` records the contender, without touching who
-actually holds the title (ADR-0313). Schema only so far: no service function presses or
-resolves a claim yet — pressing a claim into an actual holder change is a later loop.
+**Claim (on a title)** (`TitleClaim`, #4983; was **Contested Title** on `Title.claimant_org`,
+#3983):
+A character's, or a house's, claim to rule a `Title`: "I should be the ruler of this barony,
+county, duchy, kingdom or empire". Any tier, a seated or a dormant title, several claimants per
+title, one row per claimant (`claimant` → `CharacterSheet` or `house` → `Organization`, exactly
+one), with `basis` and `since`. `Title.house` stays the incumbent; a claim changes nothing about
+who holds the title (ADR-0313, extended by ADR-4983). No service presses a claim into a holder
+change yet. The Almanach title page lists every claim as "claimed by X".
 _Avoid_: claimable title (that's `Title.is_claimable`, the unrelated unclaimed/Phase-D app-in
-concept — a contested title already has a holder); succession crisis (that's `SuccessionLaw`'s
-empty-candidate-list case, a different mechanism).
+concept); contested title (the old one-house name); charter (what a title covers, not who wants
+it, see **Chartered fief**); succession crisis (that's `SuccessionLaw`'s empty-candidate-list
+case, a different mechanism).
+
+**Chartered fief** (`CharteredFief`, #4983):
+A fief a title's charter covers: the lands it is supposed to hold or historically did, one row
+per `title` → `fief` pair with a `basis`, independent of who holds the fief today. The
+containment tree (`Area.parent`) is the de facto rule; the charter is the historical one. A
+title's chartered border is the union of its fiefs' footprints, derived on read
+(`chartered_extent`), never drawn. The fief ranks below the title and sits in the same realm
+unless the title is an empire. Player-facing copy: **Historical Charter** (the chartered fiefs)
+beside **Present Holdings** (what the title holds now, the vassals table).
+_Avoid_: extent, members, contains, claim (a claim is a person's wish to rule, see **Claim**),
+de jure (the charter is lore, not law).
+
+**Title station** (`Title.station`, `TitleStation`, #4983):
+Whether a title is **seated** (held or open on the live ladder), **titular** (a crown nobody
+sits today, kept for its charter and its claims: the Kingdom of Luxen beside the Republic), or
+**potential** (a crown nobody has yet worn, an Arvum kingdom that might be). Titular and
+potential are the ladder's state words for such a rung; only a seated title below kingdom may be
+`is_claimable`, and no kingdom or empire is ever claimable in character creation. Tooling never
+restores a dormant crown; staff set the station.
+_Avoid_: standing (`DomainHolding.standing`, `HouseState.STANDING`), dormant (fine in prose,
+not a value), inactive, defunct.
+
+**Pledged liege** (`Title.pledged_liege`, #4983):
+The crown `Title` a rung's oath goes to when the land would say otherwise: the north Luxen
+duchies sworn to the Imperial crown while lying inside Luxen. `assign_holder` swears to it first,
+and `rehome_vassals`/`move_rung` never re-home a pledged oath by containment.
+_Avoid_: overlord, suzerain, sworn (the `FealtyEdge` itself).
 
 **Fealty**:
 The org→org vassal→liege edge (`FealtyEdge`, one liege per vassal, cycle-refused) forming the realm tree. Cascades the house channel audience downward.
@@ -312,6 +343,8 @@ _Avoid_: org informs, house inbox, notifications (it is not push).
 **House Claim**:
 The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
 Materialization shares `world.societies.houses.creator.build_family_org` with the plain (name-path) family builder (#3648): the title path calls it, then additionally seats the title, reassigns the seat domain and holdings, and syncs the house channel.
+A claim on an undefined house *defines* it (writes its lore); it never *founds* one (owner
+ruling 2026-11-03; the founder vocabulary rename is #4982).
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).
 
 **Claim Grants** (`claim_grants`, #3983 Plan B, ADR-0315):

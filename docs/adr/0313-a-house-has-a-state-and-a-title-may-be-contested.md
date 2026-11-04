@@ -1,6 +1,7 @@
 # ADR-0313: A house carries its own lifecycle state, and a title can be contested
 
-**Status:** Accepted (2026-09-23, #3983).
+**Status:** Accepted (2026-09-23, #3983). Extended by ADR-4983 (claims are rows on
+`TitleClaim`, a character's or a house's; `Title.claimant_org` was dropped in migration 0369).
 
 `Organization.house_state` (`HouseState`: standing/in_exile/extinct/gentry) is a field on the
 house itself, set by `set_house_state`; `Title.claimant_org` lets a second house declare a claim

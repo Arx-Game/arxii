@@ -101,6 +101,18 @@ class RegionMapFootprintSerializer(serializers.Serializer):
     title_id = serializers.IntegerField(allow_null=True)
     seat = serializers.ListField(child=serializers.IntegerField(), allow_null=True)
     pips = serializers.ListField(child=serializers.ListField(child=serializers.IntegerField()))
+    charters = serializers.ListField(child=serializers.IntegerField())
+
+
+class RegionMapLandlessTitleSerializer(serializers.Serializer):
+    """A realm title on the map that holds no land de facto (#4983)."""
+
+    title_id = serializers.IntegerField()
+    name = serializers.CharField(allow_blank=True)
+    tier = serializers.CharField()
+    station = serializers.CharField()
+    realm_id = serializers.IntegerField()
+    fief_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 class RegionMapPipsSerializer(serializers.Serializer):
@@ -110,6 +122,7 @@ class RegionMapPipsSerializer(serializers.Serializer):
     terrains = serializers.ListField(child=serializers.CharField())
     pips = serializers.ListField(child=serializers.ListField())
     footprints = RegionMapFootprintSerializer(many=True)
+    landless_titles = RegionMapLandlessTitleSerializer(many=True)
 
 
 class RegionMapUploadInputSerializer(serializers.Serializer):
@@ -161,9 +174,23 @@ class RegionMapViewSet(viewsets.ReadOnlyModelViewSet):
                         "title_id": f.title_id,
                         "seat": list(f.seat) if f.seat is not None else None,
                         "pips": [list(p) for p in f.pips],
+                        "charters": list(f.charters),
                     }
                 ).data
                 for f in read.footprints
+            ],
+            "landless_titles": [
+                RegionMapLandlessTitleSerializer(
+                    {
+                        "title_id": t.title_id,
+                        "name": t.name,
+                        "tier": t.tier,
+                        "station": t.station,
+                        "realm_id": t.realm_id,
+                        "fief_ids": list(t.fief_ids),
+                    }
+                ).data
+                for t in read.landless_titles
             ],
         }
         return Response(payload)

@@ -2231,8 +2231,19 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   per endpoint, not blanket staff-only: `AlmanachHouseViewSet` stays `IsAdminUser`, but
   `AlmanachRealmViewSet` (realms/`/charter/`/`/ladder/?for=founder`) and `LandShapeViewSet` are
   `IsAuthenticated` (Plan B Task 3 opened the founder-facing reads). `LandShape`: authored
-  land-shape catalog, `CONTENT_MODELS`. `Title.claimant_org`: contested-title schema, no
-  resolution service yet.
+  land-shape catalog, `CONTENT_MODELS`.
+- **Station, chartered fiefs and claims (#4983 slice 1 / #4984, ADR-4983):** `Title.station`
+  (`TitleStation` seated/titular/potential; `is_claimable` only on a seated title below kingdom),
+  `Title.pledged_liege` (a crown the oath goes to over land; `assign_holder`/`rehome_vassals`
+  honor it), `CharteredFief` (title → fief, the historical charter; the border is the union of
+  the fiefs' footprints, `chartered_extent`), `TitleClaim` (character or house claims a title, any
+  tier, several per title; replaces `Title.claimant_org`, dropped in 0369). Services in
+  `almanach.py`: `set_station`, `set_pledged_liege`, `charter_fief`/`uncharter_fief`,
+  `record_claim`/`withdraw_claim`, `move_rung(force=)`. Ladder state words Titular/Potential;
+  `rung_document` gains `chartered_fiefs`/`chartered_by`/`claims`/`chain`; six new `almanach_*`
+  actions. Region read: `FootprintRead.charters`, `RegionRead.landless_titles`
+  (`LandlessTitleRead`). UI: title page **Present Holdings** / **Historical Charter** / chain
+  rail / "On the map"; region map Select-mode pickers and the Historical Charter ghost.
 - **Almanach, every family (#4239, ADR-4239):** the Almanach as the one place every family
   lives (noble, crime, commoner), a browser of the graph with Create in place on every slot.
   `world.societies.houses.almanach`: `create_family` (a Family row alone for a background

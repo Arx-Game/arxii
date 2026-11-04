@@ -8,6 +8,16 @@ export const STATES = {
   held: 'Held',
   unclaimed: 'Unclaimed',
   undefined: 'Undefined',
+  // #4983: a dormant title with a charter and no land; an unnamed slot in open country.
+  titular: 'Titular',
+  potential: 'Potential',
+} as const;
+
+/** The two faces of a title a reader is shown (#4983, owner's words): what it holds
+ * now, and what its charter says it held. */
+export const SECTIONS = {
+  present_holdings: 'Present Holdings',
+  historical_charter: 'Historical Charter',
 } as const;
 
 export const REVIEW_NOTE = 'Houses will be reviewed by staff before approval';

@@ -37,12 +37,14 @@ from world.roster.services.kinship import (
 )
 from world.scenes.constants import PersonaType
 from world.societies.constants import CrimeTier
-from world.societies.houses.almanach import _family_org, liege_for_title
+from world.societies.houses.almanach import _family_org, _pledged_liege_house, liege_for_title
 from world.societies.houses.almanach_reads import (
     _build_rows,
     _realm_graph,
+    _RealmGraph,
     _row_for,
     _row_summary,
+    claimant_label,
 )
 from world.societies.houses.constants import NPC_TIER_LABEL, NPC_TIER_NUMBER, KinLink, LifeStatus
 from world.societies.houses.models import Domain, DomainGarrisonPost, DomainHolding, Title
@@ -111,6 +113,12 @@ class RungDocument:
     books: dict
     forces: list[dict]
     vassals: list[dict]
+    # #4983: what the title's charter holds, whose charters hold it, who claims it,
+    # and the way up: the realm, then every rung above it, nearest last.
+    chartered_fiefs: list[dict] = field(default_factory=list)
+    chartered_by: list[dict] = field(default_factory=list)
+    claims: list[dict] = field(default_factory=list)
+    chain: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -749,7 +757,7 @@ def rung_document(title: Title) -> RungDocument:
     forces, and the vassal rungs beneath it."""
     graph = _realm_graph(title.realm_id)
     row = _row_for(title, graph) if graph is not None else None
-    liege = liege_for_title(title)
+    liege = _pledged_liege_house(title) or liege_for_title(title)
     law = title.succession_law or (title.house.default_succession_law if title.house_id else None)
     own_area_id = graph.own_area_by_title.get(title.pk) if graph is not None else None
     domain = Domain.objects.filter(pk=own_area_id).select_related("area", "hall").first()
@@ -789,7 +797,55 @@ def rung_document(title: Title) -> RungDocument:
         books=_books_dict(books_for(title.house if title.house_id else None)),
         forces=forces_for(title.house if title.house_id else None, domain=domain),
         vassals=vassals,
+        chartered_fiefs=_charter_rows(title.charter.select_related("fief"), "fief"),
+        chartered_by=_charter_rows(title.chartered_by.select_related("title"), "title"),
+        claims=_claim_rows(title),
+        chain=_rung_chain(title, graph),
     )
+
+
+def _charter_rows(rows, attr: str) -> list[dict]:
+    """The fiefs a charter holds, or the charters that hold a fief (#4983)."""
+    return [
+        {
+            "title_id": getattr(row, attr).pk,
+            "name": getattr(row, attr).name,
+            "tier": getattr(row, attr).tier,
+            "basis": row.basis,
+        }
+        for row in rows
+    ]
+
+
+def _claim_rows(title: Title) -> list[dict]:
+    """Who claims the title, oldest first (#4983)."""
+    return [
+        {
+            "claim_id": claim.pk,
+            "claimant": claimant_label(claim),
+            "claimant_sheet_id": claim.claimant_id,
+            "house_id": claim.house_id,
+            "basis": claim.basis,
+            "since": claim.since.isoformat(),
+        }
+        for claim in title.title_claims.select_related("claimant__character", "house")
+    ]
+
+
+def _rung_chain(title: Title, graph: _RealmGraph | None) -> list[dict]:
+    """The way up from a rung: the realm first, then every chain-top rung above
+    it by containment, nearest last (#4983). A rung with no graph has only its realm."""
+    chain = [{"title_id": None, "name": title.realm.name, "tier": "realm"}]
+    if graph is None:
+        return chain
+    above: list[dict] = []
+    current = graph.parent_title_by_title.get(title.pk)
+    while current is not None:
+        rung = graph.titles_by_pk[current]
+        if graph.is_top(rung):
+            above.append({"title_id": rung.pk, "name": rung.name, "tier": rung.tier})
+        current = graph.parent_title_by_title.get(current)
+    return chain + list(reversed(above))
 
 
 # ---------------------------------------------------------------------------
@@ -861,6 +917,12 @@ def _rung_title_details(
         "seat": title.seat_domain.name if title.seat_domain_id else "",
         "is_claimable": title.is_claimable,
         "chain_top_id": row.chain_top_id if row is not None else title.pk,
+        "station": title.station,
+        "pledged_liege": (
+            {"title_id": title.pledged_liege.pk, "name": title.pledged_liege.name}
+            if title.pledged_liege_id is not None
+            else None
+        ),
     }
 
 

@@ -121,6 +121,20 @@ class HouseState(models.TextChoices):
     GENTRY = "gentry", "Gentry"
 
 
+class TitleStation(models.TextChoices):
+    """What a title with or without a holder is (#4983). SEATED is a working rung,
+    held or an undefined house a player may define. TITULAR is a dormant title: it
+    keeps its name, lore and charter, holds no land de facto, and is never claimable;
+    restoring one is staff's, never a tool's. POTENTIAL is an unnamed slot in land
+    nobody has organised. Named ``station``, not ``standing``: ``standing`` already
+    means a holding's number and a house's ``HouseState``.
+    """
+
+    SEATED = "seated", "Seated"
+    TITULAR = "titular", "Titular"
+    POTENTIAL = "potential", "Potential"
+
+
 # Which Atlas rung a title's demesne sits on (#3983). MARCH is a county-tier
 # holding, so it shares the county rung.
 TIER_TO_AREA_LEVEL: dict[str, int] = {

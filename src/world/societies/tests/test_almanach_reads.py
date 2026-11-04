@@ -6,6 +6,7 @@ from django.test import TestCase
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import RealmFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
 from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory
 from world.roster.services.kinship import add_membership
@@ -14,17 +15,21 @@ from world.societies.houses.almanach import (
     add_household_member,
     assign_holder,
     batch_unclaimed,
+    charter_fief,
     name_rung,
     open_household_position,
     plant_rung,
     publish_house,
+    record_claim,
+    set_pledged_liege,
 )
+from world.societies.houses.almanach_pages import rung_document
 from world.societies.houses.almanach_reads import (
     charter_for_realm,
     document_for_house,
     ladder_for_realm,
 )
-from world.societies.houses.constants import SuccessionDerivation, TitleTier
+from world.societies.houses.constants import SuccessionDerivation, TitleStation, TitleTier
 from world.societies.houses.models import (
     HouseCharterQuestion,
     HouseTemplate,
@@ -112,12 +117,69 @@ class LadderReadTests(TestCase):
             parent_title=self.kingdom,
             held_by=luxen,
         )
-        brasa.claimant_org = self.crown
-        brasa.save(update_fields=["claimant_org"])
+        record_claim(title=brasa, house=self.crown, basis="Carried (ADR-0313)")
         payload = ladder_for_realm(self.realm)
         row = next(r for r in payload.rows if r.title_id == brasa.pk)
         assert row.claimant_name == "Piropa"
         assert all(r.claimant_name == "" for r in payload.rows if r.title_id != brasa.pk)
+        # a person's claim reads the same way, and the first claim wins the one-name cell
+        sharlotte = CharacterSheetFactory()
+        record_claim(title=brasa, claimant=sharlotte, basis="The exiled duchess")
+        row = next(r for r in ladder_for_realm(self.realm).rows if r.title_id == brasa.pk)
+        assert row.claimant_name == "Piropa"
+
+    def test_rows_say_titular_and_potential(self) -> None:
+        old_crown = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.KINGDOM,
+            name="Old Inferna",
+            station=TitleStation.TITULAR,
+        )
+        slot = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.DUCHY,
+            name="",
+            parent_title=self.kingdom,
+            station=TitleStation.POTENTIAL,
+        )
+        rows = {r.title_id: r for r in ladder_for_realm(self.realm).rows}
+        assert rows[old_crown.pk].state == "Titular"
+        assert rows[old_crown.pk].station == TitleStation.TITULAR
+        assert not rows[old_crown.pk].claimable
+        assert rows[slot.pk].state == "Potential"
+        assert not rows[slot.pk].claimable
+        assert rows[self.kingdom.pk].state == "Held"
+        assert rows[self.kingdom.pk].station == TitleStation.SEATED
+
+    def test_rung_document_lists_charter_claims_and_chain(self) -> None:
+        old_crown = plant_rung(
+            realm=self.realm,
+            tier=TitleTier.KINGDOM,
+            name="Old Inferna",
+            station=TitleStation.TITULAR,
+        )
+        charter_fief(title=old_crown, fief=self.fervor, basis="Before the conquest")
+        sharlotte = CharacterSheetFactory()
+        record_claim(title=old_crown, claimant=sharlotte, basis="The exiled queen")
+        set_pledged_liege(self.fervor, old_crown)
+        doc = rung_document(old_crown)
+        assert doc.title["station"] == TitleStation.TITULAR
+        assert [f["title_id"] for f in doc.chartered_fiefs] == [self.fervor.pk]
+        assert doc.chartered_fiefs[0]["basis"] == "Before the conquest"
+        assert doc.claims[0]["basis"] == "The exiled queen"
+        assert doc.claims[0]["claimant_sheet_id"] == sharlotte.pk
+        assert doc.chain == [{"title_id": None, "name": "Inferna", "tier": "realm"}]
+        fervor_doc = rung_document(self.fervor)
+        assert fervor_doc.title["pledged_liege"] == {
+            "title_id": old_crown.pk,
+            "name": "Old Inferna",
+        }
+        assert [c["name"] for c in fervor_doc.chain] == [
+            "Inferna",
+            "Inferna",
+        ]  # realm, then the crown
+        assert fervor_doc.chain[1]["title_id"] == self.kingdom.pk
+        assert [f["title_id"] for f in fervor_doc.chartered_by] == [old_crown.pk]
 
     def test_a_deleted_house_leaves_its_titles_unclaimed(self) -> None:
         """Deleting a house nulls ``Title.house`` through the Collector's bulk

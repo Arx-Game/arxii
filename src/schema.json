@@ -86466,8 +86466,13 @@ components:
             type: array
             items:
               type: integer
+        charters:
+          type: array
+          items:
+            type: integer
       required:
       - area_id
+      - charters
       - holder_name
       - holder_org_id
       - level
@@ -86477,6 +86482,31 @@ components:
       - pips
       - realm_id
       - seat
+      - title_id
+    RegionMapLandlessTitle:
+      type: object
+      description: A realm title on the map that holds no land de facto (#4983).
+      properties:
+        title_id:
+          type: integer
+        name:
+          type: string
+        tier:
+          type: string
+        station:
+          type: string
+        realm_id:
+          type: integer
+        fief_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - fief_ids
+      - name
+      - realm_id
+      - station
+      - tier
       - title_id
     RegionMapPips:
       type: object
@@ -86498,8 +86528,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RegionMapFootprint'
+        landless_titles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionMapLandlessTitle'
       required:
       - footprints
+      - landless_titles
       - pips
       - region
       - terrains
@@ -88377,8 +88412,32 @@ components:
           items:
             type: object
             additionalProperties: {}
+        chartered_fiefs:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        chartered_by:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        claims:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        chain:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
       required:
       - books
+      - chain
+      - chartered_by
+      - chartered_fiefs
+      - claims
       - demesne
       - forces
       - holdings

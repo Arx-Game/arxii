@@ -22,6 +22,10 @@ import { CreateFamilyForm } from '../front/CreateFamilyForm';
 import { Picker } from '../shared/Picker';
 import { Books, Forces } from '../shared/chapters';
 import { houseUrl, orgUrl, personUrl, titleUrl } from '../shared/tier';
+import { SECTIONS, STATES } from '../copy';
+import { useRegionMapsQuery } from '@/world-builder/queries';
+import { useAccount } from '@/store/hooks';
+import { rememberMapFocus } from '@/world-builder/atlas/mapFocus';
 import '../almanach.css';
 
 export function TitlePage({ titleId }: { titleId: number }) {
@@ -40,6 +44,8 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const { data: housesPayload } = useAllHouses();
   const addHolding = useAlmanachMutation('almanach_add_holding');
   const { data: holdingKinds } = useHoldingKinds();
+  const { data: regionMaps } = useRegionMapsQuery();
+  const account = useAccount();
   const [rungName, setRungName] = useState('');
   const [moveTo, setMoveTo] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -71,7 +77,14 @@ export function TitlePage({ titleId }: { titleId: number }) {
     );
   }
   const { title, demesne, holdings, books, forces, vassals } = doc;
+  const { chartered_fiefs: charteredFiefs, chartered_by: charteredBy, claims, chain } = doc;
   const parentRef = { title_id: title.title_id, name: title.name, tier: title.tier };
+  const stationWords = { titular: STATES.titular, potential: STATES.potential } as const;
+  const stationWord =
+    title.station === 'titular' || title.station === 'potential'
+      ? stationWords[title.station]
+      : null;
+  const firstRegionMap = regionMaps?.[0] ?? null;
 
   const rows: RecordRailRow[] = [
     { label: 'tier', value: title.tier },
@@ -108,17 +121,32 @@ export function TitlePage({ titleId }: { titleId: number }) {
           <span>{title.name || 'unnamed'}</span>
         </span>
         <span className="right">
-          <span className="status">{title.house_id != null ? 'held' : 'vacant'}</span>
+          <span className="status">
+            {stationWord ?? (title.house_id != null ? 'held' : 'vacant')}
+          </span>
           <span className="mode">staff</span>
         </span>
       </div>
       <div className="almanac">
         <aside className="contents">
-          {title.sworn_to && (
-            <div className="mv">
+          {chain.length > 0 && (
+            <div className="mv" data-testid="title-chain">
               <span className="label">Above</span>
               <ol>
-                <li>{title.sworn_to}</li>
+                {chain.map((link) => (
+                  <li key={`${link.tier}-${link.title_id ?? 'realm'}`}>
+                    <Link
+                      to={
+                        link.title_id == null
+                          ? `/staff/almanach/realms/${title.realm_id}`
+                          : titleUrl(link.title_id)
+                      }
+                    >
+                      {link.name || `unnamed ${link.tier}`}
+                    </Link>
+                    <small>{link.tier}</small>
+                  </li>
+                ))}
               </ol>
             </div>
           )}
@@ -132,7 +160,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
             </ol>
           </div>
           <div className="mv">
-            <span className="label">Vassals</span>
+            <span className="label">{SECTIONS.present_holdings}</span>
             <ol>
               {vassals.map((v) => (
                 <li key={v.title_id}>
@@ -148,7 +176,18 @@ export function TitlePage({ titleId }: { titleId: number }) {
             {title.name || 'unnamed'}{' '}
             <span className="tier">
               {title.tier} · {title.realm}
-            </span>
+            </span>{' '}
+            {firstRegionMap && (
+              <Link
+                className="btn sm quiet"
+                to="/staff/world-builder"
+                onClick={() =>
+                  rememberMapFocus(account?.id ?? 'anon', firstRegionMap.id, title.title_id)
+                }
+              >
+                On the map
+              </Link>
+            )}
           </h3>
           <div className="field">
             <label htmlFor="r-name">name</label>
@@ -195,7 +234,12 @@ export function TitlePage({ titleId }: { titleId: number }) {
             </div>
             <div className="field">
               <span className="label">sworn to</span>
-              <div className="val">{title.sworn_to || <span className="meta">none</span>}</div>
+              <div className="val">
+                {title.sworn_to || <span className="meta">none</span>}
+                {title.pledged_liege && (
+                  <span className="meta">{`pledged to ${title.pledged_liege.name}`}</span>
+                )}
+              </div>
             </div>
             <div className="field">
               <span className="label">succession</span>
@@ -475,7 +519,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
           <Books books={books} />
           <Forces forces={forces} />
 
-          <h4 className="sec">Vassals</h4>
+          <h4 className="sec">{SECTIONS.present_holdings}</h4>
           <div className="scroll">
             <table className="lad">
               <thead>
@@ -501,6 +545,13 @@ export function TitlePage({ titleId }: { titleId: number }) {
                     <td className="n">{v.vassals}</td>
                   </tr>
                 ))}
+                {vassals.length === 0 && (
+                  <tr>
+                    <td colSpan={4}>
+                      <span className="meta">nothing</span>
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td colSpan={4}>
                     <button type="button" className="add" onClick={() => setPlantOpen(true)}>
@@ -514,6 +565,55 @@ export function TitlePage({ titleId }: { titleId: number }) {
                 </tr>
               </tbody>
             </table>
+          </div>
+          <h4 className="sec">{SECTIONS.historical_charter}</h4>
+          <div className="scroll">
+            <table className="lad">
+              <thead>
+                <tr>
+                  <th scope="col">title</th>
+                  <th scope="col">tier</th>
+                  <th scope="col">basis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {charteredFiefs.map((fief) => (
+                  <tr key={fief.title_id}>
+                    <td>
+                      <Link to={titleUrl(fief.title_id)}>{fief.name || 'unnamed'}</Link>
+                    </td>
+                    <td>{fief.tier}</td>
+                    <td>{fief.basis || <abbr title="none">—</abbr>}</td>
+                  </tr>
+                ))}
+                {charteredFiefs.length === 0 && (
+                  <tr>
+                    <td colSpan={3}>
+                      <span className="meta">nothing chartered</span>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {charteredBy.length > 0 && (
+              <p className="meta">
+                in the charter of{' '}
+                {charteredBy.map((row, index) => (
+                  <span key={row.title_id}>
+                    {index > 0 ? ', ' : ''}
+                    <Link to={titleUrl(row.title_id)}>{row.name || `unnamed ${row.tier}`}</Link>
+                  </span>
+                ))}
+              </p>
+            )}
+            <ul className="claims">
+              {claims.map((claim) => (
+                <li key={claim.claim_id}>
+                  <span>{`claimed by ${claim.claimant}`}</span>{' '}
+                  {claim.basis && <small>{claim.basis}</small>}
+                </li>
+              ))}
+            </ul>
           </div>
           {demesne && (
             <div className="savebar">

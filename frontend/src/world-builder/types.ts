@@ -184,6 +184,18 @@ export interface RegionMapFootprint {
   title_id: number | null;
   seat: [number, number] | null;
   pips: [number, number][];
+  /** The titles whose charters name this footprint's title (#4983). */
+  charters: number[];
+}
+
+/** A realm title on the map that holds no land de facto: titular or potential (#4983). */
+export interface RegionMapLandlessTitle {
+  title_id: number;
+  name: string;
+  tier: string;
+  station: string;
+  realm_id: number;
+  fief_ids: number[];
 }
 
 export interface RegionMapPips {
@@ -191,6 +203,7 @@ export interface RegionMapPips {
   terrains: string[];
   pips: RegionMapPipRow[];
   footprints: RegionMapFootprint[];
+  landless_titles: RegionMapLandlessTitle[];
 }
 
 export interface RegionMapUploadResult {
