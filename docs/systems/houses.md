@@ -654,7 +654,8 @@ kingdom | potential
   and names the layout itself gives are skipped); when the bank runs dry the rung is planted
   unnamed (the ladder's Undefined), never with a repeat. A name the layout gives that any
   title already bears, or that it gives twice, is refused at preview with its line. The seat
-  barony stays unnamed, since its county took the `seat` name. A duchy the walk plants is a CG
+  barony stays unnamed: `Title.name` and `Domain.name` are both unique when set, and its
+  county took the `seat` name. A duchy the walk plants is a CG
   slot only when its line says `claimable` (`held` is the default); counties and baronies keep
   `plant_rung`'s default.
 - **Figures** — county population `120 * pips`, summed upward through duchy and kingdom;

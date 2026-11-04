@@ -55,6 +55,16 @@ class PartitionTests(SimpleTestCase):
         regions = partition(pips, pips, 4, [1.5, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=5)
         assert len(regions[0]) > max(len(r) for r in regions[1:])
 
+    def test_equal_weights_split_the_land_evenly_around_a_lake(self) -> None:
+        # the live probe: a 10 by 20 outline with a 5 by 5 lake, two seeds of equal weight,
+        # came out 116 land pips to 59 because the smaller seed's frontier starved
+        pips = rectangle(10, 20)
+        lake = {(x, y) for x in range(5, 10) for y in range(5, 10)}
+        land = pips - lake
+        regions = partition(pips, land, 2, [1.0, 1.0], seed_hint=None, rng_seed=10)
+        sizes = sorted(len(r & land) for r in regions)
+        assert sizes[1] - sizes[0] <= len(land) // 5, sizes
+
     def test_water_goes_to_the_region_it_touches_most(self) -> None:
         pips = rectangle(20, 10)
         lake = {(x, y) for x in range(8, 12) for y in range(4, 6)}

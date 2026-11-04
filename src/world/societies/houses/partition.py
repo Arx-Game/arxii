@@ -102,9 +102,14 @@ def _grow(land: set[Pip], seeds: list[Pip], weights: list[float], rng_seed: int)
     unit = min(weights) or 1.0
     earned = [0.0] * len(seeds)
     while any(frontiers):
-        for index, frontier in enumerate(frontiers):
-            if not frontier:
-                continue
+        for index in range(len(seeds)):
+            if not frontiers[index]:
+                # a frontier the other seeds ate from under this one is rebuilt from the
+                # region's own edge, so a seed never starves while it still borders free land
+                frontiers[index] = _boundary(regions[index], land, owner)
+                if not frontiers[index]:
+                    continue
+            frontier = frontiers[index]
             # each round a seed earns weight/min(weight) pips and spends whole ones, so the
             # ratio between seeds survives however many there are
             earned[index] += weights[index] / unit
@@ -123,8 +128,67 @@ def _grow(land: set[Pip], seeds: list[Pip], weights: list[float], rng_seed: int)
                 regions[index].add(pip)
                 taken += 1
                 next_frontier.extend(n for n in _neighbours(pip) if n in land and n not in owner)
-            frontiers[index] = [p for p in frontier + next_frontier if p not in owner]
+            rebuilt = [p for p in frontier + next_frontier if p not in owner]
+            frontiers[index] = rebuilt or _boundary(regions[index], land, owner)
     return regions
+
+
+def _boundary(region: set[Pip], land: set[Pip], owner: dict[Pip, int]) -> list[Pip]:
+    """The free land pips next to ``region``."""
+    return [n for p in region for n in _neighbours(p) if n in land and n not in owner]
+
+
+def _connected_without(region: set[Pip], pip: Pip) -> bool:
+    """Whether ``region`` stays 4-connected once ``pip`` leaves it."""
+    rest = region - {pip}
+    if not rest:
+        return False
+    start = next(iter(rest))
+    seen = {start}
+    frontier = [start]
+    while frontier:
+        p = frontier.pop()
+        for n in _neighbours(p):
+            if n in rest and n not in seen:
+                seen.add(n)
+                frontier.append(n)
+    return len(seen) == len(rest)
+
+
+def _rebalance(regions: list[set[Pip]], weights: list[float], rng_seed: int) -> None:
+    """Growth alone can wall a seed in (a central seed closes the land behind a corner
+    one), so afterwards boundary pips move from regions above their weighted share to
+    neighbours below it, one at a time, never breaking either region's connection."""
+    if not regions[1:]:
+        return
+    owner: dict[Pip, int] = {p: i for i, region in enumerate(regions) for p in region}
+    total = sum(weights)
+    owned = len(owner)
+    targets = [owned * w / total for w in weights]
+    for _ in range(owned):
+        excess = [len(r) - t for r, t in zip(regions, targets, strict=True)]
+        donor = max(range(len(regions)), key=lambda i: excess[i])
+        if excess[donor] < 1:
+            return
+        candidates: list[tuple[float, int, Pip]] = []
+        for pip in regions[donor]:
+            for n in _neighbours(pip):
+                taker = owner.get(n)
+                if taker is None or taker == donor or excess[taker] >= -1:
+                    continue
+                candidates.append((excess[taker], _tie_key(pip, rng_seed), pip))
+        moved = False
+        for _deficit, _key, pip in sorted(candidates):
+            taker = next(owner[n] for n in _neighbours(pip) if owner.get(n) not in (None, donor))
+            if not _connected_without(regions[donor], pip):
+                continue
+            regions[donor].discard(pip)
+            regions[taker].add(pip)
+            owner[pip] = taker
+            moved = True
+            break
+        if not moved:
+            return
 
 
 def _attach_islands(regions: list[set[Pip]], land: set[Pip]) -> None:
@@ -189,6 +253,7 @@ def partition(  # noqa: PLR0913 - one argument per fact the split needs
     weights = list(weights[:count]) + [1.0] * max(0, count - len(weights))
     seeds = _seeds(land_in, count, seed_hint, pips)
     regions = _grow(land_in, seeds, weights, rng_seed)
+    _rebalance(regions, weights, rng_seed)
     _attach_islands(regions, land_in)
     _attach_water(regions, pips, land_in)
     return [r for r in regions if r]
