@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
 import { useRegionMapPipsQuery, useRegionMapUpload, useWorldBuilderAction } from '../queries';
+import type { RegionMapFootprint } from '../types';
 import { regionMapFileUrl } from '../api';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import {
@@ -78,6 +79,7 @@ import {
   type BrushWidth,
   type Pip,
 } from './regionMapFill';
+import { BARONY_LEVEL } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
 import { SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
@@ -86,6 +88,16 @@ type MapMode = 'select' | 'carve' | 'paint';
 const MODE_LABELS: Record<MapMode, string> = { select: 'Select', carve: 'Carve', paint: 'Paint' };
 type CarveTool = 'brush' | 'fill' | 'loop';
 const TOOL_LABELS: Record<CarveTool, string> = { brush: 'Brush', fill: 'Fill', loop: 'Loop' };
+
+/** The barony whose seat dot sits on `pip`, if any (#4988): the handle of the seat drag. */
+function seatBaronyAt(footprints: RegionMapFootprint[], pip: Pip): RegionMapFootprint | null {
+  return (
+    footprints.find(
+      (f) =>
+        f.level === BARONY_LEVEL && f.seat != null && f.seat[0] === pip[0] && f.seat[1] === pip[1]
+    ) ?? null
+  );
+}
 
 const WHEEL_ZOOM_RATE = 0.0015;
 
@@ -124,6 +136,8 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
   const [charterOn, setCharterOn] = useState(false);
   const [realmId, setRealmId] = useState<number | null>(null);
   const [carveTitleId, setCarveTitleId] = useState<number | null>(null);
+  // #4988: Adjust lets a carve take pips from a sibling rung instead of skipping them.
+  const [adjust, setAdjust] = useState(false);
   const [paintTerrain, setPaintTerrain] = useState<string>('plain');
   const [tool, setTool] = useState<CarveTool>('brush');
   const [brushWidth, setBrushWidth] = useState<BrushWidth>(1);
@@ -258,6 +272,21 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
     const startY = event.clientY;
     const origin = view;
     const panMode = mode === 'select' || event.altKey;
+    if (!panMode && mode === 'carve' && !event.shiftKey) {
+      // #4988: a press on a barony's seat dot starts a seat drag, not a carve
+      const startPip = pipAt(data.region, view, rect, startX, startY);
+      const seatOf = startPip ? seatBaronyAt(data.footprints, startPip) : null;
+      if (seatOf) {
+        const onSeatUp = (upEvent: PointerEvent) => {
+          window.removeEventListener('pointerup', onSeatUp);
+          const drop = pipAt(data.region, view, rect, upEvent.clientX, upEvent.clientY);
+          if (!drop || (drop[0] === startPip![0] && drop[1] === startPip![1])) return;
+          void moveSeat(seatOf, drop);
+        };
+        window.addEventListener('pointerup', onSeatUp);
+        return;
+      }
+    }
     if (!panMode && mode === 'carve' && carveTitleId == null) {
       // A carve with nothing picked is a mistake, not a gesture: say so before any
       // drag or preview starts (#4935).
@@ -345,7 +374,11 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
           for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
             const result = await runAction({
               key: 'atlas_carve_footprint',
-              kwargs: { title_id: carveTitleId, [remove ? 'remove' : 'add']: part },
+              kwargs: {
+                title_id: carveTitleId,
+                [remove ? 'remove' : 'add']: part,
+                ...(adjust ? { take_from_siblings: true } : {}),
+              },
             });
             if (result.success === false) break;
             changed.push(...parseChanged(result.data));
@@ -362,6 +395,26 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       }
     } catch {
       // the mutation already toasted
+    }
+  };
+
+  // #4988: the seat drag; its `changed` is one undo entry like a carve's
+  const moveSeat = async (barony: RegionMapFootprint, drop: Pip) => {
+    if (characterId == null || busyRef.current) return;
+    busyRef.current = true;
+    try {
+      const result = await runAction({
+        key: 'atlas_move_seat',
+        kwargs: { area_id: barony.area_id, pip: drop },
+      });
+      if (result.success !== false && barony.title_id != null) {
+        const changed = parseChanged(result.data);
+        setHistory((h) => pushEntry(h, { titleId: barony.title_id as number, changed }));
+      }
+    } catch {
+      // the mutation already toasted
+    } finally {
+      busyRef.current = false;
     }
   };
 
@@ -643,6 +696,17 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
                 </Button>
               ))}
               {tool === 'brush' && brushWidthSelect}
+              <Button
+                type="button"
+                size="sm"
+                variant={adjust ? 'default' : 'outline'}
+                aria-pressed={adjust}
+                data-testid="carve-adjust"
+                disabled={carveTitleId == null}
+                onClick={() => setAdjust((on) => !on)}
+              >
+                Adjust
+              </Button>
               <Button
                 type="button"
                 size="sm"

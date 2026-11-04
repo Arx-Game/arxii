@@ -154,6 +154,22 @@ const payload: RegionMapPips = {
   ],
 };
 
+/** The county's seat barony on pip (2, 0), only for the tests that drag it (#4988). */
+const SEAT_BARONY: RegionMapPips['footprints'][number] = {
+  area_id: 11,
+  name: 'Salvation Seat',
+  level: 40,
+  level_display: 'Barony',
+  parent_id: 10,
+  realm_id: 1,
+  holder_org_id: 4,
+  holder_name: 'House Stellaris',
+  title_id: 101,
+  seat: [2, 0],
+  pips: [[2, 0]],
+  charters: [],
+};
+
 describe('RegionMapPage', () => {
   beforeEach(() => {
     // jsdom has no 2D context; the page guards for null and draws nothing here.
@@ -484,6 +500,55 @@ describe('RegionMapPage', () => {
     expect(screen.getByTestId('select-domain')).toBeEnabled();
     // read once: a reload keeps the user's own selection, not the door's
     expect(window.sessionStorage.getItem('world-builder-atlas:focus-title')).toBeNull();
+  });
+
+  it('Adjust sends take_from_siblings with the carve and only while pressed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    const adjust = screen.getByTestId('carve-adjust');
+    expect(adjust).toHaveAttribute('aria-pressed', 'false');
+    await user.click(adjust);
+    expect(adjust).toHaveAttribute('aria-pressed', 'true');
+    click(33, 33);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(lastCall()?.kwargs.take_from_siblings).toBe(true);
+    await user.click(adjust);
+    click(39, 39);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    expect(lastCall()?.kwargs).not.toHaveProperty('take_from_siblings');
+  });
+
+  it('dragging a barony seat dispatches atlas_move_seat with the drop pip and no carve', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: { ...payload, footprints: [...payload.footprints, SEAT_BARONY] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    mutateAsync.mockResolvedValue({
+      success: true,
+      data: {
+        changed: [
+          [2, 0, 11, 10],
+          [3, 0, 10, 11],
+        ],
+      },
+    });
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    const viewport = screen.getByTestId('region-map-viewport');
+    // pip (2, 0) is the barony's seat: 6px a pip, so client (15, 3)
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 21, clientY: 3 });
+    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(lastCall()).toEqual({ key: 'atlas_move_seat', kwargs: { area_id: 11, pip: [3, 0] } });
+    // a drop on its own pip sends nothing
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 15, clientY: 3 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it('shows the loading and error states', () => {
