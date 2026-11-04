@@ -17,6 +17,7 @@ import tempfile
 from auto_rebase_migration import (
     GIT,
     MIGRATIONS_DIR,
+    NothingToDoError,
     RefusalError,
     apply_doc_renames,
     apply_renames,
@@ -103,7 +104,11 @@ def reviewed_revision(repo: Path, head: str, main_ref: str = "origin/main") -> s
         raise RefusalError(message)
     current = head
     while is_migration_update(repo, current):
-        previous = verify_migration_update(repo, current, main_ref)
+        try:
+            previous = verify_migration_update(repo, current, main_ref)
+        except NothingToDoError as exc:
+            message = f"migration update {current} cannot be reproduced: {exc}"
+            raise RefusalError(message) from exc
         print(
             f"Verified migration update {current}; retaining evidence from {previous}",
             file=sys.stderr,

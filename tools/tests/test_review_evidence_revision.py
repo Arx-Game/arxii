@@ -6,7 +6,7 @@ import subprocess
 
 from auto_rebase_migration import RefusalError, run
 import pytest
-from review_evidence_revision import BOT_EMAIL, BOT_NAME, reviewed_revision
+from review_evidence_revision import BOT_EMAIL, BOT_NAME, BOT_SUBJECT, reviewed_revision
 
 
 def sh(repo: Path, *args: str) -> str:
@@ -131,3 +131,19 @@ def test_spoofed_single_parent_bot_commit_is_rejected(repo: Path):
 def test_non_sha_input_is_rejected(repo: Path):
     with pytest.raises(RefusalError, match="full commit SHA"):
         reviewed_revision(repo, "HEAD", "main")
+
+
+def test_spoofed_no_op_merge_is_a_refusal_not_an_uncaught_exception(repo: Path):
+    head = sh(
+        repo,
+        "commit-tree",
+        "HEAD^{tree}",
+        "-p",
+        "HEAD",
+        "-p",
+        "main^1",
+        "-m",
+        BOT_SUBJECT + "0001_initial",
+    ).strip()
+    with pytest.raises(RefusalError, match="cannot be reproduced"):
+        reviewed_revision(repo, head, "main")

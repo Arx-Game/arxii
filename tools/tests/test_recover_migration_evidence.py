@@ -95,3 +95,30 @@ def test_ordinary_heads_are_not_recovered(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, "git", lambda *_args, **_kwargs: HEAD)
     monkeypatch.setattr(recovery, "is_migration_update", lambda *_args: False)
     assert recovery.recover(tmp_path, REPOSITORY, 4985, publish=True)
+
+
+def test_api_failure_reports_stderr_without_a_traceback(monkeypatch):
+    def run(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, stderr="HTTP 403: checks write denied")
+
+    monkeypatch.setattr(recovery.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="HTTP 403: checks write denied"):
+        recovery.gh_json("api", "repos/a/b/check-runs", payload={})
+
+
+def test_one_recovery_error_does_not_abort_later_prs(monkeypatch, tmp_path):
+    monkeypatch.setattr(recovery, "git", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(recovery, "gh_json", lambda *_args: [{"number": 1}, {"number": 2}])
+    monkeypatch.setattr("sys.argv", ["recover", "--repository", REPOSITORY])
+    visited = []
+
+    def recover(repo, repository, number, *, publish):
+        visited.append(number)
+        if number == 1:
+            message = "API unavailable"
+            raise RuntimeError(message)
+        return True
+
+    monkeypatch.setattr(recovery, "recover", recover)
+    assert recovery.main() == 1
+    assert visited == [1, 2]

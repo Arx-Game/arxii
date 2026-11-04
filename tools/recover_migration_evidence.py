@@ -33,13 +33,17 @@ def gh_json(*args: str, payload: dict | None = None):
         command += ["--jq", ".[]"]
     if payload is not None:
         command += ["--input", "-"]
-    result = subprocess.run(  # noqa: S603 - fixed gh executable, argv only, no shell
-        command,
-        input=json.dumps(payload) if payload is not None else None,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed gh executable, argv only, no shell
+            command,
+            input=json.dumps(payload) if payload is not None else None,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        message = f"GitHub request failed: {exc.stderr.strip()}"
+        raise RuntimeError(message) from exc
     if "--paginate" in args:
         return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     return json.loads(result.stdout)
@@ -69,6 +73,7 @@ def validate_evidence(repo: Path, repository: str, pr: dict) -> list[str]:
         return [*errors, "recovery requires a report comment in this repository"]
     text = gh_json("api", f"repos/{repository}/issues/comments/{comment.group(1)}")["body"]
     revision = reviewed_revision(repo, pr["headRefOid"])
+    print(f"Evidence revision for {pr['headRefOid']}: {revision}")
     with tempfile.TemporaryDirectory(prefix="review-report-") as directory:
         path = Path(directory) / "report.md"
         path.write_text(text, encoding="utf-8")
@@ -147,7 +152,11 @@ def main() -> int:
         numbers = [pr["number"] for pr in pulls]
     success = True
     for number in numbers:
-        success = recover(args.repo, args.repository, number, publish=args.publish) and success
+        try:
+            success = recover(args.repo, args.repository, number, publish=args.publish) and success
+        except (RefusalError, RuntimeError, subprocess.CalledProcessError) as exc:
+            print(f"#{number}: recovery failed: {exc}")
+            success = False
     return 0 if success else 1
 
 

@@ -3,6 +3,13 @@ name: Recover migration evidence
 # Re-running an old pull_request run uses its old workflow and scripts. This
 # dispatch instead uses current main to validate already-updated PR heads.
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-migration-evidence.yml'
+      - '.github/workflows/spec-evidence.yml'
+      - 'tools/review_evidence_revision.py'
+      - 'tools/recover_migration_evidence.py'
   workflow_dispatch:
     inputs:
       pr:
