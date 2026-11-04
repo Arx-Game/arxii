@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import (
     RECENT_HISTORY_MAX_LENGTH,
+    BeatAudience,
     BeatSelection,
     LifeStage,
     OfferArrival,
@@ -84,6 +85,35 @@ class BeatPoolTests(TestCase):
 
     def test_no_beginning_no_pool(self):
         self.assertEqual(beat_pool(CharacterDraftFactory()), [])
+
+    def test_an_only_these_beat_reaches_the_listed_beginnings_alone(self):
+        """#4978: the beat's list is read as its ``offered_to`` says. Under "Only these"
+        the listed Beginning meets the beat, an unlisted one does not, and a Beginning
+        added later is unlisted by construction."""
+        tree = LifeBeatFactory(
+            name="How the Tree's children are raised",
+            sort_order=3,
+            offered_to=BeatAudience.ONLY_LISTED,
+        )
+        LifeBeatExclusionFactory(beat=tree, beginning=self.other)
+        newcomer = BeginningsFactory(name="Newcomer")
+        names = lambda beginning: [  # noqa: E731 - a one-line local reader
+            b.name for b in beat_pool(CharacterDraftFactory(selected_beginnings=beginning))
+        ]
+        self.assertEqual(
+            names(self.other), ["The household", "How the Tree's children are raised", "The work"]
+        )
+        self.assertEqual(names(self.beginning), ["The household", "The court", "The work"])
+        self.assertEqual(names(newcomer), ["The household", "The court", "The work"])
+        # The default meaning is untouched: the same row on an every-but-listed beat
+        # keeps that Beginning out.
+        tree.offered_to = BeatAudience.EVERY_BUT_LISTED
+        tree.save(update_fields=["offered_to"])
+        self.assertEqual(names(self.other), ["The household", "The work"])
+        self.assertEqual(
+            names(newcomer),
+            ["The household", "The court", "How the Tree's children are raised", "The work"],
+        )
 
     def test_a_struck_stage_is_absent_from_the_pool(self):
         """The Sleeper strikes the stages before the Glimpse (#4395): absent, not greyed."""
@@ -614,6 +644,7 @@ class LifeBeatAdminTest(TestCase):
             "life_stage": LifeStage.CHILDHOOD,
             "prompt": "Placeholder prompt.",
             "selection": BeatSelection.ONE_OF,
+            "offered_to": BeatAudience.ONLY_LISTED,
             "sort_order": 1,
             "is_active": "on",
             f"{offers_prefix}-TOTAL_FORMS": "1",
@@ -642,6 +673,7 @@ class LifeBeatAdminTest(TestCase):
         self.assertEqual(offer.arrives_as, OfferArrival.CHOICE)
         self.assertEqual(offer.name, "Patient")
         self.assertEqual([e.beginning_id for e in beat.exclusions.all()], [self.beginning.pk])
+        self.assertEqual(beat.offered_to, BeatAudience.ONLY_LISTED)
 
 
 class BeatDraftValidationTests(TestCase):

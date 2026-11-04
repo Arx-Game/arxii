@@ -478,6 +478,21 @@ class BeatSelection(models.TextChoices):
     ANY = "any", "Any that apply"
 
 
+class BeatAudience(models.TextChoices):
+    """Which Beginnings a beat is offered to (#4978), read with its ``LifeBeatExclusion``
+    rows, the beat's list of Beginnings.
+
+    Staff set it per beat. ``EVERY_BUT_LISTED`` offers the beat to every Beginning except
+    the listed ones (the #4124 meaning, the default). ``ONLY_LISTED`` offers it to the
+    listed ones alone, so a beat meant for one Beginning (the Misbegotten's "How the Tree's
+    children are raised") carries one row, and a Beginning added later never meets it until
+    it is listed. Read by ``offers.beat_pool``.
+    """
+
+    EVERY_BUT_LISTED = "every_but_listed", "Every beginning except these"
+    ONLY_LISTED = "only_listed", "Only these"
+
+
 class BeatMode(models.TextChoices):
     """How a Beginning offers the beat library (#4124).
 
