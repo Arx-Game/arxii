@@ -649,10 +649,14 @@ kingdom | potential
   when the realm's culture has no PLACE names.
 - **Names** — `NameCulture.realm` links a culture to its realm (#4986, the seed links the five);
   `NameCultureEntry` rows of the `NamePart.PLACE` part are the bank. Every duchy and county
-  takes one, drawn without replacement in a stable per-run order (names already on the
-  realm's ladder are skipped); when the bank runs dry the rung is planted unnamed (the
-  ladder's Undefined), never with a repeat. The seat barony stays unnamed: `Domain.name` is
-  unique.
+  takes one, heaviest weight first with a stable per-run shuffle among equal weights, without
+  replacement (`Title.name` is unique across every realm when set, so names any ladder bears
+  and names the layout itself gives are skipped); when the bank runs dry the rung is planted
+  unnamed (the ladder's Undefined), never with a repeat. A name the layout gives that any
+  title already bears, or that it gives twice, is refused at preview with its line. The seat
+  barony stays unnamed, since its county took the `seat` name. A duchy the walk plants is a CG
+  slot only when its line says `claimable` (`held` is the default); counties and baronies keep
+  `plant_rung`'s default.
 - **Figures** — county population `120 * pips`, summed upward through duchy and kingdom;
   prosperity 65 on the capital child, 45 on the others; every generated `Domain.description`
   starts with `PLACEHOLDER:` so the lore pass finds them; a `lore` word replaces it.

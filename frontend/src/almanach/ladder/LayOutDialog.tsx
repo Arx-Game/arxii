@@ -125,7 +125,7 @@ export function LayOutDialog({
             disabled={busy || !text.trim()}
             onClick={() =>
               void run(onLayOut).then((result) => {
-                if (result?.wrote) onClose();
+                if (result?.wrote && result.refusals.length === 0) onClose();
               })
             }
           >

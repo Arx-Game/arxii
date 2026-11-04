@@ -99,12 +99,19 @@ def _grow(land: set[Pip], seeds: list[Pip], weights: list[float], rng_seed: int)
     frontiers: list[list[Pip]] = [
         [n for n in _neighbours(s) if n in land and n not in owner] for s in seeds
     ]
-    total = sum(weights)
+    unit = min(weights) or 1.0
+    earned = [0.0] * len(seeds)
     while any(frontiers):
         for index, frontier in enumerate(frontiers):
             if not frontier:
                 continue
-            share = max(1, round(weights[index] / total * 4))
+            # each round a seed earns weight/min(weight) pips and spends whole ones, so the
+            # ratio between seeds survives however many there are
+            earned[index] += weights[index] / unit
+            share = int(earned[index])
+            if share < 1:
+                continue
+            earned[index] -= share
             frontier.sort(key=lambda p: _tie_key(p, rng_seed), reverse=True)
             taken = 0
             next_frontier: list[Pip] = []

@@ -70,7 +70,7 @@ test('Preview sends the text and renders the report per kingdom', async () => {
 });
 
 test('Lay out sends the text and remembers it for the realm', async () => {
-  const onLayOut = vi.fn().mockResolvedValue({ ...REPORT, wrote: true });
+  const onLayOut = vi.fn().mockResolvedValue({ ...REPORT, wrote: true, refusals: [] });
   const onClose = vi.fn();
   renderWithProviders(
     <LayOutDialog
@@ -103,4 +103,28 @@ test('a remembered layout fills the textarea when the dialog opens', () => {
   );
   expect(screen.getByLabelText('layout')).toHaveValue('kingdom Umbros | duchies 5');
   expect(screen.getByRole('button', { name: 'Lay out' })).toBeEnabled();
+});
+
+test('Lay out keeps the dialog open and shows the refusals when a kingdom is refused', async () => {
+  const refused = {
+    ...REPORT,
+    wrote: true,
+    refusals: ['line 2: Luxen already has rungs beneath it'],
+    kingdoms: [{ ...REPORT.kingdoms[0], refusals: ['line 2: Luxen already has rungs beneath it'] }],
+  };
+  const onClose = vi.fn();
+  renderWithProviders(
+    <LayOutDialog
+      open
+      realmId={1}
+      realmName="Luxen"
+      onClose={onClose}
+      onPreview={vi.fn()}
+      onLayOut={vi.fn().mockResolvedValue(refused)}
+    />
+  );
+  await userEvent.type(screen.getByLabelText('layout'), 'kingdom Luxen | duchies 3');
+  await userEvent.click(screen.getByRole('button', { name: 'Lay out' }));
+  expect(await screen.findByText('line 2: Luxen already has rungs beneath it')).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
 });

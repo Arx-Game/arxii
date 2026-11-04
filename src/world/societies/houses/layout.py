@@ -82,6 +82,7 @@ class KingdomLine:
     chartered: list[str] = field(default_factory=list)
     claims: list[tuple[str, str]] = field(default_factory=list)
     lore: str = ""
+    claimable: bool | None = None
     children: list[ChildLine] = field(default_factory=list)
 
 
@@ -169,8 +170,8 @@ def _word_seat(line_no: int, target: Target, _word: str, value: str, _rest: list
 
 
 def _word_claimable(line_no: int, target: Target, word: str, _value: str, _rest: list[str]) -> None:
-    if not isinstance(target, ChildLine):
-        raise LayoutError(line_no, f"{word} belongs on a duchy line")
+    if isinstance(target, Defaults):
+        raise LayoutError(line_no, f"{word} belongs on a kingdom or duchy line")
     target.claimable = word == WORD_CLAIMABLE
 
 
@@ -283,12 +284,17 @@ def parse_layout(text: str) -> Layout:
 
 import zlib  # noqa: E402 - the grammar above stands on its own; the walk's imports follow
 
-from django.db import transaction  # noqa: E402
+from django.core.exceptions import ValidationError  # noqa: E402
+from django.db import IntegrityError, transaction  # noqa: E402
 
 from world.areas.models import Area  # noqa: E402
 from world.areas.worldmap.constants import Terrain  # noqa: E402
 from world.areas.worldmap.models import TerrainPip  # noqa: E402
-from world.areas.worldmap.services import footprint_of, set_footprint  # noqa: E402
+from world.areas.worldmap.services import (  # noqa: E402
+    WorldMapServiceError,
+    footprint_of,
+    set_footprint,
+)
 from world.character_sheets.models import CharacterSheet  # noqa: E402
 from world.npc_services.models import NameCulture, NameCultureEntry, NamePart  # noqa: E402
 from world.realms.models import Realm  # noqa: E402
@@ -383,7 +389,7 @@ class _Rung:
 class _Names:
     """The realm's place-name bank, drawn without replacement in a stable order."""
 
-    def __init__(self, realm: Realm, seed: int) -> None:
+    def __init__(self, realm: Realm, seed: int, reserved: set[str]) -> None:
         cultures = NameCulture.objects.filter(realm=realm)
         entries = list(
             NameCultureEntry.objects.filter(culture__in=cultures, part=NamePart.PLACE).order_by(
@@ -398,12 +404,12 @@ class _Names:
                     f"{realm.name} has no place-name bank; add Place names to its culture first."
                 ),
             )
-        taken = set(
-            Title.objects.filter(realm=realm).exclude(name="").values_list("name", flat=True)
-        )
-        values = [e.value for e in entries if e.value not in taken]
-        values.sort(key=lambda v: zlib.crc32(f"{seed}:{v}".encode()))
-        self._pool = values
+        # Title.name is unique across every realm when set, so the whole ladder is taken
+        taken = set(Title.objects.exclude(name="").values_list("name", flat=True)) | reserved
+        values = [(e.weight, e.value) for e in entries if e.value not in taken]
+        # heaviest first; a stable per-run shuffle only among equal weights
+        values.sort(key=lambda wv: (-wv[0], zlib.crc32(f"{seed}:{wv[1]}".encode())))
+        self._pool = [v for _, v in values]
         self.drawn: list[str] = []
 
     def draw(self) -> str:
@@ -437,15 +443,30 @@ def _chain_member(crown: Title, tier: str) -> Title | None:
     return Title.objects.filter(seat_domain_id=crown.seat_domain_id, tier=tier).first()
 
 
+def _explicit_names(layout: Layout) -> list[str]:
+    """Every name the layout itself gives: dormant crowns, duchy lines, seats."""
+    names: list[str] = []
+    for kingdom in layout.kingdoms:
+        if kingdom.station != TitleStation.SEATED and kingdom.name:
+            names.append(kingdom.name)
+        if kingdom.seat:
+            names.append(kingdom.seat)
+        names.extend(child.name for child in kingdom.children if child.name)
+    return names
+
+
 class _Walk:
     def __init__(self, realm: Realm, layout: Layout, *, write: bool, seed: int) -> None:
         self.realm = realm
         self.layout = layout
         self.write = write
         self.seed = seed
-        self.names = _Names(realm, seed)
+        self.explicit_names = _explicit_names(layout)
+        self.names = _Names(realm, seed, set(self.explicit_names))
         self.report = LayoutReport(wrote=write)
         self.by_name: dict[str, _Rung] = {}
+        self.claimed_names: set[str] = set()
+        self._names_before: list[str] = []
 
     # -- planning -------------------------------------------------------------------
 
@@ -466,9 +487,9 @@ class _Walk:
                 self._report_links(root, report)
         return self.report
 
-    def _plan_kingdom(self, line: KingdomLine) -> _Rung:
-        if line.station != TitleStation.SEATED:
-            return self._plan_dormant_crown(line)
+    def _drawn_crown(self, line: KingdomLine) -> tuple[Title, set[Pip], set[Pip]]:
+        """A seated kingdom line's rung, its chain duchy, its footprint and the land in
+        it, or the line's refusal."""
         crown = Title.objects.filter(
             realm=self.realm, tier=TitleTier.KINGDOM, name=line.name
         ).first()
@@ -487,8 +508,16 @@ class _Walk:
         land = _land_pips(pips)
         if not land:
             raise LayoutError(line.line_no, f"no land inside {line.name}'s outline")
+        return crown, pips, land
+
+    def _plan_kingdom(self, line: KingdomLine) -> _Rung:
+        if line.station != TitleStation.SEATED:
+            return self._plan_dormant_crown(line)
+        crown, pips, land = self._drawn_crown(line)
         root = _Rung(tier=TitleTier.KINGDOM, name=line.name, pips=pips, parent=None, existing=crown)
         self._apply_words(root, line)
+        if line.seat:
+            self._claim_name(line.seat, line.line_no)
         defaults = self.layout.defaults
         capital_w = line.capital or defaults.capital
         wanted = line.duchies or defaults.duchies or Range(2, 4)
@@ -503,6 +532,8 @@ class _Walk:
         for index, region in enumerate(regions):
             capital = index == 0
             child_line = children.pop(0) if (not capital and children) else None
+            if child_line is not None and child_line.name:
+                self._claim_name(child_line.name, child_line.line_no)
             duchy = _Rung(
                 tier=TitleTier.DUCHY,
                 name=(child_line.name if child_line and child_line.name else self.names.draw()),
@@ -581,14 +612,16 @@ class _Walk:
             county.children.append(_Rung(tier=TitleTier.BARONY, name="", pips={pip}, parent=county))
 
     def _plan_dormant_crown(self, line: KingdomLine) -> _Rung:
-        if line.name and Title.objects.filter(realm=self.realm, name=line.name).exists():
+        if line.name and Title.objects.filter(name=line.name).exists():
             raise LayoutError(line.line_no, f"{line.name} is already on the ladder")
+        self._claim_name(line.name, line.line_no)
         root = _Rung(
             tier=TitleTier.KINGDOM, name=line.name, pips=set(), parent=None, line_no=line.line_no
         )
         root.lore = line.lore
         self._apply_words(root, line)
         for child_line in line.children:
+            self._claim_name(child_line.name, child_line.line_no)
             duchy = _Rung(
                 tier=TitleTier.DUCHY,
                 name=child_line.name or self.names.draw(),
@@ -604,16 +637,31 @@ class _Walk:
         self._remember(root)
         return root
 
+    def _claim_name(self, name: str, line_no: int) -> None:
+        """A name the layout gives must be new on every ladder and new in this layout."""
+        if not name:
+            return
+        if name in self.claimed_names:
+            raise LayoutError(line_no, f"{name} is named twice in this layout")
+        if Title.objects.filter(name=name).exists():
+            raise LayoutError(line_no, f"{name} is already a title")
+        self.claimed_names.add(name)
+
     def _apply_words(self, rung: _Rung, line: KingdomLine | ChildLine) -> None:
         rung.lore = line.lore
         rung.sworn = line.sworn
         rung.chartered = list(line.chartered)
         rung.claims = list(line.claims)
         rung.line_no = line.line_no
-        if isinstance(line, ChildLine):
-            rung.claimable = line.claimable
+        rung.claimable = line.claimable
         if rung.sworn and self._crown_named(rung.sworn) is None:
             raise LayoutError(line.line_no, f"no crown named {rung.sworn} to swear to")
+        for fief_name in rung.chartered:
+            if (
+                fief_name not in self.explicit_names
+                and not Title.objects.filter(name=fief_name).exists()
+            ):
+                raise LayoutError(line.line_no, f"no rung named {fief_name} to charter")
         for who, _basis in rung.claims:
             if self._sheet_named(who) is None:
                 raise LayoutError(line.line_no, f"no character named {who} to claim it")
@@ -648,11 +696,7 @@ class _Walk:
             report.duchies.append(
                 {"name": duchy.name, "pips": len(duchy.pips), "capital": duchy.capital}
             )
-        report.names = (
-            list(self.names.drawn[len(self._names_before) :])
-            if hasattr(self, "_names_before")
-            else list(self.names.drawn)
-        )
+        report.names = list(self.names.drawn[len(self._names_before) :])
         self._names_before = list(self.names.drawn)
 
     def _report_links(self, root: _Rung, report: KingdomReport) -> None:
@@ -671,8 +715,15 @@ class _Walk:
             with transaction.atomic():
                 self._write_rung(root, report)
                 self._write_links(root, report)
-        except (LayoutError, HousesServiceError) as exc:
-            message = str(exc) if isinstance(exc, LayoutError) else exc.user_message
+        except LayoutError as exc:
+            report.refusals.append(str(exc))
+            self.report.refusals.append(str(exc))
+        except (HousesServiceError, WorldMapServiceError) as exc:
+            message = f"line {root.line_no}: {exc.user_message}"
+            report.refusals.append(message)
+            self.report.refusals.append(message)
+        except (IntegrityError, ValidationError) as exc:
+            message = f"line {root.line_no}: the database refused a row ({exc})"
             report.refusals.append(message)
             self.report.refusals.append(message)
 
@@ -704,8 +755,23 @@ class _Walk:
         for child in rung.children:
             self._write_rung(child, report)
         self._write_figures(rung)
-        if rung.claimable is not None and rung.title.tier not in CROWN_TIERS:
-            rung.title.is_claimable = rung.claimable
+        self._write_claimable(rung)
+
+    def _write_claimable(self, rung: _Rung) -> None:
+        """A duchy this walk plants is a CG slot only when its line says `claimable`; a
+        county or barony keeps plant_rung's default; a dormant chain is never claimable."""
+        if rung.title is None or rung.title.tier in CROWN_TIERS:
+            return
+        if self._station_for(rung) != TitleStation.SEATED:
+            return
+        if rung.tier == TitleTier.DUCHY and not rung.chain:
+            wanted = rung.claimable is True
+        elif rung.claimable is not None:
+            wanted = rung.claimable
+        else:
+            return
+        if rung.title.is_claimable != wanted:
+            rung.title.is_claimable = wanted
             rung.title.save(update_fields=["is_claimable"])
 
     def _station_for(self, rung: _Rung) -> str:

@@ -55,6 +55,11 @@ class ParseLayoutTests(SimpleTestCase):
         assert crown.children[1].baronies == Range(2, 2)
         assert crown.children[0].claimable is not None
 
+    def test_held_on_a_kingdom_line_is_the_seated_no_op(self) -> None:
+        layout = parse_layout("kingdom Republic of Luxen | held | duchies 8\n")
+        assert layout.kingdoms[0].station == TitleStation.SEATED
+        assert layout.kingdoms[0].duchies == Range(8, 8)
+
     def test_comments_and_blank_lines_are_skipped(self) -> None:
         layout = parse_layout("# the north\n\nkingdom Umbros\n")
         assert [k.name for k in layout.kingdoms] == ["Umbros"]

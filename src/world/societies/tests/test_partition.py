@@ -45,6 +45,16 @@ class PartitionTests(SimpleTestCase):
         assert (3, 3) in regions[0]
         assert len(regions[0]) > max(len(regions[1]), len(regions[2]))
 
+    def test_the_capital_stays_largest_at_five_children(self) -> None:
+        # the spec's own line: kingdom Umbros | duchies 5 | capital x2
+        pips = rectangle(24, 12)
+        regions = partition(pips, pips, 5, [2.0, 1.0, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=5)
+        assert len(regions) == 5
+        assert len(regions[0]) > max(len(r) for r in regions[1:])
+        # and the default weight at four children
+        regions = partition(pips, pips, 4, [1.5, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=5)
+        assert len(regions[0]) > max(len(r) for r in regions[1:])
+
     def test_water_goes_to_the_region_it_touches_most(self) -> None:
         pips = rectangle(20, 10)
         lake = {(x, y) for x in range(8, 12) for y in range(4, 6)}

@@ -190,6 +190,48 @@ class LayOutRealmTests(TestCase):
         assert len(names) == len(set(names))
         assert unnamed.filter(tier__in=(TitleTier.DUCHY, TitleTier.COUNTY)).exists()
 
+    def test_generated_duchies_are_claimable_only_when_the_layout_says_so(self) -> None:
+        layout = parse_layout(
+            "kingdom Luxen | duchies 4\n  duchy Brittany | claimable\n  duchy Anjou | held\n"
+        )
+        report = lay_out_realm(self.realm, layout)
+        assert report.kingdoms[0].refusals == []
+        assert Title.objects.get(name="Brittany").is_claimable
+        assert not Title.objects.get(name="Anjou").is_claimable
+        chain_duchy = Title.objects.get(seat_domain=self.kingdom.seat_domain, tier=TitleTier.DUCHY)
+        generated = (
+            Title.objects.filter(realm=self.realm, tier=TitleTier.DUCHY)
+            .exclude(name__in=["Brittany", "Anjou"])
+            .exclude(pk=chain_duchy.pk)
+        )
+        assert generated.count() == 1
+        assert not generated.first().is_claimable
+
+    def test_names_already_borne_anywhere_are_refused_at_preview(self) -> None:
+        elsewhere = RealmFactory(name="Umbros")
+        plant_rung(realm=elsewhere, tier=TitleTier.DUCHY, name="Brittany")
+        report = preview_layout(
+            self.realm,
+            parse_layout("kingdom Luxen | duchies 2\n  duchy Brittany\n  duchy Anjou\n"),
+        )
+        [kingdom] = report.kingdoms
+        assert any(r.startswith("line 2:") and "Brittany" in r for r in kingdom.refusals)
+        twice = preview_layout(
+            self.realm, parse_layout("kingdom Luxen | duchies 3\n  duchy Anjou\n  duchy Anjou\n")
+        )
+        assert any("line 3:" in r and "Anjou" in r for r in twice.kingdoms[0].refusals)
+        # a chartered name that matches nothing is refused at preview, not at lay-out
+        charter = preview_layout(
+            self.realm, parse_layout("kingdom Old Luxen | titular | chartered Nowhere\n")
+        )
+        assert any("Nowhere" in r for r in charter.kingdoms[0].refusals)
+
+    def test_names_are_drawn_heaviest_first(self) -> None:
+        layout = parse_layout("realm | counties 1 | baronies 1\nkingdom Luxen | duchies 2\n")
+        report = preview_layout(self.realm, layout)
+        # weights descend down PLACE_NAMES; two duchies and two counties take the top four
+        assert set(report.kingdoms[0].names) == set(PLACE_NAMES[:4])
+
     def test_no_place_bank_refuses_the_realm(self) -> None:
         bare = RealmFactory(name="Arvum")
         with self.assertRaises(LayoutRefused) as caught:
