@@ -57,6 +57,7 @@ from actions.definitions.atlas_map import (
     AtlasCarveFootprintAction,
     AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
+    AtlasMoveSeatAction,
     AtlasPaintTerrainAction,
     AtlasRestoreFootprintAction,
 )
@@ -1333,6 +1334,7 @@ _ALL_ACTIONS: list[Action] = [
     AtlasCarveFootprintAction(),
     AtlasClearFootprintAction(),
     AtlasRestoreFootprintAction(),
+    AtlasMoveSeatAction(),
     AtlasPaintTerrainAction(),
     AlmanachPlantRungAction(),
     AlmanachBatchUnclaimedAction(),

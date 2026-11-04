@@ -60,6 +60,7 @@ export type WorldBuilderActionKey =
   | 'atlas_carve_footprint'
   | 'atlas_clear_footprint'
   | 'atlas_restore_footprint'
+  | 'atlas_move_seat'
   | 'atlas_paint_terrain';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
