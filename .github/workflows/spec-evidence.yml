@@ -148,6 +148,7 @@ jobs:
           else
               report_path="$report_reference"
           fi
-          reviewed_sha="$(git rev-parse "${head_sha}^1")"
+          # Keep the original evidence revision across reproducible migration updates.
+          reviewed_sha="$(python3 tools/review_evidence_revision.py "$head_sha")"
           python3 tools/validate_review_evidence.py "$report_path" \
               --revision "$reviewed_sha" --pr-body /tmp/pr-body.md

@@ -2,8 +2,8 @@
 # Re-point a PR's review-evidence comment at the revision the gate will check.
 #
 # Both `open-pr.sh` and the `review-evidence` CI job validate the report against
-# `git rev-parse HEAD^1`. Every push after the report is written moves that
-# target, so the report goes stale and the job fails. This restates it, and
+# HEAD^1, after peeling independently verified migration bot updates. Other
+# pushes move that target, so the report goes stale and the job fails. This restates it, and
 # shows what changed between the old revision and the new one so the author
 # decides whether the review still stands rather than rubber-stamping it.
 #
@@ -17,7 +17,8 @@ PR="${1:?usage: sync-evidence-revision.sh <pr-number> [--yes]}"
 ASSUME_YES="${2:-}"
 
 REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-NEW_REV="$(git rev-parse HEAD^1)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+NEW_REV="$(python3 "$REPO_ROOT/tools/review_evidence_revision.py" "$(git rev-parse HEAD)")"
 
 BODY_FILE="$(mktemp)"
 gh pr view "$PR" --json body --jq .body > "$BODY_FILE"
@@ -46,7 +47,7 @@ fi
 
 echo "Evidence revision is stale."
 echo "  report says: $OLD_REV"
-echo "  gate checks: $NEW_REV  (HEAD^1)"
+echo "  gate checks: $NEW_REV  (resolved evidence revision)"
 echo
 
 if git cat-file -e "${OLD_REV}^{commit}" 2>/dev/null; then

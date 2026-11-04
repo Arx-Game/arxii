@@ -45,8 +45,9 @@ tip and proves the result: main's files untouched, each file's AST unchanged exc
 its `arxii` dependency, one graph leaf, no missing migrations. The workflow then
 pushes the merge, re-arms auto-merge if the queue dropped the PR for the conflict,
 and comments `<!-- migration-auto-rebase sha=<sha> status=resolved -->`. So
-`git pull --ff-only` before your next push. A PR with review evidence is not
-re-armed: restate the evidence revision, then `enqueue-pr.sh`. If you ran `migrate`
+`git pull --ff-only` before your next push. Review evidence retains its original
+revision across independently reproduced migration updates (#4990); it no longer
+needs a manual restatement. If you ran `migrate`
 on the branch, first migrate back to the base tip the comment names, because the old
 names are gone after the pull. It refuses, with a `status=refused` comment naming
 the reason, in these cases:
