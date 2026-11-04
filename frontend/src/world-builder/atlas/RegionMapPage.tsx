@@ -263,6 +263,9 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
+  // a seat press waiting for its pointerup; cleared on cancel and on unmount (#4988)
+  const seatDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => seatDragCleanup.current?.(), []);
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !data) return;
     const viewport = viewportRef.current;
@@ -277,13 +280,21 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
       const startPip = pipAt(data.region, view, rect, startX, startY);
       const seatOf = startPip ? seatBaronyAt(data.footprints, startPip) : null;
       if (seatOf) {
-        const onSeatUp = (upEvent: PointerEvent) => {
+        seatDragCleanup.current?.();
+        const stop = () => {
           window.removeEventListener('pointerup', onSeatUp);
+          window.removeEventListener('pointercancel', stop);
+          seatDragCleanup.current = null;
+        };
+        const onSeatUp = (upEvent: PointerEvent) => {
+          stop();
           const drop = pipAt(data.region, view, rect, upEvent.clientX, upEvent.clientY);
           if (!drop || (drop[0] === startPip![0] && drop[1] === startPip![1])) return;
           void moveSeat(seatOf, drop);
         };
         window.addEventListener('pointerup', onSeatUp);
+        window.addEventListener('pointercancel', stop);
+        seatDragCleanup.current = stop;
         return;
       }
     }
@@ -407,9 +418,11 @@ export function RegionMapPage({ regionId, focusAreaId = null }: RegionMapPagePro
         key: 'atlas_move_seat',
         kwargs: { area_id: barony.area_id, pip: drop },
       });
-      if (result.success !== false && barony.title_id != null) {
+      if (result.success !== false) {
         const changed = parseChanged(result.data);
-        setHistory((h) => pushEntry(h, { titleId: barony.title_id as number, changed }));
+        // a barony from the Areas tree may carry no Title; undo only reads `changed`
+        const titleId = barony.title_id ?? carveTitleId ?? 0;
+        setHistory((h) => pushEntry(h, { titleId, changed }));
       }
     } catch {
       // the mutation already toasted

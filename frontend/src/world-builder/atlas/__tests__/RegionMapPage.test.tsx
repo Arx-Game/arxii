@@ -551,6 +551,39 @@ describe('RegionMapPage', () => {
     expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 
+  it('a cancelled seat press moves nothing, and a barony with no title can still be undone', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: {
+        ...payload,
+        footprints: [...payload.footprints, { ...SEAT_BARONY, title_id: null }],
+      },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    mutateAsync.mockResolvedValue({
+      success: true,
+      data: {
+        changed: [
+          [2, 0, 11, 10],
+          [3, 0, 10, 11],
+        ],
+      },
+    });
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await enterCarve(user);
+    const viewport = screen.getByTestId('region-map-viewport');
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
+    fireEvent.pointerCancel(window);
+    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    fireEvent.pointerDown(viewport, { clientX: 15, clientY: 3, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 21, clientY: 3 });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+  });
+
   it('shows the loading and error states', () => {
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
       data: undefined,
