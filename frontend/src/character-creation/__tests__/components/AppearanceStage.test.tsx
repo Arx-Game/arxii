@@ -158,7 +158,7 @@ describe('AppearanceStage (folio)', () => {
   beforeEach(() => {
     heightBands = [mockHeightBandAverage, mockHeightBandTall];
     copy = mockCGExplanations;
-    offersResponse = { offers: [giantsBlood, attractive], closed: [], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive], terms: [] };
     draftDistinctions = [];
     syncMutate.mockClear();
   });
@@ -239,26 +239,6 @@ describe('AppearanceStage (folio)', () => {
     expect(buildIdx).toBeGreaterThan(offersIdx);
   });
 
-  it('prints the closed hint with the closedLead fallback', () => {
-    offersResponse = {
-      offers: [giantsBlood],
-      closed: [
-        {
-          distinction_id: 30,
-          name: 'Impoverished',
-          reason: 'Your route closed it.',
-          opener_labels: [],
-          opener_ids: [],
-        },
-      ],
-      terms: [],
-    };
-    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
-    expect(
-      screen.getByText('Closed by your route: Impoverished: Your route closed it.')
-    ).toBeInTheDocument();
-  });
-
   it('falls back to the inches range when a band carries no cg_hint (#3675 fix round 1)', () => {
     heightBands = [
       mockHeightBandAverage,
@@ -280,20 +260,20 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('offers the one-point unlock on every trait row (#3739)', () => {
-    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], terms: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     expect(screen.getByRole('button', { name: /make it distinctive/i })).toBeInTheDocument();
   });
 
   it('keeps the description shut and the palette narrow until the feature is bought', () => {
-    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], terms: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     expect(screen.queryByLabelText('Describe it')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Unnatural' })).toBeNull();
   });
 
   it('opens the description and the whole palette once the feature is distinctive', () => {
-    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], terms: [] };
     draftDistinctions = [
       {
         distinction_id: 90,
@@ -320,7 +300,7 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('does not mount the per-feature line as a section of its own (#3739)', () => {
-    offersResponse = { offers: [makeDistinctive], closed: [], terms: [] };
+    offersResponse = { offers: [makeDistinctive], terms: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     // "a feature" is the generic opener label; it must never head a section.
     expect(screen.queryByRole('heading', { name: /a feature/i })).toBeNull();

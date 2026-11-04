@@ -311,7 +311,8 @@ class DraftDistinctionViewSetTests(TestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Mutually exclusive" in response.data["detail"]
+        # The one lock pattern (#4979): the player can swap the blocking pick.
+        assert response.data["detail"].startswith("Unavailable because mutually exclusive with")
 
     def test_add_distinction_variant_exclusion(self):
         """Cannot add variant when sibling variant already selected."""

@@ -20,7 +20,7 @@ const syncMutate = vi.fn();
 const loadMutate = vi.fn();
 const clearMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
-let offersResponse: OffersResponse = { offers: [], closed: [], terms: [] };
+let offersResponse: OffersResponse = { offers: [], terms: [] };
 let draftDistinctions: { id: number; rank: number; offer_ids: number[]; arrivals: string[] }[] = [];
 
 vi.mock('../../../queries', async (importOriginal) => ({
@@ -165,7 +165,6 @@ describe('LifeGrids', () => {
         }),
         offer({ offer_id: 32, distinction_id: 302, name: 'Kept a shop', opener_key: 'beat:3' }),
       ],
-      closed: [],
       terms: [{ name: 'sailing', label: 'sailing', definition: 'Handling a ship at sea.' }],
     };
   });
@@ -546,7 +545,7 @@ describe('LifeGrids (the suggested life, #4865)', () => {
     loadMutate.mockClear();
     clearMutate.mockClear();
     pool = [beat({ beat_id: 1, name: 'The household' })];
-    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], closed: [], terms: [] };
+    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], terms: [] };
     draftDistinctions = [];
   });
 

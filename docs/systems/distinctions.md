@@ -561,7 +561,7 @@ chapter, opener) -- and a chapter's own component (`ChapterOffers`, `GlimpseAxes
 Upbringing answer block, the schooling stances) is where a player picks one. See
 `docs/systems/character_creation.md`'s "CG Stages" table and its `offers` endpoint for
 which chapter shows which offer, and `world.character_creation.offers` for the reader
-module (`offers_for`, `closed_for`, `reconcile_offer_picks`).
+module (`offers_for`, `reconcile_offer_picks`).
 
 During character creation, distinctions are stored in
 `CharacterDraft.draft_data["distinctions"]` as a list; each entry carries offer

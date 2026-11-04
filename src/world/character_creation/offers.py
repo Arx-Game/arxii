@@ -1,9 +1,9 @@
 """Which distinctions a draft can pick where, and the picks its choices carry (#3675).
 
 One authored ``DistinctionOffer`` row per place a distinction is shown. This module
-is the only reader: ``offers_for`` lists a chapter's priced choices, ``closed_for``
-the route's closed list, and ``reconcile_offer_picks`` applies carried and bundled
-offers and removes picks whose offer has gone.
+is the only reader: ``offers_for`` lists a chapter's priced choices (a distinction the
+route closes is simply absent from every chapter, #4979), and ``reconcile_offer_picks``
+applies carried and bundled offers and removes picks whose offer has gone.
 """
 
 from __future__ import annotations
@@ -49,7 +49,6 @@ from world.character_creation.models import (
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
 from world.character_creation.types import (
     BeatPoolEntry,
-    ClosedDistinction,
     FinalTouchesCard,
     OfferEffectTerm,
     OfferTerm,
@@ -1026,7 +1025,13 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 cost_per_rank=dist.cost_per_rank,
                 max_rank=dist.max_rank,
                 is_locked=conflict_name is not None,
-                lock_reason=f"Cannot be held with {conflict_name}" if conflict_name else "",
+                # The player can swap the blocking pick, so the card stays visible with the
+                # reason; a route-closed card is absent instead (#4979, the owner's rule).
+                lock_reason=(
+                    f"Unavailable because mutually exclusive with {conflict_name}"
+                    if conflict_name
+                    else ""
+                ),
                 opener_key=offer.opener_key,
                 first_look=offer.id in pinned,
                 held=held_elsewhere,
@@ -1085,64 +1090,6 @@ def degree_marks() -> dict[str, list[str]]:
     for offer in rows.select_related("distinction").order_by("sort_order", "id"):
         out[offer.enemy_degree].append(offer.distinction.name)
     return dict(out)
-
-
-def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDistinction]:
-    """The route's closed-distinction list, for the one chapter that would have shown them.
-
-    Called by each chapter's view/serializer alongside ``offers_for``. Each row
-    carries ``opener_labels``: the opener labels of this chapter's own active
-    CHOICE offers for the closed distinction whose opener the draft has satisfied
-    (the same ``_opener_satisfied`` check ``visible_offers`` applies, evaluated
-    directly here since ``visible_offers`` itself excludes anything closed before
-    a caller ever sees it). Empty when no offer in this chapter opens it (the
-    route closed something a different chapter offers); since #3709 every
-    chapter's offers carry an opener (a prompt, a reason or degree, a section). A chapter
-    mount (``GlimpseAxes``) uses this to print the closed hint once, under the
-    specific pick that would have opened it, instead of under every pick.
-    ``opener_ids`` (#3675 final fix B4) carries the same offers' ids, index-aligned
-    with ``opener_labels``, so a caller can match a closed row to a specific offer
-    (e.g. a Glimpse tag's own offer ids) without a name/label match.
-    """
-    route = draft.selected_origin_template
-    if route is None:
-        return []
-    closed = list(route.closed_distinctions.all())
-    if not closed:
-        return []
-    closed_ids = {d.id for d in closed}
-    ctx = _context(draft)
-    rows = DistinctionOffer.objects.filter(
-        is_active=True,
-        chapter=chapter,
-        arrives_as=OfferArrival.CHOICE,
-        distinction_id__in=closed_ids,
-    ).select_related(
-        "glimpse_tag",
-        "origin_choice",
-        "schooling_line",
-        "enemy_reason",
-        "appearance_section",
-        "unlocked_by",
-    )
-    openers: dict[int, list[str]] = defaultdict(list)
-    opener_ids: dict[int, list[int]] = defaultdict(list)
-    for offer in rows:
-        if _opener_satisfied(offer, ctx):
-            label = opener_label(offer)
-            if label:
-                openers[offer.distinction_id].append(label)
-                opener_ids[offer.distinction_id].append(offer.id)
-    return [
-        ClosedDistinction(
-            distinction_id=d.id,
-            name=d.name,
-            reason=route.closed_reason,
-            opener_labels=openers.get(d.id, []),
-            opener_ids=opener_ids.get(d.id, []),
-        )
-        for d in closed
-    ]
 
 
 def entry_price(entry: DraftDistinctionEntry, distinction: Distinction) -> int:

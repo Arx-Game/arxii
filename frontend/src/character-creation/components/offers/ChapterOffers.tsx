@@ -27,13 +27,7 @@ import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctio
 import { cn } from '@/lib/utils';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
-import type {
-  CharacterDraft,
-  ClosedDistinction,
-  OfferChapter,
-  OfferTerm,
-  VisibleOffer,
-} from '../../types';
+import type { CharacterDraft, OfferChapter, OfferTerm, VisibleOffer } from '../../types';
 import { RankControl } from './RankControl';
 import { choiceEntries, sameFeature } from './syncHelpers';
 
@@ -61,29 +55,6 @@ interface ChapterOffersProps {
    */
   showOpener?: boolean;
   /**
-   * Lead-in phrase for the closed-offers hint, e.g. "Closed on this road".
-   * Threaded from the caller's own copy query (mirrors `heading`/`hint`)
-   * rather than read here; defaults to "Closed on this road".
-   */
-  closedLead?: string;
-  /**
-   * Scope the closed-offers hint to one axis's tag via `opener_labels`
-   * (#3675 fix round 2, `closed_for` is now chapter-scoped but still
-   * returns the route's whole closed list; a chapter with several sub-blocks,
-   * like the Glimpse's one-per-tag layout, filters here so a closed item
-   * prints once, under the tag that would have opened it, not under every
-   * tag). Default: show every closed item this chapter's `useDraftOffers`
-   * response carries.
-   */
-  closedFilter?: (closed: ClosedDistinction) => boolean;
-  /**
-   * Print the closed-offers hint. Defaults to true; pass false when the
-   * caller renders its own once-per-chapter closed note elsewhere (Lineage's
-   * `ClosedByRoute`, #3675 Task 14) so a mount under one answer doesn't
-   * repeat the whole route's closed list.
-   */
-  showClosed?: boolean;
-  /**
    * Locked "bundled" stances rendered BEFORE the offered ones, no toggle or
    * rank control - the answer already granted these for free (or a refund),
    * this just shows what arrived (#3675 Task 14). `player_line` is optional:
@@ -106,14 +77,14 @@ interface ChapterOffersProps {
   className?: string;
   /**
    * `.hint` line printed when the sync mutation fails (#3675 final fix F2).
-   * Threaded from the caller's own copy query (mirrors `closedLead`) off
+   * Threaded from the caller's own copy query (mirrors `heading`/`hint`) off
    * copy key `offers_sync_error`; defaults to 'That pick did not save. Try
    * again.'.
    */
   syncErrorHint?: string;
   /**
    * The price-grammar words below (#3675 final fix F5), each threaded from
-   * the caller's own copy query the same way `closedLead` is; every default
+   * the caller's own copy query the same way `heading` is; every default
    * is the word that printed before this fix, so the demo-fidelity
    * assertions still hold with no caller override at all.
    */
@@ -359,9 +330,6 @@ export function ChapterOffers({
   headingTag,
   hint,
   showOpener = true,
-  closedLead,
-  closedFilter,
-  showClosed = true,
   bundled = [],
   className,
   syncErrorHint,
@@ -491,10 +459,11 @@ export function ChapterOffers({
     );
   }
 
+  // A card the route closes is absent from `offers` and named nowhere: the player chose
+  // the beginning, so there is nothing to swap and nothing to explain (#4979).
   const offers = (offersData?.offers ?? []).filter((offer) => (filter ? filter(offer) : true));
-  const closed = (offersData?.closed ?? []).filter((c) => (closedFilter ? closedFilter(c) : true));
 
-  if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
+  if (offers.length === 0 && bundled.length === 0) return null;
 
   // The allowance (#4395): once this block holds as many picks as it allows, the rest
   // wait; an exclusive block swaps instead, so it never counts as full. A block that
@@ -707,13 +676,6 @@ export function ChapterOffers({
       {hint && <span className="hint">{hint}</span>}
       {syncDistinctions.isError && (
         <span className="hint">{syncErrorHint ?? 'That pick did not save. Try again.'}</span>
-      )}
-      {showClosed && closed.length > 0 && (
-        <span className="hint">
-          {`${closedLead ?? 'Closed on this road'}: ${closed
-            .map((c) => `${c.name}: ${c.reason}`)
-            .join('; ')}`}
-        </span>
       )}
     </div>
   );

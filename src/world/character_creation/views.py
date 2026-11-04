@@ -58,7 +58,6 @@ from world.character_creation.models import (
 from world.character_creation.offers import (
     beats_for,
     clear_life,
-    closed_for,
     load_default_life,
     offers_for,
     reconcile_offer_picks,
@@ -1230,7 +1229,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=[HTTPMethod.GET])
     def offers(self, request: Request, pk: int | None = None) -> Response:
-        """The distinctions this draft can pick in one chapter, and what its route closed."""
+        """The distinctions this draft can pick in one chapter. A distinction the route
+        closes is absent, never named (#4979)."""
         draft = self.get_object()
         raw = request.query_params.get("chapter", "")  # noqa: USE_FILTERSET
         try:
@@ -1242,7 +1242,6 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         # once per response from the rows that own them.
         payload = {
             "offers": offers,
-            "closed": closed_for(draft, chapter),
             "terms": terms_for(offers),
         }
         return Response(OffersResponseSerializer(payload).data)

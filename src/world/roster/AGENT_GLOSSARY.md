@@ -487,12 +487,14 @@ glossary's "Magical training points"). Shared by every Beginning; a schooling li
 own `DistinctionOffer` (chapter TRADITION_STEP) is kept in sync with it by the
 tradition slate page's save, never authored separately.
 
-**Closed by route** (#3675):
-An Upbringing's `closed_distinctions` M2M (with its own `closed_reason` line):
-distinctions this route never offers, in any chapter, regardless of whether
-some other opener would otherwise satisfy it. Read by
-`world.character_creation.offers.closed_for` for every chapter alike; a route
-closes by field on `OriginTemplate`, never by matching a distinction's name.
+**Closed by route** (#3675, #4979):
+A route's `closed_distinctions` M2M: distinctions this route never offers, in any
+chapter, regardless of whether some other opener would otherwise satisfy it. Read by
+`world.character_creation.offers.visible_offers` (`_closed_ids`) for every chapter
+alike; a route closes by field on `OriginTemplate`, never by matching a distinction's
+name. A closed card is simply absent for the player, named nowhere (the `closed_reason`
+line and the chapters' closed hint went with #4979, ADR-4979). _Avoid_: closed hint,
+"Closed on this road".
 
 - **Character slot** (#3996) — one of the places an account has for characters:
   `CHARACTER_SLOTS_BASELINE` plus `PlayerData.extra_character_slots`, counted by

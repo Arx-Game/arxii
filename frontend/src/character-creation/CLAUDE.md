@@ -143,10 +143,8 @@ character-creation/
     │                            #   get their own heading, matching the demo). No heading
     │                            #   of its own; GiftStage's `section-h` above the mount
     │                            #   carries it. Each sub-block passes ChapterOffers a
-    │                            #   headingTag ("optional") and a closedFilter scoped to
-    │                            #   `opener_labels.includes(tag.name)` so a route-closed
-    │                            #   distinction prints once, under its own tag (fix
-    │                            #   round 2).
+    │                            #   headingTag ("optional"); a route-closed distinction is
+    │                            #   absent and named nowhere (#4979).
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
         ├── KinRows.tsx           # The people seated beside the parents (#4395, #4870): a
         │                         #   twin (alive, dead), a spouse (alive, dead, divorced,
@@ -212,10 +210,8 @@ character-creation/
         │                         #   list (`chapter="lineage"`, filtered to its own choice's
         │                         #   `offer_id`s - never by name/label, #3676 - `className=
         │                         #   "conditional"` merged onto ChapterOffers's own `.field`,
-        │                         #   `showClosed={false}`, its bundled offers passed through
-        │                         #   as locked stances). The route's whole closed list prints
-        │                         #   once, as a `ClosedByRoute` note after the last
-        │                         #   `scope: 'path'` question, never per-answer.
+        │                         #   its bundled offers passed through as locked stances). A card
+        │                         #   the route closes is absent and named nowhere (#4979).
         ├── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
         │                         #   one) plus the claim/name/none path UI; renders
         │                         #   FamilyTemplateForm (name path), VacancyPicker

@@ -27,7 +27,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('calls /drafts/{id}/offers/?chapter=glimpse', async () => {
-    const data: OffersResponse = { offers: [], closed: [], terms: [] };
+    const data: OffersResponse = { offers: [], terms: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     const result = await getDraftOffers(7, 'glimpse');
@@ -39,7 +39,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('hits a different chapter query for tradition_step', async () => {
-    const data: OffersResponse = { offers: [], closed: [], terms: [] };
+    const data: OffersResponse = { offers: [], terms: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     await getDraftOffers(7, 'tradition_step');
@@ -76,15 +76,6 @@ describe('character-creation/api getDraftOffers', () => {
           group: '',
           asks_figure_name: false,
           effects: [],
-        },
-      ],
-      closed: [
-        {
-          distinction_id: 99,
-          name: 'Kept Close',
-          reason: 'This tradition has no living masters.',
-          opener_labels: [],
-          opener_ids: [],
         },
       ],
       terms: [],

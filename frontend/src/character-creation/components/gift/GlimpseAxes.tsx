@@ -11,12 +11,9 @@
  * tags chosen on the same axis (e.g. Consequence: Mark + Loss) each get
  * their own heading, matching the demo's "What the mark is" / "What the
  * loss was" side by side under one axis. Each sub-block's heading carries
- * an "optional" `.tag.soft` chip (`headingTag`, #3675 fix round 2), and its
- * `closedFilter` scopes the closed-offers hint to `opener_ids` matching the
- * tag's own offer ids (#3675 final fix F4 -- never `opener_labels`/`tag.name`,
- * a display string that can collide or drift, #3676) so a route-closed
- * distinction prints once, under the tag that would have opened it, not under
- * every chosen tag's sub-block.
+ * an "optional" `.tag.soft` chip (`headingTag`, #3675 fix round 2). A
+ * distinction the route closes is absent from the tag's offers and named
+ * nowhere (#4979).
  *
  * The sheet's live editor (`magic/components/glimpse/GlimpseEditorDialog.tsx`)
  * still mounts the shared `GlimpseFlow` unchanged; this component is
@@ -171,7 +168,6 @@ export function GlimpseAxes({
                       }
                       headingTag={copy?.offers_optional_chip ?? 'optional'}
                       showOpener={false}
-                      closedFilter={(closed) => closed.opener_ids.some((id) => tagOfferIds.has(id))}
                       syncErrorHint={
                         copy?.offers_sync_error ?? 'That pick did not save. Try again.'
                       }

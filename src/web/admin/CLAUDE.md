@@ -735,7 +735,7 @@ in the builder.
 - **Files** - `web/admin/upbringing_builder/`: `views.py` (`upbringing_builder`,
   `upbringing_builder_preview`, `upbringing_builder_review`), `forms.py`
   (`UpbringingForm` - now also carrying `closed_distinctions`
-  (`FilteredSelectMultiple`) and `closed_reason`, #3675 - `QuestionFormSet`,
+  (`FilteredSelectMultiple`), #3675; its `closed_reason` line went with #4979 - `QuestionFormSet`,
   `AnswerFormSet` via `inlineformset_factory`, `answer_formset_for` for the
   per-question `a<slot.pk>`-prefixed formset, and `OfferForm`/`OfferFormSet`/
   `offer_formset_for` for the per-answer `o<choice.pk>`-prefixed offers
@@ -811,8 +811,7 @@ in the builder.
   OWN_FAMILY group question warns when a claimable family has no house org for it to
   resolve through, #3660 fix round 2 ruling L; a distinction both closed by
   `closed_distinctions` and still offered by one of this route's own active
-  answers - a contradiction; `closed_distinctions` non-empty with a blank
-  `closed_reason` - #3675), and backlog counts (questions, groups asked about,
+  answers - a contradiction - #3675; the blank-reason check went with #4979), and backlog counts (questions, groups asked about,
   people named, answers, distinctions used - a count of distinct active
   offers, not a name list, closed by this route, cheapest/dearest/
   largest-refund cost spread over required questions).
@@ -820,8 +819,9 @@ in the builder.
   `closed_distinctions` (`FilteredSelectMultiple`) names Distinctions this
   route never offers in any chapter (a question here, a Glimpse tag, a
   tradition step - `world.character_creation.offers._closed_ids` reads it for
-  every chapter alike) and `closed_reason` is the one line a player reads
-  where a closed one would have shown. Saved with `UpbringingForm` in the same
+  every chapter alike). A closed distinction is absent for the player and named nowhere:
+  the `closed_reason` line and the chapters' closed hint were removed by #4979 (owner
+  ruling 2026-11-03, ADR-4979). Saved with `UpbringingForm` in the same
   transaction as everything else; the answers table's own "Closes" column
   is a static link to this module (`#closes-module`), never a per-answer field.
 - **The route, not a pick (#4395):** the Upbringing pick retired from creation; the

@@ -222,13 +222,6 @@ def _closed_contradiction_checks(template: OriginTemplate) -> list[tuple[str, st
     ]
 
 
-def _closed_reason_check(template: OriginTemplate) -> list[tuple[str, str]]:
-    """A non-empty closed list with no line for the player to read is a warn (#3675)."""
-    if template.closed_distinctions.exists() and not template.closed_reason:
-        return [("warn", "This route closes distinctions but has no line for the player to read.")]
-    return []
-
-
 def _own_family_house_check(
     template: OriginTemplate, slots: list[OriginTemplateSlot], position: dict[int, int]
 ) -> list[tuple[str, str]]:
@@ -298,7 +291,6 @@ def _checks(
     checks.extend(_own_family_house_check(template, slots, position))
     checks.extend(_distinction_checks(template))
     checks.extend(_closed_contradiction_checks(template))
-    checks.extend(_closed_reason_check(template))
     return checks
 
 

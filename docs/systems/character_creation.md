@@ -45,7 +45,7 @@ from world.character_creation.types import (
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level` (ALL or STAFF_ONLY) |
 | `Beginnings` | Worldbuilding paths per area; since #4395 a frame, a station and a strike-list | `name`, `starting_area` (FK), `description`, `frame` (the prose every character who starts here shares, shown at the pick; carried from the route's `frame_narrative` by migration 0244), `station` (one line of standing), `strikes_childhood`/`strikes_youth`/`strikes_adulthood` (a struck stage is absent from the life grids, `struck_stages()`), `struck_stages_text` (#4830: what the life page shows in place of the stage rows when every stage is struck; the Sleeper's), `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank`, `beat_mode` |
-| `OriginTemplate` | The beginning's family route (#3617; since #4395 assigned with the beginning, `services.route_for_beginning`/`assign_route`, never a player pick: "Upbringing" is retired as a player term) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `max_claim_tier` (`TitleTier`, blank = any: the highest seat a founder raised here may define, #3983; editable in the Upbringing Builder's Family paths since #4202), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
+| `OriginTemplate` | The beginning's family route (#3617; since #4395 assigned with the beginning, `services.route_for_beginning`/`assign_route`, never a player pick: "Upbringing" is retired as a player term) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `parentage` (`Parentage`: known/unknown/adoptive, #4024; `clean()` ties it to the family flags: unknown offers only no family, adoptive needs claim or name and no no-family path; finalize writes no parents for unknown, and for adoptive turns the PC's BORN membership into ADOPTED and every parent edge into ADOPTIVE, so the #3261 name display wears the taken-in particle), `parentage_note` (prose the player reads about their parents; blank shows nothing), `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `max_claim_tier` (`TitleTier`, blank = any: the highest seat a founder raised here may define, #3983; editable in the Upbringing Builder's Family paths since #4202), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675; a closed one is absent for the player and named nowhere, #4979) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
 | `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) and, optionally, how a new family starts (`family_standing`, #4060) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
@@ -264,11 +264,7 @@ from world.character_creation.offers import (
                                #   first, then sort_order, Appearance by section (#3709)
     degree_marks,              # () -> dict[degree, [names]]: the enemy chapter's
                                #   bundled lines opened by each marking degree (#3709)
-    closed_for,                # (draft, chapter) -> list[ClosedDistinction]: the route's
-                               #   closed_distinctions, scoped to this chapter's own
-                               #   opener labels so a chapter mount prints the closed
-                               #   hint once, under the specific pick that would have
-                               #   opened it
+
     reconcile_offer_picks,     # (draft) -> list[str]: applies carried/bundled offers,
                                #   drops picks whose offer vanished, reprices every
                                #   survivor; returns the names changed; saves draft_data
@@ -398,9 +394,10 @@ finalize path.
   `offers` is `VisibleOfferSerializer` (`offer_id`, `distinction_id`, `name`,
   `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
   `is_locked`, `lock_reason`, `opener_key`, `first_look`, `held`, `effect_line`, #3709);
-  `closed` is `ClosedDistinctionSerializer` (`distinction_id`, `name`, `reason`,
-  `opener_labels` -- this chapter's own opener labels for the closed distinction, empty
-  when none of its openers are satisfied). An unknown `chapter` value 400s. The leaf
+  A distinction the route closes is absent from `offers` and named nowhere in the payload
+  (#4979, ADR-4979: the player chose the beginning, so there is nothing to swap and nothing
+  to explain; a card another pick blocks stays, disabled, with `lock_reason` "Unavailable
+  because mutually exclusive with <name>"). An unknown `chapter` value 400s. The leaf
   (`ChapterOffers`) groups by `opener_key` (one block per prompt, reason or section),
   shows the pinned lines at rest (or the first three when none is pinned), folds the
   rest under "See N more" once a block has five or more, prints a held line as held,
@@ -805,7 +802,7 @@ one click from the Authoring Workbench's Builders panel and from the row each ed
 Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
 it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines
 and one Beginning's `BeginningTradition` slate), the Upbringing Builder's per-answer offers and
-route-level `closed_distinctions`/`closed_reason` module, and a `GlimpseTag` change-form inline.
+route-level `closed_distinctions` module, and a `GlimpseTag` change-form inline.
 See `src/web/admin/CLAUDE.md`'s "Distinction Builder", "Tradition Slate", and "Glimpse Tag Admin
 Offers" sections.
 

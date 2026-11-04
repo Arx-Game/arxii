@@ -144,7 +144,7 @@ class TraditionStepJourneyTests(FinalizationTestMixin, TestCase):
             f"/api/character-creation/drafts/{draft.id}/offers/?chapter=tradition_step"
         )
         assert offers_resp.status_code == status.HTTP_200_OK
-        assert offers_resp.data["closed"] == []
+        assert "closed" not in offers_resp.data
         rows_by_offer = {row["offer_id"]: row for row in offers_resp.data["offers"]}
         assert set(rows_by_offer) == {
             self.line0_offer.id,
@@ -334,7 +334,6 @@ class GlimpseJourneyTests(FinalizationTestMixin, TestCase):
         )
         cls.route = OriginTemplateFactory(
             beginning=cls.beginnings,
-            closed_reason="Not for this line.",
             allows_name_family=False,
             allows_no_family=True,
         )
@@ -361,10 +360,9 @@ class GlimpseJourneyTests(FinalizationTestMixin, TestCase):
         offer_ids = {row["offer_id"] for row in offers_resp.data["offers"]}
         assert offer_ids == {self.mark_offer.id, self.loss_offer.id, self.public_offer.id}
         assert self.highborn_offer.id not in offer_ids
-        (closed,) = offers_resp.data["closed"]
-        assert closed["distinction_id"] == self.highborn.id
-        assert closed["reason"] == self.route.closed_reason
-        assert closed["opener_labels"] == [self.public.name]
+        # The route-closed card is absent and named nowhere in the payload (#4979).
+        assert "closed" not in offers_resp.data
+        assert "Highborn" not in str(offers_resp.data)
 
         sync_resp = self.client.put(
             f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",

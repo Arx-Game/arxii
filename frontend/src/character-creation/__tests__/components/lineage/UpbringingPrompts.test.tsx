@@ -5,9 +5,8 @@
  * own `AnswerOffer[]` (the retired singular `grants_distinction` is gone).
  * The CHOSEN answer alone, when it carries a CHOICE offer, mounts a
  * `ChapterOffers` block right after the answers list; its bundled offers (if
- * any) render inside that same block as locked stances. The route's whole
- * closed list prints once, as a `ClosedByRoute` note after the last
- * `scope: 'path'` question - never per-answer.
+ * any) render inside that same block as locked stances. A distinction the
+ * route closes is absent from the offers and named nowhere (#4979).
  */
 
 import { screen } from '@testing-library/react';
@@ -220,23 +219,6 @@ beforeEach(() => {
   updateDraftMutate.mockClear();
   offersResponse = {
     offers: [somehowAlwaysBroke, waryOfDebts, decoyMatchingLabel],
-    closed: [
-      {
-        distinction_id: 90,
-        name: 'Highborn',
-        reason: 'The yards do not make those.',
-        opener_labels: [],
-        opener_ids: [],
-      },
-      {
-        distinction_id: 91,
-        name: 'Generational Talent',
-        reason: '',
-        opener_labels: [],
-        opener_ids: [],
-      },
-      { distinction_id: 92, name: 'Spoiled', reason: '', opener_labels: [], opener_ids: [] },
-    ],
     terms: [],
   };
 });
@@ -325,25 +307,6 @@ describe('UpbringingPrompts', () => {
     expect(stance?.querySelector('.award')).toHaveTextContent('Awards 25');
     // Impoverished stays under the chosen answer's own `.conditional` block.
     expect(container.querySelector('.conditional')?.contains(impoverished)).toBe(true);
-  });
-
-  it('the closed note renders once at the end with the reason and not inside any answer block', () => {
-    const { container } = renderWithCharacterCreationProviders(
-      <UpbringingPrompts
-        draft={draftWithChoice()}
-        template={template}
-        path="claimed"
-        influence={0}
-        copy={undefined}
-        scope="path"
-      />
-    );
-    const note = screen.getByText(
-      'Closed by this route: Highborn, Generational Talent, Spoiled. The yards do not make those.'
-    );
-    expect(note).toBeInTheDocument();
-    const conditional = container.querySelector('.conditional');
-    expect(conditional?.contains(note)).toBe(false);
   });
 
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
