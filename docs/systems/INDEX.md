@@ -2244,6 +2244,11 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   actions. Region read: `FootprintRead.charters`, `RegionRead.landless_titles`
   (`LandlessTitleRead`). UI: title page **Present Holdings** / **Historical Charter** / chain
   rail / "On the map"; region map Select-mode pickers and the Historical Charter ghost.
+- **Border tools (#4983 slice 3 / #4988):** `set_footprint(take_from_siblings=)` (Adjust: a
+  sibling's or a sibling's county's pips move sideways, never a barony's seat), `move_seat`
+  (a barony's pip onto another pip its county holds), action `atlas_move_seat`, the carve
+  action's `take_from_siblings` kwarg; the region map's Carve mode gains the Adjust toggle and
+  the seat drag, both undoable. Details: [areas.md](areas.md).
 - **Almanach, every family (#4239, ADR-4239):** the Almanach as the one place every family
   lives (noble, crime, commoner), a browser of the graph with Create in place on every slot.
   `world.societies.houses.almanach`: `create_family` (a Family row alone for a background

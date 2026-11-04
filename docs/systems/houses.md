@@ -585,6 +585,10 @@ actions telnet would.
   subtree moves only with `force=True`, after which `_reswear_after_move` re-swears the moved
   chains by containment, pledged oaths excepted (#4983).
 
+The region map's border tools (#4988, `docs/systems/areas.md`: Adjust and the seat drag) are
+how a generated or hand-drawn border is corrected afterwards; `move_rung(force=True)` above is
+the staff re-parent of a held rung.
+
 ### Station, charters and claims (#4983, ADR-4983)
 
 - **`plant_rung(..., station=TitleStation.SEATED)`** — a rung planted titular or potential is
