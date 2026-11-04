@@ -129,30 +129,6 @@ class BeatPoolEntry:
     allowance_is_points: bool = False
 
 
-@dataclass(frozen=True)
-class ClosedDistinction:
-    """One distinction a route's ``closed_distinctions`` hides from every chapter (#3675).
-
-    Built by ``world.character_creation.offers.closed_for`` so a chapter can print
-    the route's closed line instead of silently omitting the option.
-    """
-
-    distinction_id: int
-    name: str
-    reason: str
-    #: Opener labels of the requesting chapter's own active offers for this
-    #: distinction whose opener the draft satisfies (#3675 fix round 2); lets a
-    #: chapter mount (the Glimpse's ``GlimpseAxes``) print the closed hint once,
-    #: under the specific pick that would have opened it, instead of under every
-    #: pick. Empty when no offer in this chapter opens it (every chapter's offers
-    #: carry an opener since #3709: a prompt, a reason or degree, a section).
-    opener_labels: list[str]
-    #: The same offers' ids, index-aligned with ``opener_labels`` (#3675 final fix
-    #: B4). A caller that needs to match a closed row to a specific offer (a
-    #: Glimpse tag's own offer ids) uses this, never a name/label match.
-    opener_ids: list[int]
-
-
 class StatAdjustment(TypedDict):
     """Result of a stat cap enforcement adjustment."""
 

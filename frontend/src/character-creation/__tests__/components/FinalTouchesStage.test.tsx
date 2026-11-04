@@ -41,7 +41,7 @@ const EMPTY_FACE_FOR_TEST = {
 };
 let offersResponse: OffersResponse;
 // The card-unlocked chapter's own response (#4846); empty unless a test fills it.
-let finalTouchesOffers: OffersResponse = { offers: [], closed: [], terms: [] };
+let finalTouchesOffers: OffersResponse = { offers: [], terms: [] };
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: mockCGExplanations }),
@@ -131,7 +131,7 @@ const republic: EnemyOffer = {
 
 describe("FinalTouchesStage (Actor's Sheet)", () => {
   beforeEach(() => {
-    offersResponse = { offers: [hedonistic, voracious], closed: [], terms: [] };
+    offersResponse = { offers: [hedonistic, voracious], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 
@@ -271,7 +271,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       requires_feature_opened: false,
       cg_max_rank: 0,
     };
-    offersResponse = { offers: [hedonistic, voracious, lightSleeper], closed: [], terms: [] };
+    offersResponse = { offers: [hedonistic, voracious, lightSleeper], terms: [] };
     let leave: (() => Promise<boolean>) | null = null;
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
@@ -317,28 +317,6 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
         },
       })
     );
-  });
-
-  it('prints the closed hint with the closedLead fallback', () => {
-    offersResponse = {
-      offers: [hedonistic],
-      closed: [
-        {
-          distinction_id: 40,
-          name: 'Indolent',
-          reason: 'Your route closed it.',
-          opener_labels: [],
-          opener_ids: [],
-        },
-      ],
-      terms: [],
-    };
-    renderWithCharacterCreationProviders(
-      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
-    );
-    expect(
-      screen.getByText('Closed by your route: Indolent: Your route closed it.')
-    ).toBeInTheDocument();
   });
 
   it('emits no class hook that cg.css has no rule for (#3667 shape)', async () => {
@@ -486,10 +464,10 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
   const PROMPT = 'The crime, if you care to name it.';
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [], terms: [] };
+    offersResponse = { offers: [], terms: [] };
   });
   afterEach(() => {
-    finalTouchesOffers = { offers: [], closed: [], terms: [] };
+    finalTouchesOffers = { offers: [], terms: [] };
     mutateAsync.mockClear();
   });
 
@@ -501,36 +479,9 @@ describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {
     expect(screen.queryByLabelText(PROMPT)).not.toBeInTheDocument();
   });
 
-  it('ignores a route-closed row no held card would have opened, and counts one it would', () => {
-    const closedRow = {
-      distinction_id: 51,
-      name: 'Marked Hands',
-      reason: 'Not on this road.',
-      opener_labels: [] as string[],
-      opener_ids: [] as number[],
-    };
-    finalTouchesOffers = { offers: [], closed: [closedRow], terms: [] };
-    const { unmount } = renderWithCharacterCreationProviders(
-      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
-    );
-    expect(screen.queryByText(HEADING)).not.toBeInTheDocument();
-    unmount();
-    finalTouchesOffers = {
-      offers: [],
-      closed: [{ ...closedRow, opener_labels: ['Jailbird'], opener_ids: [401] }],
-      terms: [],
-    };
-    renderWithCharacterCreationProviders(
-      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
-    );
-    expect(screen.getByText(HEADING)).toBeInTheDocument();
-    expect(screen.getByText(/Marked Hands/)).toBeInTheDocument();
-  });
-
   it('shows the lines a held card unlocks, with no crime prompt when no card asks', () => {
     finalTouchesOffers = {
       offers: [escapeArtist],
-      closed: [],
       terms: [],
     };
     renderWithCharacterCreationProviders(
@@ -633,7 +584,7 @@ describe('FinalTouchesStage (the grants the cards reconcile, #4852)', () => {
   const lodge = { id: 7, name: 'The Honor Lodge', is_covert: false };
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [], terms: [] };
+    offersResponse = { offers: [], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 
@@ -776,7 +727,7 @@ describe('FinalTouchesStage (the second face and the tie, #4856)', () => {
   };
 
   beforeEach(() => {
-    offersResponse = { offers: [], closed: [], terms: [] };
+    offersResponse = { offers: [], terms: [] };
   });
   afterEach(() => mutateAsync.mockClear());
 

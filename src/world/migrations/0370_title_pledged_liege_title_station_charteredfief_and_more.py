@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0368_lifebeat_offered_to"),
+        ("arxii", "0369_remove_origintemplate_closed_reason"),
     ]
 
     operations = [

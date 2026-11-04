@@ -1772,10 +1772,8 @@ export type VisibleOffer = components['schemas']['VisibleOffer'];
 /** One authored reason an enemy wants the character to fail (#3709). */
 export type EnemyReason = components['schemas']['EnemyReason'];
 
-/** A distinction the draft can no longer take, and why (#3675). */
-export type ClosedDistinction = components['schemas']['ClosedDistinction'];
-
-/** The `offers`/`closed` payload `GET .../offers/?chapter=` returns (#3675). */
+/** The `offers` payload `GET .../offers/?chapter=` returns (#3675); a card the route
+ * closes is absent from it and named nowhere (#4979). */
 export type OffersResponse = components['schemas']['OffersResponse'];
 
 /** A term on a card's mechanics line with its definition (#4874). */

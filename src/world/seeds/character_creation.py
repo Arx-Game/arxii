@@ -205,7 +205,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "lineage_offers_word": "offers",
     "lineage_offers_heading": "What it left you with",
     "lineage_offers_chip": "offered by your answer",
-    "lineage_closed_lead": "Closed by this route",
     "family_path_heading": "Your Family",
     "family_template_heading": "Your Household",
     "vacancy_heading": "Your Place in the Family",
@@ -393,7 +392,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # shows offers here, in place of the retired Distinctions stage.
     "appearance_offers_heading": "What people notice first",
     "appearance_offers_note": "offered here",
-    "appearance_closed_lead": "Closed by your route",
     # Distinctive physical features (#3739). The unlock's own words, the two
     # glosses that say what the point buys (a trait row also buys its palette and
     # its description; a marking's name and description were always free), and the
@@ -414,7 +412,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "finaltouches_rules_heading": "Rules",
     "finaltouches_devotions_heading": "Devotions",
     "finaltouches_fears_heading": "Fears",
-    "finaltouches_closed_lead": "Closed by your route",
     "finaltouches_never_do_prompt": "What would you never do?",
     "finaltouches_never_do_example": "Ex. Betray a secret. Break a vow. Make a pun.",
     "finaltouches_protect_prompt": "What would you protect at all costs?",

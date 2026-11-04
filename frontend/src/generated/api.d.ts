@@ -3485,7 +3485,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description The distinctions this draft can pick in one chapter, and what its route closed. */
+    /**
+     * @description The distinctions this draft can pick in one chapter. A distinction the route
+     *     closes is absent, never named (#4979).
+     */
     get: operations['character_creation_drafts_offers_retrieve'];
     put?: never;
     post?: never;
@@ -31305,14 +31308,6 @@ export interface components {
       light_level: number;
       paused: boolean;
     };
-    /** @description A ``world.character_creation.types.ClosedDistinction`` (#3675). */
-    ClosedDistinction: {
-      distinction_id: number;
-      name: string;
-      reason: string;
-      opener_labels: string[];
-      opener_ids: number[];
-    };
     /**
      * @description Staff CRUD for clue-reveal-kind offer details (#3428).
      *
@@ -40163,10 +40158,12 @@ export interface components {
       label: string;
       definition: string;
     };
-    /** @description The ``offers``/``closed`` payload the offers action returns (#3675). */
+    /**
+     * @description The ``offers`` payload the offers action returns (#3675). A distinction the route
+     *     closes is absent from ``offers`` and named nowhere else (#4979).
+     */
     OffersResponse: {
       offers: components['schemas']['VisibleOffer'][];
-      closed: components['schemas']['ClosedDistinction'][];
       terms: components['schemas']['OfferTerm'][];
     };
     /**

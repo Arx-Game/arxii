@@ -129,7 +129,7 @@ class OfferModelTests(TestCase):
         assert offer.name == "Impoverished"
 
     def test_route_closes_distinctions(self):
-        route = OriginTemplateFactory(closed_reason="The yards do not make those.")
+        route = OriginTemplateFactory()
         highborn = DistinctionFactory(name="Highborn")
         route.closed_distinctions.add(highborn)
         assert list(route.closed_distinctions.all()) == [highborn]

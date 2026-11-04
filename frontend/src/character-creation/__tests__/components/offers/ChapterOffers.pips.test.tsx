@@ -40,7 +40,6 @@ function career(offerId: number, distinctionId: number, name: string): VisibleOf
 
 const offersResponse: OffersResponse = {
   offers: [career(401, 41, 'Sailor'), career(402, 42, 'Soldier')],
-  closed: [],
 } as unknown as OffersResponse;
 
 vi.mock('../../../queries', async (importOriginal) => ({
@@ -76,7 +75,6 @@ function renderGrid(maxPicks: number) {
       chapter="backgrounds"
       layout="grid"
       firstLook={false}
-      showClosed={false}
       maxPicks={maxPicks}
       pointsPicks
     />

@@ -1,5 +1,16 @@
 # Character Creation & Identity
 
+## Built (2026-11-03, #4979: a closed card is absent; a blocked card says why)
+
+The test is whether the player could change what blocks a pick (owner ruling, ADR-4979).
+A card the route closes is now absent from every chapter with nothing in its place: the
+"Closed by your route" hint went from Appearance, Final Touches, the Glimpse axes and the
+route questions, with its three copy keys, the `closed` key on the offers payload,
+`closed_for`, and the route's `closed_reason` field (dropped from the Upbringing Builder;
+migration 0369, deliberate discard). A card a held pick excludes stays visible, disabled,
+and reads "Unavailable because mutually exclusive with <name>"; the sync refusal says the
+same. Every future lock reason starts "Unavailable because".
+
 ## Built (2026-11-03, #4978: a beat offered only to the Beginnings it lists)
 
 A life beat's list of Beginnings now has a meaning switch, `offered_to`: "Every

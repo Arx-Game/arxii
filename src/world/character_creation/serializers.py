@@ -1330,21 +1330,11 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     allowance_is_points = serializers.BooleanField()
 
 
-class ClosedDistinctionSerializer(serializers.Serializer):
-    """A ``world.character_creation.types.ClosedDistinction`` (#3675)."""
-
-    distinction_id = serializers.IntegerField()
-    name = serializers.CharField()
-    reason = serializers.CharField()
-    opener_labels = serializers.ListField(child=serializers.CharField())
-    opener_ids = serializers.ListField(child=serializers.IntegerField())
-
-
 class OffersResponseSerializer(serializers.Serializer):
-    """The ``offers``/``closed`` payload the offers action returns (#3675)."""
+    """The ``offers`` payload the offers action returns (#3675). A distinction the route
+    closes is absent from ``offers`` and named nowhere else (#4979)."""
 
     offers = VisibleOfferSerializer(many=True)
-    closed = ClosedDistinctionSerializer(many=True)
     #: The terms on the offers' mechanics lines with their definitions (#4872).
     terms = OfferTermSerializer(many=True)
 

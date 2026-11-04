@@ -320,7 +320,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             conflicting = Distinction.objects.filter(id__in=conflicts).first()
             raise ValidationError(
                 {
-                    "detail": f"Mutually exclusive with {conflicting.name}.",
+                    "detail": f"Unavailable because mutually exclusive with {conflicting.name}.",
                     "conflicting_id": conflicting.id,
                 }
             )

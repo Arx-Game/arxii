@@ -40,7 +40,6 @@ class UpbringingForm(forms.ModelForm):
             "max_claim_tier",
             "family_templates",
             "closed_distinctions",
-            "closed_reason",
             "is_active",
             "sort_order",
         ]
@@ -49,7 +48,6 @@ class UpbringingForm(forms.ModelForm):
             "parentage_note": "About their parents",
             "cg_point_cost": "Point cost",
             "closed_distinctions": "Distinctions",
-            "closed_reason": "The player reads",
             "max_claim_tier": "Founders may claim up to",
         }
         widgets = {

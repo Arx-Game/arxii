@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useDraftOffers, useUpdateDraft } from '../../queries';
+import { useUpdateDraft } from '../../queries';
 import {
   choiceCost,
   chosenGroupForSlot,
@@ -165,13 +165,12 @@ export function UpbringingPrompts({ draft, template, path, influence, copy, scop
           />
         );
       })}
-      {scope === 'path' && <ClosedByRoute draft={draft} copy={copy} />}
     </section>
   );
 }
 
 // =============================================================================
-// AnswerOfferSummary / ChosenAnswerOffers / ClosedByRoute - an Upbringing
+// AnswerOfferSummary / ChosenAnswerOffers - an Upbringing
 // answer's own distinction offers, offered by CG chapter rather than a
 // Distinctions stage (#3675 Task 14).
 // =============================================================================
@@ -235,7 +234,6 @@ function ChosenAnswerOffers({
       heading={copy?.lineage_offers_heading ?? 'What it left you with'}
       headingTag={copy?.lineage_offers_chip ?? 'offered by your answer'}
       showOpener={false}
-      showClosed={false}
       bundled={bundled}
       className="conditional"
       syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
@@ -244,29 +242,6 @@ function ChosenAnswerOffers({
       wordSpent={copy?.offers_word_spent}
       wordAwards={copy?.offers_word_awards}
     />
-  );
-}
-
-/** The route's own closed-distinctions note, printed once at the end of the
- * path-scoped prompts (not per question, not per answer's offered block). */
-function ClosedByRoute({
-  draft,
-  copy,
-}: {
-  draft: CharacterDraft;
-  copy: CGExplanations | undefined;
-}) {
-  const { data } = useDraftOffers(draft.id, 'lineage');
-  const closed = data?.closed ?? [];
-  if (closed.length === 0) return null;
-  const names = closed.map((c) => c.name).join(', ');
-  const reason = closed.find((c) => c.reason)?.reason ?? '';
-  return (
-    <div className="field">
-      <span className="hint">
-        {`${copy?.lineage_closed_lead ?? 'Closed by this route'}: ${names}. ${reason}`}
-      </span>
-    </div>
   );
 }
 

@@ -420,13 +420,9 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // a question; `ChapterOffers` itself renders nothing for an empty chapter.
   const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
   const prompts = draft.final_touches_prompts ?? [];
-  // `closed` is the route's whole closed list; only a row this chapter's own satisfied
-  // opener would have shown (`opener_labels` non-empty) counts, since that is the one
-  // `ChapterOffers` prints a closed hint for.
-  const showCards =
-    prompts.length > 0 ||
-    (cardOffers?.offers.length ?? 0) > 0 ||
-    (cardOffers?.closed ?? []).some((row) => row.opener_labels.length > 0);
+  // A card the route closes is absent from the offers and named nowhere (#4979), so only
+  // a live line or a live prompt opens the chapter.
+  const showCards = prompts.length > 0 || (cardOffers?.offers.length ?? 0) > 0;
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
@@ -674,7 +670,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         {announce}
       </span>
 
-      {QUESTIONS.map((q, index) => (
+      {QUESTIONS.map((q) => (
         <div key={q.key}>
           <Field
             id={`actor-${q.key}`}
@@ -689,7 +685,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             />
           </Field>
           {/* The distinctions that answer this question (#3709): one block per prompt,
-              its first look at rest, the closed hint printed once under the last. */}
+              its first look at rest. */}
           <ChapterOffers
             draft={draft}
             chapter="actors_sheet"
@@ -697,8 +693,6 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             heading={copy?.[`${q.block}_heading`] ?? q.blockHeading}
             headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
             showOpener={false}
-            showClosed={index === QUESTIONS.length - 1}
-            closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
             syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
             wordBundled={copy?.offers_word_bundled}
             wordPerRank={copy?.offers_word_per_rank}
@@ -718,9 +712,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           <ChapterOffers
             draft={draft}
             chapter="final_touches"
-            closedFilter={(row) => row.opener_labels.length > 0}
             headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
-            closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
             syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
             wordBundled={copy?.offers_word_bundled}
             wordPerRank={copy?.offers_word_per_rank}
@@ -1078,7 +1070,6 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
               heading={copy?.finaltouches_enemy_reason_offers_heading ?? 'What it left you with'}
               headingTag={copy?.finaltouches_enemy_reason_offers_chip ?? 'offered by your reason'}
               showOpener={false}
-              showClosed={false}
               syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
               wordBundled={copy?.offers_word_bundled}
               wordPerRank={copy?.offers_word_per_rank}

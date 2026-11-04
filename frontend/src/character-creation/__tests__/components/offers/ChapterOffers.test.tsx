@@ -97,7 +97,7 @@ const highborn: VisibleOffer = {
   cost_per_rank: 20,
   max_rank: 1,
   is_locked: true,
-  lock_reason: 'The Cradle raised this character; the route closed it.',
+  lock_reason: 'Unavailable because mutually exclusive with Generational Talent',
   opener_key: '',
   first_look: false,
   held: false,
@@ -133,15 +133,6 @@ beforeEach(() => {
   syncState = { isPending: false, isError: false };
   offersResponse = {
     offers: [silverTongue, magicalScar, highborn],
-    closed: [
-      {
-        distinction_id: 9,
-        name: 'Generational Talent',
-        reason: 'The route closed it.',
-        opener_labels: [],
-        opener_ids: [],
-      },
-    ],
     terms: [],
   };
   draftDistinctions = [otherChapterEntry];
@@ -274,7 +265,7 @@ describe('ChapterOffers', () => {
     expect(row).toHaveAttribute('aria-disabled', 'true');
     expect(row).toBeDisabled();
     expect(
-      screen.getByText('The Cradle raised this character; the route closed it.')
+      screen.getByText('Unavailable because mutually exclusive with Generational Talent')
     ).toBeInTheDocument();
     await user.click(row);
     expect(mutate).not.toHaveBeenCalled();
@@ -305,54 +296,6 @@ describe('ChapterOffers', () => {
     for (const button of within(group).getAllByRole('button')) {
       expect(button).not.toHaveAttribute('aria-pressed');
     }
-  });
-
-  it('renders the closed hint with the name and its own reason', () => {
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
-    );
-    expect(
-      screen.getByText('Closed on this road: Generational Talent: The route closed it.')
-    ).toBeInTheDocument();
-  });
-
-  it('lists every closed item with its own reason, joined, when more than one is closed', () => {
-    offersResponse = {
-      ...offersResponse,
-      closed: [
-        {
-          distinction_id: 9,
-          name: 'Generational Talent',
-          reason: 'The route closed it.',
-          opener_labels: [],
-          opener_ids: [],
-        },
-        {
-          distinction_id: 8,
-          name: 'Highborn',
-          reason: 'The Cradle raised this character.',
-          opener_labels: ['Public'],
-          opener_ids: [103],
-        },
-      ],
-    };
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
-    );
-    expect(
-      screen.getByText(
-        'Closed on this road: Generational Talent: The route closed it.; Highborn: The Cradle raised this character.'
-      )
-    ).toBeInTheDocument();
-  });
-
-  it('the closedLead prop overrides the default lead-in phrase', () => {
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" closedLead="No longer offered" />
-    );
-    expect(
-      screen.getByText('No longer offered: Generational Talent: The route closed it.')
-    ).toBeInTheDocument();
   });
 
   it("a selected ranked offer's price line adds a second 'N spent' total", () => {
@@ -470,63 +413,6 @@ describe('ChapterOffers', () => {
     expect(screen.queryByText('optional')).not.toBeInTheDocument();
   });
 
-  it('closedFilter scopes the closed hint to matching items only', () => {
-    offersResponse = {
-      ...offersResponse,
-      closed: [
-        {
-          distinction_id: 9,
-          name: 'Generational Talent',
-          reason: 'The route closed it.',
-          opener_labels: ['Mark'],
-          opener_ids: [101],
-        },
-        {
-          distinction_id: 8,
-          name: 'Highborn',
-          reason: 'The Cradle raised this character.',
-          opener_labels: ['Public'],
-          opener_ids: [103],
-        },
-      ],
-    };
-    renderWithCharacterCreationProviders(
-      <ChapterOffers
-        draft={createMockDraft()}
-        chapter="glimpse"
-        closedFilter={(c) => c.opener_labels.includes('Public')}
-      />
-    );
-    expect(
-      screen.getByText('Closed on this road: Highborn: The Cradle raised this character.')
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Generational Talent/)).not.toBeInTheDocument();
-  });
-
-  it('closedFilter defaults to showing every closed item', () => {
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
-    );
-    expect(
-      screen.getByText('Closed on this road: Generational Talent: The route closed it.')
-    ).toBeInTheDocument();
-  });
-
-  it('showClosed={false} hides the closed hint even when the chapter has closed items', () => {
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" showClosed={false} />
-    );
-    expect(screen.getByText('Silver Tongue')).toBeInTheDocument();
-    expect(screen.queryByText(/Closed on this road/)).not.toBeInTheDocument();
-  });
-
-  it('showClosed defaults to true (the closed hint prints without the prop)', () => {
-    renderWithCharacterCreationProviders(
-      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
-    );
-    expect(screen.getByText(/Closed on this road/)).toBeInTheDocument();
-  });
-
   it('a bundled row renders locked, ahead of the offered rows, with its refund', () => {
     renderWithCharacterCreationProviders(
       <ChapterOffers
@@ -569,8 +455,8 @@ describe('ChapterOffers', () => {
     expect(stance?.querySelector('.g')).toBeNull();
   });
 
-  it('bundled rows alone (no offers, no closed) still render the block', () => {
-    offersResponse = { offers: [], closed: [], terms: [] };
+  it('bundled rows alone (no offers) still render the block', () => {
+    offersResponse = { offers: [], terms: [] };
     renderWithCharacterCreationProviders(
       <ChapterOffers
         draft={createMockDraft()}
@@ -609,7 +495,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     }));
 
   it('a block of five or more shows the pinned lines at rest and folds the rest', () => {
-    offersResponse = { offers: many(6, [203, 205]), closed: [], terms: [] };
+    offersResponse = { offers: many(6, [203, 205]), terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -624,7 +510,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('with nothing pinned the first three stand in for the first look', () => {
-    offersResponse = { offers: many(7), closed: [], terms: [] };
+    offersResponse = { offers: many(7), terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordSeeMore="{count} further" />
     );
@@ -635,7 +521,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('a block under five never folds', () => {
-    offersResponse = { offers: many(4), closed: [], terms: [] };
+    offersResponse = { offers: many(4), terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -644,7 +530,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('firstLook={false} shows everything at rest', () => {
-    offersResponse = { offers: many(6, [200]), closed: [], terms: [] };
+    offersResponse = { offers: many(6, [200]), terms: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" firstLook={false} />
     );
@@ -656,7 +542,6 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     const user = userEvent.setup();
     offersResponse = {
       offers: [{ ...magicalScar, held: true }, silverTongue],
-      closed: [],
       terms: [],
     };
     renderWithCharacterCreationProviders(
@@ -674,7 +559,6 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   it('prints the effect line in its own fx span under the player line', () => {
     offersResponse = {
       offers: [{ ...silverTongue, effect_line: '+Deception; -Willpower' }],
-      closed: [],
       terms: [],
     };
     const { container } = renderWithCharacterCreationProviders(
