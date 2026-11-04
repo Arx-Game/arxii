@@ -187,7 +187,7 @@ push_resolved() {
     echo
     echo "Pull before your next push: \`git pull --ff-only\`. If you ran \`migrate\` on this branch, first run \`arx manage migrate arxii $(jq -r .base_tip "$mine")\`, because the old migration names will be gone after the pull."
     echo
-    echo "Review evidence keeps its original reviewed revision: the evidence check independently reproduces this migration update before carrying it forward. To recover an older failed check, run the Recover migration evidence action on main; re-running the old CI run uses its old checker."
+    echo "Review evidence keeps its original reviewed revision: the evidence check independently reproduces this migration update before carrying it forward."
     if [ -n "$rearm" ]; then echo; echo "$rearm"; fi
   } > "$SCRATCH/body.md"
   gh pr comment "$pr" --repo "$REPO" --body-file "$SCRATCH/body.md" || return 1

@@ -65,26 +65,6 @@ runs the PR code and records the tree. `push` holds the PAT, runs no PR code, an
 pushes only an identical re-derived tree. To
 re-run it for one PR: `gh workflow run migration-conflict-rebase.yml -f pr=<N>`.
 
-**Recover already-updated PRs (#4990).** Re-running the old Spec evidence run
-uses the old checker. After this fix reaches main, run:
-
-```bash
-gh workflow run recover-migration-evidence.yml           # all open bot-headed PRs
-gh workflow run recover-migration-evidence.yml -f pr=4985 # one PR
-```
-
-The action uses trusted main tooling, replays the transformation from both parents
-with hooks disabled and no PR Python execution, and requires the whole tree to
-match. Repeated verified updates are peeled back to the original head's evidence
-revision. The existing report, verdict and ledger checks still apply. Results are
-published as `review-evidence` on the unchanged live head; no report or branch is
-edited. Non-bot heads are skipped; a failed proof or report needs individual
-inspection. The same dry-run is available locally:
-
-```bash
-uv run python tools/recover_migration_evidence.py --repository Arx-Game/arxii
-```
-
 **The manual fix is `rebase_migration`, not hand-renumbering.**
 django-linear-migrations (the thing that makes `max_migration.txt` conflict
 loudly on purpose) ships the automation:
