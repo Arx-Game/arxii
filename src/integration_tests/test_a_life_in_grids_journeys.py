@@ -8,6 +8,7 @@ from __future__ import annotations
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.character_creation.constants import (
+    BeatAudience,
     BeatSelection,
     LifeStage,
     OfferChapter,
@@ -16,6 +17,7 @@ from world.character_creation.constants import (
 from world.character_creation.factories import (
     BeginningsFactory,
     DistinctionOfferFactory,
+    LifeBeatExclusionFactory,
     LifeBeatFactory,
     OriginTemplateFactory,
 )
@@ -116,6 +118,25 @@ class ALifeInGrids(FinalizationTestMixin, JourneyCase):
         self.assertEqual([b["name"] for b in self._beats(draft)], ["The Glimpse", "What you carry"])
         errors = body["stage_errors"]
         self.assertIn(STRANGERS_GAP, errors[str(draft.Stage.LINEAGE)])
+
+    def test_a_beat_offered_only_to_the_beginnings_it_lists_is_absent_elsewhere(self) -> None:
+        """#4978: a one-beginning beat lists that Beginning under "Only these"; the beats
+        endpoint hands it to that Beginning's draft and to no other, with nothing in its
+        place."""
+        tree = LifeBeatFactory(
+            name="How the Tree's children are raised",
+            sort_order=9,
+            offered_to=BeatAudience.ONLY_LISTED,
+        )
+        misbegotten = BeginningsFactory(name="Misbegotten", starting_area=self.area)
+        LifeBeatExclusionFactory(beat=tree, beginning=misbegotten)
+        draft = self._create_base_draft()
+        self.assertNotIn(tree.name, [b["name"] for b in self._beats(draft)])
+        response = self.client.patch(
+            self._draft_url(draft), {"selected_beginnings_id": misbegotten.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn(tree.name, [b["name"] for b in self._beats(draft)])
 
     def test_the_years_lived_set_the_known_for_allowance(self) -> None:
         draft = self._create_base_draft()

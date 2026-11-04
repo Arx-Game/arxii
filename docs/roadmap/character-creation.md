@@ -7,9 +7,20 @@ A card the route closes is now absent from every chapter with nothing in its pla
 "Closed by your route" hint went from Appearance, Final Touches, the Glimpse axes and the
 route questions, with its three copy keys, the `closed` key on the offers payload,
 `closed_for`, and the route's `closed_reason` field (dropped from the Upbringing Builder;
-migration 0368, deliberate discard). A card a held pick excludes stays visible, disabled,
+migration 0369, deliberate discard). A card a held pick excludes stays visible, disabled,
 and reads "Unavailable because mutually exclusive with <name>"; the sync refusal says the
 same. Every future lock reason starts "Unavailable because".
+
+## Built (2026-11-03, #4978: a beat offered only to the Beginnings it lists)
+
+A life beat's list of Beginnings now has a meaning switch, `offered_to`: "Every
+beginning except these" (what the list always meant) or "Only these". The Misbegotten's
+"How the Tree's children are raised" carries one row instead of one per other
+beginning, and a Beginning added later never meets an only-these beat until it is
+listed, which is the failure mode the maintainer wanted after authoring fourteen
+exclusion rows by hand. `beat_pool` reads the switch; the Life beat admin shows it under
+"Who meets it" above the list, and the Beginning admin's inline shows each listing beat's
+setting read-only. Route closed lists are unchanged.
 
 ## Built (2026-10-18, #4395: a beginning is a frame and a strike-list; the life is grids by stage)
 
