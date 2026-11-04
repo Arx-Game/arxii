@@ -328,13 +328,20 @@ def set_footprint(
     area: Area,
     add: Iterable[Pip] = (),
     remove: Iterable[Pip] = (),
+    take_from_siblings: bool = False,
 ) -> FootprintChange:
     """Grow or shrink an area's footprint. A pip row names its lowest holder, so
     carving a barony inside a county moves the county's row to the barony, and
     shrinking the barony hands the row back to the county. A drag takes what it may
     and skips the rest (#4317): on add, a pip another domain holds (one that is not an
     ancestor of ``area``); on remove, a pip a descendant stands on. Water is taken
-    like land: a realm's footprint includes its waters (ApostateCD, 2026-10-12)."""
+    like land: a realm's footprint includes its waters (ApostateCD, 2026-10-12).
+
+    ``take_from_siblings`` is the map's Adjust (#4988): a pip held by a sibling rung
+    under the same ladder parent, or by one of that sibling's counties, moves sideways
+    into ``area`` instead of being skipped, so a border is corrected in one stroke. A
+    barony's single pip is its seat and is never taken this way; the seat drag
+    (``move_seat``) is how a barony moves."""
     to_add = _unique_pips(add, MAX_FOOTPRINT_PIPS_PER_CALL)
     to_remove = _unique_pips(remove, MAX_FOOTPRINT_PIPS_PER_CALL)
     if not to_add and not to_remove:
@@ -344,7 +351,11 @@ def set_footprint(
     skipped: dict[str, int] = {}
     changed: list[PipChange] = []
     with transaction.atomic():
-        added = _claim(area, to_add, skipped, changed) if to_add else 0
+        added = (
+            _claim(area, to_add, skipped, changed, take_from_siblings=take_from_siblings)
+            if to_add
+            else 0
+        )
         removed = _release(area, to_remove, skipped, changed) if to_remove else 0
     return FootprintChange(
         added=added,
@@ -463,18 +474,27 @@ def _skip(skipped: dict[str, int], holder: Area, fallback: str) -> None:
     skipped[name] = skipped.get(name, 0) + 1
 
 
-def _claim(area: Area, pips: set[Pip], skipped: dict[str, int], changed: list[PipChange]) -> int:
+def _claim(
+    area: Area,
+    pips: set[Pip],
+    skipped: dict[str, int],
+    changed: list[PipChange],
+    *,
+    take_from_siblings: bool = False,
+) -> int:
     """Give ``pips`` to ``area``: open ground is taken; an ancestor's pip moves
     down to this area; a pip held by this area or a descendant is already inside;
-    any other holder's pip is skipped and counted against that holder's name.
+    with ``take_from_siblings`` a sibling's (or a sibling's county's) pip moves
+    sideways; any other holder's pip is skipped and counted against that holder's name.
     Every row taken or moved is appended to ``changed`` with its prior holder."""
     held = _rows_at(pips)
+    parent = _ladder_parent(area) if take_from_siblings else None
     moving: list[AreaFootprintPip] = []
     for row in held.values():
         holder = row.area
         if holder.pk == area.pk or _is_ancestor(area, holder):
             continue  # already inside this footprint
-        if _is_ancestor(holder, area):
+        if _is_ancestor(holder, area) or _is_sibling_side(holder, parent):
             changed.append((row.x, row.y, holder.pk, area.pk))
             row.area = area
             moving.append(row)
@@ -492,6 +512,46 @@ def _claim(area: Area, pips: set[Pip], skipped: dict[str, int], changed: list[Pi
     changed.extend((row.x, row.y, None, area.pk) for row in fresh)
     AreaFootprintPip.objects.bulk_create(fresh, batch_size=5000)
     return len(fresh) + len(moving)
+
+
+def _is_sibling_side(holder: Area, parent: Area | None) -> bool:
+    """Whether ``holder`` lies beneath ``parent`` (a sibling of the carved area or one
+    of a sibling's counties) and is not a barony, whose one pip is its seat."""
+    if parent is None or holder.level <= AreaLevel.BARONY:
+        return False
+    return _is_ancestor(parent, holder)
+
+
+def move_seat(*, area: Area, pip: Pip) -> FootprintChange:
+    """Move a barony's seat, its single pip, to ``pip`` inside its county (#4988): the
+    seat drag. Refuses an area that is not a barony, a pip its ladder parent does not
+    hold itself (another barony's seat, open ground, a cousin's land) and a drop on its
+    own pip. One transaction: the barony's rows go up to the parent and ``pip`` comes
+    down from it; ``changed`` holds both moves for the staff undo."""
+    if area.level != AreaLevel.BARONY:
+        raise WorldMapServiceError(_SEAT_IS_A_BARONY)
+    parent = _ladder_parent(area)
+    if parent is None:
+        raise WorldMapServiceError(_SEAT_NEEDS_A_COUNTY)
+    x, y = int(pip[0]), int(pip[1])
+    own = set(AreaFootprintPip.objects.filter(area=area).values_list("x", "y"))
+    if (x, y) in own:
+        raise WorldMapServiceError(_SEAT_ALREADY_THERE)
+    row = AreaFootprintPip.objects.filter(x=x, y=y).select_related("area").first()
+    if row is None or row.area_id != parent.pk:
+        raise WorldMapServiceError(_SEAT_OUTSIDE_ITS_COUNTY)
+    skipped: dict[str, int] = {}
+    changed: list[PipChange] = []
+    with transaction.atomic():
+        removed = _release(area, own, skipped, changed) if own else 0
+        added = _claim(area, {(x, y)}, skipped, changed)
+    return FootprintChange(added=added, removed=removed, changed=tuple(changed))
+
+
+_SEAT_IS_A_BARONY = "Only a barony's seat can be moved."
+_SEAT_NEEDS_A_COUNTY = "That barony sits under nothing that holds land."
+_SEAT_ALREADY_THERE = "The seat is already on that pip."
+_SEAT_OUTSIDE_ITS_COUNTY = "A seat moves only onto a pip its own county holds."
 
 
 def _release(area: Area, pips: set[Pip], skipped: dict[str, int], changed: list[PipChange]) -> int:
