@@ -10,6 +10,7 @@ from actions.definitions.atlas_map import (
     AtlasCarveFootprintAction,
     AtlasClearFootprintAction,
     AtlasCreateRegionMapAction,
+    AtlasMoveSeatAction,
     AtlasPaintTerrainAction,
     AtlasRestoreFootprintAction,
 )
@@ -19,7 +20,11 @@ from world.areas.factories import AreaFactory
 from world.areas.tests.test_worldmap import tiny_map
 from world.areas.worldmap.constants import PipSource, Terrain
 from world.areas.worldmap.models import AreaFootprintPip, RegionMap, TerrainPip
-from world.areas.worldmap.services import create_region_map, import_region_map_file
+from world.areas.worldmap.services import (
+    create_region_map,
+    import_region_map_file,
+    set_footprint,
+)
 from world.character_creation.factories import RealmFactory
 from world.societies.houses.almanach import plant_rung
 from world.societies.houses.constants import TitleTier
@@ -187,3 +192,51 @@ class AtlasMapActionTests(TestCase):
         assert area.name == "Salvation"
         missing = AtlasCarveFootprintAction().run(self.staff, title_id=999999, add=[[1, 1]])
         assert not missing.success
+
+
+class BorderToolActionTests(TestCase):
+    """Adjust through the carve action and the seat drag's action (#4988)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = _actor("BorderStaff", staff=True)
+        cls.player = _actor("BorderPlayer", staff=False)
+        cls.region = create_region_map(name="Borderland", anchor_x=0, anchor_y=0, width_cells=2)
+        import_region_map_file(region=cls.region, file_name="t.map", data=tiny_map().encode())
+        cls.duchy = AreaFactory(name="Border Duchy", level=AreaLevel.DUCHY)
+        cls.a = AreaFactory(name="Aldmere", level=AreaLevel.COUNTY, parent=cls.duchy)
+        cls.b = AreaFactory(name="Brackmere", level=AreaLevel.COUNTY, parent=cls.duchy)
+        cls.seat = AreaFactory(name="Brack Seat", level=AreaLevel.BARONY, parent=cls.b)
+        set_footprint(area=cls.b, add=[(2, 2), (2, 3), (2, 4)])
+        set_footprint(area=cls.seat, add=[(2, 4)])
+
+    def test_adjust_is_a_kwarg_on_the_carve(self) -> None:
+        plain = AtlasCarveFootprintAction().run(self.staff, area_id=self.a.pk, add=[[2, 2]])
+        assert plain.success
+        assert plain.data["added"] == 0
+        assert plain.data["skipped"] == 1
+        adjusted = AtlasCarveFootprintAction().run(
+            self.staff, area_id=self.a.pk, add=[[2, 2], [2, 4]], take_from_siblings=True
+        )
+        assert adjusted.success, adjusted.message
+        assert adjusted.data["added"] == 1
+        assert adjusted.data["skipped"] == 1  # the seat barony's pip stays
+        assert adjusted.data["changed"] == [[2, 2, self.b.pk, self.a.pk]]
+
+    def test_move_seat_action(self) -> None:
+        moved = AtlasMoveSeatAction().run(self.staff, area_id=self.seat.pk, pip=[2, 3])
+        assert moved.success, moved.message
+        assert moved.data["area_id"] == self.seat.pk
+        assert sorted(moved.data["changed"]) == [
+            [2, 3, self.b.pk, self.seat.pk],
+            [2, 4, self.seat.pk, self.b.pk],
+        ]
+        assert AreaFootprintPip.objects.get(area=self.seat).x == 2
+        assert AreaFootprintPip.objects.get(area=self.seat).y == 3
+        refused = AtlasMoveSeatAction().run(self.staff, area_id=self.seat.pk, pip=[9, 9])
+        assert not refused.success
+        assert "county" in refused.message
+        bad_shape = AtlasMoveSeatAction().run(self.staff, area_id=self.seat.pk, pip="2,3")
+        assert not bad_shape.success
+        player = AtlasMoveSeatAction().run(self.player, area_id=self.seat.pk, pip=[2, 2])
+        assert not player.success

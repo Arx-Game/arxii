@@ -286,6 +286,19 @@ never a fill (`drawRegionMap`'s `ghostPips`; the viewport exposes `data-ghost-pi
 Almanach title page's "On the map" door writes the Atlas's last-location key and a one-shot
 `sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
 
+**Border tools (#4988, slice 3 of #4983).** `set_footprint(..., take_from_siblings=True)` is
+the map's **Adjust**: a pip held by a sibling rung under the same ladder parent, or by one of
+that sibling's counties, moves sideways into the carved area instead of being skipped, so a
+border is corrected in one stroke along a river; a barony's single pip is its seat and is
+never taken this way; the moves ride in `changed` like any carve, so undo puts them back on
+the sibling. `move_seat(*, area, pip)` moves a barony's seat onto another pip its own county
+holds (refused: not a barony, a pip another barony holds, open ground, a cousin's land, its
+own pip), in one transaction whose `changed` holds both moves. Actions: `atlas_carve_footprint`
+reads `take_from_siblings`; `atlas_move_seat` (`area_id` or `title_id`, `pip` `[x, y]`). In
+Carve mode the page has an **Adjust** toggle (`aria-pressed`, sends the kwarg while on) and a
+press on a barony's seat dot starts a seat drag whose drop dispatches `atlas_move_seat`; both
+land in the undo history.
+
 The layout tool (#4986, `world/societies/houses/layout.py`, see `docs/systems/houses.md`
 "Laying out a realm") writes land only through `set_footprint`: it partitions a kingdom's
 `footprint_of` into contiguous duchies, counties and single-pip seat baronies and carves each

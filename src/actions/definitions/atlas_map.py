@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.kwarg_parsing import truthy_kwarg
 from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
 from actions.types import ActionResult, TargetType
 
@@ -182,7 +183,12 @@ class AtlasCarveFootprintAction(_AtlasMapAction):
         if add is None or remove is None:
             return ActionResult(success=False, message="Pips are lists of [x, y] pairs.")
         try:
-            change = set_footprint(area=area, add=add, remove=remove)
+            change = set_footprint(
+                area=area,
+                add=add,
+                remove=remove,
+                take_from_siblings=truthy_kwarg(kwargs.get("take_from_siblings")),
+            )
         except WorldMapServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         name = area.name or "The domain"
@@ -200,6 +206,48 @@ class AtlasCarveFootprintAction(_AtlasMapAction):
                 "skipped": change.skipped,
                 "changed": [list(pip) for pip in change.changed],
             },
+        )
+
+
+@dataclass
+class AtlasMoveSeatAction(_AtlasMapAction):
+    """Move a barony's seat, its single pip, onto another pip its county holds (#4988):
+    the map's seat drag.
+
+    Kwargs: ``area_id`` or ``title_id`` (the barony), ``pip`` as ``[x, y]``. The result's
+    ``changed`` holds both moves, the shape ``atlas_restore_footprint`` takes back.
+    """
+
+    key: str = "atlas_move_seat"
+    name: str = "Move Seat"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.worldmap.services import (  # noqa: PLC0415
+            WorldMapServiceError,
+            move_seat,
+        )
+
+        area = _carve_target(kwargs)
+        if area is None:
+            return ActionResult(success=False, message=_NO_SUCH_AREA)
+        pips = _pip_list([kwargs.get("pip")] if kwargs.get("pip") is not None else None)
+        if not pips:
+            return ActionResult(success=False, message="A seat moves to one [x, y] pip.")
+        try:
+            change = move_seat(area=area, pip=pips[0])
+        except WorldMapServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        x, y = pips[0]
+        return ActionResult(
+            success=True,
+            message=f"{area.name or 'The seat'} moved to ({x}, {y}).",
+            data={"area_id": area.pk, "changed": [list(pip) for pip in change.changed]},
         )
 
 

@@ -367,6 +367,59 @@ class FootprintServiceTests(TestCase):
         assert landless[old_crown.pk]["station"] == TitleStation.TITULAR
         assert landless[old_crown.pk]["fief_ids"] == [duchy.pk]
 
+    def test_adjust_takes_from_a_sibling_and_its_counties_but_not_a_barony_or_a_cousin(
+        self,
+    ) -> None:
+        """#4988: Adjust moves a sibling's pips sideways in one stroke; a barony's seat and
+        a cousin's land stay skipped and named."""
+        duchy = AreaFactory(name="Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
+        a = AreaFactory(name="Aldmere", level=AreaLevel.COUNTY, parent=duchy)
+        b = AreaFactory(name="Brackmere", level=AreaLevel.COUNTY, parent=duchy)
+        seat = AreaFactory(name="Seat", level=AreaLevel.BARONY, parent=b)
+        other_duchy = AreaFactory(name="Other Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
+        cousin = AreaFactory(name="Cousin", level=AreaLevel.COUNTY, parent=other_duchy)
+        set_footprint(area=b, add=[(2, 2), (2, 3), (3, 3)])
+        set_footprint(area=seat, add=[(3, 3)])
+        set_footprint(area=cousin, add=[(8, 8)])
+        plain = set_footprint(area=a, add=[(2, 2), (2, 3), (3, 3), (8, 8)])
+        assert plain.added == 0
+        assert plain.skipped == 4
+        adjusted = set_footprint(
+            area=a, add=[(2, 2), (2, 3), (3, 3), (8, 8)], take_from_siblings=True
+        )
+        assert adjusted.added == 2
+        assert adjusted.skipped == 2
+        assert adjusted.skipped_holders == ("Cousin", "Seat")
+        assert sorted(adjusted.changed) == [(2, 2, b.pk, a.pk), (2, 3, b.pk, a.pk)]
+        assert footprint_of(a) == {(2, 2), (2, 3)}
+        assert footprint_of(b) == {(3, 3)}  # the seat barony's pip, still inside Brackmere
+
+    def test_move_seat_moves_the_baronys_pip_inside_its_county_and_refuses_outside(
+        self,
+    ) -> None:
+        """#4988: a seat drag moves the barony's single pip to a pip its county holds."""
+        from world.areas.worldmap.services import move_seat
+
+        duchy = AreaFactory(name="Duchy", level=AreaLevel.DUCHY, parent=self.kingdom)
+        county = AreaFactory(name="Aldmere", level=AreaLevel.COUNTY, parent=duchy)
+        seat = AreaFactory(name="Seat", level=AreaLevel.BARONY, parent=county)
+        other = AreaFactory(name="Other Seat", level=AreaLevel.BARONY, parent=county)
+        cousin = AreaFactory(name="Cousin", level=AreaLevel.COUNTY, parent=duchy)
+        set_footprint(area=county, add=[(2, 2), (2, 3), (2, 4), (3, 3)])
+        set_footprint(area=seat, add=[(2, 2)])
+        set_footprint(area=other, add=[(3, 3)])
+        set_footprint(area=cousin, add=[(8, 8)])
+        change = move_seat(area=seat, pip=(2, 4))
+        assert footprint_of(seat) == {(2, 4)}
+        assert sorted(change.changed) == [(2, 2, seat.pk, county.pk), (2, 4, county.pk, seat.pk)]
+        assert footprint_of(county) == {(2, 2), (2, 3), (2, 4), (3, 3)}
+        for bad in ((3, 3), (8, 8), (9, 9), (2, 4)):
+            with self.assertRaises(WorldMapServiceError, msg=str(bad)):
+                move_seat(area=seat, pip=bad)
+        with self.assertRaises(WorldMapServiceError):
+            move_seat(area=county, pip=(2, 3))
+        assert footprint_of(seat) == {(2, 4)}
+
     def test_carve_reports_each_pips_prior_and_new_holder(self) -> None:
         set_footprint(area=self.kingdom, add=[(3, 3)])
         change = set_footprint(area=self.county, add=[(3, 3), (4, 3)])
