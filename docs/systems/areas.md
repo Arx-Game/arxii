@@ -286,6 +286,12 @@ never a fill (`drawRegionMap`'s `ghostPips`; the viewport exposes `data-ghost-pi
 Almanach title page's "On the map" door writes the Atlas's last-location key and a one-shot
 `sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
 
+The layout tool (#4986, `world/societies/houses/layout.py`, see `docs/systems/houses.md`
+"Laying out a realm") writes land only through `set_footprint`: it partitions a kingdom's
+`footprint_of` into contiguous duchies, counties and single-pip seat baronies and carves each
+child's pips, so the kingdom's rows move down by the containment rule above; nothing here
+draws a kingdom's outline, that stays the owner's Brush and Loop.
+
 ## AreaClosure Materialized View
 
 The `AreaClosure` model is backed by a Postgres materialized view that stores every ancestor-descendant pair with depth. This enables efficient ancestry and descendant queries without recursive CTEs at query time.

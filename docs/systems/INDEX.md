@@ -2244,6 +2244,14 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   actions. Region read: `FootprintRead.charters`, `RegionRead.landless_titles`
   (`LandlessTitleRead`). UI: title page **Present Holdings** / **Historical Charter** / chain
   rail / "On the map"; region map Select-mode pickers and the Historical Charter ghost.
+- **Laying out a realm (#4983 slice 2 / #4986, ADR-4983-B):** `houses/layout.py`
+  (`parse_layout`, `preview_layout`, `lay_out_realm`, `LayoutError`, `LayoutRefused`,
+  `LayoutReport`) and `houses/partition.py` (`partition`, `capital_seed`, `farthest_pips`,
+  `centroid_land`, pure): a typed layout plants duchies, counties and seat baronies under a
+  drawn kingdom, partitions its footprint with the capital child largest, names from the
+  realm's place bank (`NamePart.PLACE`, `NameCulture.realm`, migration 0370), writes
+  placeholder figures, and records titular/potential crowns, pledges, charters and claims.
+  Action `almanach_lay_out`; `LayOutDialog` on the realm ladder page.
 - **Almanach, every family (#4239, ADR-4239):** the Almanach as the one place every family
   lives (noble, crime, commoner), a browser of the graph with Create in place on every slot.
   `world.societies.houses.almanach`: `create_family` (a Family row alone for a background

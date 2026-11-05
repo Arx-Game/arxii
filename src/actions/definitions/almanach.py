@@ -1948,3 +1948,56 @@ class AlmanachEditPersonAction(_AlmanachAction):
         allowed = {k: v for k, v in kwargs.items() if k in ("name", "gender_id", "age")}
         _apply_existing_kin_fields(node, allowed, gender, age)
         return ActionResult(success=True, message="Saved.", data={"kinsperson_id": node.pk})
+
+
+@dataclass
+class AlmanachLayOutAction(_AlmanachAction):
+    """Lay out a realm from a typed layout (#4983 slice 2, #4986).
+
+    Kwargs: ``realm_id``, ``layout`` (the text, see ``houses.layout``), ``commit``
+    (false previews: the same walk, nothing written). ``data`` carries the report.
+    """
+
+    key: str = "almanach_lay_out"
+    name: str = "Lay Out Realm"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.realms.models import Realm  # noqa: PLC0415
+        from world.societies.houses.layout import (  # noqa: PLC0415
+            LayoutError,
+            lay_out_realm,
+            parse_layout,
+            preview_layout,
+        )
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        realm = Realm.objects.filter(pk=kwargs.get("realm_id")).first()
+        if realm is None:
+            return ActionResult(success=False, message="No such realm.")
+        try:
+            layout = parse_layout(str(kwargs.get("layout") or ""))
+        except LayoutError as exc:
+            return ActionResult(success=False, message=str(exc))
+        if not layout.kingdoms:
+            return ActionResult(success=False, message="The layout names no kingdom.")
+        commit = truthy_kwarg(kwargs.get("commit"))
+        try:
+            report = lay_out_realm(realm, layout) if commit else preview_layout(realm, layout)
+        except HousesServiceError as exc:
+            return _refusal(exc)
+        kingdoms = len(report.kingdoms)
+        planted = sum(sum(k.planted.values()) for k in report.kingdoms if not k.refusals)
+        refused = sum(1 for k in report.kingdoms if k.refusals)
+        if commit:
+            message = f"Laid out {kingdoms} kingdom(s): {planted} rung(s) planted."
+        else:
+            message = f"Previewed {kingdoms} kingdom(s): {planted} rung(s) would be planted."
+        if refused:
+            message += f" {refused} refused; see the report."
+        return ActionResult(success=True, message=message, data=report.as_data())

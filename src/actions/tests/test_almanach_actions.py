@@ -20,6 +20,7 @@ from actions.definitions.almanach import (
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
     AlmanachEditKinAction,
+    AlmanachLayOutAction,
     AlmanachMoveRungAction,
     AlmanachNameRungAction,
     AlmanachPlanEstateAction,
@@ -1082,3 +1083,76 @@ class AlmanachActionTests(TestCase):
         )
         assert not result.success
         assert result.message
+
+
+class AlmanachLayOutActionTests(TestCase):
+    """The staff lay-out verb (#4983 slice 2, #4986): preview writes nothing, commit plants."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.areas.tests.test_worldmap import tiny_map
+        from world.areas.worldmap.models import TerrainPip
+        from world.areas.worldmap.services import (
+            create_region_map,
+            import_region_map_file,
+            set_footprint,
+        )
+        from world.character_creation.factories import RealmFactory
+        from world.npc_services.models import NameCulture, NameCultureEntry, NamePart
+        from world.societies.houses.almanach import plant_rung, rung_area_for_title
+        from world.societies.houses.constants import TitleTier
+
+        cls.staff = _staff_actor("LayoutStaff")
+        cls.player = _player_actor("LayoutPlayer")
+        cls.realm = RealmFactory(name="Layout Realm")
+        culture = NameCulture.objects.create(name="Layout culture", realm=cls.realm)
+        for value in ("Ashford", "Brackwater", "Coldharbour", "Dunmere", "Eastwold", "Fennick"):
+            NameCultureEntry.objects.create(culture=culture, part=NamePart.PLACE, value=value)
+        region = create_region_map(name="Layoutland", anchor_x=0, anchor_y=0, width_cells=2)
+        import_region_map_file(region=region, file_name="t.map", data=tiny_map().encode())
+        cls.kingdom = plant_rung(realm=cls.realm, tier=TitleTier.KINGDOM, name="Layout Crown")
+        outline = sorted(
+            (x, y)
+            for x, y in TerrainPip.objects.filter(region=region).values_list("x", "y")
+            if x < 10
+        )
+        set_footprint(area=rung_area_for_title(cls.kingdom), add=outline)
+
+    def test_preview_reports_and_writes_nothing(self) -> None:
+        from world.societies.houses.models import Title
+
+        before = Title.objects.count()
+        result = AlmanachLayOutAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            layout="kingdom Layout Crown | duchies 2",
+            commit=False,
+        )
+        assert result.success, result.message
+        assert result.data["wrote"] is False
+        assert len(result.data["kingdoms"][0]["duchies"]) == 2
+        assert Title.objects.count() == before
+        assert "Previewed" in result.message
+
+    def test_commit_plants_and_a_bad_line_is_a_refusal(self) -> None:
+        from world.societies.houses.constants import TitleTier
+        from world.societies.houses.models import Title
+
+        result = AlmanachLayOutAction().run(
+            self.staff,
+            realm_id=self.realm.pk,
+            layout="kingdom Layout Crown | duchies 2",
+            commit=True,
+        )
+        assert result.success, result.message
+        assert Title.objects.filter(realm=self.realm, tier=TitleTier.DUCHY).count() == 2
+        assert "Laid out" in result.message
+        refused = AlmanachLayOutAction().run(
+            self.staff, realm_id=self.realm.pk, layout="kingdom Nowhere | mystery", commit=True
+        )
+        assert not refused.success
+        assert refused.message.startswith("line 1:")
+        player = AlmanachLayOutAction().run(
+            self.player, realm_id=self.realm.pk, layout="kingdom Layout Crown", commit=False
+        )
+        assert not player.success
