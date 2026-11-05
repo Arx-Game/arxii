@@ -382,6 +382,7 @@ class NamePart(models.TextChoices):
 
     GIVEN = "given", "Given name"
     SURNAME = "surname", "Surname"
+    PLACE = "place", "Place name"
 
 
 class NameCulture(NaturalKeyMixin, SharedMemoryModel):
@@ -410,6 +411,14 @@ class NameCulture(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="name_cultures",
         help_text="Authoring hint for society-flavored pools. NULL+NULL area = global default.",
+    )
+    realm = models.ForeignKey(
+        "arxii.Realm",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="name_cultures",
+        help_text="The realm whose places and people this culture names (#4983).",
     )
 
     objects = NaturalKeyManager()

@@ -78,8 +78,32 @@ vi.mock('../queries', () => ({
   useLadder: () => ({ data: { rows: mockRows, unclaimed_by_tier: { duchy: 1, barony: 0 } } }),
   useHouses: () => ({ data: { results: [] } }),
   useCharter: () => ({ data: mockCharter }),
-  useAlmanachMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useAlmanachMutation: (key: string) => ({
+    mutate: vi.fn(),
+    mutateAsync: (kwargs: Record<string, unknown>) => {
+      mockDispatches.push([key, kwargs]);
+      return Promise.resolve({ success: true, message: 'ok', data: mockLayoutReport });
+    },
+  }),
 }));
+
+const mockDispatches: Array<[string, Record<string, unknown>]> = [];
+const mockLayoutReport = {
+  wrote: false,
+  refusals: [],
+  kingdoms: [
+    {
+      name: 'Perdition',
+      line_no: 1,
+      planted: { duchy: 2 },
+      duchies: [{ name: 'Ash', pips: 40, capital: true }],
+      names: ['Ash'],
+      charters: [],
+      claims: [],
+      refusals: [],
+    },
+  ],
+};
 
 function renderPage() {
   return renderWithProviders(
@@ -163,4 +187,17 @@ test('the record rail renders the Charter section from useCharter', () => {
   } finally {
     mockCharter = undefined;
   }
+});
+
+test('lay out opens the layout dialog and Preview dispatches almanach_lay_out without committing', async () => {
+  mockDispatches.length = 0;
+  renderPage();
+  await userEvent.click(screen.getByRole('button', { name: /lay out/i }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.type(within(dialog).getByLabelText('layout'), 'kingdom Perdition | duchies 2');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }));
+  expect(mockDispatches).toEqual([
+    ['almanach_lay_out', { realm_id: 1, layout: 'kingdom Perdition | duchies 2', commit: false }],
+  ]);
+  expect(await within(dialog).findByTestId('layout-kingdom-Perdition')).toBeInTheDocument();
 });

@@ -760,6 +760,7 @@ class ActionRegistryTests(TestCase):
             "almanach_uncharter_fief",
             "almanach_record_claim",
             "almanach_withdraw_claim",
+            "almanach_lay_out",
             "almanach_set_station",
             "almanach_set_pledged_liege",
             "almanach_edit_house",
