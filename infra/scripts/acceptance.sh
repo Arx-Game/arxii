@@ -757,6 +757,28 @@ chkno "premigrate dir is not the backups staging dir" \
   "grep -q 'app_premigrate_dir: /var/backups/arxii$' \
      infra/ansible/roles/app_deploy/defaults/main.yml"
 
+echo "== #4999 (a failed reload recovers without a person) =="
+# The behaviour itself is proven on real systemd by
+# .github/workflows/reload-recovery.yml; these pin the wiring that test renders from.
+UNIT_TEMPLATE=infra/ansible/roles/app_deploy/templates/arxii.service.j2
+RELOAD_SCRIPT=infra/ansible/roles/app_deploy/templates/arxii-reload.sh.j2
+WATCHDOG_TEMPLATE=infra/ansible/roles/app_deploy/templates/arxii-watchdog.sh.j2
+chk   "the unit supervises the Portal, the process that stays up through a reload" \
+  "has_code '^PIDFile=\{\{ app_portal_pidfile \}\}' \"\${UNIT_TEMPLATE}\""
+chk   "ExecReload is arxii-reload, as root so it can name another user's listener" \
+  "has_code '^ExecReload=\+/usr/local/sbin/arxii-reload' \"\${UNIT_TEMPLATE}\""
+chk   "the role installs arxii-reload before the unit that names it" \
+  "[[ \$(grep -n 'src: arxii-reload.sh.j2' infra/ansible/roles/app_deploy/tasks/main.yml | cut -d: -f1) -lt \$(grep -n 'src: arxii.service.j2' infra/ansible/roles/app_deploy/tasks/main.yml | cut -d: -f1) ]]"
+chk   "arxii-reload's budget ends inside systemd's cap on a reload" \
+  "[[ \$(sed -n 's/^BUDGET_S=//p' \"\${RELOAD_SCRIPT}\") -lt \$(sed -n 's/^TimeoutStartSec=//p' \"\${UNIT_TEMPLATE}\") ]]"
+chk   "arxii-reload leaves the last resort to its caller (a restart would cancel its own job)" \
+  "! has_code 'systemctl +(restart|stop|start)' \"\${RELOAD_SCRIPT}\""
+chk   "the watchdog limits its full restarts" \
+  "has_code 'RESTART_INTERVAL_S=' \"\${WATCHDOG_TEMPLATE}\" && has_code 'RESTART_STAMP' \"\${WATCHDOG_TEMPLATE}\""
+# Evennia's default WEBSERVER_PORTS is [(4001, 4005)], and app_web_backend pins 4001.
+chk   "the game keeps Evennia's default web ports, so app_server_web_port stays 4005" \
+  "! has_code '^WEBSERVER_PORTS' src/server/conf/settings.py && grep -q '^app_server_web_port: 4005$' infra/ansible/roles/app_deploy/defaults/main.yml"
+
 echo "== #4001 (staff @reboot: request file + watchdog start; @shutdown stays down) =="
 # The game user has no sudo and Restart=always was rejected (it would turn
 # every @shutdown into a restart). @reboot writes a request file and shuts
