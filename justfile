@@ -536,12 +536,12 @@ _dc := ".devcontainer/docker-compose.yml"
 # Build + start the stack and run all devcontainer setup hooks
 dc-up:
     bash .devcontainer/sync-env.sh
-    devcontainer up --workspace-folder .
+    bash .devcontainer/safe-up.sh
 
 # Full rebuild (no cache) and re-run setup
 dc-build:
     bash .devcontainer/sync-env.sh
-    devcontainer up --workspace-folder . --build-no-cache --remove-existing-container
+    bash .devcontainer/safe-up.sh --build-no-cache --remove-existing-container
 
 # Open a shell INSIDE the app container (this is where you run `claude`).
 # zsh explicitly: `devcontainer exec` ignores $SHELL, so without naming it here
