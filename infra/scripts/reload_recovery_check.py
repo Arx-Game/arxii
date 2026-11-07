@@ -64,6 +64,7 @@ INACTIVE = "inactive"
 SYSTEMD_INIT = "systemd"
 NAME_KEY = "name"
 EVENNIA_PACKAGE = "evennia"
+SETUPTOOLS_PACKAGE = "setuptools"
 SETUP_COMMAND = "setup"
 RESTART_STAMP = Path("/run/arxii-watchdog.restart-stamp")
 # Ruled in #4999, plus margin for scheduling on a shared runner.
@@ -116,14 +117,17 @@ def setup() -> None:
     PROJECT.mkdir(parents=True, exist_ok=True)
     lock = tomllib.loads((REPO / "uv.lock").read_text())
     evennia = next(p for p in lock["package"] if p[NAME_KEY] == EVENNIA_PACKAGE)
+    # Evennia's launcher still imports distutils, which only setuptools provides now.
+    setuptools = next(p for p in lock["package"] if p[NAME_KEY] == SETUPTOOLS_PACKAGE)["version"]
     # uv.lock spells it "<url>?<query>#<sha>"; pin the same commit production runs.
     url, _, sha = evennia["source"]["git"].partition("#")
+    git_url = url.partition("?")[0]
     (PROJECT / "pyproject.toml").write_text(
         "[project]\n"
         'name = "reload-recovery-game"\n'
         'version = "0"\n'
         'requires-python = ">=3.13,<3.14"\n'
-        f'dependencies = ["evennia @ git+{url.partition("?")[0]}@{sha}"]\n'
+        f'dependencies = ["evennia @ git+{git_url}@{sha}", "setuptools=={setuptools}"]\n'
         "[tool.uv]\npackage = false\n"
     )
     sh(f"chown -R {APP_USER}: {PROJECT.parent}")
