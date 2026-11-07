@@ -100,6 +100,23 @@ watch_listeners &
 watcher_pid=$!
 trap 'kill "${watcher_pid}" 2>/dev/null; rm -f "${listener_history}"' EXIT
 
+# A stop that arrives mid-reload (an operator, a deploy, a staff @shutdown) has
+# systemd TERM this script. Left to die by the signal, the unit ends `failed`, which
+# the watchdog's failed-state branch would then start again, undoing the stop. So
+# stand aside: end the launcher at once, before it can ask the Portal for a Server
+# while the stop runs, and exit cleanly. The stop decides what happens next.
+launcher_pid=""
+# shellcheck disable=SC2317  # reached through the trap below
+on_stop() {
+  log "stop requested; abandoning the reload"
+  if [ -n "${launcher_pid}" ]; then
+    # timeout leads its own process group, so this reaches the launcher too.
+    kill -KILL -- "-${launcher_pid}" 2>/dev/null || kill -KILL "${launcher_pid}" 2>/dev/null
+  fi
+  exit 0
+}
+trap on_stop TERM INT
+
 # A listener that was not a Server, for the alert. The evidence has them all.
 foreign_holder() {
   grep -v '(("twistd"' "${listener_history}" | grep 'users:' \
@@ -181,8 +198,11 @@ attempt() {
   # launcher that ignores the TERM, so none is left holding the cgroup.
   timeout --kill-after=5 "${limit}" \
     runuser -u "${APP_USER}" -- env HOME="$(getent passwd "${APP_USER}" | cut -d: -f6)" \
-    "${UV}" run evennia reload
+    "${UV}" run evennia reload &
+  launcher_pid=$!
+  wait "${launcher_pid}"
   rc=$?
+  launcher_pid=""
 
   # A launcher that finished gets a short grace for the replacement to start
   # serving; one that timed out is judged on the state as it stands.
