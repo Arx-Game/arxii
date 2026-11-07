@@ -172,6 +172,8 @@ export function useRegionMapPipsQuery(regionId: number | null) {
     queryFn: () => fetchRegionMapPips(regionId as number),
     enabled: regionId != null,
     staleTime: 60_000,
+    // A carve in another tab (#4993) shows on return, however recently this one fetched.
+    refetchOnWindowFocus: 'always',
   });
 }
 

@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { ThemeBackground } from './theme-background';
@@ -12,15 +12,15 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-/** Routes that use a full-viewport layout without container padding or footer. */
-const FULL_VIEWPORT_ROUTES: ReadonlySet<string> = new Set(['/game']);
+/** Route patterns that use a full-viewport layout without header, padding or footer. */
+const FULL_VIEWPORT_ROUTES: readonly string[] = ['/game', '/staff/world-builder/map/:regionId'];
 
 /** Routes that use a full-bleed layout (no container padding) but keep the Footer (#3305, #3540). */
 const FULL_BLEED_ROUTES: ReadonlySet<string> = new Set(['/', '/characters/create']);
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
-  const isFullViewport = FULL_VIEWPORT_ROUTES.has(location.pathname);
+  const isFullViewport = FULL_VIEWPORT_ROUTES.some((route) => matchPath(route, location.pathname));
   const isFullBleed = FULL_BLEED_ROUTES.has(location.pathname);
 
   const renderFullViewport = () => {

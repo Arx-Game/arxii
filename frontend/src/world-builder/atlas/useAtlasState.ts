@@ -30,7 +30,7 @@ export interface AtlasHistoryEntry extends AtlasView {
 
 const RECENTS_LIMIT = 8;
 
-function readJSON<T>(key: string, fallback: T): T {
+export function readJSON<T>(key: string, fallback: T): T {
   try {
     const raw = window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
@@ -39,7 +39,7 @@ function readJSON<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJSON(key: string, value: unknown): void {
+export function writeJSON(key: string, value: unknown): void {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {

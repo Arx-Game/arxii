@@ -258,7 +258,10 @@ on the map, titular and potential crowns, each with `station` and `fief_ids`, #4
 upload, decompressed, under its original name).
 
 **Frontend:** the Atlas's region-map view (`frontend/src/world-builder/atlas/RegionMapPage.tsx`,
-view kind `regionmap`, reached from the index rail's Maps section): pips on one canvas
+view kind `regionmap`, reached from the index rail's Maps section; the header's maximize
+button opens the same page in its own tab at `/staff/world-builder/map/:regionId`,
+`RegionMapTabPage.tsx`, with `?focus=<area id>` carrying the selection and `Layout` dropping the
+site chrome, #4993): pips on one canvas
 in flat colour, cell lines every ten pips, footprints as holder-coloured fills, the seat
 as a dot; modes select, carve and paint; writes dispatch through `runAction`. Carve mode
 has three tools (#4905, `regionMapFill.ts`, pure), disabled until a domain is picked (a gesture
@@ -277,6 +280,14 @@ shading, since the owner ruled there are no enclaves to disambiguate. The rail's
 New region form carries a continent choice: a new CONTINENT rung by the region's name
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.
+
+The side panel and the realm and domain pickers each fold away (`useRegionMapLayout.ts`,
+remembered per account in `localStorage`, shared by the Atlas view and the tab); folded pickers
+still name the picked domain. The wheel zooms the map around the cursor, and because the handler
+prevents the default, Ctrl+scroll and a trackpad pinch over the map zoom the map instead of the
+browser page. The pips query refetches whenever its tab regains focus, so a carve in another
+tab shows on return. Undo stays per tab: an undo restores the holders it recorded, so it can
+overwrite a newer edit to the same pips from another tab.
 
 Select mode (#4983) carries a realm and a domain picker over the realm ladder, so a title with
 no land, a titular or potential crown, can be selected; its panel reads "holds nothing", links
