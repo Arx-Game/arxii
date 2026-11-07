@@ -617,6 +617,7 @@ fields split on `|`, a kingdom's duchy lines indented by two spaces:
 ```
 realm | counties 2-6 | baronies 1-4 | capital x1.5
 kingdom Umbros | seat Umbros | duchies 5 | capital x2
+kingdom Vestyr | duchies 3 | names Vestyr
 kingdom East Cinderus | titular | lore The Daeva remnant ...
   duchy Ashfall | counties 3
   duchy Embermarch | sworn Cinderus
@@ -628,7 +629,8 @@ kingdom | potential
   `kingdom <name>` line names a drawn KINGDOM rung already on the ladder; `titular` and
   `potential` plant a landless crown instead (an unnamed line must be `potential`); words:
   `duchies`/`counties`/`baronies N|A-B`, `capital xW`, `seat <name>` (names the crown's own
-  chain county), `held` / `claimable` on a duchy line (`is_claimable` off or on), `sworn
+  chain county), `names <culture>` (kingdom lines only: that kingdom draws its place names
+  from the named culture instead of the realm's, #4994), `held` / `claimable` on a duchy line (`is_claimable` off or on), `sworn
   <crown>` (`pledged_liege`, any realm, KINGDOM or EMPIRE), `chartered <a>, <b>`
   (`CharteredFief` rows, names from this layout or the ladder), `claimed by <character> |
   basis <text>` (a `TitleClaim`), `lore <text>` (the seat `Domain.description`). Every error
@@ -651,6 +653,14 @@ kingdom | potential
   own chain, a titular or potential name already on the ladder, a `sworn` crown or a
   `claimed by` character that does not exist. The whole layout is refused (`LayoutRefused`)
   when the realm's culture has no PLACE names.
+- **Name banks (#4994)** — a realm's *default* bank is the PLACE entries of every culture
+  linked to the realm. A *regional* culture (Vestyr, Norbyria and Cinderus in the seed) carries
+  no realm link, so it never leaks into a default bank; a kingdom line reaches it with
+  `names <culture>` (case-insensitive). An unknown culture, or one with no PLACE entries,
+  refuses that kingdom only; a layout whose every kingdom names a culture needs no realm bank.
+  `world/seeds/place_names.py` holds the eight banks (name and weight; agent-drafted, owner
+  reshaped) and `ensure_place_names()` loads them, idempotent and never moving an edited
+  weight; it runs with the `npc_services` seed cluster, beside `ensure_name_cultures()`.
 - **Names** — `NameCulture.realm` links a culture to its realm (#4986, the seed links the five);
   `NameCultureEntry` rows of the `NamePart.PLACE` part are the bank. Every duchy and county
   takes one, heaviest weight first with a stable per-run shuffle among equal weights, without

@@ -22,6 +22,8 @@ kingdom Old Luxen | titular | lore The crown before the revolt.
 
 
 class LayingOutARealmJourney(JourneyCase):
+    REGIONAL = ("Carradyn", "Penmora", "Aberwen", "Tregarion", "Maelor", "Brynmar", "Dynmere")
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.realm = RealmFactory(name="Luxen")
@@ -30,6 +32,12 @@ class LayingOutARealmJourney(JourneyCase):
         for index, value in enumerate(names):
             NameCultureEntry.objects.create(
                 culture=culture, part=NamePart.PLACE, value=value, weight=len(names) - index
+            )
+        # a regional culture has no realm: only the kingdom line's `names` word reaches it
+        regional = NameCulture.objects.create(name="Vestyr journey")
+        for index, value in enumerate(cls.REGIONAL):
+            NameCultureEntry.objects.create(
+                culture=regional, part=NamePart.PLACE, value=value, weight=9 - index
             )
         region = create_region_map(name="Catenys", anchor_x=0, anchor_y=0, width_cells=2)
         import_region_map_file(region=region, file_name="t.map", data=tiny_map().encode())
@@ -87,3 +95,37 @@ class LayingOutARealmJourney(JourneyCase):
             self.player, "almanach_lay_out", realm_id=self.realm.pk, layout=LAYOUT, commit=False
         )
         assert not refused.detail.success
+
+    def test_a_names_word_gives_the_kingdom_its_own_regional_names(self) -> None:
+        layout = (
+            "realm | counties 1 | baronies 1\nkingdom Luxen | duchies 3 | names Vestyr journey\n"
+        )
+        preview = self.web(
+            self.staff, "almanach_lay_out", realm_id=self.realm.pk, layout=layout, commit=False
+        )
+        assert preview.detail.success, preview.detail.message
+        [luxen] = preview.detail.data["kingdoms"]
+        assert luxen["refusals"] == []
+        assert set(luxen["names"]) <= set(self.REGIONAL)
+
+        laid = self.web(
+            self.staff, "almanach_lay_out", realm_id=self.realm.pk, layout=layout, commit=True
+        )
+        assert laid.detail.success, laid.detail.message
+        rows = ladder_for_realm(self.realm).rows
+        generated = {
+            r.name for r in rows if r.tier in (TitleTier.DUCHY, TitleTier.COUNTY) and r.name
+        }
+        assert generated
+        assert generated <= set(self.REGIONAL) | {"Luxen"}
+
+        unknown = self.web(
+            self.staff,
+            "almanach_lay_out",
+            realm_id=self.realm.pk,
+            layout="kingdom Luxen | names Nowhere\n",
+            commit=False,
+        )
+        assert unknown.detail.success
+        [refusal] = unknown.detail.data["kingdoms"][0]["refusals"]
+        assert "no place-name culture named Nowhere" in refusal
