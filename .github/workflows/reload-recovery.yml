@@ -7,8 +7,6 @@ name: Reload Recovery
 # can be seen short of production. Synthetic game, no secrets, public logs.
 
 on:
-  push:
-    branches: [feature-4999-self-recover-failed-server-reloads-witho]
   pull_request:
     paths:
       - infra/ansible/roles/app_deploy/templates/arxii.service.j2
@@ -18,6 +16,7 @@ on:
       - infra/scripts/reload_recovery_check.py
       - .github/workflows/reload-recovery.yml
       - uv.lock
+      - src/typeclasses/accounts.py
   workflow_dispatch:
 
 permissions:
