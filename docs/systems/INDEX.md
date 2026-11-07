@@ -3176,6 +3176,12 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   Distinction Builder's "Add from a table" (`web/admin/distinction_builder/paste.py`) lands new
   rows in bulk, additions only (an effect on a skill with no modifier target yet is not an
   error: the create step makes the target, #4820).
+- **Import Data hub (#5001):** the admin header's Import Data button opens
+  `web/admin/import_hub/` (`import_hub`): the table pastes (distinctions; place names,
+  `place_names.py`, `culture | name | weight`, additions only, the production route for the
+  realm place banks), the JSON fixture upload (disaster recovery), the content-repo load. Pastes
+  share `web/admin/paste_common.py` and `templates/admin/_paste_preview.html`; a superuser with
+  no contributor is linked and credited on the spot. Details: `src/web/admin/CLAUDE.md`.
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
   `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet/enemy/backgrounds/final_touches],

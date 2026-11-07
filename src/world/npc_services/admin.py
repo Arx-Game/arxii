@@ -224,10 +224,10 @@ class NameCultureEntryInline(admin.TabularInline):
 class NameCultureAdmin(admin.ModelAdmin):
     """#3831 - a pool of names reinforcing a region's (or society's) theme."""
 
-    list_display = ["name", "area", "society"]
-    list_filter = ["area", "society"]
+    list_display = ["name", "realm", "area", "society"]
+    list_filter = ["realm", "area", "society"]
     search_fields = ["name"]
-    list_select_related = ["area", "society"]
+    list_select_related = ["realm", "area", "society"]
     autocomplete_fields = ["area", "society"]
     inlines = [NameCultureEntryInline]
 

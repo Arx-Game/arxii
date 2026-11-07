@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<div id="import-hub-root">
+
+  {% if user.is_superuser %}
+  <section class="tuning-panel" id="panel-import-tables">
+    <h2>From a table</h2>
+    <p>Paste pipe-separated rows; every row previews as create, skip or error, and nothing is
+      written until every row reads create or skip. A row that exists is skipped, never updated;
+      nothing is deleted; a row that names something that does not exist is an error.</p>
+    <ul>
+      <li><a href="{% url 'admin_distinction_paste' %}">Distinctions</a></li>
+      <li><a href="{% url 'admin_place_name_paste' %}">Place names</a></li>
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="tuning-panel" id="panel-import-fixture">
+    <h2>From a fixture file</h2>
+    <p>Upload a JSON fixture and read the dry-run diff before anything is written. Its merge and
+      replace steps can overwrite rows that exist, credited ones included: disaster recovery, not
+      a way to add content.</p>
+    <p><a href="{% url 'admin_import_upload' %}">Upload a fixture file</a></p>
+  </section>
+
+  {% if user.is_superuser %}
+  <section class="tuning-panel" id="panel-import-content-repo">
+    <h2>From the private content repo</h2>
+    <p>Loads and upserts the lore repo's fixtures. For an empty database only: a load overwrites
+      every authored row with no author credited.</p>
+    {% if content_repo_configured %}
+    <p><a href="{% url 'admin_content_load' %}">Load the private content repo</a></p>
+    {% else %}
+    <p>Not configured here: set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> first.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

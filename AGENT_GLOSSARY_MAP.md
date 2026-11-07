@@ -780,6 +780,13 @@ builds and upserts (`update_or_create` by natural key) the maintainers' private 
 defaults" seed button, which is create-if-missing over in-repo seed content, not an external
 upsert. _Avoid_: seed run, import (Import Data is the separate ad-hoc-fixture-upload path).
 
+**Import hub** (#5001):
+The admin header's Import Data page (`/admin/_import/`, `web/admin/import_hub/`) listing every
+way authored content comes into the database: the **table pastes** (additions-only, previewed,
+digest-guarded; distinctions and place names), the JSON fixture upload (disaster recovery) and
+the content load. A paste credits the operator automatically. _Avoid_: bulk edit (a paste never
+updates), seed (that is the clone-time path), import (alone; say which route).
+
 ## Content authoring (#2980)
 
 **Content contributor**:

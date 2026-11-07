@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}forms.css: `.form-row`, `.submit-row` (#3667); a page off base_site links it itself.{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin_import_hub' %}">Import Data</a>
+  &rsaquo; Place names from a table
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<div id="place-name-paste-root">
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="module">
+      <h2>Paste rows</h2>
+      <div class="description">One row per line, columns separated by a pipe:
+        <code>{{ columns|join:" | " }}</code>. The culture must already exist; the weight is a whole
+        number from 1 to 1000 and defaults to 1 (the layout tool draws heaviest first). A name already
+        on the culture is skipped, never updated. Nothing is deleted.</div>
+      <fieldset class="module aligned">
+        <div class="form-row">
+          <div>
+            <label for="id_text">Rows</label>
+            <textarea id="id_text" name="text" rows="12" cols="80" class="vLargeTextField">{{ text }}</textarea>
+          </div>
+        </div>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" name="action" value="check" class="default">
+      </div>
+    </div>
+    {% include "admin/_paste_preview.html" %}
+  </form>
+</div>
+{% endblock %}

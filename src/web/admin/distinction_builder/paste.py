@@ -19,22 +19,30 @@ preview it is confirming no longer matches.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import hashlib
-import hmac
-import json
 import re
 
 from django.contrib import messages
 from django.contrib.admin.models import ADDITION, LogEntry
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 
-from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_written
+from web.admin.paste_common import (
+    ACTION_CREATE,
+    STATUS_CREATE,
+    STATUS_ERROR,
+    STATUS_SKIP,
+    PasteRow,
+    check_post,
+    digest_of,
+    one as _one,
+    paste_contributor,
+    refusal,
+)
 from web.admin.tuning.views import superuser_required
 from world.character_creation.constants import (
     ENEMY_MARKING_DEGREES,
@@ -72,11 +80,6 @@ COLUMNS: tuple[str, ...] = (
     "offered_under",
     "first_look_for",
 )
-STATUS_CREATE = "create"
-STATUS_SKIP = "skip"
-STATUS_ERROR = "error"
-ACTION_CHECK = "check"
-ACTION_CREATE = "create"
 
 _PROMPT_WORDS = {
     "rules": ActorSheetPrompt.NEVER_DO,
@@ -115,8 +118,7 @@ class OfferSpec:
 
 
 @dataclass
-class RowSpec:
-    line_no: int
+class RowSpec(PasteRow):
     name: str
     slug: str = ""
     category_id: int | None = None
@@ -137,12 +139,6 @@ class RowSpec:
     #: A person card (#4872): the ``figure`` effect token sets
     #: ``Distinction.asks_figure_name``, so the player names the figure on the card.
     asks_figure_name: bool = False
-    status: str = STATUS_CREATE
-    notes: list[str] = field(default_factory=list)
-
-    def fail(self, note: str) -> None:
-        self.status = STATUS_ERROR
-        self.notes.append(note)
 
     @property
     def will_create(self) -> str:
@@ -163,16 +159,6 @@ class RowSpec:
         if self.preselected_names:
             parts.append(f"suggested for {', '.join(self.preselected_names)}")
         return "; ".join(parts)
-
-
-def _one(qs: QuerySet, what: str) -> tuple[object | None, str]:
-    """Exactly one row, or the reason there is not."""
-    rows = list(qs[:2])
-    if not rows:
-        return None, f"unknown {what}"
-    if len(rows) > 1:
-        return None, f"ambiguous {what}"
-    return rows[0], ""
 
 
 def _int(raw: str, default: int, what: str, row: RowSpec) -> int:
@@ -423,7 +409,7 @@ def table_digest(rows: list[RowSpec]) -> str:
         }
         for r in rows
     ]
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    return digest_of(payload)
 
 
 def _create_effects(
@@ -503,7 +489,6 @@ def _render(request: HttpRequest, **context: object) -> HttpResponse:
         "rows": None,
         "digest": "",
         "counts": None,
-        "needs_setup": False,
     }
     base.update(context)
     return render(request, "admin/distinction_builder/paste.html", base)
@@ -515,38 +500,23 @@ def distinction_paste(request: HttpRequest) -> HttpResponse:
 
     A create POST re-parses the pasted text and refuses when its digest no longer
     matches the preview's (the text or the database changed in between), when any
-    row reads error, or when the operator has no linked contributor to credit.
+    row reads error, or when the operator's account name is already another account's
+    contributor (a superuser with no contributor is linked to one on the spot, #5001).
     """
-    contributor = current_contributor(request.user)
     if request.method != "POST":
-        return _render(request, needs_setup=contributor is None)
-    text = request.POST.get("text", "")
-    rows = parse_table(text)
-    counts = {
-        STATUS_CREATE: sum(r.status == STATUS_CREATE for r in rows),
-        STATUS_SKIP: sum(r.status == STATUS_SKIP for r in rows),
-        STATUS_ERROR: sum(r.status == STATUS_ERROR for r in rows),
-    }
-    digest = table_digest(rows)
-    action = request.POST.get("action", ACTION_CHECK)
-    if action != ACTION_CREATE:
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if contributor is None:
-        messages.error(request, "Link a contributor before adding distinctions.")
-        return _render(
-            request, text=text, rows=rows, digest=digest, counts=counts, needs_setup=True
-        )
-    if not hmac.compare_digest(digest, request.POST.get("digest", "")):
-        messages.error(
-            request, "The table or the database changed since the preview; check it again."
-        )
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if counts[STATUS_ERROR]:
-        messages.error(request, "Fix every row that reads error; nothing was created.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if not counts[STATUS_CREATE]:
-        messages.info(request, "Nothing to create.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    created = _create_rows(rows, contributor, request.user.pk)
-    messages.success(request, f"Created {created} distinction(s), credited to you.")
+        return _render(request)
+    checked = check_post(request, parse_table, table_digest)
+    if checked.action != ACTION_CREATE:
+        return _render(request, **checked.context)
+    refused = refusal(request, checked)
+    if refused is not None:
+        messages.add_message(request, *refused)
+        return _render(request, **checked.context)
+    try:
+        contributor = paste_contributor(request.user)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return _render(request, **checked.context)
+    created = _create_rows(checked.rows, contributor, request.user.pk)
+    messages.success(request, f"Created {created} distinction(s), credited to {contributor.name}.")
     return redirect(reverse("admin:arxii_distinction_changelist"))
