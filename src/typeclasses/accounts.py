@@ -484,17 +484,16 @@ class Account(DefaultAccount):
             self._record_selection(obj)
 
     def _sync_puppet_to_portal(self, session) -> None:
-        """Tell the Portal now which character this session holds (#4999).
+        """Tell the Portal now which character this session holds, or none (#4999).
 
         Evennia copies a session's character to the Portal only during a graceful
         reload. A Server that crashes or is killed never gets that far, so its
-        replacement restores the session logged in but out of character, on a socket
-        that never closed: the web client has no reason to take the character up
-        again and the player is silently stranded. Only taking a character up is
-        synced. Unpuppeting must not be, because the Server unpuppets everyone while
-        it shuts down for a reload, which would erase what the replacement restores.
-        So after a crash, someone who deliberately went out of character returns to
-        their last character.
+        replacement restores sessions from whatever the Portal last heard: without
+        this, a player came back logged in but out of character, on a socket that
+        never closed, so the web client had no reason to take the character up
+        again. Unpuppeting is synced too, so a session that lost a character (a lent
+        NPC returned, a retired character, a takeover by another session) is not put
+        back on it. A reload never unpuppets, so this cannot erase what it restores.
         """
         service = evennia.EVENNIA_SERVER_SERVICE
         # No Portal connection in a test process, or while the Server is coming up.
@@ -585,6 +584,7 @@ class Account(DefaultAccount):
         """
         super().unpuppet_object(session)
         for sess in make_iter(session):
+            self._sync_puppet_to_portal(sess)
             self._broadcast_puppet_changed(sess, character=None)
 
     def at_account_creation(self):

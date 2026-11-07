@@ -769,6 +769,8 @@ chk   "ExecReload is arxii-reload, as root so it can name another user's listene
   "has_code '^ExecReload=\+/usr/local/sbin/arxii-reload' \"\${UNIT_TEMPLATE}\""
 chk   "the role installs arxii-reload before the unit that names it" \
   "[[ \$(grep -n 'src: arxii-reload.sh.j2' infra/ansible/roles/app_deploy/tasks/main.yml | cut -d: -f1) -lt \$(grep -n 'src: arxii.service.j2' infra/ansible/roles/app_deploy/tasks/main.yml | cut -d: -f1) ]]"
+chk   "the role installs the new watchdog before the reload it may have to finish" \
+  "[[ \$(grep -n 'src: arxii-watchdog.sh.j2' infra/ansible/roles/app_deploy/tasks/main.yml | cut -d: -f1) -lt \$(grep -n 'state: reloaded' infra/ansible/roles/app_deploy/tasks/main.yml | head -n1 | cut -d: -f1) ]]"
 chk   "arxii-reload's budget ends inside systemd's cap on a reload" \
   "[[ \$(sed -n 's/^BUDGET_S=//p' \"\${RELOAD_SCRIPT}\") -lt \$(sed -n 's/^TimeoutStartSec=//p' \"\${UNIT_TEMPLATE}\") ]]"
 chk   "arxii-reload leaves the last resort to its caller (a restart would cancel its own job)" \

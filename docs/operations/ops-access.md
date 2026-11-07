@@ -136,8 +136,7 @@ A manual `evennia sstop` looks like a crash and the Server comes back. `@shutdow
 `@reboot` stop the Portal as well, so they are unaffected.
 
 After a crash or a kill, the Server's graceful shutdown never ran, so anything it had not
-saved is gone. Players keep their connection, login and character. Someone who had
-deliberately gone out of character returns to their last character.
+saved is gone. Players keep their connection, login and character.
 
 ## Two-factor authentication lockout resets
 

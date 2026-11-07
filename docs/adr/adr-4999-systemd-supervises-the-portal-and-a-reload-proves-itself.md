@@ -11,15 +11,13 @@ own port under the same Portal, and otherwise recovers the Server alone within 1
 never restarts the unit, because a restart from inside the reload job cancels that job. Its caller
 owns the last resort: the deploy's rescue, or the watchdog, limited to one full restart per 15
 minutes. A process is only ever signalled after its identity is proven by cgroup, user and command
-line, whatever port it holds. `Account.puppet_object` now tells the Portal which character a
-session holds, because Evennia does so only during a graceful reload, and without it a crash left
+line, whatever port it holds. `Account` now tells the Portal whenever a session takes up or lets go
+of a character, because Evennia does so only during a graceful reload, and without it a crash left
 players connected, logged in and silently out of character.
 
 **Accepted costs.** A lone Server crash no longer reaches `Restart=on-failure`, so recovery can
-begin up to about 105 s later, by the watchdog. A hard-killed Server loses anything unsaved. After
-a crash, someone who deliberately went out of character returns to their last character, because
-syncing unpuppets too would erase the restore: the Server unpuppets everyone while shutting down
-for a reload. A manual `evennia sstop` comes back.
+begin up to about 105 s later, by the watchdog. A hard-killed Server loses anything unsaved, and none of
+its reload or shutdown hooks run. A manual `evennia sstop` comes back.
 
 **Rejected.** `ExitType=cgroup`, which the issue's isolated test first pointed at: `PIDFile` on the
 Portal needs no new systemd setting, and real-systemd runs showed the Server's clean and unclean

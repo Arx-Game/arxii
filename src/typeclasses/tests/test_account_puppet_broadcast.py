@@ -1,8 +1,10 @@
 """Tests for Account puppet_changed broadcast on @ic swaps."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, create_autospec, patch
 
 from django.test import TestCase
+import evennia
+from evennia.server.serversession import ServerSession
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from typeclasses.accounts import Account
@@ -367,35 +369,54 @@ class PuppetWireFormatTests(TestCase):
 class PuppetSyncsToPortalTests(TestCase):
     """A crashed Server's replacement can only restore what the Portal was told (#4999)."""
 
-    def _puppet(self, *, connected_to_portal: bool, succeeds: bool = True) -> MagicMock:
-        account = AccountFactory()
-        character = CharacterFactory()
-        session = _session_mock(1)
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.character = CharacterFactory()
+        self.session = _session_mock(1)
+        self.handler = create_autospec(type(evennia.SESSION_HANDLER), instance=True)
 
+    def _connected(self, connected: bool = True):
+        service = Mock(amp_protocol=Mock() if connected else None)
+        return (
+            patch("typeclasses.accounts.evennia.EVENNIA_SERVER_SERVICE", service),
+            patch("typeclasses.accounts.evennia.SESSION_HANDLER", self.handler),
+        )
+
+    def _puppet(self, *, connected: bool = True, succeeds: bool = True) -> None:
         def fake(_self, sess, obj) -> None:
             if succeeds:
                 sess.puppet = obj
 
-        original = _patch_super_puppet(account, fake)
-        self.addCleanup(_restore_super_puppet, account, original)
-        service = Mock(amp_protocol=Mock() if connected_to_portal else None)
-        handler = MagicMock()
-        with (
-            patch("typeclasses.accounts.evennia.EVENNIA_SERVER_SERVICE", service),
-            patch("typeclasses.accounts.evennia.SESSION_HANDLER", handler),
-        ):
-            account.puppet_object(session, character)
-        self.session = session
-        return handler
+        original = _patch_super_puppet(self.account, fake)
+        self.addCleanup(_restore_super_puppet, self.account, original)
+        service_patch, handler_patch = self._connected(connected)
+        with service_patch, handler_patch:
+            self.account.puppet_object(self.session, self.character)
 
     def test_taking_up_a_character_tells_the_portal(self) -> None:
-        handler = self._puppet(connected_to_portal=True)
-        handler.session_portal_sync.assert_called_once_with(self.session)
+        self._puppet()
+        self.handler.session_portal_sync.assert_called_once_with(self.session)
 
     def test_a_refused_puppet_tells_the_portal_nothing(self) -> None:
-        handler = self._puppet(connected_to_portal=True, succeeds=False)
-        handler.session_portal_sync.assert_not_called()
+        self._puppet(succeeds=False)
+        self.handler.session_portal_sync.assert_not_called()
 
     def test_no_portal_connection_is_not_an_error(self) -> None:
-        handler = self._puppet(connected_to_portal=False)
-        handler.session_portal_sync.assert_not_called()
+        self._puppet(connected=False)
+        self.handler.session_portal_sync.assert_not_called()
+
+    def test_letting_go_of_a_character_tells_the_portal(self) -> None:
+        original = _patch_super_unpuppet(self.account, lambda _self, _sess: None)
+        self.addCleanup(_restore_super_unpuppet, self.account, original)
+        other = _session_mock(2)
+        service_patch, handler_patch = self._connected()
+        with service_patch, handler_patch:
+            self.account.unpuppet_object([self.session, other])
+        synced = [c.args[0] for c in self.handler.session_portal_sync.call_args_list]
+        self.assertEqual(synced, [self.session, other])
+
+    def test_the_sync_carries_the_character(self) -> None:
+        """What the sync sends is what a restarted Server restores the puppet from."""
+        session = ServerSession()
+        session.puid = self.character.id
+        self.assertEqual(session.get_sync_data()["puid"], self.character.id)

@@ -168,7 +168,9 @@ def setup() -> None:
     Path("/etc/systemd/system/arxii-watchdog.service").write_text(
         content.render(secrets_env_file=str(ENV_FILE))
     )
-    # The same call as Arx's Account.puppet_object: the stock game's Account lacks it.
+    # A mirror of the call Arx's Account makes (#4999), shaped the same way, because the
+    # stock game's Account lacks it. This proves Evennia restores a synced puppet; that
+    # Arx's Account makes the call is pinned by typeclasses/tests.
     accounts = GAMEDIR / "typeclasses/accounts.py"
     accounts.write_text(accounts.read_text() + PUPPET_SYNC)
     alert_src = REPO / "infra/ansible/roles/offbox_alerting/templates/arxii-alert.sh.j2"

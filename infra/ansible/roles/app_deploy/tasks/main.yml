@@ -568,6 +568,17 @@
     group: root
     mode: "0750"
 
+# Also before the reload: from this release on, the watchdog is what recovers a
+# dead Server alone, including when this play dies mid-reload. The old script
+# would answer that by restarting the unit and dropping every player.
+- name: Install the watchdog script
+  ansible.builtin.template:
+    src: arxii-watchdog.sh.j2
+    dest: /usr/local/sbin/arxii-watchdog
+    owner: root
+    group: root
+    mode: "0750"
+
 - name: Install the systemd unit
   ansible.builtin.template:
     src: arxii.service.j2
@@ -851,14 +862,6 @@
 # a dead Server leaves the unit "active" (#4999). This timer script checks BOTH
 # pidfiles: it recovers a dead Server alone, and restarts the unit + fires an
 # off-box alert when that fails or another half-dead state appears.
-- name: Install the watchdog script
-  ansible.builtin.template:
-    src: arxii-watchdog.sh.j2
-    dest: /usr/local/sbin/arxii-watchdog
-    owner: root
-    group: root
-    mode: "0750"
-
 - name: Install the watchdog service (reads OFFBOX_ALERT_TOKEN from the EnvironmentFile)
   ansible.builtin.copy:
     dest: /etc/systemd/system/arxii-watchdog.service
