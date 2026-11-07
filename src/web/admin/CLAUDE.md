@@ -2,11 +2,38 @@
 
 Custom Django admin interface with game data export/import functionality.
 
-## Export/Import System
+## Import hub (#5001) and the Export/Import System
 
-**Purpose:** Backup and restore all game configuration data (species, traits, goals, distinctions, magic, etc.) as portable JSON fixtures across multiple Arx instances.
+**Purpose:** the header's **Import Data** button opens one page (`_import/` → `admin_import_hub`,
+`web/admin/import_hub/views.py`, `templates/admin/import_hub.html`; `staff_member_required`)
+listing every way authored content comes in, each with its own preview and confirm: the table
+pastes (superuser-only cards: distinctions, `admin_distinction_paste`; place names,
+`admin_place_name_paste`), the JSON fixture upload (`admin_import_upload`, unchanged, labelled
+disaster recovery because its merge/replace can overwrite credited rows, ADR-0201), and the
+private content-repo load (`admin_content_load`, empty databases only). Game Setup's import
+links point at the hub.
 
-**Location:** Links at top of Django admin header (Export / Import) leading to dedicated pages.
+**Table pastes share one scaffold** (`web/admin/paste_common.py`: the `create`/`skip`/`error`
+statuses, `one()`, `counts()`, `digest_of()`, `paste_contributor()`; the preview and confirm
+block is `templates/admin/_paste_preview.html`). Each paste keeps its own columns, parser,
+digest payload and create step. The rules every paste keeps (ruled 2026-09-08): never updates,
+never deletes, never creates a referenced row, previews before it writes, writes all or
+nothing, superuser-only. **Credit** (owner ruling 2026-11-07): whatever a paste creates is
+credited to the operator, and a superuser with no contributor is linked to one named after
+the account on the spot (`link_contributor(user, name=user.username)`); a username that is
+already another account's contributor refuses with that message. Rows that are not credited
+content (place names) stamp nothing.
+
+- **Place names from a table** - `web/admin/import_hub/place_names.py` (`place_name_paste`,
+  template `import_hub/place_names.html`): `culture | name | weight` rows; the culture is
+  resolved case-insensitively and must exist (unknown or ambiguous is an error); a dash in a
+  name is an error; a name already a PLACE entry on that culture, or repeated earlier in the
+  table, is skipped; a name a `Title` bears creates with a note (the layout tool skips it at
+  draw). Create writes one transaction and one admin `LogEntry` per culture. This is how the
+  banks reach production; `world/seeds/place_names.py` loads them on an empty database.
+
+**Export Data** (the header's other button) saves game configuration as a portable JSON
+fixture; the fixture upload on the hub loads one.
 
 ## Game Setup Hub (#1333)
 
@@ -39,8 +66,8 @@ copy says so.
 - URLs: `_content_load/` → `admin_content_load` (GET confirm);
   `_content_load_run/` → `admin_content_load_run` (POST run).
 - The Game Setup hub shows a "Load content repo" link when configured, else a
-  hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data upload
-  remains the path for ad-hoc fixture files either way).
+  hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data hub's fixture
+  upload remains the path for ad-hoc fixture files either way).
 
 ### Reviewed delete (#4064)
 
@@ -1017,7 +1044,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `search_fields`; `live.opener_link` links either to its change form.
 - **Add from a table (#3709)** - `web/admin/distinction_builder/paste.py`
   (`distinction_paste`, one URL `admin_distinction_paste`; template
-  `paste.html`): superuser-only, additions-only bulk entry. `parse_table`
+  `paste.html`; listed on the Import Data hub, #5001, and built on the shared
+  paste scaffold above): superuser-only, additions-only bulk entry. `parse_table`
   reads pipe-separated rows in `COLUMNS` order (name, category, cost per
   rank, max rank, player line, description, effects as `+Target; -Target;
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
@@ -1039,7 +1067,7 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview
   showed; the create POST re-parses, refuses a stale digest, any error row,
-  or an operator with no linked contributor, then `_create_rows` writes
+  (an operator with no contributor is linked to one on the spot, #5001), then `_create_rows` writes
   everything in one `transaction.atomic()` (distinction, effects, offer
   lines, pins; `stamp_written` on each; one admin `LogEntry` per
   distinction). No update path, no delete path, no created reference rows;

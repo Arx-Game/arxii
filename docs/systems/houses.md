@@ -661,7 +661,9 @@ kingdom | potential
   refuses that kingdom only; a layout whose every kingdom names a culture needs no realm bank.
   `world/seeds/place_names.py` holds the eight banks (name and weight; agent-drafted, owner
   reshaped) and `ensure_place_names()` loads them, idempotent and never moving an edited
-  weight; it runs with the `npc_services` seed cluster, beside `ensure_name_cultures()`.
+  weight; it runs with the `npc_services` seed cluster, beside `ensure_name_cultures()`. On a
+  populated database (production) the banks are pasted instead: Admin > Import Data > Place
+  names from a table (`culture | name | weight`, additions only, #5001).
 - **Names** — `NameCulture.realm` links a culture to its realm (#4986, the seed links the five);
   `NameCultureEntry` rows of the `NamePart.PLACE` part are the bank. Every duchy and county
   takes one, heaviest weight first with a stable per-run shuffle among equal weights, without
