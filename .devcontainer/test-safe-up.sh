@@ -28,4 +28,25 @@ log=$(find "$tmp" -maxdepth 1 -name 'arxii-devcontainer.*' -type f)
 [ "$(stat -c %a "$log")" = 600 ]
 grep -q 'fake-secret-stdout' "$log"
 grep -q 'fake-secret-stderr' "$log"
+# Simulate Windows ACL failure: the CLI must not run without a private log.
+cat > "$tmp/uname" <<'EOF'
+#!/usr/bin/env bash
+echo MINGW64_NT
+EOF
+cat > "$tmp/cygpath" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$2"
+EOF
+cat > "$tmp/icacls.exe" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$tmp/uname" "$tmp/cygpath" "$tmp/icacls.exe"
+rm -f "$TEST_ARGS"
+unset TEST_EXIT
+status=0
+USERNAME=test bash "$root/safe-up.sh" > "$tmp/out" 2>&1 || status=$?
+[ "$status" -ne 0 ]
+[ ! -e "$TEST_ARGS" ]
+grep -q 'Could not restrict startup log access' "$tmp/out"
 echo 'safe-up tests passed'
