@@ -37,6 +37,8 @@ of one per technique.
 
 ## Confidence
 
+**Extended (#5002, [ADR-5002](adr-5002-a-casting-style-carries-its-magic-skill.md)).** A Gift's own style now supplies the cast's skill as well as its concealment, through the shared `casting_style` helper; `Gift.technique_skill` is gone.
+
 Built and wired — `Gift.style` (`src/world/magic/models/gifts.py`) and the
 `technique.gift.style` precedence check in `_concealment_for`
 (`src/world/magic/services/cast_observation.py`). Nullable, so no backfill for existing rows

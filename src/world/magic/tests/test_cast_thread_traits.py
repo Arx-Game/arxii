@@ -25,6 +25,7 @@ from world.magic.factories import (
     ResonanceFactory,
     RitualCheckConfigFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
     ThreadFactory,
 )
 from world.magic.models.rituals import Ritual
@@ -48,7 +49,7 @@ class CastThreadTraitsBase(TestCase):
         cls.resonance = ResonanceFactory()
         cls.stat = StatTraitFactory()
         cls.technique_skill = SkillFactory()
-        cls.path = PathFactory(technique_skill=cls.technique_skill)
+        cls.path = PathFactory(style=TechniqueStyleFactory(skill=cls.technique_skill))
         CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
         cls.check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=cls.check_type, trait=cls.stat, weight=1)

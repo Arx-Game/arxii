@@ -20,7 +20,6 @@ from world.checks.services import (
 from world.checks.types import ModifierBreakdown
 from world.combat.constants import CauseKind, ParticipantStatus
 from world.combat.morale import OpponentMoraleState, morale_state_for
-from world.magic.services.magic_skills import technique_paths
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.services import difficulty_indicator_for_rank_difference
 from world.progression.selectors import current_path_for_character
@@ -381,7 +380,7 @@ def _display_techniques(viewer: CharacterSheet) -> list[Technique]:
     techniques = {
         link.technique_id: link.technique
         for link in CharacterTechnique.objects.filter(character=viewer).select_related(
-            "technique__gift"
+            "technique__gift__style__skill__trait"
         )
     }
     readied = readied_ultimate(viewer)
@@ -416,13 +415,11 @@ def build_standoff_view(
         if any(approach.casts_technique for approach in approaches)
         else []
     )
-    # The viewer's Path and every technique's own Paths are read once; each technique's
-    # skill term follows from them.
+    # The viewer's Path is read once; each technique's skill term follows from it and the
+    # technique's Gift style (#5002).
     path = current_path_for_character(viewer_sheet.character) if techniques else None
-    own_paths = technique_paths(t.pk for t in techniques) if techniques else {}
     display_terms = {
-        technique.pk: display_cast_terms_for_path(technique, path, own_paths.get(technique.pk, []))
-        for technique in techniques
+        technique.pk: display_cast_terms_for_path(technique, path) for technique in techniques
     }
     view = StandoffView(
         place=encounter.room.db_key if encounter.room is not None else "",

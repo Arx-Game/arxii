@@ -59,6 +59,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     ThreadWeavingUnlockFactory,
@@ -102,7 +103,7 @@ class _BurningResonance(JourneyCase):
         )
         self.celestial, self.primal, self.abyssal = ensure_conversion_pairs()
         self.skill = SkillFactory()
-        self.path = PathFactory(technique_skill=self.skill)
+        self.path = PathFactory(style=TechniqueStyleFactory(skill=self.skill))
         self.lantern = self.make_room("The Lantern")
         SceneFactory(room=self.lantern)
 

@@ -50,6 +50,7 @@ from world.magic.factories import (
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
@@ -344,15 +345,15 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         return capture.extra_traits, rolled[0]
 
     def test_a_schooled_cast_rolls_its_magic_skill_at_the_allocated_value(self) -> None:
-        # The CG Path's technique skill is a Magic skill, so a cast on it adds that skill.
+        # The CG Path's style skill is a Magic skill, so a cast on it adds that skill.
         CheckSystemSetupFactory.create()
         PointConversionRange.objects.get_or_create(
             trait_type=TraitType.SKILL,
             min_value=1,
             defaults={"max_value": 100, "points_per_level": 1},
         )
-        self.path.technique_skill = self.thaumaturgy
-        self.path.save(update_fields=["technique_skill"])
+        self.path.style = TechniqueStyleFactory(skill=self.thaumaturgy)
+        self.path.save(update_fields=["style"])
         check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory(), weight=1)
         technique = TechniqueFactory(

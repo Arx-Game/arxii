@@ -20,11 +20,6 @@ from actions.constants import ActionCategory
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
-from world.magic.skill_choices import (
-    MAGIC_PICKER_SKILL_CHOICES,
-    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
-    MAGIC_PICKER_SKILL_HELP,
-)
 
 
 class PathStage(models.IntegerChoices):
@@ -79,22 +74,8 @@ class Path(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "the caster, not of the technique: the same catalog Technique is an "
             "Incantation cast by a Path of Tomes character and a Manifestation cast by "
             "a Path of Steel one. Drives the style's StyleCapabilityRequirement rows at "
-            "cast time. Null = the path imposes no style (pathless/NPC casters likewise)."
-        ),
-    )
-    technique_skill = models.ForeignKey(
-        "arxii.Skill",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="technique_skill_paths",
-        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
-        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
-        help_text=(
-            "The skill added to every cast of a Major Gift technique by a character on "
-            "this Path (#4450). A technique's own skill, if set, wins; a Minor Gift "
-            "technique uses the Gift's skill instead. Blank = this Path adds no skill. "
-            f"{MAGIC_PICKER_SKILL_HELP}"
+            "cast time, and its skill is the one a cast on this Path adds (#5002). Null = "
+            "the path imposes no style and adds no skill (pathless/NPC casters likewise)."
         ),
     )
 

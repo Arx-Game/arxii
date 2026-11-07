@@ -14,11 +14,6 @@ from world.contributors.models import CreditedContent
 from world.items.constants import GearArchetype
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
-from world.magic.skill_choices import (
-    MAGIC_PICKER_SKILL_CHOICES,
-    MAGIC_PICKER_SKILL_ERROR_MESSAGES,
-    MAGIC_PICKER_SKILL_HELP,
-)
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -113,22 +108,8 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="gifts",
         help_text=(
             "Casting style this gift imposes, overriding the caster's Path style "
-            "(#2905). Null = defer to the caster's Path, as before."
-        ),
-    )
-    technique_skill = models.ForeignKey(
-        "arxii.Skill",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="technique_skill_gifts",
-        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
-        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
-        help_text=(
-            "Minor Gifts only (#4450): the skill added to every cast of this Gift's "
-            "techniques. A technique's own skill, if set, wins. A Major Gift's "
-            "techniques take the caster's Path technique skill instead. Blank = this "
-            f"Gift adds no skill. {MAGIC_PICKER_SKILL_HELP}"
+            "(#2905). Its skill is the one this gift's casts add (#5002). Null = defer "
+            "to the caster's Path style and its skill."
         ),
     )
     # The gift points at the item primitive (ADR-0010). The weapon made from it carries
@@ -164,26 +145,11 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(technique_skill__isnull=True) | models.Q(kind=GiftKind.MINOR),
-                name="gift_technique_skill_minor_only",
-            ),
-        ]
-
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
         super().clean()
-        if self.technique_skill_id is not None and self.kind != GiftKind.MINOR:
-            raise ValidationError(
-                {
-                    "technique_skill": "A Major Gift's techniques take the caster's Path "
-                    "technique skill. Set it on the Path instead."
-                }
-            )
         if self.kind == GiftKind.MAJOR and self.pk and self.ultimate_techniques.exists():
             raise ValidationError(
                 {

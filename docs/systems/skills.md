@@ -339,8 +339,8 @@ applies weekly rust to skills that received no training (or other development) t
 - **Checks app**: Skill values feed into check resolution via the Trait system. A roll can also
   add a skill it does not list on its check type, through `extra_traits` (#4450, ADR-4450); the skill
   scores, develops once per roll, and counts for thread matching like a check type's own skill.
-- **Magic** (#4450): `MagicActivitySkill`, `Path.technique_skill`, `Gift.technique_skill` and
-  `Technique.skill` point at `Skill` (PROTECT for the activity table, SET_NULL for the others), so
+- **Magic** (#4450): `MagicActivitySkill`, `TechniqueStyle.skill` (the casting style's skill,
+  #5002) and `Technique.skill` point at `Skill` (PROTECT for the activity table, SET_NULL for the others), so
   staff choose which skills magical rolls add. A skill in the MAGIC trait category is not offered as
   a character's Anima Check skill (the cast would count it twice). See `docs/systems/magic.md`,
   "Magical skills".

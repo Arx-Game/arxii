@@ -2178,7 +2178,6 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
-  - technique_skill -> skills.Skill [FK] (nullable)
   - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
   - child_paths <- classes.Path
@@ -6097,7 +6096,6 @@
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
-  - technique_skill -> skills.Skill [FK] (nullable)
   - natural_weapon_template -> items.ItemTemplate [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
@@ -6807,6 +6805,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - skill -> skills.Skill [FK] (nullable)
 **Pointed to by:**
   - paths <- classes.Path
   - gifts <- magic.Gift
@@ -9717,9 +9716,8 @@
   - trait -> traits.Trait [OneToOne]
 **Pointed to by:**
   - npc_preset_skill_lines <- roster.NPCPresetSkillLine
-  - technique_skill_paths <- classes.Path
   - legend_spreads <- societies.LegendSpread
-  - technique_skill_gifts <- magic.Gift
+  - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - magic_activity_rows <- magic.MagicActivitySkill
   - combat_style <- covenants.CombatStyle

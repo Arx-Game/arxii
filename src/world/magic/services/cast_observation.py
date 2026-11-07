@@ -126,23 +126,18 @@ def _concealment_for(
 ) -> int:
     """The concealment rating for this cast; 0 when nothing imposes any.
 
-    The gift's own style wins when set (#2905) — a gift the character didn't choose
-    (a species gift) doesn't take its casting manner from whatever Path they did choose.
-    Every technique has a gift (Technique.gift is required), so this check is always safe.
-    Falls back to the caster's Path style exactly as before when the gift sets no style.
+    The style is ``casting_style``'s (#5002): the gift's own style when set (#2905), a
+    gift the character didn't choose (a species gift) not taking its casting manner from
+    whatever Path they did choose, else the caster's Path style. The cast's skill reads
+    the same style, so manner and skill never disagree.
 
     The caller has already ruled out the free, no-query cases (an openly declared cast,
     a contact-range technique), so this only runs when concealment could still apply.
     """
-    if technique.gift.style_id is not None:
-        return technique.gift.style.cast_concealment
+    from world.magic.services.casting_style import casting_style  # noqa: PLC0415
 
-    from world.progression.selectors import current_path_for_character  # noqa: PLC0415
-
-    path = current_path_for_character(caster)
-    if path is None or path.style_id is None:
-        return 0
-    return path.style.cast_concealment
+    style = casting_style(caster, technique)
+    return style.cast_concealment if style is not None else 0
 
 
 def _detection_check_type() -> CheckType | None:

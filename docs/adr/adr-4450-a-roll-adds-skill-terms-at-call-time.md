@@ -5,4 +5,6 @@ Magical rolls need to include skills that staff choose (a Path's technique skill
 
 **Amendment (#4547).** The skills these terms carry are Magic-category skills only: the four pickers (`MagicActivitySkill.skill`, `Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`) share `limit_choices_to=MAGIC_SKILL_CHOICES` (`world/magic/skill_choices.py`), so a skill a character picks elsewhere can never reach a magic roll slot, and no seeder names, creates or weights a skill for magic. A check type that weights a Magic skill itself would count it twice, so the Required content dashboard lists those for staff to repoint; production rows were left as they are rather than migrated.
 
+**Amendment (#5002, [ADR-5002](adr-5002-a-casting-style-carries-its-magic-skill.md)).** `Path.technique_skill` and `Gift.technique_skill` are replaced by `TechniqueStyle.skill`: a cast adds the technique's own skill, else its casting style's. The pickers are now `MagicActivitySkill.skill`, `TechniqueStyle.skill` and `Technique.skill`.
+
 > Status: accepted · Source: issue #4450; verify against `src/world/checks/services.py`, `src/world/checks/types.py` and `src/world/magic/services/magic_skills.py`

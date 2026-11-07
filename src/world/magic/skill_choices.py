@@ -2,9 +2,9 @@
 
 The skills a magical roll adds are bespoke Magic skills that staff make and point each
 roll at (ADR-4450). They are never skills a character can pick anywhere else, so a cast
-never counts one skill twice. Four pickers hold that line with these values:
-``MagicActivitySkill.skill``, ``Path.technique_skill``, ``Gift.technique_skill`` and
-``Technique.skill``.
+never counts one skill twice. Three pickers hold that line with these values:
+``MagicActivitySkill.skill``, ``TechniqueStyle.skill`` (the casting style's skill, which
+replaced the Path and Gift pickers in #5002) and ``Technique.skill``.
 
 ``limit_choices_to`` does both jobs: the admin form and its autocomplete offer only these
 skills, and ``Model.full_clean()`` refuses any other (``ForeignKey.validate`` filters by
@@ -14,7 +14,7 @@ active flag; a picker keeps an inactive Magic skill valid, because staff deactiv
 skill means it adds nothing, not that every row pointing at it must change.
 
 A combat style's own skill (``CombatStyle.skill``) is a Magic skill too, trained from a
-Tradition's creation pool and added by the style itself (#4844 decision 16). The four
+Tradition's creation pool and added by the style itself (#4844 decision 16). The three
 pickers never offer it, so ``MAGIC_PICKER_SKILL_CHOICES`` adds that exclusion;
 ``CombatStyle.skill`` keeps the plain ``MAGIC_SKILL_CHOICES``.
 
@@ -38,7 +38,7 @@ MAGIC_SKILL_ERROR_MESSAGES = {
 
 MAGIC_SKILL_HELP = "Magic-category skills only."
 
-#: What the four magic skill pickers offer and accept: a Magic skill that is no combat
+#: What the three magic skill pickers offer and accept: a Magic skill that is no combat
 #: style's own skill (#4921).
 MAGIC_PICKER_SKILL_CHOICES = MAGIC_SKILL_CHOICES & Q(combat_style__isnull=True)
 

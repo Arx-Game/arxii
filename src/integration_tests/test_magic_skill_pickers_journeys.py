@@ -4,10 +4,10 @@ The skills a magical roll adds are bespoke Magic skills that staff make and poin
 roll at (ADR-4450). They are never skills a character picks anywhere else, so a cast
 never counts one skill twice.
 
-- Staff set a magic skill in admin: each of the four pickers (a magical activity's
-  skill, a Path's and a Minor Gift's technique skill, a technique's own skill) offers
-  Magic skills only and refuses any other skill on save.
-- A caster on a Path whose technique skill is a Magic skill casts through
+- Staff set a magic skill in admin: each of the three pickers (a magical activity's
+  skill, a casting style's skill, a technique's own skill) offers Magic skills only and
+  refuses any other skill on save. The Path and Gift forms carry no skill since #5002.
+- A caster on a Path whose style's skill is a Magic skill casts through
   ``cast_technique`` against the seeded "Technique Cast" fallback check: the roll is
   the check type's stat plus the technique skill once. The seed used to weight an
   "occult" trait into that check as well, so a staff Magic skill called occult
@@ -34,7 +34,6 @@ from world.checks.services import perform_check
 from world.checks.test_helpers import force_check_outcome
 from world.checks.types import CheckResult, ExtraTraitTerm
 from world.classes.factories import PathFactory
-from world.classes.models import Path
 from world.covenants.factories import CombatStyleFactory
 from world.covenants.models import CombatStyle
 from world.magic.constants import GiftKind, MagicActivity
@@ -43,8 +42,9 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     GiftFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
 )
-from world.magic.models import Gift, Technique
+from world.magic.models import Technique, TechniqueStyle
 from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, ensure_technique_cast_content
 from world.progression.factories import CharacterPathHistoryFactory
@@ -187,21 +187,27 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
             self.thaumaturgy,
         )
 
-    def test_a_path_takes_a_magic_technique_skill_only(self) -> None:
-        path = PathFactory()
-        self.assertEqual(self.offered("path", "technique_skill"), {"Thaumaturgy"})
+    def test_a_casting_style_takes_a_magic_skill_only(self) -> None:
+        style = TechniqueStyleFactory(name="Incantation")
+        self.assertEqual(self.offered("techniquestyle", "skill"), {"Thaumaturgy"})
 
         self.assert_refused_then_taken(
-            reverse("admin:arxii_path_change", args=[path.pk]), "technique_skill", path
+            reverse("admin:arxii_techniquestyle_change", args=[style.pk]), "skill", style
         )
 
-    def test_a_minor_gift_takes_a_magic_technique_skill_only(self) -> None:
-        gift = GiftFactory(kind=GiftKind.MINOR)
-        self.assertEqual(self.offered("gift", "technique_skill"), {"Thaumaturgy"})
-
-        self.assert_refused_then_taken(
-            reverse("admin:arxii_gift_change", args=[gift.pk]), "technique_skill", gift
-        )
+    def test_the_path_and_gift_forms_carry_no_skill(self) -> None:
+        """The skill is set once, on the style; a Path or Gift only picks its style (#5002)."""
+        for url in (
+            reverse("admin:arxii_path_change", args=[PathFactory().pk]),
+            reverse("admin:arxii_gift_change", args=[GiftFactory(kind=GiftKind.MINOR).pk]),
+        ):
+            with self.subTest(url=url):
+                page = self.client.get(url)
+                self.assertEqual(page.status_code, 200)
+                fields = set(page.context["adminform"].form.fields)
+                self.assertIn("style", fields)
+                self.assertNotIn("technique_skill", fields)
+                self.assertNotIn("skill", fields)
 
     def test_a_technique_takes_a_magic_skill_only(self) -> None:
         technique = TechniqueFactory()
@@ -215,37 +221,31 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         """``full_clean`` holds the same rule for any other writer, with the reason."""
         rows = (
             MagicActivitySkill(activity=MagicActivity.CEREMONY, skill=self.persuasion),
-            Path(name="Path of Glass", technique_skill=self.persuasion),
-            Gift(name="Glass Song", kind=GiftKind.MINOR, technique_skill=self.persuasion),
+            TechniqueStyle(name="Glass", skill=self.persuasion),
             Technique(gift=GiftFactory(), name="Glass Edge", skill=self.persuasion),
         )
         for row in rows:
-            on_row = isinstance(row, MagicActivitySkill | Technique)
-            field = "skill" if on_row else "technique_skill"
             with self.subTest(model=type(row).__name__):
                 errors = self.validation_errors(row)
-                self.assertIn(field, errors)
-                self.assertIn("Magic category", " ".join(errors[field]))
+                self.assertIn("skill", errors)
+                self.assertIn("Magic category", " ".join(errors["skill"]))
 
     def test_a_style_skill_is_refused_by_every_picker(self) -> None:
         """A combat style's skill is trained in creation; no magical roll adds it (#4921)."""
         rows = (
             MagicActivitySkill(activity=MagicActivity.CEREMONY, skill=self.daring_dance),
-            Path(name="Path of Steps", technique_skill=self.daring_dance),
-            Gift(name="Step Song", kind=GiftKind.MINOR, technique_skill=self.daring_dance),
+            TechniqueStyle(name="Steps", skill=self.daring_dance),
             Technique(gift=GiftFactory(), name="Step Edge", skill=self.daring_dance),
         )
         for row in rows:
-            on_row = isinstance(row, MagicActivitySkill | Technique)
-            field = "skill" if on_row else "technique_skill"
             with self.subTest(model=type(row).__name__):
                 errors = self.validation_errors(row)
-                self.assertIn(field, errors)
-                self.assertIn("not a combat style's skill", " ".join(errors[field]))
+                self.assertIn("skill", errors)
+                self.assertIn("not a combat style's skill", " ".join(errors["skill"]))
 
     def test_a_style_refuses_a_skill_a_picker_already_adds(self) -> None:
         """The other way round: a style never takes a picker's skill (#4921)."""
-        PathFactory(technique_skill=self.thaumaturgy)
+        TechniqueStyleFactory(skill=self.thaumaturgy)
         style = CombatStyle(name="Veil and Needle", defense_style="barrier", skill=self.thaumaturgy)
 
         errors = self.validation_errors(style)
@@ -255,17 +255,19 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         style.skill = _magic_skill("Veil and Needle")
         self.assertEqual(self.validation_errors(style), {})
 
-    def test_a_path_refuses_a_style_skill_in_admin(self) -> None:
-        path = PathFactory()
+    def test_a_casting_style_refuses_a_combat_style_skill_in_admin(self) -> None:
+        style = TechniqueStyleFactory(name="Prayer")
 
         refused = self.save_change_form(
-            reverse("admin:arxii_path_change", args=[path.pk]), "technique_skill", self.daring_dance
+            reverse("admin:arxii_techniquestyle_change", args=[style.pk]),
+            "skill",
+            self.daring_dance,
         )
 
         self.assertEqual(refused.status_code, 200)
-        self.assertIn("technique_skill", refused.context["adminform"].form.errors)
-        path.refresh_from_db()
-        self.assertIsNone(path.technique_skill_id)
+        self.assertIn("skill", refused.context["adminform"].form.errors)
+        style.refresh_from_db()
+        self.assertIsNone(style.skill_id)
 
     @staticmethod
     def validation_errors(row) -> dict[str, list[str]]:
@@ -293,7 +295,7 @@ class ACastCountsItsMagicSkillOnce(JourneyCase):
         )
         self.template = ensure_technique_cast_content()
         self.occult = _magic_skill("occult")
-        self.path = PathFactory(technique_skill=self.occult)
+        self.path = PathFactory(style=TechniqueStyleFactory(skill=self.occult))
         self.lantern = self.make_room("The Lantern")
         SceneFactory(room=self.lantern)
         self.technique = TechniqueFactory(
