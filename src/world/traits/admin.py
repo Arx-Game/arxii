@@ -8,7 +8,7 @@ character values, and check resolution configuration.
 from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
-from world.skills.admin import SkillOnTraitInline, ensure_skill_target_or_warn
+from world.skills.admin_inlines import SkillOnTraitInline, ensure_skill_target_or_warn
 from world.skills.models import Skill
 from world.traits.models import (
     CharacterTraitValue,

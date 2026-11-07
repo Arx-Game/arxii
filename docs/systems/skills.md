@@ -84,7 +84,7 @@ sheet's `SkillEntry` carries `value` (stored plus `modifier`, the number a roll 
 `modifier`, with `at_boundary` read from the stored rating.
 
 The target is made by `mechanics.services.ensure_skill_target(trait)`: both admin paths that save a
-skill call it through `skills.admin.ensure_skill_target_or_warn` (`SkillAdmin.save_model`, and
+skill call it through `skills.admin_inlines.ensure_skill_target_or_warn` (`SkillAdmin.save_model`, and
 `TraitAdmin.save_formset` for the Trait page's Skill section, #5006), and the Distinction Builder's paste calls it at create time when an
 effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
 the first time a card names it. A same-named target in another category (the `stealth` roll
@@ -249,7 +249,7 @@ All models registered with appropriate admin interfaces:
 
 - **Where a skill is authored (#5006):** on the Trait page. The Authoring Workbench's Builders panel
   "New skill" link opens the Trait add form typed as Skill; its Skill section
-  (`SkillOnTraitInline`: tooltip, display order, active, credit) makes the `Skill` row in the same
+  (`skills.admin_inlines.SkillOnTraitInline`: tooltip, display order, active, credit) makes the `Skill` row in the same
   Save, plus its modifier target. An untouched section makes no skill (some skill-type traits are
   rolled by checks without being trained skills), and a filled section on a non-skill trait is
   refused. Specializations stay on the Skill page, linked from the section; the section is hidden

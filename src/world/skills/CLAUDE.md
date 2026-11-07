@@ -16,6 +16,11 @@ Parent skills and specializations for character abilities. Skills are linked to 
 - Admin for all models with inline specialization editing
 - SkillPointBudget limited to single row
 
+### `admin_inlines.py`
+- Registration-free pieces both the Skill and Trait admins use (#5006): `SkillOnTraitInline`
+  (the Trait page's Skill section, where a skill is authored), its formset, and
+  `ensure_skill_target_or_warn`. Neither admin module imports the other's.
+
 ### `factories.py`
 - FactoryBoy factories for all models
 
