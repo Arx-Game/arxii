@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# The CLI can print the fully expanded Compose environment, including secrets.
-# Neither stream is safe to forward or save, including on error.
+# CLI diagnostics may contain the fully expanded Compose environment.
 set -u
-if devcontainer up --workspace-folder . "$@" >/dev/null 2>&1; then
+umask 077
+log=$(mktemp "${TMPDIR:-/tmp}/arxii-devcontainer.XXXXXXXX") || {
+    echo "Could not create a private startup log; devcontainer was not started." >&2
+    exit 1
+}
+if devcontainer up --workspace-folder . "$@" >"$log" 2>&1; then
+    rm -f -- "$log"
     echo "Devcontainer started."
 else
     status=$?
-    echo "Devcontainer startup failed (exit $status); output suppressed because it may contain credentials." >&2
+    echo "Devcontainer startup failed (exit $status). Private diagnostic log: $log" >&2
+    echo "The log may contain credentials. Inspect locally; do not share it unredacted." >&2
     exit "$status"
 fi

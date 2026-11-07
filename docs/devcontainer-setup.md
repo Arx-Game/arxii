@@ -618,7 +618,8 @@ re-run the bootstrap.
 
 **Startup output and credentials:** `just dc-up` and `just dc-build` suppress the
 Dev Container CLI's output because it can print the expanded Compose environment,
-including credentials. A failure reports its exit code without saving raw output.
+including credentials. A failure reports its exit code and the path to a private temporary diagnostic log.
+That log may contain credentials: inspect it locally and delete it when finished.
 Calling `devcontainer up` directly bypasses this protection; never paste or share its
 output. Use Docker Desktop to inspect container state when startup fails.
 
