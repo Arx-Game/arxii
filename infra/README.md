@@ -332,10 +332,13 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    only after a post-reload health check against the localhost backend
    succeeds) — so a run that dies on the reload task is fixed by simply
    pressing the button again; the re-run cannot silently skip the reload.
-   If the reload itself *fails* (a wedged Server can block a graceful
-   reload forever — the 2026-08-23 dead-DB-connection incident), the play
-   falls back to a full `systemctl restart`: players drop on that path
-   only, and the deploy still lands. A reload never restarts the Portal,
+   The reload is `arxii-reload` (#4999): it succeeds only when a new Server
+   answers under the same Portal, and it recovers the Server alone for up to
+   three minutes first. If that runs out (a wedged Server, the 2026-08-23
+   dead-DB-connection incident, is now usually recovered without this), the
+   play falls back to a full `systemctl restart`: players drop on that path
+   only, and the deploy still lands. If the play dies first, the watchdog
+   recovers the game anyway (`docs/operations/ops-access.md`). A reload never restarts the Portal,
    so when the release's Portal-loaded fingerprint (`app_portal_paths`,
    `app_portal_settings_regex`) differs from the stamped one, or the
    operator set `full_restart`, the play restarts instead of reloading
