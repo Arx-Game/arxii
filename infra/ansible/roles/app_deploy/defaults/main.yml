@@ -39,8 +39,8 @@ app_service: arxii
 # the gamedir (server/server.pid), NOT relative to app_current.
 app_pidfile: /opt/arxii/current/src/server/server.pid
 # Evennia is actually TWO daemons (Server + Portal — see src/server/README.md
-# "server.pid and portal.pid"). systemd's Type=forking/PIDFile only tracks
-# server.pid; the watchdog (below) reads both.
+# "server.pid and portal.pid"). systemd's Type=forking/PIDFile tracks portal.pid,
+# the daemon that stays up (#4999); the watchdog (below) reads both.
 app_portal_pidfile: /opt/arxii/current/src/server/portal.pid
 
 # Release-local paths (Task D). Pre-flip deploy steps (uv sync, frontend
@@ -92,6 +92,15 @@ app_web_backend: "127.0.0.1:4001"
 # check. Compared on every converge, so a run that died mid-reload gets the
 # reload re-fired by the next button press instead of silently skipped.
 app_reload_stamp: /opt/arxii/reloaded_sha
+
+# The Server's own web port, behind the Portal's proxy on app_web_backend.
+# arxii-reload probes this one, because the proxy can answer with no Server behind
+# it. MUST equal the second number of settings.WEBSERVER_PORTS (Evennia's default).
+app_server_web_port: 4005
+# Failure evidence from arxii-reload (#4999): command names, PIDs and listeners,
+# never command lines or logs. Root-owned, separate from app_log_dir, because the
+# game user owns that directory and could swap a path that root writes to.
+app_reload_evidence_dir: /var/log/arxii-reload
 
 # Portal-loaded code (#3863). `evennia reload` restarts only the Server; the
 # Portal keeps the code it started with. So anything the Portal loads - the

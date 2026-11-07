@@ -47,6 +47,7 @@
       # Managed by Ansible (app_deploy). Evennia rotates its own logs but never
       # prunes; delete anything older than app_log_retention_days.
       d {{ app_log_dir }} 0750 {{ app_user }} adm {{ app_log_retention_days }}d
+      d {{ app_reload_evidence_dir }} 0750 root adm {{ app_log_retention_days }}d
   register: app_log_tmpfiles
 
 - name: Apply the tmpfiles.d rule now (do not wait for a boot)  # noqa: no-handler
@@ -558,6 +559,15 @@
   register: app_su_create
   changed_when: app_su_create.rc == 0
 
+# Before the unit: its ExecReload names this path, and the reload below runs it.
+- name: Install the reload script (verifies the replacement, recovers the Server alone)
+  ansible.builtin.template:
+    src: arxii-reload.sh.j2
+    dest: /usr/local/sbin/arxii-reload
+    owner: root
+    group: root
+    mode: "0750"
+
 - name: Install the systemd unit
   ansible.builtin.template:
     src: arxii.service.j2
@@ -718,6 +728,11 @@
 # ExecStart brings up the new release cold. Players drop on the fallback
 # path only — acceptable next to a deploy that otherwise cannot land.
 #
+# Since #4999 the reload job is arxii-reload: it verifies the replacement, tries
+# to recover the Server alone within 180 s, and exits nonzero when it cannot, so
+# this rescue is reached in about three minutes and only when players would
+# otherwise be stranded. If SSH dies first, the watchdog recovers the game anyway.
+#
 # async/poll on every job: the reload/restart blocks for the full Server
 # restart (minutes) with no output; detached-plus-poll keeps the SSH path
 # active every 15 s instead of one long silent block. 600 s comfortably
@@ -832,13 +847,10 @@
     msg: "{{ app_ws_probe.stdout_lines | default(['probe skipped: nothing reloaded or restarted']) }}"
 
 # --- Portal-crash watchdog ---------------------------------------------------
-# Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
-# Server daemon. Evennia actually runs Server + Portal as two separate
-# processes (server.pid + portal.pid — see src/server/README.md); if the
-# Portal alone dies, systemd still sees the unit as "active" (Server is
-# fine) and does nothing, but players cannot connect. This timer-driven
-# script checks BOTH pidfiles and restarts the unit + fires an off-box
-# alert when the unit claims active but a daemon is dead.
+# Type=forking + PIDFile=portal.pid (arxii.service.j2) supervises the Portal, so
+# a dead Server leaves the unit "active" (#4999). This timer script checks BOTH
+# pidfiles: it recovers a dead Server alone, and restarts the unit + fires an
+# off-box alert when that fails or another half-dead state appears.
 - name: Install the watchdog script
   ansible.builtin.template:
     src: arxii-watchdog.sh.j2
