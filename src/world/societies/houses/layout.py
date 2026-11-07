@@ -6,7 +6,7 @@ ladder from them. The grammar is one entry per line, fields separated by ``|``, 
 of a kingdom indented by two spaces::
 
     realm | counties 2-6 | baronies 1-4 | capital x1.5
-    kingdom Umbros | seat Umbros | duchies 5 | capital x2
+    kingdom Umbros | seat Umbros | duchies 5 | capital x2 | names Umbran
     kingdom East Cinderus | titular | lore The Daeva remnant ...
       duchy Ashfall | counties 3
       duchy Embermarch | sworn Cinderus
@@ -76,6 +76,7 @@ class KingdomLine:
     line_no: int
     station: str = TitleStation.SEATED
     seat: str | None = None
+    names: str | None = None
     duchies: Range | None = None
     capital: float | None = None
     sworn: str | None = None
@@ -102,6 +103,7 @@ WORD_BARONIES = "baronies"
 WORD_CAPITAL = "capital"
 WORD_CLAIMABLE = "claimable"
 WORD_BY = "by"
+WORD_NAMES = "names"
 _COUNT_WORDS = (WORD_DUCHIES, WORD_COUNTIES, WORD_BARONIES)
 _STATION_WORDS = {"titular": TitleStation.TITULAR, "potential": TitleStation.POTENTIAL}
 
@@ -169,6 +171,15 @@ def _word_seat(line_no: int, target: Target, _word: str, value: str, _rest: list
     target.seat = value
 
 
+def _word_names(line_no: int, target: Target, _word: str, value: str, _rest: list[str]) -> None:
+    if not isinstance(target, KingdomLine) or not value:
+        raise LayoutError(
+            line_no,
+            "names picks a kingdom's place-name culture: names <culture>, on a kingdom line",
+        )
+    target.names = value
+
+
 def _word_claimable(line_no: int, target: Target, word: str, _value: str, _rest: list[str]) -> None:
     if isinstance(target, Defaults):
         raise LayoutError(line_no, f"{word} belongs on a kingdom or duchy line")
@@ -213,6 +224,7 @@ _WORDS = {
     "titular": _word_station,
     "potential": _word_station,
     "seat": _word_seat,
+    WORD_NAMES: _word_names,
     "held": _word_claimable,
     "claimable": _word_claimable,
     "sworn": _word_sworn,
@@ -387,16 +399,25 @@ class _Rung:
 
 
 class _Names:
-    """The realm's place-name bank, drawn without replacement in a stable order."""
+    """The place-name banks of one layout, each drawn without replacement in a stable order.
 
-    def __init__(self, realm: Realm, seed: int, reserved: set[str]) -> None:
-        cultures = NameCulture.objects.filter(realm=realm)
+    The default bank is every culture linked to the realm. A kingdom line's ``names`` word
+    switches to one named culture instead (a regional culture carries no realm link, so it
+    never leaks into the default). A name drawn from one bank is spent in every bank."""
+
+    def __init__(self, realm: Realm, seed: int, reserved: set[str], *, needs_default: bool) -> None:
+        self._seed = seed
+        # Title.name is unique across every realm when set, so the whole ladder is taken
+        self._spent = set(Title.objects.exclude(name="").values_list("name", flat=True)) | reserved
+        self.drawn: list[str] = []
+        self._pools: dict[str, list[str]] = {}
+        self._pool: list[str] = []
         entries = list(
-            NameCultureEntry.objects.filter(culture__in=cultures, part=NamePart.PLACE).order_by(
-                "-weight", "value"
-            )
+            NameCultureEntry.objects.filter(
+                culture__realm=realm, part=NamePart.PLACE
+            ).select_related("culture")
         )
-        if not entries:
+        if not entries and needs_default:
             msg = f"realm {realm.pk} has no PLACE names"
             raise LayoutRefused(
                 msg,
@@ -404,20 +425,39 @@ class _Names:
                     f"{realm.name} has no place-name bank; add Place names to its culture first."
                 ),
             )
-        # Title.name is unique across every realm when set, so the whole ladder is taken
-        taken = set(Title.objects.exclude(name="").values_list("name", flat=True)) | reserved
-        values = [(e.weight, e.value) for e in entries if e.value not in taken]
+        self._default = self._ordered(entries)
+        self._pool = self._default
+
+    def _ordered(self, entries: list[NameCultureEntry]) -> list[str]:
+        values = [(e.weight, e.value) for e in entries if e.value not in self._spent]
         # heaviest first; a stable per-run shuffle only among equal weights
-        values.sort(key=lambda wv: (-wv[0], zlib.crc32(f"{seed}:{wv[1]}".encode())))
-        self._pool = [v for _, v in values]
-        self.drawn: list[str] = []
+        values.sort(key=lambda wv: (-wv[0], zlib.crc32(f"{self._seed}:{wv[1]}".encode())))
+        return [v for _, v in values]
+
+    def use(self, culture_name: str | None, line_no: int) -> None:
+        """Draw from ``culture_name`` from now on, or from the realm's bank when it is None."""
+        if culture_name is None:
+            self._pool = self._default
+            return
+        key = culture_name.lower()
+        if key not in self._pools:
+            culture = NameCulture.objects.filter(name__iexact=culture_name).first()
+            if culture is None:
+                raise LayoutError(line_no, f"no place-name culture named {culture_name}")
+            entries = list(NameCultureEntry.objects.filter(culture=culture, part=NamePart.PLACE))
+            if not entries:
+                raise LayoutError(line_no, f"{culture.name} has no place names to draw from")
+            self._pools[key] = self._ordered(entries)
+        self._pool = self._pools[key]
 
     def draw(self) -> str:
-        if not self._pool:
-            return ""
-        value = self._pool.pop(0)
-        self.drawn.append(value)
-        return value
+        while self._pool:
+            value = self._pool.pop(0)
+            if value not in self._spent:
+                self._spent.add(value)
+                self.drawn.append(value)
+                return value
+        return ""
 
 
 def _pick(rng_seed: int, salt: str, span: Range) -> int:
@@ -462,7 +502,12 @@ class _Walk:
         self.write = write
         self.seed = seed
         self.explicit_names = _explicit_names(layout)
-        self.names = _Names(realm, seed, set(self.explicit_names))
+        self.names = _Names(
+            realm,
+            seed,
+            set(self.explicit_names),
+            needs_default=any(k.names is None for k in layout.kingdoms),
+        )
         self.report = LayoutReport(wrote=write)
         self.by_name: dict[str, _Rung] = {}
         self.claimed_names: set[str] = set()
@@ -511,6 +556,7 @@ class _Walk:
         return crown, pips, land
 
     def _plan_kingdom(self, line: KingdomLine) -> _Rung:
+        self.names.use(line.names, line.line_no)
         if line.station != TitleStation.SEATED:
             return self._plan_dormant_crown(line)
         crown, pips, land = self._drawn_crown(line)

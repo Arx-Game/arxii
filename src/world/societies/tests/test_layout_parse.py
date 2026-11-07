@@ -65,6 +65,15 @@ class ParseLayoutTests(SimpleTestCase):
         assert [k.name for k in layout.kingdoms] == ["Umbros"]
         assert layout.kingdoms[0].line_no == 3
 
+    def test_names_picks_a_kingdoms_bank(self) -> None:
+        layout = parse_layout("kingdom Vestyr | duchies 3 | names Vestyr\nkingdom Umbros\n")
+        vestyr, umbros = layout.kingdoms
+        assert vestyr.names == "Vestyr"
+        assert umbros.names is None
+        assert parse_layout("kingdom Cinderus | NAMES  East Cinderus\n").kingdoms[0].names == (
+            "East Cinderus"
+        )
+
     def test_errors_name_the_line(self) -> None:
         cases = {
             "  duchy Orphan\n": "line 1: ",
@@ -75,6 +84,9 @@ class ParseLayoutTests(SimpleTestCase):
             "kingdom | duchies 2\n": "line 1: ",
             "kingdom Umbros\n  duchy Ash | titular\n": "line 2: ",
             "kingdom Umbros | capital two\n": "line 1: ",
+            "kingdom Umbros | names\n": "line 1: ",
+            "kingdom Umbros\n  duchy Ash | names Vestyr\n": "line 2: ",
+            "realm | names Vestyr\n": "line 1: ",
         }
         for text, prefix in cases.items():
             with self.assertRaises(LayoutError, msg=text) as caught:

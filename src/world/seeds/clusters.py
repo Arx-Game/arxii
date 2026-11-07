@@ -275,8 +275,11 @@ def _seed_npc_services() -> None:
     # #2827 phase 2 — regional name pools for NPC instantiation. Links to
     # region Areas by name when they exist; seeds unlinked otherwise.
     from world.seeds.name_cultures import ensure_name_cultures  # noqa: PLC0415
+    from world.seeds.place_names import ensure_place_names  # noqa: PLC0415
 
     ensure_name_cultures()
+    # #4983 slice 4: the place-name banks the layout tool names a realm's rungs from
+    ensure_place_names()
 
 
 def _seed_spy_tasks() -> None:

@@ -235,14 +235,17 @@ A realm's shape typed once: one line per kingdom (and its duchies), fields split
 read by `parse_layout` and planted by `lay_out_realm` after a `preview_layout`. The owner
 draws each kingdom's outline; the layout says how the land beneath is split (counts and
 ranges, the capital's weight, `seat`, `sworn`, `chartered`, `claimed by`, `titular`,
-`potential`, `held`, `lore`). A layout never draws a kingdom and never restores a titular
-crown.
+`potential`, `held`, `lore`, and on a kingdom line `names <culture>`). A layout never draws a
+kingdom and never restores a titular crown.
 _Avoid_: template, generator (it splits what is drawn), seed (that is the place-name bank).
 
 **Place-name bank** (`NameCultureEntry` rows with `part=PLACE` on the realm's `NameCulture`,
 #4986):
 The names the layout draws for duchies and counties, without replacement, in a stable
-per-run order; empty bank, no layout (`LayoutRefused`); dry bank, an undefined rung.
+per-run order; empty realm bank under a kingdom line with no `names`, no layout (`LayoutRefused`); dry bank, an undefined rung. A realm's
+default bank is its linked cultures; a **regional culture** (no realm link: Vestyr, Norbyria,
+Cinderus) is a bank a kingdom line picks with `names` (#4994). The seed is
+`world/seeds/place_names.py`.
 _Avoid_: name pool (that is the people side of the same culture), toponym list.
 
 **Pledged liege** (`Title.pledged_liege`, #4983):

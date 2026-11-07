@@ -44,6 +44,18 @@ PLACE_NAMES = [
 ]
 
 
+REGIONAL_NAMES = [
+    "Carradyn",
+    "Penmora",
+    "Aberwen",
+    "Tregarion",
+    "Maelor",
+    "Brynmar",
+    "Dynmere",
+    "Carvenna",
+]
+
+
 class LayOutRealmTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -53,6 +65,16 @@ class LayOutRealmTests(TestCase):
             NameCultureEntry.objects.create(
                 culture=culture, part=NamePart.PLACE, value=value, weight=len(PLACE_NAMES) - index
             )
+        # a regional culture carries no realm link: only a kingdom line's `names` word reaches it
+        regional = NameCulture.objects.create(name="Vestyr test")
+        for index, value in enumerate(REGIONAL_NAMES):
+            NameCultureEntry.objects.create(
+                culture=regional,
+                part=NamePart.PLACE,
+                value=value,
+                weight=len(REGIONAL_NAMES) - index,
+            )
+        NameCulture.objects.create(name="Empty test")
         cls.region = create_region_map(name="Testland", anchor_x=0, anchor_y=0, width_cells=2)
         import_region_map_file(region=cls.region, file_name="t.map", data=tiny_map().encode())
         cls.kingdom = plant_rung(realm=cls.realm, tier=TitleTier.KINGDOM, name="Luxen")
@@ -231,6 +253,41 @@ class LayOutRealmTests(TestCase):
         report = preview_layout(self.realm, layout)
         # weights descend down PLACE_NAMES; two duchies and two counties take the top four
         assert set(report.kingdoms[0].names) == set(PLACE_NAMES[:4])
+
+    def test_names_word_draws_only_from_that_culture_and_a_plain_line_never_does(self) -> None:
+        layout = parse_layout(
+            "realm | counties 1 | baronies 1\n"
+            "kingdom Luxen | duchies 2\n"
+            "kingdom Old Luxen | titular | names vestyr TEST\n  duchy\n  duchy\n"
+        )
+        report = preview_layout(self.realm, layout)
+        assert report.refusals == []
+        plain, regional = report.kingdoms
+        assert plain.names
+        assert set(plain.names) <= set(PLACE_NAMES)
+        assert len(regional.names) == 2
+        assert set(regional.names) <= set(REGIONAL_NAMES)
+
+    def test_an_unknown_culture_or_one_with_no_place_names_refuses_that_kingdom_only(self) -> None:
+        for culture, fragment in (("Nowhere", "no place-name culture"), ("Empty test", "no place")):
+            report = preview_layout(
+                self.realm,
+                parse_layout(f"kingdom Luxen | duchies 2 | names {culture}\nkingdom | potential\n"),
+            )
+            [refusal] = report.refusals
+            assert refusal.startswith("line 1:"), refusal
+            assert culture in refusal, refusal
+            assert fragment in refusal, refusal
+            assert report.kingdoms[1].refusals == []
+
+    def test_every_kingdom_naming_a_culture_needs_no_realm_bank(self) -> None:
+        bare = RealmFactory(name="Arvum")
+        report = preview_layout(bare, parse_layout("kingdom | potential | names Vestyr test\n"))
+        assert report.refusals == []
+        with self.assertRaises(LayoutRefused):
+            preview_layout(
+                bare, parse_layout("kingdom | potential | names Vestyr test\nkingdom | potential\n")
+            )
 
     def test_no_place_bank_refuses_the_realm(self) -> None:
         bare = RealmFactory(name="Arvum")
