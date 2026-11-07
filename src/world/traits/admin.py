@@ -8,6 +8,8 @@ character values, and check resolution configuration.
 from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
+from world.skills.admin import SkillOnTraitInline, ensure_skill_target_or_warn
+from world.skills.models import Skill
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -17,6 +19,7 @@ from world.traits.models import (
     ResultChartOutcome,
     Trait,
     TraitRankDescription,
+    TraitType,
 )
 
 
@@ -30,6 +33,17 @@ class TraitRankDescriptionInline(admin.TabularInline):
     readonly_fields = ["display_value"]
     ordering = ["value"]
 
+    @admin.display(description="Display value")
+    def display_value(self, obj: TraitRankDescription) -> int | str:
+        """The shown value, or blank on the empty add row (#5006).
+
+        The empty row has no value yet, and a stat's display value divides it by ten, so
+        reading the model property there raised and every stat trait's page failed.
+        """
+        if obj.value is None:
+            return ""
+        return obj.display_value
+
 
 @admin.register(Trait)
 class TraitAdmin(admin.ModelAdmin):
@@ -37,8 +51,26 @@ class TraitAdmin(admin.ModelAdmin):
     list_filter = ["trait_type", "category", "is_public"]
     search_fields = ["name", "description"]
     ordering = ["trait_type", "category", "name"]
-    inlines = [TraitRankDescriptionInline]
+    inlines = [SkillOnTraitInline, TraitRankDescriptionInline]
     readonly_fields = ["get_connections"]
+
+    def get_inline_instances(self, request, obj=None):
+        """Hide the Skill section on a saved trait that is not a skill and has none (#5006).
+
+        The add page always shows it, since the type is chosen in the same form.
+        """
+        instances = super().get_inline_instances(request, obj)
+        if obj is None or obj.trait_type == TraitType.SKILL or hasattr(obj, "skill"):
+            return instances
+        return [inline for inline in instances if not isinstance(inline, SkillOnTraitInline)]
+
+    def save_formset(self, request, form, formset, change):
+        """Save the inlines; a skill saved here gets its modifier target (#5006, #4820)."""
+        if formset.model is not Skill:
+            super().save_formset(request, form, formset, change)
+            return
+        for skill in formset.save():
+            ensure_skill_target_or_warn(request, skill)
 
     @admin.display(description="Connections")
     def get_connections(self, obj):
