@@ -494,8 +494,8 @@ Surge lives in [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md).
 **Magic Activity / Technique skill** (#4450, ADR-4450):
 A **Magic Activity** is a kind of magical roll (anima ritual, dispelling, sensing magic,
 worship rite, ...) that adds the skills staff mapped to it; the **Technique skill** is the one
-skill a technique cast adds, set by the technique, else the caster's Path (Major Gift) or the
-Gift (Minor Gift). Both ride the roll as **Extra trait terms**. See [magic
+skill a technique cast adds, set by the technique, else the skill of the casting style the cast
+is worked in (the Gift's own style, else the caster's Path style, #5002). Both ride the roll as **Extra trait terms**. See [magic
 AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Magic Activity", "Technique skill") and
 [checks AGENT_GLOSSARY](src/world/checks/AGENT_GLOSSARY.md) ("Extra trait term"). _Avoid_:
 magic check type, casting skill.

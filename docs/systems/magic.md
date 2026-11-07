@@ -73,7 +73,7 @@ and the 5-axis Thread model no longer exist.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
-| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
+| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` and the cast skill on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). `skill` is the Magic skill every cast worked in the style adds (#5002, ADR-5002; see "Magical skills"). | `name`, `description`, `skill`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier` (0 or more: a tier only adds control, #4740), `description` |
 | `Restriction` | Limitations that grant power bonuses (DESIGN kind) or a price a caster attaches to their own hold of a technique (PRICE kind, #4099, ADR-4099) | `name`, `description`, `power_bonus`, `kind` (`RestrictionKind`: DESIGN/PRICE), `creation_point_cost` (PRICE only, nullable; blank = not offered in creation), `cast_narration` (PRICE only; joins the cast narration) |
@@ -651,7 +651,7 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 
 **Magic skills only (#4547).** These skills are bespoke Magic skills (trait category MAGIC) that
 staff make and point each roll at. They are never skills a character picks anywhere else, so a
-cast never counts one skill twice. The four pickers below share
+cast never counts one skill twice. The three pickers below share
 `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`world/magic/skill_choices.py`): the admin form and
 its autocomplete offer only Magic skills that are no combat style's own skill (#4921: a style's
 skill is trained in creation and added by the style), and `full_clean()` refuses any other with
@@ -669,30 +669,28 @@ configs take their skill from the `RITUAL_WORKING` mapping, writing none while i
 |---------|----------|---------|
 | `MagicActivity` | `constants.py` | 20 `TextChoices` kinds of magical roll (see Enums) |
 | `MagicActivitySkill` | `models/magic_activity.py` | `activity`, `skill` (FK Skill, PROTECT, Magic skills only), `weight` (default 1.00); unique on (activity, skill). One row adds one skill to every roll of that activity; an activity may map several |
-| `Path.technique_skill` | `world/classes/models.py` | Nullable FK Skill (SET_NULL, Magic skills only): the skill every Major Gift technique cast by someone currently on this Path adds |
-| `Gift.technique_skill` | `models/gifts.py` | Nullable FK Skill (SET_NULL, Magic skills only), Minor Gifts only: DB constraint `gift_technique_skill_minor_only` and a matching `clean()` message |
-| `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only): overrides the Path and Gift skill for this one technique |
+| `TechniqueStyle.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only, `related_name="technique_styles"`): the skill every cast worked in this style adds (#5002, ADR-5002). It replaced `Path.technique_skill` and `Gift.technique_skill` |
+| `Technique.skill` | `models/techniques.py` | Nullable FK Skill (SET_NULL, Magic skills only): overrides the casting style's skill for this one technique |
+| `casting_style(caster, technique)` / `casting_style_for_path(technique, path)` | `services/casting_style.py` | The style a cast is worked in: the Gift's own `style`, else the caster's current Path style. Cast concealment and the cast skill both read it (#5002) |
 | `ConditionCategory.adds_loss_of_self_skills` | `world/conditions/models.py` | Boolean (default False): resist and break-free rolls on conditions in the category add the `RESISTING_LOSS_OF_SELF` skills (staff tick it for corruption, atavism, possession) |
 | `activity_skill_terms(activity)` | `services/magic_skills.py` | One `ExtraTraitTerm` per mapped row whose skill is active; empty when nothing is mapped |
 | `technique_skill_term(character, technique)` | `services/magic_skills.py` | The technique skill as a term at weight 1.00, or None |
-| `technique_skill_term_for_path(technique, path, own_paths=None)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster; pass each technique's `own_paths` from one `technique_paths` call |
-| `technique_paths(technique_ids)` / `skill_path(current_path, own_paths)` | `services/magic_skills.py` | A technique's own Paths (the `PathGiftGrant` lists that hold it, in Path order) and which Path's skill a cast adds (#4555) |
+| `technique_skill_term_for_path(technique, path)` | `services/magic_skills.py` | The same rule with the Path already read, for callers resolving many techniques for one caster |
 | `cast_check_type(personal_check, technique)` | `services/magic_skills.py` | The ADR-0096 check type precedence (personal check, else the action template's), shared by `resolve_cast_check` and the combat action picker |
 | `resolve_cast_check(character, technique)` / `CastCheck` | `services/magic_skills.py`, `types/magic_skills.py` | Frozen `(check_type, extra_traits)` for a cast |
 | `involved_trait_ids(check_type, extra_traits)` / `cast_involved_trait_ids(cast_check)` | `services/magic_skills.py` | Trait ids a roll or cast involves, for thread pulls |
 | `magic_category_skills()` | `services/magic_skills.py` | The active skills whose trait category is MAGIC (#4457): the set a Tradition's schooling stance lifts at finalize, the points CG refuses, and the Anima Check filter's exclusion. Staff control the set by a skill's category, never by name |
 | `loss_of_self_terms(template)` | `world/conditions/services.py` | The `RESISTING_LOSS_OF_SELF` terms for a condition template whose category is marked, else none |
 
-**Technique skill resolution order.** The technique's own `skill`, if set; otherwise for a Major
-Gift technique the `technique_skill` of the Path it is cast from (#4555, ADR-4555-A): the
-technique's own Paths are those whose `PathGiftGrant.starter_techniques` lists it
-(`technique_paths`, one query for many techniques; a single cast reads `Technique.cached_own_paths`, which the Path Gift Grant and Path admins clear on save through `invalidate_technique_own_paths`, so casting adds no query); `skill_path` takes the caster's current Path
-(`current_path_for_character`) when it is one of them, otherwise the technique's first own Path in
-Path order (stage, sort order, name, then pk), so a technique learned on the Path of Embers and cast after a
-Crossing into the Path of Ash still adds the Embers skill. A Path never inherits its parent's
-skill. A technique on no Path's list falls back to the caster's current Path, and a caster with no
-Path then gets no Path skill. Otherwise for a Minor Gift technique the Gift's `technique_skill`. An
-inactive skill gives no term.
+**Technique skill resolution order.** The technique's own `skill`, if set (even an inactive one,
+which then adds no term and borrows nothing, #4450); otherwise the `skill` of the style the cast is
+worked in (#5002, ADR-5002): the technique's Gift's own `style` (ADR-0199) when it sets one, else
+the caster's current Path style (`current_path_for_character`). This is the same rule cast
+concealment reads (`_concealment_for`), so a cast's manner and its skill never disagree. A
+technique learned on the Path of Embers and cast after a Crossing into the Path of Ash adds the Ash
+style's skill (this replaced #4555's own-Path rule, ADR-4555-A). A Minor Gift with no style of its
+own adds the caster's Path style's skill. A Path with no style, a style with no skill, or a caster
+with no Path gives no term, and so does an inactive skill.
 
 **Which rolls add what.**
 - Personal-check casts roll `CastCheck.check_type` and add the technique term: scene cast, combat
@@ -740,11 +738,12 @@ magic skill is never counted twice on a cast. Existing characters keep the skill
 #4457 a schooled character also starts with the Magic skills themselves; see "Tradition training
 and Academy skill courses" below.
 
-**Required content dashboard** (TUNING tier, `src/web/admin/tuning/required_content.py`): three
-probes list what staff have not set: activities with no `MagicActivitySkill` row, active Paths with
-no `technique_skill`, and Minor Gifts with no `technique_skill`. A row or field whose skill is
-inactive counts as unset, since the roll skips it. An activity staff leave unmapped on purpose
-stays listed. Three more rows came with #4457 (below). A seventh, `check-types-weight-no-magic-skill`
+**Required content dashboard** (TUNING tier, `src/web/admin/tuning/required_content.py`): two
+probes list what staff have not set: activities with no `MagicActivitySkill` row, and
+(`casting-style-skills`, #5002) each casting style used by an active Path or by a Gift that has no
+`skill`, each row linked to the style's edit page. A row or field whose skill is inactive counts
+as unset, since the roll skips it. An activity staff leave unmapped on purpose stays listed. Three
+more rows came with #4457 (below). A sixth, `check-types-weight-no-magic-skill`
 (#4547), lists each check type with a trait row on a Magic-category SKILL trait, as
 `check type: skills`, and links to the CheckType changelist filtered to exactly those
 (`?id__in=`): a check type that weights a Magic skill itself counts it twice when the magic skill
@@ -752,7 +751,8 @@ settings add it too, so staff move it into those settings. It matches on the tra
 skill trait with no `Skill` row or an inactive one is listed too.
 
 **Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
-the list); `technique_skill` on the Path and Gift forms, `skill` on the Technique form,
+the list); `skill` on the Technique style form (with a Skill column in its list) and on the
+Technique form; the Path and Gift forms carry only `style` (#5002);
 `adds_loss_of_self_skills` on the Condition category form.
 
 **Not in this slice:** fixed-value magic that becomes a check, and resonance-flavoured thread
@@ -4634,7 +4634,8 @@ you just cannot say who did it. The tiers are a ladder of attribution:
    have to be standing on someone to stab or touch them — so a melee working is
    attributed no matter how subtly its caster works magic. This, not "is it magical", is
    what makes a sword swing unconcealable.
-1. `_concealment_for(caster, technique)` checks `technique.gift.style` first — a Minor Gift
+1. `_concealment_for(caster, technique)` reads the style `casting_style` resolves (#5002),
+   the same style that supplies the cast's skill. It checks `technique.gift.style` first — a Minor Gift
    may impose its own casting style, overriding whatever the caster's Path would otherwise
    supply (#2905, ADR-0199), since a species-granted gift is magic the character never
    chose. Only when the gift sets no style does it fall back to `cast_concealment` off the

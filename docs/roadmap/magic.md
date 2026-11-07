@@ -1046,6 +1046,28 @@ from the check type, once as the technique skill.
 check-type rows that weight them; staff rename, repoint or remove them in admin as part of the skill
 revamp, working from the new dashboard row.
 
+## Magical skills: the casting style carries the skill (#5002, ADR-5002, BUILT 2026-11-07)
+
+A Path's casting skill and its casting style were authored on different rows and could drift.
+The owner ruled them one thing seen from two sides: the style is how a character works magic,
+the skill how good they are at it.
+
+**Built:**
+- `TechniqueStyle.skill` (Magic skills only, same picker rules). `Path.technique_skill`,
+  `Gift.technique_skill` and the Gift minor-only constraint are removed by schema-only migration
+  `0373_casting_style_carries_skill`, with no data migration: the owner signed off the discard of
+  the one production value (ADR-0237); staff set the skill on each style in admin.
+- One rule for a cast's manner and skill: `world/magic/services/casting_style.py`
+  (`casting_style`, the Gift's own style else the caster's Path style), read by cast
+  concealment and by `magic_skills._skill_for_path`. A Minor Gift with no style now adds the
+  caster's Path style skill. The #4555 own-Path skill machinery (`technique_paths`,
+  `skill_path`, `Technique.cached_own_paths`, its admin invalidation) is retired; a technique
+  cast after a Crossing adds the current style's skill.
+- Required content: one `casting-style-skills` row (styles used by an active Path or a Gift with
+  no active skill, each linked to its edit page) replaces the Path and Minor Gift rows.
+- Admin: the skill picker is on the Technique style form; the Path and Gift forms carry only the
+  style.
+
 ## Changing a thread's resonance (#4735, slice 6 of #4672, BUILT 2026-10-27)
 
 A player can move one of their threads to another resonance through a rite: a retune within the

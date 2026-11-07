@@ -83,6 +83,8 @@ restriction.
 mechanical weight (subtle casting, capability-gated casting circumstances); deleting it
 would discard a live requirement, not just vocabulary.
 
+**Extended (#5002, [ADR-5002](adr-5002-a-casting-style-carries-its-magic-skill.md)).** The style also carries the cast's magic skill (`TechniqueStyle.skill`).
+
 > Status: accepted · Source: #2700, Tehom design ruling 2026-07-25 · Confidence: built
 > and wired — `Path.style` + `StyleCapabilityRequirement` folded into
 > `technique_performable`; `Technique.style`/`TechniqueDraft.style`/`allowed_paths`/

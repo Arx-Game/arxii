@@ -108,7 +108,7 @@ The magic system for Arx II. Power flows from identity and connection.
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
   `docs/systems/magic.md`'s "Content pipeline" section for the full model list.
-- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0167). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`. A Gift may set its own style (`Gift.style`, nullable), which overrides the Path style when resolving `cast_concealment` for that gift's techniques (capability gating is unaffected — it still reads the caster's own Path style) — a species gift the character never chose doesn't inherit the Path's manner (#2905, ADR-0199).
+- `TechniqueStyle` - How a **practitioner** works magic (Manifestation, Subtle, Performance, Prayer, Incantation). A property of the caster's `Path` (`classes.Path.style`), NOT of the technique (#2700, ADR-0167). `StyleCapabilityRequirement` rows let a style gate casting on the caster's capabilities (an Incantation caster who cannot speak cannot incant), evaluated by `technique_performable`. `TechniqueStyle.skill` is the Magic skill casts in that style add (#5002). A Gift may set its own style (`Gift.style`, nullable), which overrides the Path style when resolving `cast_concealment` and the cast skill for that gift's techniques (`services/casting_style.py`; capability gating is unaffected — it still reads the caster's own Path style) — a species gift the character never chose doesn't inherit the Path's manner (#2905, ADR-0199).
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.), `kind` DESIGN.
   A `kind=PRICE` row is a different thing wearing the same table: a cost a caster attaches
@@ -340,18 +340,18 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
 `docs/systems/magic.md` "Magical skills".
 
 - **Models:** `MagicActivity` (`constants.py`, 20 kinds of roll), `MagicActivitySkill`
-  (`models/magic_activity.py`: activity, skill, weight; unique per pair), `Path.technique_skill`,
-  `Gift.technique_skill` (Minor only, DB constraint plus `clean()`), `Technique.skill` (override),
+  (`models/magic_activity.py`: activity, skill, weight; unique per pair), `TechniqueStyle.skill`
+  (#5002: the casting style carries the cast skill; `Path.technique_skill` and
+  `Gift.technique_skill` are gone), `Technique.skill` (override),
   `ConditionCategory.adds_loss_of_self_skills`.
 - **Services (`services/magic_skills.py`):** `activity_skill_terms(activity)`,
   `technique_skill_term(character, technique)` / `technique_skill_term_for_path(technique, path)`,
   `cast_check_type(personal_check, technique)` (ADR-0096 precedence, once), `resolve_cast_check`, `involved_trait_ids`, `cast_involved_trait_ids`. `loss_of_self_terms(template)`
   is in `world/conditions/services.py`. Terms ride the check engine's `extra_traits`.
-- **Technique skill order:** technique override, else (Major Gift) the caster's current Path when
-  it is one of the technique's own Paths (`technique_paths`: the Paths whose `PathGiftGrant`
-  lists it, cached as `Technique.cached_own_paths` and cleared by the Path Gift Grant and Path
-  admins via `invalidate_technique_own_paths`), else the technique's first own Path in Path order,
-  else the caster's current Path; else the Gift (Minor Gift) (#4555, ADR-4555-A). Inactive skills give no term.
+- **Technique skill order:** technique override, else the `skill` of the style the cast is
+  worked in: `services/casting_style.py`'s `casting_style` (the Gift's own `style`, else the
+  caster's current Path style), the same style cast concealment reads (#5002, ADR-5002, which
+  retired #4555's own-Path skill rule). Inactive skills give no term.
 - **Adding a magical roll:** add a `MagicActivity` member and pass
   `extra_traits=activity_skill_terms(MagicActivity.X)` at the roll. Import it inside the
   function when the caller is `world.conditions` or `world.species` (they sit below magic). A
@@ -360,7 +360,7 @@ Every magical roll adds skills staff chose in admin; no skill is named in code. 
 - **A new cast path** calls `resolve_cast_check(character, technique)` and passes both the
   `check_type` and `extra_traits` to the roll, and the `CastCheck` to its thread pull context.
 - **Anima Check:** the character-creation pick excludes MAGIC-category skills.
-- **Magic skills only (#4547):** the four pickers share
+- **Magic skills only (#4547):** the three pickers (activity, casting style, technique) share
   `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`skill_choices.py`), so admin and `full_clean()`
   take Magic-category skills only, and never a combat style's own skill (#4921): that one is
   trained in creation and added by the style. `CombatStyle.clean()` refuses the reverse, a style

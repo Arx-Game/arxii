@@ -19,17 +19,18 @@
 
 - **Magical skills (#4450, ADR-4450):** every magical roll adds skills staff choose in admin;
   no skill is named in code. `MagicActivity` (18 kinds of roll) plus `MagicActivitySkill`
-  (`activity`, `skill`, `weight`) map a roll to skills; `Path.technique_skill` (Major Gift
-  techniques), `Gift.technique_skill` (Minor Gifts only, DB constraint) and `Technique.skill`
-  (override) set a cast's skill; `ConditionCategory.adds_loss_of_self_skills` marks the
+  (`activity`, `skill`, `weight`) map a roll to skills; `TechniqueStyle.skill` (the casting
+  style's skill: a Gift's own style, else the caster's Path style, via
+  `world/magic/services/casting_style.py`, #5002) and `Technique.skill` (override) set a cast's
+  skill; `ConditionCategory.adds_loss_of_self_skills` marks the
   conditions whose resists add the `RESISTING_LOSS_OF_SELF` skills. Services in
   `world/magic/services/magic_skills.py`: `activity_skill_terms`, `technique_skill_term`,
   `technique_skill_term_for_path`, `cast_check_type`, `resolve_cast_check` / `CastCheck` (replaces
   `resolve_cast_check_type`), `involved_trait_ids`, `cast_involved_trait_ids`;
   `loss_of_self_terms` in `world/conditions/services.py`. The skills ride the check engine's
   `extra_traits`; cast thread pulls now include the cast's stat and skills. The Anima Check
-  pick excludes MAGIC-category skills, and three Required content probes list unmapped
-  activities, Paths and Minor Gifts. Since #4547 the four pickers offer and accept Magic skills
+  pick excludes MAGIC-category skills, and two Required content probes list unmapped
+  activities and casting styles in use (#5002). Since #4547 the pickers offer and accept Magic skills
   only (`MAGIC_SKILL_CHOICES` in `world/magic/skill_choices.py`), no seeder names a skill for
   magic, and the `check-types-weight-no-magic-skill` probe lists check types that weight a
   Magic skill directly. Details: [magic.md](magic.md) "Magical skills".
@@ -1079,7 +1080,7 @@ allocations that convert AP to development points.
   `standing_weekly_ap` (ties + training), the training door reads its own training total
   plus `standing_tie_ap`, so neither counts a row twice.
 - **Magic skills (#4450):** staff map skills to magical rolls (`MagicActivitySkill`) and to
-  casts (`Path.technique_skill`, `Gift.technique_skill`, `Technique.skill`), so a trained
+  casts (`TechniqueStyle.skill`, `Technique.skill`; #5002), so a trained
   skill adds points to those rolls and develops from them. The Anima Check pick in character
   creation excludes MAGIC-category skills. See [magic.md](magic.md) "Magical skills". Since #4457 a schooled
   character starts with the Magic skills the player spent their Tradition training points on (#4659) and CG points never buy one; `train_skill` (the one

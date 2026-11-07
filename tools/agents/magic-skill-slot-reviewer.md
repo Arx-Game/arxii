@@ -11,9 +11,10 @@ magic skill settings**. You do not write the fix. You report each door.
 ## Why this agent exists
 
 ADR-4450 settled that a magical roll keeps its check type as the base and adds the
-skills staff chose in admin, as `extra_traits` terms built from four pickers:
-`MagicActivitySkill.skill`, `Path.technique_skill`, `Gift.technique_skill` and
-`Technique.skill`. Those skills are meant to be bespoke Magic skills (trait category
+skills staff chose in admin, as `extra_traits` terms built from the pickers:
+`MagicActivitySkill.skill`, `TechniqueStyle.skill` (which replaced
+`Path.technique_skill` and `Gift.technique_skill` in #5002) and `Technique.skill`.
+Those skills are meant to be bespoke Magic skills (trait category
 MAGIC), never skills a character picks anywhere else, so a cast never counts one
 skill twice. No skill is named in code.
 
