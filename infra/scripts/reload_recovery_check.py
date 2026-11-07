@@ -71,6 +71,23 @@ RESTART_STAMP = Path("/run/arxii-watchdog.restart-stamp")
 RELOAD_BUDGET_S = 200
 
 
+PUPPET_SYNC = """
+
+def _with_puppet_sync(original):
+    def puppet_object(self, session, obj):
+        original(self, session, obj)
+        import evennia
+
+        if session.puppet is obj:
+            evennia.SESSION_HANDLER.session_portal_sync(session)
+
+    return puppet_object
+
+
+Account.puppet_object = _with_puppet_sync(Account.puppet_object)
+"""
+
+
 def sh(cmd: str, *, check: bool = True, timeout: int = 900) -> subprocess.CompletedProcess[str]:
     """Run a shell command, echoing it so the job log reads as a transcript."""
     print(f"$ {cmd}", flush=True)
@@ -145,9 +162,15 @@ def setup() -> None:
     install_rendered()
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
     unit = next(t for t in tasks if t.get(NAME_KEY, "").startswith("Install the watchdog service"))
-    Path("/etc/systemd/system/arxii-watchdog.service").write_text(
+    content = Environment(undefined=StrictUndefined).from_string(  # noqa: S701 - unit file
         unit["ansible.builtin.copy"]["content"]
     )
+    Path("/etc/systemd/system/arxii-watchdog.service").write_text(
+        content.render(secrets_env_file=str(ENV_FILE))
+    )
+    # The same call as Arx's Account.puppet_object: the stock game's Account lacks it.
+    accounts = GAMEDIR / "typeclasses/accounts.py"
+    accounts.write_text(accounts.read_text() + PUPPET_SYNC)
     alert_src = REPO / "infra/ansible/roles/offbox_alerting/templates/arxii-alert.sh.j2"
     install_script("/usr/local/sbin/arxii-alert", alert_src.read_text())
     sh("systemctl daemon-reload")
@@ -332,7 +355,6 @@ def reset() -> None:
     """Every scenario starts from a clean, running game with no leftovers."""
     RESTART_STAMP.unlink(missing_ok=True)
     (GAMEDIR / "server/reboot.requested").unlink(missing_ok=True)
-    ALERT_LOG.unlink(missing_ok=True)
     shutil.rmtree(EVIDENCE_DIR, ignore_errors=True)
     install_rendered()
     sh("systemctl daemon-reload")
@@ -341,6 +363,8 @@ def reset() -> None:
     if not wait_for(game_is_up, 60):
         msg = "the game did not come up for this scenario"
         raise RuntimeError(msg)
+    # After the restart: stopping the previous scenario's game can raise an alert.
+    ALERT_LOG.unlink(missing_ok=True)
 
 
 # --- Scenarios: each row of the spec's Verification table -------------------------
@@ -457,24 +481,27 @@ def port_held_watchdog_twice(c: Checks) -> None:
     sh(f"kill -9 {server()}")
     time.sleep(1)
     holder.grab()
-    try:
-        run_watchdog()
-        c.expect(ALERT_RESTARTED in alerts(), "the first run does one full restart")
-        c.expect(RESTART_STAMP.exists(), "the restart is stamped")
-        if unit_state() != ACTIVE:
-            sh(f"systemctl reset-failed {UNIT}", check=False)
-            sh(f"systemctl start {UNIT}", check=False, timeout=400)
-        stamp = RESTART_STAMP.stat().st_mtime
-        ALERT_LOG.unlink(missing_ok=True)
-        before_portal = portal()
-        grace_period_passed()
-        run_watchdog()
-        c.expect(RESTART_STAMP.stat().st_mtime == stamp, "the second run does no restart")
-        if before_portal is not None:
-            c.expect(portal() == before_portal, "the second run kept the Portal")
-        c.expect(ALERT_STILL_DOWN in alerts(), "the second run alerts that it is still down")
-    finally:
-        holder.release()
+    run_watchdog()
+    c.expect(ALERT_RESTARTED in alerts(), "the first run does one full restart")
+    c.expect(RESTART_STAMP.exists(), "the restart is stamped")
+    stamp = RESTART_STAMP.stat().st_mtime
+    # Inside the same 15 minutes the game comes back and the Server dies again.
+    holder.release()
+    sh(f"systemctl reset-failed {UNIT}", check=False)
+    sh(f"systemctl restart {UNIT}", check=False, timeout=400)
+    c.expect(wait_for(game_is_up, 120), "the game comes back once the port is free")
+    grace_period_passed()
+    ALERT_LOG.unlink(missing_ok=True)
+    before_portal = portal()
+    holder = PortHolder()
+    sh(f"kill -9 {server()}")
+    time.sleep(1)
+    holder.grab()
+    run_watchdog()
+    holder.release()
+    c.expect(RESTART_STAMP.stat().st_mtime == stamp, "the second run does no full restart")
+    c.expect(portal() == before_portal, "the second run kept the Portal")
+    c.expect(ALERT_STILL_DOWN in alerts(), "the second run alerts that it is still down")
 
 
 def ingame_reload_during_watchdog(c: Checks) -> None:
@@ -536,9 +563,10 @@ def reboot_request(c: Checks) -> None:
 
 
 def portal_killed(c: Checks) -> None:
-    sh(f"kill -9 {portal()}")
+    killed = portal()
+    sh(f"kill -9 {killed}")
     c.expect(
-        wait_for(lambda: portal() is not None and game_is_up(), 120),
+        wait_for(lambda: portal() not in (None, killed) and game_is_up(), 120),
         "systemd restarts the unit without the watchdog",
     )
     c.expect(main_pid() == portal(), "systemd's main process is the new Portal")
@@ -616,6 +644,8 @@ def run(selected: list[str]) -> int:
         for path in evidence:
             print(f"--- evidence {path.name}\n{path.read_text()}", flush=True)
         print(f"--- alerts\n{alerts()}", flush=True)
+        if checks.failures:
+            sh(f"journalctl -u {UNIT} -n 40 --no-pager -o short-iso", check=False)
 
     summary = ["| Scenario | Result | What was seen |", "|---|---|---|"]
     for checks in results:

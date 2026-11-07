@@ -27,6 +27,7 @@ SERVICE="{{ app_service }}.service"
 APP_USER="{{ app_user }}"
 UV="{{ base_uv_bin }}"
 SERVER_PORT="{{ app_server_web_port }}"
+SERVER_PIDFILE="{{ app_pidfile }}"
 EVIDENCE_DIR="{{ app_reload_evidence_dir }}"
 # Ruled in #4999: about three minutes before a full restart drops every player.
 # Healthy reloads measured 17-19 s, so 60 s is about three times that.
@@ -81,6 +82,30 @@ server_answers() {
 
 port_holders() { ss -H -ltnp "sport = :${SERVER_PORT}" 2>/dev/null; }
 
+# Watch the port for the whole run. Whatever blocks a replacement can be gone by
+# the time an attempt has timed out, and naming it is the point of the evidence.
+listener_history="$(mktemp)"
+watch_listeners() {
+  local current previous=""
+  while :; do
+    current="$(port_holders)"
+    if [ "${current}" != "${previous}" ]; then
+      printf '%s %s\n' "$(date -u +%TZ)" "${current:-(nothing listening)}" >>"${listener_history}"
+      previous="${current}"
+    fi
+    sleep 1
+  done
+}
+watch_listeners &
+watcher_pid=$!
+trap 'kill "${watcher_pid}" 2>/dev/null; rm -f "${listener_history}"' EXIT
+
+# A listener that was not a Server, for the alert. The evidence has them all.
+foreign_holder() {
+  grep -v '(("twistd"' "${listener_history}" | grep 'users:' \
+    | sed -n 's/.*users:(("\([^"]*\)",pid=\([0-9]*\).*/\1 pid \2/p' | head -n1
+}
+
 # Command names only: a full command line or the environment can carry secrets,
 # and game logs carry player text.
 write_evidence() {
@@ -98,8 +123,10 @@ write_evidence() {
     printf 'servers: %s\n' "$(server_pids | tr '\n' ' ')"
     printf 'unit: %s\n' "$(systemctl show -p ActiveState -p SubState -p MainPID \
       --value "${SERVICE}" | tr '\n' ' ')"
-    echo "listeners on ${SERVER_PORT}:"
+    echo "listeners on ${SERVER_PORT} now:"
     port_holders
+    echo "listeners on ${SERVER_PORT} since the reload began:"
+    cat "${listener_history}"
     echo 'unit processes:'
     for pid in $(unit_pids); do
       ps -o pid=,ppid=,user=,etimes=,stat=,comm= -p "${pid}" 2>/dev/null
@@ -123,6 +150,16 @@ remove_servers() {
   for pid in $(server_pids | grep -vxF "${portal_at_start}" || true); do
     kill -KILL "${pid}" 2>/dev/null || true
   done
+}
+
+# twistd refuses to start while its pidfile names any live process. A kill leaves
+# the file behind, and that PID can be reused by something else entirely.
+clear_stale_pidfile() {
+  local pid
+  pid="$(cat "${SERVER_PIDFILE}" 2>/dev/null || true)"
+  if [ -n "${pid}" ] && ! server_pids | grep -qxF "${pid}"; then
+    rm -f "${SERVER_PIDFILE}"
+  fi
 }
 
 wait_for_free_port() {
@@ -196,6 +233,7 @@ retry=1
 while [ "${retry}" -le "${MAX_RETRIES}" ]; do
   [ "$(portal_pid)" = "${portal_at_start}" ] || { failure_mode="portal-changed"; break; }
   remove_servers
+  clear_stale_pidfile
   wait_for_free_port
   left="$(remaining_s)"
   if [ "${left}" -le 1 ]; then
@@ -215,5 +253,5 @@ done
 remove_servers
 write_evidence "gave up"
 log "Server-only recovery exhausted (${failure_mode}); a full restart is the caller's last resort"
-alert "arxii reload recovery exhausted (${failure_mode}); expect a full restart that drops players. Port holder: $(port_holders | sed -n 's/.*users:(("\([^"]*\)",pid=\([0-9]*\).*/\1 pid \2/p' | head -n1). Evidence: ${evidence_file}"
+alert "arxii reload recovery exhausted (${failure_mode}); expect a full restart that drops players. Other process on the port: $(foreign_holder). Evidence: ${evidence_file}"
 exit 1

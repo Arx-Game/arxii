@@ -1,6 +1,6 @@
 """Tests for Account puppet_changed broadcast on @ic swaps."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 from django.test import TestCase
 
@@ -362,3 +362,40 @@ class PuppetWireFormatTests(TestCase):
         self.assertEqual(frame[2]["session_id"], 162)
         self.assertEqual(frame[2]["character_id"], 18)
         self.assertEqual(frame[2]["character_name"], "Tehom")
+
+
+class PuppetSyncsToPortalTests(TestCase):
+    """A crashed Server's replacement can only restore what the Portal was told (#4999)."""
+
+    def _puppet(self, *, connected_to_portal: bool, succeeds: bool = True) -> MagicMock:
+        account = AccountFactory()
+        character = CharacterFactory()
+        session = _session_mock(1)
+
+        def fake(_self, sess, obj) -> None:
+            if succeeds:
+                sess.puppet = obj
+
+        original = _patch_super_puppet(account, fake)
+        self.addCleanup(_restore_super_puppet, account, original)
+        service = Mock(amp_protocol=Mock() if connected_to_portal else None)
+        handler = MagicMock()
+        with (
+            patch("typeclasses.accounts.evennia.EVENNIA_SERVER_SERVICE", service),
+            patch("typeclasses.accounts.evennia.SESSION_HANDLER", handler),
+        ):
+            account.puppet_object(session, character)
+        self.session = session
+        return handler
+
+    def test_taking_up_a_character_tells_the_portal(self) -> None:
+        handler = self._puppet(connected_to_portal=True)
+        handler.session_portal_sync.assert_called_once_with(self.session)
+
+    def test_a_refused_puppet_tells_the_portal_nothing(self) -> None:
+        handler = self._puppet(connected_to_portal=True, succeeds=False)
+        handler.session_portal_sync.assert_not_called()
+
+    def test_no_portal_connection_is_not_an_error(self) -> None:
+        handler = self._puppet(connected_to_portal=False)
+        handler.session_portal_sync.assert_not_called()

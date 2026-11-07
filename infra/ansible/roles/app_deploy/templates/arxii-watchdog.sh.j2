@@ -177,7 +177,8 @@ RESTART_STAMP=/run/arxii-watchdog.restart-stamp
 
 alert() {
   if [ -x /usr/local/sbin/arxii-alert ]; then
-    /usr/local/sbin/arxii-alert "$1"
+    # A failed alert must not fail the run that just repaired the game.
+    /usr/local/sbin/arxii-alert "$1" || log "alert could not be sent"
   else
     log "arxii-alert helper not installed yet; skipping off-box alert"
   fi
@@ -221,8 +222,9 @@ if [ "${age_s}" -ge "${GRACE_PERIOD_S}" ] && pid_alive "${PORTAL_PID}" && ! pid_
   fi
   touch "${RESTART_STAMP}"
   log "Server-only recovery failed; full restart as the last resort"
+  # Alert first: a restart that cannot bring the Server up blocks for minutes.
+  alert "watchdog restarted ${SERVICE} after Server-only recovery failed; players drop once"
   systemctl restart "${SERVICE}" || log "restart failed; the failed-state branch retries from here"
-  alert "watchdog restarted ${SERVICE} after Server-only recovery failed; players dropped once"
   exit 0
 fi
 
