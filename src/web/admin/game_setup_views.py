@@ -59,7 +59,7 @@ def game_setup(request: HttpRequest) -> HttpResponse:
         "inventory": inventory,
         "seed_url": reverse("admin_seed"),
         "export_url": reverse("admin_export_preview"),
-        "import_url": reverse("admin_import_upload"),
+        "import_url": reverse("admin_import_hub"),
         "content_repo_configured": resolve_content_root() is not None,
         "content_load_url": reverse("admin_content_load"),
         # Post-#2906 every first-party model shares one real Django app_label

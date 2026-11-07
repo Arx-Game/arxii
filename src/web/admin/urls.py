@@ -55,6 +55,7 @@ from web.admin.distinction_builder.views import (
 )
 from web.admin.faction_rules.views import organization_faction_rules, society_faction_rules
 from web.admin.game_setup_views import game_setup
+from web.admin.import_hub.views import import_hub
 from web.admin.kit_view.views import kit_view, kit_view_pick
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.soulfray_builder.views import (
@@ -121,6 +122,7 @@ urlpatterns = [
     path("_excluded/", is_model_excluded, name="admin_is_excluded"),
     path("_export/", export_data, name="admin_export_data"),
     path("_export_preview/", export_preview, name="admin_export_preview"),
+    path("_import/", import_hub, name="admin_import_hub"),
     path("_import_upload/", import_upload, name="admin_import_upload"),
     path("_import_execute/", import_execute, name="admin_import_execute"),
     path("_seed/", seed_confirm, name="admin_seed"),
