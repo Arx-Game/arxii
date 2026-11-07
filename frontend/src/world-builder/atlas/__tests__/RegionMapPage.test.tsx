@@ -1,6 +1,6 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -81,7 +81,10 @@ vi.mock('@/almanach/queries', () => ({
   useAlmanachMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
+import { useLadder } from '@/almanach/queries';
 import { useRegionMapPipsQuery } from '../../queries';
+
+const realLadder = vi.mocked(useLadder).getMockImplementation()!;
 
 const payload: RegionMapPips = {
   region: {
@@ -600,5 +603,172 @@ describe('RegionMapPage', () => {
     } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
     renderWithProviders(<RegionMapPage regionId={1} />);
     expect(screen.getByTestId('region-map-error')).toBeInTheDocument();
+  });
+
+  describe('its own tab and the wheel (#4993)', () => {
+    it('offers a maximize link to the map tab, carrying the selected footprint', () => {
+      renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+      const link = screen.getByTestId('region-map-maximize');
+      expect(link).toHaveAttribute('href', '/staff/world-builder/map/1?focus=10');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener');
+      expect(link).toHaveAccessibleName('Open the map in its own tab');
+    });
+
+    it('leaves the footprint off the link when nothing is selected', () => {
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      expect(screen.getByTestId('region-map-maximize')).toHaveAttribute(
+        'href',
+        '/staff/world-builder/map/1'
+      );
+    });
+
+    it('has no maximize link once it is already in its own tab', () => {
+      renderWithProviders(<RegionMapPage regionId={1} standalone />);
+      expect(screen.queryByTestId('region-map-maximize')).not.toBeInTheDocument();
+    });
+
+    it('zooms the map on Ctrl+scroll and stops the browser zooming the page', () => {
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      const viewport = screen.getByTestId('region-map-viewport');
+      const before = viewport.dataset.zoom;
+      // fireEvent returns false when the handler called preventDefault
+      expect(fireEvent.wheel(viewport, { deltaY: -500, ctrlKey: true })).toBe(false);
+      expect(viewport.dataset.zoom).not.toBe(before);
+    });
+
+    it('moves the map on plain scroll, leaving its zoom and the page alone', () => {
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      const viewport = screen.getByTestId('region-map-viewport');
+      const canvas = screen.getByTestId('region-map-canvas');
+      const zoom = viewport.dataset.zoom;
+      const before = canvas.style.transform;
+      expect(fireEvent.wheel(viewport, { deltaY: 120 })).toBe(false);
+      expect(viewport.dataset.zoom).toBe(zoom);
+      expect(canvas.style.transform).not.toBe(before);
+      expect(canvas.style.transform).toContain('-120px');
+    });
+
+    it('still zooms when the map loads after the page mounts', () => {
+      vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+      } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+      let rerender = () => {};
+      function Harness() {
+        const [, bump] = useState(0);
+        rerender = () => bump((n) => n + 1);
+        return <RegionMapPage regionId={1} />;
+      }
+      renderWithProviders(<Harness />);
+      expect(screen.queryByTestId('region-map-viewport')).not.toBeInTheDocument();
+
+      vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+        data: payload,
+        isLoading: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+      act(() => rerender());
+      const viewport = screen.getByTestId('region-map-viewport');
+      const before = viewport.dataset.zoom;
+      expect(fireEvent.wheel(viewport, { deltaY: -500, ctrlKey: true })).toBe(false);
+      expect(viewport.dataset.zoom).not.toBe(before);
+    });
+  });
+
+  describe('collapsing the layout (#4993)', () => {
+    it('folds the side panel to a rail, keeps the selection, and remembers it', async () => {
+      const user = userEvent.setup();
+      const { unmount } = renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+      const toggle = screen.getByTestId('panel-toggle');
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('heading', { name: 'Salvation' })).toBeInTheDocument();
+
+      await user.click(toggle);
+      expect(screen.getByTestId('panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('heading', { name: 'Salvation' })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('region-map-legend')).not.toBeInTheDocument();
+      unmount();
+
+      renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+      expect(screen.getByTestId('panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+      await user.click(screen.getByTestId('panel-toggle'));
+      expect(screen.getByRole('heading', { name: 'Salvation' })).toBeInTheDocument();
+    });
+
+    it('folds the carve pickers to the domain name and leaves the tools usable', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      await user.click(screen.getByRole('button', { name: 'Carve' }));
+      await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+      await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+      await user.click(screen.getByRole('button', { name: 'Create domain' }));
+      expect(screen.getByTestId('plant-form')).toBeInTheDocument();
+
+      await user.click(screen.getByTestId('pickers-toggle'));
+      expect(screen.queryByTestId('carve-realm')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('carve-domain')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Create domain' })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('plant-form')).not.toBeInTheDocument();
+      expect(screen.getByTestId('picked-domain')).toHaveTextContent('Salvation');
+      expect(screen.getByRole('button', { name: 'Brush' })).toBeEnabled();
+
+      fireEvent.pointerDown(screen.getByTestId('region-map-viewport'), {
+        clientX: 15,
+        clientY: 3,
+        button: 0,
+      });
+      fireEvent.pointerUp(window, { clientX: 15, clientY: 3 });
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+      expect(mutateAsync.mock.calls[0][0].kwargs.title_id).toBe(100);
+
+      await user.click(screen.getByTestId('pickers-toggle'));
+      expect(screen.getByTestId('carve-domain')).toHaveValue('100');
+    });
+
+    it('says unnamed and the tier when the folded domain has no name', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useLadder).mockImplementation(
+        () =>
+          ({
+            data: {
+              rows: [
+                {
+                  title_id: 500,
+                  name: '',
+                  tier: 'county',
+                  house_name: '',
+                  parent_title_id: null,
+                  state: 'Unclaimed',
+                },
+              ],
+              unclaimed_by_tier: {},
+            },
+            refetch: vi.fn(),
+          }) as unknown as ReturnType<typeof useLadder>
+      );
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      await user.click(screen.getByRole('button', { name: 'Carve' }));
+      await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+      await user.selectOptions(screen.getByTestId('carve-domain'), '500');
+      await user.click(screen.getByTestId('pickers-toggle'));
+      expect(screen.getByTestId('picked-domain')).toHaveTextContent('unnamed county');
+      vi.mocked(useLadder).mockImplementation(realLadder);
+    });
+
+    it('folds the select pickers too, showing what is selected', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+      await user.click(screen.getByTestId('pickers-toggle'));
+      expect(screen.queryByTestId('select-realm')).not.toBeInTheDocument();
+      expect(screen.getByTestId('picked-domain')).toHaveTextContent('Salvation');
+    });
+
+    it('survives the stored setting being unreadable', () => {
+      window.localStorage.setItem('world-builder-atlas:anon:map-layout', '{not json');
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      expect(screen.getByTestId('panel-toggle')).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 });

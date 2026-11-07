@@ -14,6 +14,12 @@ export const BARONY_LEVEL = 40;
 /** Mirrors `AreaLevel.CONTINENT`: the rung a region map is the geography of (#4242). */
 export const CONTINENT_LEVEL = 70;
 
+/** The URL of a region map in its own browser tab (#4993), opening on `focusAreaId`. */
+export function regionMapTabUrl(regionId: number, focusAreaId: number | null): string {
+  const base = `/staff/world-builder/map/${regionId}`;
+  return focusAreaId == null ? base : `${base}?focus=${focusAreaId}`;
+}
+
 /**
  * A BUILDING-level area holds rooms directly — its Atlas view is the room
  * grid (`'roomgrid'`, Task 5's `<Lattice mode="rooms"/>`). Anything above

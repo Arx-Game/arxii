@@ -95,6 +95,11 @@ const TriggerGiversPage = lazy(() =>
     default: m.TriggerGiversPage,
   }))
 );
+const RegionMapTabPage = lazy(() =>
+  import('@/world-builder/atlas/RegionMapTabPage').then((m) => ({
+    default: m.RegionMapTabPage,
+  }))
+);
 const AtlasPage = lazy(() =>
   import('@/world-builder/atlas/AtlasPage').then((m) => ({
     default: m.AtlasPage,
@@ -695,6 +700,16 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <AtlasPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/world-builder/map/:regionId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <RegionMapTabPage />
                 </Suspense>
               </StaffRoute>
             }
