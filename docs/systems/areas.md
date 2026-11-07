@@ -283,9 +283,9 @@ On the map prefers the region linked to that area.
 
 The side panel and the realm and domain pickers each fold away (`useRegionMapLayout.ts`,
 remembered per account in `localStorage`, shared by the Atlas view and the tab); folded pickers
-still name the picked domain. The wheel zooms the map around the cursor, and because the handler
-prevents the default, Ctrl+scroll and a trackpad pinch over the map zoom the map instead of the
-browser page. The pips query refetches whenever its tab regains focus, so a carve in another
+still name the picked domain. Over the map, plain scroll moves the map and Ctrl or Cmd+scroll zooms it
+around the cursor, as does a trackpad pinch; the handler prevents the default, so the page neither
+scrolls nor zooms. The pips query refetches whenever its tab regains focus, so a carve in another
 tab shows on return. Undo stays per tab: an undo restores the holders it recorded, so it can
 overwrite a newer edit to the same pips from another tab.
 
