@@ -83,8 +83,9 @@ trait row stay the trained value, so a bonus never raises the cost of the next r
 sheet's `SkillEntry` carries `value` (stored plus `modifier`, the number a roll uses) beside
 `modifier`, with `at_boundary` read from the stored rating.
 
-The target is made by `mechanics.services.ensure_skill_target(trait)`: `SkillAdmin.save_model`
-calls it on every save, and the Distinction Builder's paste calls it at create time when an
+The target is made by `mechanics.services.ensure_skill_target(trait)`: both admin paths that save a
+skill call it through `skills.admin.ensure_skill_target_or_warn` (`SkillAdmin.save_model`, and
+`TraitAdmin.save_formset` for the Trait page's Skill section, #5006), and the Distinction Builder's paste calls it at create time when an
 effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
 the first time a card names it. A same-named target in another category (the `stealth` roll
 modifier that predates the Stealth skill) is left alone: staff retarget it by hand. The sheet
@@ -246,6 +247,13 @@ budget.specialization_unlock_threshold  # 30
 
 All models registered with appropriate admin interfaces:
 
+- **Where a skill is authored (#5006):** on the Trait page. The Authoring Workbench's Builders panel
+  "New skill" link opens the Trait add form typed as Skill; its Skill section
+  (`SkillOnTraitInline`: tooltip, display order, active, credit) makes the `Skill` row in the same
+  Save, plus its modifier target. An untouched section makes no skill (some skill-type traits are
+  rolled by checks without being trained skills), and a filled section on a non-skill trait is
+  refused. Specializations stay on the Skill page, linked from the section; the section is hidden
+  on a saved non-skill trait.
 - `SkillAdmin` - List/filter by category and active status, inline `Specialization` editing, ordered by `display_order`
 - `SpecializationAdmin` - List/filter by `parent_skill` and active status, search by name and parent skill
 - `CharacterSkillValueAdmin` - Shows `value`, `display_value`, `development_points`, `rust_points`; filter by skill

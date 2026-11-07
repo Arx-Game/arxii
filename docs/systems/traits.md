@@ -184,7 +184,7 @@ roll (1-100) -> ResultChartOutcome -> CheckOutcome
 
 All models registered with appropriate admin interfaces:
 
-- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing
+- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing, and a Skill section (`skills.admin.SkillOnTraitInline`) where a skill is authored on one page (#5006; see `docs/systems/skills.md`). The rank-description row's display value is blank on the empty add row, which on a stat trait used to fail the page.
 - `CharacterTraitValueAdmin` - Search by character key and trait name, filter by trait type/category
 - `PointConversionRangeAdmin` - List by trait type and value range
 - `CheckRankAdmin` - Ordered by rank

@@ -70,6 +70,13 @@ class BuildersPanelRenderTest(BuildersPanelTestCase):
         assert f'value="{self.ladder.stages[0].pk}"' in body
         assert "1. Fraying" in body
 
+    def test_panel_opens_a_new_skill_on_the_trait_form_typed_as_skill(self):
+        """A skill is authored on the Trait page's Skill section (#5006)."""
+        self.client.force_login(self.author)
+        body = self.client.get(reverse("admin_authoring")).content.decode()
+        assert f"{reverse('admin:arxii_trait_add')}?trait_type=skill" in body
+        assert reverse("admin:arxii_skill_changelist") in body
+
     def test_panel_absent_when_setup_required(self):
         self.client.force_login(self.unlinked)
         resp = self.client.get(reverse("admin_authoring"))
