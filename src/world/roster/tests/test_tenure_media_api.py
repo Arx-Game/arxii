@@ -180,7 +180,7 @@ class CharacterArtApiTests(TestCase):
 
         self.tenure.end_date = timezone.now()
         self.tenure.save()
-        RosterTenureFactory(roster_entry=self.entry, player_number=2)
+        RosterTenureFactory(roster_entry=self.entry, player_number=self.tenure.player_number + 1)
         self.entry.invalidate_tenure_cache()
         ids = [r["id"] for r in _results(self.client.get(URL, {"roster_entry": self.entry.pk}))]
         assert ids == [art_id]
