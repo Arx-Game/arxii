@@ -82,6 +82,14 @@ class ParseTableTest(PlaceNamePasteTestCase):
         assert row.status == "create"
         assert any("title" in n for n in row.notes)
 
+    def test_parsing_runs_three_queries_however_many_rows(self) -> None:
+        """Cultures, existing place names and title names are read once, not per row."""
+        text = "".join(f"Vestyr | Name{i} | {i % 9 + 1}\n" for i in range(40))
+        text += "Umbran | Fadehollow\nNowhere | Lost\nVestyr | Carradyn\n"
+        with self.assertNumQueries(3):
+            rows = parse_table(text)
+        assert [r.status for r in rows[-3:]] == ["create", "error", "skip"]
+
     def test_the_digest_changes_when_the_database_does(self) -> None:
         before = table_digest(parse_table("Vestyr | Aberwen | 3\n"))
         NameCultureEntry.objects.create(culture=self.vestyr, part=NamePart.PLACE, value="Aberwen")

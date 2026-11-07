@@ -30,7 +30,6 @@ from web.admin.paste_common import (
     PasteRow,
     check_post,
     digest_of,
-    one,
     refusal,
 )
 from web.admin.tuning.views import superuser_required
@@ -75,10 +74,45 @@ def _parse_weight(raw: str, row: RowSpec) -> int:
     return weight
 
 
-def _parse_row(line_no: int, fields: list[str]) -> RowSpec:
-    cells = [f.strip() for f in fields] + [""] * (len(COLUMNS) - len(fields))
+@dataclass
+class _Lookups:
+    """Everything a table's rows are resolved against, read once per parse (no queries in
+    the row loop): cultures by lowercased name (a list, so a case-only clash is still
+    ambiguous), the PLACE values each culture holds by lowercased value, and the title
+    names the table mentions."""
+
+    cultures: dict[str, list[NameCulture]]
+    existing: dict[tuple[int, str], str]
+    titles: set[str]
+
+    @classmethod
+    def for_table(cls, lines: list[list[str]]) -> _Lookups:
+        cultures: dict[str, list[NameCulture]] = {}
+        for culture in NameCulture.objects.all():
+            cultures.setdefault(culture.name.lower(), []).append(culture)
+        existing = {
+            (culture_id, value.lower()): value
+            for culture_id, value in NameCultureEntry.objects.filter(
+                part=NamePart.PLACE
+            ).values_list("culture_id", "value")
+        }
+        names = [cells[1] for cells in lines if len(cells) > 1 and cells[1]]
+        titles = set(Title.objects.filter(name__in=names).values_list("name", flat=True))
+        return cls(cultures=cultures, existing=existing, titles=titles)
+
+    def culture(self, name: str) -> tuple[NameCulture | None, str]:
+        """Exactly one culture, or the reason there is not (the scaffold's ``one`` shape)."""
+        matches = self.cultures.get(name.lower(), [])
+        if not matches:
+            return None, "unknown culture"
+        if len(matches) > 1:
+            return None, "ambiguous culture"
+        return matches[0], ""
+
+
+def _parse_row(line_no: int, cells: list[str], lookups: _Lookups) -> RowSpec:
     row = RowSpec(line_no=line_no, culture_name=cells[0], name=cells[1])
-    culture, why = one(NameCulture.objects.filter(name__iexact=row.culture_name), "culture")
+    culture, why = lookups.culture(row.culture_name)
     if culture is None:
         row.fail(why)
     else:
@@ -91,35 +125,43 @@ def _parse_row(line_no: int, fields: list[str]) -> RowSpec:
     elif contains_dash(row.name):
         row.fail(_DASH_NOTE)
     row.weight = _parse_weight(cells[2], row)
-    if row.status != STATUS_CREATE:
+    if row.status != STATUS_CREATE or row.culture_id is None:
         return row
-    existing = (
-        NameCultureEntry.objects.filter(
-            culture_id=row.culture_id, part=NamePart.PLACE, value__iexact=row.name
-        )
-        .values_list("value", flat=True)
-        .first()
-    )
+    existing = lookups.existing.get((row.culture_id, row.name.lower()))
     if existing is not None:
         row.skip(f"already a place name on this culture, as {existing!r}")
-    elif Title.objects.filter(name=row.name).exists():
+    elif row.name in lookups.titles:
         row.notes.append(_TITLE_NOTE)
     return row
 
 
-def parse_table(text: str) -> list[RowSpec]:
-    """Every non-blank line of ``text`` as a ``RowSpec``, resolved against the database."""
-    rows: list[RowSpec] = []
-    seen: set[tuple[int | None, str]] = set()
+def _split(text: str) -> list[tuple[int, list[str] | None]]:
+    """Each non-blank, non-comment line as its padded cells; None for a line with no pipe."""
+    out: list[tuple[int, list[str] | None]] = []
     for line_no, line in enumerate(text.splitlines(), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if line.count("|") == 0:
-            row = RowSpec(line_no=line_no, name=line.strip()[:MAX_NAME])
+            out.append((line_no, None))
+            continue
+        cells = [f.strip() for f in line.split("|")]
+        out.append((line_no, cells + [""] * (len(COLUMNS) - len(cells))))
+    return out
+
+
+def parse_table(text: str) -> list[RowSpec]:
+    """Every non-blank line of ``text`` as a ``RowSpec``, resolved against the database."""
+    split = _split(text)
+    lookups = _Lookups.for_table([cells for _, cells in split if cells is not None])
+    rows: list[RowSpec] = []
+    seen: set[tuple[int | None, str]] = set()
+    for line_no, cells in split:
+        if cells is None:
+            row = RowSpec(line_no=line_no, name="")
             row.fail("no pipe-separated columns")
             rows.append(row)
             continue
-        row = _parse_row(line_no, line.split("|"))
+        row = _parse_row(line_no, cells, lookups)
         key = (row.culture_id, row.name.lower())
         if row.status == STATUS_CREATE and key in seen:
             row.skip("appears earlier in this table")
@@ -146,10 +188,11 @@ def _create_rows(rows: list[RowSpec], user_id: int) -> int:
             )
             per_culture[row.culture_id] = per_culture.get(row.culture_id, 0) + 1
             created += 1
+        cultures = NameCulture.objects.in_bulk(list(per_culture))
         for culture_id, count in per_culture.items():
             LogEntry.objects.log_actions(
                 user_id,
-                [NameCulture.objects.get(pk=culture_id)],
+                [cultures[culture_id]],
                 ADDITION,
                 change_message=f"Added {count} place names from a table (#5001)",
             )
