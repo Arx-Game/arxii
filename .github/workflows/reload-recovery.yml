@@ -32,16 +32,11 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/0.13.4/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
           /usr/local/bin/uv --version
-      - name: Install the disposable game
+      - name: Install the disposable game and break it every way the spec lists
         run: >-
           sudo -E /usr/local/bin/uv run --no-project --python 3.13
           --with jinja2 --with pyyaml
-          infra/scripts/reload_recovery_check.py setup
-      - name: Break it every way the spec lists
-        run: >-
-          sudo -E /usr/local/bin/uv run --no-project --python 3.13
-          --with jinja2 --with pyyaml
-          infra/scripts/reload_recovery_check.py run
+          infra/scripts/reload_recovery_check.py all
       - name: Show the logs on failure
         if: failure()
         run: |

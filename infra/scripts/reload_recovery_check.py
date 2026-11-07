@@ -8,7 +8,7 @@ client as the player. It never touches production and needs no secrets.
 
 Expectations come from the spec on #4999, not from this code's output.
 
-Usage: reload_recovery_check.py setup | run [scenario ...]
+Usage: reload_recovery_check.py all [scenario ...]
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import http.server
 import os
 from pathlib import Path
 import re
+import secrets
 import shlex
 import shutil
 import socket
@@ -50,8 +51,9 @@ ALERT_LOG = Path("/tmp/arxii-alerts.log")  # noqa: S108 - throwaway runner
 TELNET_PORT = 4000
 ROOM_TEXT = b"Limbo"
 SUPERUSER = "recoverycheck"
-# Synthetic: the game exists for the length of this job and has no other account.
-SUPERUSER_PASSWORD = "synthetic-disposable-password"  # noqa: S105
+# Made fresh for each job and never written down: setup and the scenarios run in one
+# process, so the password reaches Evennia only through the environment of one command.
+SUPERUSER_PASSWORD = secrets.token_urlsafe(24)
 # Words the alerts and evidence carry, per the spec's scenarios.
 ALERT_RECOVERED = "recovered"
 ALERT_EXHAUSTED = "exhausted"
@@ -65,7 +67,7 @@ SYSTEMD_INIT = "systemd"
 NAME_KEY = "name"
 EVENNIA_PACKAGE = "evennia"
 SETUPTOOLS_PACKAGE = "setuptools"
-SETUP_COMMAND = "setup"
+ALL_COMMAND = "all"
 RESTART_STAMP = Path("/run/arxii-watchdog.restart-stamp")
 # Ruled in #4999, plus margin for scheduling on a shared runner.
 RELOAD_BUDGET_S = 200
@@ -88,11 +90,13 @@ Account.puppet_object = _with_puppet_sync(Account.puppet_object)
 """
 
 
-def sh(cmd: str, *, check: bool = True, timeout: int = 900) -> subprocess.CompletedProcess[str]:
+def sh(
+    cmd: str, *, check: bool = True, timeout: int = 900, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run a shell command, echoing it so the job log reads as a transcript."""
     print(f"$ {cmd}", flush=True)
     result = subprocess.run(  # noqa: S602 - fixed commands on a throwaway runner
-        cmd, shell=True, text=True, capture_output=True, timeout=timeout, check=False
+        cmd, shell=True, text=True, capture_output=True, timeout=timeout, check=False, env=env
     )
     if result.stdout.strip():
         print(result.stdout.rstrip(), flush=True)
@@ -150,14 +154,24 @@ def setup() -> None:
     sh(f"chown -R {APP_USER}: {PROJECT.parent}")
     as_app(f"cd {PROJECT} && {UV} sync", timeout=1200)
     as_app(f"cd {PROJECT} && {UV} run evennia --init {GAMEDIR.name}")
-    as_app(f"cd {GAMEDIR} && {UV} run evennia migrate", timeout=1200)
+    # Evennia creates the superuser from these on its first database check.
+    superuser_env = {
+        "EVENNIA_SUPERUSER_USERNAME": SUPERUSER,
+        "EVENNIA_SUPERUSER_PASSWORD": SUPERUSER_PASSWORD,
+        "EVENNIA_SUPERUSER_EMAIL": "recovery@example.invalid",
+    }
+    keep = ",".join(superuser_env)
+    # The first migrate builds the tables; the second finds no superuser and makes one
+    # from the environment, so `evennia start` under systemd never stops to ask.
+    for _ in range(2):
+        sh(
+            f"sudo -H --preserve-env={keep} -u {APP_USER} bash -c "
+            + shlex.quote(f"cd {GAMEDIR} && {UV} run evennia migrate"),
+            timeout=1200,
+            env={**os.environ, **superuser_env},
+        )
     ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ENV_FILE.write_text(
-        f"OFFBOX_ALERT_TOKEN=http://127.0.0.1:{ALERT_PORT}/check\n"
-        f"EVENNIA_SUPERUSER_USERNAME={SUPERUSER}\n"
-        f"EVENNIA_SUPERUSER_PASSWORD={SUPERUSER_PASSWORD}\n"
-        "EVENNIA_SUPERUSER_EMAIL=recovery@example.invalid\n"
-    )
+    ENV_FILE.write_text(f"OFFBOX_ALERT_TOKEN=http://127.0.0.1:{ALERT_PORT}/check\n")
     ENV_FILE.chmod(0o600)
     install_rendered()
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
@@ -663,12 +677,10 @@ def run(selected: list[str]) -> int:
 
 
 def main() -> int:
-    if sys.argv[1:2] not in (["setup"], ["run"]):
+    if sys.argv[1:2] != [ALL_COMMAND]:
         print(__doc__)
         return 2
-    if sys.argv[1] == SETUP_COMMAND:
-        setup()
-        return 0
+    setup()
     return run(sys.argv[2:])
 
 
