@@ -1,0 +1,32 @@
+{% comment %}
+The preview and confirm half of every table paste (#5001): takes `rows`, `counts`
+and `digest`; the surrounding form's textarea and check button belong to the page.
+{% endcomment %}
+{% if rows is not None %}
+<div class="module">
+  <h2>Preview: {{ rows|length }} row(s) read &middot; {{ counts.create }} to create
+    &middot; {{ counts.skip }} skipped &middot; {{ counts.error }} error(s)</h2>
+  <table class="tuning-table">
+    <thead><tr><th>Line</th><th>Row</th><th>Result</th><th>Will create</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.line_no }}</td>
+        <td>{{ row.name }}</td>
+        <td>{{ row.status }}{% if row.notes %}: {{ row.notes|join:"; " }}{% endif %}</td>
+        <td>{% if row.status == "create" %}{{ row.will_create }}{% else %}nothing{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="description">An error on any row stops the whole paste: nothing is written until every
+    row reads create or skip. The confirm re-checks a digest of this preview and refuses if the
+    table or the database changed in between.</div>
+  <div class="submit-row">
+    <input type="hidden" name="digest" value="{{ digest }}">
+    {% if counts.error == 0 and counts.create > 0 %}
+    <input type="submit" name="action" value="create" class="default">
+    {% endif %}
+  </div>
+</div>
+{% endif %}

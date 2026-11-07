@@ -316,11 +316,26 @@ class PasteViewTest(PasteTestCase):
         assert resp.status_code == 200
         assert not Distinction.objects.filter(slug="oath-bound").exists()
 
-    def test_unlinked_contributor_cannot_create(self):
+    def test_an_unlinked_superuser_is_linked_and_credited_on_the_spot(self):
+        """#5001: no Authoring Workbench detour; the contributor is named after the account."""
+        self.client.force_login(self.unlinked)
+        digest = table_digest(parse_table(ROW))
+        resp = self.client.post(self.url, {"text": ROW, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        created = Distinction.objects.get(slug="oath-bound")
+        assert created.written_by.name == "unlinked"
+        assert PlayerData.objects.get(account=self.unlinked).contributor == created.written_by
+
+    def test_a_username_already_credited_to_another_account_refuses_and_names_the_clash(self):
+        other = AccountDB.objects.create_user("other", "o@example.com", "pw-123456")
+        PlayerData.objects.create(
+            account=other, contributor=ContentContributorFactory(name="unlinked")
+        )
         self.client.force_login(self.unlinked)
         digest = table_digest(parse_table(ROW))
         resp = self.client.post(self.url, {"text": ROW, "action": "create", "digest": digest})
         assert resp.status_code == 200
+        assert "already linked to another account" in resp.content.decode()
         assert not Distinction.objects.filter(slug="oath-bound").exists()
 
     def test_pasting_the_same_table_twice_adds_nothing_the_second_time(self):
