@@ -242,7 +242,7 @@ _Avoid_: template, generator (it splits what is drawn), seed (that is the place-
 **Place-name bank** (`NameCultureEntry` rows with `part=PLACE` on the realm's `NameCulture`,
 #4986):
 The names the layout draws for duchies and counties, without replacement, in a stable
-per-run order; empty bank, no layout (`LayoutRefused`); dry bank, an undefined rung. A realm's
+per-run order; empty realm bank under a kingdom line with no `names`, no layout (`LayoutRefused`); dry bank, an undefined rung. A realm's
 default bank is its linked cultures; a **regional culture** (no realm link: Vestyr, Norbyria,
 Cinderus) is a bank a kingdom line picks with `names` (#4994). The seed is
 `world/seeds/place_names.py`.

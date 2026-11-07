@@ -652,7 +652,8 @@ kingdom | potential
   kingdom not on the ladder, one with no land drawn, one that already has rungs beneath its
   own chain, a titular or potential name already on the ladder, a `sworn` crown or a
   `claimed by` character that does not exist. The whole layout is refused (`LayoutRefused`)
-  when the realm's culture has no PLACE names.
+  when a kingdom line without `names` would draw from a realm whose cultures have no PLACE
+  names.
 - **Name banks (#4994)** — a realm's *default* bank is the PLACE entries of every culture
   linked to the realm. A *regional* culture (Vestyr, Norbyria and Cinderus in the seed) carries
   no realm link, so it never leaks into a default bank; a kingdom line reaches it with

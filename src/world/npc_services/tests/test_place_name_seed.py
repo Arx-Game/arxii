@@ -6,7 +6,9 @@ from collections import Counter
 
 from django.test import SimpleTestCase, TestCase
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_creation.factories import RealmFactory
+from world.npc_services.instantiation import generate_person_name, name_culture_for_room
 from world.npc_services.models import NameCulture, NameCultureEntry, NamePart
 from world.seeds.name_cultures import ensure_name_cultures
 from world.seeds.place_names import (
@@ -69,3 +71,14 @@ class EnsurePlaceNamesTests(TestCase):
         assert umbran.entries.filter(part=NamePart.PLACE).exists()
         assert umbran.entries.filter(part=NamePart.GIVEN).exists()
         assert NameCulture.objects.filter(name=UMBRAN).count() == 1
+
+    def test_a_culture_with_only_place_names_is_never_the_global_default_for_npc_names(
+        self,
+    ) -> None:
+        ensure_place_names()  # eight cultures, none of them with a single given name
+        common = NameCulture.objects.create(name="Common Tongue")
+        NameCultureEntry.objects.create(culture=common, part=NamePart.GIVEN, value="Marta")
+        NameCultureEntry.objects.create(culture=common, part=NamePart.SURNAME, value="Vane")
+        culture = name_culture_for_room(RoomProfileFactory())
+        assert culture == common
+        assert generate_person_name(culture) == "Marta Vane"

@@ -45,7 +45,14 @@ def name_culture_for_room(room: RoomProfile) -> NameCulture | None:
         for area_id in ancestor_ids:  # nearest ancestor first
             if area_id in cultures:
                 return cultures[area_id]
-    return NameCulture.objects.filter(area__isnull=True, society__isnull=True).first()
+    # a culture with no given names (a place-name bank such as Vestyr) cannot name a person
+    return (
+        NameCulture.objects.filter(
+            area__isnull=True, society__isnull=True, entries__part=NamePart.GIVEN
+        )
+        .distinct()
+        .first()
+    )
 
 
 def _surname_for(family, culture) -> str:
