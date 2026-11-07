@@ -1,8 +1,8 @@
 """Required-content probes for the magical skills mapping (#4450, #4457).
 
 Unmapped config means "no extra skill term" rather than a failure, so these are
-TUNING rows: staff see which magical activities, Paths and Minor Gifts still add
-no skill to their roll, and which schooling stances give no Magic training points
+TUNING rows: staff see which magical activities and casting styles in use (#5002)
+still add no skill to their roll, and which schooling stances give no Magic training points
 (slice 2 of #4659, formerly the #4457 floor), which Magic skills have no Academy
 course, and which Path suggestions name a Magic skill;
 and (#4547) which check types weight a Magic skill directly.
@@ -22,7 +22,7 @@ from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.magic.constants import GiftKind, MagicActivity
-from world.magic.factories import GiftFactory, MagicActivitySkillFactory
+from world.magic.factories import GiftFactory, MagicActivitySkillFactory, TechniqueStyleFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
@@ -46,8 +46,7 @@ class MagicSkillProbeDeclarationTests(TestCase):
     def test_all_three_are_tuning_tier_with_admin_links(self) -> None:
         keys = (
             "magic-activity-skills",
-            "path-technique-skills",
-            "minor-gift-technique-skills",
+            "casting-style-skills",
             "schooling-magic-skill-floors",
             "magic-skill-courses",
             "path-suggestions-name-magic-skills",
@@ -91,57 +90,54 @@ class UnmappedActivityProbeTests(TestCase):
         self.assertTrue(self._resolve().present)
 
 
-class PathTechniqueSkillProbeTests(TestCase):
-    def _resolve(self) -> rc.ProbeResult:
-        return _dependency("path-technique-skills").probe.resolve(None)
+class CastingStyleSkillProbeTests(TestCase):
+    """A style a cast can be worked in, with no active skill, adds none (#5002)."""
 
-    def test_probe_lists_paths_without_technique_skill(self) -> None:
-        bare = PathFactory(technique_skill=None)
-        mapped = PathFactory(technique_skill=SkillFactory())
-        inactive = PathFactory(technique_skill=None, is_active=False)
+    def _resolve(self) -> rc.ProbeResult:
+        return _dependency("casting-style-skills").probe.resolve(None)
+
+    def test_lists_styles_in_use_without_a_skill_each_linked_to_its_page(self) -> None:
+        bare = TechniqueStyleFactory(name="Prayer")
+        PathFactory(style=bare)
+        gift_only = TechniqueStyleFactory(name="Subtle")
+        GiftFactory(kind=GiftKind.MINOR, style=gift_only)
+        mapped = TechniqueStyleFactory(name="Incantation", skill=SkillFactory())
+        PathFactory(style=mapped)
+        unused = TechniqueStyleFactory(name="Unused")
+        retired = TechniqueStyleFactory(name="Retired")
+        PathFactory(style=retired, is_active=False)
 
         result = self._resolve()
 
         self.assertFalse(result.present)
-        self.assertIn(bare.name, result.missing)
-        self.assertNotIn(mapped.name, result.missing)
-        self.assertNotIn(inactive.name, result.missing)
+        self.assertEqual(result.missing, ("Prayer", "Subtle"))
+        self.assertEqual(
+            [row.url for row in result.flagged],
+            [
+                reverse("admin:arxii_techniquestyle_change", args=[bare.pk]),
+                reverse("admin:arxii_techniquestyle_change", args=[gift_only.pk]),
+            ],
+        )
+        self.assertNotIn(unused.name, result.missing)
 
-    def test_a_path_whose_technique_skill_is_inactive_is_listed(self) -> None:
-        """An inactive technique skill adds no term, so the Path still adds none."""
-        path = PathFactory(technique_skill=SkillFactory(is_active=False))
+    def test_a_style_whose_skill_is_inactive_is_listed(self) -> None:
+        """An inactive skill adds no term, so casts in the style still add none."""
+        style = TechniqueStyleFactory(name="Performance", skill=SkillFactory(is_active=False))
+        PathFactory(style=style)
 
-        self.assertIn(path.name, self._resolve().missing)
+        self.assertEqual(self._resolve().missing, ("Performance",))
 
-    def test_present_when_every_active_path_has_one(self) -> None:
-        PathFactory(technique_skill=SkillFactory())
-        self.assertTrue(self._resolve().present)
+    def test_a_style_used_by_two_paths_is_listed_once(self) -> None:
+        style = TechniqueStyleFactory(name="Manifestation")
+        PathFactory(style=style)
+        PathFactory(style=style)
 
+        self.assertEqual(self._resolve().missing, ("Manifestation",))
 
-class MinorGiftTechniqueSkillProbeTests(TestCase):
-    def _resolve(self) -> rc.ProbeResult:
-        return _dependency("minor-gift-technique-skills").probe.resolve(None)
+    def test_present_once_every_style_in_use_has_a_skill(self) -> None:
+        PathFactory(style=TechniqueStyleFactory(skill=SkillFactory()))
+        TechniqueStyleFactory()
 
-    def test_probe_lists_minor_gifts_without_technique_skill(self) -> None:
-        minor = GiftFactory(kind=GiftKind.MINOR, technique_skill=None)
-        major = GiftFactory(kind=GiftKind.MAJOR, technique_skill=None)
-        mapped = GiftFactory(kind=GiftKind.MINOR, technique_skill=SkillFactory())
-
-        result = self._resolve()
-
-        self.assertFalse(result.present)
-        self.assertIn(minor.name, result.missing)
-        self.assertNotIn(major.name, result.missing)
-        self.assertNotIn(mapped.name, result.missing)
-
-    def test_a_minor_gift_whose_technique_skill_is_inactive_is_listed(self) -> None:
-        """An inactive technique skill adds no term, so the Gift still adds none."""
-        gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=SkillFactory(is_active=False))
-
-        self.assertIn(gift.name, self._resolve().missing)
-
-    def test_present_when_only_a_major_gift_lacks_one(self) -> None:
-        GiftFactory(kind=GiftKind.MAJOR, technique_skill=None)
         self.assertTrue(self._resolve().present)
 
 

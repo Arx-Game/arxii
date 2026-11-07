@@ -1,23 +1,21 @@
 """Config models behind magical skills (#4450).
 
-The activity-to-skill table, the three ``technique_skill`` / ``skill`` fields and the
-Gift rule that only a Minor Gift carries one. The rolls that read these rows are tested
+The activity-to-skill table and the two cast skill fields (a casting style's ``skill``,
+#5002, and a technique's own ``skill``). The rolls that read these rows are tested
 in the check-engine and cast-path suites; this file covers what the schema guarantees.
 """
 
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase
 
-from world.classes.factories import PathFactory
-from world.magic.constants import GiftKind, MagicActivity
-from world.magic.factories import GiftFactory, MagicActivitySkillFactory, TechniqueFactory
-from world.skills.factories import MagicSkillFactory
-
-MAJOR_GIFT_MESSAGE = (
-    "A Major Gift's techniques take the caster's Path technique skill. Set it on the Path instead."
+from world.magic.constants import MagicActivity
+from world.magic.factories import (
+    MagicActivitySkillFactory,
+    TechniqueFactory,
+    TechniqueStyleFactory,
 )
+from world.skills.factories import MagicSkillFactory
 
 
 class MagicActivitySkillTests(TestCase):
@@ -41,36 +39,13 @@ class MagicActivitySkillTests(TestCase):
             self.skill.delete()
 
 
-class GiftTechniqueSkillTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.skill = MagicSkillFactory()
-
-    def test_gift_technique_skill_rejected_on_major(self) -> None:
-        gift = GiftFactory(kind=GiftKind.MAJOR)
-        gift.technique_skill = self.skill
-        with self.assertRaises(ValidationError) as ctx:
-            gift.full_clean()
-        self.assertEqual(ctx.exception.message_dict["technique_skill"], [MAJOR_GIFT_MESSAGE])
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            gift.save()
-
-    def test_gift_technique_skill_allowed_on_minor(self) -> None:
-        gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=self.skill)
-        gift.full_clean()
-        gift.refresh_from_db()
-        self.assertEqual(gift.technique_skill, self.skill)
-
-
-class SkillDeleteNullsTechniqueSkillTests(TestCase):
-    def test_skill_delete_nulls_path_gift_technique(self) -> None:
+class SkillDeleteNullsCastSkillTests(TestCase):
+    def test_skill_delete_nulls_style_and_technique(self) -> None:
         skill = MagicSkillFactory()
-        path = PathFactory(technique_skill=skill)
-        gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=skill)
+        style = TechniqueStyleFactory(skill=skill)
         technique = TechniqueFactory(skill=skill)
         skill.delete()
-        for row in (path, gift, technique):
+        for row in (style, technique):
             row.refresh_from_db()
-        self.assertIsNone(path.technique_skill)
-        self.assertIsNone(gift.technique_skill)
+        self.assertIsNone(style.skill)
         self.assertIsNone(technique.skill)

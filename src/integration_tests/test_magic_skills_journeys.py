@@ -1,9 +1,9 @@
 """Journeys for magical skills (#4450): a technique's skill joins the roll its cast makes.
 
-A caster on a Path whose staff-set technique skill is, say, Occult rolls her cast with that
-skill added to the check the cast already used. These journeys cast the way the web client does
-(``dispatch_player_action`` on ``cast_technique``, or a declared combat technique) and read back
-the roll the cast made.
+A caster on a Path whose casting style's staff-set skill (#5002) is, say, Occult rolls her
+cast with that skill added to the check the cast already used. These journeys cast the way
+the web client does (``dispatch_player_action`` on ``cast_technique``, or a declared combat
+technique) and read back the roll the cast made.
 """
 
 from __future__ import annotations
@@ -71,6 +71,7 @@ from world.magic.factories import (
     MagicActivitySkillFactory,
     ResonanceFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     ThreadWeavingUnlockFactory,
@@ -109,7 +110,7 @@ class CastingWithATechniqueSkill(JourneyCase):
             defaults={"max_value": 100, "points_per_level": 1},
         )
         self.skill = SkillFactory()
-        self.path = PathFactory(technique_skill=self.skill)
+        self.path = PathFactory(style=TechniqueStyleFactory(skill=self.skill))
         self.lantern = self.make_room("The Lantern")
         SceneFactory(room=self.lantern)
 
@@ -168,7 +169,7 @@ class CastingWithATechniqueSkill(JourneyCase):
         self.assertEqual(len(rolled), 1)
         return capture.extra_traits, rolled[0]
 
-    def test_scene_cast_adds_path_technique_skill(self) -> None:
+    def test_scene_cast_adds_the_path_styles_skill(self) -> None:
         terms, result = self.cast_and_read_the_roll(self.ysmay)
 
         self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),))
@@ -231,7 +232,9 @@ class FlirtingWithATechniqueSkill(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=self.parlor)
         self.hobb = self.make_player("Hobb", room=self.parlor)
         sheet = self.ysmay.sheet_data
-        CharacterPathHistoryFactory(character=sheet, path=PathFactory(technique_skill=self.skill))
+        CharacterPathHistoryFactory(
+            character=sheet, path=PathFactory(style=TechniqueStyleFactory(skill=self.skill))
+        )
         CharacterTraitValue.objects.create(character=sheet, trait=self.skill.trait, value=30)
         self.technique = TechniqueFactory(
             name="Mesmerizing Gaze", intensity=3, control=8, anima_cost=2, gift=GiftFactory()
@@ -336,7 +339,7 @@ class FightingWithATechniqueSkill(JourneyCase):
             defaults={"max_value": 100, "points_per_level": 1},
         )
         self.skill = SkillFactory()
-        self.path = PathFactory(technique_skill=self.skill)
+        self.path = PathFactory(style=TechniqueStyleFactory(skill=self.skill))
         self.yard = self.make_room("The Yard")
 
         check_type = CheckTypeFactory()
@@ -368,7 +371,7 @@ class FightingWithATechniqueSkill(JourneyCase):
         )
         self.opponent = CombatOpponentFactory(encounter=self.encounter)
 
-    def test_combat_round_cast_adds_path_technique_skill(self) -> None:
+    def test_combat_round_cast_adds_the_path_styles_skill(self) -> None:
         WeeklySkillUsage.flush_instance_cache()
         ref = ActionRef(
             backend=ActionBackend.COMBAT, technique_id=self.technique.pk, action_slot="focused"
