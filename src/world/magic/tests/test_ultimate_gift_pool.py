@@ -118,7 +118,6 @@ class GiftAdminFormTests(TestCase):
             "style",
             "resonances",
             "ultimate_techniques",
-            "technique_skill",
             "natural_weapon_template",
             "written_by",
             "written_on",

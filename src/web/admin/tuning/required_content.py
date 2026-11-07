@@ -1121,28 +1121,39 @@ def _probe_magic_activity_skills() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
-def _probe_path_technique_skills() -> ProbeResult:
-    """Every active `Path` names the skill its Major Gift techniques add (#4450).
+def _probe_casting_style_skills() -> ProbeResult:
+    """Every casting style a cast can be worked in names the skill it adds (#5002).
 
-    Consumer: `world/magic/services/magic_skills.py:43` `_skill_for_path()`. A Major
-    Gift technique without its own skill takes the caster's current Path
-    `technique_skill`; a Path with none leaves those casts at their check type alone. An
-    inactive technique skill adds no term, so it counts as none.
+    Consumer: `world/magic/services/magic_skills.py` `_skill_for_path()` and
+    `technique_skill_term()`. A technique without its own skill takes the skill of the
+    style it is cast in: its Gift's style, else the caster's Path style. A style used by
+    an active Path or by a Gift with no skill, or an inactive one, leaves those casts at
+    their check type alone. Each row links the style's edit page.
     """
     from django.db.models import Q  # noqa: PLC0415
+    from django.urls import reverse  # noqa: PLC0415
 
-    from world.classes.models import Path  # noqa: PLC0415
+    from world.magic.models import TechniqueStyle  # noqa: PLC0415
 
-    missing = tuple(
-        Path.objects.filter(is_active=True)
-        .filter(Q(technique_skill__isnull=True) | Q(technique_skill__is_active=False))
+    styles = (
+        TechniqueStyle.objects.filter(Q(paths__is_active=True) | Q(gifts__isnull=False))
+        .filter(Q(skill__isnull=True) | Q(skill__is_active=False))
+        .distinct()
         .order_by("name")
-        .values_list("name", flat=True)
     )
-    if not missing:
+    rows = tuple(
+        FlaggedRow(
+            text=style.name,
+            url=reverse("admin:arxii_techniquestyle_change", args=[style.pk]),
+        )
+        for style in styles
+    )
+    if not rows:
         return ProbeResult(present=True)
-    detail = f"{len(missing)} active Path(s) have no technique skill: their casts add none."
-    return ProbeResult(present=False, missing=missing, detail=detail)
+    detail = f"{len(rows)} casting style(s) in use have no skill: casts in them add none."
+    return ProbeResult(
+        present=False, missing=tuple(row.text for row in rows), detail=detail, flagged=rows
+    )
 
 
 def _probe_combat_style_skills() -> ProbeResult:
@@ -1227,32 +1238,6 @@ def _probe_traditions_teach_a_style() -> ProbeResult:
     if not missing:
         return ProbeResult(present=True)
     detail = f"{len(missing)} active Tradition(s) teach no combat style."
-    return ProbeResult(present=False, missing=missing, detail=detail)
-
-
-def _probe_minor_gift_technique_skills() -> ProbeResult:
-    """Every Minor `Gift` names the skill its techniques add (#4450).
-
-    Consumer: `world/magic/services/magic_skills.py:43` `_skill_for_path()`. A Minor
-    Gift technique without its own skill takes the Gift's `technique_skill`. A Major
-    Gift is never listed: it takes the caster's Path skill instead, and the model
-    refuses a technique_skill on one. `Gift` has no active flag, so every Minor Gift
-    counts. An inactive technique skill adds no term, so it counts as none.
-    """
-    from django.db.models import Q  # noqa: PLC0415
-
-    from world.magic.constants import GiftKind  # noqa: PLC0415
-    from world.magic.models import Gift  # noqa: PLC0415
-
-    missing = tuple(
-        Gift.objects.filter(kind=GiftKind.MINOR)
-        .filter(Q(technique_skill__isnull=True) | Q(technique_skill__is_active=False))
-        .order_by("name")
-        .values_list("name", flat=True)
-    )
-    if not missing:
-        return ProbeResult(present=True)
-    detail = f"{len(missing)} Minor Gift(s) have no technique skill: their casts add none."
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
@@ -4100,28 +4085,16 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="MagicActivitySkill",
         ),
         ContentDependency(
-            key="path-technique-skills",
-            label="Technique skill on each active Path",
+            key="casting-style-skills",
+            label="Skill on each casting style in use",
             tier=DependencyTier.TUNING,
-            consumer="world/magic/services/magic_skills.py:43 _skill_for_path()",
+            consumer="world/magic/services/magic_skills.py _skill_for_path()",
             consequence=(
-                "A Major Gift technique cast by someone on that Path adds no skill "
+                "A technique cast in that style, with no skill of its own, adds no skill "
                 "to its roll and develops none."
             ),
-            probe=CustomProbe(fn=_probe_path_technique_skills),
-            admin_model="Path",
-        ),
-        ContentDependency(
-            key="minor-gift-technique-skills",
-            label="Technique skill on each Minor Gift",
-            tier=DependencyTier.TUNING,
-            consumer="world/magic/services/magic_skills.py:43 _skill_for_path()",
-            consequence=(
-                "A technique of that Minor Gift with no skill of its own adds no skill "
-                "to its roll and develops none."
-            ),
-            probe=CustomProbe(fn=_probe_minor_gift_technique_skills),
-            admin_model="Gift",
+            probe=CustomProbe(fn=_probe_casting_style_skills),
+            admin_model="TechniqueStyle",
         ),
         ContentDependency(
             key="schooling-magic-skill-floors",

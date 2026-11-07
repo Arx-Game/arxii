@@ -94,8 +94,8 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
     Gift yields a different set per Path (a warrior-line and a spy-line path can both
     grant Pyromancy, but grant different techniques from it). ``starter_techniques``
     is the list of techniques for this Path and Gift (#4555): a technique is offered
-    only on the Paths whose list holds it, and a technique belongs to those Paths for
-    its cast skill (``magic_skills.technique_paths``). Character creation offers from
+    only on the Paths whose list holds it. (Its cast skill follows the caster's casting
+    style, not this list, #5002.) Character creation offers from
     it, Academy training checks it, and ``grant_path_magic`` mints CharacterGift +
     CharacterTechnique rows from it on a crossing, each less the techniques a
     Tradition grant keeps for other Traditions (``cg_catalog.offered_to_tradition``).

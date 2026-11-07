@@ -154,7 +154,6 @@ from world.magic.models.dramatic_moment import (
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.facets import merge_facets
 from world.magic.services.glimpse import refresh_glimpse_state
-from world.magic.services.magic_skills import invalidate_technique_own_paths
 from world.magic.services.modifier_sizing import applied_condition_size_warnings
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
@@ -255,8 +254,12 @@ class StyleCapabilityRequirementInline(admin.TabularInline):
 
 @admin.register(TechniqueStyle)
 class TechniqueStyleAdmin(admin.ModelAdmin):
-    list_display = ["name", "get_paths"]
+    """A casting style: how a caster works magic, and the skill those casts add (#5002)."""
+
+    list_display = ["name", "skill", "get_paths"]
+    list_select_related = ["skill__trait"]
     search_fields = ["name", "description"]
+    autocomplete_fields = ["skill"]
     inlines = [StyleCapabilityRequirementInline]
 
     def get_queryset(self, request):
@@ -937,7 +940,6 @@ class GiftAdminForm(forms.ModelForm):
             "creator",
             "codex_entry",
             "style",
-            "technique_skill",
             "natural_weapon_template",
             "resonances",
             "ultimate_techniques",
@@ -966,7 +968,7 @@ class GiftAdminForm(forms.ModelForm):
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     form = GiftAdminForm
-    autocomplete_fields = ["creator", "parent", "technique_skill"]
+    autocomplete_fields = ["creator", "parent"]
     list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
@@ -1146,19 +1148,6 @@ class PathGiftGrantAdmin(admin.ModelAdmin):
     def get_technique_count(self, obj: PathGiftGrant) -> int:
         """An empty pool is the gap the required-content sentinel reports (#3682)."""
         return obj.technique_count
-
-    def save_related(self, request, form, formsets, change) -> None:
-        """The list says which Paths a technique belongs to for its cast skill (#4555)."""
-        super().save_related(request, form, formsets, change)
-        invalidate_technique_own_paths()
-
-    def delete_model(self, request, obj) -> None:
-        super().delete_model(request, obj)
-        invalidate_technique_own_paths()
-
-    def delete_queryset(self, request, queryset) -> None:
-        super().delete_queryset(request, queryset)
-        invalidate_technique_own_paths()
 
 
 @admin.register(CharacterTradition)

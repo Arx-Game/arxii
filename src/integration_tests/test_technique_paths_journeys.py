@@ -29,6 +29,7 @@ from world.magic.factories import (
     ResonanceFactory,
     RitualOfTheDuranceFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
@@ -173,16 +174,24 @@ class CrossingIntoAPath(JourneyCase):
 
 
 class CastingAfterACrossing(JourneyCase):
-    """Ysmay learned Cinder Word on the Path of Embers and now walks the Path of Ash."""
+    """Ysmay learned Cinder Word on the Path of Embers and now walks the Path of Ash.
+
+    A cast's skill follows the style she casts in now, her current Path's (#5002, which
+    replaced #4555's own-Path rule), so both techniques add the Ash style's skill.
+    """
 
     def setUp(self) -> None:
         super().setUp()
         CheckSystemSetupFactory.create()
         self.embers_skill = SkillFactory()
         self.ash_skill = SkillFactory()
-        embers = PathFactory(name="Path of Embers", technique_skill=self.embers_skill)
+        embers = PathFactory(
+            name="Path of Embers", style=TechniqueStyleFactory(skill=self.embers_skill)
+        )
         ash = PathFactory(
-            name="Path of Ash", stage=PathStage.POTENTIAL, technique_skill=self.ash_skill
+            name="Path of Ash",
+            stage=PathStage.POTENTIAL,
+            style=TechniqueStyleFactory(skill=self.ash_skill),
         )
         room = self.make_room("The Lantern")
         SceneFactory(room=room)
@@ -223,10 +232,10 @@ class CastingAfterACrossing(JourneyCase):
         self.assertTrue(outcome.detail.success, outcome.detail.message)
         return capture.extra_traits
 
-    def test_a_technique_from_her_old_path_adds_that_paths_skill(self) -> None:
+    def test_a_technique_from_her_old_path_adds_her_current_styles_skill(self) -> None:
         self.assertEqual(
             self.cast_terms(self.cinder),
-            (ExtraTraitTerm(trait=self.embers_skill.trait, weight=Decimal("1.00")),),
+            (ExtraTraitTerm(trait=self.ash_skill.trait, weight=Decimal("1.00")),),
         )
 
     def test_a_technique_of_her_current_path_adds_its_skill(self) -> None:

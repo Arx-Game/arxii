@@ -142,9 +142,13 @@ class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     Exception: a Minor Gift may override this for its own techniques via
     ``Gift.style`` — a species gift the character never chose doesn't inherit the
-    caster's Path-chosen manner (#2905, ADR-0199). The override affects only
-    ``cast_concealment`` resolution; capability gating below still reads the caster's
-    own Path style.
+    caster's Path-chosen manner (#2905, ADR-0199). The override affects
+    ``cast_concealment`` and the cast's ``skill`` (``casting_style``); capability gating
+    below still reads the caster's own Path style.
+
+    The style also carries the cast's magic skill (#5002, ADR-5002): how a character
+    works magic and how good they are at it are one thing seen from two sides, so a cast
+    adds the ``skill`` of the style it is worked in unless the technique sets its own.
 
     Mechanical, not decorative: a style's ``StyleCapabilityRequirement`` rows gate
     casting on the caster's capabilities (an Incantation caster who cannot speak cannot
@@ -160,6 +164,21 @@ class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Description of this technique style.",
+    )
+    skill = models.ForeignKey(
+        "arxii.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_styles",
+        limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
+        error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
+        help_text=(
+            "The skill every cast worked in this style adds (#5002): a Path's casts take "
+            "the Path style's skill, a Gift with its own style takes that style's. A "
+            "technique's own skill, if set, wins. Blank = casts in this style add no "
+            f"skill. {MAGIC_PICKER_SKILL_HELP}"
+        ),
     )
     cast_concealment = models.PositiveSmallIntegerField(
         default=0,
@@ -663,9 +682,9 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,
         error_messages=MAGIC_PICKER_SKILL_ERROR_MESSAGES,
         help_text=(
-            "Overrides the technique skill for this one technique (#4450). Blank = use "
-            "the caster's Path technique skill (Major Gift) or the Gift's technique "
-            f"skill (Minor Gift). {MAGIC_PICKER_SKILL_HELP}"
+            "Overrides the cast skill for this one technique (#4450). Blank = use the "
+            "skill of the style the cast is worked in: the Gift's own style if it sets "
+            f"one, else the caster's Path style (#5002). {MAGIC_PICKER_SKILL_HELP}"
         ),
     )
     applied_conditions = models.ManyToManyField(
@@ -757,23 +776,6 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
                     "technique. Remove it from those first."
                 )
                 raise ValidationError({"is_ultimate": msg})
-
-    @cached_property
-    def cached_own_paths(self) -> list:
-        """The Paths whose ``PathGiftGrant.starter_techniques`` list holds this technique.
-
-        In Path order (stage, sort order, name, then pk), each with its technique skill
-        select_related: the technique's own Paths for its cast skill (#4555,
-        ``magic_skills.skill_path``). Cached so a cast costs no query after the first.
-        The Path Gift Grant and Path admins clear it on every save through
-        ``magic_skills.invalidate_technique_own_paths``.
-        """
-        return [
-            grant.path
-            for grant in self.granted_by_path_gifts.select_related(
-                "path__technique_skill__trait"
-            ).order_by("path__stage", "path__sort_order", "path__name", "path__pk")
-        ]
 
     @cached_property
     def cached_restrictions(self) -> list:

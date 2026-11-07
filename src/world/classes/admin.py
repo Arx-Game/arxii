@@ -13,8 +13,6 @@ from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.magic.models import PathGiftGrant
-from world.magic.services.magic_skills import invalidate_technique_own_paths
-from world.mechanics.services import ensure_aspect_target
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -88,11 +86,7 @@ class PathGiftGrantInline(admin.TabularInline):
 
 @admin.register(Path)
 class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
-    """Admin for character paths.
-
-    A save can change a technique's own Paths (a grant removed inline, the Path's
-    order), so it clears ``Technique.cached_own_paths`` (#4555).
-    """
+    """Admin for character paths. A Path's cast skill is its style's (#5002)."""
 
     list_display = [
         "name",
@@ -106,7 +100,7 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["stage", "is_active", "style"]
     search_fields = ["name", "description"]
     filter_horizontal = ["parent_paths"]
-    autocomplete_fields = ["style", "technique_skill"]
+    autocomplete_fields = ["style"]
     list_select_related = ["style"]
     inlines = [
         PathAspectInline,
@@ -118,23 +112,11 @@ class PathAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
-        ("Casting", {"fields": ("technique_skill", "style", "action_category")}),
+        ("Casting", {"fields": ("style", "action_category")}),
         ("Display", {"fields": ("icon_url", "icon_name", "sort_order", "is_active")}),
         ("Evolution", {"fields": ("parent_paths",)}),
         CREDIT_FIELDSET,
     )
-
-    def save_related(self, request, form, formsets, change) -> None:
-        super().save_related(request, form, formsets, change)
-        invalidate_technique_own_paths()
-
-    def delete_model(self, request, obj) -> None:
-        super().delete_model(request, obj)
-        invalidate_technique_own_paths()
-
-    def delete_queryset(self, request, queryset) -> None:
-        super().delete_queryset(request, queryset)
-        invalidate_technique_own_paths()
 
     @admin.display(description="Parents")
     def parent_count(self, obj):
@@ -165,6 +147,10 @@ class AspectAdmin(admin.ModelAdmin):
         Aspect row needs one with ``target_aspect`` set. An explicit call, not a signal
         (ADR-0009).
         """
+        # Imported here: a module-level import made this admin the first importer of
+        # world.mechanics.services, which reaches a cycle through world.checks (#5002).
+        from world.mechanics.services import ensure_aspect_target  # noqa: PLC0415
+
         super().save_model(request, obj, form, change)
         if ensure_aspect_target(obj) is None:
             messages.warning(

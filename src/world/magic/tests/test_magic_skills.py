@@ -1,4 +1,4 @@
-"""Magic-layer skill term resolution (#4450): activity rows and the technique skill."""
+"""Magic-layer skill term resolution (#4450): activity rows and the cast skill (#5002)."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -18,9 +18,9 @@ from world.magic.constants import GiftKind, MagicActivity, RitualExecutionKind
 from world.magic.factories import (
     GiftFactory,
     MagicActivitySkillFactory,
-    PathGiftGrantFactory,
     RitualCheckConfigFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
 )
 from world.magic.models import Technique
 from world.magic.models.rituals import Ritual
@@ -34,7 +34,7 @@ from world.magic.services.magic_skills import (
 from world.magic.types.magic_skills import CastCheck
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import CharacterPathHistory
-from world.skills.factories import SkillFactory
+from world.skills.factories import MagicSkillFactory, SkillFactory
 from world.traits.factories import StatTraitFactory
 
 
@@ -78,6 +78,8 @@ class ActivitySkillTermsTests(TestCase):
 
 
 class TechniqueSkillTermTests(TestCase):
+    """The cast skill is the override, else the skill of the style it is cast in (#5002)."""
+
     @classmethod
     def setUpTestData(cls):
         cls.override_skill = SkillFactory()
@@ -85,28 +87,31 @@ class TechniqueSkillTermTests(TestCase):
         cls.new_path_skill = SkillFactory()
         cls.gift_skill = SkillFactory()
         cls.sheet = CharacterSheetFactory()
-        cls.path = PathFactory(technique_skill=cls.path_skill)
+        cls.path = PathFactory(style=TechniqueStyleFactory(skill=cls.path_skill))
         cls.major_gift = GiftFactory(kind=GiftKind.MAJOR)
-        cls.minor_gift = GiftFactory(kind=GiftKind.MINOR, technique_skill=cls.gift_skill)
+        cls.minor_gift = GiftFactory(
+            kind=GiftKind.MINOR, style=TechniqueStyleFactory(skill=cls.gift_skill)
+        )
 
     def _term(self, technique):
         return technique_skill_term(self.sheet.character, technique)
 
     def test_technique_override_wins(self):
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
-        technique = TechniqueFactory(gift=self.major_gift, skill=self.override_skill)
+        technique = TechniqueFactory(gift=self.minor_gift, skill=self.override_skill)
 
         term = self._term(technique)
 
         self.assertEqual(term, ExtraTraitTerm(self.override_skill.trait, Decimal("1.00")))
 
     def test_inactive_override_gives_no_term(self):
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         inactive = SkillFactory(is_active=False)
         technique = TechniqueFactory(gift=self.major_gift, skill=inactive)
 
         self.assertIsNone(self._term(technique))
 
-    def test_major_gift_uses_current_path_skill(self):
+    def test_gift_without_a_style_uses_the_path_styles_skill(self):
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         technique = TechniqueFactory(gift=self.major_gift)
 
@@ -114,8 +119,15 @@ class TechniqueSkillTermTests(TestCase):
 
         self.assertEqual(term, ExtraTraitTerm(self.path_skill.trait, Decimal("1.00")))
 
-    def test_major_gift_after_path_change_uses_new_path(self):
-        new_path = PathFactory(technique_skill=self.new_path_skill)
+    def test_minor_gift_without_a_style_uses_the_path_styles_skill(self):
+        """Before #5002 a Minor Gift with no skill of its own added none."""
+        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
+        technique = TechniqueFactory(gift=GiftFactory(kind=GiftKind.MINOR))
+
+        self.assertEqual(self._term(technique).trait, self.path_skill.trait)
+
+    def test_after_a_path_change_the_new_paths_style_counts(self):
+        new_path = PathFactory(style=TechniqueStyleFactory(skill=self.new_path_skill))
         old = CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         # selected_at is auto_now_add, so backdate the first row with a queryset update.
         CharacterPathHistory.objects.filter(pk=old.pk).update(
@@ -128,21 +140,39 @@ class TechniqueSkillTermTests(TestCase):
 
         self.assertEqual(term.trait, self.new_path_skill.trait)
 
-    def test_minor_gift_uses_gift_skill(self):
+    def test_a_gifts_own_style_wins_over_the_path_style(self):
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
-        technique = TechniqueFactory(gift=self.minor_gift)
+        for gift in (
+            self.minor_gift,
+            GiftFactory(kind=GiftKind.MAJOR, style=TechniqueStyleFactory(skill=self.gift_skill)),
+        ):
+            with self.subTest(kind=gift.kind):
+                term = self._term(TechniqueFactory(gift=gift))
+                self.assertEqual(term, ExtraTraitTerm(self.gift_skill.trait, Decimal("1.00")))
 
-        term = self._term(technique)
+    def test_a_gifts_own_style_counts_with_no_path(self):
+        self.assertEqual(
+            self._term(TechniqueFactory(gift=self.minor_gift)).trait, self.gift_skill.trait
+        )
 
-        self.assertEqual(term, ExtraTraitTerm(self.gift_skill.trait, Decimal("1.00")))
-
-    def test_inactive_path_skill_gives_no_term(self):
+    def test_inactive_style_skill_gives_no_term(self):
         inactive = SkillFactory(is_active=False)
-        path = PathFactory(technique_skill=inactive)
+        path = PathFactory(style=TechniqueStyleFactory(skill=inactive))
         CharacterPathHistoryFactory(character=self.sheet, path=path)
         technique = TechniqueFactory(gift=self.major_gift)
 
         self.assertIsNone(self._term(technique))
+
+    def test_a_style_with_no_skill_gives_no_term(self):
+        path = PathFactory(style=TechniqueStyleFactory())
+        CharacterPathHistoryFactory(character=self.sheet, path=path)
+
+        self.assertIsNone(self._term(TechniqueFactory(gift=self.major_gift)))
+
+    def test_a_path_with_no_style_gives_no_term(self):
+        CharacterPathHistoryFactory(character=self.sheet, path=PathFactory(style=None))
+
+        self.assertIsNone(self._term(TechniqueFactory(gift=self.major_gift)))
 
     def test_no_path_no_term(self):
         technique = TechniqueFactory(gift=self.major_gift)
@@ -171,22 +201,19 @@ class TechniqueSkillTermTests(TestCase):
         )
 
 
-class TechniqueOwnPathSkillTests(TestCase):
-    """#4555: a technique adds the skill of a Path whose list holds it."""
+class CastingStyleSkillEditTests(TestCase):
+    """A staff edit to a style's skill reaches the next cast, with no restart (#5002)."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.embers_skill = SkillFactory()
-        cls.ash_skill = SkillFactory()
-        cls.embers = PathFactory(name="Path of Embers", technique_skill=cls.embers_skill)
-        cls.ash = PathFactory(name="Path of Ash", technique_skill=cls.ash_skill)
-        cls.gift = GiftFactory()
-        cls.technique = TechniqueFactory(gift=cls.gift)
-        cls.embers_grant = PathGiftGrantFactory(path=cls.embers, gift=cls.gift)
-        cls.embers_grant.starter_techniques.add(cls.technique)
+        cls.first_skill = MagicSkillFactory()
+        cls.second_skill = MagicSkillFactory()
+        cls.style = TechniqueStyleFactory(name="Incantation", skill=cls.first_skill)
+        cls.path = PathFactory(name="Path of Tomes", style=cls.style)
+        cls.technique = TechniqueFactory(gift=GiftFactory())
         cls.sheet = CharacterSheetFactory()
-        CharacterPathHistoryFactory(character=cls.sheet, path=cls.ash)
-        cls.staff = AccountDB.objects.create_superuser("pathwarden", "pw@example.com", "pw-12345")
+        CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
+        cls.staff = AccountDB.objects.create_superuser("stylewarden", "sw@example.com", "sw-12345")
 
     def _skill(self):
         # The identity-mapped row, as a cast reads it; setUpTestData hands each test a copy.
@@ -194,27 +221,26 @@ class TechniqueOwnPathSkillTests(TestCase):
         term = technique_skill_term(self.sheet.character, technique)
         return term.trait if term is not None else None
 
-    def test_a_technique_off_the_current_path_adds_its_own_paths_skill(self):
-        self.assertEqual(self._skill(), self.embers_skill.trait)
-
-    def test_a_staff_edit_to_the_paths_list_reaches_the_next_cast(self):
-        """The cached own Paths are cleared by the Path Gift Grant admin's save."""
-        self.assertEqual(self._skill(), self.embers_skill.trait)
-        ash_grant = PathGiftGrantFactory(path=self.ash, gift=self.gift)
+    def test_saving_the_style_form_changes_the_next_casts_skill(self):
+        self.assertEqual(self._skill(), self.first_skill.trait)
         self.client.force_login(self.staff)
 
         response = self.client.post(
-            reverse("admin:arxii_pathgiftgrant_change", args=[ash_grant.pk]),
+            reverse("admin:arxii_techniquestyle_change", args=[self.style.pk]),
             {
-                "path": self.ash.pk,
-                "gift": self.gift.pk,
-                "starter_techniques": [self.technique.pk],
-                "ultimate_techniques": [],
+                "name": "Incantation",
+                "description": "",
+                "skill": self.second_skill.pk,
+                "cast_concealment": 0,
+                "capability_requirements-TOTAL_FORMS": 0,
+                "capability_requirements-INITIAL_FORMS": 0,
+                "capability_requirements-MIN_NUM_FORMS": 0,
+                "capability_requirements-MAX_NUM_FORMS": 1000,
             },
         )
 
         self.assertEqual(response.status_code, 302, response.content[:500])
-        self.assertEqual(self._skill(), self.ash_skill.trait)
+        self.assertEqual(self._skill(), self.second_skill.trait)
 
 
 class ResolveCastCheckTests(TestCase):
@@ -223,7 +249,7 @@ class ResolveCastCheckTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.template = ActionTemplateFactory()
         cls.skill = SkillFactory()
-        cls.path = PathFactory(technique_skill=cls.skill)
+        cls.path = PathFactory(style=TechniqueStyleFactory(skill=cls.skill))
         CharacterPathHistoryFactory(character=cls.sheet, path=cls.path)
         cls.gift = GiftFactory(kind=GiftKind.MAJOR)
 

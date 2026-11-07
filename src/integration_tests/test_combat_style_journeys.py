@@ -64,6 +64,7 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
 )
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.constants import RoundStatus
@@ -289,7 +290,8 @@ class TechniquesInStyle(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=yard)
         self.sheet = self.ysmay.sheet_data
         CharacterPathHistoryFactory(
-            character=self.sheet, path=PathFactory(technique_skill=self.path_skill)
+            character=self.sheet,
+            path=PathFactory(style=TechniqueStyleFactory(skill=self.path_skill)),
         )
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
         CharacterAnimaFactory(character=self.sheet, current=20, maximum=30)
