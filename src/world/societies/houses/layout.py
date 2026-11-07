@@ -6,7 +6,7 @@ ladder from them. The grammar is one entry per line, fields separated by ``|``, 
 of a kingdom indented by two spaces::
 
     realm | counties 2-6 | baronies 1-4 | capital x1.5
-    kingdom Umbros | seat Umbros | duchies 5 | capital x2
+    kingdom Umbros | seat Umbros | duchies 5 | capital x2 | names Umbran
     kingdom East Cinderus | titular | lore The Daeva remnant ...
       duchy Ashfall | counties 3
       duchy Embermarch | sworn Cinderus
@@ -76,6 +76,7 @@ class KingdomLine:
     line_no: int
     station: str = TitleStation.SEATED
     seat: str | None = None
+    names: str | None = None
     duchies: Range | None = None
     capital: float | None = None
     sworn: str | None = None
@@ -102,6 +103,7 @@ WORD_BARONIES = "baronies"
 WORD_CAPITAL = "capital"
 WORD_CLAIMABLE = "claimable"
 WORD_BY = "by"
+WORD_NAMES = "names"
 _COUNT_WORDS = (WORD_DUCHIES, WORD_COUNTIES, WORD_BARONIES)
 _STATION_WORDS = {"titular": TitleStation.TITULAR, "potential": TitleStation.POTENTIAL}
 
@@ -169,6 +171,15 @@ def _word_seat(line_no: int, target: Target, _word: str, value: str, _rest: list
     target.seat = value
 
 
+def _word_names(line_no: int, target: Target, _word: str, value: str, _rest: list[str]) -> None:
+    if not isinstance(target, KingdomLine) or not value:
+        raise LayoutError(
+            line_no,
+            "names picks a kingdom's place-name culture: names <culture>, on a kingdom line",
+        )
+    target.names = value
+
+
 def _word_claimable(line_no: int, target: Target, word: str, _value: str, _rest: list[str]) -> None:
     if isinstance(target, Defaults):
         raise LayoutError(line_no, f"{word} belongs on a kingdom or duchy line")
@@ -213,6 +224,7 @@ _WORDS = {
     "titular": _word_station,
     "potential": _word_station,
     "seat": _word_seat,
+    WORD_NAMES: _word_names,
     "held": _word_claimable,
     "claimable": _word_claimable,
     "sworn": _word_sworn,
