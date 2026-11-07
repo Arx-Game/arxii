@@ -616,6 +616,13 @@ sets `fsync=off` (see above), the pgdata volume has no crash-safety. Don't debug
 it: `docker volume rm arxii-pgdata` (stack down first), then `just dc-up` and
 re-run the bootstrap.
 
+**Startup output and credentials:** `just dc-up` and `just dc-build` suppress the
+Dev Container CLI's output because it can print the expanded Compose environment,
+including credentials. A failure reports its exit code and the path to a private temporary diagnostic log.
+That log may contain credentials: inspect it locally and delete it when finished.
+Calling `devcontainer up` directly bypasses this protection; never paste or share its
+output. Use Docker Desktop to inspect container state when startup fails.
+
 **First `just dc-up` is slow** — expected. The image build bakes the entire toolchain.
 Subsequent starts skip the build and are much faster.
 
