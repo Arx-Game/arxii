@@ -55,7 +55,7 @@ SUPERUSER_PASSWORD = "synthetic-disposable-password"  # noqa: S105
 # Words the alerts and evidence carry, per the spec's scenarios.
 ALERT_RECOVERED = "recovered"
 ALERT_EXHAUSTED = "exhausted"
-ALERT_RESTARTED = "restarted"
+ALERT_RESTARTED = "restarting"
 ALERT_STILL_DOWN = "still down"
 ALERT_UNCLEAN = "stopped uncleanly"
 HOLDER_COMMAND = "python3"

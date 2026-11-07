@@ -223,7 +223,12 @@ if [ "${age_s}" -ge "${GRACE_PERIOD_S}" ] && pid_alive "${PORTAL_PID}" && ! pid_
   touch "${RESTART_STAMP}"
   log "Server-only recovery failed; full restart as the last resort"
   # Alert first: a restart that cannot bring the Server up blocks for minutes.
-  alert "watchdog restarted ${SERVICE} after Server-only recovery failed; players drop once"
+  alert "watchdog restarting ${SERVICE} after Server-only recovery failed; players drop once"
+  # The alert can take seconds; a stop that landed meanwhile must win.
+  if ! server_recovery_wanted "${portal_pid}"; then
+    log "the unit left that state while alerting; not restarting"
+    exit 0
+  fi
   systemctl restart "${SERVICE}" || log "restart failed; the failed-state branch retries from here"
   exit 0
 fi

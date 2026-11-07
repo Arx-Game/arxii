@@ -39,6 +39,23 @@ PORT_WAIT_S=30
 TERM_GRACE_S=10
 HEALTH_GRACE_S=30
 
+# A stop that arrives mid-reload (an operator, a deploy, a staff @shutdown) has
+# systemd TERM this script. Left to die by the signal, the unit ends `failed`, which
+# the watchdog's failed-state branch would then start again, undoing the stop. So
+# stand aside: end the launcher at once, before it can ask the Portal for a Server
+# while the stop runs, and exit cleanly. The stop decides what happens next.
+launcher_pid=""
+# shellcheck disable=SC2317  # reached through the trap below
+on_stop() {
+  printf '[arxii-reload] %s\n' "stop requested; abandoning the reload"
+  if [ -n "${launcher_pid}" ]; then
+    # timeout leads its own process group, so this reaches the launcher too.
+    kill -KILL -- "-${launcher_pid}" 2>/dev/null || kill -KILL "${launcher_pid}" 2>/dev/null
+  fi
+  exit 0
+}
+trap on_stop TERM INT
+
 started_s="$(date +%s)"
 evidence_file=""
 failure_mode=""
@@ -74,8 +91,12 @@ find_daemon() {
 portal_pid() { find_daemon 'portal/portal\.py' | head -n1; }
 server_pids() { find_daemon 'server\.py'; }
 
+# server_answers <pids>: the Server's port is held by one of these PIDs and answers.
+# An old Server still finishing its shutdown can answer too, so the owner matters.
 server_answers() {
-  local code
+  local code owner
+  owner="$(port_holders | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${owner}" ] && grep -qxF "${owner}" <<<"$(tr ' ' '\n' <<<"$1")" || return 1
   code="$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${SERVER_PORT}/" || true)"
   [ "${code:-000}" -ge 100 ] 2>/dev/null && [ "${code}" -lt 500 ]
 }
@@ -100,22 +121,6 @@ watch_listeners &
 watcher_pid=$!
 trap 'kill "${watcher_pid}" 2>/dev/null; rm -f "${listener_history}"' EXIT
 
-# A stop that arrives mid-reload (an operator, a deploy, a staff @shutdown) has
-# systemd TERM this script. Left to die by the signal, the unit ends `failed`, which
-# the watchdog's failed-state branch would then start again, undoing the stop. So
-# stand aside: end the launcher at once, before it can ask the Portal for a Server
-# while the stop runs, and exit cleanly. The stop decides what happens next.
-launcher_pid=""
-# shellcheck disable=SC2317  # reached through the trap below
-on_stop() {
-  log "stop requested; abandoning the reload"
-  if [ -n "${launcher_pid}" ]; then
-    # timeout leads its own process group, so this reaches the launcher too.
-    kill -KILL -- "-${launcher_pid}" 2>/dev/null || kill -KILL "${launcher_pid}" 2>/dev/null
-  fi
-  exit 0
-}
-trap on_stop TERM INT
 
 # A listener that was not a Server, for the alert. The evidence has them all.
 foreign_holder() {
@@ -214,7 +219,9 @@ attempt() {
       return 1
     fi
     new_server="$(server_pids | tr '\n' ' ')"
-    if [ -n "${new_server}" ] && [ "${new_server}" != "${server_before}" ] && server_answers; then
+    if [ -n "${new_server}" ] && [ "${new_server}" != "${server_before}" ] \
+      && server_answers "$(comm -13 <(tr ' ' '\n' <<<"${server_before}" | sort) \
+        <(tr ' ' '\n' <<<"${new_server}" | sort) | tr '\n' ' ')"; then
       return 0
     fi
     if [ "${grace}" -le 0 ] || [ "$(remaining_s)" -le 2 ]; then
