@@ -634,6 +634,18 @@ describe('RegionMapPage', () => {
       expect(viewport.dataset.zoom).not.toBe(before);
     });
 
+    it('moves the map on plain scroll, leaving its zoom and the page alone', () => {
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      const viewport = screen.getByTestId('region-map-viewport');
+      const canvas = screen.getByTestId('region-map-canvas');
+      const zoom = viewport.dataset.zoom;
+      const before = canvas.style.transform;
+      expect(fireEvent.wheel(viewport, { deltaY: 120 })).toBe(false);
+      expect(viewport.dataset.zoom).toBe(zoom);
+      expect(canvas.style.transform).not.toBe(before);
+      expect(canvas.style.transform).toContain('-120px');
+    });
+
     it('still zooms when the map loads after the page mounts', () => {
       vi.mocked(useRegionMapPipsQuery).mockReturnValue({
         data: undefined,

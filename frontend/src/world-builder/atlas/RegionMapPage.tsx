@@ -193,6 +193,15 @@ export function RegionMapPage({
     if (!viewport) return undefined;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      // Plain scroll moves the map; Ctrl+scroll zooms it (#4993).
+      if (!event.ctrlKey && !event.metaKey) {
+        setView((prev) => ({
+          ...prev,
+          panX: prev.panX - event.deltaX,
+          panY: prev.panY - event.deltaY,
+        }));
+        return;
+      }
       const rect = viewport.getBoundingClientRect();
       const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_RATE);
       setView((prev) =>
