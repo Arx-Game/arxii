@@ -98,6 +98,10 @@ ten minutes, deleting the file first so a start that fails cannot loop. A
 `@shutdown` into a restart, and a sudo grant for the game user was rejected as a
 privilege the process does not otherwise need.
 
+A staff `@reload` that fails, or a Server that dies by itself, needs no verb at all:
+the watchdog sees a dead Server under a live Portal and recovers the Server alone (next
+section).
+
 None of the three can recover a Server whose reactor-thread database connection
 has died (a Postgres restart under it): Evennia's shutdown routine writes to the
 database on its first line, and in that state nobody can log in to type anything.
@@ -107,6 +111,32 @@ Evennia's maintenance loop). If it ever does not, "Stand up infra" recovers it:
 the deploy's reload fails after five minutes and the role falls back to a full
 restart, or press it with `full_restart` to skip the wait. Over the gate, the
 equivalent is `ssh arxii-prod sudo systemctl restart arxii`.
+
+## When a reload fails (#4999)
+
+systemd supervises the Portal, so a Server exiting never stops the unit. Recovery runs
+without anyone, and players stay connected through it:
+
+1. `systemctl reload arxii` runs `/usr/local/sbin/arxii-reload`. It counts as success only
+   when a new Server answers on port 4005 under the same Portal. If not, it ends any
+   Server left in the unit (identified by cgroup, user and command line; it never signals
+   anything else, whatever port that holds) and retries, for up to three minutes.
+2. Then it exits nonzero. The deploy's rescue restarts the unit. Outside a deploy, the
+   watchdog does: at most one full restart per 15 minutes. Inside that window it keeps
+   trying Server-only recovery, which drops nobody, and alerts that the game is still down.
+3. A dead Server outside a deploy reaches step 1 within about 105 seconds (the watchdog's
+   one-minute tick and a 45-second re-check, which lets a healthy `@reload` finish).
+
+Every recovery alerts off-box. **To find out what blocked a Server, read
+`/var/log/arxii-reload/<UTC time>.log`** (readable by `adm`, so by `arxops`; kept 30 days).
+It has the failure mode, the PIDs, and every process that listened on the Server's port
+since the reload began.
+
+A manual `evennia sstop` looks like a crash and the Server comes back. `@shutdown` and
+`@reboot` stop the Portal as well, so they are unaffected.
+
+After a crash or a kill, the Server's graceful shutdown never ran, so anything it had not
+saved is gone. Players keep their connection, login and character.
 
 ## Two-factor authentication lockout resets
 

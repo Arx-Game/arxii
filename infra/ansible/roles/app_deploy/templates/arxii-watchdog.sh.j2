@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Managed by Ansible (app_deploy). Portal-crash watchdog.
 #
-# Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
-# Server daemon. Evennia runs Server + Portal as two SEPARATE processes
-# (server.pid + portal.pid — see src/server/README.md); a Portal-only crash
-# leaves the unit "active" from systemd's point of view (Server is fine)
-# while players cannot connect. This timer-driven script checks BOTH
-# pidfiles every run and restarts the unit (+ fires an off-box alert) when
-# the unit claims active but a daemon is dead. Since the 2026-08-17 reboot
-# outage it also resurrects a unit that systemd has parked in `failed`
-# (start-limit hit) — rate-limited, see the failed branch below — so a
-# crash-looped start eventually converges back to running without a human.
+# Type=forking + PIDFile=portal.pid (arxii.service.j2) supervises the Portal, so
+# a Server that dies leaves the unit "active" (#4999). Evennia runs Server +
+# Portal as two SEPARATE processes (server.pid + portal.pid; see
+# src/server/README.md). This timer-driven script checks BOTH pidfiles every run.
+# A dead Server under a live Portal is recovered without dropping players (see
+# "Server-only recovery" below); any other half-dead state restarts the unit and
+# fires an off-box alert. Since the 2026-08-17 reboot outage it also resurrects a
+# unit that systemd has parked in `failed` (start-limit hit), rate-limited (see
+# the failed branch below), so a crash-looped start eventually converges back to
+# running without a human.
 #
 # Failure modes this deliberately guards against becoming false positives —
 # a watchdog that flaps (restarts on every transient blip) is worse than no
@@ -23,20 +23,10 @@
 #     window after the unit's ActiveEnterTimestamp tolerates a missing
 #     pidfile without restarting (which would just race the fresh start).
 #
-# DELIBERATE TRADEOFF (documented, not an oversight): the root cause this
-# whole script works around is that Evennia's `evennia start` CLI manages
-# BOTH daemons under ONE process tree with no per-daemon systemd unit of its
-# own — systemd can only supervise what it launched (the Server side, via
-# Type=forking/PIDFile). Splitting Server and Portal into two separate
-# systemd units (each independently supervised, each restartable on its
-# own) is the actual fix; it's nontrivial because Evennia doesn't expose a
-# "start only the Portal" / "start only the Server" CLI entrypoint. Until
-# that's built, this 1-minute poll-and-restart-the-whole-unit script is the
-# accepted interim. The SubState string match in the case statement below
-# is similarly best-effort — it's not an exhaustive enumeration of every
-# systemd sub-state that could mean "something is happening right now",
-# just the ones observed in practice; a sub-state this doesn't recognize as
-# "in flight" could still produce a false-positive restart.
+# The SubState string match in the case statement below is best-effort: it's not
+# an exhaustive enumeration of every systemd sub-state that could mean "something
+# is happening right now", just the ones observed in practice; a sub-state this
+# doesn't recognize as "in flight" could still produce a false-positive restart.
 set -euo pipefail
 set +x
 
@@ -166,6 +156,83 @@ pid_alive() {
   kill -0 "${pid}" 2>/dev/null
 }
 
+# --- Server-only recovery (#4999) ----------------------------------------------
+# A dead Server under a live Portal: players are still connected, so bring back
+# the Server alone (ExecReload is arxii-reload, with its own budget, evidence and
+# alert) before anything that would drop them. This also catches a staff @reload
+# that failed, which never passes through ExecReload at all.
+#
+# A healthy in-game @reload (about 20 s) and a @shutdown in flight both look like
+# this for a moment, hence the re-check, and a stop can land at any point while
+# the recovery runs, hence the same check before the restart. Ruled in #4999: a
+# full restart is the last resort, and one per RESTART_INTERVAL_S at most, so a
+# port that never frees cannot drop players every few minutes. Server-only
+# attempts carry on inside that window because they drop nobody.
+#
+# A manual `evennia sstop` looks identical and comes back too; nothing in this
+# repo uses it, and @shutdown and @reboot both stop the Portal as well.
+SERVER_RECHECK_S=45
+RESTART_INTERVAL_S=900
+RESTART_STAMP=/run/arxii-watchdog.restart-stamp
+
+alert() {
+  if [ -x /usr/local/sbin/arxii-alert ]; then
+    # A failed alert must not fail the run that just repaired the game.
+    /usr/local/sbin/arxii-alert "$1" || log "alert could not be sent"
+  else
+    log "arxii-alert helper not installed yet; skipping off-box alert"
+  fi
+}
+
+# server_recovery_wanted <portal pid>: the unit is steady, the Server is dead, the
+# same Portal is alive, and nobody has asked for a stop or a reboot.
+server_recovery_wanted() {
+  [ "$(systemctl is-active "${SERVICE}" 2>/dev/null || true)" = "active" ] \
+    && [ "$(systemctl show -p SubState --value "${SERVICE}" 2>/dev/null || true)" = "running" ] \
+    && [ ! -f "${REBOOT_REQUEST}" ] \
+    && ! pid_alive "${SERVER_PID}" \
+    && pid_alive "${PORTAL_PID}" \
+    && [ "$(cat "${PORTAL_PID}" 2>/dev/null || true)" = "$1" ]
+}
+
+if [ "${age_s}" -ge "${GRACE_PERIOD_S}" ] && pid_alive "${PORTAL_PID}" && ! pid_alive "${SERVER_PID}"; then
+  portal_pid="$(cat "${PORTAL_PID}")"
+  log "Server is dead under a live Portal; re-checking in ${SERVER_RECHECK_S}s"
+  sleep "${SERVER_RECHECK_S}"
+  if ! server_recovery_wanted "${portal_pid}"; then
+    log "no recovery wanted after the re-check (a reload or stop was in flight)"
+    exit 0
+  fi
+  log "recovering the Server alone"
+  if systemctl reload "${SERVICE}"; then
+    log "Server recovered; Portal ${portal_pid} kept"
+    alert "watchdog recovered a dead Server under ${SERVICE}; Portal kept, players stayed connected"
+    exit 0
+  fi
+  if ! server_recovery_wanted "${portal_pid}"; then
+    log "reload failed, but the unit is no longer in that state; leaving it alone"
+    exit 0
+  fi
+  now_s="$(date +%s)"
+  last_restart_s="$(stat -c %Y "${RESTART_STAMP}" 2>/dev/null || echo 0)"
+  if [ $(( now_s - last_restart_s )) -lt "${RESTART_INTERVAL_S}" ]; then
+    log "Server-only recovery failed; last full restart was $(( now_s - last_restart_s ))s ago, not restarting again yet"
+    alert "${SERVICE}: Server is still down after recovery and a full restart $(( now_s - last_restart_s ))s ago; needs a person if this repeats"
+    exit 0
+  fi
+  touch "${RESTART_STAMP}"
+  log "Server-only recovery failed; full restart as the last resort"
+  # Alert first: a restart that cannot bring the Server up blocks for minutes.
+  alert "watchdog restarting ${SERVICE} after Server-only recovery failed; players drop once"
+  # The alert can take seconds; a stop that landed meanwhile must win.
+  if ! server_recovery_wanted "${portal_pid}"; then
+    log "the unit left that state while alerting; not restarting"
+    exit 0
+  fi
+  systemctl restart "${SERVICE}" || log "restart failed; the failed-state branch retries from here"
+  exit 0
+fi
+
 dead=0
 for pf in "${SERVER_PID}" "${PORTAL_PID}"; do
   if ! pid_alive "${pf}"; then
@@ -187,17 +254,9 @@ fi
 log "restarting ${SERVICE} (an Evennia daemon is dead while the unit reports active)"
 systemctl restart "${SERVICE}"
 
-# Off-box alert via offbox_alerting's shared arxii-alert helper. The restart
-# above always happens regardless; only the alert is skipped here. Guarded
-# (not just `|| true`'d) because site.yml runs offbox_alerting AFTER
-# app_deploy — on a brand-new box's FIRST converge, this watchdog's own
-# timer (installed by app_deploy, checks every minute) could fire before
-# offbox_alerting has installed /usr/local/sbin/arxii-alert at all, and a
-# bare call to a not-yet-existing script would itself be a spurious
-# "watchdog is broken" failure, unrelated to the actual Evennia-daemon-dead
-# condition this script is trying to report.
-if [ -x /usr/local/sbin/arxii-alert ]; then
-  /usr/local/sbin/arxii-alert "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected"
-else
-  log "arxii-alert helper not installed yet (offbox_alerting hasn't converged this run) — skipping off-box alert"
-fi
+# The restart above always happens regardless; only the alert is skipped when the
+# helper is missing. Guarded because site.yml runs offbox_alerting AFTER app_deploy:
+# on a brand-new box's FIRST converge, this watchdog's own timer could fire before
+# /usr/local/sbin/arxii-alert exists, and a bare call would be a spurious "watchdog
+# is broken" failure unrelated to the Evennia-daemon-dead condition being reported.
+alert "watchdog restarted ${SERVICE}: a dead Evennia daemon was detected"

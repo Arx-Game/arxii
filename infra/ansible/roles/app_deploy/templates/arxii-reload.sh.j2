@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+# Managed by Ansible (app_deploy). ExecReload for {{ app_service }}.service (#4999).
+#
+# A bare `evennia reload` exits only when the replacement Server connects: if it
+# never does, the launcher waits until systemd's timeout and nothing has been
+# repaired. This script gives a reload a verified meaning. Exit 0 means a NEW
+# Server answers on its own port under the SAME Portal. Otherwise it recovers
+# the Server alone, within a fixed budget, and leaves the last resort to its
+# caller:
+#
+#   exit 0  healthy, Portal unchanged
+#   exit 1  budget spent; the caller (the deploy's rescue, the watchdog) restarts
+#   exit 2  no Portal; `evennia reload` would start everything and undo a stop
+#
+# It never calls systemctl: a restart from inside the reload job would cancel
+# the job running it. It runs as root (the `+` on ExecReload) only so `ss` can
+# name a listener owned by another user; Evennia itself runs as the app user.
+#
+# Identity, for both daemons: listed in this unit's cgroup, owned by the app
+# user, with the Evennia entry point on its twistd command line. A process that
+# fails any part of that is never signalled, whatever port it holds. Pidfiles
+# are not trusted for this, because a reused PID would pass.
+set -uo pipefail
+set +x
+
+SERVICE="{{ app_service }}.service"
+APP_USER="{{ app_user }}"
+UV="{{ base_uv_bin }}"
+SERVER_PORT="{{ app_server_web_port }}"
+SERVER_PIDFILE="{{ app_pidfile }}"
+EVIDENCE_DIR="{{ app_reload_evidence_dir }}"
+# Ruled in #4999: about three minutes before a full restart drops every player.
+# Healthy reloads measured 17-19 s, so 60 s is about three times that.
+BUDGET_S=180
+FIRST_ATTEMPT_S=60
+RETRY_ATTEMPT_S=45
+MAX_RETRIES=2
+PORT_WAIT_S=30
+TERM_GRACE_S=10
+HEALTH_GRACE_S=30
+
+# A stop that arrives mid-reload (an operator, a deploy, a staff @shutdown) has
+# systemd TERM this script. Left to die by the signal, the unit ends `failed`, which
+# the watchdog's failed-state branch would then start again, undoing the stop. So
+# stand aside: end the launcher at once, before it can ask the Portal for a Server
+# while the stop runs, and exit cleanly. The stop decides what happens next.
+launcher_pid=""
+# shellcheck disable=SC2317  # reached through the trap below
+on_stop() {
+  printf '[arxii-reload] %s\n' "stop requested; abandoning the reload"
+  if [ -n "${launcher_pid}" ]; then
+    # timeout leads its own process group, so this reaches the launcher too.
+    kill -KILL -- "-${launcher_pid}" 2>/dev/null || kill -KILL "${launcher_pid}" 2>/dev/null
+  fi
+  exit 0
+}
+trap on_stop TERM INT
+
+started_s="$(date +%s)"
+evidence_file=""
+failure_mode=""
+
+log() { printf '[arxii-reload] %s\n' "$*"; }
+remaining_s() { echo $(( BUDGET_S - ( $(date +%s) - started_s ) )); }
+
+alert() {
+  if [ -x /usr/local/sbin/arxii-alert ]; then
+    /usr/local/sbin/arxii-alert "$1" || log "alert could not be sent"
+  fi
+}
+
+unit_pids() {
+  local group
+  group="$(systemctl show -p ControlGroup --value "${SERVICE}" 2>/dev/null || true)"
+  [ -n "${group}" ] && cat "/sys/fs/cgroup${group}/cgroup.procs" 2>/dev/null
+}
+
+# find_daemon <entry point path suffix>: print PIDs in this unit that are
+# positively that daemon.
+find_daemon() {
+  local suffix="$1" pid owner
+  for pid in $(unit_pids); do
+    owner="$(stat -c %U "/proc/${pid}" 2>/dev/null || true)"
+    [ "${owner}" = "${APP_USER}" ] || continue
+    if tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null \
+      | grep -qE "^--python=.*/evennia/server/${suffix}$"; then
+      echo "${pid}"
+    fi
+  done
+}
+portal_pid() { find_daemon 'portal/portal\.py' | head -n1; }
+server_pids() { find_daemon 'server\.py'; }
+
+# server_answers <pids>: the Server's port is held by one of these PIDs and answers.
+# An old Server still finishing its shutdown can answer too, so the owner matters.
+server_answers() {
+  local code owner
+  owner="$(port_holders | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${owner}" ] && grep -qxF "${owner}" <<<"$(tr ' ' '\n' <<<"$1")" || return 1
+  code="$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${SERVER_PORT}/" || true)"
+  [ "${code:-000}" -ge 100 ] 2>/dev/null && [ "${code}" -lt 500 ]
+}
+
+port_holders() { ss -H -ltnp "sport = :${SERVER_PORT}" 2>/dev/null; }
+
+# Watch the port for the whole run. Whatever blocks a replacement can be gone by
+# the time an attempt has timed out, and naming it is the point of the evidence.
+listener_history="$(mktemp)"
+watch_listeners() {
+  local current previous=""
+  while :; do
+    current="$(port_holders)"
+    if [ "${current}" != "${previous}" ]; then
+      printf '%s %s\n' "$(date -u +%TZ)" "${current:-(nothing listening)}" >>"${listener_history}"
+      previous="${current}"
+    fi
+    sleep 1
+  done
+}
+watch_listeners &
+watcher_pid=$!
+trap 'kill "${watcher_pid}" 2>/dev/null; rm -f "${listener_history}"' EXIT
+
+
+# A listener that was not a Server, for the alert. The evidence has them all.
+foreign_holder() {
+  grep -v '(("twistd"' "${listener_history}" | grep 'users:' \
+    | sed -n 's/.*users:(("\([^"]*\)",pid=\([0-9]*\).*/\1 pid \2/p' | head -n1
+}
+
+# Command names only: a full command line or the environment can carry secrets,
+# and game logs carry player text.
+write_evidence() {
+  local stage="$1" pid
+  if [ -z "${evidence_file}" ]; then
+    install -d -o root -g adm -m 0750 "${EVIDENCE_DIR}"
+    evidence_file="${EVIDENCE_DIR}/$(date -u +%Y%m%dT%H%M%SZ).log"
+    install -o root -g adm -m 0640 /dev/null "${evidence_file}"
+  fi
+  {
+    printf '== %s at %s, %ss into the reload\n' \
+      "${stage}" "$(date -u +%FT%TZ)" "$(( $(date +%s) - started_s ))"
+    printf 'failure mode: %s\n' "${failure_mode:-none}"
+    printf 'portal: %s (started as %s)\n' "$(portal_pid)" "${portal_at_start}"
+    printf 'servers: %s\n' "$(server_pids | tr '\n' ' ')"
+    printf 'unit: %s\n' "$(systemctl show -p ActiveState -p SubState -p MainPID \
+      --value "${SERVICE}" | tr '\n' ' ')"
+    echo "listeners on ${SERVER_PORT} now:"
+    port_holders
+    echo "listeners on ${SERVER_PORT} since the reload began:"
+    cat "${listener_history}"
+    echo 'unit processes:'
+    for pid in $(unit_pids); do
+      ps -o pid=,ppid=,user=,etimes=,stat=,comm= -p "${pid}" 2>/dev/null
+    done
+  } >>"${evidence_file}"
+}
+
+# remove_servers: end every Server left in this unit, so a retry cannot run
+# beside a hung or half-started one. The Portal is excluded by its own identity.
+remove_servers() {
+  local pids pid waited=0
+  pids="$(server_pids | grep -vxF "${portal_at_start}" || true)"
+  [ -n "${pids}" ] || return 0
+  log "ending identified Server process(es): $(tr '\n' ' ' <<<"${pids}")"
+  for pid in ${pids}; do kill -TERM "${pid}" 2>/dev/null || true; done
+  while [ "${waited}" -lt "${TERM_GRACE_S}" ] && [ -n "$(server_pids)" ]; do
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  # Re-read rather than reuse the list: only what still passes identity is killed.
+  for pid in $(server_pids | grep -vxF "${portal_at_start}" || true); do
+    kill -KILL "${pid}" 2>/dev/null || true
+  done
+}
+
+# twistd refuses to start while its pidfile names any live process. A kill leaves
+# the file behind, and that PID can be reused by something else entirely.
+clear_stale_pidfile() {
+  local pid
+  pid="$(cat "${SERVER_PIDFILE}" 2>/dev/null || true)"
+  if [ -n "${pid}" ] && ! server_pids | grep -qxF "${pid}"; then
+    rm -f "${SERVER_PIDFILE}"
+  fi
+}
+
+wait_for_free_port() {
+  local waited=0
+  while [ -n "$(port_holders)" ] && [ "${waited}" -lt "${PORT_WAIT_S}" ] \
+    && [ "$(remaining_s)" -gt 1 ]; do
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+}
+
+# attempt <seconds>: one bounded `evennia reload`, judged by what is running
+# afterwards rather than by the launcher's exit code alone.
+attempt() {
+  local limit="$1" server_before rc grace new_server
+  server_before="$(server_pids | tr '\n' ' ')"
+  log "evennia reload, up to ${limit}s"
+  # timeout signals the launcher's whole process group; --kill-after covers a
+  # launcher that ignores the TERM, so none is left holding the cgroup.
+  timeout --kill-after=5 "${limit}" \
+    runuser -u "${APP_USER}" -- env HOME="$(getent passwd "${APP_USER}" | cut -d: -f6)" \
+    "${UV}" run evennia reload &
+  launcher_pid=$!
+  wait "${launcher_pid}"
+  rc=$?
+  launcher_pid=""
+
+  # A launcher that finished gets a short grace for the replacement to start
+  # serving; one that timed out is judged on the state as it stands.
+  grace=0
+  [ "${rc}" -eq 0 ] && grace="${HEALTH_GRACE_S}"
+  while :; do
+    if [ "$(portal_pid)" != "${portal_at_start}" ]; then
+      failure_mode="portal-changed"
+      return 1
+    fi
+    new_server="$(server_pids | tr '\n' ' ')"
+    if [ -n "${new_server}" ] && [ "${new_server}" != "${server_before}" ] \
+      && server_answers "$(comm -13 <(tr ' ' '\n' <<<"${server_before}" | sort) \
+        <(tr ' ' '\n' <<<"${new_server}" | sort) | tr '\n' ' ')"; then
+      return 0
+    fi
+    if [ "${grace}" -le 0 ] || [ "$(remaining_s)" -le 2 ]; then
+      break
+    fi
+    sleep 2
+    grace=$(( grace - 2 ))
+  done
+
+  if [ -n "${new_server}" ] && [ "${new_server}" = "${server_before}" ]; then
+    failure_mode="server-hung"
+  elif [ -n "$(port_holders)" ]; then
+    failure_mode="port-held"
+  elif [ -z "${new_server}" ]; then
+    failure_mode="no-replacement"
+  else
+    failure_mode="replacement-not-answering"
+  fi
+  return 1
+}
+
+portal_at_start="$(portal_pid)"
+if [ -z "${portal_at_start}" ]; then
+  log "no Portal in ${SERVICE}; refusing, because evennia reload would start everything"
+  exit 2
+fi
+
+if attempt "${FIRST_ATTEMPT_S}"; then
+  log "Server replaced and answering; Portal ${portal_at_start} unchanged"
+  exit 0
+fi
+
+log "reload failed (${failure_mode}); recovering the Server alone"
+write_evidence "first failure"
+retry=1
+while [ "${retry}" -le "${MAX_RETRIES}" ]; do
+  [ "$(portal_pid)" = "${portal_at_start}" ] || { failure_mode="portal-changed"; break; }
+  remove_servers
+  clear_stale_pidfile
+  wait_for_free_port
+  left="$(remaining_s)"
+  if [ "${left}" -le 1 ]; then
+    break
+  fi
+  if attempt "$(( left < RETRY_ATTEMPT_S ? left : RETRY_ATTEMPT_S ))"; then
+    write_evidence "recovered on retry ${retry}"
+    log "recovered on retry ${retry}; Portal ${portal_at_start} unchanged"
+    alert "arxii reload failed (${failure_mode}) and recovered on retry ${retry}; Portal kept. Evidence: ${evidence_file}"
+    exit 0
+  fi
+  write_evidence "retry ${retry} failed"
+  retry=$(( retry + 1 ))
+done
+
+# Leave no half-started Server for the caller's restart or the next attempt.
+remove_servers
+write_evidence "gave up"
+log "Server-only recovery exhausted (${failure_mode}); a full restart is the caller's last resort"
+alert "arxii reload recovery exhausted (${failure_mode}); expect a full restart that drops players. Other process on the port: $(foreign_holder). Evidence: ${evidence_file}"
+exit 1

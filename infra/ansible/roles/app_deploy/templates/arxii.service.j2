@@ -24,18 +24,30 @@ Slice=arxii.slice
 # walking upward, so the venv is still picked up from app_current.
 WorkingDirectory={{ app_gamedir }}
 EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
-# Evennia is a Twisted app; forking start + pidfile. Reload is code-only
-# (Portal keeps players connected). `uv run` activates the project venv
-# so the `evennia` entrypoint installed via uv sync is on PATH.
+# Evennia is a Twisted app; forking start + pidfile. `uv run` activates the
+# project venv so the `evennia` entrypoint installed via uv sync is on PATH.
+#
+# PIDFile names the PORTAL (#4999): systemd's main process must be the one that
+# stays up. It used to be server.pid, but the Server exits on purpose in every
+# reload. When its replacement never came up, systemd found no main process at
+# the reload timeout and ran ExecStop, which stopped the Portal too; the stop was
+# clean, so `systemctl reload` reported success, Restart= did not fire and the
+# watchdog read `inactive` as deliberate. The game stayed down until the next
+# deploy (2026-11-05, 2026-11-07). A Server exit now never touches the unit: the
+# watchdog owns Server recovery and a Portal death reaches Restart= directly.
 Type=forking
-PIDFile={{ app_pidfile }}
+PIDFile={{ app_portal_pidfile }}
 # A cold start after a host reboot (DB warmup, uv resolution, both daemons
 # forking) can exceed systemd's default 90s; declaring failure early is what
 # triggered the 2026-08-17 restart race. Five minutes is generous, and a
-# genuinely hung start still fails and retries.
+# genuinely hung start still fails and retries. systemd applies this to
+# ExecReload as well; arxii-reload's own 180 s budget ends well inside it.
 TimeoutStartSec=300
 ExecStart={{ base_uv_bin }} run evennia start
-ExecReload={{ base_uv_bin }} run evennia reload
+# Verifies the replacement and recovers the Server alone (#4999). `+` runs it as
+# root so it can name a listener another user owns; Evennia still runs as the
+# app user.
+ExecReload=+/usr/local/sbin/arxii-reload
 ExecStop={{ base_uv_bin }} run evennia stop
 # Runs after every stop AND after a failed start: force-clear any twistd
 # survivor so the next start can never collide with a predecessor still
@@ -44,6 +56,10 @@ ExecStop={{ base_uv_bin }} run evennia stop
 # processes only — deploy-time django commands under the same user don't
 # match.
 ExecStopPost=-/usr/bin/pkill -KILL -u {{ app_user }} -f twistd
+# Restart= handles a Portal death on its own now, without the watchdog and its
+# alert, so say so here. `-`: arxii-alert is absent until offbox_alerting has
+# converged on a brand-new box.
+ExecStopPost=-+/bin/sh -c '[ "$$SERVICE_RESULT" = success ] || /usr/local/sbin/arxii-alert "{{ app_service }} stopped uncleanly ($$SERVICE_RESULT); Restart= is bringing it back"'
 Restart=on-failure
 RestartSec=15
 

@@ -26,6 +26,7 @@ import contextlib
 
 from django.conf import settings
 from django.utils.functional import cached_property
+import evennia
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 from evennia.utils.utils import make_iter
 
@@ -478,8 +479,26 @@ class Account(DefaultAccount):
             with contextlib.suppress(AttributeError):
                 del obj.ndb.puppet_entry_session
         if session.puppet is obj:
+            self._sync_puppet_to_portal(session)
             self._broadcast_puppet_changed(session, obj)
             self._record_selection(obj)
+
+    def _sync_puppet_to_portal(self, session) -> None:
+        """Tell the Portal now which character this session holds, or none (#4999).
+
+        Evennia copies a session's character to the Portal only during a graceful
+        reload. A Server that crashes or is killed never gets that far, so its
+        replacement restores sessions from whatever the Portal last heard: without
+        this, a player came back logged in but out of character, on a socket that
+        never closed, so the web client had no reason to take the character up
+        again. Unpuppeting is synced too, so a session that lost a character (a lent
+        NPC returned, a retired character, a takeover by another session) is not put
+        back on it. A reload never unpuppets, so this cannot erase what it restores.
+        """
+        service = evennia.EVENNIA_SERVER_SERVICE
+        # No Portal connection in a test process, or while the Server is coming up.
+        if service and service.amp_protocol:
+            evennia.SESSION_HANDLER.session_portal_sync(session)
 
     def _record_selection(self, character) -> None:
         """Puppeting records the durable selection (#3812; amends ADR-0241).
@@ -565,6 +584,7 @@ class Account(DefaultAccount):
         """
         super().unpuppet_object(session)
         for sess in make_iter(session):
+            self._sync_puppet_to_portal(sess)
             self._broadcast_puppet_changed(sess, character=None)
 
     def at_account_creation(self):

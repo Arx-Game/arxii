@@ -1,0 +1,45 @@
+name: Reload Recovery
+
+# Breaks a disposable Evennia game under real systemd and checks that the unit,
+# arxii-reload and the watchdog recover it the way #4999 specifies, with a
+# logged-in telnet client as the player. The devcontainer has no systemd or
+# container runtime, so this runner is the only place the supervision behaviour
+# can be seen short of production. Synthetic game, no secrets, public logs.
+
+on:
+  pull_request:
+    paths:
+      - infra/ansible/roles/app_deploy/templates/arxii.service.j2
+      - infra/ansible/roles/app_deploy/templates/arxii-reload.sh.j2
+      - infra/ansible/roles/app_deploy/templates/arxii-watchdog.sh.j2
+      - infra/ansible/roles/offbox_alerting/templates/arxii-alert.sh.j2
+      - infra/scripts/reload_recovery_check.py
+      - .github/workflows/reload-recovery.yml
+      - uv.lock
+      - src/typeclasses/accounts.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv where the unit expects it
+        run: |
+          curl -LsSf https://astral.sh/uv/0.13.4/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+          /usr/local/bin/uv --version
+      - name: Install the disposable game and break it every way the spec lists
+        run: >-
+          sudo -E /usr/local/bin/uv run --no-project --python 3.13
+          --with jinja2 --with pyyaml
+          infra/scripts/reload_recovery_check.py all
+      - name: Show the logs on failure
+        if: failure()
+        run: |
+          sudo journalctl -u arxii.service -n 200 --no-pager -o short-iso || true
+          sudo tail -n 80 /opt/arxii/current/src/server/logs/server.log || true
+          sudo tail -n 80 /opt/arxii/current/src/server/logs/portal.log || true
