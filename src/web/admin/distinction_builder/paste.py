@@ -19,7 +19,6 @@ preview it is confirming no longer matches.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import hmac
 import re
 
 from django.contrib import messages
@@ -33,16 +32,16 @@ from django.utils.text import slugify
 
 from web.admin.authoring.credit import stamp_written
 from web.admin.paste_common import (
-    ACTION_CHECK,
     ACTION_CREATE,
     STATUS_CREATE,
     STATUS_ERROR,
     STATUS_SKIP,
     PasteRow,
-    counts as _counts,
+    check_post,
     digest_of,
     one as _one,
     paste_contributor,
+    refusal,
 )
 from web.admin.tuning.views import superuser_required
 from world.character_creation.constants import (
@@ -506,29 +505,18 @@ def distinction_paste(request: HttpRequest) -> HttpResponse:
     """
     if request.method != "POST":
         return _render(request)
-    text = request.POST.get("text", "")
-    rows = parse_table(text)
-    counts = _counts(rows)
-    digest = table_digest(rows)
-    action = request.POST.get("action", ACTION_CHECK)
-    if action != ACTION_CREATE:
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if not hmac.compare_digest(digest, request.POST.get("digest", "")):
-        messages.error(
-            request, "The table or the database changed since the preview; check it again."
-        )
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if counts[STATUS_ERROR]:
-        messages.error(request, "Fix every row that reads error; nothing was created.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if not counts[STATUS_CREATE]:
-        messages.info(request, "Nothing to create.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
+    checked = check_post(request, parse_table, table_digest)
+    if checked.action != ACTION_CREATE:
+        return _render(request, **checked.context)
+    refused = refusal(request, checked)
+    if refused is not None:
+        messages.add_message(request, *refused)
+        return _render(request, **checked.context)
     try:
         contributor = paste_contributor(request.user)
     except ValueError as exc:
         messages.error(request, str(exc))
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    created = _create_rows(rows, contributor, request.user.pk)
+        return _render(request, **checked.context)
+    created = _create_rows(checked.rows, contributor, request.user.pk)
     messages.success(request, f"Created {created} distinction(s), credited to {contributor.name}.")
     return redirect(reverse("admin:arxii_distinction_changelist"))

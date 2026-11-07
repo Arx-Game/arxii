@@ -15,7 +15,6 @@ empty database; here the owner's edited text lands only its missing rows.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hmac
 
 from django.contrib import messages
 from django.contrib.admin.models import ADDITION, LogEntry
@@ -26,14 +25,13 @@ from django.urls import reverse
 
 from core.identifier_dashes import contains_dash
 from web.admin.paste_common import (
-    ACTION_CHECK,
     ACTION_CREATE,
     STATUS_CREATE,
-    STATUS_ERROR,
     PasteRow,
-    counts as _counts,
+    check_post,
     digest_of,
     one,
+    refusal,
 )
 from web.admin.tuning.views import superuser_required
 from world.npc_services.models import NameCulture, NameCultureEntry, NamePart
@@ -176,24 +174,13 @@ def place_name_paste(request: HttpRequest) -> HttpResponse:
     """GET the form; POST ``action=check`` previews; POST ``action=create`` writes."""
     if request.method != "POST":
         return _render(request)
-    text = request.POST.get("text", "")
-    rows = parse_table(text)
-    counts = _counts(rows)
-    digest = table_digest(rows)
-    action = request.POST.get("action", ACTION_CHECK)
-    if action != ACTION_CREATE:
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if not hmac.compare_digest(digest, request.POST.get("digest", "")):
-        messages.error(
-            request, "The table or the database changed since the preview; check it again."
-        )
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if counts[STATUS_ERROR]:
-        messages.error(request, "Fix every row that reads error; nothing was created.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    if not counts[STATUS_CREATE]:
-        messages.info(request, "Nothing to create.")
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    created = _create_rows(rows, request.user.pk)
+    checked = check_post(request, parse_table, table_digest)
+    if checked.action != ACTION_CREATE:
+        return _render(request, **checked.context)
+    refused = refusal(request, checked)
+    if refused is not None:
+        messages.add_message(request, *refused)
+        return _render(request, **checked.context)
+    created = _create_rows(checked.rows, request.user.pk)
     messages.success(request, f"Created {created} place name(s).")
     return redirect(reverse("admin:arxii_nameculture_changelist"))

@@ -15,12 +15,15 @@ spot, instead of being sent to the Authoring Workbench first.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 import hashlib
+import hmac
 import json
 
+from django.contrib import messages
 from django.db.models import QuerySet
+from django.http import HttpRequest
 from evennia.accounts.models import AccountDB
 
 from web.admin.authoring.contributors import current_contributor, link_contributor
@@ -83,3 +86,55 @@ def paste_contributor(user: AccountDB) -> ContentContributor:
     if contributor is not None:
         return contributor
     return link_contributor(user, name=user.username)
+
+
+@dataclass
+class Checked:
+    """A paste POST read once: the text, its rows, their counts and the preview's digest."""
+
+    text: str
+    rows: list
+    counts: dict[str, int]
+    digest: str
+    action: str
+
+    @property
+    def context(self) -> dict[str, object]:
+        return {"text": self.text, "rows": self.rows, "digest": self.digest, "counts": self.counts}
+
+
+def check_post(
+    request: HttpRequest,
+    parse: Callable[[str], list],
+    digest: Callable[[list], str],
+) -> Checked:
+    """Parse the posted table the way the preview did; the view renders or writes from it."""
+    text = request.POST.get("text", "")
+    rows = parse(text)
+    return Checked(
+        text=text,
+        rows=rows,
+        counts=counts(rows),
+        digest=digest(rows),
+        action=request.POST.get("action", ACTION_CHECK),
+    )
+
+
+_STALE = "The table or the database changed since the preview; check it again."
+_ERROR_ROWS = "Fix every row that reads error; nothing was created."
+_NOTHING = "Nothing to create."
+
+
+def refusal(request: HttpRequest, checked: Checked) -> tuple[int, str] | None:
+    """Why a create POST writes nothing, as a message level and text, or None to go ahead.
+
+    A stale digest (the text or the database changed since the preview), any error row,
+    or nothing left to create.
+    """
+    if not hmac.compare_digest(checked.digest, request.POST.get("digest", "")):
+        return messages.ERROR, _STALE
+    if checked.counts[STATUS_ERROR]:
+        return messages.ERROR, _ERROR_ROWS
+    if not checked.counts[STATUS_CREATE]:
+        return messages.INFO, _NOTHING
+    return None
