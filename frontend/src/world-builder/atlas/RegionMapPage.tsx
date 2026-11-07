@@ -13,18 +13,10 @@
  * neighbours are shading.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Maximize2,
-  PanelRightClose,
-  PanelRightOpen,
-} from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAlmanachMutation, useLadder, useRealms } from '@/almanach/queries';
-import { Plate, PlateHead } from '@/components/folio';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,15 +60,7 @@ import {
   type PipChange,
   type PipHolder,
 } from './carveHistory';
-import {
-  PIP_PX,
-  TERRAIN_COLORS,
-  drawRegionMap,
-  footprintAt,
-  pipAt,
-  pipKey,
-  regionBounds,
-} from './regionMapCanvas';
+import { PIP_PX, drawRegionMap, footprintAt, pipAt, pipKey, regionBounds } from './regionMapCanvas';
 import {
   BRUSH_WIDTHS,
   brushPips,
@@ -88,7 +72,8 @@ import {
 } from './regionMapFill';
 import { BARONY_LEVEL, regionMapTabUrl } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
-import { SelectPickers } from './SelectPickers';
+import { FoldToggle, RegionMapPanel } from './RegionMapPanel';
+import { CarvePickers, SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
 import { useRegionMapLayout } from './useRegionMapLayout';
 
@@ -105,6 +90,13 @@ function seatBaronyAt(footprints: RegionMapFootprint[], pip: Pip): RegionMapFoot
         f.level === BARONY_LEVEL && f.seat != null && f.seat[0] === pip[0] && f.seat[1] === pip[1]
     ) ?? null
   );
+}
+
+/** What the folded pickers still say: the domain being carved, or the selected one. */
+function pickedName(candidates: ({ name: string; tier?: string } | null)[]): string {
+  const picked = candidates.find((candidate) => candidate != null);
+  if (!picked) return '';
+  return picked.name || (picked.tier ? `unnamed ${picked.tier}` : '');
 }
 
 const WHEEL_ZOOM_RATE = 0.0015;
@@ -581,10 +573,9 @@ export function RegionMapPage({
   }
   const { region } = data;
   const miles = region.width_cells * 100;
-  // What the folded pickers still say: the domain the brush is carving, or the selected one.
-  const carveTargetName = carveTarget && (carveTarget.name || `unnamed ${carveTarget.tier}`);
-  const selectedName = selected?.name || selectedLandless?.name || selectedLadderRow?.name;
-  const pickedDomainName = mode === 'carve' ? carveTargetName : selectedName;
+  const pickedDomainName = pickedName(
+    mode === 'carve' ? [carveTarget] : [selected, selectedLandless, selectedLadderRow]
+  );
   const brushWidthSelect = (
     <select
       className="h-8 rounded-md border bg-background px-2 text-sm"
@@ -682,22 +673,14 @@ export function RegionMapPage({
         )}
         {mode !== 'paint' && (
           <>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              aria-expanded={pickersOpen}
-              aria-label={pickersOpen ? 'Hide realm and domain' : 'Show realm and domain'}
-              title={pickersOpen ? 'Hide realm and domain' : 'Show realm and domain'}
-              data-testid="pickers-toggle"
-              onClick={togglePickers}
-            >
-              {pickersOpen ? (
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              )}
-            </Button>
+            <FoldToggle
+              open={pickersOpen}
+              what="realm and domain"
+              openIcon={ChevronLeft}
+              foldedIcon={ChevronRight}
+              onToggle={togglePickers}
+              testId="pickers-toggle"
+            />
             {!pickersOpen && pickedDomainName && (
               <span className="font-body text-sm" data-testid="picked-domain">
                 {pickedDomainName}
@@ -721,52 +704,18 @@ export function RegionMapPage({
         {mode === 'carve' && (
           <>
             {pickersOpen && (
-              <>
-                <select
-                  className="h-8 rounded-md border bg-background px-2 text-sm"
-                  value={realmId ?? ''}
-                  onChange={(event) => {
-                    setRealmId(event.target.value ? Number(event.target.value) : null);
-                    setCarveTitleId(null);
-                  }}
-                  aria-label="realm"
-                  data-testid="carve-realm"
-                >
-                  <option value="">Realm…</option>
-                  {realms.map((realm) => (
-                    <option key={realm.id} value={realm.id}>
-                      {realm.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-8 max-w-xs rounded-md border bg-background px-2 text-sm"
-                  value={carveTitleId ?? ''}
-                  onChange={(event) =>
-                    setCarveTitleId(event.target.value ? Number(event.target.value) : null)
-                  }
-                  aria-label="domain"
-                  data-testid="carve-domain"
-                  disabled={realmId == null}
-                >
-                  <option value="">Domain…</option>
-                  {(ladder?.rows ?? []).map((row) => (
-                    <option key={row.title_id} value={row.title_id}>
-                      {row.name || `unnamed ${row.tier}`} · {row.tier}
-                      {row.house_name ? ` · ${row.house_name}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={realmId == null}
-                  onClick={() => setPlantOpen((open) => !open)}
-                >
-                  Create domain
-                </Button>
-              </>
+              <CarvePickers
+                realms={realms}
+                realmId={realmId}
+                onRealm={(id) => {
+                  setRealmId(id);
+                  setCarveTitleId(null);
+                }}
+                ladderRows={ladderRows}
+                carveTitleId={carveTitleId}
+                onDomain={setCarveTitleId}
+                onCreate={() => setPlantOpen((open) => !open)}
+              />
             )}
             <span className="mx-1 h-6 border-l" aria-hidden="true" />
             <span className="flex items-center gap-2" data-testid="carve-tools">
@@ -900,126 +849,24 @@ export function RegionMapPage({
             data-testid="region-map-canvas"
           />
         </div>
-        <aside
-          className={cn(
-            'relative shrink-0 overflow-y-auto border-l border-t',
-            panelOpen ? 'w-72' : 'w-10'
-          )}
-          data-testid="region-map-panel"
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="absolute right-1 top-1 z-10 h-8 w-8 p-0"
-            aria-expanded={panelOpen}
-            aria-label={panelOpen ? 'Hide the side panel' : 'Show the side panel'}
-            title={panelOpen ? 'Hide the side panel' : 'Show the side panel'}
-            data-testid="panel-toggle"
-            onClick={togglePanel}
-          >
-            {panelOpen ? (
-              <PanelRightClose className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
-            )}
-          </Button>
-          {panelOpen && (
-            <Plate className="h-full rounded-none p-4">
-              {selected || selectedLandless || selectedLadderRow ? (
-                <div>
-                  <PlateHead as="div">
-                    {selected
-                      ? selected.level_display
-                      : (selectedLandless?.tier ?? selectedLadderRow?.tier ?? '')}
-                  </PlateHead>
-                  <h3 className="theme-heading mt-1 text-lg font-semibold [font-variant:small-caps]">
-                    {(selected
-                      ? selected.name
-                      : (selectedLandless?.name ?? selectedLadderRow?.name)) || 'Unnamed'}
-                  </h3>
-                  {stationWord && (
-                    <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-                      {stationWord}
-                    </p>
-                  )}
-                  <p className="mt-1 font-body text-sm italic text-muted-foreground">
-                    {selected
-                      ? `${selected.holder_name || 'Unclaimed'} · ${selected.pips.length} pips`
-                      : 'holds nothing'}
-                  </p>
-                  {focusTitleId != null && (
-                    <Link
-                      to={`/staff/almanach/titles/${focusTitleId}`}
-                      className="mt-3 inline-block text-sm underline hover:text-primary"
-                    >
-                      Open in the Almanach
-                    </Link>
-                  )}
-                  {focusTitleId != null && (
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={charterOn ? 'default' : 'outline'}
-                        aria-pressed={charterOn}
-                        onClick={() => setCharterOn((on) => !on)}
-                      >
-                        Historical Charter
-                      </Button>
-                      {charterOn && (
-                        <ul className="mt-2 space-y-0.5 text-sm">
-                          {charterFootprints.map((f) => (
-                            <li key={f.area_id}>{f.name || 'Unnamed'}</li>
-                          ))}
-                          {charterFootprints.length === 0 && (
-                            <li className="text-muted-foreground">nothing chartered</li>
-                          )}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  {mode === 'carve' && selected && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="mt-3"
-                      disabled={selected.title_id == null}
-                      onClick={() => {
-                        if (selected.realm_id != null) setRealmId(selected.realm_id);
-                        setCarveTitleId(selected.title_id);
-                      }}
-                    >
-                      Carve this one
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <PlateHead as="div">Open ground</PlateHead>
-                  <p className="mt-1 font-body text-sm italic text-muted-foreground">
-                    {data.footprints.length} domains on this map.
-                  </p>
-                </div>
-              )}
-              <div
-                className="mt-6 grid grid-cols-2 gap-x-3 gap-y-1"
-                data-testid="region-map-legend"
-              >
-                {data.terrains.map((terrain) => (
-                  <span key={terrain} className="flex items-center gap-2 text-xs">
-                    <span
-                      className="inline-block h-3 w-3 rounded-sm border border-black/20"
-                      style={{ background: TERRAIN_COLORS[terrain] ?? '#c0c0c0' }}
-                    />
-                    {terrain}
-                  </span>
-                ))}
-              </div>
-            </Plate>
-          )}
-        </aside>
+        <RegionMapPanel
+          open={panelOpen}
+          onToggle={togglePanel}
+          selection={{ selected, selectedLandless, selectedLadderRow, stationWord, focusTitleId }}
+          charterOn={charterOn}
+          onToggleCharter={() => setCharterOn((on) => !on)}
+          charterFootprints={charterFootprints}
+          footprintCount={data.footprints.length}
+          terrains={data.terrains}
+          onCarveThis={
+            mode === 'carve'
+              ? (footprint) => {
+                  if (footprint.realm_id != null) setRealmId(footprint.realm_id);
+                  setCarveTitleId(footprint.title_id);
+                }
+              : undefined
+          }
+        />
       </div>
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
         <AlertDialogContent>

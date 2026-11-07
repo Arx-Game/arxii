@@ -81,7 +81,10 @@ vi.mock('@/almanach/queries', () => ({
   useAlmanachMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
+import { useLadder } from '@/almanach/queries';
 import { useRegionMapPipsQuery } from '../../queries';
+
+const realLadder = vi.mocked(useLadder).getMockImplementation()!;
 
 const payload: RegionMapPips = {
   region: {
@@ -722,6 +725,36 @@ describe('RegionMapPage', () => {
 
       await user.click(screen.getByTestId('pickers-toggle'));
       expect(screen.getByTestId('carve-domain')).toHaveValue('100');
+    });
+
+    it('says unnamed and the tier when the folded domain has no name', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useLadder).mockImplementation(
+        () =>
+          ({
+            data: {
+              rows: [
+                {
+                  title_id: 500,
+                  name: '',
+                  tier: 'county',
+                  house_name: '',
+                  parent_title_id: null,
+                  state: 'Unclaimed',
+                },
+              ],
+              unclaimed_by_tier: {},
+            },
+            refetch: vi.fn(),
+          }) as unknown as ReturnType<typeof useLadder>
+      );
+      renderWithProviders(<RegionMapPage regionId={1} />);
+      await user.click(screen.getByRole('button', { name: 'Carve' }));
+      await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+      await user.selectOptions(screen.getByTestId('carve-domain'), '500');
+      await user.click(screen.getByTestId('pickers-toggle'));
+      expect(screen.getByTestId('picked-domain')).toHaveTextContent('unnamed county');
+      vi.mocked(useLadder).mockImplementation(realLadder);
     });
 
     it('folds the select pickers too, showing what is selected', async () => {

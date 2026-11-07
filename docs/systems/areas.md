@@ -281,7 +281,7 @@ New region form carries a continent choice: a new CONTINENT rung by the region's
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.
 
-The side panel and the realm and domain pickers each fold away (`useRegionMapLayout.ts`,
+The side panel (`RegionMapPanel.tsx`) and the realm and domain pickers each fold away (`useRegionMapLayout.ts`,
 remembered per account in `localStorage`, shared by the Atlas view and the tab); folded pickers
 still name the picked domain. Over the map, plain scroll moves the map and Ctrl or Cmd+scroll zooms it
 around the cursor, as does a trackpad pinch; the handler prevents the default, so the page neither
