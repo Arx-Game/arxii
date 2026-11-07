@@ -55,6 +55,21 @@ class ParseTableTest(PlaceNamePasteTestCase):
         assert "weight" in notes[3][1]
         assert parse_table("no pipes here\n")[0].status == "error"
 
+    def test_a_name_over_a_hundred_characters_is_an_error_not_cut_short(self) -> None:
+        [row] = parse_table(f"Vestyr | {'A' * 101}\n")
+        assert row.status == "error"
+        assert any("100" in n for n in row.notes)
+
+    def test_a_weight_past_the_column_limit_is_an_error_not_a_500(self) -> None:
+        [row] = parse_table("Vestyr | Aberwen | 3000000000\n")
+        assert row.status == "error"
+        assert any("weight" in n for n in row.notes)
+
+    def test_a_skip_names_the_spelling_that_exists(self) -> None:
+        [row] = parse_table("Vestyr | CARRADYN\n")
+        assert row.status == "skip"
+        assert any("Carradyn" in n for n in row.notes)
+
     def test_two_cultures_differing_only_in_case_are_ambiguous(self) -> None:
         NameCulture.objects.create(name="VESTYR")
         [row] = parse_table("vestyr | Aberwen\n")

@@ -16,9 +16,9 @@ spot, instead of being sent to the Authoring Workbench first.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 import hashlib
 import json
-from typing import Protocol
 
 from django.db.models import QuerySet
 from evennia.accounts.models import AccountDB
@@ -33,8 +33,21 @@ ACTION_CHECK = "check"
 ACTION_CREATE = "create"
 
 
-class HasStatus(Protocol):
-    status: str
+@dataclass(kw_only=True)
+class PasteRow:
+    """One pasted line as the preview shows it; each paste's row type extends this."""
+
+    line_no: int
+    status: str = STATUS_CREATE
+    notes: list[str] = field(default_factory=list)
+
+    def fail(self, note: str) -> None:
+        self.status = STATUS_ERROR
+        self.notes.append(note)
+
+    def skip(self, note: str) -> None:
+        self.status = STATUS_SKIP
+        self.notes.append(note)
 
 
 def one(qs: QuerySet, what: str) -> tuple[object | None, str]:
@@ -47,7 +60,7 @@ def one(qs: QuerySet, what: str) -> tuple[object | None, str]:
     return rows[0], ""
 
 
-def counts(rows: Sequence[HasStatus]) -> dict[str, int]:
+def counts(rows: Sequence[PasteRow]) -> dict[str, int]:
     return {
         STATUS_CREATE: sum(r.status == STATUS_CREATE for r in rows),
         STATUS_SKIP: sum(r.status == STATUS_SKIP for r in rows),

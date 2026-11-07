@@ -14,7 +14,7 @@ empty database; here the owner's edited text lands only its missing rows.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import hmac
 
 from django.contrib import messages
@@ -30,7 +30,7 @@ from web.admin.paste_common import (
     ACTION_CREATE,
     STATUS_CREATE,
     STATUS_ERROR,
-    STATUS_SKIP,
+    PasteRow,
     counts as _counts,
     digest_of,
     one,
@@ -42,28 +42,20 @@ from world.societies.houses.models import Title
 COLUMNS: tuple[str, ...] = ("culture", "name", "weight")
 _NO_NAME = "no name"
 _DASH_NOTE = "names use a hyphen, not a dash"
-_WEIGHT_NOTE = "weight is a whole number from 1 up"
+MAX_WEIGHT = 1000
+MAX_NAME = 100
+_WEIGHT_NOTE = f"weight is a whole number from 1 to {MAX_WEIGHT}"
+_LONG_NAME_NOTE = f"names are at most {MAX_NAME} characters"
 _TITLE_NOTE = "a title bears this name; the layout tool will skip it"
 
 
 @dataclass
-class RowSpec:
-    line_no: int
+class RowSpec(PasteRow):
     culture_name: str = ""
     name: str = ""
     weight: int = 1
     culture_id: int | None = None
     culture_label: str = ""
-    status: str = STATUS_CREATE
-    notes: list[str] = field(default_factory=list)
-
-    def fail(self, note: str) -> None:
-        self.status = STATUS_ERROR
-        self.notes.append(note)
-
-    def skip(self, note: str) -> None:
-        self.status = STATUS_SKIP
-        self.notes.append(note)
 
     @property
     def will_create(self) -> str:
@@ -79,7 +71,7 @@ def _parse_weight(raw: str, row: RowSpec) -> int:
     except ValueError:
         row.fail(f"{_WEIGHT_NOTE}, not {raw!r}")
         return 1
-    if weight < 1:
+    if weight < 1 or weight > MAX_WEIGHT:
         row.fail(f"{_WEIGHT_NOTE}, not {raw!r}")
         return 1
     return weight
@@ -87,7 +79,7 @@ def _parse_weight(raw: str, row: RowSpec) -> int:
 
 def _parse_row(line_no: int, fields: list[str]) -> RowSpec:
     cells = [f.strip() for f in fields] + [""] * (len(COLUMNS) - len(fields))
-    row = RowSpec(line_no=line_no, culture_name=cells[0], name=cells[1][:100])
+    row = RowSpec(line_no=line_no, culture_name=cells[0], name=cells[1])
     culture, why = one(NameCulture.objects.filter(name__iexact=row.culture_name), "culture")
     if culture is None:
         row.fail(why)
@@ -96,16 +88,22 @@ def _parse_row(line_no: int, fields: list[str]) -> RowSpec:
         row.culture_label = culture.name
     if not row.name:
         row.fail(_NO_NAME)
+    elif len(row.name) > MAX_NAME:
+        row.fail(_LONG_NAME_NOTE)
     elif contains_dash(row.name):
         row.fail(_DASH_NOTE)
     row.weight = _parse_weight(cells[2], row)
     if row.status != STATUS_CREATE:
         return row
-    exists = NameCultureEntry.objects.filter(
-        culture_id=row.culture_id, part=NamePart.PLACE, value__iexact=row.name
-    ).exists()
-    if exists:
-        row.skip("already a place name on this culture")
+    existing = (
+        NameCultureEntry.objects.filter(
+            culture_id=row.culture_id, part=NamePart.PLACE, value__iexact=row.name
+        )
+        .values_list("value", flat=True)
+        .first()
+    )
+    if existing is not None:
+        row.skip(f"already a place name on this culture, as {existing!r}")
     elif Title.objects.filter(name=row.name).exists():
         row.notes.append(_TITLE_NOTE)
     return row
@@ -119,7 +117,7 @@ def parse_table(text: str) -> list[RowSpec]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if line.count("|") == 0:
-            row = RowSpec(line_no=line_no, name=line.strip()[:100])
+            row = RowSpec(line_no=line_no, name=line.strip()[:MAX_NAME])
             row.fail("no pipe-separated columns")
             rows.append(row)
             continue

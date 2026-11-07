@@ -38,6 +38,7 @@ from web.admin.paste_common import (
     STATUS_CREATE,
     STATUS_ERROR,
     STATUS_SKIP,
+    PasteRow,
     counts as _counts,
     digest_of,
     one as _one,
@@ -118,8 +119,7 @@ class OfferSpec:
 
 
 @dataclass
-class RowSpec:
-    line_no: int
+class RowSpec(PasteRow):
     name: str
     slug: str = ""
     category_id: int | None = None
@@ -140,12 +140,6 @@ class RowSpec:
     #: A person card (#4872): the ``figure`` effect token sets
     #: ``Distinction.asks_figure_name``, so the player names the figure on the card.
     asks_figure_name: bool = False
-    status: str = STATUS_CREATE
-    notes: list[str] = field(default_factory=list)
-
-    def fail(self, note: str) -> None:
-        self.status = STATUS_ERROR
-        self.notes.append(note)
 
     @property
     def will_create(self) -> str:
@@ -519,11 +513,6 @@ def distinction_paste(request: HttpRequest) -> HttpResponse:
     action = request.POST.get("action", ACTION_CHECK)
     if action != ACTION_CREATE:
         return _render(request, text=text, rows=rows, digest=digest, counts=counts)
-    try:
-        contributor = paste_contributor(request.user)
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
     if not hmac.compare_digest(digest, request.POST.get("digest", "")):
         messages.error(
             request, "The table or the database changed since the preview; check it again."
@@ -535,6 +524,11 @@ def distinction_paste(request: HttpRequest) -> HttpResponse:
     if not counts[STATUS_CREATE]:
         messages.info(request, "Nothing to create.")
         return _render(request, text=text, rows=rows, digest=digest, counts=counts)
+    try:
+        contributor = paste_contributor(request.user)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return _render(request, text=text, rows=rows, digest=digest, counts=counts)
     created = _create_rows(rows, contributor, request.user.pk)
-    messages.success(request, f"Created {created} distinction(s), credited to you.")
+    messages.success(request, f"Created {created} distinction(s), credited to {contributor.name}.")
     return redirect(reverse("admin:arxii_distinction_changelist"))

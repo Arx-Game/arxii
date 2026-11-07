@@ -325,6 +325,17 @@ class PasteViewTest(PasteTestCase):
         created = Distinction.objects.get(slug="oath-bound")
         assert created.written_by.name == "unlinked"
         assert PlayerData.objects.get(account=self.unlinked).contributor == created.written_by
+        followed = self.client.get(resp.url)
+        assert "credited to unlinked" in followed.content.decode()
+
+    def test_a_refused_create_links_no_contributor(self):
+        """The link is made only when rows are about to be written (#5001 review)."""
+        self.client.force_login(self.unlinked)
+        resp = self.client.post(self.url, {"text": ROW, "action": "create", "digest": "stale"})
+        assert resp.status_code == 200
+        assert not PlayerData.objects.filter(
+            account=self.unlinked, contributor__isnull=False
+        ).exists()
 
     def test_a_username_already_credited_to_another_account_refuses_and_names_the_clash(self):
         other = AccountDB.objects.create_user("other", "o@example.com", "pw-123456")

@@ -27,8 +27,9 @@ content (place names) stamp nothing.
 - **Place names from a table** - `web/admin/import_hub/place_names.py` (`place_name_paste`,
   template `import_hub/place_names.html`): `culture | name | weight` rows; the culture is
   resolved case-insensitively and must exist (unknown or ambiguous is an error); a dash in a
-  name is an error; a name already a PLACE entry on that culture, or repeated earlier in the
-  table, is skipped; a name a `Title` bears creates with a note (the layout tool skips it at
+  name, a name over 100 characters, or a weight outside 1 to 1000 is an error; a name already a
+  PLACE entry on that culture (matched case-insensitively; the note names the spelling that
+  exists), or repeated earlier in the table, is skipped; a name a `Title` bears creates with a note (the layout tool skips it at
   draw). Create writes one transaction and one admin `LogEntry` per culture. This is how the
   banks reach production; `world/seeds/place_names.py` loads them on an empty database.
 
@@ -214,9 +215,9 @@ is a one-row, one-typed-confirmation action every time.
   the load/export/push links.
 - This guard does not reach the generic Import Data surface below (`services.execute_import`):
   its merge/replace pipeline can overwrite a credited row's fields with no credit check at all.
-  That is deliberate, not a gap - Import Data is superuser-only disaster-recovery tooling with
-  its own dry-run diff preview, not the content pipeline this freeze protects. See ADR-0201's
-  trade-offs section and the "Export/Import System" section below.
+  That is deliberate, not a gap - the fixture upload (staff-gated, reached from the Import Data
+  hub) is disaster-recovery tooling with its own dry-run diff preview, not the content pipeline
+  this freeze protects. See ADR-0201's trade-offs section and the "Import hub" section above.
 
 ### Content-Repo Export & Push (PR #2425; grid bundles added #2436/#2448)
 
@@ -1066,8 +1067,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   resolves every name against existing rows (`_one`: unknown or ambiguous is
   an error), marks a row `create`, `skip` (slug exists, or the slug repeats
   in the table) or `error`; `table_digest` hashes exactly what the preview
-  showed; the create POST re-parses, refuses a stale digest, any error row,
-  (an operator with no contributor is linked to one on the spot, #5001), then `_create_rows` writes
+  showed; the create POST re-parses, refuses a stale digest, any error row, or a username
+  that is already another account's contributor (an operator with no contributor is linked
+  to one on the spot, #5001), then `_create_rows` writes
   everything in one `transaction.atomic()` (distinction, effects, offer
   lines, pins; `stamp_written` on each; one admin `LogEntry` per
   distinction). No update path, no delete path, no created reference rows;
@@ -1892,6 +1894,7 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 
 - `_export_preview/` - Export preview page with model inventory
 - `_export/` - POST endpoint that accepts selected models and returns fixture JSON
+- `_import/` - the Import Data hub (#5001); `_import/place_names/` - place names from a table
 - `_import_upload/` - File upload form / fixture analysis
 - `_import_execute/` - Execute import with per-model actions
 - `_exclude/` - Toggle model exclusion

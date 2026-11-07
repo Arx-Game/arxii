@@ -40,10 +40,11 @@
     <h2>From the private content repo</h2>
     <p>Loads and upserts the lore repo's fixtures. For an empty database only: a load overwrites
       every authored row with no author credited.</p>
-    {% if not content_repo_configured %}
+    {% if content_repo_configured %}
+    <p><a href="{% url 'admin_content_load' %}">Load the private content repo</a></p>
+    {% else %}
     <p>Not configured here: set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> first.</p>
     {% endif %}
-    <p><a href="{% url 'admin_content_load' %}">Load the private content repo</a></p>
   </section>
   {% endif %}
 </div>

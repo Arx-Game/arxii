@@ -32,10 +32,13 @@ class ImportHubTests(TestCase):
     def test_a_superuser_sees_every_route(self) -> None:
         self.client.force_login(self.super)
         body = self.client.get(self.url).content.decode()
-        for name in ("admin_distinction_paste", "admin_import_upload", "admin_content_load"):
+        for name in ("admin_distinction_paste", "admin_import_upload"):
             assert reverse(name) in body, name
         assert "_import/place_names/" in body
         assert "disaster recovery" in body
+        # no CONTENT_REPO_PATH in tests: the content-repo panel says so and offers no link
+        assert "CONTENT_REPO_PATH" in body
+        assert reverse("admin_content_load") not in body
 
     def test_game_setup_points_its_import_links_at_the_hub(self) -> None:
         self.client.force_login(self.super)
