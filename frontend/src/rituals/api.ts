@@ -64,7 +64,7 @@ export interface AnimaRitualPatchBody {
   narrative_prose?: string;
   /** FK pk for traits.Trait (stat) */
   stat_id?: number | null;
-  /** FK pk for skills.Skill */
+  /** FK pk for a skill: a skill-type traits.Trait (#5008) */
   skill_id?: number | null;
   /** FK pk for skills.Specialization */
   specialization_id?: number | null;

@@ -50,7 +50,7 @@ interface FormState {
   narrative_prose: string;
   /** FK id for traits.Trait (stat) — pending proper picker (Phase 10) */
   stat_id: string;
-  /** FK id for skills.Skill — pending proper picker (Phase 10) */
+  /** FK id for a skill: a skill-type traits.Trait (#5008), pending proper picker (Phase 10) */
   skill_id: string;
   /** FK id for skills.Specialization — optional */
   specialization_id: string;
