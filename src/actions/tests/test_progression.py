@@ -23,8 +23,8 @@ from world.progression.models import (
 from world.roster.factories import grant_test_tenure
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
-    CharacterSkillValueFactory,
     SkillFactory,
+    SkillRatingFactory,
     SpecializationFactory,
     TrainingAllocationFactory,
 )
@@ -423,9 +423,7 @@ class PurchaseUnlockActionTests(TestCase):
         """Can purchase a skill breakthrough when the actor has enough XP (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        skill_value = CharacterSkillValueFactory(
-            character=character.sheet_data, skill=skill, value=19
-        )
+        skill_value = SkillRatingFactory(character=character.sheet_data, skill=skill, value=19)
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=150)
 
@@ -446,7 +444,7 @@ class PurchaseUnlockActionTests(TestCase):
         """Purchasing a skill breakthrough fails without enough XP (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=character.sheet_data, skill=skill, value=19)
+        SkillRatingFactory(character=character.sheet_data, skill=skill, value=19)
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=50)
 
@@ -463,7 +461,7 @@ class PurchaseUnlockActionTests(TestCase):
         """A second purchase attempt fails once the gate is already cleared (#2115)."""
         character, _sheet, account = self._create_character_with_account()
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=character.sheet_data, skill=skill, value=19)
+        SkillRatingFactory(character=character.sheet_data, skill=skill, value=19)
         self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
         self._set_xp(account, total_earned=300)
 

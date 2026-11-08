@@ -38,7 +38,6 @@ from world.magic.factories import TraditionFactory, TraditionGiftGrantFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.roster.factories import RosterTenureFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory
-from world.skills.models import CharacterSkillValue
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
 #: Tradition Training at rank 1 gives this many Magic training points.
@@ -209,7 +208,6 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
         sheet = self._finalize(draft)
 
         self.assertEqual(sheet.combat_style, self.dance)
-        self.assertEqual(CharacterSkillValue.objects.get(character=sheet, skill=skill).value, total)
         self.assertEqual(
             CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, total
         )
@@ -279,7 +277,8 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
 
         self.assertIsNone(sheet.combat_style)
         self.assertEqual(
-            CharacterSkillValue.objects.get(character=sheet, skill=self.thaumaturgy).value, total
+            CharacterTraitValue.objects.get(character=sheet, trait=self.thaumaturgy.trait).value,
+            total,
         )
 
     def test_switching_tradition_clears_a_style_it_does_not_teach(self) -> None:

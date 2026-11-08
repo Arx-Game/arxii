@@ -64,7 +64,7 @@ from world.skills.factories import (
     SkillPointBudgetFactory,
     SpecializationFactory,
 )
-from world.skills.models import CharacterSkillValue, SkillPointBudget
+from world.skills.models import SkillPointBudget
 from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -227,9 +227,11 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
 
         sheet = self._finalize(draft)
 
-        held = {
-            row.skill_id: row.value for row in CharacterSkillValue.objects.filter(character=sheet)
-        }
+        held = dict(
+            CharacterTraitValue.objects.filter(
+                character=sheet, trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
+            ).values_list("trait__skill", "value")
+        )
         self.assertEqual(sum(held.values()), total)
         self.assertIn(held[self.thaumaturgy.pk], range(1, total + 1))
         skill = self.thaumaturgy
@@ -241,8 +243,8 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         self.assertEqual(change.source, TraitChangeSource.CHARACTER_CREATION)
         # Only allocated Magic skills are written; nothing lifts the rest.
         self.assertFalse(
-            CharacterSkillValue.objects.filter(
-                character=sheet, skill__in=[self.geomancy, self.lapsed]
+            CharacterTraitValue.objects.filter(
+                character=sheet, trait__in=[self.geomancy.trait, self.lapsed.trait]
             )
         )
 
@@ -259,7 +261,8 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         total = self._allocate_pool(draft, self.geomancy)
         sheet = self._finalize(draft)
         self.assertEqual(
-            CharacterSkillValue.objects.get(character=sheet, skill=self.geomancy).value, total
+            CharacterTraitValue.objects.get(character=sheet, trait=self.geomancy.trait).value,
+            total,
         )
 
     def test_switching_tradition_drops_training(self) -> None:
@@ -298,7 +301,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
 
         magic_ids = [skill.pk for skill in (*self.active_magic, self.lapsed)]
         self.assertFalse(
-            CharacterSkillValue.objects.filter(character=sheet, skill_id__in=magic_ids)
+            CharacterTraitValue.objects.filter(character=sheet, trait__skill__in=magic_ids)
         )
 
     def test_magic_points_refused_with_names(self) -> None:

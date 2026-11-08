@@ -25,7 +25,7 @@ from world.progression.models import (
 )
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.services.selection import set_selected_entry
-from world.skills.factories import CharacterSkillValueFactory, SkillFactory
+from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.species.factories import LanguageFactory
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
@@ -92,7 +92,7 @@ class UnlockShopViewTests(TestCase):
     def _create_gated_skill(self, *, xp_cost: int | None = None):
         """Create a skill parked at an XP boundary (#2115), optionally with an authored cost."""
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.character.sheet_data, skill=skill, value=19)
+        SkillRatingFactory(character=self.character.sheet_data, skill=skill, value=19)
         if xp_cost is not None:
             chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
             XPCostEntry.objects.create(chart=chart, level=20, xp_cost=xp_cost)

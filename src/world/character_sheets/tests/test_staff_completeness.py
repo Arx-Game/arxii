@@ -43,7 +43,6 @@ from world.roster.factories import FamilyFactory
 from world.roster.models import Kinsperson
 from world.roster.services.staff_characters import mint_gm_character
 from world.skills.factories import SkillFactory
-from world.skills.models import CharacterSkillValue
 from world.species.factories import LanguageFactory
 from world.traits.factories import StatTraitFactory, TraitFactory
 from world.traits.models import CharacterTraitValue, TraitType
@@ -123,7 +122,7 @@ class StaffBuildsACompleteSheetTests(TestCase):
         send("post", "staff-kinship", {"family": FamilyFactory().pk})
 
         assert CharacterTraitValue.objects.filter(character=sheet, trait=self.stat).exists()
-        assert CharacterSkillValue.objects.filter(character=sheet, skill=self.skill).exists()
+        assert CharacterTraitValue.objects.filter(character=sheet, trait=self.skill.trait).exists()
         assert CharacterDistinction.objects.filter(character=sheet).exists()
         assert CharacterFormValue.objects.filter(form__character=sheet, option=self.red).exists()
         assert FormMarking.objects.filter(form__character=sheet).exists()

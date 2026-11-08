@@ -21,8 +21,7 @@ from world.progression.services.skill_development import (
     process_weekly_skill_development,
 )
 from world.progression.types import DevelopmentSource
-from world.skills.factories import CharacterSkillValueFactory, SkillFactory
-from world.skills.models import CharacterSkillValue
+from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.traits.factories import TraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -389,9 +388,8 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
-        CharacterSkillValue.objects.filter(character=self.character.sheet_data).delete()
         # Parked at an XP boundary.
-        self.skill_value = CharacterSkillValueFactory(
+        self.skill_value = SkillRatingFactory(
             character=self.character.sheet_data, skill=self.skill, value=19
         )
 

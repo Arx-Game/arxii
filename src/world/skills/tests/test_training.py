@@ -17,9 +17,9 @@ from world.relationships.services import get_or_create_side
 from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
-    CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
     SkillFactory,
+    SkillRatingFactory,
     SpecializationFactory,
 )
 from world.skills.models import SkillPointBudget, TrainingAllocation
@@ -145,7 +145,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         cls.skill = SkillFactory()
 
         # Student has skill value 40
-        cls.student_skill = CharacterSkillValueFactory(
+        cls.student_skill = SkillRatingFactory(
             character=cls.student_identity,
             skill=cls.skill,
             value=40,
@@ -156,7 +156,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         cls.mentor = cls.mentor_identity.character
 
         # Mentor has skill value 100
-        CharacterSkillValueFactory(
+        SkillRatingFactory(
             character=cls.mentor_identity,
             skill=cls.skill,
             value=100,
@@ -164,7 +164,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
 
         # Teaching skill for mentor (value=20), registered on config
         cls.teaching_skill = SkillFactory()
-        CharacterSkillValueFactory(
+        SkillRatingFactory(
             character=cls.mentor_identity,
             skill=cls.teaching_skill,
             value=20,
@@ -209,7 +209,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_no_path_level_defaults_to_one(self) -> None:
         """Character with no class levels uses path_level=1."""
         student_identity = CharacterSheetFactory()
-        CharacterSkillValueFactory(character=student_identity, skill=self.skill, value=20)
+        SkillRatingFactory(character=student_identity, skill=self.skill, value=20)
         alloc = TrainingAllocation.objects.create(
             character=student_identity,
             skill=self.skill,
@@ -233,7 +233,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
     def test_zero_student_skill_uses_floor(self) -> None:
         """Student with 0 skill uses 1 to prevent division by zero."""
         student_identity = CharacterSheetFactory()
-        # No CharacterSkillValue created — defaults to 0 -> floor to 1
+        # No skill rating — defaults to 0 -> floor to 1
         CharacterClassLevelFactory(character=student_identity, level=1)
         alloc = TrainingAllocation.objects.create(
             character=student_identity,
@@ -265,7 +265,7 @@ class CalculateSpecializationTrainingTests(TestCase):
         cls.spec = SpecializationFactory(parent_skill=cls.skill)
 
         # Student: parent=30, spec=10, total=40
-        CharacterSkillValueFactory(character=cls.student_identity, skill=cls.skill, value=30)
+        SkillRatingFactory(character=cls.student_identity, skill=cls.skill, value=30)
         CharacterSpecializationValueFactory(
             character=cls.student_identity,
             specialization=cls.spec,
@@ -275,14 +275,14 @@ class CalculateSpecializationTrainingTests(TestCase):
         # Mentor: parent=50, spec=50, teaching=20
         cls.mentor_identity = CharacterSheetFactory()
         cls.mentor = cls.mentor_identity.character
-        CharacterSkillValueFactory(character=cls.mentor_identity, skill=cls.skill, value=50)
+        SkillRatingFactory(character=cls.mentor_identity, skill=cls.skill, value=50)
         CharacterSpecializationValueFactory(
             character=cls.mentor_identity,
             specialization=cls.spec,
             value=50,
         )
         cls.teaching_skill = SkillFactory()
-        CharacterSkillValueFactory(
+        SkillRatingFactory(
             character=cls.mentor_identity,
             skill=cls.teaching_skill,
             value=20,
@@ -511,8 +511,8 @@ class ProcessWeeklyTrainingTests(TestCase):
         CharacterClassLevel.objects.filter(character=self.student_identity).delete()
 
         # Create fresh mutable data each test
-        self.student_skill, _ = self.student_identity.skill_values.update_or_create(
-            skill=self.skill,
+        self.student_skill, _ = self.student_identity.trait_values.update_or_create(
+            trait=self.skill.trait,
             defaults={"value": 10},
         )
         CharacterClassLevelFactory(character=self.student_identity, level=1)
@@ -735,12 +735,12 @@ class RunWeeklySkillCronTests(TestCase):
         RosterEntryFactory(character_sheet__character=self.character)
         self.trained_skill = SkillFactory()
         self.untrained_skill = SkillFactory()
-        self.trained_sv = CharacterSkillValueFactory(
+        self.trained_sv = SkillRatingFactory(
             character=self.identity,
             skill=self.trained_skill,
             value=10,
         )
-        CharacterSkillValueFactory(
+        SkillRatingFactory(
             character=self.identity,
             skill=self.untrained_skill,
             value=11,

@@ -11,7 +11,7 @@ from world.progression.models.rewards import (
     cumulative_dp_for_level,
 )
 from world.progression.types import DevelopmentSource
-from world.skills.factories import CharacterSkillValueFactory, SkillFactory
+from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.skills.services import points_to_next_boundary, train_skill
 from world.traits.models import CharacterTraitValue
 
@@ -112,7 +112,7 @@ class TrainSkillTests(TestCase):
         )
 
     def test_train_skill_stop_at_boundary_keeps_excess(self) -> None:
-        CharacterSkillValueFactory(character=self.sheet, skill=self.skill, value=18)
+        SkillRatingFactory(character=self.sheet, skill=self.skill, value=18)
 
         result = train_skill(self.sheet, self.skill, 1500, description="x", stop_at_boundary=True)
 
@@ -122,7 +122,7 @@ class TrainSkillTests(TestCase):
         self.assertEqual(DevelopmentTransaction.objects.get().amount, 900)
 
     def test_train_skill_without_stop_dissipates_at_boundary(self) -> None:
-        CharacterSkillValueFactory(character=self.sheet, skill=self.skill, value=18)
+        SkillRatingFactory(character=self.sheet, skill=self.skill, value=18)
 
         result = train_skill(self.sheet, self.skill, 1500, description="Weekly")
 

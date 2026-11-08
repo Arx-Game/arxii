@@ -1,7 +1,7 @@
 """Journeys: a skill the character trained shows the same on the sheet and in her rolls (#4496).
 
-A skill's rating lives in two stores: the sheet shows ``CharacterSkillValue`` and a
-check reads ``CharacterTraitValue``. Ysmay raises a skill every way the game lets her
+A skill's rating is its trait's ``CharacterTraitValue``: the sheet shows it and a check
+reads it (#5010). Ysmay raises a skill every way the game lets her
 after creation (a weekly training tick, an XP breakthrough, a level-up from use), and
 after each one the number on her sheet and the skill points a check on that skill is
 worth are the same. Rust never changes a rating, and a tick leaves it alone.
@@ -33,7 +33,7 @@ from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.services.skill_development import weekly_skill_development_task
 from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory
-from world.skills.models import CharacterSkillValue, Skill
+from world.skills.models import Skill
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -139,17 +139,6 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
         run_weekly_skill_cron()  # 50 of the 200 points a level costs
         self.assertSheetAndRollAgree(self.skill, 11)
 
-    def test_a_character_who_trained_before_the_fix_is_not_lowered(self) -> None:
-        """Alpha rows once written by training alone: sheet 14, roll 11. The next tick
-        keeps the 14 she earned and brings the roll up to it."""
-        self.made_with(self.skill, 11)
-        sheet_row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.skill)
-        sheet_row.value = 14
-        sheet_row.save()
-        self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=10")
-        run_weekly_skill_cron()
-        self.assertSheetAndRollAgree(self.skill, 14)
-
 
 class BuyingABreakthrough(_TrainedSkillCase):
     """A skill parked at an XP boundary is bought past it, and the roll follows."""
@@ -216,16 +205,6 @@ class LevellingASkillByUse(_TrainedSkillCase):
         perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
 
         self.assertSheetAndRollAgree(self.skill, 31)
-
-    def test_a_character_who_levelled_by_use_before_the_fix_is_not_lowered(self) -> None:
-        """Alpha rows once written by use alone: roll 14, sheet 11. The next roll with
-        effort keeps the 14 she earned and brings the sheet up to it."""
-        self.made_with(self.skill, 11)
-        trait_row = CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait)
-        trait_row.value = 14
-        trait_row.save()
-        perform_check(self.ysmay, self.check_on(self.skill), effort_level=EffortLevel.HIGH)
-        self.assertSheetAndRollAgree(self.skill, 14)
 
 
 class OneWeeklyRustPass(_TrainedSkillCase):

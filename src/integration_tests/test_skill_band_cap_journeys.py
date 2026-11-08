@@ -41,7 +41,6 @@ from world.progression.services.awards import award_development_points
 from world.progression.types import DevelopmentSource
 from world.roster.services.staff_characters import mint_gm_character
 from world.skills.factories import SkillFactory
-from world.skills.models import CharacterSkillValue
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import (
@@ -91,8 +90,8 @@ class _BandCapCase(JourneyCase):
             enforce_caps=False,
         )
 
-    def skill_row(self) -> CharacterSkillValue:
-        return CharacterSkillValue.objects.get(character=self.sheet, skill=self.skill)
+    def skill_row(self) -> CharacterTraitValue:
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait)
 
     def rolls_at(self) -> int:
         return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait).value
@@ -253,8 +252,12 @@ class StaffEditRefusesAboveTheCap(JourneyCase):
         refused = self.api(staff).patch(url, {"skills": {str(skill.pk): 25}}, format="json")
         self.assertEqual(refused.status_code, 400, refused.content)
         self.assertIn("the skill cap for this character's band", refused.json()["detail"])
-        self.assertFalse(CharacterSkillValue.objects.filter(character=sheet).exists())
+        self.assertFalse(
+            CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).exists()
+        )
 
         allowed = self.api(staff).patch(url, {"skills": {str(skill.pk): 20}}, format="json")
         self.assertEqual(allowed.status_code, 200, allowed.content)
-        self.assertEqual(CharacterSkillValue.objects.get(character=sheet, skill=skill).value, 20)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, 20
+        )

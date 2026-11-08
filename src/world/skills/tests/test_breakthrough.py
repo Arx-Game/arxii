@@ -19,7 +19,7 @@ from world.progression.models.rewards import (
     cumulative_dp_for_level,
 )
 from world.roster.factories import grant_test_tenure
-from world.skills.factories import CharacterSkillValueFactory, SkillFactory
+from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.skills.services import (
     purchase_skill_breakthrough,
     skills_at_boundary,
@@ -145,19 +145,19 @@ class PurchaseSkillBreakthroughTests(TestCase):
         ExperiencePointsDataFactory(account=self.account, total_earned=total_earned, total_spent=0)
 
     def test_fails_when_not_at_boundary(self) -> None:
-        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=15)
+        SkillRatingFactory(character=self.identity, skill=self.skill, value=15)
         success, message = purchase_skill_breakthrough(self.character, self.skill)
         self.assertFalse(success)
         self.assertIn("not at a breakthrough boundary", message.lower())
 
     def test_fails_when_no_unlock_authored(self) -> None:
-        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=19)
+        SkillRatingFactory(character=self.identity, skill=self.skill, value=19)
         success, message = purchase_skill_breakthrough(self.character, self.skill)
         self.assertFalse(success)
         self.assertIn("no breakthrough authored", message.lower())
 
     def test_fails_with_insufficient_xp(self) -> None:
-        CharacterSkillValueFactory(character=self.identity, skill=self.skill, value=19)
+        SkillRatingFactory(character=self.identity, skill=self.skill, value=19)
         self._authored_unlock(target_rating=20, xp_cost=100)
         self._set_xp(total_earned=50)
 
@@ -168,7 +168,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
     def test_success_clears_gate_and_resumes_from_zero(self) -> None:
         """A successful purchase clears the gate and raises the ledger to the new rating;
         training resumes from zero toward the next level (no retroactive credit)."""
-        skill_value = CharacterSkillValueFactory(
+        skill_value = SkillRatingFactory(
             character=self.identity,
             skill=self.skill,
             value=19,
@@ -197,7 +197,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
 
     def test_duplicate_purchase_fails_once_cleared(self) -> None:
         """A second purchase attempt fails — the skill is no longer at a boundary."""
-        CharacterSkillValueFactory(
+        SkillRatingFactory(
             character=self.identity,
             skill=self.skill,
             value=19,

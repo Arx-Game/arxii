@@ -553,9 +553,9 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.skills.factories import SpecializationFactory
-        from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+        from world.skills.models import CharacterSpecializationValue
 
-        CharacterSkillValue.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
         CharacterSpecializationValue.flush_instance_cache()
         cls._setup_finalization_base(cls, prefix="Skill Test", height_min=900, height_max=1000)
         cls.melee_skill = SkillFactory(trait__name="Melee Combat")
@@ -563,10 +563,10 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
 
     def setUp(self):
-        from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+        from world.skills.models import CharacterSpecializationValue
 
         self._flush_common_caches()
-        CharacterSkillValue.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
         CharacterSpecializationValue.flush_instance_cache()
         self.account = AccountDB.objects.create(username=f"skilltest_{id(self)}")
 
@@ -574,12 +574,11 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         return self._create_base_draft(first_name="SkillTest", skills={}, specializations={})
 
     def test_finalize_creates_skill_values(self):
-        """Finalization should create CharacterSkillValue records."""
+        """Finalization writes each skill's rating to its trait's CharacterTraitValue."""
         from world.progression.models.rewards import (
             DevelopmentPoints,
             cumulative_dp_for_level,
         )
-        from world.skills.models import CharacterSkillValue
 
         draft = self._create_complete_draft()
         draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}
@@ -588,9 +587,9 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        skill_value = CharacterSkillValue.objects.get(
+        skill_value = CharacterTraitValue.objects.get(
             character_id=character.pk,
-            skill=self.melee_skill,
+            trait=self.melee_skill.trait,
         )
         assert skill_value.value == 30
         # The ledger counts from the rating CG set, so 31 is one level away (#5010).
@@ -608,7 +607,6 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
         from world.skills.factories import SkillPointBudgetFactory
-        from world.skills.models import CharacterSkillValue
         from world.traits.constants import TraitCategory
 
         occult = SkillFactory(trait__name="Occult Test", trait__category=TraitCategory.MAGIC)
@@ -638,9 +636,11 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         held = dict(
-            CharacterSkillValue.objects.filter(
-                character_id=character.pk, skill__trait__category=TraitCategory.MAGIC
-            ).values_list("skill_id", "value")
+            CharacterTraitValue.objects.filter(
+                character_id=character.pk,
+                trait__trait_type=TraitType.SKILL,
+                trait__category=TraitCategory.MAGIC,
+            ).values_list("trait__skill", "value")
         )
         assert held == {occult.pk: 30, ritualism.pk: 20}
 
@@ -680,17 +680,15 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_skips_zero_value_skills(self):
         """Skills with value 0 should not create records."""
-        from world.skills.models import CharacterSkillValue
-
         draft = self._create_complete_draft()
         draft.draft_data["skills"] = {str(self.melee_skill.pk): 0}
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
 
-        assert not CharacterSkillValue.objects.filter(
+        assert not CharacterTraitValue.objects.filter(
             character_id=character.pk,
-            skill=self.melee_skill,
+            trait=self.melee_skill.trait,
         ).exists()
 
 

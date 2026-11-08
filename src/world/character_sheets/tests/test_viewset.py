@@ -109,9 +109,9 @@ from world.roster.models import HiddenCharacterArt
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory
 from world.skills.factories import (
-    CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
     SkillFactory,
+    SkillRatingFactory,
     SpecializationFactory,
 )
 from world.societies.factories import (
@@ -125,7 +125,7 @@ from world.species.factories import SpeciesFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
-from world.traits.models import TraitCategory
+from world.traits.models import TraitCategory, TraitType
 from world.worship.factories import WorshippedBeingFactory
 from world.worship.models import WorshipDeclaration
 
@@ -736,9 +736,7 @@ class TestSkillsSection(TestCase):
         # Create a skill with a specialization
         cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
-        CharacterSkillValueFactory(
-            character=cls.character.sheet_data, skill=cls.melee_skill, value=30
-        )
+        SkillRatingFactory(character=cls.character.sheet_data, skill=cls.melee_skill, value=30)
         CharacterSpecializationValueFactory(
             character=cls.character.sheet_data, specialization=cls.swords_spec, value=10
         )
@@ -794,7 +792,7 @@ class TestSkillsSection(TestCase):
     def test_skill_entry_at_boundary_true_when_gated(self) -> None:
         """A skill parked at an XP boundary (19/29/39/49) reports at_boundary=True (#2115)."""
         gated_skill = SkillFactory(trait__name="Gated Skill", trait__category=TraitCategory.COMBAT)
-        CharacterSkillValueFactory(character=self.character.sheet_data, skill=gated_skill, value=29)
+        SkillRatingFactory(character=self.character.sheet_data, skill=gated_skill, value=29)
 
         skills = self._get_skills()
         entry = next(e for e in skills if e["skill"]["id"] == gated_skill.pk)
@@ -2692,7 +2690,7 @@ class TestCharacterSheetQueryCount(TestCase):
         # --- Skills ---
         melee_skill = SkillFactory(trait__name="QCMelee", trait__category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="QCSwords", parent_skill=melee_skill)
-        CharacterSkillValueFactory(character=cls.character.sheet_data, skill=melee_skill, value=20)
+        SkillRatingFactory(character=cls.character.sheet_data, skill=melee_skill, value=20)
         CharacterSpecializationValueFactory(
             character=cls.character.sheet_data, specialization=swords_spec, value=5
         )
@@ -2787,7 +2785,7 @@ class TestCharacterSheetQueryCount(TestCase):
          7.    character forms (TRUE filter)
          8.    character form values (traits + options)
         9.    character trait_values (stats)
-        10.    character skill_values
+        10.    character skill ratings (skill-type trait_values)
         11.    character specialization_values
         12.    character distinctions
         13.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
@@ -2927,7 +2925,11 @@ class TestCharacterSheetQueryCount(TestCase):
         # +0 (#4921): the combat style rides the sheet's own query (select_related); a
         # sheet with a style pays four more (gear kinds, skill value, Tradition, vows). This
         # fixture's character has none.
-        ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
+        ModifierTarget.get_for_trait(
+            self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
+            .first()
+            .trait
+        )
         with self.assertNumQueries(59):
             response = self.client.get(url)
         assert response.status_code == 200
@@ -3026,7 +3028,7 @@ class TestPrefetchCompleteness(TestCase):
         # Skills + specializations
         melee_skill = SkillFactory(trait__name="PFMelee", trait__category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="PFSwords", parent_skill=melee_skill)
-        CharacterSkillValueFactory(character=cls.character.sheet_data, skill=melee_skill, value=15)
+        SkillRatingFactory(character=cls.character.sheet_data, skill=melee_skill, value=15)
         CharacterSpecializationValueFactory(
             character=cls.character.sheet_data, specialization=swords_spec, value=5
         )
@@ -3125,7 +3127,11 @@ class TestPrefetchCompleteness(TestCase):
         sheet = self._get_sheet()
         # The skill targets' trait cache is per process and warmed by any stat read
         # (#4820); with no skill target the bonus pass then issues no query of its own.
-        ModifierTarget.get_for_trait(self.character.sheet_data.skill_values.first().skill.trait)
+        ModifierTarget.get_for_trait(
+            self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
+            .first()
+            .trait
+        )
         with self.assertNumQueries(0):
             _build_skills(sheet)
 

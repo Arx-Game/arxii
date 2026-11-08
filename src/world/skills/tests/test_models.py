@@ -86,67 +86,6 @@ class SpecializationModelTests(TestCase):
         assert spec.parent_name == "Melee Combat"
 
 
-class CharacterSkillValueModelTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.trait = Trait.objects.create(
-            name="Persuasion",
-            trait_type=TraitType.SKILL,
-            category=TraitCategory.SOCIAL,
-        )
-
-    def setUp(self):
-        from world.skills.models import CharacterSkillValue, Skill
-
-        # Flush SharedMemoryModel caches to prevent test pollution
-        CharacterSkillValue.flush_instance_cache()
-        Skill.flush_instance_cache()
-
-        self.sheet = CharacterSheetFactory()
-        self.character = self.sheet.character
-        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
-
-    def test_character_skill_value_creation(self):
-        """CharacterSkillValue should store the skill value the sheet shows."""
-        from world.skills.models import CharacterSkillValue
-
-        csv = CharacterSkillValue.objects.create(
-            character=self.sheet,
-            skill=self.skill,
-            value=20,
-        )
-        assert csv.value == 20
-
-    def test_character_skill_display_value(self):
-        """Skills display their true stored value (ADR-0193)."""
-        from world.skills.models import CharacterSkillValue
-
-        csv = CharacterSkillValue.objects.create(
-            character=self.sheet,
-            skill=self.skill,
-            value=25,
-        )
-        assert csv.display_value == 25
-
-    def test_character_skill_unique_constraint(self):
-        """Character can only have one value per skill."""
-        from django.db import IntegrityError
-
-        from world.skills.models import CharacterSkillValue
-
-        CharacterSkillValue.objects.create(
-            character=self.sheet,
-            skill=self.skill,
-            value=10,
-        )
-        with self.assertRaises(IntegrityError):
-            CharacterSkillValue.objects.create(
-                character=self.sheet,
-                skill=self.skill,
-                value=20,
-            )
-
-
 class CharacterSpecializationValueModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -314,14 +253,13 @@ class FactoryTests(TestCase):
         assert spec.pk is not None
         assert spec.parent_skill is not None
 
-    def test_character_skill_value_factory(self):
-        """CharacterSkillValueFactory should create valid CharacterSkillValue."""
-        from world.skills.factories import CharacterSkillValueFactory
+    def test_skill_rating_factory(self):
+        """SkillRatingFactory makes the skill trait's CharacterTraitValue (#5010)."""
+        from world.skills.factories import SkillRatingFactory
 
-        csv = CharacterSkillValueFactory()
-        assert csv.pk is not None
-        assert csv.character is not None
-        assert csv.skill is not None
+        rating = SkillRatingFactory()
+        assert rating.pk is not None
+        assert rating.trait.skill is not None
 
     def test_character_specialization_value_factory(self):
         """CharacterSpecializationValueFactory should create valid value."""
