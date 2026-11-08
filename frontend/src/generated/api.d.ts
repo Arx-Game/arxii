@@ -39550,7 +39550,7 @@ export interface components {
     /** @description One SKILL line, named by the skill rather than its id (#3427). */
     NPCPresetSkillLine: {
       readonly skill_name: string;
-      /** @description True 1-100 skill value -- no display-scale conversion, matching CharacterSkillValue. */
+      /** @description True 1-100 skill value -- no display-scale conversion, matching the skill trait's CharacterTraitValue. */
       readonly value: number;
     };
     /** @description One STAT line, named by the trait rather than its id (#3427). */
