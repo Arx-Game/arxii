@@ -284,9 +284,32 @@ from world.progression.models import DevelopmentPoints
 
 dev = DevelopmentPoints.objects.get(character=character, trait=trait)
 # Awards points AND automatically applies them to CharacterTraitValue
-# Caps at major thresholds (multiples of 10) if unlock not present
 dev.award_points(5)
 ```
+
+**The one ledger for skills (#5010).** `DevelopmentPoints` is the only development and
+rust ledger a skill has: use (`award_check_development`), GM awards
+(`award_development_points`) and training (`world.skills.services.train_skill`, weekly
+training and Academy courses) all come through `award_points`. For a SKILL trait:
+
+- `award_points` first raises `total_earned` to `cumulative_dp_for_level(current rating)`,
+  so the ledger counts from the rating the character has, not from 10. Every writer that
+  sets a skill rating directly (character creation, staff edit, the XP breakthrough, the NPC
+  copy, a preset) aligns the ledger through
+  `services.skill_development.align_development_floors(sheet, {trait: rating})`, which
+  raises it to the rating's floor, or brings it down when the rating was lowered, keeping any
+  progress toward the next level. The language breakthrough uses the same helper.
+- It parks at the next XP boundary (19, 29, 39, 49) until the breakthrough is bought
+  (`_rating_ceiling`); rust is still paid off and the surplus dissipates.
+- One weekly rust pass: the weekly rollover's skill development step
+  (`weekly_skill_development_task` -> `process_weekly_skill_development(ended_week)` ->
+  `_apply_weekly_rust`) adds `path level + 5` of `rust_debt` to every ledger row above the
+  base level, except a trait used in the ended week (`WeeklySkillUsage`) or trained in it (a
+  `TRAINING` `DevelopmentTransaction` stamped with that `game_week`). Languages never rust.
+  It runs once per week (a `RUST` transaction for the week is its idempotency guard).
+
+Stats and languages still count from the base level, and stats still develop through use
+exactly as before (#5008 decision 6).
 
 **Acquisition provenance (#3055).** When `award_points` crosses a level threshold, it
 also writes a `traits.CharacterTraitChange` row (`old_value`/`new_value` spanning every
@@ -308,7 +331,7 @@ skills.md's "Band skill cap" section for every raise path the cap binds.
 **Language XP locks (#4090).** For a LANGUAGE-typed trait only, `award_points` stops
 leveling one rating below an authored `TraitRatingUnlock` and lets surplus `total_earned`
 dissipate instead of banking it, the same ephemerality skills follow at their XP
-boundaries; see species.md's "Language XP locks and breakthroughs" section.
+boundaries (both through `_rating_ceiling`); see species.md's "Language XP locks and breakthroughs" section.
 `purchase_language_breakthrough` (`world.species.language_progression`) is the
 counterpart purchase, writing its own `CharacterTraitChange` with
 `source=TraitChangeSource.XP_BREAKTHROUGH` when it clears the lock.
@@ -328,7 +351,8 @@ Adjudication Toolkit entry in `docs/systems/INDEX.md`).
 **Check-based accrual (#3039 chokepoint, #3066 caller threading).**
 `world.progression.services.skill_development
 .award_check_development(character_sheet, check_type, effort_level, path_level)`
-writes both `WeeklySkillUsage` (accumulator for the weekly audit/rust cron) and
+writes both `WeeklySkillUsage` (accumulator for the weekly audit, and the use that exempts a
+trait from that week's rust) and
 `DevelopmentPoints` (via `award_points`) for every trait the check used. Its sole
 caller is `world.checks.services._award_check_development`, hooked at the
 `perform_check` chokepoint — every check path (combat, scene actions, the test-rig

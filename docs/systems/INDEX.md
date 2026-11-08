@@ -1068,9 +1068,13 @@ allocations that convert AP to development points.
   `traits.CharacterTraitValue` is what checks read; weekly training, the XP breakthrough and a
   level-up from use all write both (`set_skill_trait`, `set_skill_sheet_value`,
   `reconcile_skill_stores` in `world/skills/services.py`). See skills.md.
+- **One development ledger (#5010):** a skill's progress and rust live in its trait's
+  `progression.DevelopmentPoints`; use, GM awards and training (`train_skill`) all go through
+  `award_points`, which parks a skill at 19/29/39/49 and counts from its current rating. One
+  weekly rust pass (the rollover's) spares a skill used or trained that week.
 - **Actions:** `ManageTrainingAction` (`registry_key="manage_training"`) — shared by
   web `TrainingAllocationViewSet` and telnet `training` command
-- **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in
+- **Cron:** `run_weekly_skill_cron()` (training only) registered as `skills.weekly_training` in
   `world/game_clock/tasks.py`
 - **Weekly AP budget (shared with ties, #3957):** `create_training_allocation` /
   `update_training_allocation` validate the character's training total PLUS their standing

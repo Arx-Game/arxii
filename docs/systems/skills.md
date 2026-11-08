@@ -22,7 +22,7 @@ Character skills and specializations with development tracking, linked to the Tr
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSkillValue` | Character's skill value with progression | `character` (FK ObjectDB), `skill` (FK Skill), `value`, `development_points`, `rust_points` |
+| `CharacterSkillValue` | The skill rating the sheet shows | `character` (FK ObjectDB), `skill` (FK Skill), `value` |
 | `CharacterSpecializationValue` | Character's specialization value (no rust) | `character` (FK ObjectDB), `specialization` (FK Specialization), `value`, `development_points` |
 | `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Skill, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `ap_amount` |
 
@@ -38,15 +38,30 @@ Character skills and specializations with development tracking, linked to the Tr
 
 ## Key Concepts
 
-### Development Points
-- Progress toward next skill level (e.g., 450/1000)
-- Earned through training, scenes, missions
-- Resets when level increases
+### Development and rust: one ledger (#5010)
 
-### Rust Points
-- Blocks development until cleared (must train to remove rust before gaining new levels)
-- Only affects parent skills; specializations are immune
-- Encourages specialization over jack-of-all-trades builds
+A skill's progress and its rust live in one place, the skill trait's
+`progression.DevelopmentPoints` row (`total_earned`, `rust_debt`). Every source of
+development writes it through `DevelopmentPoints.award_points`: use (checks with effort),
+GM awards, weekly training and Academy courses (both through `train_skill`). So training
+and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 costs
+`(N - 9) x 100`.
+
+- **The ledger counts from the current rating.** For a skill trait `award_points` first
+  raises `total_earned` to what the current rating cost, and every writer that sets a
+  rating directly (character creation and staff edit through `set_skill_values`, the XP
+  breakthrough, the NPC copy, a staff character's preset) aligns the ledger to it through
+  `progression.services.skill_development.align_development_floors`. A skill made at 30 needs
+  2,100 points to reach 31. A rating set lower brings the ledger down with it, so use does not
+  walk it straight back up.
+- **Rust** is debt on the same row: incoming points pay it off before they count toward a
+  level. It only affects parent skills; specializations are immune.
+- **One weekly rust pass**, run by the weekly rollover
+  (`progression.services.skill_development._apply_weekly_rust`). A skill used in the week
+  that ended (a `WeeklySkillUsage` row) or trained in it (a `TRAINING`
+  `DevelopmentTransaction` stamped with that `game_week`) is exempt; every other ledger row
+  above the base level takes `path level + 5`. Languages never rust.
+- Specializations keep their own counter, `CharacterSpecializationValue.development_points`.
 
 ### One rating, two stores (#4496)
 
@@ -58,18 +73,14 @@ and records a `traits.CharacterTraitChange`:
 | Writer | Source stamped |
 |--------|----------------|
 | Character creation and staff edit (`set_skill_values`) | the caller's (`CHARACTER_CREATION`, `STAFF_EDIT`) |
-| Weekly training (`_apply_development_to_skill`) | `DEVELOPMENT_LEVEL_UP` |
 | XP breakthrough (`purchase_skill_breakthrough`) | `XP_BREAKTHROUGH` |
-| Level-up from use (`DevelopmentPoints.award_points`, a SKILL trait) | `DEVELOPMENT_LEVEL_UP` |
+| Level-up from use, training or a GM award (`DevelopmentPoints.award_points`, a SKILL trait) | `DEVELOPMENT_LEVEL_UP` |
 
 The helpers live in `world/skills/services.py`: `set_skill_trait` (the trait row, with its
 `CharacterTraitChange`), `set_skill_sheet_value` (the sheet row, created if missing) and
 `reconcile_skill_stores`, which raises both stores to the higher of the two before a writer
 adds its progress, so a character whose rows diverged before #4496 is never lowered.
-Rust changes no rating (it only accrues `rust_points`), so it needs no sync. The two
-**development counters stay separate**: `CharacterSkillValue.development_points` (weekly
-training and its `(value - 9) x 100` cost) and `DevelopmentPoints.total_earned` (use, with
-`cumulative_dp_for_level`). Merging them, or retiring one store, is a design question.
+Rust changes no rating (it is debt on the `DevelopmentPoints` ledger), so it needs no sync.
 Journeys: `integration_tests/test_trained_skills_journeys.py`.
 
 ### A card's bonus on a skill (#4820, slice 1 of #4813)
@@ -97,10 +108,11 @@ Journeys: `integration_tests/test_skill_bonus_journeys.py`.
 ### XP Boundaries (19, 29, 39, 49) — plateau, not a stop (#2115)
 
 A skill value ending in 9 (`_is_at_xp_boundary`, `services.py`) is a **breakthrough
-plateau**: training keeps paying off rust (a boundary-parked skill can still "blow the
-rust off"), but any surplus dev points beyond the rust payoff **dissipate** — they are
-deliberately ephemeral, never banked and never silently discarded. Every dissipation is
-reported: `_apply_development_to_skill` returns a plateau message
+plateau** for every source of development, use and GM awards as well as training (owner
+ruling on #5010): `DevelopmentPoints.award_points` parks a skill trait there. Incoming
+points keep paying off rust (a boundary-parked skill can still "blow the rust off"), but
+any surplus beyond the rust payoff **dissipates**: it is deliberately ephemeral, never
+banked. A training dissipation is reported: `train_skill` returns a plateau message
 ("`<skill>` is at threshold `<N>.0` — training maintains, does not advance until the
 breakthrough is unlocked.") which `process_weekly_training` folds into the
 `DevelopmentTransaction.description` audit row. The same rule applies when a level-up's
@@ -111,9 +123,9 @@ The gate clears via `purchase_skill_breakthrough(character, skill)` — an XP sp
 an authored `progression.TraitRatingUnlock` (`trait=skill.trait,
 target_rating=skill_value.value + 1`), mirroring `spend_xp_on_unlock`'s XP-debit pattern.
 The purchase does not itself grant a level (ADR-0053: XP buys the unlock that gates, never
-the grant) — it clears `skill_value.value` to the target rating and resets
-`development_points` to 0, so training resumes accruing from zero (no retroactive credit
-for points that dissipated while gated). `skills_at_boundary(character)` is the selector
+the grant) — it raises the rating to the target, and `set_skill_trait` raises the
+`DevelopmentPoints` ledger to it, so development resumes from zero toward the next level
+(no retroactive credit for points that dissipated while gated). `skills_at_boundary(character)` is the selector
 that surfaces every gated skill (with its authored XP cost, or `authored=False` when staff
 hasn't authored a breakthrough for that boundary yet) — feeds the `training` listing's
 plateau annotation, the `progression unlocks` listing's `[skill]` section, and the
@@ -138,7 +150,7 @@ specializations at every post-creation raise:
 
 | Raise path | At the cap |
 |------------|------------|
-| Training and Academy (`_develop_skill_value`, via `train_skill`) | Stops at the cap; surplus dissipates as at an XP boundary, with a message naming the cap folded into the `DevelopmentTransaction.description` |
+| Training and Academy (`train_skill`, through `DevelopmentPoints.award_points`) | Stops at the cap; surplus dissipates as at an XP boundary, with a message naming the cap folded into the `DevelopmentTransaction.description` |
 | `points_to_next_boundary` | Counts up to the cap when it comes before the next boundary; a skill at its cap takes only its rust |
 | Specialization training (`_apply_development_to_specialization`) | Same stop and message |
 | XP breakthrough (`purchase_skill_breakthrough`) | Refused, with the cap message, when the target rating is above the cap; no XP is spent |
@@ -256,7 +268,7 @@ All models registered with appropriate admin interfaces:
   on a saved non-skill trait.
 - `SkillAdmin` - List/filter by category and active status, inline `Specialization` editing, ordered by `display_order`
 - `SpecializationAdmin` - List/filter by `parent_skill` and active status, search by name and parent skill
-- `CharacterSkillValueAdmin` - Shows `value`, `display_value`, `development_points`, `rust_points`; filter by skill
+- `CharacterSkillValueAdmin` - Shows `value`, `display_value`; filter by skill
 - `CharacterSpecializationValueAdmin` - Shows `value`, `display_value`, `development_points`; filter by parent skill
 - `SkillPointBudgetAdmin` - Single-row model; `has_add_permission` returns False if row exists, `has_delete_permission` always False
 
@@ -287,12 +299,12 @@ per `(character, skill)` and `(character, specialization)`.
 | `remove_training_allocation(allocation)` | Deletes an allocation |
 | `calculate_training_development(allocation)` | Computes development points from the training formula |
 | `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP |
-| `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult` | The one writer for development from training (#4457): creates the sheet's row at `DP_BASE_LEVEL` (10) when it has none, applies the points through `_apply_development_to_skill`, writes the `DevelopmentTransaction` for the points applied. The skill branch of `process_weekly_training()` and Academy skill courses both call it. With `stop_at_boundary=True` the points are clamped to `points_to_next_boundary`, so nothing dissipates; the caller keeps the excess. `SkillTrainingResult` (`world/skills/types.py`) carries `old_value`, `new_value`, `points_applied`, `plateau_message` |
-| `points_to_next_boundary(skill_value: CharacterSkillValue) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585): unpaid rust, then each level's cost up to the stop, less banked points. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
+| `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult` | The one writer for development from training (#4457): a skill the character has no rating in starts at `DP_BASE_LEVEL` (10); the points go into the skill trait's `DevelopmentPoints` ledger through `award_points` (#5010), and one `DevelopmentTransaction` records the points applied, stamped with the current `game_week`. The skill branch of `process_weekly_training()` and Academy skill courses both call it. With `stop_at_boundary=True` the points are clamped to `points_to_next_boundary`, so nothing dissipates; the caller keeps the excess. `SkillTrainingResult` (`world/skills/types.py`) carries `old_value`, `new_value`, `points_applied`, `plateau_message` |
+| `points_to_next_boundary(tracker: DevelopmentPoints) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585), read from its ledger (#5010): unpaid rust, then each level's cost up to the stop, less progress banked toward it. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
 | `stored_skill_cap(sheet) -> int or None` / `skill_cap_message(name, stored_cap) -> str` | The band's skill cap as a stored value (`skill_cap_for(sheet) * 10`, `None` for no cap), and the message every raise path shows when development stops at it (#4585) |
-| `apply_weekly_rust(trained_skills)` | Adds rust to untrained skills |
+| `next_xp_boundary(value) -> int or None` | The first XP boundary at or above `value`; where `award_points` parks a skill (#5010) |
 | `set_skill_trait(sheet, skill, value, source)` / `set_skill_sheet_value(sheet, skill, value)` / `reconcile_skill_stores(sheet, skill)` | Keep a skill's two stores equal (#4496) |
-| `run_weekly_skill_cron()` | Orchestrator: training then rust; registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
+| `run_weekly_skill_cron()` | Weekly training only (rust is the rollover's one pass, #5010); registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
 
 ### Training Formula
 
@@ -333,8 +345,9 @@ training remove id=<id>
 `run_weekly_skill_cron()` is registered in `world/game_clock/tasks.py` as the weekly task
 `skills.weekly_training` (`interval=7 days`, anchored Sunday midnight EST / Monday 05:00 UTC,
 same cadence as `weekly_rollover`). It processes every character's allocations, awards
-`DevelopmentTransaction` rows with `source=TRAINING` and `reason=SYSTEM_AWARD`, and then
-applies weekly rust to skills that received no training (or other development) that week.
+`DevelopmentTransaction` rows with `source=TRAINING`, `reason=SYSTEM_AWARD` and the current
+`game_week`. It applies no rust: the weekly rollover's skill development pass does, once,
+and that game week stamp exempts a trained skill from it (#5010).
 
 ---
 
@@ -343,7 +356,7 @@ applies weekly rust to skills that received no training (or other development) t
 - **Trait System**: `Skill.trait` is a OneToOneField to `Trait` (trait_type=SKILL), giving skills unified check resolution
 - **Classes/Paths app**: `PathSkillSuggestion` links to `classes.Path` for CG skill templates
 - **Character Creation**: Stage 5 uses skills for allocation with point budgets
-- **Character Sheets**: Display skills with development progress and rust status
+- **Character Sheets**: Display skills, with `at_boundary` for a skill parked at an XP boundary
 - **Checks app**: Skill values feed into check resolution via the Trait system. A roll can also
   add a skill it does not list on its check type, through `extra_traits` (#4450, ADR-4450); the skill
   scores, develops once per roll, and counts for thread matching like a check type's own skill.
