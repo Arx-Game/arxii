@@ -1262,7 +1262,7 @@ decides defense" under Combat Seams).
   vow's defense profile (ADR-4759, read by `defense_style_for` since #4809; the profile
   table itself was dropped in #4975, ADR-4975).
   Since #4884 (slice 2 of #4844) a style also has `skill` (nullable one-to-one to a
-  Magic-category `Skill`, PROTECT, one style per skill), `hit_stat` (nullable FK to a stat
+  Magic-category skill `Trait`, PROTECT, one style per skill), `hit_stat` (nullable FK to a stat
   `Trait`, PROTECT), `taught_by` (M2M `Tradition`, `related_name="combat_styles"`) and
   `compatible_roles` (M2M `CovenantRole`, the vows it works with). **`CombatStyleGear`**
   (NK `(style, gear_archetype)`, unique, in `CONTENT_MODELS`) lists the kinds it fights with:

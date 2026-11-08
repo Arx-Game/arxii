@@ -5,7 +5,9 @@ Character stats and dice rolling mechanics based on Arx I's successful system. U
 ## Key Files
 
 ### `models.py`
-- **`Trait`**: Trait definitions (name, category, description) - uses SharedMemoryModel
+- **`Trait`**: Trait definitions (name, category, description, tooltip, display_order,
+  is_active) - uses SharedMemoryModel. A skill is a Trait of type SKILL (#5008); see
+  `docs/systems/traits.md`, "A skill is a Trait"
 - **`CharacterTraitValue`**: Character trait scores (1-100 internal, 1.0-10.0 display)
 - **`CharacterTraitChange`**: Acquisition-provenance ledger row (#3055) for every in-place
   `CharacterTraitValue.value` mutation — `old_value`/`new_value`/`source`
@@ -16,6 +18,10 @@ Character stats and dice rolling mechanics based on Arx I's successful system. U
 - **`PointConversionRange`**: Converts trait points to discrete ranks for dice rolling
 - **`CheckRank`**: Dice pool configuration for different rank levels
 - **`ResultChart`**: Success/failure tables for check resolution
+
+### `admin.py`
+- `TraitAdmin` is where a skill is authored: tooltip, order and active as plain fields, a
+  specializations inline for skill-type traits, and `ensure_skill_target_or_warn` on save
 
 ### `handlers.py`
 - **`TraitHandler`**: Character trait interface (get/set values, make checks)

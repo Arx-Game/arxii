@@ -291,7 +291,7 @@ from world.checks.types import ExtraTraitTerm
 
 result = perform_check(
     character, check_type, target_difficulty=10,
-    extra_traits=(ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00")),),
+    extra_traits=(ExtraTraitTerm(trait=skill, weight=Decimal("1.00")),),
 )
 ```
 
@@ -894,7 +894,7 @@ re-expressed on that scale as content work.
 
 Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`.
 
-**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `skills.Skill`/`traits.Trait`/`classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0168)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
+**`CheckCategory`/`CheckType`/`CheckTypeTrait` (+ `traits.Trait`, skills included, and `classes.Aspect`/`classes.PathAspect`) are content-repo-owned (#2698, ADR-0168)** — every cluster below looks its rows up via `world.seeds.sample_content.authored_or_sample()` rather than inventing them; a row is only invented when `SEED_SAMPLE_CONTENT` is on (a third-party clone with no content repo). Maintainers author these in the content repo, and the composition table below describes what the content repo is expected to carry, not what a bare Big Button press creates. `skills.Specialization`/`checks.CheckTypeSpecialization`/`checks.CheckTypeAspect` are NOT content-repo-owned and keep seeding unconditionally. A reseed no longer wipes and rewrites a CheckType's composition (the pre-#2698 "authoritative rewrite" idiom silently reverted any content-repo/staff-tuned weight on every Big Button press) — `get_or_create`/`authored_or_sample` converge instead, so an edited weight survives.
 
 **Code-required `CheckType`/`CheckCategory` rows are declared, not assumed (#2724, ADR-0171).** A handful of check types are named by string literal deep in service code — fatigue's `"fatigue_willpower"`/endurance rows (`world.fatigue.services`), the fury control-retention check, the vitals survival category/endurance/death checks. These still live in `CONTENT_MODELS` and are still content-repo-exportable, but the dependency is now declared in `world.seeds.config_prerequisites.CONFIG_PREREQUISITES` and runs **before** the content load (`world.seeds.database.load_content_first`) — so an authored fixture always upserts over the code default, and a staff member editing `checktype.json` can see, in one place, which rows are load-bearing rather than discovering it by deleting one and breaking fatigue checks. See ADR-0171.
 

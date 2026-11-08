@@ -18,7 +18,7 @@ The central spine connecting every system in the game. Characters develop throug
 - **The Durance:** Each character's overarching story of magical discovery and who they truly are
 
 ## What Exists
-- **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization (skills); a skill's rating is its trait's CharacterTraitValue and its development and rust live in DevelopmentPoints (#5010). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
+- **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). A skill is a Trait of type SKILL with its tooltip, order and active flag on the Trait (the Skill model was folded in and deleted, #5008, ADR-5008); Specialization (skills) hangs off it. A skill's rating is its trait's CharacterTraitValue and its development and rust live in DevelopmentPoints (#5010). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
 - **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling. LegendHonor + LegendLevelCalibration (#3466) for the Rite of Honors — see below
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)

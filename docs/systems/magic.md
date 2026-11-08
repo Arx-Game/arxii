@@ -747,8 +747,8 @@ more rows came with #4457 (below). A sixth, `check-types-weight-no-magic-skill`
 (#4547), lists each check type with a trait row on a Magic-category SKILL trait, as
 `check type: skills`, and links to the CheckType changelist filtered to exactly those
 (`?id__in=`): a check type that weights a Magic skill itself counts it twice when the magic skill
-settings add it too, so staff move it into those settings. It matches on the trait, so a Magic
-skill trait with no `Skill` row or an inactive one is listed too.
+settings add it too, so staff move it into those settings. It matches every Magic skill trait,
+an inactive one too.
 
 **Admin.** `MagicActivitySkill` changelist (activity filter, skill autocomplete, weight editable in
 the list); `skill` on the Technique style form (with a Skill column in its list) and on the

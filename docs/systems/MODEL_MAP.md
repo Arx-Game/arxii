@@ -3560,7 +3560,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - skill -> skills.Skill [OneToOne] (nullable)
+  - skill -> traits.Trait [OneToOne] (nullable)
   - hit_stat -> traits.Trait [FK] (nullable)
   - taught_by -> magic.Tradition [M2M]
   - compatible_roles -> covenants.CovenantRole [M2M]
@@ -6162,7 +6162,7 @@
 
 ### MagicActivitySkill
 **Foreign Keys:**
-  - skill -> skills.Skill [FK]
+  - skill -> traits.Trait [FK]
 
 ### MagicProgressionMilestone
 **Foreign Keys:**
@@ -6464,7 +6464,7 @@
 **Foreign Keys:**
   - ritual -> magic.Ritual [OneToOne]
   - stat -> traits.Trait [FK]
-  - skill -> skills.Skill [FK]
+  - skill -> traits.Trait [FK]
   - specialization -> skills.Specialization [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - check_type -> checks.CheckType [FK] (nullable)
@@ -6626,7 +6626,7 @@
   - clash_per_round_pool -> actions.ConsequencePool [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
-  - skill -> skills.Skill [FK] (nullable)
+  - skill -> traits.Trait [FK] (nullable)
   - target_weather_type -> weather.WeatherType [FK] (nullable)
   - travel_anchor_kind -> magic.PortalAnchorKind [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -6804,7 +6804,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - skill -> skills.Skill [FK] (nullable)
+  - skill -> traits.Trait [FK] (nullable)
 **Pointed to by:**
   - paths <- classes.Path
   - gifts <- magic.Gift
@@ -6993,7 +6993,7 @@
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
 - `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None, technique: 'Technique | None' = None) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
-- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None, resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
+- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Trait | None' = None, resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' - Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None - Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' - Validate and atomically consume ``ritual``'s components from ``components``.`
@@ -7337,7 +7337,7 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
-- `skill_modifiers_for_sheet(character_sheet: 'CharacterSheet', skills: 'Iterable[Skill]') -> 'dict[int, int]' - ``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).`
+- `skill_modifiers_for_sheet(character_sheet: 'CharacterSheet', skills: 'Iterable[Trait]') -> 'dict[int, int]' - ``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' - Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
@@ -7912,7 +7912,7 @@
 ### SkillCourseOfferDetails
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
-  - skill -> skills.Skill [FK]
+  - skill -> traits.Trait [FK]
   - check_type -> checks.CheckType [FK]
 **Pointed to by:**
   - enrollments <- npc_services.SkillCourseEnrollment
@@ -8860,7 +8860,7 @@
 ### NPCPresetSkillLine
 **Foreign Keys:**
   - preset -> roster.NPCStatlinePreset [FK]
-  - skill -> skills.Skill [FK]
+  - skill -> traits.Trait [FK]
 
 ### NPCPresetTraitLine
 **Foreign Keys:**
@@ -9436,7 +9436,7 @@
   - technique -> magic.Technique [FK] (nullable)
   - snapshot_ritual -> magic.Ritual [FK] (nullable)
   - snapshot_stat -> traits.Trait [FK] (nullable)
-  - snapshot_skill -> skills.Skill [FK] (nullable)
+  - snapshot_skill -> traits.Trait [FK] (nullable)
   - snapshot_specialization -> skills.Specialization [FK] (nullable)
   - snapshot_resonance -> magic.Resonance [FK] (nullable)
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
@@ -9701,32 +9701,15 @@
 ### PathSkillSuggestion
 **Foreign Keys:**
   - character_path -> classes.Path [FK]
-  - skill -> skills.Skill [FK]
-
-### Skill
-**Foreign Keys:**
-  - written_by -> contributors.ContentContributor [FK] (nullable)
-  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - trait -> traits.Trait [OneToOne]
-**Pointed to by:**
-  - npc_preset_skill_lines <- roster.NPCPresetSkillLine
-  - legend_spreads <- societies.LegendSpread
-  - technique_styles <- magic.TechniqueStyle
-  - override_techniques <- magic.Technique
-  - magic_activity_rows <- magic.MagicActivitySkill
-  - combat_style <- covenants.CombatStyle
-  - course_offers <- npc_services.SkillCourseOfferDetails
-  - specializations <- skills.Specialization
-  - path_suggestions <- skills.PathSkillSuggestion
-  - training_allocations <- skills.TrainingAllocation
+  - skill -> traits.Trait [FK]
 
 ### SkillPointBudget
 **Foreign Keys:**
-  - teaching_skill -> skills.Skill [FK] (nullable)
+  - teaching_skill -> traits.Trait [FK] (nullable)
 
 ### Specialization
 **Foreign Keys:**
-  - parent_skill -> skills.Skill [FK]
+  - parent_skill -> traits.Trait [FK]
 **Pointed to by:**
   - check_type_specializations <- checks.CheckTypeSpecialization
   - character_values <- skills.CharacterSpecializationValue
@@ -9736,13 +9719,14 @@
 ### TrainingAllocation
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
-  - skill -> skills.Skill [FK] (nullable)
+  - skill -> traits.Trait [FK] (nullable)
   - specialization -> skills.Specialization [FK] (nullable)
   - mentor -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
-- `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
+- `boundary_message(name: 'str', next_rating: 'int') -> 'str' - The XP-boundary plateau message for a skill named ``name`` (#2115, #5010).`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Trait | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
+- `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Trait | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
 - `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
@@ -9751,17 +9735,17 @@
 - `next_xp_boundary(value: 'int') -> 'int | None' - The first XP boundary at or above *value* (19, 29, 39, 49), ``None`` above 49.`
 - `points_to_next_boundary(tracker: 'DevelopmentPoints') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
 - `process_weekly_training() -> 'None' - Process all training allocations for the weekly tick.`
-- `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
+- `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Trait') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' - Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' - Run the weekly skill training cycle: process every training allocation.`
-- `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).`
+- `set_skill_trait(sheet: 'CharacterSheet', skill: 'Trait', value: 'int', source: 'str') -> 'None' - Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).`
 - `skill_cap_message(name: 'str', stored_cap: 'int') -> 'str' - Message shown when development stops at the band's skill cap (#4585).`
-- `skill_rating(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - The character's stored rating in ``skill``, else 0.`
+- `skill_rating(sheet: 'CharacterSheet', skill: 'Trait') -> 'int' - The character's stored rating in ``skill``, else 0.`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
-- `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
+- `train_skill(sheet: 'CharacterSheet', skill: 'Trait', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
 
 
@@ -10163,7 +10147,7 @@
 **Foreign Keys:**
   - legend_entry -> societies.LegendEntry [FK]
   - spreader_persona -> scenes.Persona [FK]
-  - skill -> skills.Skill [FK] (nullable)
+  - skill -> traits.Trait [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - societies_reached -> societies.Society [M2M]
 
@@ -10610,8 +10594,8 @@
 - `get_covenant_legend_totals(covenant_ids: 'list[int]') -> 'dict[int, int]' - Bulk sibling of ``get_covenant_legend_total`` — one query for a page of covenants.`
 - `get_persona_legend_total(persona: 'Persona') -> 'int' - Per-persona legend lookup from materialized view.`
 - `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
-- `spread_deed(deed: 'LegendEntry', spreader_persona: 'Persona', value_added: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Skill | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'LegendSpread' - Record a spreading action and add legend value, clamped to capacity.`
-- `spread_event(event: 'LegendEvent', spreader_persona: 'Persona', value_per_deed: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Skill | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'list[LegendSpread]' - Spread all active deeds linked to an event at once.`
+- `spread_deed(deed: 'LegendEntry', spreader_persona: 'Persona', value_added: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Trait | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'LegendSpread' - Record a spreading action and add legend value, clamped to capacity.`
+- `spread_event(event: 'LegendEvent', spreader_persona: 'Persona', value_per_deed: 'int', *, description: 'str' = '', method: 'str' = '', skill: 'Trait | None' = None, audience_factor: 'Decimal' = Decimal('1.0'), scene: 'Scene | None' = None, societies_reached: 'list[Society] | None' = None) -> 'list[LegendSpread]' - Spread all active deeds linked to an event at once.`
 
 
 ## world.species
@@ -11380,6 +11364,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - npc_preset_trait_lines <- roster.NPCPresetTraitLine
+  - npc_preset_skill_lines <- roster.NPCPresetSkillLine
   - check_type_traits <- checks.CheckTypeTrait
   - modifier_targets <- mechanics.ModifierTarget
   - capability_derivations <- mechanics.TraitCapabilityDerivation
@@ -11387,6 +11372,9 @@
   - character_values <- traits.CharacterTraitValue
   - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
+  - legend_spreads <- societies.LegendSpread
+  - technique_styles <- magic.TechniqueStyle
+  - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
@@ -11395,10 +11383,15 @@
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
+  - magic_activity_rows <- magic.MagicActivitySkill
+  - combat_style <- covenants.CombatStyle
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - language <- species.Language
-  - skill <- skills.Skill
+  - course_offers <- npc_services.SkillCourseOfferDetails
+  - specializations <- skills.Specialization
+  - path_suggestions <- skills.PathSkillSuggestion
+  - training_allocations <- skills.TrainingAllocation
 
 ### TraitRankDescription
 **Foreign Keys:**

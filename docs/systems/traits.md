@@ -7,11 +7,39 @@ Character stats, trait definitions, and check resolution lookup tables (point co
 
 ---
 
+## A skill is a Trait
+
+A skill is a `Trait` whose `trait_type` is `SKILL`, and nothing else (#5008, ADR-5008).
+There is no separate skill model.
+
+- **Where its fields live.** Name, category and description are the trait's. So are the
+  skill's hover text (`Trait.tooltip`), its order in character creation and on the sheet
+  (`Trait.display_order`) and whether it is offered at all (`Trait.is_active`). Those three
+  are general `Trait` fields; non-skill traits keep their defaults.
+- **Its specializations** hang off the trait: `skills.Specialization.parent_skill` is a FK to
+  `Trait`, limited to skill-type traits.
+- **Referencing a skill.** Every reference is a FK to `Trait` with
+  `limit_choices_to={"trait_type": "skill"}` (magic pickers add `category=MAGIC`, see
+  `world/magic/skill_choices.py`). The field keeps a skill-flavoured name (`skill`,
+  `parent_skill`, `teaching_skill`, `snapshot_skill`), because what it holds is a skill.
+- **A character's rating** is that trait's `CharacterTraitValue`, read through the trait
+  handler (`skill_rating(sheet, skill)`), and its progress and rust are that trait's
+  `progression.DevelopmentPoints` row (#5010). See `docs/systems/skills.md`.
+- **Authoring.** One admin page, the Trait page: tooltip, order and active are plain fields,
+  specializations are an inline, and saving a skill makes the modifier target its bonuses
+  land on (`mechanics.services.ensure_skill_target`).
+- **The rule behind it.** A profile row exists only to extend a row we cannot modify, such as
+  Evennia's. `Trait` is ours, so a skill gets columns on it, not a companion table.
+  `species.Language` still sits beside its LANGUAGE trait in the old companion shape; it was
+  left as it is.
+
+---
+
 ## Enums (models.py)
 
 ```python
 from world.traits.models import (
-    TraitType,      # STAT, SKILL, MODIFIER, OTHER
+    TraitType,      # STAT, SKILL, MODIFIER, LANGUAGE, OTHER
     TraitCategory,  # PHYSICAL, SOCIAL, MENTAL, MAGIC, COMBAT, GENERAL, CRAFTING, WAR, OTHER
 )
 ```
@@ -34,7 +62,7 @@ from world.traits.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Trait` | Trait definition template with case-insensitive caching | `name`, `trait_type` (TraitType), `category` (TraitCategory), `description`, `is_public` |
+| `Trait` | Trait definition template with case-insensitive caching; a SKILL-type trait is a skill | `name`, `trait_type` (TraitType), `category` (TraitCategory), `description`, `is_public`, `tooltip`, `display_order`, `is_active` |
 | `TraitRankDescription` | Descriptive labels for trait values during CG | `trait` (FK Trait), `value`, `label`, `description` |
 | `PointConversionRange` | Converts trait values to weighted points (exponential curves) | `trait_type` (TraitType), `min_value`, `max_value`, `points_per_level` |
 | `CheckRank` | Maps point totals to rank levels for check resolution | `rank`, `min_points`, `name`, `description` |
@@ -184,7 +212,7 @@ roll (1-100) -> ResultChartOutcome -> CheckOutcome
 
 All models registered with appropriate admin interfaces:
 
-- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing, and a Skill section (`skills.admin_inlines.SkillOnTraitInline`, shared so neither admin module imports the other) where a skill is authored on one page (#5006; see `docs/systems/skills.md`). The rank-description row's display value is blank on the empty add row, which on a stat trait used to fail the page.
+- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing. A skill is authored here in full (#5006, #5008): `tooltip`, `display_order` and `is_active` are plain fields, `SpecializationInline` edits its specializations (refused on a non-skill trait), and saving a skill-type trait runs `ensure_skill_target_or_warn`. The rank-description row's display value is blank on the empty add row, which on a stat trait used to fail the page.
 - `CharacterTraitValueAdmin` - Search by character key and trait name, filter by trait type/category
 - `PointConversionRangeAdmin` - List by trait type and value range
 - `CheckRankAdmin` - Ordered by rank
@@ -196,7 +224,7 @@ All models registered with appropriate admin interfaces:
 ## Integration Points
 
 - **Checks app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for check resolution
-- **Skills app**: `Skill` model links to `Trait` via OneToOneField
+- **Skills app**: a skill is a SKILL-type `Trait`; `skills.Specialization` and every other skill FK point at `Trait` (see "A skill is a Trait" above)
 - **Distinctions app**: Stat modifiers applied via `TraitHandler.get_trait_value()`
 - **Character Creation**: Trait display and stat allocation
 - **Character Sheets**: Trait display via `TraitHandler`

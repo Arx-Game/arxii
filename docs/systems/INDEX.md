@@ -1053,7 +1053,10 @@ Character statistics and dice rolling mechanics.
   - `character.stats.get_stat(name)` — internal value
   - `character.stats.get_stat_display(name)` — display value (1-5)
 - **9 Primary Stats:** strength, agility, stamina, charm, presence, perception, intellect, wits, willpower
-- **Trait Types:** stat, skill, modifier, other
+- **A skill is a Trait (#5008, ADR-5008):** a SKILL-type `Trait` is the skill; `Trait.tooltip`,
+  `display_order` and `is_active` carry what the deleted `Skill` row held, and every skill FK points
+  at `Trait`. Canonical explanation: [traits.md](traits.md) "A skill is a Trait".
+- **Trait Types:** stat, skill, modifier, language, other
 - **Trait Categories:** physical, social, mental, magic, combat, general, crafting, war, other
 - **Integrates with:** magic (intensity calculations), skills (bonuses), mechanics (modifier stacking), checks (point calculation)
 - **Source:** `src/world/traits/`
@@ -1062,9 +1065,12 @@ Character statistics and dice rolling mechanics.
 Character abilities with parent skills and specializations, plus weekly training
 allocations that convert AP to development points.
 
-- **Models:** `Skill`, `Specialization`, `CharacterSpecializationValue`, `TrainingAllocation`
-- **The rating is `CharacterTraitValue` (#5010):** a skill's rating is the `traits.CharacterTraitValue`
-  on `skill.trait`, the one row the sheet shows and checks read (`skill_rating`, `set_skill_trait`
+- **A skill is a skill-type `Trait`** (#5008): no `Skill` model; see [traits.md](traits.md)
+  "A skill is a Trait".
+- **Models:** `Specialization` (`parent_skill` FK Trait), `CharacterSpecializationValue`,
+  `SkillPointBudget`, `PathSkillSuggestion`, `TrainingAllocation`
+- **The rating is `CharacterTraitValue` (#5010):** a skill's rating is the skill trait's
+  `traits.CharacterTraitValue`, the one row the sheet shows and checks read (`skill_rating`, `set_skill_trait`
   in `world/skills/services.py`). `CharacterSkillValue` is gone. See skills.md.
 - **One development ledger (#5010):** a skill's progress and rust live in its trait's
   `progression.DevelopmentPoints`; use, GM awards and training (`train_skill`) all go through
@@ -4042,7 +4048,7 @@ GM at a given level may author (#2000, ADR-0097).
   `apply_npc_preset(sheet, preset)` (beside `mint_story_npc`) mirrors CG
   finalize's write shape exactly (`_create_stat_values`/`_create_skill_values`,
   `world.character_creation.services`): trait lines at `display_value *
-  STAT_DISPLAY_DIVISOR`, skill lines as the `CharacterTraitValue` on `skill.trait`
+  STAT_DISPLAY_DIVISOR`, skill lines as the skill trait's `CharacterTraitValue`
   (a skill's one rating store, #5010, ledger aligned), every line stamped with a
   `CharacterTraitChange` (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`).
   Refuses re-application to a sheet already carrying an NPC_PRESET stamp — no
@@ -7116,7 +7122,7 @@ Unified modifier system — categories, types, sources, and per-character modifi
     `AspectAdmin.save_model` and `world/seeds/levers.py:ensure_aspect_targets`; read by the check
     seam's ASPECT block (checks.md, "The aspect lever")
   - `ensure_skill_target(trait) -> ModifierTarget | None` (#4820) — the stat-category target a
-    skill's bonuses land on, created if missing; called by `SkillAdmin.save_model` and the
+    skill's bonuses land on, created if missing; called by `TraitAdmin.save_model` and the
     Distinction Builder's paste at create time
   - `skill_modifiers_for_sheet(sheet, skills) -> dict[int, int]` (#4820) — the modifier a roll
     on each skill gets, for the sheet's `SkillEntry.modifier`; cards, conditions and worn
