@@ -89,7 +89,34 @@ vi.mock('@/world-builder/queries', () => ({
   }),
 }));
 
+/** The holding house's roll as the house document draws it (#5017): members, a
+ * married-in spouse from another family, one dead, one a player character. */
+const node = {
+  tier: 'standing',
+  is_deceased: false,
+  believed_deceased: false,
+  is_appable: false,
+  sheet_id: null as number | null,
+  gender: '',
+  age: 30,
+  description: '',
+};
+const houseDoc = {
+  family: {
+    family_id: 4,
+    nodes: [
+      { ...node, id: 11, name: 'Kathryn mar Katta', family_id: 4, sheet_id: 5 },
+      { ...node, id: 12, name: 'Galleron', family_id: 7 },
+      { ...node, id: 13, name: 'Old Marr', family_id: 4, is_deceased: true },
+      { ...node, id: 14, name: 'Aldo mar Katta', family_id: 4 },
+    ],
+    parentage: [],
+    unions: [],
+  },
+};
+
 vi.mock('../queries', () => ({
+  useHouseDocument: () => ({ data: houseDoc }),
   useTitleDocument: () =>
     currentError
       ? { data: undefined, error: currentError, refetch }
@@ -364,4 +391,77 @@ test('a page that fails to load says so and offers a retry instead of loading fo
   } finally {
     currentError = null;
   }
+});
+
+test('an unseated title reads Undefined ruler; the slot lists the family roll, spouses marked, the dead last (#5017)', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, holder_id: null, holder: '' } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByText('holder')).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: 'holder' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Undefined ruler' }));
+    const slot = screen.getByRole('group', { name: 'Ruler' });
+    const names = () =>
+      within(slot)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+        .filter((t) => t !== 'Add family member' && t !== 'Cancel');
+    expect(names()).toEqual([
+      'Aldo mar Katta',
+      'Galleron married in',
+      'Kathryn mar Katta PC',
+      'Old Marr rip',
+    ]);
+    // Typing narrows the roll; it is never a search of everyone by exact name.
+    await userEvent.type(within(slot).getByRole('searchbox', { name: 'Family member' }), 'gal');
+    expect(names()).toEqual(['Galleron married in']);
+    await userEvent.click(within(slot).getByRole('button', { name: 'Galleron married in' }));
+    expect(mutate).toHaveBeenCalledWith({ title_id: 3, node_id: 12 });
+    expect(screen.queryByRole('group', { name: 'Ruler' })).toBeNull();
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('Add family member creates the person in the holding family and seats them (#5017)', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, holder_id: null, holder: '' } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Undefined ruler' }));
+    const slot = screen.getByRole('group', { name: 'Ruler' });
+    await userEvent.click(within(slot).getByRole('button', { name: 'Add family member' }));
+    await userEvent.type(within(slot).getByRole('textbox', { name: 'Name' }), 'Marrow{enter}');
+    expect(mutate).toHaveBeenCalledWith(
+      { family_id: 4, name: 'Marrow' },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+    const options = mutate.mock.calls.at(-1)![1] as {
+      onSuccess: (r: { success: boolean; message: string; data: unknown }) => void;
+    };
+    options.onSuccess({
+      success: true,
+      message: 'Marrow is on record.',
+      data: { kinsperson_id: 44 },
+    });
+    expect(mutate).toHaveBeenLastCalledWith({ title_id: 3, node_id: 44 });
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a seated title names its ruler as a link and offers Change ruler, which lists everyone else (#5017)', async () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  const heldBy = screen.getByText('held by', { selector: '.field .label' }).parentElement!;
+  expect(within(heldBy).getByRole('link', { name: 'Kathryn mar Katta' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/people/11'
+  );
+  await userEvent.click(within(heldBy).getByRole('button', { name: 'Change ruler' }));
+  const slot = screen.getByRole('group', { name: 'Ruler' });
+  expect(within(slot).queryByRole('button', { name: /Kathryn/ })).toBeNull();
+  expect(within(slot).getByRole('button', { name: 'Galleron married in' })).toBeInTheDocument();
+  await userEvent.click(within(slot).getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('group', { name: 'Ruler' })).toBeNull();
 });

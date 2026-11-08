@@ -1,5 +1,5 @@
 /**
- * A domain's page (#4239): the title and who holds it, Location as realm,
+ * A domain's page (#4239): the title, who holds it and its ruler (#5017), Location as realm,
  * tier and seat (the map is #4242), the demesne and its holdings, Books,
  * Forces, and the Vassals beneath with Create vassal domain and Add vacant
  * seats. A vacant title offers Create Family, which takes it.
@@ -17,10 +17,10 @@ import {
 } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
 import { HoldingRow } from './HoldingRow';
+import { RulerSlot } from './RulerSlot';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
 import { CreateFamilyForm } from '../front/CreateFamilyForm';
-import { Picker } from '../shared/Picker';
 import { Books, Forces } from '../shared/chapters';
 import { houseUrl, orgUrl, personUrl, titleUrl } from '../shared/tier';
 import { SECTIONS, STATES } from '../copy';
@@ -33,7 +33,6 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const { data: doc, error, refetch } = useTitleDocument(titleId);
   const plant = useAlmanachMutation('almanach_plant_rung');
   const batch = useAlmanachMutation('almanach_batch_unclaimed');
-  const setHolder = useAlmanachMutation('almanach_set_holder');
   const describe = useAlmanachMutation('almanach_describe_demesne');
   const nameRung = useAlmanachMutation('almanach_name_rung');
   const deleteRung = useAlmanachMutation('almanach_delete_rung');
@@ -113,7 +112,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
     { label: 'tier', value: title.tier },
     { label: 'realm', value: title.realm },
     { label: 'held by', value: title.held_by || 'vacant' },
-    { label: 'holder', value: title.holder || 'none' },
+    { label: 'ruler', value: title.holder || 'undefined' },
     { label: 'sworn to', value: title.sworn_to || 'none' },
     { label: 'seat', value: title.seat || 'none' },
     {
@@ -238,17 +237,14 @@ export function TitlePage({ titleId }: { titleId: number }) {
                 {title.house_id != null ? (
                   <>
                     <Link to={houseUrl(title.house_id)}>{title.held_by}</Link>
-                    {title.holder_id != null && (
-                      <span className="meta">
-                        <Link to={personUrl(title.holder_id)}>{title.holder}</Link>
-                      </span>
-                    )}
-                    <Picker
-                      kind="person"
-                      placeholder="holder"
-                      ariaLabel="holder"
-                      onPick={(hit) => setHolder.mutate({ title_id: titleId, node_id: hit.id })}
-                    />
+                    <span className="meta">
+                      <RulerSlot
+                        titleId={titleId}
+                        houseId={title.house_id}
+                        holderId={title.holder_id}
+                        holderName={title.holder}
+                      />
+                    </span>
                   </>
                 ) : (
                   <button type="button" className="new" onClick={() => setCreateFamily(true)}>
