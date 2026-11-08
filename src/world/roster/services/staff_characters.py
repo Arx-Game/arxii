@@ -259,9 +259,9 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     ``_create_skill_values`` in ``world.character_creation.services`` --
     rather than calling them: those are private draft-dict readers, not a
     reusable seam. For each trait line, writes a ``CharacterTraitValue`` at
-    ``display_value * STAT_DISPLAY_DIVISOR``. For each skill line, writes a
-    ``CharacterSkillValue`` plus the #2894 bridging ``CharacterTraitValue`` on
-    ``skill.trait`` (the check engine reads only trait rows). Every written
+    ``display_value * STAT_DISPLAY_DIVISOR``. For each skill line, writes the
+    ``CharacterTraitValue`` on ``skill.trait`` (a skill's one rating store, #5010)
+    and aligns its ``DevelopmentPoints`` ledger. Every written
     value gets a ``CharacterTraitChange`` provenance stamp
     (``old_value=0``, ``source=NPC_PRESET``).
 
@@ -272,7 +272,9 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     Raises:
         StaffMintError: ``sheet`` already carries a preset-sourced stamp.
     """
-    from world.skills.models import CharacterSkillValue  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        align_development_floors,
+    )
     from world.traits.models import (  # noqa: PLC0415
         STAT_DISPLAY_DIVISOR,
         CharacterTraitChange,
@@ -299,19 +301,13 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     CharacterTraitValue.objects.bulk_create(trait_values)
 
     skill_lines = list(preset.skill_lines.select_related("skill", "skill__trait"))
-    skill_trait_values: list[CharacterTraitValue] = []
-    for line in skill_lines:
-        CharacterSkillValue.objects.create(
-            character=sheet,
-            skill=line.skill,
-            value=line.value,
-            development_points=0,
-            rust_points=0,
-        )
-        skill_trait_values.append(
-            CharacterTraitValue(character=sheet, trait=line.skill.trait, value=line.value)
-        )
+    skill_trait_values = [
+        CharacterTraitValue(character=sheet, trait=line.skill.trait, value=line.value)
+        for line in skill_lines
+    ]
     CharacterTraitValue.objects.bulk_create(skill_trait_values)
+    # A preset's skill ratings count toward the cost curve like any direct write (#5010).
+    align_development_floors(sheet, {tv.trait: tv.value for tv in skill_trait_values})
 
     all_trait_values = trait_values + skill_trait_values
     CharacterTraitChange.objects.bulk_create(

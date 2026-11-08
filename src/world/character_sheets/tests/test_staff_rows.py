@@ -31,7 +31,7 @@ from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.skills.factories import SkillFactory, SpecializationFactory
-from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+from world.skills.models import CharacterSpecializationValue
 from world.traits.factories import StatTraitFactory
 from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
 from world.vitals.models import CharacterVitals
@@ -70,7 +70,6 @@ class BareSheetServiceTests(TestCase):
         skill = SkillFactory()
         spec = SpecializationFactory(parent_skill=skill)
         set_skill_values(self.sheet, {skill: 20}, {spec: 10}, source=TraitChangeSource.STAFF_EDIT)
-        assert CharacterSkillValue.objects.get(character=self.sheet, skill=skill).value == 20
         assert (
             CharacterSpecializationValue.objects.get(
                 character=self.sheet, specialization=spec

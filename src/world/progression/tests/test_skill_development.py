@@ -21,8 +21,8 @@ from world.progression.services.skill_development import (
     process_weekly_skill_development,
 )
 from world.progression.types import DevelopmentSource
-from world.skills.factories import CharacterSkillValueFactory, SkillFactory
-from world.skills.models import CharacterSkillValue
+from world.roster.factories import RosterEntryFactory
+from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.traits.factories import TraitFactory
 from world.traits.models import (
     CharacterTraitChange,
@@ -361,17 +361,12 @@ class AwardCheckDevelopmentTest(TestCase):
         assert usage2["points_earned"] == 15
 
 
-class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
-    """#2115 regression: check-driven dev leaves a skill's training counters alone.
+class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
+    """#5010: development from use parks a skill at its XP boundary, as training does.
 
-    Weekly training (``world.skills.services._apply_development_to_skill``) and
-    check-driven dev (``award_check_development``) are two independently-tracked
-    development counters (see the #2115 spec's "Verified interaction with
-    check-driven dev" finding). Check-driven dev stays oblivious to XP boundaries
-    and never adds to ``CharacterSkillValue.development_points`` or its rust. Since
-    #4496 it does write the skill's *rating* to both stores when it levels the skill
-    (``integration_tests/test_trained_skills_journeys.py``); this test is about the
-    counters, at a boundary-parked rating that no award here moves.
+    Use, training and GM awards share one ledger (``DevelopmentPoints``), and a skill
+    trait parks at 19, 29, 39 and 49 until its breakthrough is bought; the surplus
+    dissipates (owner ruling on #5010).
     """
 
     @classmethod
@@ -394,18 +389,13 @@ class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
         DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character.sheet_data).delete()
-        CharacterSkillValue.objects.filter(character=self.character.sheet_data).delete()
-        # Parked at an XP boundary — proves award_check_development ignores it.
-        self.skill_value = CharacterSkillValueFactory(
-            character=self.character.sheet_data,
-            skill=self.skill,
-            value=19,
-            development_points=0,
-            rust_points=0,
+        # Parked at an XP boundary.
+        self.skill_value = SkillRatingFactory(
+            character=self.character.sheet_data, skill=self.skill, value=19
         )
 
-    def test_award_check_development_leaves_character_skill_value_untouched(self) -> None:
-        """award_check_development adds no training dev points and pays no rust."""
+    def test_award_check_development_parks_at_the_boundary(self) -> None:
+        """A use at a boundary raises nothing, and its points dissipate."""
         award_check_development(
             character_sheet=self.sheet,
             check_type=self.check_type,
@@ -414,14 +404,29 @@ class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
         )
 
         dp = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
-        assert dp.total_earned == 10
+        assert dp.total_earned == cumulative_dp_for_level(19)
 
         self.skill_value.refresh_from_db()
-        # A boundary-parked skill value is completely untouched by check-driven dev —
-        # no dev points added, no rust payoff, no level change.
         assert self.skill_value.value == 19
-        assert self.skill_value.development_points == 0
-        assert self.skill_value.rust_points == 0
+
+    def test_a_rating_lowered_outside_the_ledger_does_not_climb_back(self) -> None:
+        """A rating lowered by a path that skips the ledger (the admin) stays lowered."""
+        self.skill_value.value = 15
+        self.skill_value.save()
+        DevelopmentPoints.objects.update_or_create(
+            character_sheet=self.sheet,
+            trait=self.skill.trait,
+            defaults={"total_earned": cumulative_dp_for_level(30)},
+        )
+
+        award_check_development(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            effort_level=EffortLevel.MEDIUM,
+            path_level=1,
+        )
+
+        assert CharacterTraitValue.objects.get(pk=self.skill_value.pk).value == 15
 
 
 class RustDebtPayoffTest(TestCase):
@@ -570,6 +575,8 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
+        # Rust reaches only characters in active play (#5010).
+        RosterEntryFactory(character_sheet=cls.sheet)
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
         cls.trait_language = TraitFactory(
@@ -663,6 +670,24 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         )
         # char_level=5, rust = 5+5 = 10, cap = (12-10)*100 = 200
         assert dev["rust_debt"] == 10
+
+    def test_rust_spares_npcs_and_stops_at_one_level(self) -> None:
+        """An NPC (no roster entry) never rusts; a PC's debt stops at one level's cost."""
+        npc = CharacterSheetFactory()
+        npc_dev = DevelopmentPoints.objects.create(character_sheet=npc, trait=self.trait_unused)
+        CharacterTraitValue.objects.create(character=npc, trait=self.trait_unused, value=12)
+        DevelopmentPoints.objects.create(
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300, rust_debt=195
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
+        )
+
+        process_weekly_skill_development(self.game_week)
+
+        npc_dev.refresh_from_db()
+        pc_dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait_unused)
+        assert (npc_dev.rust_debt, pc_dev.rust_debt) == (0, 200)
 
     def test_rust_creates_audit_transaction(self) -> None:
         """Rust application creates a DevelopmentTransaction with source=RUST."""

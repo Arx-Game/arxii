@@ -139,62 +139,12 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
         return self.parent_skill.name
 
 
-class CharacterSkillValue(SharedMemoryModel):
-    """
-    Character's skill value with progression tracking.
-
-    Stores the actual skill value plus development points (progress toward
-    next level) and rust points (blocks development until cleared).
-    """
-
-    character = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        related_name="skill_values",
-        help_text="The character this skill value belongs to",
-    )
-    skill = models.ForeignKey(
-        Skill,
-        on_delete=models.CASCADE,
-        related_name="character_values",
-        help_text="The skill this value is for",
-    )
-    value = models.PositiveIntegerField(
-        help_text="Current skill value (10, 20, 30, etc.)",
-    )
-    development_points = models.PositiveIntegerField(
-        default=0,
-        help_text="Progress toward next level (resets at threshold)",
-    )
-    rust_points = models.PositiveIntegerField(
-        default=0,
-        help_text="Accumulated rust blocking development (0 = clear)",
-    )
-    character_id: int
-
-    class Meta:
-        unique_together: ClassVar[list[list[str]]] = [["character", "skill"]]
-        indexes: ClassVar[list[models.Index]] = [
-            models.Index(fields=["character", "skill"]),
-            models.Index(fields=["character"]),
-        ]
-
-    def __str__(self):
-        character = cast("ObjectDB", self.character)
-        return f"{character.key}: {self.skill.name} = {self.display_value}"
-
-    @property
-    def display_value(self) -> int:
-        """Skills display their true stored value (#2894) — development moves
-        them by single points, so 25 shows as 25, never 2.5."""
-        return cast(int, self.value)
-
-
 class CharacterSpecializationValue(SharedMemoryModel):
     """
     Character's specialization value with development tracking.
 
-    Similar to CharacterSkillValue but without rust (specializations are immune).
+    Specializations keep their own development counter and never rust. A skill's
+    rating is its trait's ``CharacterTraitValue`` (#5010).
     """
 
     character = models.ForeignKey(

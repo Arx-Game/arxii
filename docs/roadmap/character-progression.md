@@ -18,7 +18,7 @@ The central spine connecting every system in the game. Characters develop throug
 - **The Durance:** Each character's overarching story of magical discovery and who they truly are
 
 ## What Exists
-- **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization, CharacterSkillValue with development/rust tracking (skills). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
+- **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization (skills); a skill's rating is its trait's CharacterTraitValue and its development and rust live in DevelopmentPoints (#5010). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
 - **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling. LegendHonor + LegendLevelCalibration (#3466) for the Rite of Honors — see below
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
@@ -64,8 +64,8 @@ The central spine connecting every system in the game. Characters develop throug
   `traits.CharacterTraitChange` records every `CharacterTraitValue.value` mutation
   (old_value/new_value/source) — written by the CG finalize baseline stamp, the
   `DevelopmentPoints.award_points` level-up, and the maturation spend/reconciliation
-  writers (and, since #4496, weekly skill training and the skill XP breakthrough, which keep
-  `skills.CharacterSkillValue` and the skill's trait row equal); `magic.CharacterTechnique`/`magic.CharacterGift` gained an `origin` field
+  writers (and the skill XP breakthrough and staff and creation skill writes, through
+  `set_skill_trait`; since #5010 the skill's trait row is its only rating store); `magic.CharacterTechnique`/`magic.CharacterGift` gained an `origin` field
   (`AcquisitionOrigin`) stamped at every creation site. Existing receipts
   (`CharacterXPTransaction`, `ResonanceGrant`, `ClassLevelAdvancement`,
   `distinctions.DistinctionOrigin`) were already adequate and untouched. This is the

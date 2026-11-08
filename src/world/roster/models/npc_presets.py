@@ -4,7 +4,7 @@ A GM minting a Story NPC (``mint_story_npc``, ``staff_characters.py``) picks a
 curated archetype -- "Guard", "Courtier" -- instead of hand-inventing stat and
 skill values. Staff author the catalog; GMs only select from it (ADR-0176
 stays intact -- the applied values land as the same real
-``CharacterTraitValue``/``CharacterSkillValue`` rows a PC's sheet carries,
+``CharacterTraitValue`` rows a PC's sheet carries (a skill's rating included),
 never a shortcut representation).
 
 ``NPCStatlinePreset`` is the catalog row (content-repo-owned, registered in
@@ -146,7 +146,7 @@ class NPCPresetSkillLine(RelatedCacheClearingMixin, SharedMemoryModel):
     )
     value = models.PositiveSmallIntegerField(
         help_text="True 1-100 skill value -- no display-scale conversion, matching "
-        "CharacterSkillValue."
+        "the skill trait's CharacterTraitValue."
     )
 
     class Meta:

@@ -115,11 +115,7 @@ def _base_money_for(deed: MissionDeedRecord, reporter: ObjectDB) -> int:
 
 def reporter_can_embellish(reporter: ObjectDB) -> bool:
     """True when the reporter has the Persuasion skill (the gate that offers Embellished)."""
-    from world.skills.models import CharacterSkillValue  # noqa: PLC0415
-
-    return CharacterSkillValue.objects.filter(
-        character_id=reporter.pk, skill__trait__name__iexact="Persuasion", value__gt=0
-    ).exists()
+    return reporter.traits.get_base_trait_value("Persuasion") > 0
 
 
 def _manipulation_specialization(reporter: ObjectDB) -> Specialization | None:

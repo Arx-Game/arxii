@@ -12,6 +12,7 @@ tapered in the stat lane (#4726).
 
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, cast
+import weakref
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -91,6 +92,10 @@ class TraitHandler:
         }
 
         self.initialized = False
+        # Register so CharacterTraitValue.save/delete keep this cache current
+        # (``_update_trait_cache``); nothing registered a handler before #5010, so
+        # a long-lived character's cached values went stale after any write.
+        _character_trait_handlers[character.pk] = self
 
     def setup_cache(self, reset: bool = False) -> None:
         """
@@ -314,8 +319,11 @@ class TraitHandler:
         trait_name_lower = trait_name.lower()
 
         # Search through all trait type caches
+        # ``.get``, not ``[]``: the buckets are defaultdicts, and indexing one stored a
+        # zero DefaultTraitValue under this name in every bucket, which a later
+        # ``get_base_trait_value`` could find before the real value (#5010).
         for trait_type_cache in self._cache.values():
-            trait_value = trait_type_cache[trait_name_lower]
+            trait_value = trait_type_cache.get(trait_name_lower)
             if isinstance(trait_value, CharacterTraitValue):
                 return trait_value
 
@@ -429,5 +437,8 @@ class TraitHandler:
         self.initialized = False
 
 
-# Global cache for character trait handlers
-_character_trait_handlers: dict[int, "TraitHandler"] = {}
+# Live trait handlers by character pk, for CharacterTraitValue's save/delete hook. Weak,
+# so a character the identity map lets go of is not pinned here.
+_character_trait_handlers: "weakref.WeakValueDictionary[int, TraitHandler]" = (
+    weakref.WeakValueDictionary()
+)

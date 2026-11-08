@@ -144,8 +144,8 @@ from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
-from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
-from world.skills.services import is_skill_at_xp_boundary
+from world.skills.models import CharacterSpecializationValue, Skill
+from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
@@ -767,9 +767,13 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    # A skill's rating is its trait's CharacterTraitValue (#5010); a skill-type trait
+    # with no Skill row is not a trained skill yet and has no sheet entry.
     Prefetch(
-        "skill_values",
-        queryset=CharacterSkillValue.objects.select_related("skill__trait"),
+        "trait_values",
+        queryset=CharacterTraitValue.objects.filter(
+            trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
+        ).select_related("trait__skill"),
         to_attr="cached_skill_values",
     ),
     Prefetch(
@@ -799,10 +803,12 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
-    modifiers = skill_modifiers_for_sheet(sheet, [csv.skill for csv in sheet.cached_skill_values])
+    modifiers = skill_modifiers_for_sheet(
+        sheet, [tv.trait.skill for tv in sheet.cached_skill_values]
+    )
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
-        skill = csv.skill
+        skill = csv.trait.skill
         modifier = modifiers.get(skill.pk, 0)
         result.append(
             SkillEntry(
@@ -2224,11 +2230,7 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
     skill = style.skill
     skill_value = 0
     if skill is not None:
-        skill_value = (
-            CharacterSkillValue.objects.filter(character=sheet, skill=skill)
-            .values_list("value", flat=True)
-            .first()
-        ) or 0
+        skill_value = skill_rating(sheet, skill)
     from django.db.models import Exists, OuterRef  # noqa: PLC0415
 
     from world.magic.models import CharacterTradition, Tradition  # noqa: PLC0415
@@ -2303,7 +2305,10 @@ def get_character_sheet_queryset() -> QuerySet[CharacterSheet]:
                 seen_select.add(sr)
                 all_select.append(sr)
         for pr in prefetch_related:
-            key = pr.prefetch_through if isinstance(pr, Prefetch) else pr
+            # Keyed on where the prefetch lands (its ``to_attr`` when set), so two
+            # sections can prefetch one relation into different attributes (the stats
+            # and skill ratings both read ``trait_values``, #5010).
+            key = pr.prefetch_to if isinstance(pr, Prefetch) else pr
             if key not in seen_prefetch:
                 seen_prefetch.add(key)
                 all_prefetch.append(pr)
@@ -2510,6 +2515,16 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
     )
 
 
+def _staff_skill_ratings(sheet: CharacterSheet) -> dict[int, int]:
+    """Skill pk to stored rating, read from the character's trait handler (#5010)."""
+    ratings = sheet.character.traits.get_traits_by_type(TraitType.SKILL)
+    by_trait = {row.trait_id: row.value for row in ratings.values()}
+    return {
+        skill.pk: by_trait[skill.trait_id]
+        for skill in Skill.objects.filter(trait_id__in=list(by_trait))
+    }
+
+
 def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     """The CG rows the sheet holds, by id (#4221). Staff only, so a few plain queries."""
     from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
@@ -2542,9 +2557,7 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     beginnings = creation_beginnings(sheet)
     return StaffEditRows(
         stats=stats,
-        skills=dict(
-            CharacterSkillValue.objects.filter(character=sheet).values_list("skill_id", "value")
-        ),
+        skills=_staff_skill_ratings(sheet),
         specializations=dict(
             CharacterSpecializationValue.objects.filter(character=sheet).values_list(
                 "specialization_id", "value"

@@ -59,8 +59,8 @@ from world.npc_services.factories import (
 from world.npc_services.models import SkillCourseEnrollment
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
+from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
 from world.skills.factories import SkillFactory, SkillTraitFactory
-from world.skills.models import CharacterSkillValue
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
@@ -210,11 +210,17 @@ class _AcademyCourseCase(JourneyCase):
             character_sheet=self.sheet, course=self.course, completed_at__isnull=True
         )
 
-    def occult_stores(self) -> tuple[int, int]:
-        """Her Occult rating as the sheet shows it and as a check reads it."""
-        sheet_row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        trait_row = CharacterTraitValue.objects.get(character=self.sheet, trait=self.occult.trait)
-        return sheet_row.value, trait_row.value
+    def occult_rating(self) -> int:
+        """Her Occult rating: the one row the sheet shows and a check reads (#5010)."""
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.occult.trait).value
+
+    def occult_ledger(self) -> DevelopmentPoints:
+        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.occult.trait)
+
+    def occult_banked(self) -> int:
+        """Development banked toward her next Occult level (#5010)."""
+        rating = self.occult_rating()
+        return self.occult_ledger().total_earned - cumulative_dp_for_level(rating)
 
     def holdings(self) -> tuple[int, int, int, int]:
         return self.ap(), self.purse(), self.hares(), self.enrollments()
@@ -235,7 +241,7 @@ class EnrollingInACourse(_AcademyCourseCase):
         enrollment = self.open_enrollment()
         self.assertEqual(enrollment.development_remaining, 1200)
         self.assertIsNotNone(enrollment.last_session_week)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
         # The next roll that adds Occult as a skill term is worth her new rating.
         roll = CheckTypeFactory(name="Read the wards", category=CheckCategoryFactory())
@@ -257,7 +263,7 @@ class EnrollingInACourse(_AcademyCourseCase):
         self.assertIn("Success. Occult rises from 10 to 12.", resolved.detail.message)
         self.assertEqual(self.holdings(), (STARTING_AP - SESSION_AP, STARTING_COIN - COIN, 0, 1))
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
     def test_free_course_charges_no_coin(self) -> None:
         self.course.coin_cost = 0
@@ -271,7 +277,7 @@ class EnrollingInACourse(_AcademyCourseCase):
         self.assertEqual(self.hares(), 0)
         self.assertEqual(self.ap(), STARTING_AP - SESSION_AP)
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
 
 class RefusedEnrollments(_AcademyCourseCase):
@@ -329,7 +335,7 @@ class RefusedEnrollments(_AcademyCourseCase):
             told,
         )
         self.assertNothingCharged(before)
-        self.assertEqual(self.occult_stores(), (19, 19))
+        self.assertEqual(self.occult_rating(), 19)
 
 
 class SessionsOfACourse(_AcademyCourseCase):
@@ -347,7 +353,7 @@ class SessionsOfACourse(_AcademyCourseCase):
         )
         self.assertEqual(self.holdings(), before)
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
     def test_next_week_session_charges_ap_only(self) -> None:
         advance_game_week()
@@ -363,7 +369,7 @@ class SessionsOfACourse(_AcademyCourseCase):
             (STARTING_AP - 2 * SESSION_AP, STARTING_COIN - COIN, 0, 1),
         )
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
     def test_critical_and_completion(self) -> None:
         advance_game_week()
@@ -388,7 +394,7 @@ class SessionsOfACourse(_AcademyCourseCase):
         advance_game_week()
         told = self.take_course("success")  # the last 150: 500, 14 -> 15
         self.assertIn("Success. Occult rises from 14 to 15. The course is complete.", told)
-        self.assertEqual(self.occult_stores(), (15, 15))
+        self.assertEqual(self.occult_rating(), 15)
         finished = SkillCourseEnrollment.objects.get(character_sheet=self.sheet)
         self.assertIsNotNone(finished.completed_at)
         self.assertEqual(finished.development_remaining, 0)
@@ -414,8 +420,7 @@ class SessionsOfACourse(_AcademyCourseCase):
         )
         self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
         self.assertEqual(self.open_enrollment().development_remaining, 1050)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        self.assertEqual(row.development_points, 150)
+        self.assertEqual(self.occult_banked(), 150)
 
     def test_botch_spends_ap_and_teaches_nothing(self) -> None:
         advance_game_week()
@@ -430,7 +435,7 @@ class SessionsOfACourse(_AcademyCourseCase):
             (STARTING_AP - 2 * SESSION_AP, STARTING_COIN - COIN, 0, 1),
         )
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
     def test_retaking_a_course_finished_this_week_waits_for_the_week(self) -> None:
         enrollment = self.open_enrollment()
@@ -475,7 +480,7 @@ class SessionsOfACourse(_AcademyCourseCase):
         self.assertIn(f"Success. You learn nothing this session; {SESSION_AP} AP spent.", told)
         self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
         self.assertEqual(self.open_enrollment().development_remaining, 1200)
-        self.assertEqual(self.occult_stores(), (12, 12))
+        self.assertEqual(self.occult_rating(), 12)
 
 
 class ACourseAtABoundary(_AcademyCourseCase):
@@ -484,9 +489,9 @@ class ACourseAtABoundary(_AcademyCourseCase):
     def test_boundary_keeps_remainder(self) -> None:
         # Enrolled, at 18 with 800 of the 900 to 19 banked, and 1200 of the course left.
         self.made_with_occult(18)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        row.development_points = 800
-        row.save()
+        ledger = self.occult_ledger()
+        ledger.total_earned = cumulative_dp_for_level(18) + 800
+        ledger.save()
         SkillCourseEnrollmentFactory(
             character_sheet=self.sheet, course=self.course, development_remaining=1200
         )
@@ -498,7 +503,7 @@ class ACourseAtABoundary(_AcademyCourseCase):
             "Break through to continue the course.",
             told,
         )
-        self.assertEqual(self.occult_stores(), (19, 19))
+        self.assertEqual(self.occult_rating(), 19)
         self.assertEqual(self.open_enrollment().development_remaining, 1100)
         self.assertEqual((self.purse(), self.hares()), (purse_before, hares_before))
 
@@ -525,7 +530,7 @@ class ACourseAtABoundary(_AcademyCourseCase):
             "Breakthrough! Occult rises to",
             self.telnet(self.ysmay, f"progression unlock skill={self.occult.pk}"),
         )
-        self.assertEqual(self.occult_stores(), (20, 20))
+        self.assertEqual(self.occult_rating(), 20)
 
         advance_game_week()
         told = self.take_course("success")
@@ -535,8 +540,7 @@ class ACourseAtABoundary(_AcademyCourseCase):
             told,
         )
         self.assertEqual(self.open_enrollment().development_remaining, 800)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        self.assertEqual(row.development_points, SESSION)
+        self.assertEqual(self.occult_banked(), SESSION)
 
 
 class TheTrainersMenu(_AcademyCourseCase):

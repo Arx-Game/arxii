@@ -36,7 +36,6 @@ from world.items.factories import (
 )
 from world.mechanics.services import ensure_skill_target
 from world.skills.factories import SkillFactory
-from world.skills.models import CharacterSkillValue
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -103,7 +102,7 @@ class ASkillBonusFromACard(JourneyCase):
         return row
 
     def stored(self) -> int:
-        return CharacterSkillValue.objects.get(character=self.sheet, skill=self.sailing).value
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.sailing.trait).value
 
     def test_the_card_rolls_and_shows_and_training_moves_the_rating_underneath(self) -> None:
         self.assertEqual((self.roll_points(), self.sheet_row()["value"]), (11, 11))

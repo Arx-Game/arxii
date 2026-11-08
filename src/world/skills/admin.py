@@ -3,7 +3,6 @@ from django.contrib import admin
 from world.admin_utils import OneRowPerFormSet
 from world.skills.admin_inlines import ensure_skill_target_or_warn
 from world.skills.models import (
-    CharacterSkillValue,
     CharacterSpecializationValue,
     Skill,
     SkillPointBudget,
@@ -54,29 +53,6 @@ class SpecializationAdmin(admin.ModelAdmin):
     list_filter = ["parent_skill", "is_active"]
     search_fields = ["name", "description", "tooltip", "parent_skill__trait__name"]
     ordering = ["parent_skill__trait__name", "display_order", "name"]
-
-
-@admin.register(CharacterSkillValue)
-class CharacterSkillValueAdmin(admin.ModelAdmin):
-    """Admin for character skill values."""
-
-    autocomplete_fields = ["character"]
-
-    list_display = [
-        "character",
-        "skill",
-        "value",
-        "display_value",
-        "development_points",
-        "rust_points",
-    ]
-    list_filter = ["skill"]
-    search_fields = ["character__db_key", "skill__trait__name"]
-    ordering = ["character__db_key", "skill__trait__name"]
-
-    @admin.display(description="Display Value")
-    def display_value(self, obj):
-        return obj.display_value
 
 
 @admin.register(CharacterSpecializationValue)

@@ -1,1 +1,1 @@
-0373_casting_style_carries_skill
+0375_one_skill_rating_store

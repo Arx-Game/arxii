@@ -9,7 +9,6 @@ import factory
 import factory.django
 
 from world.skills.models import (
-    CharacterSkillValue,
     CharacterSpecializationValue,
     PathSkillSuggestion,
     Skill,
@@ -18,7 +17,7 @@ from world.skills.models import (
     TrainingAllocation,
 )
 from world.traits.factories import TraitFactory
-from world.traits.models import TraitCategory, TraitType
+from world.traits.models import CharacterTraitValue, TraitCategory, TraitType
 
 # Lazy factory reference (Django app_label.ModuleName.Factory), extracted to satisfy S1192.
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
@@ -63,17 +62,17 @@ class SpecializationFactory(factory.django.DjangoModelFactory):
     is_active = True
 
 
-class CharacterSkillValueFactory(factory.django.DjangoModelFactory):
-    """Factory for creating CharacterSkillValue records."""
+class SkillRatingFactory(factory.django.DjangoModelFactory):
+    """A character's rating in a skill: the skill trait's ``CharacterTraitValue`` (#5010)."""
 
     class Meta:
-        model = CharacterSkillValue
+        model = CharacterTraitValue
+        exclude = ("skill",)
 
     character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     skill = factory.SubFactory(SkillFactory)
+    trait = factory.LazyAttribute(lambda o: o.skill.trait)
     value = 20
-    development_points = 0
-    rust_points = 0
 
 
 class CharacterSpecializationValueFactory(factory.django.DjangoModelFactory):

@@ -1,10 +1,13 @@
 """Journeys: a skill the character trained shows the same on the sheet and in her rolls (#4496).
 
-A skill's rating lives in two stores: the sheet shows ``CharacterSkillValue`` and a
-check reads ``CharacterTraitValue``. Ysmay raises a skill every way the game lets her
+A skill's rating is its trait's ``CharacterTraitValue``: the sheet shows it and a check
+reads it (#5010). Ysmay raises a skill every way the game lets her
 after creation (a weekly training tick, an XP breakthrough, a level-up from use), and
 after each one the number on her sheet and the skill points a check on that skill is
 worth are the same. Rust never changes a rating, and a tick leaves it alone.
+
+Training and use develop one ledger (``DevelopmentPoints``, #5010): it counts from the
+rating she was made with, and one weekly rust pass spares a skill she trained or used.
 
 The expected numbers come from the rules the issue and the skills docs state: weekly
 training pays ``5 x AP x path level`` development points, a skill level costs
@@ -23,10 +26,14 @@ from world.checks.factories import CheckCategoryFactory, CheckTypeFactory, Check
 from world.checks.models import CheckType
 from world.checks.services import perform_check
 from world.fatigue.constants import EffortLevel
+from world.game_clock.week_services import advance_game_week
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
+from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.services.skill_development import weekly_skill_development_task
+from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory
-from world.skills.models import CharacterSkillValue, Skill
+from world.skills.models import Skill
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -132,17 +139,6 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
         run_weekly_skill_cron()  # 50 of the 200 points a level costs
         self.assertSheetAndRollAgree(self.skill, 11)
 
-    def test_a_character_who_trained_before_the_fix_is_not_lowered(self) -> None:
-        """Alpha rows once written by training alone: sheet 14, roll 11. The next tick
-        keeps the 14 she earned and brings the roll up to it."""
-        self.made_with(self.skill, 11)
-        sheet_row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.skill)
-        sheet_row.value = 14
-        sheet_row.save()
-        self.telnet(self.ysmay, f"training add skill={self.skill.pk} ap=10")
-        run_weekly_skill_cron()
-        self.assertSheetAndRollAgree(self.skill, 14)
-
 
 class BuyingABreakthrough(_TrainedSkillCase):
     """A skill parked at an XP boundary is bought past it, and the roll follows."""
@@ -197,29 +193,59 @@ class LevellingASkillByUse(_TrainedSkillCase):
 
         self.assertSheetAndRollAgree(self.skill, 11)
 
-    def test_a_character_who_levelled_by_use_before_the_fix_is_not_lowered(self) -> None:
-        """Alpha rows once written by use alone: roll 14, sheet 11. The next roll with
-        effort keeps the 14 she earned and brings the sheet up to it."""
-        self.made_with(self.skill, 11)
-        trait_row = CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait)
-        trait_row.value = 14
-        trait_row.save()
-        perform_check(self.ysmay, self.check_on(self.skill), effort_level=EffortLevel.HIGH)
-        self.assertSheetAndRollAgree(self.skill, 14)
+    def test_use_counts_from_the_rating_she_was_made_with(self) -> None:
+        """Made at 30, 31 costs (30 - 9) x 100 = 2,100 points: 105 high-effort rolls of 20,
+        not the 23,100 that every level from 10 would cost (#5010 scenario 1)."""
+        self.made_with(self.skill, 30)
+        check_type = self.check_on(self.skill)
+        for _ in range(104):
+            perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
+        self.assertSheetAndRollAgree(self.skill, 30)
+
+        perform_check(self.ysmay, check_type, effort_level=EffortLevel.HIGH)
+
+        self.assertSheetAndRollAgree(self.skill, 31)
 
 
-class RustOnAnUntrainedSkill(_TrainedSkillCase):
-    """A week of rust builds up on a skill she did not train and moves no rating."""
+class OneWeeklyRustPass(_TrainedSkillCase):
+    """The week turns once, and only a skill she neither trained nor used rusts (#5010)."""
 
-    def test_rust_leaves_the_sheet_and_the_roll_equal(self) -> None:
+    def week_turns(self) -> None:
+        """The rollover closes the week and runs its skill development pass."""
+        advance_game_week()
+        weekly_skill_development_task()
+
+    def rust_entries(self, skill: Skill) -> int:
+        return DevelopmentTransaction.objects.filter(
+            character_sheet=self.sheet, trait=skill.trait, source=DevelopmentSource.RUST
+        ).count()
+
+    def test_a_trained_skill_does_not_rust_and_an_idle_one_rusts_once(self) -> None:
         trained = SkillFactory()
         self.made_with(trained, 11)
         self.made_with(self.skill, 12)
         self.telnet(self.ysmay, f"training add skill={trained.pk} ap=10")
-
         run_weekly_skill_cron()
 
-        rusty = CharacterSkillValue.objects.get(character=self.sheet, skill=self.skill)
-        self.assertEqual(rusty.rust_points, 6)  # path level 1 + 5
+        self.week_turns()
+
+        self.assertEqual(self.rust_entries(trained), 0)
+        idle_rust = DevelopmentTransaction.objects.get(
+            character_sheet=self.sheet, trait=self.skill.trait, source=DevelopmentSource.RUST
+        )
+        self.assertEqual(idle_rust.amount, 6)  # path level 1 + 5
         self.assertSheetAndRollAgree(self.skill, 12)
         self.assertSheetAndRollAgree(trained, 11)
+
+    def test_a_used_skill_she_never_trained_does_not_rust(self) -> None:
+        """Scenario 3: rolling a skill with effort in a week spares it that week's rust."""
+        used = SkillFactory()
+        self.made_with(used, 12)
+        self.made_with(self.skill, 12)
+        perform_check(self.ysmay, self.check_on(used), effort_level=EffortLevel.HIGH)
+
+        self.week_turns()
+
+        self.assertEqual(self.rust_entries(used), 0)
+        self.assertEqual(self.rust_entries(self.skill), 1)
+        self.assertSheetAndRollAgree(used, 12)

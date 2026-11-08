@@ -369,7 +369,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
     from world.magic.models.ritual_check_config import RitualCheckConfig  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
-    from world.skills.models import CharacterSkillValue, Skill  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     character = character_sheet.character
@@ -390,12 +390,13 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     # 2. Resolve skill — explicit CG pick wins; else the character's highest CG
     #    skill value.
     if skill is None:
-        skill_value = (
-            CharacterSkillValue.objects.filter(character_id=character.pk).order_by("-value").first()
+        rated = sorted(
+            character.traits.get_traits_by_type(TraitType.SKILL).values(),
+            key=lambda row: row.value,
+            reverse=True,
         )
-        if skill_value is not None:
-            skill = skill_value.skill
-        else:
+        skill = next((row.trait.skill for row in rated if hasattr(row.trait, "skill")), None)
+        if skill is None:
             # Fallback: first active skill in the database (edge case for test accounts).
             skill = Skill.objects.filter(is_active=True).first()
 

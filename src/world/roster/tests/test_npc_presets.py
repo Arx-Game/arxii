@@ -22,7 +22,6 @@ from world.roster.services.staff_characters import (
     apply_npc_preset,
     mint_story_npc,
 )
-from world.skills.models import CharacterSkillValue
 from world.traits.factories import PointConversionRangeFactory
 from world.traits.models import (
     STAT_DISPLAY_DIVISOR,
@@ -47,16 +46,13 @@ class ApplyNpcPresetServiceTests(TestCase):
         value = CharacterTraitValue.objects.get(character=self.sheet, trait=line.trait)
         assert value.value == 4 * STAT_DISPLAY_DIVISOR
 
-    def test_skill_lines_write_value_plus_trait_bridge_row(self) -> None:
+    def test_skill_lines_write_the_skill_trait_row(self) -> None:
         line = NPCPresetSkillLineFactory(preset=self.preset, value=42)
 
         apply_npc_preset(self.sheet, self.preset)
 
-        skill_value = CharacterSkillValue.objects.get(character=self.sheet, skill=line.skill)
-        assert skill_value.value == 42
-        # #2894 bridge: perform_check reads only CharacterTraitValue rows.
-        bridge = CharacterTraitValue.objects.get(character=self.sheet, trait=line.skill.trait)
-        assert bridge.value == 42
+        rating = CharacterTraitValue.objects.get(character=self.sheet, trait=line.skill.trait)
+        assert rating.value == 42
 
     def test_provenance_stamps_carry_npc_preset_source(self) -> None:
         trait_line = NPCPresetTraitLineFactory(preset=self.preset, display_value=5)

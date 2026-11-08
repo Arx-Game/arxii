@@ -905,7 +905,7 @@ def _take_course_session(
     from world.npc_services.models import SkillCourseEnrollment  # noqa: PLC0415
     from world.skills.services import (  # noqa: PLC0415
         is_skill_at_xp_boundary,
-        reconcile_skill_stores,
+        skill_rating,
     )
 
     skill = course.skill
@@ -935,7 +935,7 @@ def _take_course_session(
         msg = "You have already trained in this course this week."
         raise _CourseRefusedError(msg, enrollment)
 
-    rating = reconcile_skill_stores(sheet, skill)
+    rating = skill_rating(sheet, skill)
     if is_skill_at_xp_boundary(rating):
         until = "a course can raise it" if enrollment is None else "the course can continue"
         msg = f"{skill.name} is at {rating} and needs a breakthrough before {until}."

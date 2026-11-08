@@ -122,8 +122,14 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
     from world.magic.constants import AcquisitionOrigin, TargetKind  # noqa: PLC0415
     from world.magic.models import CharacterGift, CharacterTechnique, Thread  # noqa: PLC0415
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
-    from world.skills.models import CharacterSkillValue  # noqa: PLC0415
-    from world.traits.models import CharacterTraitChange, CharacterTraitValue  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        align_development_floors,
+    )
+    from world.traits.models import (  # noqa: PLC0415
+        CharacterTraitChange,
+        CharacterTraitValue,
+        TraitType,
+    )
 
     source_traits = list(CharacterTraitValue.objects.filter(character=source))
     existing = {row.trait_id: row for row in CharacterTraitValue.objects.filter(character=target)}
@@ -145,19 +151,10 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
             changes.append(_trait_change(target, old.trait, old.value, 0))
             old.delete()
     CharacterTraitChange.objects.bulk_create(changes)
-
-    CharacterSkillValue.objects.filter(character=target).delete()
-    CharacterSkillValue.objects.bulk_create(
-        [
-            CharacterSkillValue(
-                character=target,
-                skill=row.skill,
-                value=row.value,
-                development_points=row.development_points,
-                rust_points=row.rust_points,
-            )
-            for row in CharacterSkillValue.objects.filter(character=source)
-        ]
+    # A copied skill rating counts toward the cost curve like any direct write (#5010).
+    align_development_floors(
+        target,
+        {row.trait: row.value for row in source_traits if row.trait.trait_type == TraitType.SKILL},
     )
 
     CharacterTechnique.objects.filter(character=target).delete()

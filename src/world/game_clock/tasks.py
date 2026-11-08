@@ -882,7 +882,10 @@ def register_all_tasks() -> None:
             interval=timedelta(days=7),
             anchor_weekday=0,
             anchor_hour_utc=5,
-            description=("Process deliberate skill-training allocations and apply weekly rust."),
+            description=(
+                "Process deliberate skill-training allocations. Rust is applied once a week "
+                "by the rollover's skill development pass."
+            ),
         )
     )
 
