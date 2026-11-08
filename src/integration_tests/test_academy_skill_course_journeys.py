@@ -59,6 +59,7 @@ from world.npc_services.factories import (
 from world.npc_services.models import SkillCourseEnrollment
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
+from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
 from world.skills.factories import SkillFactory, SkillTraitFactory
 from world.skills.models import CharacterSkillValue
 from world.societies.constants import ObligationState
@@ -215,6 +216,14 @@ class _AcademyCourseCase(JourneyCase):
         sheet_row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
         trait_row = CharacterTraitValue.objects.get(character=self.sheet, trait=self.occult.trait)
         return sheet_row.value, trait_row.value
+
+    def occult_ledger(self) -> DevelopmentPoints:
+        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.occult.trait)
+
+    def occult_banked(self) -> int:
+        """Development banked toward her next Occult level (#5010)."""
+        rating = self.occult_stores()[1]
+        return self.occult_ledger().total_earned - cumulative_dp_for_level(rating)
 
     def holdings(self) -> tuple[int, int, int, int]:
         return self.ap(), self.purse(), self.hares(), self.enrollments()
@@ -414,8 +423,7 @@ class SessionsOfACourse(_AcademyCourseCase):
         )
         self.assertEqual(self.ap(), STARTING_AP - 2 * SESSION_AP)
         self.assertEqual(self.open_enrollment().development_remaining, 1050)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        self.assertEqual(row.development_points, 150)
+        self.assertEqual(self.occult_banked(), 150)
 
     def test_botch_spends_ap_and_teaches_nothing(self) -> None:
         advance_game_week()
@@ -484,9 +492,9 @@ class ACourseAtABoundary(_AcademyCourseCase):
     def test_boundary_keeps_remainder(self) -> None:
         # Enrolled, at 18 with 800 of the 900 to 19 banked, and 1200 of the course left.
         self.made_with_occult(18)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        row.development_points = 800
-        row.save()
+        ledger = self.occult_ledger()
+        ledger.total_earned = cumulative_dp_for_level(18) + 800
+        ledger.save()
         SkillCourseEnrollmentFactory(
             character_sheet=self.sheet, course=self.course, development_remaining=1200
         )
@@ -535,8 +543,7 @@ class ACourseAtABoundary(_AcademyCourseCase):
             told,
         )
         self.assertEqual(self.open_enrollment().development_remaining, 800)
-        row = CharacterSkillValue.objects.get(character=self.sheet, skill=self.occult)
-        self.assertEqual(row.development_points, SESSION)
+        self.assertEqual(self.occult_banked(), SESSION)
 
 
 class TheTrainersMenu(_AcademyCourseCase):

@@ -97,6 +97,13 @@ class _BandCapCase(JourneyCase):
     def rolls_at(self) -> int:
         return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait).value
 
+    def ledger(self) -> DevelopmentPoints:
+        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
+
+    def banked(self) -> int:
+        """Development banked toward the skill's next level (#5010)."""
+        return self.ledger().total_earned - cumulative_dp_for_level(self.rolls_at())
+
     def train_a_week(self) -> DevelopmentTransaction:
         """She plans 80 AP of training (400 points at level 1) and the week ticks."""
         self.assertIn(
@@ -129,8 +136,7 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
         self.assertIn(f"Breakthrough! {self.skill.name} rises to 3.0", told)
 
         transaction = self.train_a_week()
-        row = self.skill_row()
-        self.assertEqual((row.value, row.development_points), (30, 0))
+        self.assertEqual((self.skill_row().value, self.banked()), (30, 0))
         self.assertEqual(self.rolls_at(), 30)
         self.assertIn(f"{self.skill.name} is at 3.0, {CAP_MESSAGE}", transaction.description)
 
@@ -138,14 +144,13 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
         """Cap 6, at 59 with 4,900 of 5,000 banked: 400 more buys 60 and 300 dissipates."""
         self.band_caps_skills_at(6)
         self.made_with(59)
-        row = self.skill_row()
-        row.development_points = 4900
-        row.save()
+        ledger = self.ledger()
+        ledger.total_earned = cumulative_dp_for_level(59) + 4900
+        ledger.save()
 
         transaction = self.train_a_week()
 
-        row = self.skill_row()
-        self.assertEqual((row.value, row.development_points), (60, 0))
+        self.assertEqual((self.skill_row().value, self.banked()), (60, 0))
         self.assertEqual(self.rolls_at(), 60)
         self.assertIn(f"is at 6.0, {CAP_MESSAGE}", transaction.description)
 
@@ -153,14 +158,13 @@ class TrainingStopsAtTheBandCap(_BandCapCase):
         self.band_caps_skills_at(None)
         self.made_with(30)
         transaction = self.train_a_week()
-        row = self.skill_row()
-        self.assertEqual((row.value, row.development_points), (30, 400))
+        self.assertEqual((self.skill_row().value, self.banked()), (30, 400))
         self.assertNotIn(CAP_MESSAGE, transaction.description)
 
     def test_a_band_with_no_row_caps_nothing(self) -> None:
         self.made_with(30)
         transaction = self.train_a_week()
-        self.assertEqual(self.skill_row().development_points, 400)
+        self.assertEqual(self.banked(), 400)
         self.assertNotIn(CAP_MESSAGE, transaction.description)
 
 

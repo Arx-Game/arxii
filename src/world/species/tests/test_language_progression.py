@@ -87,16 +87,17 @@ class LanguageXPLockTests(TestCase):
         self.assertEqual(self.tracker.total_earned, cumulative_dp_for_level(19))
         self.assertEqual(language_lock_rating(self.sheet, self.language), 20)
 
-    def test_a_skill_trait_is_not_gated_by_award_points(self) -> None:
+    def test_a_skill_trait_is_not_gated_by_an_authored_unlock(self) -> None:
+        """A skill parks only at its XP boundaries (#5010), never at a language-style lock."""
         skill_trait = TraitFactory(name="LockTestSkill", trait_type=TraitType.SKILL)
-        TraitRatingUnlock.objects.create(trait=skill_trait, target_rating=20)
-        CharacterTraitValue.objects.create(character=self.sheet, trait=skill_trait, value=18)
+        TraitRatingUnlock.objects.create(trait=skill_trait, target_rating=25)
+        CharacterTraitValue.objects.create(character=self.sheet, trait=skill_trait, value=20)
         tracker = DevelopmentPointsFactory(
             character_sheet=self.sheet, trait=skill_trait, total_earned=0
         )
-        tracker.award_points(cumulative_dp_for_level(21))
+        tracker.award_points(cumulative_dp_for_level(28) - cumulative_dp_for_level(20))
         value = CharacterTraitValue.objects.get(character=self.sheet, trait=skill_trait).value
-        self.assertEqual(value, 21)
+        self.assertEqual(value, 28)
 
     def test_a_non_language_award_makes_no_new_query(self) -> None:
         """The LANGUAGE gate returns before any query, so other traits pay nothing for it."""
@@ -112,7 +113,7 @@ class LanguageXPLockTests(TestCase):
         with CaptureQueriesContext(connection) as with_gate:
             gated.award_points(cumulative_dp_for_level(12))
         with (
-            mock.patch.object(DevelopmentPoints, "_language_rating_ceiling", return_value=None),
+            mock.patch.object(DevelopmentPoints, "_rating_ceiling", return_value=None),
             CaptureQueriesContext(connection) as without_gate,
         ):
             ungated.award_points(cumulative_dp_for_level(12))
