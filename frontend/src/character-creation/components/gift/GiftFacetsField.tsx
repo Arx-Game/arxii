@@ -24,7 +24,7 @@ export function GiftFacetsField({ draft, resonanceName }: Props) {
   const { data: facets } = useFacets();
   const updateDraft = useUpdateDraft();
   const picked = draft.draft_data.selected_gift_facet_ids ?? [];
-  const names = new Map((facets ?? []).map((facet) => [facet.id, facet.name]));
+  const nameOf = (id: number): string => facets?.find((facet) => facet.id === id)?.name ?? '…';
 
   const save = (ids: number[]) =>
     updateDraft.mutate({
@@ -41,10 +41,10 @@ export function GiftFacetsField({ draft, resonanceName }: Props) {
             key={id}
             className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm"
           >
-            {names.get(id) ?? '…'}
+            {nameOf(id)}
             <button
               type="button"
-              aria-label={`Remove ${names.get(id) ?? 'facet'}`}
+              aria-label={`Remove ${nameOf(id)}`}
               className="text-muted-foreground hover:text-foreground"
               disabled={updateDraft.isPending}
               onClick={() => save(picked.filter((other) => other !== id))}
