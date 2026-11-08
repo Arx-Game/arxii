@@ -12,14 +12,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.areas.positioning.constants import CreatureTraversal
-from world.areas.positioning.services import edge_crossing_cost
+from world.areas.positioning.constants import CreatureTraversal, ReactionReach
+from world.areas.positioning.services import blink_landings, edge_crossing_cost
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.areas.positioning.models import PositionEdge
+    from world.areas.positioning.models import Position, PositionEdge
     from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import CapabilityType
 
 WALKING_ONLY: frozenset[str] = frozenset({CreatureTraversal.WALKS})
 
@@ -47,6 +48,44 @@ def traversals_of(objectdb: ObjectDB) -> frozenset[str]:
         # RelatedObjectDoesNotExist subclasses AttributeError: no sheet.
         return WALKING_ONLY
     return player_traversals(sheet)
+
+
+#: Reaches that give no turn blink: no dodge at all, or a dodge that stays put (#5019).
+_NO_BLINK_REACH = frozenset({ReactionReach.NONE, ReactionReach.IN_PLACE})
+
+
+def blink_capabilities(objectdb: ObjectDB) -> list[CapabilityType]:
+    """The capabilities she blinks with on her turn, strongest first (#5019).
+
+    Each carries the Blinks traversal, a reach that moves her, and is held above its
+    innate baseline. Nothing for an object without a sheet: only player characters blink.
+    """
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    try:
+        sheet = objectdb.sheet_data
+    except AttributeError:
+        return []
+    held: list[tuple[int, CapabilityType]] = []
+    for capability in CapabilityType.objects.cached_all():
+        if capability.traversal != CreatureTraversal.BLINKS:
+            continue
+        if capability.reaction_reach in _NO_BLINK_REACH:
+            continue
+        above = get_effective_capability_value(sheet, capability) - capability.innate_baseline
+        if above > 0:
+            held.append((above, capability))
+    held.sort(key=lambda pair: (-pair[0], pair[1].pk))
+    return [capability for _, capability in held]
+
+
+def blink_capability_to(objectdb: ObjectDB, target: Position) -> CapabilityType | None:
+    """The strongest of her blink capabilities whose blink lands on ``target``, or None."""
+    for capability in blink_capabilities(objectdb):
+        if target in blink_landings(objectdb, capability.reaction_reach):
+            return capability
+    return None
 
 
 def cheapest_crossing(edge: PositionEdge, traversals: frozenset[str]) -> tuple[int, str] | None:

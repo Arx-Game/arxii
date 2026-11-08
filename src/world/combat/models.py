@@ -18,7 +18,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty, pop_cached_rows
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
-from world.areas.positioning.constants import CreatureTraversal
+from world.areas.positioning.constants import NPC_TRAVERSAL_CHOICES
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -3532,7 +3532,7 @@ class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     traversal = models.CharField(
         max_length=20,
-        choices=CreatureTraversal.choices,
+        choices=NPC_TRAVERSAL_CHOICES,
         default=NPC_DEFAULT_TRAVERSAL,
         help_text=(
             "How these creatures get past walls. Walks: open ways only. Climbs or "

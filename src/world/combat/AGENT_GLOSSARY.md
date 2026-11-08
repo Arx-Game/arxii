@@ -136,6 +136,13 @@ with that capability's value as a bonus, costs anima or physical fatigue
 made this round. A dodge that at least partly succeeds may move her (her **Dodge plan**).
 _Avoid_: evade (the defense check itself), blink (one way of dodging), parry.
 
+**Turn blink** (#5019, ADR-5019):
+Moving on her own turn with a capability whose `traversal` is Blinks: straight to any place her
+dodge with that capability could land, crossing no edge. One hop plus one dodge's cost in a fight,
+free outside; not a reaction. The same capability is her blink dodge.
+_Avoid_: teleport move, blink mode (a technique has no modes), Phase Jump (a cast that spends her
+action).
+
 **Dodge plan** (#4676):
 `CombatParticipant.dodge_enabled` and `dodge_landing`, set while declaring (`combat_dodge`):
 dodge in place, land in a place her reach covers, or do not dodge. Private to her; reset each

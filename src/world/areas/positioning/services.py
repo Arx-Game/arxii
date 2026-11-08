@@ -27,6 +27,7 @@ from world.areas.positioning.constants import (
     CreatureTraversal,
     PositionKind,
     RampartSignature,
+    ReactionReach,
 )
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
@@ -1035,6 +1036,43 @@ def adjacent_open_positions(position: Position) -> list[PositionEdge]:
     return [edge for edge in edges if not edge_blocks_crossing(edge)]
 
 
+#: How far each reach goes, narrowest first (a dodge's strongest-reaching source wins ties).
+REACH_ORDER = {
+    ReactionReach.IN_PLACE: 1,
+    ReactionReach.ADJACENT: 2,
+    ReactionReach.AIRBORNE: 3,
+    ReactionReach.ANY_PLACE: 4,
+}
+
+
+def reachable_landings(current: Position | None, reach: str) -> list[Position]:
+    """The places a dodge or a blink with this reach may land in, her own place first.
+
+    ADJACENT and AIRBORNE add the places next door across an open edge; AIRBORNE also
+    the air above her place when it has no roof; ANY_PLACE the whole room (#4676). A
+    turn blink reads the same list (#5019), so one reach governs both uses.
+    """
+    if current is None or reach == ReactionReach.NONE:
+        return []
+    if reach == ReactionReach.IN_PLACE:
+        return [current]
+    if reach == ReactionReach.ANY_PLACE:
+        others = Position.objects.filter(room_id=current.room_id).exclude(pk=current.pk)
+        return [current, *sorted(others, key=lambda p: p.name)]
+    neighbours = []
+    for edge in adjacent_open_positions(current):
+        other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        neighbours.append(other)
+    if reach == ReactionReach.AIRBORNE:
+        above = Position.objects.filter(
+            room_id=current.room_id, kind=PositionKind.AERIAL, elevation_anchor=current
+        ).first()
+        if above is not None and not current.is_roofed:
+            neighbours.append(above)
+    unique = {p.pk: p for p in neighbours if p.pk != current.pk}
+    return [current, *sorted(unique.values(), key=lambda p: p.name)]
+
+
 def reachable_positions(objectdb: ObjectDB) -> set[Position]:
     """Return the set of positions reachable from objectdb's current position.
 
@@ -1618,6 +1656,67 @@ def check_move_to_position(
 
     if not _can_move(objectdb):
         raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
+
+
+_ERR_BLINK_HERE = "You are already there."
+_ERR_BLINK_OUT_OF_REACH = "Your blink can't reach {place}."
+_ERR_BLINK_LAND_FIRST = "You are in the air; land first."
+
+
+def blink_landings(objectdb: ObjectDB, reach: str) -> list[Position]:
+    """Where a turn blink with ``reach`` can take ``objectdb`` from her place (#5019).
+
+    ``reachable_landings`` less her own place, kept to her layer: a mover on the ground
+    blinks to ground places, one in the air to places in the air (taking off and landing
+    stay their own moves). The air over a roofed place is closed, as it is to a flier.
+    """
+    current = position_of(objectdb)
+    airborne = current is not None and current.kind == PositionKind.AERIAL
+    landings = []
+    for place in reachable_landings(current, reach):
+        if place.pk == current.pk or (place.kind == PositionKind.AERIAL) != airborne:
+            continue
+        anchor = place.elevation_anchor if airborne else None
+        if anchor is not None and anchor.is_roofed:
+            continue
+        landings.append(place)
+    return landings
+
+
+def check_blink_to_position(objectdb: ObjectDB, target: Position, *, reach: str) -> None:
+    """Raise PositionTransitionError if a turn blink with ``reach`` cannot land on ``target``.
+
+    A blink crosses no edge, so walls, seals and challenges between do not matter (#5019).
+    Same room, placed, not her own place, inside ``blink_landings``, and she can move.
+    """
+    if target.room_id != objectdb.db_location_id:
+        raise PositionTransitionError(_ERR_MOVE_CROSS_ROOM)
+    current = position_of(objectdb)
+    if current is None:
+        raise PositionTransitionError(_ERR_MOVE_UNPLACED)
+    if target.pk == current.pk:
+        raise PositionTransitionError(_ERR_BLINK_HERE)
+    if target not in blink_landings(objectdb, reach):
+        if current.kind == PositionKind.AERIAL and target.kind != PositionKind.AERIAL:
+            raise PositionTransitionError(_ERR_BLINK_LAND_FIRST)
+        if target.kind == PositionKind.AERIAL and current.kind != PositionKind.AERIAL:
+            raise PositionTransitionError(_ERR_MOVE_CANNOT_FLY)
+        raise PositionTransitionError(_ERR_BLINK_OUT_OF_REACH.format(place=target.name))
+    if not _can_move(objectdb):
+        raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
+
+
+def blink_to_position(
+    objectdb: ObjectDB, target: Position, *, reach: str, square: Square | None = None
+) -> ObjectPosition:
+    """Blink ``objectdb`` straight to ``target``, crossing no edge (#5019).
+
+    Validated by ``check_blink_to_position``; paying for it is the caller's business.
+    """
+    check_blink_to_position(objectdb, target, reach=reach)
+    if square is not None:
+        validate_square(target, square, mover=objectdb)
+    return _commit_position(objectdb, target, square=square)
 
 
 def _traversals_cross(edge: PositionEdge, traversals: frozenset[str]) -> bool:

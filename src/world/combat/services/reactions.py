@@ -21,12 +21,13 @@ import contextvars
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.areas.positioning.constants import PositionKind, ReactionCostKind, ReactionReach
+from world.areas.positioning.constants import ReactionCostKind, ReactionReach
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
-    adjacent_open_positions,
+    REACH_ORDER,
     force_move_to_position,
     position_of,
+    reachable_landings,
 )
 from world.combat.constants import DEFENSE_REDUCED_THRESHOLD, ActionCategory
 from world.combat.models import MovementConfig
@@ -44,15 +45,6 @@ if TYPE_CHECKING:
 DODGE_ROLL_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "dodge_roll_active", default=False
 )
-
-#: Where a dodge may land, for each reach. ADJACENT and AIRBORNE add the places
-#: next door; AIRBORNE also the air above her place; ANY_PLACE the whole room.
-_REACH_ORDER = {
-    ReactionReach.IN_PLACE: 1,
-    ReactionReach.ADJACENT: 2,
-    ReactionReach.AIRBORNE: 3,
-    ReactionReach.ANY_PLACE: 4,
-}
 
 
 @dataclass(frozen=True)
@@ -172,31 +164,8 @@ def dodge_sources(participant: CombatParticipant) -> list[DodgeSource]:
                 reach=ReactionReach.ANY_PLACE, cost_kind=ReactionCostKind.ANIMA, value=0, ward=ward
             )
         )
-    sources.sort(key=lambda s: (s.value, _REACH_ORDER.get(s.reach, 0)), reverse=True)
+    sources.sort(key=lambda s: (s.value, REACH_ORDER.get(s.reach, 0)), reverse=True)
     return sources
-
-
-def reachable_landings(current: Position | None, reach: str) -> list[Position]:
-    """The places a dodge with this reach may land in, her own place first."""
-    if current is None or reach == ReactionReach.NONE:
-        return []
-    if reach == ReactionReach.IN_PLACE:
-        return [current]
-    if reach == ReactionReach.ANY_PLACE:
-        others = Position.objects.filter(room_id=current.room_id).exclude(pk=current.pk)
-        return [current, *sorted(others, key=lambda p: p.name)]
-    neighbours = []
-    for edge in adjacent_open_positions(current):
-        other = edge.position_b if edge.position_a_id == current.pk else edge.position_a
-        neighbours.append(other)
-    if reach == ReactionReach.AIRBORNE:
-        above = Position.objects.filter(
-            room_id=current.room_id, kind=PositionKind.AERIAL, elevation_anchor=current
-        ).first()
-        if above is not None and not current.is_roofed:
-            neighbours.append(above)
-    unique = {p.pk: p for p in neighbours if p.pk != current.pk}
-    return [current, *sorted(unique.values(), key=lambda p: p.name)]
 
 
 def dodge_landing_options(participant: CombatParticipant) -> list[Position]:
@@ -205,7 +174,7 @@ def dodge_landing_options(participant: CombatParticipant) -> list[Position]:
     if not sources:
         return []
     current = position_of(participant.character_sheet.character)
-    widest = max(sources, key=lambda s: _REACH_ORDER.get(s.reach, 0))
+    widest = max(sources, key=lambda s: REACH_ORDER.get(s.reach, 0))
     return reachable_landings(current, widest.reach)
 
 
@@ -257,22 +226,82 @@ def pay_for_dodge(participant: CombatParticipant, dodge: Dodge) -> bool:
             return False
         spend_condition_use(dodge.source.ward)
         return True
+    return charge_capability_use(participant.character_sheet, dodge.source.cost_kind)
+
+
+def capability_use_cost(cost_kind: str) -> str:
+    """What one use of a capability with this cost kind costs, e.g. "2 anima" (#4676, #5019).
+
+    A dodge and a turn blink with the same capability cost the same.
+    """
     tuning = reaction_tuning()
-    sheet = participant.character_sheet
-    if dodge.source.cost_kind == ReactionCostKind.FATIGUE:
+    if cost_kind == ReactionCostKind.FATIGUE:
+        return f"{tuning.dodge_fatigue_cost} fatigue"
+    return f"{tuning.dodge_anima_cost} anima"
+
+
+def can_pay_capability_use(sheet: CharacterSheet, cost_kind: str) -> bool:
+    """Whether she can pay for one use now: fatigue always can, anima needs enough left."""
+    if cost_kind == ReactionCostKind.FATIGUE:
+        return True
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
+    return anima is not None and anima.current >= reaction_tuning().dodge_anima_cost
+
+
+def charge_capability_use(sheet: CharacterSheet, cost_kind: str) -> bool:
+    """Charge one use of a capability (a dodge or a turn blink); False when she cannot pay.
+
+    Fatigue for a physical capability, else anima, in the ``MovementConfig`` amounts.
+    """
+    tuning = reaction_tuning()
+    if cost_kind == ReactionCostKind.FATIGUE:
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
         from world.fatigue.services import apply_fatigue  # noqa: PLC0415
 
         apply_fatigue(sheet, ActionCategory.PHYSICAL, tuning.dodge_fatigue_cost, EffortLevel.LOW)
         return True
-    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    if not can_pay_capability_use(sheet, cost_kind):
+        return False
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
 
-    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
-    if anima is None or anima.current < tuning.dodge_anima_cost:
-        return False
     deduct_anima(sheet.character, tuning.dodge_anima_cost, lethal=False)
     return True
+
+
+def spend_capability_use(sheet: CharacterSheet, cost_kind: str, *, lethal: bool) -> None:
+    """Pay for a use she chooses on her own turn (a turn blink, #5019); never refused.
+
+    Fatigue for a physical capability. Anima goes through the cast's own path: ``deduct_anima``
+    may run past her pool into a deficit (in a lethal encounter), and ``accumulate_soulfray``
+    turns the strain into Soulfray, exactly as an unaffordable technique cast does. Pushing
+    past her limits is the point of the magic, so lack of anima never stops her.
+    """
+    tuning = reaction_tuning()
+    if cost_kind == ReactionCostKind.FATIGUE:
+        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+        apply_fatigue(sheet, ActionCategory.PHYSICAL, tuning.dodge_fatigue_cost, EffortLevel.LOW)
+        return
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+    from world.magic.services.soulfray import accumulate_soulfray  # noqa: PLC0415
+
+    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
+    if anima is None:
+        return  # no anima pool to draw on
+    deficit = deduct_anima(sheet.character, tuning.dodge_anima_cost, lethal=lethal)
+    accumulate_soulfray(
+        character=sheet.character,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=None,
+        lethal=lethal,
+    )
 
 
 def land_dodge(participant: CombatParticipant, dodge: Dodge, success_level: int) -> bool:
@@ -300,13 +329,10 @@ def covered_place(
 
 def dodge_cost_line(source: DodgeSource) -> str:
     """The bare cost of a dodge with this source, for the dodge plan."""
-    tuning = reaction_tuning()
     if source.ward is not None:
         cost = f"{source.ward.condition.reactive_anima_cost} anima"
-    elif source.cost_kind == ReactionCostKind.FATIGUE:
-        cost = f"{tuning.dodge_fatigue_cost} fatigue"
     else:
-        cost = f"{tuning.dodge_anima_cost} anima"
+        cost = capability_use_cost(source.cost_kind)
     return f"Each dodge costs {cost}. Each dodge after the first this round is harder."
 
 

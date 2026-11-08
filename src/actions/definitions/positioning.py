@@ -21,6 +21,9 @@ from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
 from world.areas.positioning.constants import (
+    BLINK_ROOM,
+    BLINKED,
+    BLINKED_PAID,
     STUNT_CANT_FROM_HERE,
     STUNT_CLEAN,
     STUNT_MISSED,
@@ -31,7 +34,7 @@ from world.areas.positioning.constants import (
     CreatureTraversal,
     StuntOutcome,
 )
-from world.areas.positioning.exceptions import PositionError
+from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     FeatureType,
     Position,
@@ -40,6 +43,8 @@ from world.areas.positioning.models import (
 )
 from world.areas.positioning.services import (
     attach_feature,
+    blink_to_position,
+    check_move_to_position,
     detach_feature,
     edge_between,
     edge_blocks_crossing,
@@ -55,7 +60,11 @@ from world.areas.positioning.services import (
     validate_square,
 )
 from world.areas.positioning.stunts import perform_stunt
-from world.areas.positioning.traversal import best_crossing_cost, traversals_of
+from world.areas.positioning.traversal import (
+    best_crossing_cost,
+    blink_capability_to,
+    traversals_of,
+)
 from world.combat.constants import (
     HELD_GROUND_GOT_PAST,
     HELD_GROUND_GOT_PAST_PARTLY,
@@ -73,12 +82,14 @@ from world.combat.services.movement_budget import (
     hops_left,
     spend_combat_hop,
 )
+from world.combat.services.reactions import capability_use_cost, spend_capability_use
 from world.gm.constants import GMLevel
 from world.mechanics.models import ChallengeApproach
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.combat.models import CombatParticipant
+    from world.conditions.models import CapabilityType
 
 STOPPED_BY_HOLDER = "You are stopped by {name}."
 _ERR_SQUARE_PAIR = "Pick a square with both coordinates."
@@ -151,6 +162,10 @@ class MoveToPositionAction(Action):
             return ActionResult(success=False, message=exc.user_message)
 
         traversals = traversals_of(actor)
+        unwalkable = _unwalkable_step(actor, target, traversals, square, context)
+        if unwalkable is not None:
+            return unwalkable
+
         cost = _move_cost(actor, target, traversals)
         participant = _declaring_participant(actor)
         if participant is not None and cost > 1:
@@ -179,6 +194,83 @@ class MoveToPositionAction(Action):
         send_room_state(actor_state)
 
         return ActionResult(success=True, message=message)
+
+
+def _unwalkable_step(
+    actor: ObjectDB,
+    target: Position,
+    traversals: frozenset[str],
+    square: tuple[int, int] | None,
+    context: ActionContext | None,
+) -> ActionResult | None:
+    """None when she can walk (or climb, leap, fly) to ``target``; else blink or refuse.
+
+    Walking wins wherever it reaches. A place walking cannot reach this step may be one
+    her blink reaches (#5019); otherwise the walk's refusal is the answer.
+    """
+    try:
+        check_move_to_position(actor, target, traversals=traversals)
+    except PositionTransitionError as refusal:
+        blinks = CreatureTraversal.BLINKS in traversals
+        blink = blink_capability_to(actor, target) if blinks else None
+        if blink is None:
+            return ActionResult(success=False, message=refusal.user_message)
+        return _blink(actor, target, blink, square, context)
+    return None
+
+
+def _blink(
+    actor: ObjectDB,
+    target: Position,
+    capability: CapabilityType,
+    square: tuple[int, int] | None,
+    context: ActionContext | None,
+) -> ActionResult:
+    """Blink straight to ``target`` with ``capability`` (#5019).
+
+    In a declaring round it costs one hop and one use of the capability (a dodge's cost:
+    anima, or fatigue for a physical one); it is not a reaction, so later dodges this round
+    are no harder. Too little anima never stops her: the charge runs through the cast's
+    anima-and-Soulfray path (``spend_capability_use``, owner ruling 2026-11-08). Landing in
+    held ground stops her there. Outside a fight it is free.
+    """
+    participant = _declaring_participant(actor)
+    sheet = actor.sheet_data
+    cost_kind = capability.reaction_cost_kind
+    cost = capability_use_cost(cost_kind)
+    # Read before the move: her own place never counts as held against her.
+    held = held_position_ids_against(actor) if participant is not None else frozenset()
+    try:
+        # The move, the payment, the hop and the held-ground stop land together.
+        with transaction.atomic():
+            blink_to_position(actor, target, reach=capability.reaction_reach, square=square)
+            message = BLINKED.format(place=target.name)
+            if participant is not None:
+                spend_capability_use(sheet, cost_kind, lethal=participant.encounter.is_lethal)
+                spend_combat_hop(participant)
+                message = BLINKED_PAID.format(place=target.name, cost=cost)
+                stopped = _stop_in_held_ground(actor, participant, target, held)
+                if stopped:
+                    message = f"{message} {stopped}"
+    except PositionError as exc:
+        return ActionResult(success=False, message=exc.user_message)
+
+    _narrate_blink(actor, target)
+    sdm = context.scene_data if context else SceneDataManager()
+    send_room_state(sdm.initialize_state_for_object(actor))
+    return ActionResult(success=True, message=message)
+
+
+def _narrate_blink(actor: ObjectDB, target: Position) -> None:
+    """Tell the room she blinked, naming her by persona (#5019)."""
+    from world.scenes.narrator import narrate_room_outcome  # noqa: PLC0415
+    from world.scenes.services import persona_names_for_sheets  # noqa: PLC0415
+
+    room = actor.location
+    if room is None:
+        return
+    name = persona_names_for_sheets([actor.pk]).get(actor.pk, actor.key)
+    narrate_room_outcome(room, BLINK_ROOM.format(name=name, place=target.name))
 
 
 _PASS_MESSAGES = {

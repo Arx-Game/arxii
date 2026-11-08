@@ -449,6 +449,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   there, and only leaving the place (on her turn or by a dodge landing outside it) escapes it.
   Journeys: `test_dodging_journeys.py`. Not built: NPCs dodging, and covering attacks that
   spread past one place.
+- **A blink power dodges and moves (#5019, ADR-5019) [BUILT & WIRED].** A dodging capability
+  whose way of moving is Blinks also moves its holder on her turn, straight to any place its
+  dodge could land, past walls and enemies: one hop plus one dodge's cost in a fight, free
+  outside, not a reaction. One technique granting that capability gives both uses. The move
+  list offers "Blink to X (2 anima)"; telnet `position X` blinks where walking cannot reach.
+  Journeys: `test_blinking_journeys.py`. Not built (owner ruling): NPCs blinking.
 - **3-PC party vs. a factory boss — the full break-bar/phase/enrage journey (#2095).**
   One `resolve_round`-driven test proves the whole boss-anatomy chain (#2016, ADR-0102)
   in order: solo attacks fully soaked while the guard is unbroken → a landed combo chips
