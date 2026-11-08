@@ -40,7 +40,11 @@ class SkillManager(NaturalKeyManager):
         return instance
 
     def get_by_natural_key(self, *args):
-        trait = Trait.objects.get_by_natural_key(*args)
+        try:
+            trait = Trait.objects.get_by_natural_key(*args)
+        except Trait.DoesNotExist as exc:
+            msg = f"Skill matching natural key {args!r} does not exist."
+            raise self.model.DoesNotExist(msg) from exc
         if trait.trait_type != TraitType.SKILL:
             msg = f"Skill matching natural key {args!r} does not exist."
             raise self.model.DoesNotExist(msg)

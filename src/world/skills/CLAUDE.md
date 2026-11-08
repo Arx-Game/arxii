@@ -136,6 +136,6 @@ dev_points = base_gain + mentor_bonus
 
 ### Integration Points
 - **Action Points**: AP consumed at weekly cron from `ActionPointPool`
-- **Progression**: Creates `DevelopmentTransaction` audit records with `DevelopmentSource.TRAINING` source and `ProgressionReason.SYSTEM_AWARD` reason. Uses the skill's linked Trait (or parent skill's Trait for specializations) as the transaction trait.
+- **Progression**: Creates `DevelopmentTransaction` audit records with `DevelopmentSource.TRAINING` source and `ProgressionReason.SYSTEM_AWARD` reason. Uses the skill (Skill is a proxy of Trait), or a specialization's parent skill, as the transaction trait.
 - **Relationships**: `get_relationship_tier()` stub in `world.relationships.helpers` (TODO: implement)
 - **Guise**: Mentor FK points to character_sheets.Guise

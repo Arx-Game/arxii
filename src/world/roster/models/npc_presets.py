@@ -137,7 +137,7 @@ class NPCPresetSkillLine(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="skill_lines",
     )
     # String FK for the same reason as NPCPresetTraitLine.trait above --
-    # world.skills.models.Skill wraps a Trait, so it inherits the same cycle.
+    # world.skills.models.Skill is a proxy of Trait, so it inherits the same cycle.
     skill = models.ForeignKey(
         "arxii.Skill",
         on_delete=models.PROTECT,

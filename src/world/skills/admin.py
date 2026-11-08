@@ -1,8 +1,7 @@
-from django.contrib import admin, messages
-from django.http import HttpRequest
+from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet
-from world.mechanics.services import ensure_skill_target
+from world.skills.admin_shared import ensure_skill_target_or_warn
 from world.skills.models import (
     CharacterSpecializationValue,
     Skill,
@@ -10,22 +9,6 @@ from world.skills.models import (
     Specialization,
     TrainingAllocation,
 )
-
-
-def ensure_skill_target_or_warn(request: HttpRequest, skill: Skill) -> None:
-    """Make sure a modifier target points at ``skill``, warning staff if not (#4820).
-
-    A skill rolls a distinction's bonus only through a stat-category ``ModifierTarget``
-    whose ``target_trait`` is the skill; without one a pasted ``+10 <skill>`` is refused.
-    An explicit call, not a signal (ADR-0009).
-    """
-    if ensure_skill_target(skill) is None:
-        messages.warning(
-            request,
-            f"No modifier target was made for {skill.name}: another category already "
-            "has a target of that name. Retarget that row to this skill on the "
-            "Modifier targets admin.",
-        )
 
 
 class SpecializationInline(admin.TabularInline):

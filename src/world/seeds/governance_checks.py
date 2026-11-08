@@ -11,8 +11,8 @@ household/org; boosts a dispatched collector). Two check compositions ride them:
 - **Domain Investment** — intellect + Scholarship (+ Economics): improving an
   org's income streams / cracking down on graft.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
 ``CONTENT_MODELS`` and keep seeding unconditionally, but no longer wipe and
@@ -93,10 +93,10 @@ def _rename_legacy_organization() -> None:
 
 
 def ensure_governance_skills() -> dict[str, object]:
-    """Look up (or sample) the Scholarship + Leadership Skill rows + backing Traits.
+    """Look up (or sample) the Scholarship + Leadership skills (Skill, a proxy of Trait).
 
     ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). A skill
-    whose Trait or Skill row isn't authored is omitted from the returned dict.
+    whose Trait isn't authored as a skill is omitted from the returned dict.
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415

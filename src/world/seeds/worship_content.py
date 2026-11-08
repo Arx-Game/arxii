@@ -4,7 +4,7 @@ Idempotent. Names and lore are PLACEHOLDER pending Apostate rewrite. Magnitude
 tuning is deferred by convention (placeholders-now); the aspect weights below
 are the one mechanical knob (Path of the Chosen's ceremony edge).
 
-``skills.skill``, ``traits.trait``, ``checks.checktype``/``checktypetrait``, and
+``traits.trait`` (``Skill`` is its proxy), ``checks.checktype``/``checktypetrait``, and
 ``classes.aspect``/``pathaspect`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``checks.checktypeaspect`` stays outside ``CONTENT_MODELS`` and keeps
@@ -165,7 +165,7 @@ def ensure_traditions_and_beings(specs: dict[str, object]) -> None:
     """Seed the four traditions and PLACEHOLDER example beings.
 
     ``rites_specialization`` is a required FK — a tradition whose specialization
-    is missing (the Rites Skill/Trait isn't authored, #2698) is skipped entirely.
+    is missing (the Rites skill Trait isn't authored, #2698) is skipped entirely.
     """
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 

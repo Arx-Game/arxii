@@ -4,7 +4,7 @@ The search action (``actions/definitions/investigation.py``) rolls a ``CheckType
 ``"Search"`` (``clues.constants.SEARCH_CHECK_TYPE_NAME``) that was **never seeded** — so a search
 rolled with no
 authored composition and the action degraded to a PLACEHOLDER. Seed the **Investigation** skill
-(+ its backing SKILL trait) and the **Search** ``CheckType`` as **perception (stat) + Investigation
+(a Skill, a proxy of Trait) and the **Search** ``CheckType`` as **perception (stat) + Investigation
 (skill)**, idempotently. The specialization layer is optional/future. Mirrors
 ``world/seeds/social_checks.py``; this is the mystery/investigation core loop's roll.
 
@@ -13,8 +13,8 @@ Also seeds the **Identification** ``CheckType`` (#1107 slice 5, Apostate's 2026-
 check. Deliberately a *different* stat pairing than Search: clocking a face from memory/deduction
 (intellect) rather than noticing a physical clue (perception).
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. No longer wipes and rewrites a composition on each run (#2698 Part 1 — that
 reverted authored/staff-tuned weights on every Big Button press);
@@ -37,7 +37,7 @@ _WITS_STAT = "wits"
 
 
 def ensure_investigation_skill():
-    """Look up (or sample) the Investigation ``Skill`` + its backing SKILL ``Trait``.
+    """Look up (or sample) the Investigation ``Skill`` (a proxy of Trait).
 
     ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). Returns
     ``None`` when either isn't authored.

@@ -10,8 +10,8 @@ moment doesn't exist at deed birth yet.
 
 Weights PLACEHOLDER.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. No longer wipes and rewrites the composition on each run (#2698 Part 1 —
 that reverted authored/staff-tuned weights on every Big Button press);

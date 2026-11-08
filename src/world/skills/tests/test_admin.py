@@ -6,8 +6,11 @@ from evennia.accounts.models import AccountDB
 
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
-from world.skills.factories import SkillFactory, SpecializationFactory
-from world.traits.admin import SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE
+from world.skills.factories import (
+    PathSkillSuggestionFactory,
+    SkillFactory,
+    SpecializationFactory,
+)
 from world.traits.models import Trait, TraitType
 
 
@@ -64,9 +67,7 @@ class SkillAdminSaveTests(TestCase):
         messages = [str(message) for message in response.context["messages"]]
         assert any("Retarget that row" in message for message in messages), messages
 
-    def test_a_skill_with_specializations_cannot_be_retyped_on_the_trait_page(self) -> None:
-        skill = SkillFactory(name="Rigging Lore")
-        SpecializationFactory(parent_skill=skill, name="Knots")
+    def _retype_to_stat(self, skill):
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_trait_change", args=[skill.pk])
         data = {
@@ -81,6 +82,16 @@ class SkillAdminSaveTests(TestCase):
             formset = inline.formset
             for field, value in formset.management_form.initial.items():
                 data[f"{formset.prefix}-{field}"] = value
-        response = self.client.post(url, data, follow=True)
-        assert SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE in response.content.decode()
+        return self.client.post(url, data, follow=True).content.decode()
+
+    def test_a_skill_in_use_cannot_be_retyped_on_the_trait_page(self) -> None:
+        skill = SkillFactory(name="Rigging Lore")
+        SpecializationFactory(parent_skill=skill, name="Knots")
+        assert "This skill is still used by specializations" in self._retype_to_stat(skill)
+        assert Trait.objects.filter(pk=skill.pk, trait_type=TraitType.SKILL).exists()
+
+    def test_any_skill_fk_blocks_the_retype_not_only_specializations(self) -> None:
+        skill = SkillFactory(name="Chart Reading")
+        PathSkillSuggestionFactory(skill=skill)
+        assert "path skill suggestions" in self._retype_to_stat(skill)
         assert Trait.objects.filter(pk=skill.pk, trait_type=TraitType.SKILL).exists()

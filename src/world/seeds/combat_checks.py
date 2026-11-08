@@ -8,8 +8,8 @@ Stands up the ``Melee Combat`` parent skill (Trait-backed,
 (+ owned weapon specialization)``. Mirrors ``world/seeds/social_checks.py``
 (#1689).
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``,
-and ``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait``
+(a ``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
 is on. ``skills.specialization``/``checks.checktypespecialization`` stay
 outside ``CONTENT_MODELS`` and keep seeding unconditionally via
@@ -58,7 +58,7 @@ def _ensure_combat_category():
 
 
 def ensure_melee_combat_skill():
-    """Look up (or sample) the Melee Combat Skill + its backing SKILL Trait."""
+    """Look up (or sample) the Melee Combat Skill (a proxy of Trait)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import TraitCategory  # noqa: PLC0415
@@ -177,7 +177,7 @@ _STRIKE_CHECKS: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
 
 
 def ensure_strike_skill(name: str, tooltip: str) -> object | None:
-    """Look up (or sample) one strike skill and its backing SKILL Trait."""
+    """Look up (or sample) one strike Skill (a proxy of Trait)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import TraitCategory  # noqa: PLC0415

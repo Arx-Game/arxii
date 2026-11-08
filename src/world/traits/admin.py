@@ -10,7 +10,8 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
-from world.mechanics.services import ensure_skill_target
+from world.skills.admin_shared import ensure_skill_target_or_warn
+from world.skills.models import Skill
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -46,14 +47,23 @@ class TraitRankDescriptionInline(admin.TabularInline):
         return obj.display_value
 
 
-SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE = (
-    "This skill has specializations, so it must stay a Skill. Move or delete its "
-    "specializations first."
+SKILL_IN_USE_RETYPED_MESSAGE = (
+    "This skill is still used by {uses}, so it must stay a Skill. Repoint or remove those first."
 )
 
 
+def skill_uses(trait: Trait) -> list[str]:
+    """What still points at ``trait`` as a ``Skill`` (any FK to the proxy), by name."""
+    return [
+        str(rel.related_model._meta.verbose_name_plural)  # noqa: SLF001 - model options
+        for rel in Skill._meta.related_objects  # noqa: SLF001 - model options
+        if rel.field.remote_field.model is Skill
+        and rel.related_model._base_manager.filter(**{rel.field.name: trait.pk}).exists()  # noqa: SLF001
+    ]
+
+
 class TraitAdminForm(forms.ModelForm):
-    """Refuses retyping a skill that still has specializations away from Skill (#5008).
+    """Refuses retyping a skill something still points at as a Skill (#5008).
 
     No ``Meta``: ``TraitAdmin`` builds the form for ``Trait`` with its own fields.
     """
@@ -63,9 +73,9 @@ class TraitAdminForm(forms.ModelForm):
         if (
             self.initial.get("trait_type") == TraitType.SKILL
             and cleaned.get("trait_type") != TraitType.SKILL
-            and self.instance.specializations.exists()
+            and (uses := skill_uses(self.instance))
         ):
-            raise ValidationError(SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE)
+            raise ValidationError(SKILL_IN_USE_RETYPED_MESSAGE.format(uses=", ".join(uses)))
         return cleaned
 
 
@@ -85,7 +95,7 @@ class TraitAdmin(admin.ModelAdmin):
         """Save; a skill-type trait gets the modifier target its bonuses land on (#4820)."""
         super().save_model(request, obj, form, change)
         if obj.trait_type == TraitType.SKILL:
-            ensure_skill_target(obj)
+            ensure_skill_target_or_warn(request, obj)
 
     @admin.display(description="Connections")
     def get_connections(self, obj):

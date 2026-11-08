@@ -36,10 +36,10 @@ class SpecializationSerializer(serializers.ModelSerializer):
 class SkillSerializer(serializers.ModelSerializer):
     """Serializer for Skill model with nested specializations."""
 
-    name = serializers.CharField(source="trait.name", read_only=True)
-    category = serializers.CharField(source="trait.category", read_only=True)
+    name = serializers.CharField(read_only=True)
+    category = serializers.CharField(read_only=True)
     category_display = serializers.SerializerMethodField()
-    description = serializers.CharField(source="trait.description", read_only=True)
+    description = serializers.CharField(read_only=True)
     specializations = SpecializationSerializer(
         many=True, read_only=True, source="cached_specializations"
     )
@@ -61,9 +61,9 @@ class SkillSerializer(serializers.ModelSerializer):
     def get_category_display(self, obj: Skill) -> str:
         """Get the human-readable category label."""
         try:
-            return TraitCategory(obj.trait.category).label
+            return TraitCategory(obj.category).label
         except ValueError:
-            return obj.trait.category
+            return obj.category
 
 
 class SkillListSerializer(SkillSerializer):

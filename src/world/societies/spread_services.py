@@ -62,8 +62,12 @@ _SKILL_DESCRIPTIONS = {
 
 def _ensure_skill(name: str):
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import TraitCategory  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
+    clash = Trait.objects.filter(name=name).exclude(trait_type=TraitType.SKILL).first()
+    if clash is not None:
+        msg = f"A {clash.get_trait_type_display()} trait is named {name}; a skill needs it."
+        raise ValueError(msg)
     skill, _ = Skill.objects.get_or_create(
         name=name,
         defaults={

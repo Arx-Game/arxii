@@ -11,8 +11,8 @@ specializations for the accusation counter-play (#1825);
 every FK (specializations, check compositions, character trait values)
 survives the rename.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
 ``CONTENT_MODELS`` and keep seeding unconditionally via ``get_or_create``, but
@@ -88,7 +88,7 @@ def _ensure_category(name: str) -> object | None:
 
 
 def _ensure_skill(name: str, tooltip: str) -> object | None:
-    """Look up (or sample) a PHYSICAL-category Skill + backing Trait (#2698)."""
+    """Look up (or sample) a PHYSICAL-category Skill (a proxy of Trait, #2698)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import TraitCategory  # noqa: PLC0415
@@ -166,7 +166,7 @@ def ensure_skulduggery_skill() -> object:
 
 
 def ensure_security_skills() -> dict[str, object]:
-    """Seed the Skulduggery + Athletics Skill rows (+ their backing SKILL Traits).
+    """Seed the Skulduggery + Athletics skills (Skill, a proxy of Trait).
 
     Also ensures the Investigation skill exists (seeded by investigation_checks.py,
     but we call get_or_create so this seed is self-sufficient in test setups).
