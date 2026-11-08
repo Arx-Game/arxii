@@ -125,7 +125,6 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
     from world.progression.services.skill_development import (  # noqa: PLC0415
         align_development_floors,
     )
-    from world.skills.models import CharacterSkillValue  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         CharacterTraitChange,
         CharacterTraitValue,
@@ -156,14 +155,6 @@ def _copy_powers(source: CharacterSheet, target: CharacterSheet) -> None:
     align_development_floors(
         target,
         {row.trait: row.value for row in source_traits if row.trait.trait_type == TraitType.SKILL},
-    )
-
-    CharacterSkillValue.objects.filter(character=target).delete()
-    CharacterSkillValue.objects.bulk_create(
-        [
-            CharacterSkillValue(character=target, skill=row.skill, value=row.value)
-            for row in CharacterSkillValue.objects.filter(character=source)
-        ]
     )
 
     CharacterTechnique.objects.filter(character=target).delete()

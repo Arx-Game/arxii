@@ -22,7 +22,6 @@ from world.relationships.helpers import get_relationship_tier
 from world.relationships.services import standing_tie_ap
 from world.roster.models import RosterEntry
 from world.skills.models import (
-    CharacterSkillValue,
     CharacterSpecializationValue,
     Skill,
     SkillPointBudget,
@@ -105,10 +104,7 @@ def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
     Returns:
         The raw skill value, or 0 if the character has no value for this skill.
     """
-    try:
-        return CharacterSkillValue.objects.get(character_id=character.pk, skill=skill).value
-    except CharacterSkillValue.DoesNotExist:
-        return 0
+    return skill_rating(character.pk, skill)
 
 
 def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
@@ -381,17 +377,31 @@ def remove_training_allocation(allocation: TrainingAllocation) -> None:
     allocation.delete()
 
 
-def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
-    """The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055).
+def skill_rating(sheet_id: int, skill: Skill) -> int:
+    """The character's rating in ``skill``: its trait's ``CharacterTraitValue``, else 0.
 
-    A skill's rating lives in two stores: ``CharacterSkillValue`` (what the sheet shows)
-    and this trait row (what a check reads). Every writer of a skill's value keeps them
-    equal (#4496): character creation and staff edit through ``set_skill_values``,
-    weekly training, the XP breakthrough and a level-up from use through here and
-    :func:`set_skill_sheet_value`. A row that changes, or is new, gets a
+    A skill's rating has one store, the skill trait's ``CharacterTraitValue`` (#5010);
+    the sheet, a check and every reader use it. ``sheet_id`` is the character sheet's
+    (and so the character's) pk.
+    """
+    rating = (
+        CharacterTraitValue.objects.filter(character_id=sheet_id, trait_id=skill.trait_id)
+        .values_list("value", flat=True)
+        .first()
+    )
+    return rating or 0
+
+
+def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
+    """Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).
+
+    The trait row is a skill's one rating store (#5010). Writers that set a rating
+    outright come through here: character creation and staff edit (``set_skill_values``)
+    and the XP breakthrough. Development (use, training, GM awards) levels the row in
+    ``DevelopmentPoints.award_points``. A row that changes, or is new, gets a
     ``CharacterTraitChange`` with ``source``, and the skill's ``DevelopmentPoints``
-    ledger is aligned to the new rating (#5010), so development continues from the
-    rating written here rather than from the base level.
+    ledger is aligned to the new rating, so development continues from the rating
+    written here rather than from the base level.
     """
     from world.progression.services.skill_development import (  # noqa: PLC0415
         align_development_floors,
@@ -410,44 +420,6 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
         character_sheet=sheet, trait=skill.trait, old_value=old, new_value=value, source=source
     )
     align_development_floors(sheet, {skill.trait: value})
-
-
-def set_skill_sheet_value(sheet: CharacterSheet, skill: Skill, value: int) -> None:
-    """The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.
-
-    Creates the row when the sheet has none. Progress toward the next level is not
-    kept here: it lives in the skill trait's ``DevelopmentPoints`` ledger (#5010).
-    """
-    row, created = CharacterSkillValue.objects.get_or_create(
-        character=sheet,
-        skill=skill,
-        defaults={"value": value},
-    )
-    if not created and row.value != value:
-        row.value = value
-        row.save(update_fields=["value"])
-
-
-def reconcile_skill_stores(sheet: CharacterSheet, skill: Skill) -> int:
-    """Bring a skill's two stores up to the higher of the two, and return that rating.
-
-    Skills only rise in play, so when the stores disagree (weekly training and an XP
-    breakthrough once wrote only the sheet row, a level-up from use only the trait row,
-    #4496) the higher value is the one the character earned. Every post-creation
-    writer calls this before it adds its own progress, so no write can lower a
-    character's skill. Returns 0, writing nothing, when the character has neither row.
-    """
-    sheet_row = CharacterSkillValue.objects.filter(character=sheet, skill=skill).first()
-    trait_row = CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).first()
-    if sheet_row is None and trait_row is None:
-        return 0
-    rating = max(
-        sheet_row.value if sheet_row else 0,
-        trait_row.value if trait_row else 0,
-    )
-    set_skill_sheet_value(sheet, skill, rating)
-    set_skill_trait(sheet, skill, rating, TraitChangeSource.DEVELOPMENT_LEVEL_UP)
-    return rating
 
 
 def _development_cost(current_value: int) -> int:
@@ -576,17 +548,17 @@ def train_skill(
     The one writer for development from training: weekly training and an Academy course
     both come through here. The points go into the skill trait's ``DevelopmentPoints``
     ledger through ``award_points`` (#5010), the same ledger use and GM awards feed, so
-    rust is paid first, the skill parks at an XP boundary or the band's skill cap, and
-    the sheet's copy of the rating is kept equal. One ``DevelopmentTransaction`` records
-    the points applied, stamped with the current game week (a trained skill is exempt
-    from that week's rust), with any plateau message appended to ``description``. With
+    rust is paid first and the skill parks at an XP boundary or the band's skill cap.
+    One ``DevelopmentTransaction`` records the points applied, stamped with the current
+    game week (a trained skill is exempt from that week's rust), with any plateau message
+    appended to ``description``. With
     ``stop_at_boundary`` the points are clamped to :func:`points_to_next_boundary`, so
     none dissipates at a boundary; the excess is simply not applied and the caller
     keeps it.
     """
     with transaction.atomic():
         # A skill the character has no rating in starts at the base level.
-        old_value = reconcile_skill_stores(sheet, skill) or DP_BASE_LEVEL
+        old_value = skill_rating(sheet.pk, skill) or DP_BASE_LEVEL
         tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
             character_sheet=sheet, trait=skill.trait
         )
@@ -676,10 +648,10 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
     from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
-    reconcile_skill_stores(character.sheet_data, skill)
-    try:
-        skill_value = CharacterSkillValue.objects.get(character_id=character.pk, skill=skill)
-    except CharacterSkillValue.DoesNotExist:
+    skill_value = CharacterTraitValue.objects.filter(
+        character_id=character.pk, trait=skill.trait
+    ).first()
+    if skill_value is None:
         return False, f"{skill.name} has no recorded value for this character."
 
     if not _is_at_xp_boundary(skill_value.value):
@@ -704,7 +676,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
         # between the read above and this transaction, so re-check the boundary still
         # holds before spending XP (double-spend guard). Write through the locked
         # instance so the identity map isn't left holding the stale, unlocked one.
-        skill_value = CharacterSkillValue.objects.select_for_update().get(pk=skill_value.pk)
+        skill_value = CharacterTraitValue.objects.select_for_update().get(pk=skill_value.pk)
         if skill_value.value + 1 != target_rating:
             return False, f"{skill.name} is not at a breakthrough boundary."
 
@@ -719,10 +691,8 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
         except NoAccountForCharacterError as exc:
             return False, exc.user_message
 
-        skill_value.value = target_rating
-        skill_value.save(update_fields=["value"])
         set_skill_trait(
-            skill_value.character, skill, target_rating, TraitChangeSource.XP_BREAKTHROUGH
+            character.sheet_data, skill, target_rating, TraitChangeSource.XP_BREAKTHROUGH
         )
 
     return (

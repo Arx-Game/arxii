@@ -69906,7 +69906,7 @@ components:
           type: integer
           readOnly: true
           description: True 1-100 skill value -- no display-scale conversion, matching
-            CharacterSkillValue.
+            the skill trait's CharacterTraitValue.
       required:
       - skill_name
       - value

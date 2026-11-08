@@ -8,7 +8,7 @@ This module contains models related to earning and tracking rewards:
 - DevelopmentTransaction: Development point transaction audit trail
 """
 
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -26,9 +26,6 @@ from world.traits.models import (
     TraitChangeSource,
     TraitType,
 )
-
-if TYPE_CHECKING:
-    from world.skills.models import Skill
 
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 TRAIT_MODEL = "arxii.Trait"
@@ -267,22 +264,18 @@ class DevelopmentPoints(SharedMemoryModel):
             List of ``(old_level, new_level)`` tuples for each level-up that occurred.
         """
         from world.skills.services import (  # noqa: PLC0415 - skills.services imports this module
-            reconcile_skill_stores,
-            set_skill_sheet_value,
             stored_skill_cap,
         )
 
-        skill = self._skill()
-        if skill is not None:
-            reconcile_skill_stores(self.character_sheet, skill)
-        trait_value, created = CharacterTraitValue.objects.get_or_create(
+        is_skill = self.trait.trait_type == TraitType.SKILL
+        trait_value, _created = CharacterTraitValue.objects.get_or_create(
             character=self.character_sheet,
             trait=self.trait,
             defaults={"value": 10},
         )
         starting_level: int = trait_value.value
 
-        if self.trait.trait_type == TraitType.SKILL:
+        if is_skill:
             self.total_earned = max(self.total_earned, cumulative_dp_for_level(starting_level))
         if self.rust_debt > 0:
             payoff = min(amount, self.rust_debt)
@@ -293,7 +286,7 @@ class DevelopmentPoints(SharedMemoryModel):
         self.save()
 
         ceiling = self._rating_ceiling(starting_level)
-        skill_cap = stored_skill_cap(self.character_sheet) if skill is not None else None
+        skill_cap = stored_skill_cap(self.character_sheet) if is_skill else None
         level_ups = self._levels_earned(starting_level, ceiling, skill_cap)
         current_level = level_ups[-1][1] if level_ups else starting_level
 
@@ -319,10 +312,6 @@ class DevelopmentPoints(SharedMemoryModel):
                 source=TraitChangeSource.DEVELOPMENT_LEVEL_UP,
             )
 
-        if skill is not None and (level_ups or created):
-            # The sheet shows CharacterSkillValue, a check reads the trait row (#4496).
-            set_skill_sheet_value(self.character_sheet, skill, trait_value.value)
-
         return level_ups
 
     def _dissipate_above(self, level: int) -> None:
@@ -340,7 +329,7 @@ class DevelopmentPoints(SharedMemoryModel):
         """
         from world.skills.services import stored_skill_cap  # noqa: PLC0415
 
-        if self._skill() is None:
+        if self.trait.trait_type != TraitType.SKILL:
             return None
         cap = stored_skill_cap(self.character_sheet)
         if cap is None:
@@ -349,14 +338,6 @@ class DevelopmentPoints(SharedMemoryModel):
             character=self.character_sheet, trait=self.trait
         ).first()
         return cap if row is not None and row.value >= cap else None
-
-    def _skill(self) -> "Skill | None":
-        """The ``Skill`` this tracker's trait belongs to, ``None`` for any other trait."""
-        from world.skills.models import Skill  # noqa: PLC0415
-
-        if self.trait.trait_type != TraitType.SKILL:
-            return None
-        return Skill.objects.filter(trait_id=self.trait_id).first()
 
     class Meta:
         unique_together: ClassVar[list[str]] = ["character_sheet", "trait"]

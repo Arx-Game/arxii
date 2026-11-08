@@ -136,19 +136,12 @@ def spread_check_modifiers(character, specialization=None) -> int:
     No form rolls plain Performance. A form/skill the character lacks contributes
     nothing for that part (you may attempt a form you're unskilled in).
     """
-    from world.skills.models import (  # noqa: PLC0415
-        CharacterSkillValue,
-        CharacterSpecializationValue,
-    )
+    from world.skills.models import CharacterSpecializationValue  # noqa: PLC0415
+    from world.skills.services import skill_rating  # noqa: PLC0415
 
     ensure_spread_skills()
     skill = specialization.parent_skill if specialization else _ensure_skill(PERFORMANCE_SKILL_NAME)
-    skill_value = (
-        CharacterSkillValue.objects.filter(character_id=character.pk, skill=skill)
-        .values_list("value", flat=True)
-        .first()
-    )
-    total = _value_points(skill_value)
+    total = _value_points(skill_rating(character.pk, skill))
     if specialization is not None:
         spec_value = (
             CharacterSpecializationValue.objects.filter(

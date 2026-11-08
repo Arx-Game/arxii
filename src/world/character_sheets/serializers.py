@@ -144,8 +144,8 @@ from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
-from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
-from world.skills.services import is_skill_at_xp_boundary
+from world.skills.models import CharacterSpecializationValue
+from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
 from world.societies.models import OrganizationMembership, OrganizationReputation
@@ -767,9 +767,13 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    # A skill's rating is its trait's CharacterTraitValue (#5010); a skill-type trait
+    # with no Skill row is not a trained skill yet and has no sheet entry.
     Prefetch(
-        "skill_values",
-        queryset=CharacterSkillValue.objects.select_related("skill__trait"),
+        "trait_values",
+        queryset=CharacterTraitValue.objects.filter(
+            trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
+        ).select_related("trait__skill"),
         to_attr="cached_skill_values",
     ),
     Prefetch(
@@ -799,10 +803,12 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
-    modifiers = skill_modifiers_for_sheet(sheet, [csv.skill for csv in sheet.cached_skill_values])
+    modifiers = skill_modifiers_for_sheet(
+        sheet, [tv.trait.skill for tv in sheet.cached_skill_values]
+    )
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
-        skill = csv.skill
+        skill = csv.trait.skill
         modifier = modifiers.get(skill.pk, 0)
         result.append(
             SkillEntry(
@@ -2224,11 +2230,7 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
     skill = style.skill
     skill_value = 0
     if skill is not None:
-        skill_value = (
-            CharacterSkillValue.objects.filter(character=sheet, skill=skill)
-            .values_list("value", flat=True)
-            .first()
-        ) or 0
+        skill_value = skill_rating(sheet.pk, skill)
     from django.db.models import Exists, OuterRef  # noqa: PLC0415
 
     from world.magic.models import CharacterTradition, Tradition  # noqa: PLC0415
@@ -2543,7 +2545,9 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     return StaffEditRows(
         stats=stats,
         skills=dict(
-            CharacterSkillValue.objects.filter(character=sheet).values_list("skill_id", "value")
+            CharacterTraitValue.objects.filter(
+                character=sheet, trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
+            ).values_list("trait__skill", "value")
         ),
         specializations=dict(
             CharacterSpecializationValue.objects.filter(character=sheet).values_list(
