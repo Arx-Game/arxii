@@ -371,6 +371,7 @@ from actions.definitions.market import (
     SetServiceOfferAction,
 )
 from actions.definitions.mood import SenseMoodAction, SetMoodAction
+from actions.definitions.motif_facet import BindMotifFacetAction, UnbindMotifFacetAction
 from actions.definitions.motif_style import (
     BindMotifStyleAction,
     ListMotifStylesAction,
@@ -1077,6 +1078,8 @@ _ALL_ACTIONS: list[Action] = [
     BindMotifStyleAction(),
     UnbindMotifStyleAction(),
     ListMotifStylesAction(),
+    BindMotifFacetAction(),
+    UnbindMotifFacetAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
     StartDefenseInstallationAction(),

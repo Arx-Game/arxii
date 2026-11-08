@@ -105,19 +105,21 @@ class UnbindMotifStyleAction(MotifStyleActionBase):
 
 @dataclass
 class ListMotifStylesAction(MotifStyleActionBase):
-    """List the actor's style bindings."""
+    """List the actor's style bindings and facet ties (#5021: one ``motif`` listing)."""
 
     key: str = "list_motif_styles"
     name: str = "List Motif Styles"
     icon: str = "list"
 
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.magic.services.motif_facet import motif_facet_bindings  # noqa: PLC0415
         from world.magic.services.motif_style import motif_style_bindings  # noqa: PLC0415
 
         sheet = self._sheet(actor)
         if sheet is None:
             return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         bindings = motif_style_bindings(sheet)
+        facets = motif_facet_bindings(sheet)
         data = {
             "bindings": [
                 {
@@ -128,13 +130,23 @@ class ListMotifStylesAction(MotifStyleActionBase):
                     "resonance_name": b.motif_resonance.resonance.name,
                 }
                 for b in bindings
-            ]
+            ],
+            "facet_bindings": [
+                {
+                    "facet_id": f.facet_id,
+                    "facet_name": f.facet.name,
+                    "resonance_id": f.motif_resonance.resonance_id,
+                    "resonance_name": f.motif_resonance.resonance.name,
+                }
+                for f in facets
+            ],
         }
-        return ActionResult(success=True, message=_build_list_message(bindings), data=data)
+        message = f"{_build_list_message(bindings)}\n{_build_facet_message(facets)}"
+        return ActionResult(success=True, message=message, data=data)
 
 
 def _build_list_message(bindings: list) -> str:
-    """Compose the telnet listing for ``ListMotifStylesAction``."""
+    """Compose the style half of the telnet listing for ``ListMotifStylesAction``."""
     if not bindings:
         return "You have no styles bound. Use 'motif bindstyle <style>=<resonance>'."
     lines = ["|wYour style bindings:|n"]
@@ -142,4 +154,16 @@ def _build_list_message(bindings: list) -> str:
         f"  {b.style.name} ({b.style.get_audacity_display()}) → {b.motif_resonance.resonance.name}"
         for b in bindings
     )
+    return "\n".join(lines)
+
+
+def _build_facet_message(facets: list) -> str:
+    """Compose the facet half of the telnet listing (#5021), grouped by resonance."""
+    if not facets:
+        return "You have no facets tied. Use 'motif bindfacet <facet>=<resonance>'."
+    grouped: dict[str, list[str]] = {}
+    for f in facets:
+        grouped.setdefault(f.motif_resonance.resonance.name, []).append(f.facet.name)
+    lines = ["|wYour facets:|n"]
+    lines.extend(f"  {name}: {', '.join(names)}" for name, names in grouped.items())
     return "\n".join(lines)

@@ -14,6 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from actions.definitions.motif_facet import BindMotifFacetAction, UnbindMotifFacetAction
 from actions.definitions.motif_style import (
     BindMotifStyleAction,
     ListMotifStylesAction,
@@ -21,8 +22,12 @@ from actions.definitions.motif_style import (
 )
 from web.api.mixins import CharacterContextMixin
 from world.items.models import Style
-from world.magic.models import Resonance
-from world.magic.serializers_motif_style import MotifStyleBindSerializer, MotifStyleUnbindSerializer
+from world.magic.models import Facet, Resonance
+from world.magic.serializers_motif_style import (
+    MotifFacetBindSerializer,
+    MotifStyleBindSerializer,
+    MotifStyleUnbindSerializer,
+)
 from world.magic.views_actor import PuppetActorMixin
 
 #: Error detail returned when the request has no active character to act as.
@@ -35,12 +40,17 @@ CHARACTER_NOT_FOUND_DETAIL = "No character found."
 STYLE_NOT_FOUND_DETAIL = "No such style."
 #: Error detail when the given resonance_id doesn't resolve to a catalog row.
 RESONANCE_NOT_FOUND_DETAIL = "No such resonance."
+#: Error detail when the given facet_id doesn't resolve to a vocabulary row.
+FACET_NOT_FOUND_DETAIL = "No such facet."
 
 
 class MotifStyleViewSet(CharacterContextMixin, PuppetActorMixin, viewsets.ViewSet):
-    """List, bind, and unbind the acting character's Motif style bindings.
+    """List, bind, and unbind the acting character's Motif style bindings and facets.
 
-    ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+    ``list`` runs :class:`ListMotifStylesAction` (styles and facets, #5021).
+    ``bind-facet``/``unbind-facet`` resolve the ``Facet`` and ``Resonance`` rows and
+    dispatch :class:`BindMotifFacetAction` / :class:`UnbindMotifFacetAction`.
+    ``bind``/``unbind`` resolve
     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
 
@@ -125,3 +135,46 @@ class MotifStyleViewSet(CharacterContextMixin, PuppetActorMixin, viewsets.ViewSe
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result.data)
+
+    def _facet_and_resonance(self, request: Any) -> tuple[Any, Any, Response | None]:
+        serializer = MotifFacetBindSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        facet = Facet.objects.filter(pk=serializer.validated_data["facet_id"]).first()
+        if facet is None:
+            return (
+                None,
+                None,
+                Response({"detail": FACET_NOT_FOUND_DETAIL}, status=status.HTTP_400_BAD_REQUEST),
+            )
+        resonance = Resonance.objects.filter(pk=serializer.validated_data["resonance_id"]).first()
+        if resonance is None:
+            return (
+                None,
+                None,
+                Response(
+                    {"detail": RESONANCE_NOT_FOUND_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+                ),
+            )
+        return facet, resonance, None
+
+    def _run_facet_action(self, request: Any, action_cls: type) -> Response:
+        facet, resonance, error = self._facet_and_resonance(request)
+        if error is not None:
+            return error
+        actor, error = self._resolve_scoped_actor(request)
+        if error is not None:
+            return error
+        result = action_cls().run(actor=actor, facet=facet, resonance=resonance)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
+
+    @action(detail=False, methods=["post"], url_path="bind-facet")
+    def bind_facet(self, request: Any) -> Response:
+        """Tie a facet to one of the acting character's claimed resonances (#5021)."""
+        return self._run_facet_action(request, BindMotifFacetAction)
+
+    @action(detail=False, methods=["post"], url_path="unbind-facet")
+    def unbind_facet(self, request: Any) -> Response:
+        """Untie a facet from one of the acting character's resonances (#5021)."""
+        return self._run_facet_action(request, UnbindMotifFacetAction)

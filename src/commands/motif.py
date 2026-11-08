@@ -1,11 +1,13 @@
-"""Motif style-binding telnet command — the ``motif`` namespace (#2030).
+"""Motif binding telnet command — the ``motif`` namespace (#2030, facets #5021).
 
-A single command routes the three player-facing motif style-binding verbs
+A single command routes the player-facing motif style- and facet-binding verbs
 through the shared ``dispatch_player_action`` seam. No game logic lives here;
 the command only parses telnet text and resolves objects before dispatching
-to the REGISTRY actions in ``actions/definitions/motif_style.py``. Claim
-validation (unclaimed resonance, per-resonance binding cap) stays in the
-service layer — the command never duplicates it.
+to the REGISTRY actions in ``actions/definitions/motif_style.py`` and
+``motif_facet.py``. Claim validation (unclaimed resonance, per-resonance cap, a
+facet a signed flourish needs) stays in the service layer — the command never
+duplicates it. A facet name resolves through ``find_facet``, so aliases and
+plurals ("Wolves") reach their facet.
 
 The verbs live under the ``motif`` namespace to avoid broad one-word key
 collisions with exits/channels/aliases (same reasoning as ``CmdSignature`` /
@@ -28,23 +30,29 @@ if TYPE_CHECKING:
 _SUBVERB_LIST = "list"
 _SUBVERB_BINDSTYLE = "bindstyle"
 _SUBVERB_UNBINDSTYLE = "unbindstyle"
+_SUBVERB_BINDFACET = "bindfacet"
+_SUBVERB_UNBINDFACET = "unbindfacet"
 
 # subverb → registry action key.
 _SUBVERBS: dict[str, str] = {
     _SUBVERB_BINDSTYLE: "bind_motif_style",
     _SUBVERB_UNBINDSTYLE: "unbind_motif_style",
+    _SUBVERB_BINDFACET: "bind_motif_facet",
+    _SUBVERB_UNBINDFACET: "unbind_motif_facet",
     _SUBVERB_LIST: "list_motif_styles",
 }
 
 
 class CmdMotif(DispatchCommand):
-    """Bind or unbind a Style to one of your claimed resonances.
+    """Bind styles and facets to your claimed resonances.
 
     Usage:
-        motif                                    - list your style bindings
+        motif                                    - list your styles and facets
         motif list                               - (same)
         motif bindstyle <style>=<resonance>      - bind a style to a resonance
         motif unbindstyle <style>                - remove a style binding
+        motif bindfacet <facet>=<resonance>      - tie a facet to a resonance
+        motif unbindfacet <facet>=<resonance>    - untie a facet from a resonance
     """
 
     key = "motif"
@@ -84,6 +92,8 @@ class CmdMotif(DispatchCommand):
             return self._args_bindstyle()
         if self._subverb == _SUBVERB_UNBINDSTYLE:
             return self._args_unbindstyle()
+        if self._subverb in (_SUBVERB_BINDFACET, _SUBVERB_UNBINDFACET):
+            return self._args_facet()
         return {}  # unreachable — func() gates on _SUBVERBS
 
     # -- resolution helpers -----------------------------------------------
@@ -97,6 +107,16 @@ class CmdMotif(DispatchCommand):
             msg = f"There is no style called '{name}'."
             raise CommandError(msg)
         return style
+
+    def _require_facet(self, name: str) -> Any:
+        """Resolve *name* (or an alias of it) to a Facet, or raise CommandError."""
+        from world.magic.services.facets import find_facet  # noqa: PLC0415
+
+        facet = find_facet(name)
+        if facet is None:
+            msg = f"There is no facet called '{name}'."
+            raise CommandError(msg)
+        return facet
 
     def _require_resonance(self, name: str) -> Any:
         """Resolve *name* to a Resonance (iexact), or raise CommandError."""
@@ -130,3 +150,15 @@ class CmdMotif(DispatchCommand):
             raise CommandError(msg)
         style = self._require_style(style_name)
         return {"style": style}
+
+    def _args_facet(self) -> dict[str, Any]:
+        """Resolve bindfacet/unbindfacet args: ``<facet>=<resonance>``."""
+        facet_part, sep, resonance_part = self._rest.partition("=")
+        facet_name = facet_part.strip()
+        resonance_name = resonance_part.strip()
+        if not sep or not facet_name or not resonance_name:
+            msg = f"Usage: motif {self._subverb} <facet>=<resonance>."
+            raise CommandError(msg)
+        facet = self._require_facet(facet_name)
+        resonance = self._require_resonance(resonance_name)
+        return {"facet": facet, "resonance": resonance}
