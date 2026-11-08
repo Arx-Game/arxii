@@ -1558,6 +1558,25 @@ def set_appable(  # noqa: PLR0913 — keyword-only; one arg per slot constraint
 
 
 @transaction.atomic
+def _of_the_family(node: Kinsperson, family_id: int) -> bool:
+    """A member on record, or the wedded spouse of one (#5017).
+
+    The family roll the Almanach draws shows a member's spouse beside the
+    member, and a marriage often reaches the record without a married-in
+    membership (the spouse link writes one only for the picked person into the
+    page's family; the admin's Spouses section writes none), so the rule reads
+    the open marriage as well as the membership rows.
+    """
+    members = FamilyMembership.objects.filter(family_id=family_id, ended_at__isnull=True)
+    if members.filter(kinsperson=node).exists():
+        return True
+    return (
+        Union.objects.filter(ended_at__isnull=True, kind__confers_wedlock=True, members=node)
+        .filter(members__in=members.values("kinsperson_id"))
+        .exists()
+    )
+
+
 def set_personal_holder(*, title: Title, node: Kinsperson) -> Title:
     """Name who holds ``title`` in person (#4239): one of the holding house's family."""
     if title.house_id is None or title.house.family_id is None:
@@ -1565,9 +1584,7 @@ def set_personal_holder(*, title: Title, node: Kinsperson) -> Title:
         raise HousesServiceError(
             msg, user_message="Give the title to a house before naming its holder."
         )
-    if not FamilyMembership.objects.filter(
-        kinsperson=node, family_id=title.house.family_id, ended_at__isnull=True
-    ).exists():
+    if not _of_the_family(node, title.house.family_id):
         msg = "holder outside family"
         raise HousesServiceError(msg, user_message="The holder must be of the holding family.")
     title.holder = node

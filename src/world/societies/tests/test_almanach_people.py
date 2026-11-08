@@ -4,6 +4,7 @@ organization, kin from nothing, links to anyone, status, tier, appable, holder."
 from __future__ import annotations
 
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import RealmFactory
@@ -14,6 +15,7 @@ from world.roster.factories import (
     FamilyKindFactory,
     KinspersonFactory,
     ParentageEdgeFactory,
+    UnionFactory,
     UnionKindFactory,
 )
 from world.roster.models import Family, FamilyMembership, ParentageEdge, Union
@@ -356,3 +358,31 @@ class SetPersonalHolderTests(_Realm):
         vacant = plant_rung(realm=self.realm, tier=TitleTier.COUNTY, name="Nowhere")
         with self.assertRaises(HousesServiceError):
             set_personal_holder(title=vacant, node=royal)
+
+    def test_a_spouse_married_in_from_another_house_may_hold(self):
+        """#5017: the roll the ruler slot shows includes a member's spouse, so the
+        rule accepts one too; the Almanach spouse link writes the married-in
+        membership only one way round, and a marriage recorded in the admin
+        writes none."""
+        royal = KinspersonFactory(name="Royal")
+        add_membership(kinsperson=royal, family=self.crown.family, basis=MembershipBasis.BORN)
+        consort = KinspersonFactory(
+            name="Consort", family=FamilyFactory(name="House Elsewhere", kind=self.noble)
+        )
+        paramour = KinspersonFactory(name="Paramour")
+        UnionFactory(kind=UnionKindFactory(name="Dalliance", confers_wedlock=False)).members.set(
+            [royal, paramour]
+        )
+        with self.assertRaises(HousesServiceError):
+            set_personal_holder(title=self.throne, node=consort)
+        with self.assertRaises(HousesServiceError):
+            set_personal_holder(title=self.throne, node=paramour)
+        marriage = UnionFactory(kind=UnionKindFactory(name="Marriage"))
+        marriage.members.set([royal, consort])
+        set_personal_holder(title=self.throne, node=consort)
+        self.throne.refresh_from_db()
+        self.assertEqual(self.throne.holder, consort)
+        marriage.ended_at = timezone.now()
+        marriage.save(update_fields=["ended_at"])
+        with self.assertRaises(HousesServiceError):
+            set_personal_holder(title=self.throne, node=consort)
