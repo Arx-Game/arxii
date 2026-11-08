@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
@@ -13,7 +12,11 @@ from django.db.models import Max, Sum
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.classes.models import CharacterClassLevel
 from world.progression.constants import DP_BASE_LEVEL
-from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    DevelopmentTransaction,
+    cumulative_dp_for_level,
+)
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
 from world.relationships.services import standing_tie_ap
@@ -27,7 +30,12 @@ from world.skills.models import (
     TrainingAllocation,
 )
 from world.skills.types import SkillTrainingResult
-from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    TraitChangeSource,
+    TraitType,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -381,8 +389,14 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
     equal (#4496): character creation and staff edit through ``set_skill_values``,
     weekly training, the XP breakthrough and a level-up from use through here and
     :func:`set_skill_sheet_value`. A row that changes, or is new, gets a
-    ``CharacterTraitChange`` with ``source``.
+    ``CharacterTraitChange`` with ``source``, and the skill's ``DevelopmentPoints``
+    ledger is aligned to the new rating (#5010), so development continues from the
+    rating written here rather than from the base level.
     """
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        align_development_floors,
+    )
+
     row = CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).first()
     old = row.value if row else 0
     if row is None:
@@ -395,19 +409,19 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
     CharacterTraitChange.objects.create(
         character_sheet=sheet, trait=skill.trait, old_value=old, new_value=value, source=source
     )
+    align_development_floors(sheet, {skill.trait: value})
 
 
 def set_skill_sheet_value(sheet: CharacterSheet, skill: Skill, value: int) -> None:
     """The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.
 
-    Creates the row when the sheet has none. Only ``value`` moves; the row's
-    ``development_points`` and ``rust_points`` are the training counters and stay as
-    they are (the use-development counter, ``DevelopmentPoints``, is a separate one).
+    Creates the row when the sheet has none. Progress toward the next level is not
+    kept here: it lives in the skill trait's ``DevelopmentPoints`` ledger (#5010).
     """
     row, created = CharacterSkillValue.objects.get_or_create(
         character=sheet,
         skill=skill,
-        defaults={"value": value, "development_points": 0, "rust_points": 0},
+        defaults={"value": value},
     )
     if not created and row.value != value:
         row.value = value
@@ -477,6 +491,22 @@ def is_skill_at_xp_boundary(value: int) -> bool:
     return _is_at_xp_boundary(value)
 
 
+def next_xp_boundary(value: int) -> int | None:
+    """The first XP boundary at or above *value* (19, 29, 39, 49), ``None`` above 49.
+
+    Where a skill's development parks until its breakthrough is bought
+    (``DevelopmentPoints.award_points``, #5010).
+    """
+    return next(
+        (
+            v
+            for v in range(max(value, _XP_BOUNDARY_MIN), _XP_BOUNDARY_MAX + 1)
+            if _is_at_xp_boundary(v)
+        ),
+        None,
+    )
+
+
 def stored_skill_cap(sheet: CharacterSheet) -> int | None:
     """The highest stored value the sheet's level band lets a skill reach (#4585).
 
@@ -505,51 +535,32 @@ def _boundary_message(skill: Skill, next_rating: int) -> str:
     )
 
 
-def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> str | None:
-    """Apply development points to a skill and keep the check engine's copy equal (#4496).
-
-    Starts from the higher of the skill's two stores (``reconcile_skill_stores``), runs
-    :func:`_develop_skill_value`, then writes the resulting rating to the trait row a
-    check reads. Returns the plateau message ``_develop_skill_value`` returns.
-    """
-    sheet = skill_value.character
-    skill = skill_value.skill
-    skill_value.value = max(skill_value.value, reconcile_skill_stores(sheet, skill))
-    message = _develop_skill_value(skill_value, dev_points)
-    set_skill_trait(sheet, skill, skill_value.value, TraitChangeSource.DEVELOPMENT_LEVEL_UP)
-    return message
-
-
-def points_to_next_boundary(skill_value: CharacterSkillValue) -> int | None:
+def points_to_next_boundary(tracker: DevelopmentPoints) -> int | None:
     """Development the skill can take before it parks at its next XP boundary.
 
-    Counts unpaid rust first (rust is paid before any level), then the cost of each
-    level from the current value up to the next boundary (19, 29, 39, 49), less the
-    ``development_points`` already banked toward the current level. A skill already
-    sitting at a boundary can take only its rust, since anything more dissipates. The
-    band's skill cap (#4585) is a stop like a boundary: the count ends there, and a skill
-    at its cap takes only its rust. Returns ``None`` above 49 with no cap set, where no
-    stop lies ahead. A caller that must not lose any development to dissipation clamps
-    what it applies to this number.
+    Reads the skill trait's ``DevelopmentPoints`` ledger (#5010): unpaid rust first
+    (rust is paid before any level), then what the levels from the current rating up to
+    the next boundary (19, 29, 39, 49) cost, less the progress already banked toward
+    them. A skill already sitting at a boundary can take only its rust, since anything
+    more dissipates. The band's skill cap (#4585) is a stop like a boundary: the count
+    ends there, and a skill at its cap takes only its rust. Returns ``None`` above 49
+    with no cap set, where no stop lies ahead. A caller that must not lose any
+    development to dissipation clamps what it applies to this number.
     """
-    value = skill_value.value
-    cap = stored_skill_cap(skill_value.character)
+    row = CharacterTraitValue.objects.filter(
+        character=tracker.character_sheet, trait=tracker.trait
+    ).first()
+    value = row.value if row is not None else DP_BASE_LEVEL
+    cap = stored_skill_cap(tracker.character_sheet)
     if _is_at_xp_boundary(value) or (cap is not None and value >= cap):
-        return skill_value.rust_points
-    boundary = next(
-        (
-            v
-            for v in range(max(value, _XP_BOUNDARY_MIN), _XP_BOUNDARY_MAX + 1)
-            if _is_at_xp_boundary(v)
-        ),
-        None,
-    )
+        return tracker.rust_debt
+    boundary = next_xp_boundary(value)
     if cap is not None:
         boundary = cap if boundary is None else min(boundary, cap)
     if boundary is None:
         return None
-    level_cost = sum(_development_cost(v) for v in range(value, boundary))
-    return skill_value.rust_points + max(level_cost - skill_value.development_points, 0)
+    banked = max(tracker.total_earned, cumulative_dp_for_level(value))
+    return tracker.rust_debt + max(cumulative_dp_for_level(boundary) - banked, 0)
 
 
 def train_skill(
@@ -563,31 +574,40 @@ def train_skill(
     """Develop a skill from training and record the audit transaction.
 
     The one writer for development from training: weekly training and an Academy course
-    both come through here. Creates the sheet's ``CharacterSkillValue`` at the base level
-    when it has none, applies ``dev_points`` through :func:`_apply_development_to_skill`
-    (which keeps the sheet row and the check engine's trait row equal), and writes one
-    ``DevelopmentTransaction`` for the points applied, with any plateau message appended
-    to ``description``. With ``stop_at_boundary`` the points are clamped to
-    :func:`points_to_next_boundary`, so none dissipates at a boundary; the excess is
-    simply not applied and the caller keeps it.
+    both come through here. The points go into the skill trait's ``DevelopmentPoints``
+    ledger through ``award_points`` (#5010), the same ledger use and GM awards feed, so
+    rust is paid first, the skill parks at an XP boundary or the band's skill cap, and
+    the sheet's copy of the rating is kept equal. One ``DevelopmentTransaction`` records
+    the points applied, stamped with the current game week (a trained skill is exempt
+    from that week's rust), with any plateau message appended to ``description``. With
+    ``stop_at_boundary`` the points are clamped to :func:`points_to_next_boundary`, so
+    none dissipates at a boundary; the excess is simply not applied and the caller
+    keeps it.
     """
-    skill_value, _created = CharacterSkillValue.objects.get_or_create(
-        character=sheet,
-        skill=skill,
-        defaults={"value": DP_BASE_LEVEL, "development_points": 0, "rust_points": 0},
-    )
-    skill_value.value = max(skill_value.value, reconcile_skill_stores(sheet, skill))
-    old_value = skill_value.value
-    points_applied = dev_points
-    if stop_at_boundary:
-        room = points_to_next_boundary(skill_value)
-        if room is not None:
-            points_applied = min(dev_points, room)
-    plateau_message = _apply_development_to_skill(skill_value, points_applied)
-    _record_training_transaction(sheet, skill.trait, points_applied, description, plateau_message)
+    with transaction.atomic():
+        # A skill the character has no rating in starts at the base level.
+        old_value = reconcile_skill_stores(sheet, skill) or DP_BASE_LEVEL
+        tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
+            character_sheet=sheet, trait=skill.trait
+        )
+        tracker.total_earned = max(tracker.total_earned, cumulative_dp_for_level(old_value))
+        points_applied = dev_points
+        if stop_at_boundary:
+            room = points_to_next_boundary(tracker)
+            if room is not None:
+                points_applied = min(dev_points, room)
+        expected_total = tracker.total_earned + max(points_applied - tracker.rust_debt, 0)
+        tracker.award_points(points_applied)
+        new_value = CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value
+        plateau_message = None
+        if tracker.total_earned < expected_total:
+            plateau_message = _skill_plateau_message(skill, new_value, stored_skill_cap(sheet))
+        _record_training_transaction(
+            sheet, skill.trait, points_applied, description, plateau_message
+        )
     return SkillTrainingResult(
         old_value=old_value,
-        new_value=skill_value.value,
+        new_value=new_value,
         points_applied=points_applied,
         plateau_message=plateau_message,
     )
@@ -600,7 +620,13 @@ def _record_training_transaction(
     description: str,
     plateau_message: str | None,
 ) -> None:
-    """Write the ``DevelopmentTransaction`` audit row for a training award."""
+    """Write the ``DevelopmentTransaction`` audit row for a training award.
+
+    Stamped with the current game week: the weekly rust pass reads it to exempt a
+    trait trained that week (#5010).
+    """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+
     if plateau_message:
         description = f"{description} — {plateau_message}"
     DevelopmentTransaction.objects.create(
@@ -610,71 +636,17 @@ def _record_training_transaction(
         amount=amount,
         reason=ProgressionReason.SYSTEM_AWARD,
         description=description,
+        game_week=get_current_game_week(),
     )
 
 
-def _skill_plateau_message(skill_value: CharacterSkillValue, cap: int | None) -> str | None:
-    """Describe the first advancement boundary reached, if any."""
-    if cap is not None and skill_value.value >= cap:
-        return skill_cap_message(skill_value.skill.name, cap)
-    if _is_at_xp_boundary(skill_value.value):
-        return _boundary_message(skill_value.skill, skill_value.value + 1)
+def _skill_plateau_message(skill: Skill, value: int, cap: int | None) -> str | None:
+    """Describe the stop a skill at *value* has reached (band cap first), if any."""
+    if cap is not None and value >= cap:
+        return skill_cap_message(skill.name, cap)
+    if _is_at_xp_boundary(value):
+        return _boundary_message(skill, value + 1)
     return None
-
-
-def _develop_skill_value(skill_value: CharacterSkillValue, dev_points: int) -> str | None:
-    """Apply development points to a skill, handling rust payoff, level-ups, and plateau.
-
-    Dev points pay off rust first, always — even while the skill is parked at an
-    XP boundary (19, 29, 39, 49), so training/use can still "blow the rust off" a
-    gated skill (#2115). Any surplus beyond the rust payoff dissipates at a
-    boundary: development points are deliberately ephemeral (the 2026-07-09
-    ephemerality ruling) — never banked, never silently discarded. The same
-    dissipation (with the same visible message) applies to overflow from a
-    level-up that lands exactly on a boundary. The band's skill cap (#4585) is a
-    wall of the same kind: development stops at it, surplus dissipates, and the
-    message names the cap. Mutates ``skill_value`` in place and saves it.
-
-    Args:
-        skill_value: The CharacterSkillValue to develop.
-        dev_points: Development points to apply.
-
-    Returns:
-        A plateau message when points dissipated at a boundary or the band's cap
-        this call, else ``None``.
-    """
-    cap = stored_skill_cap(skill_value.character)
-    # Pay off rust first — always, even when parked at a boundary.
-    remaining = dev_points
-    if skill_value.rust_points > 0:
-        rust_paid = min(remaining, skill_value.rust_points)
-        skill_value.rust_points -= rust_paid
-        remaining -= rust_paid
-
-    plateau = _skill_plateau_message(skill_value, cap)
-    if plateau is not None:
-        skill_value.development_points = 0
-        skill_value.save()
-        return plateau if remaining else None
-
-    # Apply remaining to development
-    remaining += skill_value.development_points
-
-    message = None
-    cost = _development_cost(skill_value.value)
-    while remaining >= cost:
-        remaining -= cost
-        skill_value.value += 1
-        plateau = _skill_plateau_message(skill_value, cap)
-        if plateau is not None:
-            message = plateau if remaining > 0 else None
-            remaining = 0
-            break
-        cost = _development_cost(skill_value.value)
-
-    skill_value.development_points = remaining
-    skill_value.save()
-    return message
 
 
 def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool, str]:
@@ -686,7 +658,9 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     level (ADR-0053: XP buys the unlock that gates, never the grant) — it just
     clears the gate. Because dev points earned while gated dissipate rather than
     bank (the 2026-07-09 ephemerality ruling), there is nothing to retroactively
-    apply: training simply resumes accruing from zero once the gate is clear.
+    apply: the new rating is written through :func:`set_skill_trait`, which raises
+    the ``DevelopmentPoints`` ledger to it, so development resumes from zero toward
+    the next level (#5010).
 
     Args:
         character: The character purchasing the breakthrough.
@@ -746,8 +720,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
             return False, exc.user_message
 
         skill_value.value = target_rating
-        skill_value.development_points = 0
-        skill_value.save()
+        skill_value.save(update_fields=["value"])
         set_skill_trait(
             skill_value.character, skill, target_rating, TraitChangeSource.XP_BREAKTHROUGH
         )
@@ -771,6 +744,8 @@ class SkillBreakthroughProspect:
 def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
     """Return the character's skills currently parked at an XP boundary (#2115).
 
+    Reads each skill trait's ``CharacterTraitValue`` (the rating a check reads).
+
     Feeds the ``progression unlock`` listing and the sheet skills section's
     ``at_boundary`` flag — so a player sees why a skill stalled, and what the
     breakthrough costs, before burning a session wondering.
@@ -785,32 +760,33 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
     """
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
 
-    gated = [
-        sv
-        for sv in CharacterSkillValue.objects.filter(character_id=character.pk).select_related(
-            "skill__trait"
+    gated = {
+        row.trait_id: row.value
+        for row in CharacterTraitValue.objects.filter(
+            character_id=character.pk, trait__trait_type=TraitType.SKILL
         )
-        if _is_at_xp_boundary(sv.value)
-    ]
+        if _is_at_xp_boundary(row.value)
+    }
     if not gated:
         return []
 
-    trait_ids = [sv.skill.trait_id for sv in gated]
-    target_ratings = [sv.value + 1 for sv in gated]
+    skills = list(
+        Skill.objects.filter(trait_id__in=list(gated)).select_related("trait").order_by("pk")
+    )
     unlocks = {
         (u.trait_id, u.target_rating): u
         for u in TraitRatingUnlock.objects.filter(
-            trait_id__in=trait_ids, target_rating__in=target_ratings
+            trait_id__in=list(gated), target_rating__in={v + 1 for v in gated.values()}
         )
     }
 
     prospects: list[SkillBreakthroughProspect] = []
-    for sv in gated:
-        next_rating = sv.value + 1
-        unlock = unlocks.get((sv.skill.trait_id, next_rating))
+    for skill in skills:
+        next_rating = gated[skill.trait_id] + 1
+        unlock = unlocks.get((skill.trait_id, next_rating))
         prospects.append(
             SkillBreakthroughProspect(
-                skill=sv.skill,
+                skill=skill,
                 next_rating=next_rating,
                 xp_cost=unlock.get_xp_cost_for_character(character) if unlock else None,
                 authored=unlock is not None,
@@ -861,21 +837,16 @@ def _apply_development_to_specialization(
 
 
 @transaction.atomic
-def process_weekly_training() -> dict[int, set[int]]:
+def process_weekly_training() -> None:
     """Process all training allocations for the weekly tick.
 
     Iterates every ``TrainingAllocation``, calculates development points,
     applies them to the relevant skill or specialization, consumes AP
     from the character's action point pool, and records a
-    ``DevelopmentTransaction`` audit trail entry for each allocation.
-
-    Returns:
-        A dict mapping character PKs to sets of trained Skill PKs. For
-        specialization training the parent skill PK is included (used by
-        the rust system to prevent rust on actively trained skills).
+    ``DevelopmentTransaction`` audit trail entry for each allocation. Those
+    transactions carry the game week, which exempts the trained skill (or a trained
+    specialization's parent skill) from that week's rust (#5010).
     """
-    trained_skills: dict[int, set[int]] = defaultdict(set)
-
     # Pre-fetch the Teaching skill once for all mentor calculations.
     teaching_skill = _get_teaching_skill()
 
@@ -910,7 +881,6 @@ def process_weekly_training() -> dict[int, set[int]]:
         description = f"Weekly training: {allocation}"
         if allocation.skill:
             train_skill(character, allocation.skill, dev_points, description=description)
-            trained_skills[character.pk].add(allocation.skill.pk)
         elif allocation.specialization:
             spec_value, _created = CharacterSpecializationValue.objects.get_or_create(
                 character=character,
@@ -918,7 +888,6 @@ def process_weekly_training() -> dict[int, set[int]]:
                 defaults={"value": 10, "development_points": 0},
             )
             cap_message = _apply_development_to_specialization(spec_value, dev_points)
-            trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
             _record_training_transaction(
                 character,
                 allocation.specialization.parent_skill.trait,
@@ -947,51 +916,12 @@ def process_weekly_training() -> dict[int, set[int]]:
                 str(character),
             )
 
-    return dict(trained_skills)
-
 
 def run_weekly_skill_cron() -> None:
-    """Run the full weekly skill development cycle.
+    """Run the weekly skill training cycle: process every training allocation.
 
-    1. Process all training allocations (award dev points, consume AP).
-    2. Apply rust to all untrained skills.
+    Rust is not applied here. The one weekly rust pass is the progression rollover's
+    (``world.progression.services.skill_development._apply_weekly_rust``), which exempts
+    a skill trained or used that week (#5010).
     """
-    trained_skills = process_weekly_training()
-    apply_weekly_rust(trained_skills)
-
-
-def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
-    """Apply weekly rust to all untrained skills.
-
-    Skills that were actively trained or used this week (present in
-    ``trained_skills``) are exempt. All other skills accumulate rust
-    equal to ``character_level + 5``, capped at the current level's
-    development cost.
-
-    Args:
-        trained_skills: Dict from ``process_weekly_training()`` mapping
-            character PKs to sets of Skill PKs that were active this week.
-    """
-    active_characters = (
-        RosterEntry.objects.active_rosters().exclude_dormant().values("character_sheet")
-    )
-    all_skill_values = list(
-        CharacterSkillValue.objects.filter(
-            character__in=active_characters,
-        ).select_related("character")
-    )
-
-    # Batch-fetch path levels for all characters with skill values (1 query).
-    character_pks = {sv.character_id for sv in all_skill_values}
-    path_levels = _bulk_path_levels(character_pks)
-
-    for sv in all_skill_values:
-        active_skills = trained_skills.get(sv.character_id, set())
-        if sv.skill_id in active_skills:
-            continue
-
-        char_level = path_levels.get(sv.character_id, 1)
-        rust_amount = char_level + 5
-        max_rust = _development_cost(sv.value)
-        sv.rust_points = min(sv.rust_points + rust_amount, max_rust)
-        sv.save()
+    process_weekly_training()

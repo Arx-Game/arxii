@@ -93,9 +93,8 @@ def purchase_language_breakthrough(sheet: CharacterSheet, language: Language) ->
         NoAccountForCharacterError,
     )
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
-    from world.progression.models.rewards import (  # noqa: PLC0415
-        DevelopmentPoints,
-        cumulative_dp_for_level,
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        align_development_floors,
     )
     from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
@@ -147,13 +146,7 @@ def purchase_language_breakthrough(sheet: CharacterSheet, language: Language) ->
             new_value=unlock.target_rating,
             source=TraitChangeSource.XP_BREAKTHROUGH,
         )
-        tracker, _created = DevelopmentPoints.objects.get_or_create(
-            character_sheet=sheet, trait_id=language.trait_id
-        )
-        floor = cumulative_dp_for_level(unlock.target_rating)
-        if tracker.total_earned < floor:
-            tracker.total_earned = floor
-            tracker.save(update_fields=["total_earned"])
+        align_development_floors(sheet, {language.trait: unlock.target_rating})
 
     return (
         True,

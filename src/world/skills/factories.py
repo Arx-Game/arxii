@@ -72,8 +72,6 @@ class CharacterSkillValueFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     skill = factory.SubFactory(SkillFactory)
     value = 20
-    development_points = 0
-    rust_points = 0
 
 
 class CharacterSpecializationValueFactory(factory.django.DjangoModelFactory):

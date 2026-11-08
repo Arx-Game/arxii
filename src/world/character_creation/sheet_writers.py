@@ -135,7 +135,8 @@ def set_skill_values(
     """Set skill and specialization values, creating missing rows and updating others.
 
     A skill also writes the matching ``CharacterTraitValue`` the check engine reads
-    (#2894), at the same 1 to 100 value. ``enforce_caps`` holds the configured
+    (#2894), at the same 1 to 100 value, and aligns its ``DevelopmentPoints`` ledger to
+    that rating (``set_skill_trait``, #5010). ``enforce_caps`` holds the configured
     ``max_skill_value`` / ``max_specialization_value`` and the sheet's level band
     skill cap (#4585); character creation already validated its picks and passes False.
     Lowering a skill to 0 keeps its row at 0.

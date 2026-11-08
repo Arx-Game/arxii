@@ -141,10 +141,11 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
 
 class CharacterSkillValue(SharedMemoryModel):
     """
-    Character's skill value with progression tracking.
+    The skill rating the character sheet shows.
 
-    Stores the actual skill value plus development points (progress toward
-    next level) and rust points (blocks development until cleared).
+    A copy of the skill trait's ``CharacterTraitValue`` (what a check reads), kept
+    equal by ``world.skills.services``. Progress toward the next level and rust live
+    in the trait's ``progression.DevelopmentPoints`` ledger (#5010).
     """
 
     character = models.ForeignKey(
@@ -161,14 +162,6 @@ class CharacterSkillValue(SharedMemoryModel):
     )
     value = models.PositiveIntegerField(
         help_text="Current skill value (10, 20, 30, etc.)",
-    )
-    development_points = models.PositiveIntegerField(
-        default=0,
-        help_text="Progress toward next level (resets at threshold)",
-    )
-    rust_points = models.PositiveIntegerField(
-        default=0,
-        help_text="Accumulated rust blocking development (0 = clear)",
     )
     character_id: int
 

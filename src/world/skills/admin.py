@@ -67,8 +67,6 @@ class CharacterSkillValueAdmin(admin.ModelAdmin):
         "skill",
         "value",
         "display_value",
-        "development_points",
-        "rust_points",
     ]
     list_filter = ["skill"]
     search_fields = ["character__db_key", "skill__trait__name"]

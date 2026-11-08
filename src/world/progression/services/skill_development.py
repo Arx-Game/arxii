@@ -6,7 +6,9 @@ Points accumulate in :class:`DevelopmentPoints` and trigger automatic
 skill level-ups when cumulative thresholds are crossed.
 
 Also handles weekly skill development processing: audit trail creation for
-earned dp and rust application for unused skills.
+earned dp and the one weekly rust pass, which spares a trait used or trained that
+week (#5010). :func:`align_development_floors` keeps the ledger in step with a
+rating written directly.
 """
 
 from __future__ import annotations
@@ -31,11 +33,12 @@ from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
     WeeklySkillUsage,
+    cumulative_dp_for_level,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from evennia.objects.models import ObjectDB
 
@@ -151,6 +154,43 @@ def award_check_development(
     return level_ups
 
 
+def align_development_floors(sheet: CharacterSheet, ratings: Mapping[Trait, int]) -> None:
+    """Bring each trait's ``DevelopmentPoints`` ledger in line with a rating written directly.
+
+    A rating set outside development (character creation, a staff edit, an XP or
+    language breakthrough, an NPC copy or preset) counts toward the cost curve:
+    ``total_earned`` rises to ``cumulative_dp_for_level(rating)``, so the next level
+    costs one level's points, not every level from the base (#5010). A rating set
+    lower than the ledger already pays for brings the ledger down to that rating, so
+    the next use does not walk it straight back up. Progress banked toward the next
+    level is kept. Creates a missing row; ``rust_debt`` is untouched.
+    """
+    if not ratings:
+        return
+    existing = {
+        row.trait_id: row
+        for row in DevelopmentPoints.objects.filter(
+            character_sheet=sheet, trait_id__in=[trait.pk for trait in ratings]
+        )
+    }
+    new_rows: list[DevelopmentPoints] = []
+    for trait, rating in ratings.items():
+        floor = cumulative_dp_for_level(rating)
+        top = max(cumulative_dp_for_level(rating + 1) - 1, floor)
+        row = existing.get(trait.pk)
+        if row is None:
+            new_rows.append(
+                DevelopmentPoints(character_sheet=sheet, trait=trait, total_earned=floor)
+            )
+            continue
+        aligned = min(max(row.total_earned, floor), top)
+        if aligned != row.total_earned:
+            row.total_earned = aligned
+            row.save(update_fields=["total_earned"])
+    if new_rows:
+        DevelopmentPoints.objects.bulk_create(new_rows)
+
+
 def _developing_traits(
     check_type: CheckType, extra_traits: Sequence[ExtraTraitTerm]
 ) -> list[Trait]:
@@ -230,7 +270,11 @@ def _apply_weekly_rust(
     game_week: GameWeek,
     used_pairs: set[tuple[int, int]],
 ) -> int:
-    """Apply rust to unused skills for a given week. Returns the number of rust applications.
+    """Apply rust to idle traits for a given week. Returns the number of rust applications.
+
+    The one weekly rust pass (#5010). A character and trait is exempt when it was used
+    in *game_week* (*used_pairs*) or trained in it (a ``TRAINING``
+    ``DevelopmentTransaction`` stamped with that week). Languages never rust.
 
     Idempotent: checks for existing RUST transactions referencing the game week
     and skips processing if any are found.
@@ -249,7 +293,12 @@ def _apply_weekly_rust(
         )
         return 0
 
-    # Exclude character+trait pairs that were used this week.
+    # Exclude character+trait pairs that were used or trained this week.
+    used_pairs = used_pairs | set(
+        DevelopmentTransaction.objects.filter(
+            source=DevelopmentSource.TRAINING, game_week=game_week
+        ).values_list("character_sheet_id", "trait_id")
+    )
     # NOTE: This builds an OR-chain of Q objects, which scales linearly with the
     # number of used pairs. For large player bases (1000+ active skill usages per
     # week), consider replacing with a subquery or raw SQL NOT IN clause. For MVP
@@ -318,9 +367,9 @@ def process_weekly_skill_development(game_week: GameWeek) -> None:
     1. For every :class:`WeeklySkillUsage` row for *game_week*, create a
        single :class:`DevelopmentTransaction` audit record per character+trait
        and mark the usage row as processed.
-    2. For every :class:`DevelopmentPoints` row whose character+trait does
-       **not** have a usage row for this week (and the trait level is above
-       the CG base), apply rust debt.
+    2. For every :class:`DevelopmentPoints` row whose character+trait was
+       neither used nor trained this week (and the trait level is above the CG
+       base, and the trait is not a language), apply rust debt.
 
     Args:
         game_week: The GameWeek to process.

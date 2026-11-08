@@ -272,6 +272,9 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     Raises:
         StaffMintError: ``sheet`` already carries a preset-sourced stamp.
     """
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        align_development_floors,
+    )
     from world.skills.models import CharacterSkillValue  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         STAT_DISPLAY_DIVISOR,
@@ -301,17 +304,13 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     skill_lines = list(preset.skill_lines.select_related("skill", "skill__trait"))
     skill_trait_values: list[CharacterTraitValue] = []
     for line in skill_lines:
-        CharacterSkillValue.objects.create(
-            character=sheet,
-            skill=line.skill,
-            value=line.value,
-            development_points=0,
-            rust_points=0,
-        )
+        CharacterSkillValue.objects.create(character=sheet, skill=line.skill, value=line.value)
         skill_trait_values.append(
             CharacterTraitValue(character=sheet, trait=line.skill.trait, value=line.value)
         )
     CharacterTraitValue.objects.bulk_create(skill_trait_values)
+    # A preset's skill ratings count toward the cost curve like any direct write (#5010).
+    align_development_floors(sheet, {tv.trait: tv.value for tv in skill_trait_values})
 
     all_trait_values = trait_values + skill_trait_values
     CharacterTraitChange.objects.bulk_create(

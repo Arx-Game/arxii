@@ -186,20 +186,28 @@ class DevelopmentPoints(SharedMemoryModel):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def _language_rating_ceiling(self, current_value: int) -> int | None:
-        """The lowest authored ``TraitRatingUnlock`` rating above *current_value* (#4090).
+    def _rating_ceiling(self, current_value: int) -> int | None:
+        """The rating this trait cannot develop to until a breakthrough is bought, else ``None``.
 
-        LANGUAGE traits only, and the type check runs before any query so every other
-        trait's award path is unchanged. Skills park at their XP boundaries on
-        ``CharacterSkillValue`` (``world.skills.services._apply_development_to_skill``),
-        and other DevelopmentPoints-levelled traits carry no authored rating locks, so
-        widening this would change skill check-use development, which is not ruled.
+        A SKILL trait stops at its next XP boundary (19, 29, 39, 49; #2115), for every
+        source of development: use, training and GM awards all come through
+        :meth:`award_points` (#5010). The ceiling is one past the boundary, so the skill
+        parks on the boundary itself; above 49 there is none.
 
-        Unlike skills, which park at every x9 boundary whether or not staff authored a
-        breakthrough there, a language parks only where staff authored a
-        ``TraitRatingUnlock``. That difference is intended (the #4090 spec Amendment):
-        an unauthored lock would strand a language with nothing to buy.
+        A LANGUAGE trait stops one rating below the lowest authored ``TraitRatingUnlock``
+        above *current_value* (#4090). Unlike skills, which park at every x9 boundary
+        whether or not staff authored a breakthrough there, a language parks only where
+        staff authored one. That difference is intended (the #4090 spec Amendment): an
+        unauthored lock would strand a language with nothing to buy.
+
+        Stats and every other trait have no ceiling, and the type check runs before any
+        query, so their award path is unchanged.
         """
+        if self.trait.trait_type == TraitType.SKILL:
+            from world.skills.services import next_xp_boundary  # noqa: PLC0415
+
+            boundary = next_xp_boundary(current_value)
+            return None if boundary is None else boundary + 1
         if self.trait.trait_type != TraitType.LANGUAGE:
             return None
         from world.progression.models.unlocks import TraitRatingUnlock  # noqa: PLC0415
@@ -214,7 +222,7 @@ class DevelopmentPoints(SharedMemoryModel):
     def _levels_earned(
         self, starting_level: int, ceiling: int | None, skill_cap: int | None
     ) -> list[tuple[int, int]]:
-        """List levels affordable before the language or skill cap."""
+        """List levels affordable before the rating ceiling or the band skill cap."""
         level_ups: list[tuple[int, int]] = []
         current_level = starting_level
         while True:
@@ -232,6 +240,11 @@ class DevelopmentPoints(SharedMemoryModel):
     def award_points(self, amount: int) -> list[tuple[int, int]]:
         """Award development points and level up the trait when thresholds are crossed.
 
+        For a SKILL trait the ledger first rises to what the current rating cost
+        (``cumulative_dp_for_level``), so a skill set to 30 in character creation needs
+        one level's points to reach 31, not every level from the base (#5010). Stats and
+        languages count from the base as before.
+
         If there is outstanding ``rust_debt``, incoming dp pays off the debt first.
         Only the remainder counts toward the ``total_earned`` accumulator and
         potential level-ups.
@@ -241,11 +254,11 @@ class DevelopmentPoints(SharedMemoryModel):
         advanced to 10 on first dp award (cumulative_dp_for_level returns 0 for
         levels <= 10).
 
-        A LANGUAGE trait stops one rating below an authored ``TraitRatingUnlock``
-        (#4090); surplus dp there dissipates. A SKILL trait stops at its level band's
-        skill cap (#4585, ``world.skills.services.stored_skill_cap``) the same way;
-        :meth:`at_skill_cap` tells a caller to say so. Stats and other traits are
-        unaffected.
+        A SKILL trait parks on its next XP boundary and a LANGUAGE trait one rating below
+        an authored ``TraitRatingUnlock`` (:meth:`_rating_ceiling`); a SKILL trait also
+        stops at its level band's skill cap (#4585, ``world.skills.services.stored_skill_cap``)
+        and :meth:`at_skill_cap` tells a caller to say so. Rust is still paid off while
+        parked, and any surplus dissipates. Stats and other traits are unaffected.
 
         Args:
             amount: Development points to award.
@@ -253,14 +266,6 @@ class DevelopmentPoints(SharedMemoryModel):
         Returns:
             List of ``(old_level, new_level)`` tuples for each level-up that occurred.
         """
-        if self.rust_debt > 0:
-            payoff = min(amount, self.rust_debt)
-            self.rust_debt -= payoff
-            amount -= payoff
-
-        self.total_earned += amount
-        self.save()
-
         from world.skills.services import (  # noqa: PLC0415 - skills.services imports this module
             reconcile_skill_stores,
             set_skill_sheet_value,
@@ -275,17 +280,27 @@ class DevelopmentPoints(SharedMemoryModel):
             trait=self.trait,
             defaults={"value": 10},
         )
-
         starting_level: int = trait_value.value
-        ceiling = self._language_rating_ceiling(starting_level)
+
+        if skill is not None:
+            self.total_earned = max(self.total_earned, cumulative_dp_for_level(starting_level))
+        if self.rust_debt > 0:
+            payoff = min(amount, self.rust_debt)
+            self.rust_debt -= payoff
+            amount -= payoff
+
+        self.total_earned += amount
+        self.save()
+
+        ceiling = self._rating_ceiling(starting_level)
         skill_cap = stored_skill_cap(self.character_sheet) if skill is not None else None
         level_ups = self._levels_earned(starting_level, ceiling, skill_cap)
         current_level = level_ups[-1][1] if level_ups else starting_level
 
-        # Parked at an XP lock, or at the band's skill cap (#4585): surplus dp
-        # dissipates instead of banking (the 2026-07-09 ephemerality ruling skills
-        # follow), so neither a breakthrough nor a higher band back-pays development
-        # earned while stopped.
+        # Parked at an XP boundary or lock, or at the band's skill cap (#4585): surplus
+        # dp dissipates instead of banking (the 2026-07-09 ephemerality ruling), so
+        # neither a breakthrough nor a higher band back-pays development earned while
+        # stopped.
         parked = ceiling is not None and current_level == ceiling - 1
         if parked or (skill_cap is not None and current_level >= skill_cap):
             self._dissipate_above(current_level)
