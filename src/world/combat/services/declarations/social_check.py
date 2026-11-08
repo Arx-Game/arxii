@@ -170,7 +170,9 @@ def roll_social_check(  # noqa: PLR0913 - each term feeds the one roll
     perks (``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
     ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) can fire on
     Demoralize/Taunt/Parley, whose callers all resolve
-    ``_resolve_primary_target_sheet(action)`` and pass it through. Rally
+    ``_resolve_primary_target_sheet(action)`` and pass it through. A bare NPC
+    opponent passes ``None`` here; the first three situations then read it from
+    the round context instead (#5020). Rally
     (targets an ally, not an opponent) keeps the default ``None`` — it has no
     opposing target for a TARGET_* situation to key off.
     """

@@ -58,6 +58,7 @@ from world.magic.factories import (
     TechniqueFunctionTagFactory,
 )
 from world.scenes.constants import RoundStatus
+from world.scenes.factories import PersonaFactory
 from world.scenes.models import InteractionPowerLedgerEntry
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import CheckOutcome
@@ -245,6 +246,32 @@ class StrikingAnEnemyBusyWithSomeoneElse(_BanditFight):
 
         self.assertEqual(self.strikes(self.mira, self.captain), 0)
         self.assertNotTold(self.mira, self.ANNOUNCE)
+
+    def test_the_captain_winding_up_on_a_place_pays_nothing(self) -> None:
+        PendingOpponentAttackFactory(
+            encounter=self.encounter,
+            opponent=self.captain,
+            threat_entry=ThreatPoolEntryFactory(pool=self.captain.threat_pool, windup_rounds=1),
+            target=None,
+            declared_round=1,
+            resolves_round=2,
+        )
+
+        self.assertEqual(self.strikes(self.mira, self.captain), 0)
+        self.assertNotTold(self.mira, self.ANNOUNCE)
+
+    def test_a_named_rival_swinging_at_tomas_pays_off(self) -> None:
+        rival = CombatOpponentFactory(
+            encounter=self.encounter,
+            name="Rival",
+            persona=PersonaFactory(),
+            health=500,
+            max_health=500,
+        )
+        self.bandit_attacks(rival, at=(self.tomas,))
+
+        self.assertEqual(self.strikes(self.mira, rival), PAYOFF)
+        self.assertTold(self.mira, self.ANNOUNCE)
 
     def test_the_captain_swinging_at_another_bandit_pays_off(self) -> None:
         self.bandit_attacks(self.captain, at_bandits=(self.guard,))
