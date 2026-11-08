@@ -73,7 +73,7 @@ class NPCStatlinePreset(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
         A line's save or delete clears it through ``NPCPresetSkillLine.related_cache_fields``.
         """
-        return list(self.skill_lines.select_related("skill", "skill__trait"))
+        return list(self.skill_lines.select_related("skill"))
 
 
 class NPCPresetTraitLine(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -136,12 +136,13 @@ class NPCPresetSkillLine(RelatedCacheClearingMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="skill_lines",
     )
-    # String FK for the same reason as NPCPresetTraitLine.trait above --
-    # world.skills.models.Skill wraps a Trait, so it inherits the same cycle.
+    # String FK for the same reason as NPCPresetTraitLine.trait above: a skill is a
+    # skill-type Trait (#5008).
     skill = models.ForeignKey(
-        "arxii.Skill",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         related_name="npc_preset_skill_lines",
+        limit_choices_to={"trait_type": "skill"},
         help_text="PROTECT: mirrors NPCPresetTraitLine.trait's rationale.",
     )
     value = models.PositiveSmallIntegerField(

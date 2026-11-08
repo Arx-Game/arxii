@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.classes.models import Path
     from world.magic.models import CharacterAura, Gift, Resonance, Technique, Tradition
-    from world.skills.models import Skill
     from world.species.models import Species
     from world.traits.models import Trait
 
@@ -45,7 +44,7 @@ class MagicPicks:
     techniques: Sequence[Technique]
     resonance: Resonance | None
     anima_stat: Trait | None
-    anima_skill: Skill | None
+    anima_skill: Trait | None
     ritual_name: str
     account: AccountDB
     origin: str

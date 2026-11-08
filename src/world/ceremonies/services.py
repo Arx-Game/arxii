@@ -549,7 +549,7 @@ def record_speech(
     if check_type is not None:
         oratory = Specialization.objects.filter(
             name=SPEECH_SPECIALIZATION_NAME,
-            parent_skill__trait__name=SPEECH_CHECK_TYPE_NAME,
+            parent_skill__name=SPEECH_CHECK_TYPE_NAME,
         ).first()
         result = perform_check_with_modifiers(
             speaker_persona.character_sheet.character,

@@ -1,1 +1,1 @@
-0375_one_skill_rating_store
+0378_fold_skill_into_trait_contract

@@ -1,19 +1,19 @@
 """
 Skills System Models
 
-Parent skills and specializations for character abilities.
-Skills are linked to the Trait system for unified check resolution.
+A skill is a Trait whose ``trait_type`` is SKILL (#5008, see ``docs/systems/traits.md``).
+This module holds what hangs off a skill: its specializations, the CG skill budget, path
+suggestions and training allocations. Every FK to a skill is a FK to Trait limited to
+skill-type traits.
 """
 
 from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.db import models
-from django.utils.functional import cached_property
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.contributors.models import CreditedContent
 from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
@@ -22,62 +22,8 @@ if TYPE_CHECKING:
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
-
-class Skill(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
-    """
-    Parent skill definition linked to Trait system.
-
-    Skills are broad categories (Melee Combat, Persuasion) that can have
-    specializations underneath them.
-    """
-
-    trait = models.OneToOneField(
-        Trait,
-        on_delete=models.CASCADE,
-        limit_choices_to={"trait_type": TraitType.SKILL},
-        related_name="skill",
-        help_text="The trait definition this skill is linked to",
-    )
-    tooltip = models.TextField(
-        blank=True,
-        help_text="Short description shown on hover in UI",
-    )
-    display_order = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Order for display in character sheets and CG",
-    )
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Whether this skill is available for use",
-    )
-
-    def __str__(self):
-        return self.name
-
-    @property
-    def name(self) -> str:
-        """Skill name from linked trait."""
-        return self.trait.name
-
-    class NaturalKeyConfig:
-        fields = ["trait"]
-
-    objects = NaturalKeyManager()
-
-    @property
-    def category(self) -> str:
-        """Skill category from linked trait."""
-        return self.trait.category
-
-    @property
-    def description(self) -> str:
-        """Skill description from linked trait."""
-        return self.trait.description
-
-    @cached_property
-    def cached_specializations(self) -> list["Specialization"]:
-        """Prefetched specializations for this skill."""
-        return list(self.specializations.all())
+#: A skill is a Trait of type SKILL (#5008); every skill FK offers and accepts only those.
+SKILL_TRAIT_CHOICES = {"trait_type": TraitType.SKILL}
 
 
 class Specialization(NaturalKeyMixin, SharedMemoryModel):
@@ -99,10 +45,11 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
         help_text="Specialization name (e.g., 'Swords', 'Seduction')",
     )
     parent_skill = models.ForeignKey(
-        Skill,
+        Trait,
         on_delete=models.CASCADE,
         related_name="specializations",
-        help_text="The parent skill this specialization belongs to",
+        limit_choices_to=SKILL_TRAIT_CHOICES,
+        help_text="The parent skill (a skill-type trait) this specialization belongs to",
     )
     description = models.TextField(
         blank=True,
@@ -125,7 +72,7 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["parent_skill", "name"]
-        dependencies = ["arxii.Skill"]
+        dependencies = ["arxii.Trait"]
 
     class Meta:
         unique_together = ["parent_skill", "name"]
@@ -219,11 +166,12 @@ class SkillPointBudget(SharedMemoryModel):
         help_text="Maximum specialization value in CG",
     )
     teaching_skill = models.ForeignKey(
-        "arxii.Skill",
+        Trait,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
+        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="Skill used for mentor teaching bonus in training formula",
     )
 
@@ -266,9 +214,10 @@ class PathSkillSuggestion(SharedMemoryModel):
         help_text="The path this suggestion belongs to",
     )
     skill = models.ForeignKey(
-        Skill,
+        Trait,
         on_delete=models.CASCADE,
         related_name="path_suggestions",
+        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="The skill being suggested",
     )
     suggested_value = models.PositiveSmallIntegerField(
@@ -281,7 +230,7 @@ class PathSkillSuggestion(SharedMemoryModel):
 
     class Meta:
         unique_together: ClassVar[list[list[str]]] = [["character_path", "skill"]]
-        ordering = ["character_path", "display_order", "skill__trait__name"]
+        ordering = ["character_path", "display_order", "skill__name"]
 
     def __str__(self):
         return f"{self.character_path.name}: {self.skill.name} = {self.suggested_value}"
@@ -302,11 +251,12 @@ class TrainingAllocation(SharedMemoryModel):
         help_text="The character this training allocation belongs to",
     )
     skill = models.ForeignKey(
-        Skill,
+        Trait,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="training_allocations",
+        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="The skill being trained (mutually exclusive with specialization)",
     )
     specialization = models.ForeignKey(
@@ -352,5 +302,5 @@ class TrainingAllocation(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        target = self.skill.trait.name if self.skill else self.specialization.name
+        target = self.skill.name if self.skill else self.specialization.name
         return f"{self.character}: {target} ({self.ap_amount} AP)"

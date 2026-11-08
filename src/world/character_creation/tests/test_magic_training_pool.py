@@ -18,7 +18,6 @@ from world.magic.factories import (
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory
-from world.traits.factories import SkillTraitFactory
 from world.traits.models import TraitCategory
 
 
@@ -105,7 +104,7 @@ class MagicTrainingPoolTest(TestCase):
 
     def test_required_spend_capped_by_magic_skills(self) -> None:
         for _ in range(3):
-            SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC))
+            SkillFactory(category=TraitCategory.MAGIC)
         big = DistinctionFactory(name="Big")
         DistinctionEffectFactory(distinction=big, target=self.target, value_per_rank=200)
         pool = self._draft([big], gift=False, affinity=False).magic_training_pool
@@ -127,10 +126,8 @@ class MagicSkillAllocationTest(TestCase):
         training = DistinctionFactory(name="Tradition Training")
         DistinctionEffectFactory(distinction=training, target=cls.target, value_per_rank=30)
         cls.training = training
-        cls.skills = [
-            SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
-        ]
-        cls.combat = SkillFactory(trait=SkillTraitFactory(category=TraitCategory.COMBAT))
+        cls.skills = [SkillFactory(category=TraitCategory.MAGIC) for _ in range(3)]
+        cls.combat = SkillFactory(category=TraitCategory.COMBAT)
         cls.resonance = ResonanceFactory(affinity=AffinityFactory())
 
     def _draft(self, magic_skills, *, gift=None, trained=True):
@@ -168,9 +165,7 @@ class MagicSkillAllocationTest(TestCase):
         self.assertEqual(self._errors(alloc), ["Magic skills only"])
 
     def test_inactive_magic_skill_fails(self) -> None:
-        lapsed = SkillFactory(
-            trait=SkillTraitFactory(category=TraitCategory.MAGIC), is_active=False
-        )
+        lapsed = SkillFactory(category=TraitCategory.MAGIC, is_active=False)
         self.assertEqual(self._errors({str(lapsed.pk): 40}), ["Magic skills only"])
 
     def test_off_step_value_fails(self) -> None:

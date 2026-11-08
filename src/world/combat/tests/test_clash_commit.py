@@ -120,7 +120,7 @@ class CommitToClashTests(TestCase):
                 config_strain=self.config_strain,
             )
 
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         self.assertEqual(capture.check_type, self.check_type)
         self.assertEqual(capture.extra_traits, (term,))
         self.assertEqual(tuple(collected.call_args.kwargs["extra_traits"]), (term,))

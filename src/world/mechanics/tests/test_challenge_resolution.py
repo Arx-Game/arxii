@@ -1009,7 +1009,7 @@ class TechniqueSkillTermTests(TestCase):
 
         from world.checks.types import ExtraTraitTerm
 
-        return (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+        return (ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00")),)
 
     def _resolve(self, source: CapabilitySource):
         """Resolve and return (terms the roll carried, terms the recorded breakdown used).

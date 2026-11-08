@@ -1696,7 +1696,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         skills = [
             {"id": skill.pk, "name": skill.name, "value": value_of(skill.pk), "max": max_value}
-            for skill in training_skills(obj).select_related("trait").order_by("trait__name")
+            for skill in training_skills(obj).order_by("name")
         ]
         return {
             "base_sources": [

@@ -142,7 +142,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
         cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
         # Skill so provision_player_anima_ritual finds a default and doesn't skip.
-        cls.skill = SkillFactory(trait__name="CastPCRitualism")
+        cls.skill = SkillFactory(name="CastPCRitualism")
 
         # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
         # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.

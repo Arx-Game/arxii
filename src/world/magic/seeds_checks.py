@@ -389,7 +389,7 @@ def ensure_character_magic_check_type(character_sheet: Any, *, stat: Any, skill:
         check_type=check_type, trait=stat, defaults={"weight": Decimal("1.00")}
     )
     CheckTypeTrait.objects.get_or_create(
-        check_type=check_type, trait=skill.trait, defaults={"weight": Decimal("1.00")}
+        check_type=check_type, trait=skill, defaults={"weight": Decimal("1.00")}
     )
     if arcana is not None:
         CheckTypeAspect.objects.get_or_create(

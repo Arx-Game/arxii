@@ -380,7 +380,7 @@ def _display_techniques(viewer: CharacterSheet) -> list[Technique]:
     techniques = {
         link.technique_id: link.technique
         for link in CharacterTechnique.objects.filter(character=viewer).select_related(
-            "technique__gift__style__skill__trait"
+            "technique__gift__style__skill"
         )
     }
     readied = readied_ultimate(viewer)

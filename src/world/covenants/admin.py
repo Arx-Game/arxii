@@ -533,7 +533,7 @@ class CombatStyleAdmin(admin.ModelAdmin):
 
     list_display = ("name", "skill", "hit_stat", "defense_style", "armor_share_tenths")
     list_filter = ("defense_style",)
-    list_select_related = ("skill__trait", "hit_stat")
+    list_select_related = ("skill", "hit_stat")
     search_fields = ("name",)
     autocomplete_fields = ("skill", "hit_stat")
     filter_horizontal = ("taught_by", "compatible_roles")

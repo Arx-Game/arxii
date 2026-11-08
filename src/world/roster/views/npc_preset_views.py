@@ -44,7 +44,7 @@ class NPCStatlinePresetViewSet(ReadOnlyModelViewSet):
         ),
         Prefetch(
             "skill_lines",
-            queryset=NPCPresetSkillLine.objects.select_related("skill", "skill__trait"),
+            queryset=NPCPresetSkillLine.objects.select_related("skill"),
             to_attr="cached_skill_lines",
         ),
     )

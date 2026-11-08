@@ -20,7 +20,6 @@ from world.magic.seeds_sanctum import (
     ensure_sanctum_rituals,
 )
 from world.skills.factories import MagicSkillFactory
-from world.skills.models import Skill
 from world.traits.models import Trait, TraitType
 
 
@@ -32,7 +31,7 @@ class FreshSeedCreatesNoMagicSkillTests(TestCase):
         ensure_sanctum_rituals()
         ensure_magic_check_content()
 
-        self.assertFalse(Skill.objects.exists())
+        self.assertFalse(Trait.objects.filter(trait_type="skill").exists())
         self.assertFalse(Trait.objects.filter(trait_type=TraitType.SKILL).exists())
         self.assertFalse(CheckTypeTrait.objects.filter(trait__trait_type=TraitType.SKILL).exists())
 

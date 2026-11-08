@@ -33,7 +33,6 @@ from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.services.skill_development import weekly_skill_development_task
 from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory
-from world.skills.models import Skill
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -71,7 +70,7 @@ class _TrainedSkillCase(JourneyCase):
         self.skill = SkillFactory()
         self._checks: dict[int, CheckType] = {}
 
-    def made_with(self, skill: Skill, rating: int) -> None:
+    def made_with(self, skill: Trait, rating: int) -> None:
         """Ysmay leaves character creation with ``skill`` at ``rating`` in both stores."""
         set_skill_values(
             self.sheet,
@@ -81,22 +80,22 @@ class _TrainedSkillCase(JourneyCase):
             enforce_caps=False,
         )
 
-    def check_on(self, skill: Skill) -> CheckType:
+    def check_on(self, skill: Trait) -> CheckType:
         """The check type that rolls only ``skill``, built once per skill."""
         if skill.pk not in self._checks:
             check_type = CheckTypeFactory(
                 name=f"Roll {skill.name}", category=CheckCategoryFactory(name=f"Rolls {skill.pk}")
             )
-            CheckTypeTraitFactory(check_type=check_type, trait=skill.trait, weight=Decimal("1.0"))
+            CheckTypeTraitFactory(check_type=check_type, trait=skill, weight=Decimal("1.0"))
             self._checks[skill.pk] = check_type
         return self._checks[skill.pk]
 
-    def roll_points(self, skill: Skill, effort: str | None = None) -> int:
+    def roll_points(self, skill: Trait, effort: str | None = None) -> int:
         """The skill points a check on ``skill`` is worth to Ysmay right now."""
         result = perform_check(self.ysmay, self.check_on(skill), effort_level=effort)
         return result.trait_points
 
-    def sheet_shows(self, skill: Skill) -> int:
+    def sheet_shows(self, skill: Trait) -> int:
         """The rating her character sheet shows for ``skill``, read through the REST API."""
         response = self.api(self.account_of(self.ysmay)).get(
             f"/api/character-sheets/{self.sheet.pk}/"
@@ -105,7 +104,7 @@ class _TrainedSkillCase(JourneyCase):
         shown = {row["skill"]["id"]: row["value"] for row in response.json()["skills"]}
         return shown[skill.pk]
 
-    def assertSheetAndRollAgree(self, skill: Skill, rating: int) -> None:  # noqa: N802
+    def assertSheetAndRollAgree(self, skill: Trait, rating: int) -> None:  # noqa: N802
         self.assertEqual(self.sheet_shows(skill), rating, "the sheet")
         self.assertEqual(self.roll_points(skill), rating, "a check's skill points")
 
@@ -126,7 +125,7 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
 
         self.assertSheetAndRollAgree(self.skill, 12)
         change = CharacterTraitChange.objects.filter(
-            character_sheet=self.sheet, trait=self.skill.trait
+            character_sheet=self.sheet, trait=self.skill
         ).latest("pk")
         self.assertEqual(
             (change.old_value, change.new_value, change.source),
@@ -147,8 +146,8 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.made_with(self.skill, 19)
         chart = XPCostChart.objects.create(name="Breakthroughs")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.skill, target_rating=20)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=150, total_spent=0
         )
@@ -159,7 +158,7 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.assertIn(f"Breakthrough! {self.skill.name} rises to", told)
         self.assertSheetAndRollAgree(self.skill, 20)
         change = CharacterTraitChange.objects.filter(
-            character_sheet=self.sheet, trait=self.skill.trait
+            character_sheet=self.sheet, trait=self.skill
         ).latest("pk")
         self.assertEqual(
             (change.old_value, change.new_value, change.source),
@@ -170,8 +169,8 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.made_with(self.skill, 19)
         chart = XPCostChart.objects.create(name="Breakthroughs")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.skill, target_rating=20)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=40, total_spent=0
         )
@@ -215,9 +214,9 @@ class OneWeeklyRustPass(_TrainedSkillCase):
         advance_game_week()
         weekly_skill_development_task()
 
-    def rust_entries(self, skill: Skill) -> int:
+    def rust_entries(self, skill: Trait) -> int:
         return DevelopmentTransaction.objects.filter(
-            character_sheet=self.sheet, trait=skill.trait, source=DevelopmentSource.RUST
+            character_sheet=self.sheet, trait=skill, source=DevelopmentSource.RUST
         ).count()
 
     def test_a_trained_skill_does_not_rust_and_an_idle_one_rusts_once(self) -> None:
@@ -231,7 +230,7 @@ class OneWeeklyRustPass(_TrainedSkillCase):
 
         self.assertEqual(self.rust_entries(trained), 0)
         idle_rust = DevelopmentTransaction.objects.get(
-            character_sheet=self.sheet, trait=self.skill.trait, source=DevelopmentSource.RUST
+            character_sheet=self.sheet, trait=self.skill, source=DevelopmentSource.RUST
         )
         self.assertEqual(idle_rust.amount, 6)  # path level 1 + 5
         self.assertSheetAndRollAgree(self.skill, 12)

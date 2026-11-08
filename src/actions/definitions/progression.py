@@ -58,7 +58,6 @@ class ManageTrainingAction(Action):
     ) -> ActionResult:
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.skills.models import (  # noqa: PLC0415
-            Skill,
             Specialization,
             TrainingAllocation,
         )
@@ -67,19 +66,20 @@ class ManageTrainingAction(Action):
             remove_training_allocation,
             update_training_allocation,
         )
+        from world.traits.models import Trait  # noqa: PLC0415
 
         operation = kwargs.get(_KWARG_OPERATION)
 
         try:
             if operation == _OPERATION_ADD:
-                return self._add(actor, kwargs, Skill, Specialization, create_training_allocation)
+                return self._add(actor, kwargs, Trait, Specialization, create_training_allocation)
             if operation == _OPERATION_UPDATE:
                 return self._update(
                     actor, kwargs, TrainingAllocation, Persona, update_training_allocation
                 )
             if operation == _OPERATION_REMOVE:
                 return self._remove(actor, kwargs, TrainingAllocation, remove_training_allocation)
-        except Skill.DoesNotExist:
+        except Trait.DoesNotExist:
             return ActionResult(success=False, message="No such skill.")
         except Specialization.DoesNotExist:
             return ActionResult(success=False, message="No such specialization.")
@@ -129,7 +129,10 @@ class ManageTrainingAction(Action):
             return ActionResult(success=False, message="ap_amount is required.")
 
         if has_skill:
-            skill = skill_cls.objects.get(pk=skill_id)
+            from world.traits.models import TraitType  # noqa: PLC0415
+
+            # A skill is a skill-type Trait (#5008).
+            skill = skill_cls.objects.get(pk=skill_id, trait_type=TraitType.SKILL)
             specialization: Any = None
             target_name = skill.name
         else:
@@ -258,8 +261,8 @@ class PurchaseUnlockAction(Action):
         from world.magic.models import Thread  # noqa: PLC0415
         from world.magic.types.alterations import AlterationGateError  # noqa: PLC0415
         from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
-        from world.skills.models import Skill  # noqa: PLC0415
         from world.species.models import Language  # noqa: PLC0415
+        from world.traits.models import Trait  # noqa: PLC0415
 
         unlock_type = kwargs.get("unlock_type")
 
@@ -275,7 +278,7 @@ class PurchaseUnlockAction(Action):
         except (
             ClassLevelUnlock.DoesNotExist,
             Thread.DoesNotExist,
-            Skill.DoesNotExist,
+            Trait.DoesNotExist,
             Language.DoesNotExist,
         ) as exc:
             # #3657 tranche 12: an unknown id used to answer with the ORM's own
@@ -283,7 +286,7 @@ class PurchaseUnlockAction(Action):
             no_such = {
                 ClassLevelUnlock.DoesNotExist: "No such class-level unlock.",
                 Thread.DoesNotExist: "No such thread.",
-                Skill.DoesNotExist: "No such skill.",
+                Trait.DoesNotExist: "No such skill.",
                 Language.DoesNotExist: "No such language.",
             }
             return ActionResult(success=False, message=no_such[type(exc)])
@@ -377,13 +380,13 @@ class PurchaseUnlockAction(Action):
         kwargs: dict[str, Any],
     ) -> ActionResult:
         """Purchase a skill's XP-boundary breakthrough for the actor (#2115)."""
-        from world.skills.models import Skill  # noqa: PLC0415
         from world.skills.services import purchase_skill_breakthrough  # noqa: PLC0415
+        from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
         skill_id = kwargs.get("skill_id")
         if skill_id is None:
             return ActionResult(success=False, message="skill_id is required.")
-        skill = Skill.objects.get(pk=skill_id)
+        skill = Trait.objects.get(pk=skill_id, trait_type=TraitType.SKILL)
         success, message = purchase_skill_breakthrough(actor, skill)
         if not success:
             return ActionResult(success=False, message=message)

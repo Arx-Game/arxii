@@ -82,9 +82,7 @@ class GossipTelnetE2EJourneyTest(TestCase):
         # Gossiper — has the Gossip specialization (skill gate).
         cls.gossiper_sheet = CharacterSheetFactory()
         cls.gossiper = cls.gossiper_sheet.character
-        cls.gossip_spec = Specialization.objects.get(
-            name="Gossip", parent_skill__trait__name="Persuasion"
-        )
+        cls.gossip_spec = Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(
             character=cls.gossiper_sheet, specialization=cls.gossip_spec, value=10
         )

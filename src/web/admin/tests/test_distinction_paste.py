@@ -26,7 +26,7 @@ from world.distinctions.factories import DistinctionCategoryFactory, Distinction
 from world.distinctions.models import Distinction
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
-from world.skills.factories import SkillTraitFactory
+from world.skills.factories import SkillFactory
 
 ROW = (
     "Oath-Bound | Personality | 5 | 1 | A word given is kept. | Long prose. | +Bonds goals | "
@@ -190,7 +190,7 @@ class ParseTableTest(PasteTestCase):
     def test_a_skill_with_no_target_yet_reads_create_and_names_the_target_it_makes(self):
         """+10 on a skill no target points at is not an error (#4820): the preview says the
         create step makes the target, and nothing is written at parse time."""
-        SkillTraitFactory(name="Sailing")
+        SkillFactory(name="Sailing")
         (row,) = parse_table("Shipboard | Personality | 10 | 1 | At sea. | | +10 sailing | rules |")
         assert row.status == "create", row.notes
         assert row.notes == ["makes the modifier target for the Sailing skill"]
@@ -200,7 +200,7 @@ class ParseTableTest(PasteTestCase):
         assert not ModifierTarget.objects.filter(name="sailing").exists()
 
     def test_a_skill_name_with_a_space_or_underscore_resolves_the_same_skill(self):
-        SkillTraitFactory(name="Melee Combat")
+        SkillFactory(name="Melee Combat")
         (spaced,) = parse_table("A | Personality | 5 | 1 | a | | +5 melee combat | rules |")
         (underscored,) = parse_table("B | Personality | 5 | 1 | b | | +5 melee_combat | rules |")
         assert spaced.status == underscored.status == "create"
@@ -286,7 +286,7 @@ class PasteViewTest(PasteTestCase):
     def test_create_makes_the_skill_target_and_the_effect_lands_on_it(self):
         """The create step makes the stat-category target for the skill's trait inside the
         batch, so the pasted +10 sailing reaches the Sailing roll (#4820)."""
-        trait = SkillTraitFactory(name="Sailing")
+        trait = SkillFactory(name="Sailing")
         text = "Shipboard | Personality | 10 | 1 | At sea. | | +10 sailing | rules |"
         self.client.force_login(self.author)
         digest = table_digest(parse_table(text))

@@ -99,7 +99,7 @@ class MagicStageValidationTest(TestCase):
         cls.other_trait = SkillTraitFactory(name="not a stat")
         cls.skill = SkillFactory()
         cls.inactive_skill = SkillFactory(is_active=False)
-        cls.magic_skill = SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC))
+        cls.magic_skill = SkillFactory(category=TraitCategory.MAGIC)
 
     def _draft(self, **draft_data_overrides):
         selected_species = draft_data_overrides.pop("selected_species", None)

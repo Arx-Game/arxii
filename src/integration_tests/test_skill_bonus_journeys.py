@@ -68,7 +68,7 @@ class ASkillBonusFromACard(JourneyCase):
         self.quay = self.make_room("The Quay")
         self.rhoswen = self.make_player("Rhoswen", room=self.quay)
         self.sheet = self.rhoswen.sheet_data
-        self.sailing = SkillFactory(trait__name="Sailing")
+        self.sailing = SkillFactory(name="Sailing")
         set_skill_values(
             self.sheet,
             {self.sailing: 11},
@@ -77,15 +77,13 @@ class ASkillBonusFromACard(JourneyCase):
             enforce_caps=False,
         )
         check_type = CheckTypeFactory(name="Sail", category=CheckCategoryFactory(name="Sailing"))
-        CheckTypeTraitFactory(
-            check_type=check_type, trait=self.sailing.trait, weight=Decimal("1.0")
-        )
+        CheckTypeTraitFactory(check_type=check_type, trait=self.sailing, weight=Decimal("1.0"))
         self.sail = check_type
 
     def take_the_sailor_card(self) -> None:
         """The Sailor card, +10 sailing, granted through the one acquisition seam. The
         target it needs is the one the Skill admin's save and the paste make."""
-        target = ensure_skill_target(self.sailing.trait)
+        target = ensure_skill_target(self.sailing)
         sailor = DistinctionFactory(name="Sailor", slug="sailor", cost_per_rank=0, max_rank=4)
         DistinctionEffectFactory(distinction=sailor, target=target, value_per_rank=10)
         grant_distinction(self.sheet, sailor, origin=DistinctionOrigin.CHARACTER_CREATION)
@@ -102,7 +100,7 @@ class ASkillBonusFromACard(JourneyCase):
         return row
 
     def stored(self) -> int:
-        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.sailing.trait).value
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.sailing).value
 
     def test_the_card_rolls_and_shows_and_training_moves_the_rating_underneath(self) -> None:
         self.assertEqual((self.roll_points(), self.sheet_row()["value"]), (11, 11))
@@ -128,7 +126,7 @@ class ASkillBonusFromACard(JourneyCase):
         it showed 11 while the roll was 16."""
         recipe = CraftingRecipeFactory()
         CraftingRecipeModifierFactory(
-            recipe=recipe, target=ensure_skill_target(self.sailing.trait), base_value=5
+            recipe=recipe, target=ensure_skill_target(self.sailing), base_value=5
         )
         template = ItemTemplateFactory(name="Sea-cloak")
         TemplateSlotFactory(

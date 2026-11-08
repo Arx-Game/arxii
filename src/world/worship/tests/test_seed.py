@@ -8,7 +8,8 @@ from world.seeds.worship_content import (
     CEREMONY_CHECK_TYPE,
     seed_worship_content,
 )
-from world.skills.models import Skill, Specialization
+from world.skills.models import Specialization
+from world.traits.models import Trait
 from world.worship.models import WorshippedBeing, WorshipTradition
 
 
@@ -17,8 +18,8 @@ class WorshipSeedTests(TestCase):
     def test_seed_creates_expected_rows_and_is_idempotent(self) -> None:
         seed_worship_content()
         first_counts = (
-            Skill.objects.filter(trait__name="Rites").count(),
-            Specialization.objects.filter(parent_skill__trait__name="Rites").count(),
+            Trait.objects.filter(trait_type="skill", name="Rites").count(),
+            Specialization.objects.filter(parent_skill__name="Rites").count(),
             CheckType.objects.filter(name=CEREMONY_CHECK_TYPE).count(),
             Achievement.objects.filter(name__startswith="God's Favorite").count(),
             WorshipTradition.objects.count(),
@@ -33,8 +34,8 @@ class WorshipSeedTests(TestCase):
 
         seed_worship_content()
         second_counts = (
-            Skill.objects.filter(trait__name="Rites").count(),
-            Specialization.objects.filter(parent_skill__trait__name="Rites").count(),
+            Trait.objects.filter(trait_type="skill", name="Rites").count(),
+            Specialization.objects.filter(parent_skill__name="Rites").count(),
             CheckType.objects.filter(name=CEREMONY_CHECK_TYPE).count(),
             Achievement.objects.filter(name__startswith="God's Favorite").count(),
             WorshipTradition.objects.count(),
@@ -45,7 +46,7 @@ class WorshipSeedTests(TestCase):
     def test_every_tradition_specialization_is_under_rites(self) -> None:
         seed_worship_content()
         for tradition in WorshipTradition.objects.all():
-            self.assertEqual(tradition.rites_specialization.parent_skill.trait.name, "Rites")
+            self.assertEqual(tradition.rites_specialization.parent_skill.name, "Rites")
 
     def test_seed_sets_the_favor_terms_and_being_targets(self) -> None:
         """#4333: the invocation check, the example bonuses, two targets per being."""

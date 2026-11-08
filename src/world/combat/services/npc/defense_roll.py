@@ -82,7 +82,7 @@ def _style_skill_rating(participant: CombatParticipant, style_fit: StyleFit) -> 
         return None
     return (
         CharacterTraitValue.objects.filter(
-            character=participant.character_sheet, trait_id=style_fit.style.skill.trait_id
+            character=participant.character_sheet, trait_id=style_fit.style.skill.pk
         )
         .values_list("value", flat=True)
         .first()

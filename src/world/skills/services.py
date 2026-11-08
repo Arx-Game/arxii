@@ -23,7 +23,6 @@ from world.relationships.services import standing_tie_ap
 from world.roster.models import RosterEntry
 from world.skills.models import (
     CharacterSpecializationValue,
-    Skill,
     SkillPointBudget,
     Specialization,
     TrainingAllocation,
@@ -32,6 +31,7 @@ from world.skills.types import SkillTrainingResult
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
+    Trait,
     TraitChangeSource,
     TraitType,
 )
@@ -41,7 +41,6 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
-    from world.traits.models import Trait
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +93,7 @@ def _bulk_path_levels(character_pks: set[int]) -> dict[int, int]:
     return {pk: levels.get(pk, 1) for pk in character_pks}
 
 
-def _get_skill_value(character: CharacterSheet, skill: Skill) -> int:
+def _get_skill_value(character: CharacterSheet, skill: Trait) -> int:
     """Look up a character's value for a given skill.
 
     Args:
@@ -146,7 +145,7 @@ def has_specialization(
     return _get_spec_value(character, specialization) >= minimum_rank * 10
 
 
-def _get_teaching_skill() -> Skill | None:
+def _get_teaching_skill() -> Trait | None:
     """Look up the Teaching skill from the skill config.
 
     Returns:
@@ -158,7 +157,7 @@ def _get_teaching_skill() -> Skill | None:
 
 def _get_teaching_value(
     mentor_character: ObjectDB,
-    teaching_skill: Skill | None = _UNSET,  # type: ignore[assignment]
+    teaching_skill: Trait | None = _UNSET,  # type: ignore[assignment]
 ) -> int:
     """Look up the mentor's Teaching skill value.
 
@@ -181,7 +180,7 @@ def _get_teaching_value(
 def calculate_training_development(
     allocation: TrainingAllocation,
     *,
-    _teaching_skill: Skill | None = _UNSET,  # type: ignore[assignment]
+    _teaching_skill: Trait | None = _UNSET,  # type: ignore[assignment]
     _path_levels: dict[int, int] | None = None,
 ) -> int:
     """Calculate development points earned from a training allocation.
@@ -279,7 +278,7 @@ def create_training_allocation(
     character: ObjectDB,
     ap_amount: int,
     *,
-    skill: Skill | None = None,
+    skill: Trait | None = None,
     specialization: Specialization | None = None,
     mentor: Persona | None = None,
 ) -> TrainingAllocation:
@@ -377,17 +376,17 @@ def remove_training_allocation(allocation: TrainingAllocation) -> None:
     allocation.delete()
 
 
-def skill_rating(sheet: CharacterSheet, skill: Skill) -> int:
+def skill_rating(sheet: CharacterSheet, skill: Trait) -> int:
     """The character's stored rating in ``skill``, else 0.
 
     A skill's rating has one store, the skill trait's ``CharacterTraitValue`` (#5010),
     read through the character's trait handler (``character.traits``), which caches
     every value and is kept current by ``CharacterTraitValue.save``.
     """
-    return sheet.character.traits.get_base_trait_value(skill.trait.name)
+    return sheet.character.traits.get_base_trait_value(skill.name)
 
 
-def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
+def set_skill_trait(sheet: CharacterSheet, skill: Trait, value: int, source: str) -> None:
     """Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).
 
     The trait row is a skill's one rating store (#5010). Writers that set a rating
@@ -402,21 +401,21 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
         align_development_floors,
     )
 
-    row = sheet.character.traits.get_trait_object(skill.trait.name)
+    row = sheet.character.traits.get_trait_object(skill.name)
     if not isinstance(row, CharacterTraitValue):
         row = None
     old = row.value if row else 0
     if row is None:
-        CharacterTraitValue.objects.create(character=sheet, trait=skill.trait, value=value)
+        CharacterTraitValue.objects.create(character=sheet, trait=skill, value=value)
     elif row.value != value:
         row.value = value
         row.save(update_fields=["value"])
     else:
         return
     CharacterTraitChange.objects.create(
-        character_sheet=sheet, trait=skill.trait, old_value=old, new_value=value, source=source
+        character_sheet=sheet, trait=skill, old_value=old, new_value=value, source=source
     )
-    align_development_floors(sheet, {skill.trait: value})
+    align_development_floors(sheet, {skill: value})
 
 
 def _development_cost(current_value: int) -> int:
@@ -496,7 +495,7 @@ def skill_cap_message(name: str, stored_cap: int) -> str:
     )
 
 
-def _boundary_message(skill: Skill, next_rating: int) -> str:
+def _boundary_message(skill: Trait, next_rating: int) -> str:
     """Plateau message shown when dev points dissipate at an XP boundary (#2115)."""
     return boundary_message(skill.name, next_rating)
 
@@ -539,7 +538,7 @@ def points_to_next_boundary(tracker: DevelopmentPoints) -> int | None:
 
 def train_skill(
     sheet: CharacterSheet,
-    skill: Skill,
+    skill: Trait,
     dev_points: int,
     *,
     description: str,
@@ -562,7 +561,7 @@ def train_skill(
         # A skill the character has no rating in starts at the base level.
         old_value = skill_rating(sheet, skill) or DP_BASE_LEVEL
         tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
-            character_sheet=sheet, trait=skill.trait
+            character_sheet=sheet, trait=skill
         )
         tracker.align_to_rating(old_value)
         points_applied = dev_points
@@ -576,9 +575,7 @@ def train_skill(
         plateau_message = None
         if tracker.total_earned < expected_total:
             plateau_message = _skill_plateau_message(skill, new_value, stored_skill_cap(sheet))
-        _record_training_transaction(
-            sheet, skill.trait, points_applied, description, plateau_message
-        )
+        _record_training_transaction(sheet, skill, points_applied, description, plateau_message)
     return SkillTrainingResult(
         old_value=old_value,
         new_value=new_value,
@@ -614,7 +611,7 @@ def _record_training_transaction(
     )
 
 
-def _skill_plateau_message(skill: Skill, value: int, cap: int | None) -> str | None:
+def _skill_plateau_message(skill: Trait, value: int, cap: int | None) -> str | None:
     """Describe the stop a skill at *value* has reached (band cap first), if any."""
     if cap is not None and value >= cap:
         return skill_cap_message(skill.name, cap)
@@ -623,7 +620,7 @@ def _skill_plateau_message(skill: Skill, value: int, cap: int | None) -> str | N
     return None
 
 
-def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool, str]:
+def purchase_skill_breakthrough(character: ObjectDB, skill: Trait) -> tuple[bool, str]:
     """Spend XP to break through a skill's XP-boundary plateau (#2115).
 
     Wires the pre-existing but never-called ``TraitRatingUnlock`` model through
@@ -650,7 +647,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
     from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
-    skill_value = character.traits.get_trait_object(skill.trait.name)
+    skill_value = character.traits.get_trait_object(skill.name)
     if not isinstance(skill_value, CharacterTraitValue):
         return False, f"{skill.name} has no recorded value for this character."
 
@@ -662,7 +659,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     if cap is not None and target_rating > cap:
         return False, skill_cap_message(skill.name, cap)
     try:
-        unlock = TraitRatingUnlock.objects.get(trait=skill.trait, target_rating=target_rating)
+        unlock = TraitRatingUnlock.objects.get(trait=skill, target_rating=target_rating)
     except TraitRatingUnlock.DoesNotExist:
         return (
             False,
@@ -705,7 +702,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
 class SkillBreakthroughProspect:
     """A skill parked at an XP boundary, with its breakthrough cost if authored (#2115)."""
 
-    skill: Skill
+    skill: Trait
     next_rating: int
     xp_cost: int | None
     authored: bool
@@ -731,27 +728,24 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
 
     gated = {
-        row.trait_id: row.value
+        row.trait: row.value
         for row in character.traits.get_traits_by_type(TraitType.SKILL).values()
         if _is_at_xp_boundary(row.value)
     }
     if not gated:
         return []
 
-    skills = list(
-        Skill.objects.filter(trait_id__in=list(gated)).select_related("trait").order_by("pk")
-    )
     unlocks = {
         (u.trait_id, u.target_rating): u
         for u in TraitRatingUnlock.objects.filter(
-            trait_id__in=list(gated), target_rating__in={v + 1 for v in gated.values()}
+            trait__in=list(gated), target_rating__in={v + 1 for v in gated.values()}
         )
     }
 
     prospects: list[SkillBreakthroughProspect] = []
-    for skill in skills:
-        next_rating = gated[skill.trait_id] + 1
-        unlock = unlocks.get((skill.trait_id, next_rating))
+    for skill in sorted(gated, key=lambda trait: trait.pk):
+        next_rating = gated[skill] + 1
+        unlock = unlocks.get((skill.pk, next_rating))
         prospects.append(
             SkillBreakthroughProspect(
                 skill=skill,
@@ -827,10 +821,7 @@ def process_weekly_training() -> None:
         ).select_related(
             "character",
             "skill",
-            "skill__trait",
-            "specialization",
             "specialization__parent_skill",
-            "specialization__parent_skill__trait",
             "mentor",
             "mentor__character_sheet__character",
         )
@@ -858,7 +849,7 @@ def process_weekly_training() -> None:
             cap_message = _apply_development_to_specialization(spec_value, dev_points)
             _record_training_transaction(
                 character,
-                allocation.specialization.parent_skill.trait,
+                allocation.specialization.parent_skill,
                 dev_points,
                 description,
                 cap_message,

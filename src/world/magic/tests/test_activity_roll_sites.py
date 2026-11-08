@@ -50,7 +50,7 @@ from world.magic.factories import (
 )
 from world.scenes.factories import SceneFactory
 from world.skills.factories import SkillFactory
-from world.skills.models import Skill
+from world.traits.models import Trait
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.worship.rite_services import perform_worship_rite
@@ -63,9 +63,9 @@ from world.worship.tests.test_rites import RiteTestBase
 SKILL_WEIGHT = Decimal("0.50")
 
 
-def terms_for(skill: Skill) -> tuple[ExtraTraitTerm, ...]:
+def terms_for(skill: Trait) -> tuple[ExtraTraitTerm, ...]:
     """The one term a ``skill`` mapped at ``SKILL_WEIGHT`` adds to a roll."""
-    return (ExtraTraitTerm(trait=skill.trait, weight=SKILL_WEIGHT),)
+    return (ExtraTraitTerm(trait=skill, weight=SKILL_WEIGHT),)
 
 
 class RollReached(Exception):
@@ -1100,7 +1100,7 @@ class TechniqueEnhancedConditionEffectTests(ActivityTermTestCase):
 
     def test_technique_source_adds_its_skill(self) -> None:
         enhancement = self.technique_enhancement(skill=self.skill)
-        technique_terms = (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+        technique_terms = (ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00")),)
 
         for remove in (False, True):
             with self.subTest(remove=remove):

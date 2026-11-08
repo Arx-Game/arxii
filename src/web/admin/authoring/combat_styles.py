@@ -95,7 +95,7 @@ def styles_for_vow(role: CovenantRole) -> list[StyleRow]:
     Three queries however many styles: the styles with their skills, the styles listing
     the vow, and the holders per style.
     """
-    styles = list(CombatStyle.objects.select_related("skill__trait").order_by("name"))
+    styles = list(CombatStyle.objects.select_related("skill").order_by("name"))
     if not styles:
         return []
     listing = styles_listing_vow(role)

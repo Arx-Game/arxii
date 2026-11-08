@@ -61,7 +61,6 @@ _SKILL_DESCRIPTIONS = {
 
 
 def _ensure_skill(name: str):
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
     trait, _ = Trait.objects.get_or_create(
@@ -72,8 +71,7 @@ def _ensure_skill(name: str):
             "description": _SKILL_DESCRIPTIONS.get(name, ""),
         },
     )
-    skill, _ = Skill.objects.get_or_create(trait=trait)
-    return skill
+    return trait
 
 
 def ensure_spread_skills() -> None:
@@ -90,7 +88,7 @@ def ensure_spread_skills() -> None:
     form_names = [name for name, _, _ in SPREAD_FORMS]
     already_seeded = Specialization.objects.filter(
         name__in=form_names,
-        parent_skill__trait__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
+        parent_skill__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
     ).count() == len(SPREAD_FORMS)
     if already_seeded:
         return
@@ -117,7 +115,7 @@ def get_spread_specializations():
     # per parent_skill, so a same-named spec under another skill must not leak in.
     return Specialization.objects.filter(
         name__in=form_names,
-        parent_skill__trait__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
+        parent_skill__name__in=[PERFORMANCE_SKILL_NAME, PERSUASION_SKILL_NAME],
         is_active=True,
     ).order_by("display_order", "name")
 

@@ -33,7 +33,7 @@ class StylesForVowTest(TestCase):
         cls.sub = SubroleCovenantRoleFactory(
             name="Style Vow Choir", slug="style-vow-choir", parent_role=cls.vow
         )
-        cls.skill = SkillFactory(trait__name="Footwork Drill")
+        cls.skill = SkillFactory(name="Footwork Drill")
         cls.listed = CombatStyleFactory(name="Listed Style", skill=cls.skill)
         cls.listed.compatible_roles.add(cls.vow)
         cls.unlisted = CombatStyleFactory(name="Unlisted Style")
@@ -82,7 +82,7 @@ class StylesForVowTest(TestCase):
 
     def test_an_inactive_skill_has_nothing_to_lose(self) -> None:
         style = CombatStyleFactory(
-            name="Retired Skill Style", skill=SkillFactory(trait__name="Old Drill", is_active=False)
+            name="Retired Skill Style", skill=SkillFactory(name="Old Drill", is_active=False)
         )
         row = next(r for r in combat_styles.styles_for_vow(self.vow) if r.name == style.name)
         self.assertIsNone(row.skill_name)
@@ -107,7 +107,7 @@ class StylesForVowTest(TestCase):
             combat_styles.styles_for_vow(self.vow)
         for index in range(4):
             style = CombatStyleFactory(
-                name=f"Flat Style {index}", skill=SkillFactory(trait__name=f"Flat Drill {index}")
+                name=f"Flat Style {index}", skill=SkillFactory(name=f"Flat Drill {index}")
             )
             style.compatible_roles.add(self.vow)
         with CaptureQueriesContext(connection) as many:

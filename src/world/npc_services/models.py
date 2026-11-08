@@ -1071,9 +1071,10 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     skill = models.ForeignKey(
-        "arxii.Skill",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         related_name="course_offers",
+        limit_choices_to={"trait_type": "skill"},
         help_text="The skill this course develops.",
     )
     total_development = models.PositiveIntegerField(

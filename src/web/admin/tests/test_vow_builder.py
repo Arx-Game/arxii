@@ -668,9 +668,9 @@ class VowStylesModuleTests(VowPageCase):
         self.assertIn("No combat styles are authored yet.", module)
 
     def test_a_listed_style_works_and_an_unlisted_one_shows_its_cost(self) -> None:
-        listed = CombatStyleFactory(name="Storm Footwork", skill=SkillFactory(trait__name="Squall"))
+        listed = CombatStyleFactory(name="Storm Footwork", skill=SkillFactory(name="Squall"))
         listed.compatible_roles.add(self.role)
-        unlisted = CombatStyleFactory(name="Iron Guard", skill=SkillFactory(trait__name="Bulwark"))
+        unlisted = CombatStyleFactory(name="Iron Guard", skill=SkillFactory(name="Bulwark"))
         module = self._module()
         url = reverse("admin:arxii_combatstyle_change", args=[listed.pk])
         self.assertIn(f'<a href="{url}">Storm Footwork</a>', module)
@@ -720,13 +720,13 @@ class VowStylesModuleTests(VowPageCase):
         self.assertIn("<td>1</td>", self._row(self._module(), "Storm Footwork"))
 
     def test_the_module_costs_the_same_queries_with_one_style_or_four(self) -> None:
-        CombatStyleFactory(name="Count Style 0", skill=SkillFactory(trait__name="Count 0"))
+        CombatStyleFactory(name="Count Style 0", skill=SkillFactory(name="Count 0"))
         self._module()  # warm the site caches
         with CaptureQueriesContext(connection) as one:
             self._module()
         for index in range(1, 4):
             style = CombatStyleFactory(
-                name=f"Count Style {index}", skill=SkillFactory(trait__name=f"Count {index}")
+                name=f"Count Style {index}", skill=SkillFactory(name=f"Count {index}")
             )
             style.compatible_roles.add(self.role)
         self._module()  # warm the new styles' skills into the identity map

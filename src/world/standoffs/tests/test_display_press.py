@@ -136,7 +136,7 @@ class DisplayTechniqueSkillTests(DisplayPressBase):
         self.skill = SkillFactory()
         self.technique.skill = self.skill
         self.technique.save(update_fields=["skill"])
-        self.term = ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00"))
+        self.term = ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00"))
 
     @staticmethod
     def _terms_for(mock, check_type) -> list[tuple]:

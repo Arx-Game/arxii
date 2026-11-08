@@ -1292,8 +1292,8 @@ def _probe_magic_skill_courses() -> ProbeResult:
     missing = tuple(
         magic_category_skills()
         .exclude(pk__in=covered)
-        .order_by("trait__name")
-        .values_list("trait__name", flat=True)
+        .order_by("name")
+        .values_list("name", flat=True)
     )
     if not missing:
         return ProbeResult(present=True)
@@ -1313,8 +1313,8 @@ def _probe_path_suggestions_name_magic_skills() -> ProbeResult:
 
     named = (
         PathSkillSuggestion.objects.filter(skill__in=magic_category_skills())
-        .order_by("character_path__name", "skill__trait__name")
-        .values_list("character_path__name", "skill__trait__name")
+        .order_by("character_path__name", "skill__name")
+        .values_list("character_path__name", "skill__name")
     )
     missing = tuple(f"{path}: {skill}" for path, skill in named)
     if not missing:
@@ -1334,9 +1334,9 @@ def _probe_check_types_weight_no_magic_skill() -> ProbeResult:
     magic skill out of those settings otherwise. Each row is `check type: skills`; the
     link opens the admin list filtered to exactly those check types, to repoint.
 
-    Matches on the trait (a SKILL trait in the Magic category), not a `Skill` row, so a
-    weighting on a Magic skill trait with no `Skill` row or an inactive one is listed
-    too. Production rows are left as they are; staff repoint them.
+    Matches every SKILL trait in the Magic category (a skill is a skill-type trait,
+    #5008), so a weighting on an inactive one is listed too. Production rows are left
+    as they are; staff repoint them.
     """
     from urllib.parse import urlencode  # noqa: PLC0415
 
@@ -3512,7 +3512,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=FilteredRowProbe(
                 label="Specialization",
-                filters=(("name", "Gossip"), ("parent_skill__trait__name", "Persuasion")),
+                filters=(("name", "Gossip"), ("parent_skill__name", "Persuasion")),
                 absent_detail=("No Specialization 'Gossip' row under skill trait 'Persuasion'."),
             ),
         ),

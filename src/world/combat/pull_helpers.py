@@ -362,7 +362,7 @@ def _with_style_skill(sheet: CharacterSheet, trait_ids: tuple[int, ...]) -> tupl
     fit = style_fit_for_attack(character, _equipped_weapon_archetype(character))
     if not fit.counts:
         return trait_ids
-    return tuple(dict.fromkeys([*trait_ids, fit.style.skill.trait_id]))
+    return tuple(dict.fromkeys([*trait_ids, fit.style.skill.pk]))
 
 
 def _resolve_combat_burn(

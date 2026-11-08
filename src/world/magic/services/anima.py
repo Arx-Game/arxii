@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from world.magic.models.rituals import Ritual
     from world.roster.models import RosterEntry
     from world.scenes.models import Scene
-    from world.skills.models import Skill
     from world.traits.models import Trait
 
 logger = logging.getLogger(__name__)
@@ -335,7 +334,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     *,
     ritual_name: str,
     stat: Trait | None = None,
-    skill: Skill | None = None,
+    skill: Trait | None = None,
     resonance: Resonance | None = None,
 ) -> Ritual | None:
     """Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.
@@ -369,7 +368,6 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
     from world.magic.models.ritual_check_config import RitualCheckConfig  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     character = character_sheet.character
@@ -395,10 +393,10 @@ def provision_player_anima_ritual(  # noqa: PLR0913
             key=lambda row: row.value,
             reverse=True,
         )
-        skill = next((row.trait.skill for row in rated if hasattr(row.trait, "skill")), None)
+        skill = next((row.trait for row in rated), None)
         if skill is None:
             # Fallback: first active skill in the database (edge case for test accounts).
-            skill = Skill.objects.filter(is_active=True).first()
+            skill = Trait.objects.filter(trait_type=TraitType.SKILL, is_active=True).first()
 
     if skill is None:
         logger.warning(

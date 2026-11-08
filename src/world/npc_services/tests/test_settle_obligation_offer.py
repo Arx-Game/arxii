@@ -209,9 +209,9 @@ class SettleObligationLoopEndToEndTests(TestCase):
 
         resonance = Resonance.objects.first()
         stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
-        from world.skills.models import Skill
+        from world.traits.models import Trait
 
-        skill = Skill.objects.filter(is_active=True).first()
+        skill = Trait.objects.filter(trait_type="skill", is_active=True).first()
 
         account = AccountDB.objects.create(username="settle_loop_probe")
         draft_data = {

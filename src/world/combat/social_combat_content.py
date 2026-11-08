@@ -161,7 +161,7 @@ def _ensure_social_combat_check_types(
         skill = skills.get(skill_name)
         if skill is not None:
             authored_or_sample(
-                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill
             )
         if spec_name is not None and specs.get(spec_name) is not None:
             CheckTypeSpecialization.objects.get_or_create(

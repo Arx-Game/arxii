@@ -19,11 +19,11 @@ from world.traits.models import CharacterTraitValue
 def _tracker(sheet, skill, value: int, *, rust: int = 0, banked: int = 0) -> DevelopmentPoints:
     """A skill rated ``value`` with ``banked`` progress toward the next level and rust."""
     CharacterTraitValue.objects.update_or_create(
-        character=sheet, trait=skill.trait, defaults={"value": value}
+        character=sheet, trait=skill, defaults={"value": value}
     )
     return DevelopmentPoints(
         character_sheet=sheet,
-        trait=skill.trait,
+        trait=skill,
         total_earned=cumulative_dp_for_level(value) + banked,
         rust_debt=rust,
     )
@@ -104,10 +104,10 @@ class TrainSkillTests(TestCase):
         transaction = DevelopmentTransaction.objects.get(character_sheet=self.sheet)
         self.assertEqual(transaction.amount, 300)
         self.assertEqual(transaction.source, DevelopmentSource.TRAINING)
-        self.assertEqual(transaction.trait, self.skill.trait)
+        self.assertEqual(transaction.trait, self.skill)
         self.assertIsNotNone(transaction.game_week)
         self.assertEqual(
-            CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait).value,
+            CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill).value,
             12,
         )
 

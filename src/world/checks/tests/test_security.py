@@ -163,9 +163,7 @@ class ResolveSecurityCheckTests(TestCase):
                 SecurityCheckKind.LOCKPICK, self.character, target_difficulty=0
             )
 
-        spec = Specialization.objects.get(
-            name="Lockpicking", parent_skill__trait__name="Skulduggery"
-        )
+        spec = Specialization.objects.get(name="Lockpicking", parent_skill__name="Skulduggery")
         CharacterSpecializationValueFactory(
             character=self.character.sheet_data, specialization=spec, value=30
         )

@@ -22,10 +22,10 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import CharacterDraft
     from world.covenants.models import CombatStyle
-    from world.skills.models import Skill
+    from world.traits.models import Trait
 
 
-def training_skills(draft: CharacterDraft) -> QuerySet[Skill]:
+def training_skills(draft: CharacterDraft) -> QuerySet[Trait]:
     """The active Magic skills the draft may train: none of a style's but its own style's."""
     from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
 
@@ -49,7 +49,7 @@ def reconcile_combat_style(draft: CharacterDraft) -> None:
 
     Saves only what changed.
     """
-    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     update_fields: list[str] = []
     if (
@@ -61,7 +61,7 @@ def reconcile_combat_style(draft: CharacterDraft) -> None:
 
     allocation = draft.draft_data.get("magic_skills")
     if isinstance(allocation, dict) and allocation:
-        style_skills = Skill.objects.filter(combat_style__isnull=False)
+        style_skills = Trait.objects.filter(trait_type=TraitType.SKILL, combat_style__isnull=False)
         if draft.selected_combat_style_id is not None:
             style_skills = style_skills.exclude(combat_style__pk=draft.selected_combat_style_id)
         dropped = {str(pk) for pk in style_skills.values_list("pk", flat=True)}

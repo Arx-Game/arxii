@@ -74,7 +74,7 @@ class PenetrationContestTests(TestCase):
         from world.skills.factories import SkillFactory
 
         skill = SkillFactory()
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         resolver = replace(_build_resolver(barrier_strength=7), offense_extra_traits=(term,))
         with (
             patch("world.combat.services.perform_check") as mock_pen,

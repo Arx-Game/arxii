@@ -113,9 +113,9 @@ dict of `distinctions`/`beginnings`/`upbringings`/`soulfray_stages`/
       <th>Skills</th>
       <td>
         <a href="{% url 'admin:arxii_trait_add' %}?trait_type=skill">New skill</a>
-        &middot; <a href="{% url 'admin:arxii_skill_changelist' %}">All skills</a>
-        <p class="help">A skill is one page: its trait's name, category and description,
-          with the skill's tooltip, order and active flag in the same form.</p>
+        &middot; <a href="{% url 'admin:arxii_trait_changelist' %}?trait_type__exact=skill">All skills</a>
+        <p class="help">A skill is a trait of type Skill: its name, category, description,
+          tooltip, order, active flag and specializations are all on its trait page.</p>
       </td>
     </tr>
   </tbody>

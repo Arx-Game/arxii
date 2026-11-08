@@ -76,7 +76,7 @@ class BareSheetServiceTests(TestCase):
             ).value
             == 10
         )
-        assert CharacterTraitValue.objects.get(character=self.sheet, trait=skill.trait).value == 20
+        assert CharacterTraitValue.objects.get(character=self.sheet, trait=skill).value == 20
         with self.assertRaises(SheetWriteError):
             set_skill_values(self.sheet, {skill: 999}, {}, source=TraitChangeSource.STAFF_EDIT)
 

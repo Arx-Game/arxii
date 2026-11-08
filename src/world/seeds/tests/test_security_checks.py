@@ -24,12 +24,11 @@ class SecurityCheckSeedTests(TestCase):
         seed_security_check_content()
 
     def test_seeds_skulduggery_skill(self):
-        from world.skills.models import Skill
-        from world.traits.models import TraitCategory, TraitType
+        from world.traits.models import Trait, TraitCategory, TraitType
 
-        skill = Skill.objects.get(trait__name="Skulduggery")
-        assert skill.trait.trait_type == TraitType.SKILL
-        assert skill.trait.category == TraitCategory.PHYSICAL
+        skill = Trait.objects.get(trait_type="skill", name="Skulduggery")
+        assert skill.trait_type == TraitType.SKILL
+        assert skill.category == TraitCategory.PHYSICAL
 
     def test_no_larceny_skill_remains(self):
         from world.traits.models import Trait
@@ -37,19 +36,16 @@ class SecurityCheckSeedTests(TestCase):
         assert not Trait.objects.filter(name="Larceny").exists()
 
     def test_seeds_athletics_skill(self):
-        from world.skills.models import Skill
-        from world.traits.models import TraitCategory, TraitType
+        from world.traits.models import Trait, TraitCategory, TraitType
 
-        skill = Skill.objects.get(trait__name="Athletics")
-        assert skill.trait.trait_type == TraitType.SKILL
-        assert skill.trait.category == TraitCategory.PHYSICAL
+        skill = Trait.objects.get(trait_type="skill", name="Athletics")
+        assert skill.trait_type == TraitType.SKILL
+        assert skill.category == TraitCategory.PHYSICAL
 
     def test_seeds_lockpicking_under_skulduggery(self):
         from world.skills.models import Specialization
 
-        spec = Specialization.objects.get(
-            name="Lockpicking", parent_skill__trait__name="Skulduggery"
-        )
+        spec = Specialization.objects.get(name="Lockpicking", parent_skill__name="Skulduggery")
         assert spec.is_active
 
     def test_seeds_criminal_specializations(self):
@@ -57,13 +53,13 @@ class SecurityCheckSeedTests(TestCase):
         from world.skills.models import Specialization
 
         for name in ["Pickpocketing", "Streetwise", "Disguise", "Forgery", "Sleight of Hand"]:
-            spec = Specialization.objects.get(name=name, parent_skill__trait__name="Skulduggery")
+            spec = Specialization.objects.get(name=name, parent_skill__name="Skulduggery")
             assert spec.is_active, name
 
     def test_seeds_climbing_under_athletics(self):
         from world.skills.models import Specialization
 
-        spec = Specialization.objects.get(name="Climbing", parent_skill__trait__name="Athletics")
+        spec = Specialization.objects.get(name="Climbing", parent_skill__name="Athletics")
         assert spec.is_active
 
     def test_lockpick_composition(self):
@@ -201,7 +197,6 @@ class SkulduggeryRenameTests(TestCase):
     """The seed renames a pre-existing Larceny row in place (#1825) — FKs survive."""
 
     def test_rename_converges_from_larceny(self):
-        from world.skills.models import Skill
         from world.traits.models import Trait, TraitCategory, TraitType
 
         trait = Trait.objects.create(
@@ -210,7 +205,6 @@ class SkulduggeryRenameTests(TestCase):
             category=TraitCategory.PHYSICAL,
             is_public=True,
         )
-        skill = Skill.objects.create(trait=trait, tooltip="old", display_order=35, is_active=True)
 
         seed_check_resolution_tables()
         seed_stealth_check_content()
@@ -219,6 +213,5 @@ class SkulduggeryRenameTests(TestCase):
         # No refresh needed: Trait is identity-mapped, so the seed mutated THIS instance.
         assert trait.name == "Skulduggery"
         assert Trait.objects.filter(pk=trait.pk, name="Skulduggery").exists()
-        assert Skill.objects.get(trait=trait).pk == skill.pk
         assert not Trait.objects.filter(name="Larceny").exists()
         assert Trait.objects.filter(name="Skulduggery").count() == 1

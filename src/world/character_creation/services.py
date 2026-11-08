@@ -2614,8 +2614,8 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     unknown id is skipped with a warning, as before.
     """
     from world.character_creation.sheet_writers import set_skill_values  # noqa: PLC0415
-    from world.skills.models import Skill, Specialization  # noqa: PLC0415
-    from world.traits.models import TraitChangeSource  # noqa: PLC0415
+    from world.skills.models import Specialization  # noqa: PLC0415
+    from world.traits.models import Trait, TraitChangeSource, TraitType  # noqa: PLC0415
 
     def by_id(queryset: Any, data: dict) -> dict:
         wanted = {int(pk): value for pk, value in data.items() if value > 0}
@@ -2624,10 +2624,11 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             logger.warning("Invalid ID %s in draft for character %s", pk, character.key)
         return {found[pk]: value for pk, value in wanted.items() if pk in found}
 
-    skills = by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {}))
+    skill_traits = Trait.objects.filter(trait_type=TraitType.SKILL)
+    skills = by_id(skill_traits, draft.draft_data.get("skills", {}))
     # The Gift stage's Magic skill allocation (validated there) is written as given; a
     # Magic skill the draft did not allocate to is not written (#4659).
-    skills |= by_id(Skill.objects.select_related("trait"), draft.draft_data.get("magic_skills", {}))
+    skills |= by_id(skill_traits, draft.draft_data.get("magic_skills", {}))
     set_skill_values(
         character.sheet_data,
         skills,
@@ -2872,7 +2873,6 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     )
     from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait  # noqa: PLC0415
 
     data = draft.draft_data
@@ -2891,7 +2891,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         techniques=resolve_rows(Technique, data.get("selected_technique_ids") or []),
         resonance=by_id(Resonance, "selected_gift_resonance_id"),
         anima_stat=by_id(Trait, "anima_check_stat_id"),
-        anima_skill=by_id(Skill, "anima_check_skill_id"),
+        anima_skill=by_id(Trait, "anima_check_skill_id"),
         ritual_name=data.get("anima_ritual_name") or f"{character_name}'s Anima Ritual",
         account=draft.account,
         origin=AcquisitionOrigin.CHARACTER_CREATION,

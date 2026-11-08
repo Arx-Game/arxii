@@ -11,55 +11,15 @@ class TraitTypeTests(TestCase):
         assert TraitType.MODIFIER.label == "Modifier"
 
 
-class SkillModelTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.trait = Trait.objects.create(
-            name="Melee Combat",
-            trait_type=TraitType.SKILL,
-            category=TraitCategory.COMBAT,
-            description="Close-quarters fighting ability",
-        )
-
-    def test_skill_creation(self):
-        """Skill should link to a Trait with type SKILL."""
-        from world.skills.models import Skill
-
-        skill = Skill.objects.create(
-            trait=self.trait,
-            tooltip="Fighting with melee weapons",
-            display_order=1,
-        )
-        assert skill.trait.name == "Melee Combat"
-        assert skill.tooltip == "Fighting with melee weapons"
-        assert skill.is_active is True
-
-    def test_skill_name_property(self):
-        """Skill should expose name from linked trait."""
-        from world.skills.models import Skill
-
-        skill = Skill.objects.create(trait=self.trait)
-        assert skill.name == "Melee Combat"
-
-    def test_skill_category_property(self):
-        """Skill should expose category from linked trait."""
-        from world.skills.models import Skill
-
-        skill = Skill.objects.create(trait=self.trait)
-        assert skill.category == TraitCategory.COMBAT
-
-
 class SpecializationModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from world.skills.models import Skill
-
         cls.trait = Trait.objects.create(
             name="Melee Combat",
             trait_type=TraitType.SKILL,
             category=TraitCategory.COMBAT,
         )
-        cls.skill = Skill.objects.create(trait=cls.trait)
+        cls.skill = cls.trait
 
     def test_specialization_creation(self):
         """Specialization should link to a parent skill."""
@@ -98,18 +58,16 @@ class CharacterSpecializationValueModelTests(TestCase):
     def setUp(self):
         from world.skills.models import (
             CharacterSpecializationValue,
-            Skill,
             Specialization,
         )
 
         # Flush SharedMemoryModel caches to prevent test pollution
         CharacterSpecializationValue.flush_instance_cache()
-        Skill.flush_instance_cache()
         Specialization.flush_instance_cache()
 
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+        self.skill = self.trait
         self.spec = Specialization.objects.get_or_create(
             name="Swords",
             parent_skill=self.skill,
@@ -198,9 +156,7 @@ class PathSkillSuggestionModelTests(TestCase):
         )
 
     def setUp(self):
-        from world.skills.models import Skill
-
-        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+        self.skill = self.trait
 
     def test_path_skill_suggestion_creation(self):
         """PathSkillSuggestion should link path to suggested skill value."""
@@ -243,7 +199,7 @@ class FactoryTests(TestCase):
 
         skill = SkillFactory()
         assert skill.pk is not None
-        assert skill.trait.trait_type == TraitType.SKILL
+        assert skill.trait_type == TraitType.SKILL
 
     def test_specialization_factory(self):
         """SpecializationFactory should create valid Specialization."""
@@ -259,7 +215,7 @@ class FactoryTests(TestCase):
 
         rating = SkillRatingFactory()
         assert rating.pk is not None
-        assert rating.trait.skill is not None
+        assert rating.trait.trait_type == TraitType.SKILL
 
     def test_character_specialization_value_factory(self):
         """CharacterSpecializationValueFactory should create valid value."""

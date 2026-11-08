@@ -260,7 +260,7 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     rather than calling them: those are private draft-dict readers, not a
     reusable seam. For each trait line, writes a ``CharacterTraitValue`` at
     ``display_value * STAT_DISPLAY_DIVISOR``. For each skill line, writes the
-    ``CharacterTraitValue`` on ``skill.trait`` (a skill's one rating store, #5010)
+    ``CharacterTraitValue`` on ``skill`` (a skill's one rating store, #5010)
     and aligns its ``DevelopmentPoints`` ledger. Every written
     value gets a ``CharacterTraitChange`` provenance stamp
     (``old_value=0``, ``source=NPC_PRESET``).
@@ -300,9 +300,9 @@ def apply_npc_preset(sheet: CharacterSheet, preset: NPCStatlinePreset) -> None:
     ]
     CharacterTraitValue.objects.bulk_create(trait_values)
 
-    skill_lines = list(preset.skill_lines.select_related("skill", "skill__trait"))
+    skill_lines = list(preset.skill_lines.select_related("skill"))
     skill_trait_values = [
-        CharacterTraitValue(character=sheet, trait=line.skill.trait, value=line.value)
+        CharacterTraitValue(character=sheet, trait=line.skill, value=line.value)
         for line in skill_lines
     ]
     CharacterTraitValue.objects.bulk_create(skill_trait_values)

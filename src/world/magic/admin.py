@@ -257,7 +257,7 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
     """A casting style: how a caster works magic, and the skill those casts add (#5002)."""
 
     list_display = ["name", "skill", "get_paths"]
-    list_select_related = ["skill__trait"]
+    list_select_related = ["skill"]
     search_fields = ["name", "description"]
     autocomplete_fields = ["skill"]
     inlines = [StyleCapabilityRequirementInline]
@@ -1423,7 +1423,7 @@ class MagicActivitySkillAdmin(admin.ModelAdmin):
     list_display = ["activity", "skill", "weight"]
     list_editable = ["weight"]
     list_filter = ["activity"]
-    list_select_related = ["skill__trait"]
+    list_select_related = ["skill"]
     autocomplete_fields = ["skill"]
 
 

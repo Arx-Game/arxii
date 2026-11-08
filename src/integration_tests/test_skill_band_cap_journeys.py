@@ -91,13 +91,13 @@ class _BandCapCase(JourneyCase):
         )
 
     def skill_row(self) -> CharacterTraitValue:
-        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait)
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill)
 
     def rolls_at(self) -> int:
-        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait).value
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill).value
 
     def ledger(self) -> DevelopmentPoints:
-        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
+        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill)
 
     def banked(self) -> int:
         """Development banked toward the skill's next level (#5010)."""
@@ -117,8 +117,8 @@ class _BandCapCase(JourneyCase):
     def author_breakthrough(self, target: int, *, xp_cost: int = 100) -> None:
         chart = XPCostChart.objects.create(name=f"Breakthroughs {target}")
         XPCostEntry.objects.create(chart=chart, level=target, xp_cost=xp_cost)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=target)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.skill, target_rating=target)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=150, total_spent=0
         )
@@ -194,7 +194,7 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
         check_type = CheckTypeFactory(
             name=f"Roll {self.skill.name}", category=CheckCategoryFactory(name="Band cap rolls")
         )
-        CheckTypeTraitFactory(check_type=check_type, trait=self.skill.trait, weight=Decimal(1))
+        CheckTypeTraitFactory(check_type=check_type, trait=self.skill, weight=Decimal(1))
         return check_type
 
     def test_a_roll_with_effort_at_the_cap_does_not_level_the_skill(self) -> None:
@@ -202,22 +202,22 @@ class UseAndAwardsStopAtTheCap(_BandCapCase):
         cap holds her at 3.0 and the surplus dissipates."""
         self.band_caps_skills_at(3)
         self.made_with(30)
-        self._bank_toward(self.skill.trait, 31, short_by=10)
+        self._bank_toward(self.skill, 31, short_by=10)
 
         perform_check(self.ysmay, self._check_on_skill(), effort_level=EffortLevel.HIGH)
 
         self.assertEqual(self.rolls_at(), 30)
         self.assertEqual(self.skill_row().value, 30)
-        tracker = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
+        tracker = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill)
         self.assertEqual(tracker.total_earned, cumulative_dp_for_level(30))
 
     def test_a_gm_award_at_the_cap_says_so_on_the_record(self) -> None:
         self.band_caps_skills_at(3)
         self.made_with(30)
-        self._bank_toward(self.skill.trait, 31, short_by=10)
+        self._bank_toward(self.skill, 31, short_by=10)
 
         record = award_development_points(
-            self.sheet, self.skill.trait, DevelopmentSource.SCENE, 50, description="A duel"
+            self.sheet, self.skill, DevelopmentSource.SCENE, 50, description="A duel"
         )
 
         self.assertEqual(self.rolls_at(), 30)
@@ -252,12 +252,8 @@ class StaffEditRefusesAboveTheCap(JourneyCase):
         refused = self.api(staff).patch(url, {"skills": {str(skill.pk): 25}}, format="json")
         self.assertEqual(refused.status_code, 400, refused.content)
         self.assertIn("the skill cap for this character's band", refused.json()["detail"])
-        self.assertFalse(
-            CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).exists()
-        )
+        self.assertFalse(CharacterTraitValue.objects.filter(character=sheet, trait=skill).exists())
 
         allowed = self.api(staff).patch(url, {"skills": {str(skill.pk): 20}}, format="json")
         self.assertEqual(allowed.status_code, 200, allowed.content)
-        self.assertEqual(
-            CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, 20
-        )
+        self.assertEqual(CharacterTraitValue.objects.get(character=sheet, trait=skill).value, 20)

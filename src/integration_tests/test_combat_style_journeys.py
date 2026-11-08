@@ -86,7 +86,7 @@ ONE = Decimal(1)
 
 def _style(*gear: str, name: str = STYLE, **fields: Any):
     """A style with its own Magic skill and the given gear kinds."""
-    style = CombatStyleFactory(name=name, skill=MagicSkillFactory(trait__name=name), **fields)
+    style = CombatStyleFactory(name=name, skill=MagicSkillFactory(name=name), **fields)
     for kind in gear:
         CombatStyleGearFactory(style=style, gear_archetype=kind)
     return style
@@ -116,13 +116,13 @@ class _StyledStriker(_StrikeField):
     def styled(self, *gear: str):
         style = _style(*gear, hit_stat=self.strength)
         CharacterTraitValue.objects.create(
-            character=self.sheet, trait=style.skill.trait, value=STYLE_RATING
+            character=self.sheet, trait=style.skill, value=STYLE_RATING
         )
         _give_style(self.sheet, style)
         return style
 
     def style_term(self, style) -> ExtraTraitTerm:
-        return ExtraTraitTerm(trait=style.skill.trait, weight=ONE)
+        return ExtraTraitTerm(trait=style.skill, weight=ONE)
 
     def hit_lines(self) -> list[dict[str, Any]]:
         hit_row = self.shown_rolls()[0]
@@ -337,7 +337,7 @@ class TechniquesInStyle(JourneyCase):
         return casts[0]
 
     def path_term(self) -> ExtraTraitTerm:
-        return ExtraTraitTerm(trait=self.path_skill.trait, weight=ONE)
+        return ExtraTraitTerm(trait=self.path_skill, weight=ONE)
 
     def test_the_hit_roll_adds_the_style_skill_and_keeps_its_own_stat(self) -> None:
         style = _style(GearArchetype.UNARMED, hit_stat=self.strength)
@@ -347,7 +347,7 @@ class TechniquesInStyle(JourneyCase):
 
         self.assertEqual(
             tuple(cast["extra_traits"]),
-            (self.path_term(), ExtraTraitTerm(trait=style.skill.trait, weight=ONE)),
+            (self.path_term(), ExtraTraitTerm(trait=style.skill, weight=ONE)),
         )
         # No weapon in hand: the technique rolls its own check's stat, not Strength.
         self.assertIsNone(cast["stat_override"])
@@ -370,7 +370,7 @@ class TechniquesInStyle(JourneyCase):
 
         self.assertEqual(
             tuple(cast["extra_traits"]),
-            (self.path_term(), ExtraTraitTerm(trait=style.skill.trait, weight=ONE)),
+            (self.path_term(), ExtraTraitTerm(trait=style.skill, weight=ONE)),
         )
 
     def test_a_vow_off_the_style_still_lapses_a_weaponless_cast(self) -> None:
@@ -425,7 +425,7 @@ class DefendingInStyle(_DefenseYard):
         roll = self.defend(mira)
 
         self.assertEqual(
-            tuple(roll["extra_traits"]), (ExtraTraitTerm(trait=style.skill.trait, weight=ONE),)
+            tuple(roll["extra_traits"]), (ExtraTraitTerm(trait=style.skill, weight=ONE),)
         )
         self.assertEqual(self.health(mira), 100 - (10 - 2))
 
@@ -490,7 +490,7 @@ class ReadingTheDefenseRoll(_DefenseYard):
         mira = self.fighter("Mira", style=style)
         CharacterTraitValue.objects.create(character=mira.sheet_data, trait=self.dodge, value=15)
         CharacterTraitValue.objects.create(
-            character=mira.sheet_data, trait=style.skill.trait, value=STYLE_RATING
+            character=mira.sheet_data, trait=style.skill, value=STYLE_RATING
         )
         return mira, style
 

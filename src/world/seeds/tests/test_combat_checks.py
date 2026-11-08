@@ -8,21 +8,18 @@ from world.seeds.combat_checks import seed_combat_check_content
 @override_settings(SEED_SAMPLE_CONTENT=True)  # seed_combat_check_content gates on #2698
 class CombatCheckSeedTests(TestCase):
     def test_melee_combat_skill_seeded(self):
-        from world.skills.models import Skill
-        from world.traits.models import TraitCategory, TraitType
+        from world.traits.models import Trait, TraitCategory, TraitType
 
         seed_combat_check_content()
-        skill = Skill.objects.get(trait__name="Melee Combat")
-        self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
-        self.assertEqual(skill.trait.category, TraitCategory.COMBAT)
+        skill = Trait.objects.get(trait_type="skill", name="Melee Combat")
+        self.assertEqual(skill.trait_type, TraitType.SKILL)
+        self.assertEqual(skill.category, TraitCategory.COMBAT)
 
     def test_weapon_specializations_seeded(self):
         from world.skills.models import Specialization
 
         seed_combat_check_content()
-        specs = {
-            s.name for s in Specialization.objects.filter(parent_skill__trait__name="Melee Combat")
-        }
+        specs = {s.name for s in Specialization.objects.filter(parent_skill__name="Melee Combat")}
         self.assertEqual(specs, {"Small Weapons", "Medium Weapons", "Heavy Weapons"})
 
     def test_melee_attack_composition(self):
@@ -59,12 +56,12 @@ class CombatCheckSeedTests(TestCase):
     def test_strike_skills_and_attack_checks_seeded(self):
         """#4858: the strike skills, and the Strike's attack checks composed like production."""
         from world.checks.models import CheckType
-        from world.skills.models import Skill
+        from world.traits.models import Trait
 
         seed_combat_check_content()
         seed_combat_check_content()  # re-run converges
         for skill in ("Ranged Combat", "Thrown Combat", "Unarmed Combat"):
-            self.assertTrue(Skill.objects.filter(trait__name=skill).exists())
+            self.assertTrue(Trait.objects.filter(trait_type="skill", name=skill).exists())
         expected = {
             "Melee Attack": {"strength", "Melee Combat"},
             "Ranged Attack": {"agility", "perception"},

@@ -50,13 +50,13 @@ from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, ensure_techni
 from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
-from world.skills.factories import SkillFactory, SkillTraitFactory
-from world.skills.models import Skill
+from world.skills.factories import SkillFactory
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
     PointConversionRange,
+    Trait,
     TraitCategory,
     TraitType,
 )
@@ -65,8 +65,8 @@ from world.vitals.models import CharacterVitals
 SKILL_VALUE = 30
 
 
-def _magic_skill(name: str) -> Skill:
-    return SkillFactory(trait=SkillTraitFactory(name=name, category=TraitCategory.MAGIC))
+def _magic_skill(name: str) -> Trait:
+    return SkillFactory(name=name, category=TraitCategory.MAGIC)
 
 
 def _posted_value(bound) -> object | None:
@@ -130,9 +130,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         )
         self.client.force_login(staff)
         self.thaumaturgy = _magic_skill("Thaumaturgy")
-        self.persuasion = SkillFactory(
-            trait=SkillTraitFactory(name="Persuasion", category=TraitCategory.SOCIAL)
-        )
+        self.persuasion = SkillFactory(name="Persuasion", category=TraitCategory.SOCIAL)
         # A combat style's own skill is a Magic skill no picker offers (#4921), so every
         # "offered" set below holds Thaumaturgy alone.
         self.daring_dance = _magic_skill("The Daring Dance")
@@ -147,7 +145,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.assertEqual(response.status_code, 200)
         return {row["text"] for row in response.json()["results"]}
 
-    def save_change_form(self, url: str, field: str, skill: Skill):
+    def save_change_form(self, url: str, field: str, skill: Trait):
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
         data = _page_as_post(page)
@@ -177,7 +175,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
         self.assertEqual(refused.status_code, 200)
         self.assertIn("skill", refused.context["adminform"].form.errors)
-        self.assertFalse(MagicActivitySkill.objects.exists())
+        self.assertFalse(MagicActivityTrait.objects.filter(trait_type="skill").exists())
 
         taken = self.client.post(url, {**row, "skill": self.thaumaturgy.pk})
 
@@ -319,7 +317,7 @@ class ACastCountsItsMagicSkillOnce(JourneyCase):
         )
         if skill_value:
             CharacterTraitValue.objects.create(
-                character=sheet, trait=self.occult.trait, value=skill_value
+                character=sheet, trait=self.occult, value=skill_value
             )
         return character
 
@@ -350,7 +348,7 @@ class ACastCountsItsMagicSkillOnce(JourneyCase):
         self.assertEqual(check_type.name, TECHNIQUE_CAST_CHECK_TYPE_NAME)
         weighted = set(check_type.traits.values_list("trait__name", flat=True))
         self.assertEqual(weighted, {"willpower"})
-        self.assertEqual(terms, (ExtraTraitTerm(trait=self.occult.trait, weight=Decimal("1.00")),))
+        self.assertEqual(terms, (ExtraTraitTerm(trait=self.occult, weight=Decimal("1.00")),))
         _, _, untrained = self.cast(self.hobb)
         self.assertEqual(trained.trait_points - untrained.trait_points, SKILL_VALUE)
 
@@ -368,9 +366,9 @@ class StaffSeeWhichCheckTypesWeightAMagicSkill(JourneyCase):
     def test_the_row_lists_the_check_types_and_links_to_them(self) -> None:
         occult = _magic_skill("Occult Theory")
         tiding = CheckTypeFactory(name="Reading the Tides")
-        CheckTypeTraitFactory(check_type=tiding, trait=occult.trait)
+        CheckTypeTraitFactory(check_type=tiding, trait=occult)
         plain = CheckTypeFactory(name="Climbing")
-        CheckTypeTraitFactory(check_type=plain, trait=SkillFactory().trait)
+        CheckTypeTraitFactory(check_type=plain, trait=SkillFactory())
 
         page = self.client.get(reverse("admin_ops_required_content"))
 

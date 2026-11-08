@@ -107,7 +107,6 @@ class TestSeededCharacterCreation(TestCase):
         from world.magic.models import Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.seeds.character_creation import DEFAULT_STAT_NAMES
-        from world.skills.models import Skill
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
 
@@ -158,7 +157,7 @@ class TestSeededCharacterCreation(TestCase):
         self.assertIsNotNone(resonance, "the content repo must author a resonance")
         stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
         self.assertIsNotNone(stat, "character-creation cluster must seed STAT traits")
-        skill = Skill.objects.filter(is_active=True).first()
+        skill = Trait.objects.filter(trait_type="skill", is_active=True).first()
         self.assertIsNotNone(skill, "checks cluster must seed an active skill")
 
         account = AccountDB.objects.create(username="seeded_cg_player")

@@ -501,7 +501,7 @@ class JoustResolutionTests(TestCase):
         ) as roll:
             _resolve_joust_pass(a, action_a, b, action_b)
 
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         self.assertEqual(roll.call_count, 2)
         for call in roll.call_args_list:
             self.assertEqual(tuple(call.kwargs["extra_traits"]), (term,))

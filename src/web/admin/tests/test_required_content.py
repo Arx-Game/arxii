@@ -842,7 +842,7 @@ class TestGossipSpecializationProbe(TestCase):
     def test_missing_when_the_parent_skill_trait_is_wrong(self) -> None:
         from world.skills.factories import SkillFactory, SpecializationFactory
 
-        wrong_skill = SkillFactory(trait__name="Deception")
+        wrong_skill = SkillFactory(name="Deception")
         SpecializationFactory(name="Gossip", parent_skill=wrong_skill)
         result = _probe_for("gossip-specialization").resolve(None)
         self.assertFalse(result.present)
@@ -850,7 +850,7 @@ class TestGossipSpecializationProbe(TestCase):
     def test_present_when_the_parent_skill_trait_matches(self) -> None:
         from world.skills.factories import SkillFactory, SpecializationFactory
 
-        persuasion_skill = SkillFactory(trait__name="Persuasion")
+        persuasion_skill = SkillFactory(name="Persuasion")
         SpecializationFactory(name="Gossip", parent_skill=persuasion_skill)
         result = _probe_for("gossip-specialization").resolve(None)
         self.assertTrue(result.present)

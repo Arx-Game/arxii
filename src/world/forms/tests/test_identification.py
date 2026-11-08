@@ -32,7 +32,6 @@ from world.seeds.investigation_checks import (
     ensure_identification_check,
     seed_investigation_check_content,
 )
-from world.skills.models import Skill
 from world.societies.constants import FameTier
 from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import Trait, TraitType
@@ -73,11 +72,9 @@ class IdentificationCheckSeedTests(TestCase):
         self.assertNotIn("perception", identification_stats)
 
     def test_shares_investigation_skill_row_with_search(self):
-        skill = Skill.objects.get(trait__name="Investigation")
+        skill = Trait.objects.get(trait_type="skill", name="Investigation")
         composed_types = set(
-            CheckTypeTrait.objects.filter(trait=skill.trait).values_list(
-                "check_type__name", flat=True
-            )
+            CheckTypeTrait.objects.filter(trait=skill).values_list("check_type__name", flat=True)
         )
         self.assertEqual(composed_types, {"Search", IDENTIFICATION_CHECK_TYPE_NAME})
 

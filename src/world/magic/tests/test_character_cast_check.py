@@ -48,7 +48,7 @@ class CharacterMagicCheckTypeTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.other = CharacterSheetFactory()
         cls.willpower = TraitFactory(name="willpower", trait_type=TraitType.STAT)
-        cls.skill = SkillFactory(trait__name="ritualism")
+        cls.skill = SkillFactory(name="ritualism")
 
     def test_synthesizes_per_character_check_weighted_on_stat_and_skill(self):
         ct = ensure_character_magic_check_type(self.sheet, stat=self.willpower, skill=self.skill)
@@ -181,7 +181,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         tradition = TraditionFactory()
 
         # Skill needed so provision_player_anima_ritual doesn't log + skip.
-        cls.skill = SkillFactory(trait__name="PCProvisionMelee")
+        cls.skill = SkillFactory(name="PCProvisionMelee")
 
         # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
         # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.
@@ -326,7 +326,7 @@ class GetCharacterCastCheckTests(TestCase):
         ResonanceFactory()
         cls.resonance = ResonanceFactory()
         tradition = TraditionFactory()
-        cls.skill = SkillFactory(trait__name="CCProvisionMelee")
+        cls.skill = SkillFactory(name="CCProvisionMelee")
 
         # Gift-stage draft contract (#2426): a catalog Gift + Technique the player
         # picks, granted for this (path, tradition) via PathGiftGrant/TraditionGiftGrant.

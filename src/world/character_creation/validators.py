@@ -538,7 +538,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
        available technique without an action template is rejected as unfinished.
     4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
-       valid anima_check_skill_id (an active Skill outside the magic category, which
+       valid anima_check_skill_id (an active skill outside the magic category, which
        magical rolls add as terms) — the character's Anima Check.
 
     Between 4 and 5, a Tradition that teaches a combat style needs one of its styles
@@ -625,7 +625,6 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
 def _anima_check_error(draft: CharacterDraft) -> str | None:
     """The Anima Check needs a stat and an active skill outside the Magic category."""
     from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     stat_id = draft.draft_data.get("anima_check_stat_id")
@@ -637,7 +636,7 @@ def _anima_check_error(draft: CharacterDraft) -> str | None:
     # skills as terms, so choosing one here would count it twice (#4450).
     skill_valid = (
         bool(skill_id)
-        and Skill.objects.filter(pk=skill_id, is_active=True)
+        and Trait.objects.filter(pk=skill_id, trait_type=TraitType.SKILL, is_active=True)
         .exclude(pk__in=magic_category_skills())
         .exists()
     )

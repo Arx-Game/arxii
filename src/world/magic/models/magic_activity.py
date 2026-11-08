@@ -32,7 +32,7 @@ class MagicActivitySkill(SharedMemoryModel):
         help_text="The kind of magical roll this skill is added to.",
     )
     skill = models.ForeignKey(
-        "arxii.Skill",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         related_name="magic_activity_rows",
         limit_choices_to=MAGIC_PICKER_SKILL_CHOICES,

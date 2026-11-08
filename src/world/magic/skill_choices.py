@@ -8,7 +8,7 @@ replaced the Path and Gift pickers in #5002) and ``Technique.skill``.
 
 ``limit_choices_to`` does both jobs: the admin form and its autocomplete offer only these
 skills, and ``Model.full_clean()`` refuses any other (``ForeignKey.validate`` filters by
-it), with ``MAGIC_SKILL_ERROR_MESSAGES`` saying why. The set follows a skill's trait
+it), with ``MAGIC_SKILL_ERROR_MESSAGES`` saying why. The set follows a skill's
 category, never its name. ``magic_category_skills()`` reads the same filter and adds the
 active flag; a picker keeps an inactive Magic skill valid, because staff deactivating a
 skill means it adds nothing, not that every row pointing at it must change.
@@ -25,9 +25,10 @@ from __future__ import annotations
 
 from django.db.models import Q
 
-from world.traits.models import TraitCategory
+from world.traits.models import TraitCategory, TraitType
 
-MAGIC_SKILL_CHOICES = Q(trait__category=TraitCategory.MAGIC)
+#: A skill is a skill-type Trait (#5008), so the picker filters the Trait itself.
+MAGIC_SKILL_CHOICES = Q(category=TraitCategory.MAGIC, trait_type=TraitType.SKILL)
 
 MAGIC_SKILL_ERROR_MESSAGES = {
     "invalid": (

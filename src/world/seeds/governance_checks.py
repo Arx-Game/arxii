@@ -11,7 +11,7 @@ household/org; boosts a dispatched collector). Two check compositions ride them:
 - **Domain Investment** — intellect + Scholarship (+ Economics): improving an
   org's income streams / cracking down on graft.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
+``checks.checkcategory``/``checktype``/``checktypetrait`` and
 ``traits.trait`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
@@ -93,32 +93,27 @@ def _rename_legacy_organization() -> None:
 
 
 def ensure_governance_skills() -> dict[str, object]:
-    """Look up (or sample) the Scholarship + Leadership Skill rows + backing Traits.
+    """Look up (or sample) the Scholarship + Leadership skills (SKILL Traits, #5008).
 
-    ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). A skill
-    whose Trait or Skill row isn't authored is omitted from the returned dict.
+    ``traits.Trait`` is content-repo-owned (#2698). A skill whose Trait isn't
+    authored is omitted from the returned dict.
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     skills: dict[str, object] = {}
     for order, (name, tooltip, category) in enumerate(_GOVERNANCE_SKILLS):
-        trait = authored_or_sample(
+        skill = authored_or_sample(
             Trait,
             {
                 "trait_type": TraitType.SKILL,
                 "category": category,
                 "is_public": True,
+                "tooltip": tooltip,
+                "display_order": 20 + order,
+                "is_active": True,
             },
             name=name,
-        )
-        if trait is None:
-            continue
-        skill = authored_or_sample(
-            Skill,
-            {"tooltip": tooltip, "display_order": 20 + order, "is_active": True},
-            trait=trait,
         )
         if skill is None:
             continue
@@ -204,7 +199,7 @@ def ensure_governance_check_compositions(
         skill = skills.get(skill_name)
         if skill is not None:
             authored_or_sample(
-                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill
             )
         spec = specs.get(spec_name)
         if spec is not None:

@@ -416,8 +416,8 @@ class PurchaseUnlockActionTests(TestCase):
         """Author a TraitRatingUnlock + its XP cost for ``skill`` (#2115)."""
         chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
         XPCostEntry.objects.create(chart=chart, level=target_rating, xp_cost=xp_cost)
-        TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
-        return TraitRatingUnlock.objects.create(trait=skill.trait, target_rating=target_rating)
+        TraitXPCost.objects.create(trait=skill, cost_chart=chart)
+        return TraitRatingUnlock.objects.create(trait=skill, target_rating=target_rating)
 
     def test_purchase_skill_breakthrough_success(self):
         """Can purchase a skill breakthrough when the actor has enough XP (#2115)."""

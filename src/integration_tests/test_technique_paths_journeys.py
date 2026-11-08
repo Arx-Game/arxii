@@ -235,11 +235,11 @@ class CastingAfterACrossing(JourneyCase):
     def test_a_technique_from_her_old_path_adds_her_current_styles_skill(self) -> None:
         self.assertEqual(
             self.cast_terms(self.cinder),
-            (ExtraTraitTerm(trait=self.ash_skill.trait, weight=Decimal("1.00")),),
+            (ExtraTraitTerm(trait=self.ash_skill, weight=Decimal("1.00")),),
         )
 
     def test_a_technique_of_her_current_path_adds_its_skill(self) -> None:
         self.assertEqual(
             self.cast_terms(self.smoke),
-            (ExtraTraitTerm(trait=self.ash_skill.trait, weight=Decimal("1.00")),),
+            (ExtraTraitTerm(trait=self.ash_skill, weight=Decimal("1.00")),),
         )

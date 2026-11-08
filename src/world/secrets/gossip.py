@@ -98,7 +98,7 @@ def _gossip_check_type():
 def _gossip_specialization():
     from world.skills.models import Specialization  # noqa: PLC0415
 
-    return Specialization.objects.get(name="Gossip", parent_skill__trait__name="Persuasion")
+    return Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
 
 
 def _area_for_room(room: ObjectDB) -> Area | None:
