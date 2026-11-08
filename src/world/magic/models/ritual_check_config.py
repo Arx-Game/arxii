@@ -17,8 +17,8 @@ class RitualCheckConfig(SharedMemoryModel):
     that SCENE_ACTION rituals must have a config (other kinds may) is
     enforced in Ritual.clean().
 
-    FK paths mirror CharacterAnimaRitual: stat/skill → traits.Trait (a skill is
-    a skill-type Trait, #5008), specialization → skills.Specialization,
+    FK paths mirror CharacterAnimaRitual: stat/skill → traits.Trait /
+    skills.Skill, specialization → skills.Specialization,
     check_type → checks.CheckType. For SERVICE rituals, stat/skill are
     narrative/authoring hints — the roll's mechanics come entirely from
     check_type composition + the authored difficulty.
@@ -37,10 +37,9 @@ class RitualCheckConfig(SharedMemoryModel):
         help_text="The primary stat used in this ritual's check.",
     )
     skill = models.ForeignKey(
-        "arxii.Trait",
+        "arxii.Skill",
         on_delete=models.PROTECT,
         related_name="+",
-        limit_choices_to={"trait_type": "skill"},
         help_text="The skill used in this ritual's check.",
     )
     specialization = models.ForeignKey(

@@ -6,13 +6,11 @@ character values, and check resolution configuration.
 """
 
 from django import forms
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.http import HttpRequest
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.mechanics.services import ensure_skill_target
-from world.skills.models import Specialization
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -48,29 +46,6 @@ class TraitRankDescriptionInline(admin.TabularInline):
         return obj.display_value
 
 
-SPECIALIZATIONS_ON_NON_SKILL_TRAIT_MESSAGE = (
-    "Only a trait of type Skill can have specializations. Set Trait type to Skill, or "
-    "clear the Specializations rows."
-)
-
-
-def ensure_skill_target_or_warn(request: HttpRequest, skill: Trait) -> None:
-    """Make sure a modifier target points at ``skill``, warning staff if not (#4820).
-
-    A skill rolls a distinction's bonus only through a stat-category ``ModifierTarget``
-    whose ``target_trait`` is the skill; without one a pasted ``+10 <skill>`` is refused.
-    The Trait page's save calls this for a skill-type trait. An explicit call, not a
-    signal (ADR-0009).
-    """
-    if ensure_skill_target(skill) is None:
-        messages.warning(
-            request,
-            f"No modifier target was made for {skill.name}: another category already "
-            "has a target of that name. Retarget that row to this skill on the "
-            "Modifier targets admin.",
-        )
-
-
 SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE = (
     "This skill has specializations, so it must stay a Skill. Move or delete its "
     "specializations first."
@@ -85,9 +60,8 @@ class TraitAdminForm(forms.ModelForm):
 
     def clean(self) -> dict:
         cleaned = super().clean()
-        was_skill = self.initial.get("trait_type") == TraitType.SKILL
         if (
-            was_skill
+            self.initial.get("trait_type") == TraitType.SKILL
             and cleaned.get("trait_type") != TraitType.SKILL
             and self.instance.specializations.exists()
         ):
@@ -95,69 +69,27 @@ class TraitAdminForm(forms.ModelForm):
         return cleaned
 
 
-class SpecializationFormSet(OneRowPerFormSet):
-    """Refuses specializations on a trait that is not of type Skill (#5008).
-
-    ``Specialization.parent_skill``'s ``limit_choices_to`` guards its own admin page's
-    picker, but an inline sets the parent itself and never runs that check.
-    """
-
-    def clean(self) -> None:
-        super().clean()
-        if self.instance.trait_type == TraitType.SKILL:
-            return
-        for form in self.forms:
-            if form.has_changed() and not self._should_delete_form(form):
-                raise ValidationError(SPECIALIZATIONS_ON_NON_SKILL_TRAIT_MESSAGE)
-
-
-class SpecializationInline(admin.TabularInline):
-    """A skill's specializations, authored on its Trait page (#5008)."""
-
-    model = Specialization
-    formset = SpecializationFormSet
-    extra = 1
-    fields = ["name", "tooltip", "display_order", "is_active"]
-    ordering = ["display_order", "name"]
-
-
 @admin.register(Trait)
 class TraitAdmin(admin.ModelAdmin):
-    """A trait; a skill is a Trait of type Skill, authored here in full (#5008).
-
-    Tooltip, sheet order and the active flag are plain fields, and a skill's
-    specializations are an inline.
-    """
+    """Every trait. Skills are authored on the Skill page, a proxy of this (#5008)."""
 
     form = TraitAdminForm
-    list_display = ["name", "trait_type", "category", "is_public", "is_active", "display_order"]
-    list_filter = ["trait_type", "category", "is_public", "is_active"]
-    search_fields = ["name", "description", "tooltip"]
+    list_display = ["name", "trait_type", "category", "is_public"]
+    list_filter = ["trait_type", "category", "is_public"]
+    search_fields = ["name", "description"]
     ordering = ["trait_type", "category", "name"]
-    inlines = [SpecializationInline, TraitRankDescriptionInline]
+    inlines = [TraitRankDescriptionInline]
     readonly_fields = ["get_connections"]
 
-    def get_inline_instances(self, request, obj=None):
-        """Hide Specializations on a saved trait that is not a skill and has none.
-
-        The add page always shows it, since the type is chosen in the same form.
-        """
-        instances = super().get_inline_instances(request, obj)
-        if obj is None or obj.trait_type == TraitType.SKILL or obj.specializations.exists():
-            return instances
-        return [inline for inline in instances if not isinstance(inline, SpecializationInline)]
-
     def save_model(self, request, obj, form, change):
-        """Save the trait; a skill gets the modifier target its bonuses land on (#4820)."""
+        """Save; a skill-type trait gets the modifier target its bonuses land on (#4820)."""
         super().save_model(request, obj, form, change)
         if obj.trait_type == TraitType.SKILL:
-            ensure_skill_target_or_warn(request, obj)
+            ensure_skill_target(obj)
 
     @admin.display(description="Connections")
     def get_connections(self, obj):
-        return describe_reverse_relations(
-            obj, exclude=frozenset({"rank_descriptions", "specializations"})
-        )
+        return describe_reverse_relations(obj, exclude=frozenset({"rank_descriptions"}))
 
 
 @admin.register(CharacterTraitValue)

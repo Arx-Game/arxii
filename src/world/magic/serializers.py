@@ -1398,7 +1398,7 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         """Resolve integer PK fields to model instances."""
         from world.checks.models import CheckType  # noqa: PLC0415
-        from world.skills.models import Specialization  # noqa: PLC0415
+        from world.skills.models import Skill, Specialization  # noqa: PLC0415
         from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
         resolved: dict = {}
@@ -1411,8 +1411,8 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"stat_id": "Stat trait not found."}) from exc
         if (val := attrs.get("skill_id")) is not None:
             try:
-                resolved["skill"] = Trait.objects.get(pk=val, trait_type=TraitType.SKILL)
-            except Trait.DoesNotExist as exc:
+                resolved["skill"] = Skill.objects.get(pk=val)
+            except Skill.DoesNotExist as exc:
                 raise serializers.ValidationError({"skill_id": "Skill not found."}) from exc
 
         # Nullable FK fields — resolve via helper.

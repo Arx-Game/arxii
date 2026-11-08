@@ -11,6 +11,7 @@ import factory.django
 from world.skills.models import (
     CharacterSpecializationValue,
     PathSkillSuggestion,
+    Skill,
     SkillPointBudget,
     Specialization,
     TrainingAllocation,
@@ -22,11 +23,20 @@ from world.traits.models import CharacterTraitValue, TraitCategory, TraitType
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
 
-class SkillFactory(TraitFactory):
-    """A skill: a Trait of type SKILL (#5008)."""
+class SkillTraitFactory(TraitFactory):
+    """Factory for creating Trait records with type SKILL."""
 
     trait_type = TraitType.SKILL
     category = TraitCategory.COMBAT
+
+
+class SkillFactory(SkillTraitFactory):
+    """Factory for creating Skill records: skill-type Traits seen through the proxy."""
+
+    class Meta:
+        model = Skill
+        django_get_or_create = ("name",)
+
     tooltip = factory.Faker("sentence")
     display_order = factory.Sequence(lambda n: n)
     is_active = True

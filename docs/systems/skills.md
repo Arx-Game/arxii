@@ -1,9 +1,8 @@
 # Skills System
 
-Character skills and specializations with development tracking. A skill is a skill-type
-`Trait`; there is no separate skill model. What that means, field by field, is in
-`docs/systems/traits.md`, "A skill is a Trait" (ADR-5008). This page covers what hangs off a
-skill: specializations, the CG budget, training, development and rust.
+Character skills and specializations with development tracking. `Skill` is a proxy of `Trait`
+(a typed view of skill-type traits, no table); see `docs/systems/traits.md`, "A skill is a
+Trait" (ADR-5008).
 
 **Source:** `src/world/skills/`
 **API Base:** `/api/skills/`
@@ -16,16 +15,17 @@ skill: specializations, the CG budget, training, development and rust.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Specialization` | Specific application under a parent skill | `name`, `parent_skill` (FK Trait, SKILL type only), `description`, `tooltip`, `display_order`, `is_active` |
+| `Skill` | Proxy of `Trait` showing only skill-type traits (#5008) | `name`, `category`, `description`, `tooltip`, `display_order`, `is_active` (all `Trait` fields) |
+| `Specialization` | Specific application under a parent skill | `name`, `parent_skill` (FK Skill), `description`, `tooltip`, `display_order`, `is_active` |
 | `SkillPointBudget` | CG point budget configuration (single-row model) | `path_points` (50), `free_points` (60), `points_per_tier` (10), `specialization_unlock_threshold` (30), `max_skill_value` (30), `max_specialization_value` (30) |
-| `PathSkillSuggestion` | Suggested skill allocation for a path (template) | `character_path` (FK Path), `skill` (FK Trait, SKILL type only), `suggested_value`, `display_order` |
+| `PathSkillSuggestion` | Suggested skill allocation for a path (template) | `character_path` (FK Path), `skill` (FK Skill), `suggested_value`, `display_order` |
 
 ### Character Data (SharedMemoryModel - per-character instances)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterSpecializationValue` | Character's specialization value (no rust) | `character` (FK ObjectDB), `specialization` (FK Specialization), `value`, `development_points` |
-| `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Trait, SKILL type only, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `ap_amount` |
+| `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Skill, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `ap_amount` |
 
 ---
 
@@ -68,7 +68,7 @@ and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 co
 
 ### The rating is `CharacterTraitValue` (#5010)
 
-A character's rating in a skill is the skill trait's `traits.CharacterTraitValue`, one
+A character's rating in a skill is the skill's own `traits.CharacterTraitValue`, one
 row that the sheet shows and every check reads. `skill_rating(sheet, skill)` (through the character's trait handler)
 (`world/skills/services.py`) reads it. Writers record a `traits.CharacterTraitChange`:
 
@@ -94,8 +94,8 @@ sheet's `SkillEntry` carries `value` (stored plus `modifier`, the number a roll 
 `modifier`, with `at_boundary` read from the stored rating.
 
 The target is made by `mechanics.services.ensure_skill_target(trait)`: both admin paths that save a
-skill-type trait calls it through `TraitAdmin.save_model` (`traits.admin.ensure_skill_target_or_warn`,
-#5008), and the Distinction Builder's paste calls it at create time when an
+skill call it (`SkillAdmin.save_model` through `ensure_skill_target_or_warn`, and
+`TraitAdmin.save_model` for a skill-type trait), and the Distinction Builder's paste calls it at create time when an
 effect names a skill with no target yet (the preview row says so), so a new skill takes a bonus
 the first time a card names it. A same-named target in another category (the `stealth` roll
 modifier that predates the Stealth skill) is left alone: staff retarget it by hand. The sheet
@@ -176,6 +176,20 @@ lowered; it just cannot rise. Journeys: `integration_tests/test_skill_band_cap_j
 
 ## Key Methods
 
+### Skill (a proxy of Trait)
+
+```python
+from world.skills.models import Skill
+
+skill = Skill.objects.get(pk=1)  # only skill-type traits; skill.pk is the trait's pk
+skill.name, skill.category, skill.tooltip  # Trait's own fields
+Skill.objects.create(name="Sailing", category=...)  # save() sets trait_type=SKILL
+```
+
+`Skill` shares `Trait`'s identity map, so a row read through `Skill` can be the cached
+`Trait` instance. Put skill behaviour on `Trait` (`cached_specializations` is there), not on
+the proxy.
+
 ### Specialization
 
 ```python
@@ -245,12 +259,11 @@ budget.specialization_unlock_threshold  # 30
 
 All models registered with appropriate admin interfaces:
 
-- **Where a skill is authored (#5006, #5008):** on its Trait page, the only skill page. The
-  Authoring Workbench's Builders panel "New skill" link opens the Trait add form typed as Skill,
-  and "All skills" opens the Trait list filtered to skill-type traits. Tooltip, display order and
-  active are plain Trait fields; specializations are an inline (`traits.admin.SpecializationInline`),
-  refused on a non-skill trait and hidden on a saved non-skill trait that has none. Saving a
-  skill-type trait makes its modifier target.
+- `SkillAdmin` (on the proxy, #5008) - where a skill is authored: name, category, description,
+  tooltip, order, active and credits, with an inline `Specialization` editor; the trait type is
+  not shown (always Skill). Save makes its modifier target. The Builders panel's "New skill" and
+  "All skills" links open it. On the Trait page, a skill that has specializations cannot be
+  retyped away from Skill.
 - `SpecializationAdmin` - List/filter by `parent_skill` and active status, search by name and parent skill
 - `CharacterSpecializationValueAdmin` - Shows `value`, `display_value`, `development_points`; filter by parent skill
 - `SkillPointBudgetAdmin` - Single-row model; `has_add_permission` returns False if row exists, `has_delete_permission` always False
@@ -336,7 +349,7 @@ and that game week stamp exempts a trained skill from it (#5010).
 
 ## Integration Points
 
-- **Trait System**: a skill is a `Trait` of type SKILL (see `docs/systems/traits.md`, "A skill is a Trait"), so checks resolve it like any trait
+- **Trait System**: `Skill` is a proxy of `Trait` (trait_type=SKILL), giving skills unified check resolution
 - **Classes/Paths app**: `PathSkillSuggestion` links to `classes.Path` for CG skill templates
 - **Character Creation**: Stage 5 uses skills for allocation with point budgets
 - **Character Sheets**: Display skills, with `at_boundary` for a skill parked at an XP boundary
@@ -344,7 +357,7 @@ and that game week stamp exempts a trained skill from it (#5010).
   add a skill it does not list on its check type, through `extra_traits` (#4450, ADR-4450); the skill
   scores, develops once per roll, and counts for thread matching like a check type's own skill.
 - **Magic** (#4450): `MagicActivitySkill`, `TechniqueStyle.skill` (the casting style's skill,
-  #5002) and `Technique.skill` point at a skill-type `Trait` (PROTECT for the activity table, SET_NULL for the others), so
+  #5002) and `Technique.skill` point at `Skill` (PROTECT for the activity table, SET_NULL for the others), so
   staff choose which skills magical rolls add. A skill in the MAGIC trait category is not offered as
   a character's Anima Check skill (the cast would count it twice). See `docs/systems/magic.md`,
   "Magical skills".

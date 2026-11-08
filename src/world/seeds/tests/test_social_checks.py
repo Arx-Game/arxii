@@ -10,7 +10,7 @@ from world.checks.services import perform_check
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.social_checks import seed_social_check_content
 from world.skills.factories import CharacterSpecializationValueFactory
-from world.skills.models import Specialization
+from world.skills.models import Skill, Specialization
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -23,7 +23,7 @@ class SocialCheckSeedTests(TestCase):
 
     def test_seeds_parent_skills(self):
         for name in ("Persuasion", "Performance"):
-            assert Trait.objects.filter(trait_type="skill", name=name).exists()
+            assert Skill.objects.filter(name=name).exists()
 
     def test_seeds_specializations_under_their_parents(self):
         persuasion_specs = set(

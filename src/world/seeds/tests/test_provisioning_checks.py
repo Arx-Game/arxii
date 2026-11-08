@@ -16,7 +16,7 @@ from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTra
 from world.items.models import AccentLevel, QualityTier
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.provisioning_checks import COOKING_CHECK_NAME, seed_provisioning_content
-from world.skills.models import Specialization
+from world.skills.models import Skill, Specialization
 from world.traits.models import Trait, TraitType
 
 
@@ -28,7 +28,7 @@ class ProvisioningCheckSeedTests(TestCase):
         seed_provisioning_content()
 
     def test_seeds_cooking_skill(self) -> None:
-        skill = Trait.objects.get(trait_type="skill", name="Cooking")
+        skill = Skill.objects.get(name="Cooking")
         self.assertEqual(skill.trait_type, TraitType.SKILL)
 
     def test_seeds_brewing_specialization_attached_to_check(self) -> None:

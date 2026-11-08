@@ -6,10 +6,11 @@ from rest_framework import serializers
 
 from world.skills.models import (
     PathSkillSuggestion,
+    Skill,
     SkillPointBudget,
     Specialization,
 )
-from world.traits.models import Trait, TraitCategory
+from world.traits.models import TraitCategory
 
 
 class SpecializationSerializer(serializers.ModelSerializer):
@@ -33,16 +34,18 @@ class SpecializationSerializer(serializers.ModelSerializer):
 
 
 class SkillSerializer(serializers.ModelSerializer):
-    """A skill (a skill-type Trait, #5008) with nested specializations."""
+    """Serializer for Skill model with nested specializations."""
 
+    name = serializers.CharField(source="trait.name", read_only=True)
+    category = serializers.CharField(source="trait.category", read_only=True)
     category_display = serializers.SerializerMethodField()
+    description = serializers.CharField(source="trait.description", read_only=True)
     specializations = SpecializationSerializer(
         many=True, read_only=True, source="cached_specializations"
     )
 
     class Meta:
-        model = Trait
-        read_only_fields = ["name", "category", "description"]
+        model = Skill
         fields = [
             "id",
             "name",
@@ -55,12 +58,12 @@ class SkillSerializer(serializers.ModelSerializer):
             "specializations",
         ]
 
-    def get_category_display(self, obj: Trait) -> str:
+    def get_category_display(self, obj: Skill) -> str:
         """Get the human-readable category label."""
         try:
-            return TraitCategory(obj.category).label
+            return TraitCategory(obj.trait.category).label
         except ValueError:
-            return obj.category
+            return obj.trait.category
 
 
 class SkillListSerializer(SkillSerializer):

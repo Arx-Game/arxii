@@ -799,7 +799,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's four
     # XP boundaries (20/30/40/50), so the #2115 breakthrough purchase is always
     # reachable instead of a landmine. Registered LAST — it iterates every
-    # currently-seeded skill Trait, so it must run after every cluster that seeds
+    # currently-seeded Skill row, so it must run after every cluster that seeds
     # new skills (combat_checks/social/investigation/governance/stealth); safe to
     # re-run (idempotent) after authoring a skill outside those clusters.
     "skills": _seed_skills,

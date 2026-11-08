@@ -2387,12 +2387,11 @@ class LegendSpread(SharedMemoryModel):
         help_text="How it was spread (e.g., bard song, tavern gossip, pamphlet)",
     )
     skill = models.ForeignKey(
-        "arxii.Trait",
+        "arxii.Skill",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="legend_spreads",
-        limit_choices_to={"trait_type": "skill"},
         help_text="The skill used for this spread, if any",
     )
     audience_factor = models.DecimalField(

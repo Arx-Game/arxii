@@ -11,6 +11,7 @@ from world.magic.seeds_cast import (
     get_standalone_cast_pool,
     get_standalone_cast_template,
 )
+from world.skills.models import Skill
 from world.traits.models import Trait, TraitType
 
 
@@ -33,7 +34,7 @@ class TechniqueCastSeedTests(TestCase):
         }
         self.assertEqual(weighted, {("willpower", TraitType.STAT)})
         self.assertFalse(Trait.objects.filter(trait_type=TraitType.SKILL).exists())
-        self.assertFalse(Trait.objects.filter(trait_type="skill").exists())
+        self.assertFalse(Skill.objects.exists())
 
     def test_idempotent_and_get_returns_same_row(self):
         a = ensure_technique_cast_content()

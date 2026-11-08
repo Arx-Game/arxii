@@ -6,20 +6,19 @@ from typing import Any
 
 import django_filters
 
-from world.skills.models import Specialization
-from world.traits.models import Trait
+from world.skills.models import Skill, Specialization
 
 _IS_ACTIVE = "is_active"
 _TRUE = "true"
 
 
 class SkillFilter(django_filters.FilterSet):
-    """Filter skills (skill-type traits) with default-to-active behavior."""
+    """Filter skills with default-to-active behavior."""
 
     is_active = django_filters.BooleanFilter(field_name=_IS_ACTIVE)
 
     class Meta:
-        model = Trait
+        model = Skill
         fields = [_IS_ACTIVE]
 
     def __init__(self, data: Any = None, *args: Any, **kwargs: Any) -> None:

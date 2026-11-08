@@ -5,7 +5,7 @@ Every `CharacterTraitValue` stores the fine-grained 1-100 range (ADR-0193, #2894
 _Avoid_: "1-5 scale" for storage (that's stat display, draft-side only), dividing skill values by 10
 
 **Trait**:
-The base definition template for any measurable character quality, typed as STAT, SKILL, MODIFIER, LANGUAGE or OTHER and grouped by category. A Stat is a Trait of type STAT and a Skill is a Trait of type SKILL, so they share one check-resolution pipeline.
+The base definition template for any measurable character quality, typed as STAT, SKILL, MODIFIER, or OTHER and grouped by category. Every Stat and Skill is backed by a Trait record, giving them a unified check-resolution pipeline.
 _Avoid_: attribute, stat (for the generic case)
 
 **Stat**:
@@ -13,8 +13,8 @@ One of the 12 core character statistics used in character creation and gameplay,
 _Avoid_: ability score, primary attribute
 
 **Skill**:
-A broad learnable competency (Melee Combat, Persuasion). A Skill is a Trait of type SKILL and nothing else (#5008, ADR-5008): its tooltip, order, active flag and Specializations are on that Trait, and every reference to a skill is a FK to Trait limited to SKILL. See `docs/systems/traits.md`, "A skill is a Trait".
-_Avoid_: proficiency, talent, "the Skill row", "the skill's trait" (they are one row)
+A broad learnable competency (Melee Combat, Persuasion): a Trait of type SKILL, seen through the `Skill` proxy model (#5008, ADR-5008), carrying development and rust progression on the character. Skills are the parent category beneath which Specializations live.
+_Avoid_: proficiency, talent
 
 **Specialization**:
 A specific application beneath a parent Skill (Swords under Melee Combat, Seduction under Persuasion) that stacks with the parent when applicable and, unlike a Skill, is immune to rust. It unlocks once the parent Skill reaches the configured threshold.

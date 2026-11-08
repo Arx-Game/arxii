@@ -8,10 +8,11 @@ from world.seeds.combat_checks import seed_combat_check_content
 @override_settings(SEED_SAMPLE_CONTENT=True)  # seed_combat_check_content gates on #2698
 class CombatCheckSeedTests(TestCase):
     def test_melee_combat_skill_seeded(self):
-        from world.traits.models import Trait, TraitCategory, TraitType
+        from world.skills.models import Skill
+        from world.traits.models import TraitCategory, TraitType
 
         seed_combat_check_content()
-        skill = Trait.objects.get(trait_type="skill", name="Melee Combat")
+        skill = Skill.objects.get(name="Melee Combat")
         self.assertEqual(skill.trait_type, TraitType.SKILL)
         self.assertEqual(skill.category, TraitCategory.COMBAT)
 
@@ -56,12 +57,12 @@ class CombatCheckSeedTests(TestCase):
     def test_strike_skills_and_attack_checks_seeded(self):
         """#4858: the strike skills, and the Strike's attack checks composed like production."""
         from world.checks.models import CheckType
-        from world.traits.models import Trait
+        from world.skills.models import Skill
 
         seed_combat_check_content()
         seed_combat_check_content()  # re-run converges
         for skill in ("Ranged Combat", "Thrown Combat", "Unarmed Combat"):
-            self.assertTrue(Trait.objects.filter(trait_type="skill", name=skill).exists())
+            self.assertTrue(Skill.objects.filter(name=skill).exists())
         expected = {
             "Melee Attack": {"strength", "Melee Combat"},
             "Ranged Attack": {"agility", "perception"},

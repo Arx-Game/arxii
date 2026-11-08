@@ -19,7 +19,7 @@ from world.forms.models import FormMarking, FormTrait, FormTraitOption
 from world.goals.serializers import GoalInputSerializer
 from world.items.constants import BodyRegion
 from world.journals.constants import JournalKind
-from world.skills.models import Specialization
+from world.skills.models import Skill, Specialization
 from world.traits.models import Trait, TraitType
 from world.worship.models import WorshippedBeing
 
@@ -83,8 +83,8 @@ class StaffSkillsSerializer(serializers.Serializer):
         child=serializers.IntegerField(), required=False, default=dict
     )
 
-    def validate_skills(self, value: dict[str, int]) -> dict[Trait, int]:
-        return _rows_by_pk(Trait.objects.filter(trait_type=TraitType.SKILL), value, "skills")
+    def validate_skills(self, value: dict[str, int]) -> dict[Skill, int]:
+        return _rows_by_pk(Skill.objects.all(), value, "skills")
 
     def validate_specializations(self, value: dict[str, int]) -> dict[Specialization, int]:
         return _rows_by_pk(Specialization.objects.all(), value, "specializations")
@@ -275,9 +275,7 @@ class StaffMagicSerializer(serializers.Serializer):
     anima_stat = serializers.PrimaryKeyRelatedField(
         queryset=Trait.objects.filter(trait_type=TraitType.STAT)
     )
-    anima_skill = serializers.PrimaryKeyRelatedField(
-        queryset=Trait.objects.filter(trait_type=TraitType.SKILL, is_active=True)
-    )
+    anima_skill = serializers.PrimaryKeyRelatedField(queryset=Skill.objects.filter(is_active=True))
     ritual_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
     glimpse = serializers.CharField(required=False, allow_blank=True, default="")
 

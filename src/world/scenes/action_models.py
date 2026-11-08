@@ -219,12 +219,11 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Primary stat from ritual check spec at fire time",
     )
     snapshot_skill = models.ForeignKey(
-        "arxii.Trait",
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
-        limit_choices_to={"trait_type": "skill"},
         help_text="Skill from ritual check spec at fire time",
     )
     snapshot_specialization = models.ForeignKey(

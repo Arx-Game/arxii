@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTrait
 from world.seeds.checks import seed_check_resolution_tables
 from world.seeds.governance_checks import seed_governance_check_content
-from world.skills.models import Specialization
+from world.skills.models import Skill, Specialization
 from world.traits.models import Trait, TraitType
 
 
@@ -21,7 +21,7 @@ class GovernanceCheckSeedTests(TestCase):
             ("Scholarship", "Economics"),
             ("Leadership", "Stewardship"),
         ):
-            skill = Trait.objects.get(trait_type="skill", name=skill_name)
+            skill = Skill.objects.get(name=skill_name)
             self.assertEqual(skill.trait_type, TraitType.SKILL)
             Specialization.objects.get(parent_skill=skill, name=spec_name)
 

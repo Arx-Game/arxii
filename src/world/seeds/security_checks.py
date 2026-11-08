@@ -11,7 +11,7 @@ specializations for the accusation counter-play (#1825);
 every FK (specializations, check compositions, character trait values)
 survives the rename.
 
-``checks.checkcategory``/``checktype``/``checktypetrait`` and
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
 ``traits.trait`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
@@ -88,14 +88,14 @@ def _ensure_category(name: str) -> object | None:
 
 
 def _ensure_skill(name: str, tooltip: str) -> object | None:
-    """Look up (or sample) a PHYSICAL-category skill, a SKILL Trait (#2698, #5008)."""
+    """Look up (or sample) a PHYSICAL-category Skill + backing Trait (#2698)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
     return authored_or_sample(
-        Trait,
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.PHYSICAL,
             "is_public": True,
             "tooltip": tooltip,
@@ -160,13 +160,13 @@ def rename_larceny_to_skulduggery() -> None:
 
 
 def ensure_skulduggery_skill() -> object:
-    """Seed (or converge) the Skulduggery skill — the shared entry other seeds call."""
+    """Seed (or converge) the Skulduggery Skill — the shared entry other seeds call."""
     rename_larceny_to_skulduggery()
     return _ensure_skill("Skulduggery", _SKULDUGGERY_TOOLTIP)
 
 
 def ensure_security_skills() -> dict[str, object]:
-    """Seed the Skulduggery + Athletics skills (SKILL Traits, #5008).
+    """Seed the Skulduggery + Athletics Skill rows (+ their backing SKILL Traits).
 
     Also ensures the Investigation skill exists (seeded by investigation_checks.py,
     but we call get_or_create so this seed is self-sufficient in test setups).

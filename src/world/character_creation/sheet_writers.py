@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from world.realms.models import Realm
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
-    from world.skills.models import Specialization
+    from world.skills.models import Skill, Specialization
     from world.traits.models import Trait
     from world.worship.models import WorshippedBeing
 
@@ -92,7 +92,7 @@ def set_stat_values(sheet: CharacterSheet, values: Mapping[Trait, int], *, sourc
 
 
 def _check_skill_caps(
-    skills: Mapping[Trait, int], specializations: Mapping[Specialization, int]
+    skills: Mapping[Skill, int], specializations: Mapping[Specialization, int]
 ) -> None:
     from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
@@ -109,7 +109,7 @@ def _check_skill_caps(
 
 def _check_band_skill_cap(
     sheet: CharacterSheet,
-    skills: Mapping[Trait, int],
+    skills: Mapping[Skill, int],
     specializations: Mapping[Specialization, int],
 ) -> None:
     """Refuse a value above the sheet's level band skill cap (#4585)."""
@@ -126,7 +126,7 @@ def _check_band_skill_cap(
 
 def set_skill_values(
     sheet: CharacterSheet,
-    skills: Mapping[Trait, int],
+    skills: Mapping[Skill, int],
     specializations: Mapping[Specialization, int],
     *,
     source: str,

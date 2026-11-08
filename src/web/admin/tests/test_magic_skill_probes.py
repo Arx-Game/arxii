@@ -30,10 +30,11 @@ from world.npc_services.factories import (
     NPCServiceOfferFactory,
     SkillCourseOfferDetailsFactory,
 )
-from world.skills.factories import PathSkillSuggestionFactory, SkillFactory
+from world.skills.factories import PathSkillSuggestionFactory, SkillFactory, SkillTraitFactory
+from world.skills.models import Skill
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import StatTraitFactory
-from world.traits.models import Trait, TraitCategory
+from world.traits.models import TraitCategory
 
 
 def _dependency(key: str) -> rc.ContentDependency:
@@ -140,7 +141,7 @@ class CastingStyleSkillProbeTests(TestCase):
         self.assertTrue(self._resolve().present)
 
 
-def _magic_skill(**kwargs: object) -> Trait:
+def _magic_skill(**kwargs: object) -> Skill:
     return SkillFactory(category=TraitCategory.MAGIC, **kwargs)
 
 
@@ -207,7 +208,7 @@ class MagicSkillCourseProbeTests(TestCase):
     def _resolve(self) -> rc.ProbeResult:
         return _dependency("magic-skill-courses").probe.resolve(None)
 
-    def _course(self, skill: Trait, *, affiliated: bool = True, active: bool = True) -> None:
+    def _course(self, skill: Skill, *, affiliated: bool = True, active: bool = True) -> None:
         role = NPCRoleFactory(
             faction_affiliation=OrganizationFactory() if affiliated else None,
             is_active=active,
@@ -303,7 +304,7 @@ class CheckTypesWeightNoMagicSkillProbeTests(TestCase):
 
     def test_a_magic_skill_trait_with_no_skill_row_is_listed_too(self) -> None:
         """The weighting is on the trait: an orphaned Magic skill trait still rolls."""
-        trait = SkillFactory(category=TraitCategory.MAGIC)
+        trait = SkillTraitFactory(category=TraitCategory.MAGIC)
         tides = CheckTypeFactory(name="Reading the Tides")
         CheckTypeTraitFactory(check_type=tides, trait=trait)
 

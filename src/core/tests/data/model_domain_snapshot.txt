@@ -842,6 +842,7 @@ arxii.situationinstance mechanics
 arxii.situationkind gm
 arxii.situationtemplate mechanics
 arxii.situationtraplink mechanics
+arxii.skill skills
 arxii.skillpointbudget skills
 arxii.socialconsentblacklist consent
 arxii.socialconsentcategory consent

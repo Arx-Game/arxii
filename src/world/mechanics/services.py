@@ -83,6 +83,7 @@ if TYPE_CHECKING:
     from world.covenants.style_fit import StyleGearReach
     from world.items.models import EquippedItem, ItemInstance
     from world.mechanics.engagement import CharacterEngagement
+    from world.skills.models import Skill
 
 
 # ---------------------------------------------------------------------------
@@ -2446,9 +2447,8 @@ def ensure_skill_target(trait: Trait) -> ModifierTarget | None:
     A skill rolls a bonus only through a target whose ``target_trait`` is its trait
     (``TraitHandler.get_trait_modifier``); production had one for every stat and none
     for any skill, so ``+10 sailing`` was refused by the paste and would have reached no
-    roll if authored by hand. The Trait admin's save of a skill and the Distinction
-    Builder's paste call this, so a new skill takes a bonus the first time a card names
-    it. Idempotent.
+    roll if authored by hand. The Skill admin's save and the Distinction Builder's paste
+    call this, so a new skill takes a bonus the first time a card names it. Idempotent.
 
     The target is named the way the paste spells an effect (lowercase, spaces to
     underscores). A target of that name in another category (the ``stealth`` roll
@@ -2480,7 +2480,7 @@ def ensure_skill_target(trait: Trait) -> ModifierTarget | None:
 
 
 def skill_modifiers_for_sheet(
-    character_sheet: CharacterSheet, skills: Iterable[Trait]
+    character_sheet: CharacterSheet, skills: Iterable[Skill]
 ) -> dict[int, int]:
     """``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).
 
@@ -2497,7 +2497,7 @@ def skill_modifiers_for_sheet(
     from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
 
-    by_target: dict[int, Trait] = {}
+    by_target: dict[int, Skill] = {}
     targets: dict[int, ModifierTarget] = {}
     for skill in skills:
         target = ModifierTarget.get_for_trait(skill)

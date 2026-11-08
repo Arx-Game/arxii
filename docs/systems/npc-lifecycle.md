@@ -154,7 +154,7 @@ carries, a skill's rating included).
   `_create_skill_values` in `world.character_creation.services` — rather
   than calling those private draft-dict helpers: trait lines write a
   `CharacterTraitValue` at `display_value * STAT_DISPLAY_DIVISOR`; skill
-  lines write the skill trait's `CharacterTraitValue` (a skill's one
+  lines write the skill's `CharacterTraitValue` (a skill's one
   rating store, #5010) and align its `DevelopmentPoints` ledger; every written value gets a `CharacterTraitChange` provenance stamp
   (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`). Refuses a sheet
   that already carries any NPC_PRESET-sourced stamp — no re-apply path in

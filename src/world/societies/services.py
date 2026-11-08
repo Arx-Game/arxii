@@ -17,6 +17,7 @@ from evennia.objects.models import ObjectDB
 
 from world.covenants.models import Covenant
 from world.scenes.models import Interaction, Persona, Scene
+from world.skills.models import Skill
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.models import (
     CharacterLegendSummary,
@@ -32,7 +33,6 @@ from world.societies.models import (
     refresh_legend_views,
 )
 from world.stories.models import Story
-from world.traits.models import Trait
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -403,7 +403,7 @@ def spread_deed(  # noqa: PLR0913
     *,
     description: str = "",
     method: str = "",
-    skill: Trait | None = None,
+    skill: Skill | None = None,
     audience_factor: Decimal = Decimal("1.0"),
     scene: Scene | None = None,
     societies_reached: list[Society] | None = None,
@@ -472,7 +472,7 @@ def spread_event(  # noqa: PLR0913
     *,
     description: str = "",
     method: str = "",
-    skill: Trait | None = None,
+    skill: Skill | None = None,
     audience_factor: Decimal = Decimal("1.0"),
     scene: Scene | None = None,
     societies_reached: list[Society] | None = None,

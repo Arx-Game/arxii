@@ -24,9 +24,10 @@ class SecurityCheckSeedTests(TestCase):
         seed_security_check_content()
 
     def test_seeds_skulduggery_skill(self):
-        from world.traits.models import Trait, TraitCategory, TraitType
+        from world.skills.models import Skill
+        from world.traits.models import TraitCategory, TraitType
 
-        skill = Trait.objects.get(trait_type="skill", name="Skulduggery")
+        skill = Skill.objects.get(name="Skulduggery")
         assert skill.trait_type == TraitType.SKILL
         assert skill.category == TraitCategory.PHYSICAL
 
@@ -36,9 +37,10 @@ class SecurityCheckSeedTests(TestCase):
         assert not Trait.objects.filter(name="Larceny").exists()
 
     def test_seeds_athletics_skill(self):
-        from world.traits.models import Trait, TraitCategory, TraitType
+        from world.skills.models import Skill
+        from world.traits.models import TraitCategory, TraitType
 
-        skill = Trait.objects.get(trait_type="skill", name="Athletics")
+        skill = Skill.objects.get(name="Athletics")
         assert skill.trait_type == TraitType.SKILL
         assert skill.category == TraitCategory.PHYSICAL
 
@@ -197,6 +199,7 @@ class SkulduggeryRenameTests(TestCase):
     """The seed renames a pre-existing Larceny row in place (#1825) — FKs survive."""
 
     def test_rename_converges_from_larceny(self):
+        from world.skills.models import Skill
         from world.traits.models import Trait, TraitCategory, TraitType
 
         trait = Trait.objects.create(
@@ -213,5 +216,6 @@ class SkulduggeryRenameTests(TestCase):
         # No refresh needed: Trait is identity-mapped, so the seed mutated THIS instance.
         assert trait.name == "Skulduggery"
         assert Trait.objects.filter(pk=trait.pk, name="Skulduggery").exists()
+        assert Skill.objects.get(name="Skulduggery").pk == trait.pk
         assert not Trait.objects.filter(name="Larceny").exists()
         assert Trait.objects.filter(name="Skulduggery").count() == 1

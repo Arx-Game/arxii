@@ -1,10 +1,7 @@
 """
 Skills System Models
 
-A skill is a Trait whose ``trait_type`` is SKILL (#5008, see ``docs/systems/traits.md``).
-This module holds what hangs off a skill: its specializations, the CG skill budget, path
-suggestions and training allocations. Every FK to a skill is a FK to Trait limited to
-skill-type traits.
+Skills (a proxy of Trait, #5008) and specializations for character abilities.
 """
 
 from typing import TYPE_CHECKING, ClassVar, cast
@@ -22,8 +19,64 @@ if TYPE_CHECKING:
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
-#: A skill is a Trait of type SKILL (#5008); every skill FK offers and accepts only those.
-SKILL_TRAIT_CHOICES = {"trait_type": TraitType.SKILL}
+
+class SkillManager(NaturalKeyManager):
+    """Only skill-type traits (#5008).
+
+    ``Skill`` shares ``Trait``'s identity map and natural-key index, so the cache
+    fast paths are rechecked or delegated to ``Trait``'s manager: a cached stat must
+    not come back from ``Skill.objects.get(pk=...)``, and warming the index through
+    this manager must not leave it holding skills alone.
+    """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(trait_type=TraitType.SKILL)
+
+    def get(self, *args, **kwargs):
+        instance = super().get(*args, **kwargs)
+        if instance.trait_type != TraitType.SKILL:
+            msg = "Skill matching query does not exist."
+            raise self.model.DoesNotExist(msg)
+        return instance
+
+    def get_by_natural_key(self, *args):
+        trait = Trait.objects.get_by_natural_key(*args)
+        if trait.trait_type != TraitType.SKILL:
+            msg = f"Skill matching natural key {args!r} does not exist."
+            raise self.model.DoesNotExist(msg)
+        return trait
+
+    def warm_lookup_table(self) -> None:
+        Trait.objects.warm_lookup_table()
+
+    def cached_all(self) -> list:
+        return [
+            trait for trait in Trait.objects.cached_all() if trait.trait_type == TraitType.SKILL
+        ]
+
+
+class Skill(Trait):
+    """
+    A skill: a Trait whose ``trait_type`` is SKILL, seen through a proxy (#5008, #5015).
+
+    No table of its own. Skills are broad categories (Melee Combat, Persuasion) that can
+    have specializations underneath them; the tooltip, sheet order and active flag are
+    the trait's own fields. Every FK to a skill points here. The identity map is
+    ``Trait``'s, so a row read through ``Skill`` may be the cached ``Trait`` instance:
+    put behaviour a skill needs on ``Trait``, not here.
+    """
+
+    objects = SkillManager()
+
+    class Meta:
+        proxy = True
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs) -> None:
+        self.trait_type = TraitType.SKILL
+        super().save(*args, **kwargs)
 
 
 class Specialization(NaturalKeyMixin, SharedMemoryModel):
@@ -45,11 +98,10 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
         help_text="Specialization name (e.g., 'Swords', 'Seduction')",
     )
     parent_skill = models.ForeignKey(
-        Trait,
+        Skill,
         on_delete=models.CASCADE,
         related_name="specializations",
-        limit_choices_to=SKILL_TRAIT_CHOICES,
-        help_text="The parent skill (a skill-type trait) this specialization belongs to",
+        help_text="The parent skill this specialization belongs to",
     )
     description = models.TextField(
         blank=True,
@@ -72,7 +124,7 @@ class Specialization(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["parent_skill", "name"]
-        dependencies = ["arxii.Trait"]
+        dependencies = ["arxii.Skill"]
 
     class Meta:
         unique_together = ["parent_skill", "name"]
@@ -166,12 +218,11 @@ class SkillPointBudget(SharedMemoryModel):
         help_text="Maximum specialization value in CG",
     )
     teaching_skill = models.ForeignKey(
-        Trait,
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
-        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="Skill used for mentor teaching bonus in training formula",
     )
 
@@ -214,10 +265,9 @@ class PathSkillSuggestion(SharedMemoryModel):
         help_text="The path this suggestion belongs to",
     )
     skill = models.ForeignKey(
-        Trait,
+        Skill,
         on_delete=models.CASCADE,
         related_name="path_suggestions",
-        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="The skill being suggested",
     )
     suggested_value = models.PositiveSmallIntegerField(
@@ -251,12 +301,11 @@ class TrainingAllocation(SharedMemoryModel):
         help_text="The character this training allocation belongs to",
     )
     skill = models.ForeignKey(
-        Trait,
+        Skill,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="training_allocations",
-        limit_choices_to=SKILL_TRAIT_CHOICES,
         help_text="The skill being trained (mutually exclusive with specialization)",
     )
     specialization = models.ForeignKey(

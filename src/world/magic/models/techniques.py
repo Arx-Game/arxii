@@ -166,7 +166,7 @@ class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Description of this technique style.",
     )
     skill = models.ForeignKey(
-        "arxii.Trait",
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -674,7 +674,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         help_text="Resolution spec for using this technique outside challenge contexts.",
     )
     skill = models.ForeignKey(
-        "arxii.Trait",
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

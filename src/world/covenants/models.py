@@ -1479,7 +1479,7 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
     skill = models.OneToOneField(
-        "arxii.Trait",
+        "arxii.Skill",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

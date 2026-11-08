@@ -141,7 +141,7 @@ from world.mechanics.services import ensure_skill_target, skill_modifiers_for_sh
 
 # The stat-category target a skill's bonuses land on (target_trait = the skill's trait),
 # created if missing; None when another category already owns the name (retarget by hand).
-target = ensure_skill_target(skill)   # TraitAdmin.save_model (skill traits) and the paste call this
+target = ensure_skill_target(skill)   # SkillAdmin.save_model and the paste call this
 
 # skill.pk -> the modifier a roll on that skill gets, for the sheet: card and condition
 # rows in three queries, worn crafted pieces and the equipment walk from cached handlers.

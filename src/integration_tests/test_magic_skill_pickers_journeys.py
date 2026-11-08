@@ -51,12 +51,12 @@ from world.progression.factories import CharacterPathHistoryFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.skills.factories import SkillFactory
+from world.skills.models import Skill
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
     PointConversionRange,
-    Trait,
     TraitCategory,
     TraitType,
 )
@@ -65,7 +65,7 @@ from world.vitals.models import CharacterVitals
 SKILL_VALUE = 30
 
 
-def _magic_skill(name: str) -> Trait:
+def _magic_skill(name: str) -> Skill:
     return SkillFactory(name=name, category=TraitCategory.MAGIC)
 
 
@@ -145,7 +145,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.assertEqual(response.status_code, 200)
         return {row["text"] for row in response.json()["results"]}
 
-    def save_change_form(self, url: str, field: str, skill: Trait):
+    def save_change_form(self, url: str, field: str, skill: Skill):
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
         data = _page_as_post(page)
@@ -167,7 +167,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.assertEqual(getattr(row, f"{field}_id"), self.thaumaturgy.pk)
 
     def test_a_magical_activity_takes_a_magic_skill_only(self) -> None:
-        self.assertEqual(self.offered("magicactivityskill", "skill"), {"Thaumaturgy (Skill)"})
+        self.assertEqual(self.offered("magicactivityskill", "skill"), {"Thaumaturgy"})
         url = reverse("admin:arxii_magicactivityskill_add")
         row = {"activity": MagicActivity.RITUAL_WORKING, "weight": "1.00"}
 
@@ -187,7 +187,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
     def test_a_casting_style_takes_a_magic_skill_only(self) -> None:
         style = TechniqueStyleFactory(name="Incantation")
-        self.assertEqual(self.offered("techniquestyle", "skill"), {"Thaumaturgy (Skill)"})
+        self.assertEqual(self.offered("techniquestyle", "skill"), {"Thaumaturgy"})
 
         self.assert_refused_then_taken(
             reverse("admin:arxii_techniquestyle_change", args=[style.pk]), "skill", style
@@ -209,7 +209,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
     def test_a_technique_takes_a_magic_skill_only(self) -> None:
         technique = TechniqueFactory()
-        self.assertEqual(self.offered("technique", "skill"), {"Thaumaturgy (Skill)"})
+        self.assertEqual(self.offered("technique", "skill"), {"Thaumaturgy"})
 
         self.assert_refused_then_taken(
             reverse("admin:arxii_technique_change", args=[technique.pk]), "skill", technique

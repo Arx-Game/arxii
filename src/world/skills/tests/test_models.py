@@ -11,15 +11,51 @@ class TraitTypeTests(TestCase):
         assert TraitType.MODIFIER.label == "Modifier"
 
 
-class SpecializationModelTests(TestCase):
+class SkillModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.trait = Trait.objects.create(
             name="Melee Combat",
             trait_type=TraitType.SKILL,
             category=TraitCategory.COMBAT,
+            description="Close-quarters fighting ability",
         )
-        cls.skill = cls.trait
+
+    def test_a_skill_is_a_skill_type_trait(self):
+        """Skill is a proxy of Trait (#5008): saving one makes a SKILL trait."""
+        from world.skills.models import Skill
+
+        skill = Skill.objects.create(name="Swordplay", category=TraitCategory.COMBAT)
+        assert Trait.objects.get(pk=skill.pk).trait_type == TraitType.SKILL
+        assert str(skill) == "Swordplay"
+
+    def test_skill_objects_sees_only_skills(self):
+        """A cached stat never comes back through Skill, by pk or natural key."""
+        from world.skills.models import Skill
+
+        stat = Trait.objects.create(
+            name="strength_test", trait_type=TraitType.STAT, category=TraitCategory.PHYSICAL
+        )
+        assert Skill.objects.get(pk=self.trait.pk).pk == self.trait.pk
+        assert not Skill.objects.filter(pk=stat.pk).exists()
+        with self.assertRaises(Skill.DoesNotExist):
+            Skill.objects.get(pk=stat.pk)
+        with self.assertRaises(Skill.DoesNotExist):
+            Skill.objects.get_by_natural_key("strength_test")
+        assert Trait.get_by_name("strength_test") == stat
+
+
+class SpecializationModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.skills.models import Skill
+
+        cls.trait = Trait.objects.create(
+            name="Melee Combat",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.COMBAT,
+        )
+        cls.skill = Skill.objects.get(pk=cls.trait.pk)
 
     def test_specialization_creation(self):
         """Specialization should link to a parent skill."""
@@ -58,16 +94,18 @@ class CharacterSpecializationValueModelTests(TestCase):
     def setUp(self):
         from world.skills.models import (
             CharacterSpecializationValue,
+            Skill,
             Specialization,
         )
 
         # Flush SharedMemoryModel caches to prevent test pollution
         CharacterSpecializationValue.flush_instance_cache()
+        Skill.flush_instance_cache()
         Specialization.flush_instance_cache()
 
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.skill = self.trait
+        self.skill = Skill.objects.get(pk=self.trait.pk)
         self.spec = Specialization.objects.get_or_create(
             name="Swords",
             parent_skill=self.skill,
@@ -156,7 +194,9 @@ class PathSkillSuggestionModelTests(TestCase):
         )
 
     def setUp(self):
-        self.skill = self.trait
+        from world.skills.models import Skill
+
+        self.skill = Skill.objects.get(pk=self.trait.pk)
 
     def test_path_skill_suggestion_creation(self):
         """PathSkillSuggestion should link path to suggested skill value."""

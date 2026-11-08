@@ -50,7 +50,7 @@ from world.magic.factories import (
 )
 from world.scenes.factories import SceneFactory
 from world.skills.factories import SkillFactory
-from world.traits.models import Trait
+from world.skills.models import Skill
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
 from world.worship.rite_services import perform_worship_rite
@@ -63,7 +63,7 @@ from world.worship.tests.test_rites import RiteTestBase
 SKILL_WEIGHT = Decimal("0.50")
 
 
-def terms_for(skill: Trait) -> tuple[ExtraTraitTerm, ...]:
+def terms_for(skill: Skill) -> tuple[ExtraTraitTerm, ...]:
     """The one term a ``skill`` mapped at ``SKILL_WEIGHT`` adds to a roll."""
     return (ExtraTraitTerm(trait=skill, weight=SKILL_WEIGHT),)
 

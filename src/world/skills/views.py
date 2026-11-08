@@ -17,6 +17,7 @@ from world.action_points.models import ActionPointConfig
 from world.skills.filters import SkillFilter, SpecializationFilter
 from world.skills.models import (
     PathSkillSuggestion,
+    Skill,
     SkillPointBudget,
     Specialization,
     TrainingAllocation,
@@ -33,7 +34,6 @@ from world.skills.serializers.training import (
     ManageTrainingUpdateSerializer,
     TrainingAllocationSerializer,
 )
-from world.traits.models import Trait, TraitType
 
 _NO_PUPPET_MESSAGE = "You must be playing a character to manage training."
 
@@ -65,9 +65,9 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = SkillFilter
 
     def get_queryset(self):
-        """Return skills (skill-type traits, #5008) ordered by display_order."""
+        """Return skills ordered by display_order."""
         return (
-            Trait.objects.filter(trait_type=TraitType.SKILL)
+            Skill.objects.all()
             .prefetch_related(
                 Prefetch(
                     "specializations",
@@ -75,7 +75,7 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
                     to_attr="cached_specializations",
                 ),
             )
-            .order_by("display_order", "name")
+            .order_by("display_order")
         )
 
     def get_serializer_class(self):

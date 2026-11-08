@@ -61,17 +61,17 @@ _SKILL_DESCRIPTIONS = {
 
 
 def _ensure_skill(name: str):
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
-    trait, _ = Trait.objects.get_or_create(
+    skill, _ = Skill.objects.get_or_create(
         name=name,
         defaults={
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.SOCIAL,
             "description": _SKILL_DESCRIPTIONS.get(name, ""),
         },
     )
-    return trait
+    return skill
 
 
 def ensure_spread_skills() -> None:

@@ -13,7 +13,7 @@ Also seeds the **Identification** ``CheckType`` (#1107 slice 5, Apostate's 2026-
 check. Deliberately a *different* stat pairing than Search: clocking a face from memory/deduction
 (intellect) rather than noticing a physical clue (perception).
 
-``checks.checkcategory``/``checktype``/``checktypetrait`` and
+``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
 ``traits.trait`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. No longer wipes and rewrites a composition on each run (#2698 Part 1 — that
@@ -37,19 +37,19 @@ _WITS_STAT = "wits"
 
 
 def ensure_investigation_skill():
-    """Look up (or sample) the Investigation skill, a SKILL ``Trait`` (#5008).
+    """Look up (or sample) the Investigation ``Skill`` + its backing SKILL ``Trait``.
 
-    ``traits.Trait`` is content-repo-owned (#2698). Returns ``None`` when it
-    isn't authored.
+    ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). Returns
+    ``None`` when either isn't authored.
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
     name, tooltip = _INVESTIGATION_SKILL
     return authored_or_sample(
-        Trait,
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.GENERAL,
             "is_public": True,
             "tooltip": tooltip,

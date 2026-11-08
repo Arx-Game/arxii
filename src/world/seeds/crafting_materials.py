@@ -239,6 +239,7 @@ def seed_craft_skills() -> None:
 
     from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
     wits = authored_or_sample(
@@ -260,9 +261,8 @@ def seed_craft_skills() -> None:
         return
     for name, tooltip, order in _CRAFT_SKILLS:
         skill_trait = authored_or_sample(
-            Trait,
+            Skill,
             {
-                "trait_type": TraitType.SKILL,
                 "category": TraitCategory.CRAFTING,
                 "is_public": True,
                 "tooltip": f"PLACEHOLDER: {tooltip}",

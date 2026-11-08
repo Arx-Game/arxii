@@ -4,12 +4,12 @@ Every skill's four XP boundaries (20/30/40/50) need a purchasable
 ``TraitRatingUnlock`` or the breakthrough purchase is a landmine no player can
 ever clear — mirrors the #2116(a) authored-unlock landmine pattern. Seeds one
 shared ``XPCostChart`` ("Skill Breakthroughs") with a flat placeholder cost
-curve, then a ``TraitXPCost`` + four ``TraitRatingUnlock`` rows per skill-type ``Trait``.
+curve, then a ``TraitXPCost`` + four ``TraitRatingUnlock`` rows per ``Skill``.
 
 Idempotent throughout (get_or_create / update_or_create). Content only — no
 data migration (ADR-0013). Must run *after* every cluster that seeds new
-skills (``combat_checks``/``social``/``investigation``/``governance``/
-``stealth``) since it iterates every skill-type ``Trait`` at call time; re-run
+``Skill`` rows (``combat_checks``/``social``/``investigation``/``governance``/
+``stealth``) since it iterates ``Skill.objects.all()`` at call time; re-run
 this seeder (it is idempotent) after authoring a new skill outside those
 clusters.
 """
@@ -36,7 +36,7 @@ def seed_skill_breakthrough_catalog() -> None:
         XPCostChart,
         XPCostEntry,
     )
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
 
     chart, _ = XPCostChart.objects.update_or_create(
         name=_CHART_NAME,
@@ -52,7 +52,7 @@ def seed_skill_breakthrough_catalog() -> None:
             defaults={"xp_cost": cost},
         )
 
-    for skill in Trait.objects.filter(trait_type=TraitType.SKILL):
+    for skill in Skill.objects.all():
         TraitXPCost.objects.get_or_create(trait=skill, cost_chart=chart)
         for rating in _FLAT_COST_PER_BOUNDARY:
             TraitRatingUnlock.objects.get_or_create(trait=skill, target_rating=rating)

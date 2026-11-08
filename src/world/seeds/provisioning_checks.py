@@ -112,13 +112,12 @@ def _ensure_cooking_check():
         CheckTypeTrait,
     )
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.skills.models import Specialization  # noqa: PLC0415
+    from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    skill = authored_or_sample(
-        Trait,
+    skill = skill_trait = authored_or_sample(
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.CRAFTING,
             "is_public": True,
             "tooltip": "The table as craft — food, drink, and the art of provision.",
@@ -127,13 +126,15 @@ def _ensure_cooking_check():
         },
         name=COOKING_SKILL_NAME,
     )
-    if skill is None:
+    if skill_trait is None:
         return None
-    brewing, _created = Specialization.objects.get_or_create(
-        parent_skill=skill,
-        name=BREWING_SPECIALIZATION_NAME,
-        defaults={"display_order": 0, "is_active": True},
-    )
+    brewing = None
+    if skill is not None:
+        brewing, _created = Specialization.objects.get_or_create(
+            parent_skill=skill,
+            name=BREWING_SPECIALIZATION_NAME,
+            defaults={"display_order": 0, "is_active": True},
+        )
     wits = authored_or_sample(
         Trait,
         {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
@@ -159,7 +160,7 @@ def _ensure_cooking_check():
     if check_type is None:
         return None
     CheckTypeTrait.objects.get_or_create(
-        check_type=check_type, trait=skill, defaults={"weight": Decimal("1.00")}
+        check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
     )
     # Brewing rides the check as an authored specialization row (#2894 — the
     # Specialization existed but was never linked, so it contributed nothing).

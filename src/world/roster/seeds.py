@@ -137,7 +137,7 @@ def ensure_family_kinds() -> dict[str, FamilyKind]:
 class NPCPresetSeedSpec(NamedTuple):
     """One starter statline preset's authored defaults (#3427).
 
-    ``trait_lines``/``skill_lines`` name their stat or skill Trait by the name a
+    ``trait_lines``/``skill_lines`` name their Trait/Skill by the name a
     real content deploy already seeds (the 12 core stats, the Melee
     Combat/Persuasion/Performance/Investigation skill catalog) — a name that
     isn't authored/sampled yet is skipped, not invented, by
@@ -196,12 +196,12 @@ def ensure_starter_npc_presets() -> None:
     ``NPCStatlinePreset`` is content-repo-owned (#2698) — looked up via
     ``authored_or_sample`` rather than invented unless sampling is on. Its
     trait/skill line rows are not themselves in ``CONTENT_MODELS`` (mirrors
-    ``skills.Specialization`` under a content-gated parent skill — see
+    ``skills.Specialization`` under a content-gated parent ``Skill`` — see
     ``combat_checks.ensure_weapon_specializations``), so once a preset exists
     they're created unconditionally via ``get_or_create``, idempotent across
-    re-runs. A line whose named Trait isn't itself authored (or
+    re-runs. A line whose named Trait/Skill isn't itself authored (or
     sampled) yet is skipped rather than invented — a later re-seed picks it
-    up once that Trait exists.
+    up once that Trait/Skill exists.
     """
     from world.roster.models import (  # noqa: PLC0415
         NPCPresetSkillLine,
@@ -209,6 +209,7 @@ def ensure_starter_npc_presets() -> None:
         NPCStatlinePreset,
     )
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
     for spec in _NPC_PRESET_SEED:
@@ -229,9 +230,7 @@ def ensure_starter_npc_presets() -> None:
             )
 
         for skill_name, value in spec.skill_lines:
-            skill = Trait.objects.filter(
-                name__iexact=skill_name, trait_type=TraitType.SKILL
-            ).first()
+            skill = Skill.objects.filter(name__iexact=skill_name).first()
             if skill is None:
                 continue
             NPCPresetSkillLine.objects.get_or_create(

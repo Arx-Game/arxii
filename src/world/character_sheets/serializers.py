@@ -144,7 +144,7 @@ from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
-from world.skills.models import CharacterSpecializationValue
+from world.skills.models import CharacterSpecializationValue, Skill
 from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
@@ -767,8 +767,8 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    # A skill is a skill-type trait (#5008) and its rating is that trait's
-    # CharacterTraitValue (#5010).
+    # A skill's rating is its trait's CharacterTraitValue (#5010); a skill is a
+    # skill-type trait (#5008).
     Prefetch(
         "trait_values",
         queryset=CharacterTraitValue.objects.filter(
@@ -2514,12 +2514,10 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
 
 
 def _staff_skill_ratings(sheet: CharacterSheet) -> dict[int, int]:
-    """Skill pk to stored rating, read from the character's trait handler (#5010).
-
-    A skill is a skill-type trait (#5008), so the pk is the trait's.
-    """
+    """Skill pk to stored rating, read from the character's trait handler (#5010)."""
     ratings = sheet.character.traits.get_traits_by_type(TraitType.SKILL)
-    return {row.trait_id: row.value for row in ratings.values()}
+    by_trait = {row.trait_id: row.value for row in ratings.values()}
+    return {skill.pk: by_trait[skill.pk] for skill in Skill.objects.filter(pk__in=list(by_trait))}
 
 
 def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:

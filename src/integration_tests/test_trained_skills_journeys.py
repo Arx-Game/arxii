@@ -33,6 +33,7 @@ from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.services.skill_development import weekly_skill_development_task
 from world.progression.types import DevelopmentSource
 from world.skills.factories import SkillFactory
+from world.skills.models import Skill
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
@@ -70,7 +71,7 @@ class _TrainedSkillCase(JourneyCase):
         self.skill = SkillFactory()
         self._checks: dict[int, CheckType] = {}
 
-    def made_with(self, skill: Trait, rating: int) -> None:
+    def made_with(self, skill: Skill, rating: int) -> None:
         """Ysmay leaves character creation with ``skill`` at ``rating`` in both stores."""
         set_skill_values(
             self.sheet,
@@ -80,7 +81,7 @@ class _TrainedSkillCase(JourneyCase):
             enforce_caps=False,
         )
 
-    def check_on(self, skill: Trait) -> CheckType:
+    def check_on(self, skill: Skill) -> CheckType:
         """The check type that rolls only ``skill``, built once per skill."""
         if skill.pk not in self._checks:
             check_type = CheckTypeFactory(
@@ -90,12 +91,12 @@ class _TrainedSkillCase(JourneyCase):
             self._checks[skill.pk] = check_type
         return self._checks[skill.pk]
 
-    def roll_points(self, skill: Trait, effort: str | None = None) -> int:
+    def roll_points(self, skill: Skill, effort: str | None = None) -> int:
         """The skill points a check on ``skill`` is worth to Ysmay right now."""
         result = perform_check(self.ysmay, self.check_on(skill), effort_level=effort)
         return result.trait_points
 
-    def sheet_shows(self, skill: Trait) -> int:
+    def sheet_shows(self, skill: Skill) -> int:
         """The rating her character sheet shows for ``skill``, read through the REST API."""
         response = self.api(self.account_of(self.ysmay)).get(
             f"/api/character-sheets/{self.sheet.pk}/"
@@ -104,7 +105,7 @@ class _TrainedSkillCase(JourneyCase):
         shown = {row["skill"]["id"]: row["value"] for row in response.json()["skills"]}
         return shown[skill.pk]
 
-    def assertSheetAndRollAgree(self, skill: Trait, rating: int) -> None:  # noqa: N802
+    def assertSheetAndRollAgree(self, skill: Skill, rating: int) -> None:  # noqa: N802
         self.assertEqual(self.sheet_shows(skill), rating, "the sheet")
         self.assertEqual(self.roll_points(skill), rating, "a check's skill points")
 
@@ -214,7 +215,7 @@ class OneWeeklyRustPass(_TrainedSkillCase):
         advance_game_week()
         weekly_skill_development_task()
 
-    def rust_entries(self, skill: Trait) -> int:
+    def rust_entries(self, skill: Skill) -> int:
         return DevelopmentTransaction.objects.filter(
             character_sheet=self.sheet, trait=skill, source=DevelopmentSource.RUST
         ).count()

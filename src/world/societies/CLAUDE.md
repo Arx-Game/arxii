@@ -245,6 +245,6 @@ Permanent, monotonically increasing metric of a character's remarkable accomplis
 - **`scenes.Persona`**: Identity for memberships, reputation, and legend
 - **`character_creation.Beginnings`**: Links to societies for character backgrounds
 - **`progression.LegendRequirement`**: Path leveling gates that check character legend total
-- **Skill (a SKILL-type `traits.Trait`)**: Optional FK on LegendSpread for the skill used when spreading
+- **`skills.Skill`**: Optional FK on LegendSpread for the skill used when spreading
 - **`scenes.Scene`**: Optional FK on entries/events/spreads for scene linking
 - **`stories.Story`**: Optional FK on entries/events for story linking

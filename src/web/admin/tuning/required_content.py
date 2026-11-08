@@ -1292,8 +1292,8 @@ def _probe_magic_skill_courses() -> ProbeResult:
     missing = tuple(
         magic_category_skills()
         .exclude(pk__in=covered)
-        .order_by("name")
-        .values_list("name", flat=True)
+        .order_by("trait__name")
+        .values_list("trait__name", flat=True)
     )
     if not missing:
         return ProbeResult(present=True)
@@ -1334,9 +1334,8 @@ def _probe_check_types_weight_no_magic_skill() -> ProbeResult:
     magic skill out of those settings otherwise. Each row is `check type: skills`; the
     link opens the admin list filtered to exactly those check types, to repoint.
 
-    Matches every SKILL trait in the Magic category (a skill is a skill-type trait,
-    #5008), so a weighting on an inactive one is listed too. Production rows are left
-    as they are; staff repoint them.
+    Matches every SKILL trait in the Magic category (a `Skill` is one, #5008), an
+    inactive one too. Production rows are left as they are; staff repoint them.
     """
     from urllib.parse import urlencode  # noqa: PLC0415
 

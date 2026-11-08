@@ -4,7 +4,7 @@ Idempotent. Names and lore are PLACEHOLDER pending Apostate rewrite. Magnitude
 tuning is deferred by convention (placeholders-now); the aspect weights below
 are the one mechanical knob (Path of the Chosen's ceremony edge).
 
-``traits.trait``, ``checks.checktype``/``checktypetrait``, and
+``skills.skill``, ``traits.trait``, ``checks.checktype``/``checktypetrait``, and
 ``classes.aspect``/``pathaspect`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``checks.checktypeaspect`` stays outside ``CONTENT_MODELS`` and keeps
@@ -52,19 +52,18 @@ _BEINGS = [
 def ensure_rites_skill_and_specializations() -> dict[str, object]:
     """Look up (or sample) the Rites skill (open to all paths) + tradition specializations.
 
-    The skill is a SKILL ``traits.Trait`` (#5008), content-repo-owned (#2698);
-    when it isn't authored, ``specs`` is empty (its ``parent_skill`` FK is
+    ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698); when the
+    Skill isn't authored, ``specs`` is empty (its ``parent_skill`` FK is
     required). ``skills.Specialization`` itself is not content-repo-owned and
     stays unconditional.
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.skills.models import Specialization  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.skills.models import Skill, Specialization  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
     skill = authored_or_sample(
-        Trait,
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.SOCIAL,
             "is_public": True,
             "tooltip": "Conducting ceremonies: funerals, weddings, blessings, sermons.",
@@ -166,7 +165,7 @@ def ensure_traditions_and_beings(specs: dict[str, object]) -> None:
     """Seed the four traditions and PLACEHOLDER example beings.
 
     ``rites_specialization`` is a required FK — a tradition whose specialization
-    is missing (the Rites skill Trait isn't authored, #2698) is skipped entirely.
+    is missing (the Rites Skill/Trait isn't authored, #2698) is skipped entirely.
     """
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 

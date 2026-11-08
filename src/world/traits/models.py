@@ -121,9 +121,9 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     Uses SharedMemoryModel for automatic caching and includes case-insensitive
     lookup methods similar to Arx I's NameLookupModel pattern.
 
-    A skill is a Trait whose ``trait_type`` is SKILL, and nothing else (#5008): every
-    reference to a skill is a FK to Trait limited to that type, and the skill's tooltip,
-    sheet order, active flag and specializations live on this row.
+    A skill is a Trait whose ``trait_type`` is SKILL (#5008); ``world.skills.models.Skill``
+    is a proxy of this model that sees only those rows. The skill's tooltip, sheet order,
+    active flag and specializations live on this row.
     """
 
     name = models.CharField(
@@ -200,7 +200,11 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @cached_property
     def cached_specializations(self) -> list["Specialization"]:
-        """This skill's specializations; the skills API prefetches them onto this name."""
+        """This skill's specializations; the skills API prefetches them onto this name.
+
+        On Trait rather than the ``Skill`` proxy: the identity map is shared, so a row
+        read through ``Skill`` can come back as the ``Trait`` instance already cached.
+        """
         return list(self.specializations.all())
 
     @classmethod

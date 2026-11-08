@@ -19,7 +19,7 @@ from world.magic.services.anima import get_character_cast_check
 from world.magic.services.casting_style import casting_style, casting_style_for_path
 from world.magic.skill_choices import MAGIC_SKILL_CHOICES
 from world.magic.types.magic_skills import CastCheck
-from world.traits.models import Trait
+from world.skills.models import Skill
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
 TECHNIQUE_SKILL_WEIGHT = Decimal("1.00")
 
 
-def magic_category_skills() -> QuerySet[Trait]:
-    """The active skill-type traits in the Magic category.
+def magic_category_skills() -> QuerySet[Skill]:
+    """The active skills whose trait is in the Magic category.
 
     Staff control the set by a skill's category, never by name. Called by character
     creation (the skills a Tradition's schooling stance lifts at finalize, the points a
@@ -44,7 +44,7 @@ def magic_category_skills() -> QuerySet[Trait]:
     ``MAGIC_PICKER_SKILL_CHOICES``, which leaves those out (#4547, #4921), and character
     creation trains only the chosen style's (``magic_training.training_skills``).
     """
-    return Trait.objects.filter(MAGIC_SKILL_CHOICES, is_active=True)
+    return Skill.objects.filter(MAGIC_SKILL_CHOICES, is_active=True)
 
 
 def activity_skill_terms(activity: MagicActivity) -> tuple[ExtraTraitTerm, ...]:
@@ -58,7 +58,7 @@ def activity_skill_terms(activity: MagicActivity) -> tuple[ExtraTraitTerm, ...]:
     return tuple(ExtraTraitTerm(trait=row.skill, weight=row.weight) for row in rows)
 
 
-def _skill_for_path(technique: Technique, path: Path | None) -> Trait | None:
+def _skill_for_path(technique: Technique, path: Path | None) -> Skill | None:
     """The skill a technique adds for a caster whose current Path is ``path``.
 
     The technique's own skill wins. Otherwise the skill of the style the cast is worked
@@ -75,7 +75,7 @@ def _skill_for_path(technique: Technique, path: Path | None) -> Trait | None:
     return style.skill if style is not None else None
 
 
-def _skill_term(skill: Trait | None) -> ExtraTraitTerm | None:
+def _skill_term(skill: Skill | None) -> ExtraTraitTerm | None:
     """``skill`` as a roll term, or None when there is no skill or it is inactive."""
     if skill is None or not skill.is_active:
         return None

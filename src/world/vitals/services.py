@@ -297,7 +297,7 @@ def _ensure_medicine_check_type() -> CheckType | None:
 
     Used for wound treatment checks (``TreatmentTemplate.check_type``).
     ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait``, ``traits.Trait``,
-    and skill-type ``traits.Trait`` rows are content-repo-owned (#2698) — looked up rather than
+    and ``skills.Skill`` are content-repo-owned (#2698) — looked up rather than
     invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when the
     category or the check type itself isn't authored.
     """
