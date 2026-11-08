@@ -20,6 +20,8 @@ the new column in the contract step, and on the old one if this step is reversed
 from django.db import migrations, models
 import django.db.models.deletion
 
+# The three Trait fields carry a database default too, so the release still running
+# between migrate and the Server reload can INSERT a Trait without naming them.
 _SKILL = "arxii.skill"
 _TRAIT = "arxii.trait"
 _CASCADE = django.db.models.deletion.CASCADE
@@ -77,19 +79,22 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="trait",
             name="tooltip",
-            field=models.TextField(blank=True, help_text="Short description shown on hover in UI"),
+            field=models.TextField(
+                blank=True, db_default="", help_text="Short description shown on hover in UI"
+            ),
         ),
         migrations.AddField(
             model_name="trait",
             name="display_order",
             field=models.PositiveSmallIntegerField(
-                default=0, help_text="Order for display in character sheets and CG"
+                db_default=0, default=0, help_text="Order for display in character sheets and CG"
             ),
         ),
         migrations.AddField(
             model_name="trait",
             name="is_active",
             field=models.BooleanField(
+                db_default=True,
                 default=True,
                 help_text=(
                     "Whether this trait is available for use. An inactive skill is left out "

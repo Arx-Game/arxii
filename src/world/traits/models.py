@@ -151,16 +151,21 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this trait should display by default in character sheets",
     )
+    # db_default too (#5008): the release still running between migrate and the Server
+    # reload inserts Traits without naming these columns.
     tooltip = models.TextField(
         blank=True,
+        db_default="",
         help_text="Short description shown on hover in UI",
     )
     display_order = models.PositiveSmallIntegerField(
         default=0,
+        db_default=0,
         help_text="Order for display in character sheets and CG",
     )
     is_active = models.BooleanField(
         default=True,
+        db_default=True,
         help_text=(
             "Whether this trait is available for use. An inactive skill is left out of "
             "character creation, training and the sheet's pickers."

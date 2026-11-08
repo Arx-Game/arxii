@@ -9,9 +9,12 @@ from evennia.accounts.models import AccountDB
 
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
-from world.skills.factories import SkillFactory
+from world.skills.factories import SkillFactory, SpecializationFactory
 from world.skills.models import Specialization
-from world.traits.admin import SPECIALIZATIONS_ON_NON_SKILL_TRAIT_MESSAGE
+from world.traits.admin import (
+    SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE,
+    SPECIALIZATIONS_ON_NON_SKILL_TRAIT_MESSAGE,
+)
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -76,6 +79,16 @@ class TraitAdminSkillTests(TestCase):
         response = self._add(TraitType.STAT, **{"specializations-0-name": "Storms"})
         assert not Trait.objects.filter(name="Invocation").exists()
         assert SPECIALIZATIONS_ON_NON_SKILL_TRAIT_MESSAGE in response.content.decode()
+
+    def test_a_skill_with_specializations_cannot_be_retyped(self) -> None:
+        skill = SkillFactory(name="Sailing", category=TraitCategory.MAGIC)
+        SpecializationFactory(parent_skill=skill, name="Rigging")
+        url = reverse("admin:arxii_trait_change", args=[skill.pk])
+        response = self._post(url, TraitType.STAT, "Sailing")
+        assert SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE in response.content.decode()
+        assert Trait.objects.filter(pk=skill.pk).values_list("trait_type", flat=True)[0] == (
+            TraitType.SKILL
+        )
 
     def test_saving_again_keeps_the_one_target(self) -> None:
         skill = SkillFactory(name="Sailing", category=TraitCategory.MAGIC)

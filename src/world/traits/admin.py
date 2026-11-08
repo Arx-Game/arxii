@@ -5,6 +5,7 @@ Provides administrative interfaces for managing trait definitions,
 character values, and check resolution configuration.
 """
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest
@@ -70,6 +71,30 @@ def ensure_skill_target_or_warn(request: HttpRequest, skill: Trait) -> None:
         )
 
 
+SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE = (
+    "This skill has specializations, so it must stay a Skill. Move or delete its "
+    "specializations first."
+)
+
+
+class TraitAdminForm(forms.ModelForm):
+    """Refuses retyping a skill that still has specializations away from Skill (#5008).
+
+    No ``Meta``: ``TraitAdmin`` builds the form for ``Trait`` with its own fields.
+    """
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        was_skill = self.initial.get("trait_type") == TraitType.SKILL
+        if (
+            was_skill
+            and cleaned.get("trait_type") != TraitType.SKILL
+            and self.instance.specializations.exists()
+        ):
+            raise ValidationError(SKILL_WITH_SPECIALIZATIONS_RETYPED_MESSAGE)
+        return cleaned
+
+
 class SpecializationFormSet(OneRowPerFormSet):
     """Refuses specializations on a trait that is not of type Skill (#5008).
 
@@ -104,6 +129,7 @@ class TraitAdmin(admin.ModelAdmin):
     specializations are an inline.
     """
 
+    form = TraitAdminForm
     list_display = ["name", "trait_type", "category", "is_public", "is_active", "display_order"]
     list_filter = ["trait_type", "category", "is_public", "is_active"]
     search_fields = ["name", "description", "tooltip"]
