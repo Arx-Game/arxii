@@ -428,9 +428,24 @@ export interface MotifStyleBinding {
   resonance_name: string;
 }
 
+/** One facet tied to a resonance, inside GET /api/magic/motif-styles/'s `facet_bindings` (#5021). */
+export interface MotifFacetBinding {
+  facet_id: number;
+  facet_name: string;
+  resonance_id: number;
+  resonance_name: string;
+}
+
 /** Response for GET /api/magic/motif-styles/. */
 export interface MotifStyleBindingsResponse {
   bindings: MotifStyleBinding[];
+  facet_bindings: MotifFacetBinding[];
+}
+
+/** Request body for POST /api/magic/motif-styles/bind-facet/ and .../unbind-facet/ (#5021). */
+export interface MotifFacetRequest {
+  facet_id: number;
+  resonance_id: number;
 }
 
 /** Request body for POST /api/magic/motif-styles/bind/. */
