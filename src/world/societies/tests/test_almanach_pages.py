@@ -38,9 +38,10 @@ from world.societies.houses.almanach_pages import (
     search,
 )
 from world.societies.houses.almanach_reads import document_for_house
+from world.societies.houses.almanach_serializers import RungDocumentSerializer
 from world.societies.houses.constants import HoldingChoice, KinLink, LifeStatus, TitleTier
 from world.societies.houses.factories import HoldingKindFactory, HouseTemplateFactory
-from world.societies.houses.models import Domain, DomainGarrisonPost
+from world.societies.houses.models import Domain, DomainGarrisonPost, Title
 from world.societies.houses.services import add_holding
 from world.societies.turf_services import add_gang, claim_ward
 
@@ -199,6 +200,27 @@ class AlmanachPagesTests(TestCase):
         self.assertEqual(doc.forces[0]["men"], 120)
         self.assertEqual(len(doc.vassals), 1)
         self.assertEqual(doc.vassals[0]["held_by"], "")
+
+    def test_rung_document_for_an_inner_chain_rung(self):
+        """The empire's own chain kingdom (planted with it, sharing its seat) gets a
+        page: sworn to the empire by its chain, not refused as a non-top (#5011)."""
+        realm = RealmFactory(name="Imperial Umbros")
+        katta = OrganizationFactory(name="Katta")
+        empire = plant_rung(realm=realm, tier=TitleTier.EMPIRE, name="Umbral Empire", held_by=katta)
+        chain_kingdom = Title.objects.get(seat_domain=empire.seat_domain, tier=TitleTier.KINGDOM)
+        doc = rung_document(chain_kingdom)
+        self.assertEqual(doc.title["title_id"], chain_kingdom.pk)
+        self.assertEqual(doc.title["sworn_to"], "Umbral Empire")
+        self.assertEqual(doc.title["chain_top_id"], empire.pk)
+        self.assertEqual(doc.title["held_by"], "Katta")
+        self.assertEqual(
+            [(c["name"], c["tier"]) for c in doc.chain],
+            [("Imperial Umbros", "realm"), ("Umbral Empire", "empire")],
+        )
+        self.assertEqual(doc.vassals, [])
+        self.assertEqual(RungDocumentSerializer(doc).data["title"]["sworn_to"], "Umbral Empire")
+        # the top of the chain is unchanged by the guard
+        self.assertEqual(rung_document(empire).title["sworn_to"], "")
 
     def test_books_and_forces_for_nothing(self):
         self.assertEqual(books_for(None).income_week, 0)

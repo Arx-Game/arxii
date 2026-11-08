@@ -757,7 +757,11 @@ def rung_document(title: Title) -> RungDocument:
     forces, and the vassal rungs beneath it."""
     graph = _realm_graph(title.realm_id)
     row = _row_for(title, graph) if graph is not None else None
-    liege = _pledged_liege_house(title) or liege_for_title(title)
+    # An inner chain rung (the empire's own kingdom, a kingdom's own duchy) shares its
+    # seat and holder with its chain top; ``liege_for_title`` refuses it, and its oath
+    # is its chain top's, which ``row.sworn_to`` already says (#5011).
+    chain_top = graph is None or graph.is_top(title)
+    liege = _pledged_liege_house(title) or (liege_for_title(title) if chain_top else None)
     law = title.succession_law or (title.house.default_succession_law if title.house_id else None)
     own_area_id = graph.own_area_by_title.get(title.pk) if graph is not None else None
     domain = Domain.objects.filter(pk=own_area_id).select_related("area", "hall").first()
