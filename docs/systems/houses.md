@@ -751,8 +751,16 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   last) and the title block carries `station` and `pledged_liege` (#4983). On the title page
   these are **Present Holdings** (the vassals table, "nothing" when a titular title holds no
   land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
-  "claimed by X" line), the chain rail above, and an "On the map" door that opens the Atlas on
-  the first region map with this title selected (`world-builder/atlas/mapFocus.ts`).
+  "claimed by X" line), the chain rail above, and a globe beside the heading ("View on the
+  map" to a screen reader) that opens the Atlas on the first region map with this title
+  selected (`world-builder/atlas/mapFocus.ts`). The name field stands alone under the heading,
+  "Name" as its placeholder, and saves on Enter or when focus leaves (#5017). Under "held by"
+  the **ruler slot** (`title/RulerSlot.tsx`) names who holds the title in person: empty it
+  reads "Undefined ruler"; opened, it lists the holding family's roll as the house document
+  draws it (members and their spouses, the dead last, "married in"/"rip"/"PC" after a name),
+  narrowed by typing, with "Add family member" at the foot (`almanach_create_kin` then
+  `almanach_set_holder`); set, the ruler's name links to their page and a pencil reopens the
+  list. It is never a search of everyone by name.
   The page builds for an inner chain rung too (the empire's own kingdom, a kingdom's own
   duchy, planted with the top and sharing its seat): the liege walk (`liege_for_title`,
   which refuses a non-top through `_require_chain_top`) runs only when `graph.is_top(title)`,
@@ -1080,8 +1088,10 @@ creates it in place. The admin stays as an escape hatch and nothing is removed f
   which mints the staffer's own OOC character) then `attach_sheet`. `attach_sheet(*, node,
   sheet)`: a sheet on a player shelf makes the node a PC (through `claim_appable_node` when
   appable), any other sheet makes it SHEETED. `set_appable(*, node, appable, age_min, age_max,
-  allowed_genders, name_locked)`; `set_personal_holder(*, title, node)` (one of the holding
-  house's family).
+  allowed_genders, name_locked)`; `set_personal_holder(*, title, node)` (a member of the holding
+  house's family on record, or the wedded spouse of one, #5017: the Almanach spouse link
+  writes a married-in membership only for the picked person into the page's family, and the
+  admin's Spouses section writes none, so the rule reads the open marriage too).
 - The crime ladder's authoring (`turf_services.claim_ward`, `add_gang`;
   `crew_slots.open_crew_slot`): a ward or city held outright at full grip, never a flip; a gang
   as an organization of the gang type under the family with its oath and its neighborhood; a
