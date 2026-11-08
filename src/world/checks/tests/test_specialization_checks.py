@@ -19,7 +19,6 @@ from world.checks.factories import (
 from world.checks.services import _calculate_specialization_points, perform_check
 from world.skills.factories import (
     CharacterSpecializationValueFactory,
-    SkillFactory,
     SpecializationFactory,
 )
 from world.skills.services import get_specialization_value, has_specialization
@@ -60,7 +59,7 @@ class SpecializationInCheckTests(TestCase):
             name="spec_test_persuasion",
             defaults={"trait_type": TraitType.SKILL, "category": TraitCategory.SOCIAL},
         )
-        cls.persuasion = SkillFactory(trait=cls.persuasion_trait)
+        cls.persuasion = cls.persuasion_trait
         cls.seduction = SpecializationFactory(
             parent_skill=cls.persuasion, name="spec_test_seduction"
         )

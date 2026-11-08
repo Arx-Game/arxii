@@ -71,13 +71,9 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
         )
         SkillPointBudgetFactory(pk=1)
 
-        cls.thaumaturgy = SkillFactory(
-            trait__name="Thaumaturgy", trait__category=TraitCategory.MAGIC
-        )
-        dance_skill = SkillFactory(
-            trait__name="The Daring Dance", trait__category=TraitCategory.MAGIC
-        )
-        mask_skill = SkillFactory(trait__name="The Iron Mask", trait__category=TraitCategory.MAGIC)
+        cls.thaumaturgy = SkillFactory(name="Thaumaturgy", category=TraitCategory.MAGIC)
+        dance_skill = SkillFactory(name="The Daring Dance", category=TraitCategory.MAGIC)
+        mask_skill = SkillFactory(name="The Iron Mask", category=TraitCategory.MAGIC)
         agility, _ = Trait.objects.get_or_create(
             name="agility", defaults={"trait_type": TraitType.STAT}
         )
@@ -208,9 +204,7 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
         sheet = self._finalize(draft)
 
         self.assertEqual(sheet.combat_style, self.dance)
-        self.assertEqual(
-            CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value, total
-        )
+        self.assertEqual(CharacterTraitValue.objects.get(character=sheet, trait=skill).value, total)
 
     def test_the_owners_sheet_shows_the_style_and_a_strangers_does_not(self) -> None:
         draft = self._schooled_draft(self.tradition)
@@ -277,7 +271,7 @@ class ChoosingAStyleInCreation(FinalizationTestMixin, JourneyCase):
 
         self.assertIsNone(sheet.combat_style)
         self.assertEqual(
-            CharacterTraitValue.objects.get(character=sheet, trait=self.thaumaturgy.trait).value,
+            CharacterTraitValue.objects.get(character=sheet, trait=self.thaumaturgy).value,
             total,
         )
 

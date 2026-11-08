@@ -2624,10 +2624,10 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
             logger.warning("Invalid ID %s in draft for character %s", pk, character.key)
         return {found[pk]: value for pk, value in wanted.items() if pk in found}
 
-    skills = by_id(Skill.objects.select_related("trait"), draft.draft_data.get("skills", {}))
+    skills = by_id(Skill.objects.all(), draft.draft_data.get("skills", {}))
     # The Gift stage's Magic skill allocation (validated there) is written as given; a
     # Magic skill the draft did not allocate to is not written (#4659).
-    skills |= by_id(Skill.objects.select_related("trait"), draft.draft_data.get("magic_skills", {}))
+    skills |= by_id(Skill.objects.all(), draft.draft_data.get("magic_skills", {}))
     set_skill_values(
         character.sheet_data,
         skills,

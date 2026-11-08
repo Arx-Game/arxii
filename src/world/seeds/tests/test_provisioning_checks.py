@@ -28,8 +28,8 @@ class ProvisioningCheckSeedTests(TestCase):
         seed_provisioning_content()
 
     def test_seeds_cooking_skill(self) -> None:
-        skill = Skill.objects.get(trait__name="Cooking")
-        self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
+        skill = Skill.objects.get(name="Cooking")
+        self.assertEqual(skill.trait_type, TraitType.SKILL)
 
     def test_seeds_brewing_specialization_attached_to_check(self) -> None:
         check_type = CheckType.objects.get(name=COOKING_CHECK_NAME)

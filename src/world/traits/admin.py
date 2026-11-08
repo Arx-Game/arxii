@@ -5,10 +5,12 @@ Provides administrative interfaces for managing trait definitions,
 character values, and check resolution configuration.
 """
 
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
-from world.skills.admin_inlines import SkillOnTraitInline, ensure_skill_target_or_warn
+from world.skills.admin_shared import ensure_skill_target_or_warn
 from world.skills.models import Skill
 from world.traits.models import (
     CharacterTraitValue,
@@ -45,32 +47,55 @@ class TraitRankDescriptionInline(admin.TabularInline):
         return obj.display_value
 
 
+SKILL_IN_USE_RETYPED_MESSAGE = (
+    "This skill is still used by {uses}, so it must stay a Skill. Repoint or remove those first."
+)
+
+
+def skill_uses(trait: Trait) -> list[str]:
+    """What still points at ``trait`` as a ``Skill`` (any FK to the proxy), by name."""
+    return [
+        str(rel.related_model._meta.verbose_name_plural)  # noqa: SLF001 - model options
+        for rel in Skill._meta.related_objects  # noqa: SLF001 - model options
+        if rel.field.remote_field.model is Skill
+        and rel.related_model._base_manager.filter(**{rel.field.name: trait.pk}).exists()  # noqa: SLF001
+    ]
+
+
+class TraitAdminForm(forms.ModelForm):
+    """Refuses retyping a skill something still points at as a Skill (#5008).
+
+    No ``Meta``: ``TraitAdmin`` builds the form for ``Trait`` with its own fields.
+    """
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        if (
+            self.initial.get("trait_type") == TraitType.SKILL
+            and cleaned.get("trait_type") != TraitType.SKILL
+            and (uses := skill_uses(self.instance))
+        ):
+            raise ValidationError(SKILL_IN_USE_RETYPED_MESSAGE.format(uses=", ".join(uses)))
+        return cleaned
+
+
 @admin.register(Trait)
 class TraitAdmin(admin.ModelAdmin):
+    """Every trait. Skills are authored on the Skill page, a proxy of this (#5008)."""
+
+    form = TraitAdminForm
     list_display = ["name", "trait_type", "category", "is_public"]
     list_filter = ["trait_type", "category", "is_public"]
     search_fields = ["name", "description"]
     ordering = ["trait_type", "category", "name"]
-    inlines = [SkillOnTraitInline, TraitRankDescriptionInline]
+    inlines = [TraitRankDescriptionInline]
     readonly_fields = ["get_connections"]
 
-    def get_inline_instances(self, request, obj=None):
-        """Hide the Skill section on a saved trait that is not a skill and has none (#5006).
-
-        The add page always shows it, since the type is chosen in the same form.
-        """
-        instances = super().get_inline_instances(request, obj)
-        if obj is None or obj.trait_type == TraitType.SKILL or hasattr(obj, "skill"):
-            return instances
-        return [inline for inline in instances if not isinstance(inline, SkillOnTraitInline)]
-
-    def save_formset(self, request, form, formset, change):
-        """Save the inlines; a skill saved here gets its modifier target (#5006, #4820)."""
-        if formset.model is not Skill:
-            super().save_formset(request, form, formset, change)
-            return
-        for skill in formset.save():
-            ensure_skill_target_or_warn(request, skill)
+    def save_model(self, request, obj, form, change):
+        """Save; a skill-type trait gets the modifier target its bonuses land on (#4820)."""
+        super().save_model(request, obj, form, change)
+        if obj.trait_type == TraitType.SKILL:
+            ensure_skill_target_or_warn(request, obj)
 
     @admin.display(description="Connections")
     def get_connections(self, obj):

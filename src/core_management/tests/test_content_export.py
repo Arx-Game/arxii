@@ -439,7 +439,7 @@ class ContentExportTests(TestCase):
 
         sheet = CharacterSheetFactory()
         stat = TraitFactory(name="willpower", trait_type=TraitType.STAT)
-        skill = SkillFactory(trait__name="ritualism")
+        skill = SkillFactory(name="ritualism")
         synthesized = ensure_character_magic_check_type(sheet, stat=stat, skill=skill)
         owned_trait_names = {t.trait.name for t in synthesized.traits.all()}
         assert owned_trait_names  # sanity: the synthesized row really carries traits

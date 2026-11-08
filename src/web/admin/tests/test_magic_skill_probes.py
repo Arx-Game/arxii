@@ -142,7 +142,7 @@ class CastingStyleSkillProbeTests(TestCase):
 
 
 def _magic_skill(**kwargs: object) -> Skill:
-    return SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC), **kwargs)
+    return SkillFactory(category=TraitCategory.MAGIC, **kwargs)
 
 
 class SchoolingTrainingPointsProbeTests(TestCase):
@@ -223,11 +223,11 @@ class MagicSkillCourseProbeTests(TestCase):
         result = self._resolve()
 
         self.assertFalse(result.present)
-        self.assertEqual(set(result.missing), {ritualism.trait.name, theology.trait.name})
+        self.assertEqual(set(result.missing), {ritualism.name, theology.name})
 
         self._course(ritualism)
 
-        self.assertEqual(self._resolve().missing, (theology.trait.name,))
+        self.assertEqual(self._resolve().missing, (theology.name,))
 
         self._course(theology)
 
@@ -237,13 +237,13 @@ class MagicSkillCourseProbeTests(TestCase):
         skill = _magic_skill()
         self._course(skill, affiliated=False)
 
-        self.assertEqual(self._resolve().missing, (skill.trait.name,))
+        self.assertEqual(self._resolve().missing, (skill.name,))
 
     def test_a_course_on_an_inactive_role_does_not_count(self) -> None:
         skill = _magic_skill()
         self._course(skill, active=False)
 
-        self.assertEqual(self._resolve().missing, (skill.trait.name,))
+        self.assertEqual(self._resolve().missing, (skill.name,))
 
     def test_an_inactive_or_non_magic_skill_is_not_listed(self) -> None:
         _magic_skill(is_active=False)
@@ -265,7 +265,7 @@ class PathSuggestionsNameMagicSkillsProbeTests(TestCase):
         result = self._resolve()
 
         self.assertFalse(result.present)
-        self.assertEqual(result.missing, (f"{path.name}: {magic.trait.name}",))
+        self.assertEqual(result.missing, (f"{path.name}: {magic.name}",))
 
         suggestion.delete()
 
@@ -282,20 +282,20 @@ class CheckTypesWeightNoMagicSkillProbeTests(TestCase):
         occult = _magic_skill()
         ritualism = _magic_skill()
         tides = CheckTypeFactory(name="Reading the Tides")
-        CheckTypeTraitFactory(check_type=tides, trait=occult.trait)
-        CheckTypeTraitFactory(check_type=tides, trait=ritualism.trait)
+        CheckTypeTraitFactory(check_type=tides, trait=occult)
+        CheckTypeTraitFactory(check_type=tides, trait=ritualism)
         CheckTypeTraitFactory(check_type=tides, trait=StatTraitFactory())
         wards = CheckTypeFactory(name="Raising Wards")
-        CheckTypeTraitFactory(check_type=wards, trait=occult.trait)
-        CheckTypeTraitFactory(check_type=CheckTypeFactory(), trait=SkillFactory().trait)
+        CheckTypeTraitFactory(check_type=wards, trait=occult)
+        CheckTypeTraitFactory(check_type=CheckTypeFactory(), trait=SkillFactory())
 
         result = self._resolve()
 
         self.assertFalse(result.present)
-        names = sorted([occult.trait.name, ritualism.trait.name])
+        names = sorted([occult.name, ritualism.name])
         self.assertEqual(
             result.missing,
-            (f"Raising Wards: {occult.trait.name}", f"Reading the Tides: {', '.join(names)}"),
+            (f"Raising Wards: {occult.name}", f"Reading the Tides: {', '.join(names)}"),
         )
         changelist = reverse("admin:arxii_checktype_changelist")
         self.assertEqual(
@@ -313,7 +313,7 @@ class CheckTypesWeightNoMagicSkillProbeTests(TestCase):
     def test_present_when_check_types_weight_stats_and_ordinary_skills(self) -> None:
         check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory())
-        CheckTypeTraitFactory(check_type=check_type, trait=SkillFactory().trait)
+        CheckTypeTraitFactory(check_type=check_type, trait=SkillFactory())
 
         result = self._resolve()
 

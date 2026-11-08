@@ -468,7 +468,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
             apply_damage_to_participant(ally_participant, 40)
 
         self.assertEqual(len(rolls), 1)
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         self.assertEqual(tuple(rolls[0]["extra_traits"]), (term,))
 
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:

@@ -90305,7 +90305,8 @@ components:
           description: Order for display in character sheets and CG
         is_active:
           type: boolean
-          description: Whether this skill is available for use
+          description: Whether this trait is available for use. An inactive skill
+            is left out of character creation, training and the sheet's pickers.
         specializations:
           type: array
           items:
@@ -90348,7 +90349,8 @@ components:
           description: Order for display in character sheets and CG
         is_active:
           type: boolean
-          description: Whether this skill is available for use
+          description: Whether this trait is available for use. An inactive skill
+            is left out of character creation, training and the sheet's pickers.
       required:
       - category
       - category_display

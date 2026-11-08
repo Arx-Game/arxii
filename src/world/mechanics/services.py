@@ -2500,7 +2500,7 @@ def skill_modifiers_for_sheet(
     by_target: dict[int, Skill] = {}
     targets: dict[int, ModifierTarget] = {}
     for skill in skills:
-        target = ModifierTarget.get_for_trait(skill.trait)
+        target = ModifierTarget.get_for_trait(skill)
         if target is not None:
             by_target[target.pk] = skill
             targets[target.pk] = target
@@ -2530,7 +2530,7 @@ def skill_modifiers_for_sheet(
             hit.add(target_id)
     handler = character.traits
     return {
-        by_target[target_id].pk: handler.get_trait_modifier(by_target[target_id].trait)
+        by_target[target_id].pk: handler.get_trait_modifier(by_target[target_id])
         for target_id in hit
     }
 

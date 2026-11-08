@@ -230,7 +230,7 @@ def ensure_starter_npc_presets() -> None:
             )
 
         for skill_name, value in spec.skill_lines:
-            skill = Skill.objects.filter(trait__name__iexact=skill_name).first()
+            skill = Skill.objects.filter(name__iexact=skill_name).first()
             if skill is None:
                 continue
             NPCPresetSkillLine.objects.get_or_create(

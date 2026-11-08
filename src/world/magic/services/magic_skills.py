@@ -54,8 +54,8 @@ def activity_skill_terms(activity: MagicActivity) -> tuple[ExtraTraitTerm, ...]:
     """
     rows = MagicActivitySkill.objects.filter(
         activity=activity, skill__is_active=True
-    ).select_related("skill__trait")
-    return tuple(ExtraTraitTerm(trait=row.skill.trait, weight=row.weight) for row in rows)
+    ).select_related("skill")
+    return tuple(ExtraTraitTerm(trait=row.skill, weight=row.weight) for row in rows)
 
 
 def _skill_for_path(technique: Technique, path: Path | None) -> Skill | None:
@@ -79,7 +79,7 @@ def _skill_term(skill: Skill | None) -> ExtraTraitTerm | None:
     """``skill`` as a roll term, or None when there is no skill or it is inactive."""
     if skill is None or not skill.is_active:
         return None
-    return ExtraTraitTerm(trait=skill.trait, weight=TECHNIQUE_SKILL_WEIGHT)
+    return ExtraTraitTerm(trait=skill, weight=TECHNIQUE_SKILL_WEIGHT)
 
 
 def technique_skill_term_for_path(technique: Technique, path: Path | None) -> ExtraTraitTerm | None:

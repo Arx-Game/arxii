@@ -65,7 +65,7 @@ from world.skills.factories import (
     SpecializationFactory,
 )
 from world.skills.models import SkillPointBudget
-from world.traits.factories import CheckSystemSetupFactory, SkillTraitFactory, StatTraitFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
@@ -126,16 +126,12 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
                 schooling_line=line,
             )
 
-        cls.thaumaturgy = SkillFactory(
-            trait__name="Thaumaturgy", trait__category=TraitCategory.MAGIC
-        )
-        cls.geomancy = SkillFactory(trait__name="Geomancy", trait__category=TraitCategory.MAGIC)
-        cls.hermetics = SkillFactory(trait__name="Hermetics", trait__category=TraitCategory.MAGIC)
-        cls.lapsed = SkillFactory(
-            trait__name="Lapsed Lore", trait__category=TraitCategory.MAGIC, is_active=False
-        )
+        cls.thaumaturgy = SkillFactory(name="Thaumaturgy", category=TraitCategory.MAGIC)
+        cls.geomancy = SkillFactory(name="Geomancy", category=TraitCategory.MAGIC)
+        cls.hermetics = SkillFactory(name="Hermetics", category=TraitCategory.MAGIC)
+        cls.lapsed = SkillFactory(name="Lapsed Lore", category=TraitCategory.MAGIC, is_active=False)
         cls.active_magic = (cls.thaumaturgy, cls.geomancy, cls.hermetics)
-        cls.swordplay = SkillFactory(trait__name="Swordplay", trait__category=TraitCategory.COMBAT)
+        cls.swordplay = SkillFactory(name="Swordplay", category=TraitCategory.COMBAT)
         cls.parrying = SpecializationFactory(name="Parrying", parent_skill=cls.swordplay)
         cls.wards = SpecializationFactory(name="Wards", parent_skill=cls.thaumaturgy)
 
@@ -229,22 +225,22 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
 
         held = dict(
             CharacterTraitValue.objects.filter(
-                character=sheet, trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
-            ).values_list("trait__skill", "value")
+                character=sheet, trait__trait_type=TraitType.SKILL
+            ).values_list("trait", "value")
         )
         self.assertEqual(sum(held.values()), total)
         self.assertIn(held[self.thaumaturgy.pk], range(1, total + 1))
         skill = self.thaumaturgy
         self.assertEqual(
-            CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value,
+            CharacterTraitValue.objects.get(character=sheet, trait=skill).value,
             held[skill.pk],
         )
-        change = CharacterTraitChange.objects.get(character_sheet=sheet, trait=skill.trait)
+        change = CharacterTraitChange.objects.get(character_sheet=sheet, trait=skill)
         self.assertEqual(change.source, TraitChangeSource.CHARACTER_CREATION)
         # Only allocated Magic skills are written; nothing lifts the rest.
         self.assertFalse(
             CharacterTraitValue.objects.filter(
-                character=sheet, trait__in=[self.geomancy.trait, self.lapsed.trait]
+                character=sheet, trait__in=[self.geomancy, self.lapsed]
             )
         )
 
@@ -261,7 +257,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         total = self._allocate_pool(draft, self.geomancy)
         sheet = self._finalize(draft)
         self.assertEqual(
-            CharacterTraitValue.objects.get(character=sheet, trait=self.geomancy.trait).value,
+            CharacterTraitValue.objects.get(character=sheet, trait=self.geomancy).value,
             total,
         )
 
@@ -300,9 +296,7 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         sheet = self._finalize(draft)
 
         magic_ids = [skill.pk for skill in (*self.active_magic, self.lapsed)]
-        self.assertFalse(
-            CharacterTraitValue.objects.filter(character=sheet, trait__skill__in=magic_ids)
-        )
+        self.assertFalse(CharacterTraitValue.objects.filter(character=sheet, trait__in=magic_ids))
 
     def test_magic_points_refused_with_names(self) -> None:
         draft = self._create_base_draft()
@@ -393,14 +387,14 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
             casters.append(character)
         schooled, self_taught = casters
 
-        term = ExtraTraitTerm(trait=self.thaumaturgy.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=self.thaumaturgy, weight=Decimal("1.00"))
         terms, schooled_roll = self._cast_and_read_the_roll(schooled, technique)
         self.assertEqual(terms, (term,))
         terms, self_taught_roll = self._cast_and_read_the_roll(self_taught, technique)
         self.assertEqual(terms, (term,))
         self.assertFalse(
             CharacterTraitValue.objects.filter(
-                character=self_taught.sheet_data, trait=self.thaumaturgy.trait
+                character=self_taught.sheet_data, trait=self.thaumaturgy
             )
         )
         self.assertEqual(schooled_roll.trait_points - self_taught_roll.trait_points, allocated)
@@ -453,9 +447,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
             [TechniqueFactory(gift=gift, action_template=get_standalone_cast_template())]
         )
         technique = gift.techniques.first()
-        cls.skills = [
-            SkillFactory(trait=SkillTraitFactory(category=TraitCategory.MAGIC)) for _ in range(3)
-        ]
+        cls.skills = [SkillFactory(category=TraitCategory.MAGIC) for _ in range(3)]
         cls.account = AccountFactory()
         cls.resonance = ResonanceFactory()
         cls.path, cls.tradition = path, tradition

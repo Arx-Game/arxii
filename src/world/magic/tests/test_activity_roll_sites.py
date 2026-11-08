@@ -65,7 +65,7 @@ SKILL_WEIGHT = Decimal("0.50")
 
 def terms_for(skill: Skill) -> tuple[ExtraTraitTerm, ...]:
     """The one term a ``skill`` mapped at ``SKILL_WEIGHT`` adds to a roll."""
-    return (ExtraTraitTerm(trait=skill.trait, weight=SKILL_WEIGHT),)
+    return (ExtraTraitTerm(trait=skill, weight=SKILL_WEIGHT),)
 
 
 class RollReached(Exception):
@@ -1100,7 +1100,7 @@ class TechniqueEnhancedConditionEffectTests(ActivityTermTestCase):
 
     def test_technique_source_adds_its_skill(self) -> None:
         enhancement = self.technique_enhancement(skill=self.skill)
-        technique_terms = (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+        technique_terms = (ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00")),)
 
         for remove in (False, True):
             with self.subTest(remove=remove):

@@ -35,12 +35,8 @@ class SkillsStageValidationTests(TestCase):
             max_skill_value=30,
             max_specialization_value=30,
         )
-        cls.melee_skill = SkillFactory(
-            trait__name="Melee Combat", trait__category=TraitCategory.COMBAT
-        )
-        cls.defense_skill = SkillFactory(
-            trait__name="Defense", trait__category=TraitCategory.COMBAT
-        )
+        cls.melee_skill = SkillFactory(name="Melee Combat", category=TraitCategory.COMBAT)
+        cls.defense_skill = SkillFactory(name="Defense", category=TraitCategory.COMBAT)
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
         cls.path = PathFactory(
             name="Test Path for Skills",

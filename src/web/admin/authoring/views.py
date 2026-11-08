@@ -160,8 +160,7 @@ def identity_field_for(model: type) -> str | None:
     ``"name"`` when the model carries a concrete ``CharField`` named
     ``"name"`` with no choices - the same shape ``prose_fields_for`` checks
     each of its own candidate fields against - else ``None``. A model with no
-    such column (``Skill``, whose identity is its linked ``Trait``'s name;
-    ``MissionNode``; the guide and line tables) keeps the plain
+    such column (``MissionNode``, the guide and line tables) keeps the plain
     "Editing <model> #<pk>" heading instead of trying to expose a substitute.
     """
     try:

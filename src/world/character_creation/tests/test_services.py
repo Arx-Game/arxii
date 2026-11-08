@@ -558,8 +558,8 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         CharacterTraitValue.flush_instance_cache()
         CharacterSpecializationValue.flush_instance_cache()
         cls._setup_finalization_base(cls, prefix="Skill Test", height_min=900, height_max=1000)
-        cls.melee_skill = SkillFactory(trait__name="Melee Combat")
-        cls.defense_skill = SkillFactory(trait__name="Defense")
+        cls.melee_skill = SkillFactory(name="Melee Combat")
+        cls.defense_skill = SkillFactory(name="Defense")
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
 
     def setUp(self):
@@ -589,12 +589,12 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
         skill_value = CharacterTraitValue.objects.get(
             character_id=character.pk,
-            trait=self.melee_skill.trait,
+            trait=self.melee_skill,
         )
         assert skill_value.value == 30
         # The ledger counts from the rating CG set, so 31 is one level away (#5010).
         ledger = DevelopmentPoints.objects.get(
-            character_sheet_id=character.pk, trait=self.melee_skill.trait
+            character_sheet_id=character.pk, trait=self.melee_skill
         )
         assert ledger.total_earned == cumulative_dp_for_level(30)
 
@@ -609,9 +609,9 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         from world.skills.factories import SkillPointBudgetFactory
         from world.traits.constants import TraitCategory
 
-        occult = SkillFactory(trait__name="Occult Test", trait__category=TraitCategory.MAGIC)
-        ritualism = SkillFactory(trait__name="Ritualism Test", trait__category=TraitCategory.MAGIC)
-        SkillFactory(trait__name="Unallocated Test", trait__category=TraitCategory.MAGIC)
+        occult = SkillFactory(name="Occult Test", category=TraitCategory.MAGIC)
+        ritualism = SkillFactory(name="Ritualism Test", category=TraitCategory.MAGIC)
+        SkillFactory(name="Unallocated Test", category=TraitCategory.MAGIC)
         category = ModifierCategoryFactory(name=CG_MODIFIER_CATEGORY)
         target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
         SkillPointBudgetFactory(pk=1)
@@ -640,7 +640,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
                 character_id=character.pk,
                 trait__trait_type=TraitType.SKILL,
                 trait__category=TraitCategory.MAGIC,
-            ).values_list("trait__skill", "value")
+            ).values_list("trait", "value")
         )
         assert held == {occult.pk: 30, ritualism.pk: 20}
 
@@ -654,7 +654,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
 
         change = CharacterTraitChange.objects.get(
-            character_sheet_id=character.pk, trait=self.melee_skill.trait
+            character_sheet_id=character.pk, trait=self.melee_skill
         )
         assert change.old_value == 0
         assert change.new_value == 30
@@ -688,7 +688,7 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
         assert not CharacterTraitValue.objects.filter(
             character_id=character.pk,
-            trait=self.melee_skill.trait,
+            trait=self.melee_skill,
         ).exists()
 
 
@@ -2094,7 +2094,7 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
             cls, prefix="Ritual Knowledge Test", height_min=3100, height_max=3200
         )
         # Skill needed so provision_player_anima_ritual doesn't log + skip.
-        cls.combat_skill = SkillFactory(trait__name="RKTMelee")
+        cls.combat_skill = SkillFactory(name="RKTMelee")
 
     def setUp(self):
         self._flush_common_caches()

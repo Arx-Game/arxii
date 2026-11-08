@@ -21,8 +21,8 @@ class GovernanceCheckSeedTests(TestCase):
             ("Scholarship", "Economics"),
             ("Leadership", "Stewardship"),
         ):
-            skill = Skill.objects.get(trait__name=skill_name)
-            self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
+            skill = Skill.objects.get(name=skill_name)
+            self.assertEqual(skill.trait_type, TraitType.SKILL)
             Specialization.objects.get(parent_skill=skill, name=spec_name)
 
     def test_tax_collection_composition(self) -> None:

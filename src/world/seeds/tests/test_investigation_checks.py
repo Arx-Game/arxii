@@ -18,8 +18,8 @@ class InvestigationCheckSeedTests(TestCase):
         seed_investigation_check_content()
 
     def test_seeds_investigation_skill(self) -> None:
-        skill = Skill.objects.get(trait__name="Investigation")
-        self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
+        skill = Skill.objects.get(name="Investigation")
+        self.assertEqual(skill.trait_type, TraitType.SKILL)
 
     def test_search_check_is_perception_plus_investigation(self) -> None:
         search = CheckType.objects.get(name=SEARCH_CHECK_TYPE_NAME)

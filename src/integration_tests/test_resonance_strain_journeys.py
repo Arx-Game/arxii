@@ -132,7 +132,7 @@ class _BurningResonance(JourneyCase):
             )
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
         self.skill_unlock = ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.TRAIT, unlock_trait=self.skill.trait
+            target_kind=TargetKind.TRAIT, unlock_trait=self.skill
         )
         # The scene's anti-spam memory is process-wide and keyed by sheet pk.
         pending_actions._LAST_ACTED.clear()
@@ -148,7 +148,7 @@ class _BurningResonance(JourneyCase):
         CharacterVitals.objects.create(
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
-        CharacterTraitValue.objects.create(character=sheet, trait=self.skill.trait, value=10)
+        CharacterTraitValue.objects.create(character=sheet, trait=self.skill, value=10)
         if aura is not None:
             percents = {"celestial": "0", "primal": "0", "abyssal": "0", aura: "100"}
             CharacterAuraFactory(character=sheet, **percents)
@@ -170,7 +170,7 @@ class _BurningResonance(JourneyCase):
         if not sheet.thread_weaving_unlocks.filter(unlock=self.skill_unlock).exists():
             CharacterThreadWeavingUnlockFactory(character=sheet, unlock=self.skill_unlock)
         return weave_thread(
-            sheet, TargetKind.TRAIT, self.skill.trait, resonance, name=f"{resonance.name} Strand"
+            sheet, TargetKind.TRAIT, self.skill, resonance, name=f"{resonance.name} Strand"
         )
 
     @staticmethod

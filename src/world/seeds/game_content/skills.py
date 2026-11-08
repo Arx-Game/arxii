@@ -52,7 +52,7 @@ def seed_skill_breakthrough_catalog() -> None:
             defaults={"xp_cost": cost},
         )
 
-    for skill in Skill.objects.select_related("trait").all():
-        TraitXPCost.objects.get_or_create(trait=skill.trait, cost_chart=chart)
+    for skill in Skill.objects.all():
+        TraitXPCost.objects.get_or_create(trait=skill, cost_chart=chart)
         for rating in _FLAT_COST_PER_BOUNDARY:
-            TraitRatingUnlock.objects.get_or_create(trait=skill.trait, target_rating=rating)
+            TraitRatingUnlock.objects.get_or_create(trait=skill, target_rating=rating)

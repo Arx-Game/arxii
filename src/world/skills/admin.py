@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet
-from world.skills.admin_inlines import ensure_skill_target_or_warn
+from world.skills.admin_shared import ensure_skill_target_or_warn
 from world.skills.models import (
     CharacterSpecializationValue,
     Skill,
@@ -23,26 +23,19 @@ class SpecializationInline(admin.TabularInline):
 
 @admin.register(Skill)
 class SkillAdmin(admin.ModelAdmin):
-    """Admin for parent skills."""
+    """The skill authoring page: a skill is a Trait of type Skill (#5008, #5015)."""
 
     list_display = ["name", "category", "is_active", "display_order"]
-    list_filter = ["trait__category", "is_active"]
-    search_fields = ["trait__name", "trait__description", "tooltip"]
-    ordering = ["display_order", "trait__name"]
+    list_filter = ["category", "is_active"]
+    search_fields = ["name", "description", "tooltip"]
+    ordering = ["display_order", "name"]
+    exclude = ["trait_type"]  # always Skill; Skill.save sets it
     inlines = [SpecializationInline]
 
     def save_model(self, request, obj, form, change):
         """Save the skill and make sure a modifier target points at its trait (#4820)."""
         super().save_model(request, obj, form, change)
         ensure_skill_target_or_warn(request, obj)
-
-    @admin.display(description="Name")
-    def name(self, obj):
-        return obj.name
-
-    @admin.display(description="Category")
-    def category(self, obj):
-        return obj.trait.get_category_display()
 
 
 @admin.register(Specialization)
@@ -51,8 +44,8 @@ class SpecializationAdmin(admin.ModelAdmin):
 
     list_display = ["name", "parent_skill", "is_active", "display_order"]
     list_filter = ["parent_skill", "is_active"]
-    search_fields = ["name", "description", "tooltip", "parent_skill__trait__name"]
-    ordering = ["parent_skill__trait__name", "display_order", "name"]
+    search_fields = ["name", "description", "tooltip", "parent_skill__name"]
+    ordering = ["parent_skill__name", "display_order", "name"]
 
 
 @admin.register(CharacterSpecializationValue)

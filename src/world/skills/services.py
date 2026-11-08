@@ -384,7 +384,7 @@ def skill_rating(sheet: CharacterSheet, skill: Skill) -> int:
     read through the character's trait handler (``character.traits``), which caches
     every value and is kept current by ``CharacterTraitValue.save``.
     """
-    return sheet.character.traits.get_base_trait_value(skill.trait.name)
+    return sheet.character.traits.get_base_trait_value(skill.name)
 
 
 def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
@@ -402,21 +402,21 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
         align_development_floors,
     )
 
-    row = sheet.character.traits.get_trait_object(skill.trait.name)
+    row = sheet.character.traits.get_trait_object(skill.name)
     if not isinstance(row, CharacterTraitValue):
         row = None
     old = row.value if row else 0
     if row is None:
-        CharacterTraitValue.objects.create(character=sheet, trait=skill.trait, value=value)
+        CharacterTraitValue.objects.create(character=sheet, trait=skill, value=value)
     elif row.value != value:
         row.value = value
         row.save(update_fields=["value"])
     else:
         return
     CharacterTraitChange.objects.create(
-        character_sheet=sheet, trait=skill.trait, old_value=old, new_value=value, source=source
+        character_sheet=sheet, trait=skill, old_value=old, new_value=value, source=source
     )
-    align_development_floors(sheet, {skill.trait: value})
+    align_development_floors(sheet, {skill: value})
 
 
 def _development_cost(current_value: int) -> int:
@@ -562,7 +562,7 @@ def train_skill(
         # A skill the character has no rating in starts at the base level.
         old_value = skill_rating(sheet, skill) or DP_BASE_LEVEL
         tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
-            character_sheet=sheet, trait=skill.trait
+            character_sheet=sheet, trait=skill
         )
         tracker.align_to_rating(old_value)
         points_applied = dev_points
@@ -576,9 +576,7 @@ def train_skill(
         plateau_message = None
         if tracker.total_earned < expected_total:
             plateau_message = _skill_plateau_message(skill, new_value, stored_skill_cap(sheet))
-        _record_training_transaction(
-            sheet, skill.trait, points_applied, description, plateau_message
-        )
+        _record_training_transaction(sheet, skill, points_applied, description, plateau_message)
     return SkillTrainingResult(
         old_value=old_value,
         new_value=new_value,
@@ -650,7 +648,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
     from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
-    skill_value = character.traits.get_trait_object(skill.trait.name)
+    skill_value = character.traits.get_trait_object(skill.name)
     if not isinstance(skill_value, CharacterTraitValue):
         return False, f"{skill.name} has no recorded value for this character."
 
@@ -662,7 +660,7 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     if cap is not None and target_rating > cap:
         return False, skill_cap_message(skill.name, cap)
     try:
-        unlock = TraitRatingUnlock.objects.get(trait=skill.trait, target_rating=target_rating)
+        unlock = TraitRatingUnlock.objects.get(trait=skill, target_rating=target_rating)
     except TraitRatingUnlock.DoesNotExist:
         return (
             False,
@@ -738,9 +736,7 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
     if not gated:
         return []
 
-    skills = list(
-        Skill.objects.filter(trait_id__in=list(gated)).select_related("trait").order_by("pk")
-    )
+    skills = list(Skill.objects.filter(pk__in=list(gated)).order_by("pk"))
     unlocks = {
         (u.trait_id, u.target_rating): u
         for u in TraitRatingUnlock.objects.filter(
@@ -750,8 +746,8 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
 
     prospects: list[SkillBreakthroughProspect] = []
     for skill in skills:
-        next_rating = gated[skill.trait_id] + 1
-        unlock = unlocks.get((skill.trait_id, next_rating))
+        next_rating = gated[skill.pk] + 1
+        unlock = unlocks.get((skill.pk, next_rating))
         prospects.append(
             SkillBreakthroughProspect(
                 skill=skill,
@@ -827,10 +823,10 @@ def process_weekly_training() -> None:
         ).select_related(
             "character",
             "skill",
-            "skill__trait",
+            "skill",
             "specialization",
             "specialization__parent_skill",
-            "specialization__parent_skill__trait",
+            "specialization__parent_skill",
             "mentor",
             "mentor__character_sheet__character",
         )
@@ -858,7 +854,7 @@ def process_weekly_training() -> None:
             cap_message = _apply_development_to_specialization(spec_value, dev_points)
             _record_training_transaction(
                 character,
-                allocation.specialization.parent_skill.trait,
+                allocation.specialization.parent_skill,
                 dev_points,
                 description,
                 cap_message,

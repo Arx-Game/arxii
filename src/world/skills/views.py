@@ -67,7 +67,7 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Return skills ordered by display_order."""
         return (
-            Skill.objects.select_related("trait")
+            Skill.objects.all()
             .prefetch_related(
                 Prefetch(
                     "specializations",
@@ -111,7 +111,7 @@ class SpecializationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return specializations ordered by parent skill and display_order."""
-        return Specialization.objects.select_related("parent_skill__trait").order_by(
+        return Specialization.objects.select_related("parent_skill").order_by(
             "parent_skill__display_order", "display_order"
         )
 
@@ -131,9 +131,9 @@ class PathSkillSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return suggestions ordered by display_order."""
-        return PathSkillSuggestion.objects.select_related(
-            "character_path", "skill__trait"
-        ).order_by("character_path", "display_order")
+        return PathSkillSuggestion.objects.select_related("character_path", "skill").order_by(
+            "character_path", "display_order"
+        )
 
 
 class SkillPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
@@ -207,8 +207,8 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         allocations = (
             TrainingAllocation.objects.filter(character_id=puppet.pk)
             .select_related(
-                "skill__trait",
-                "specialization__parent_skill__trait",
+                "skill",
+                "specialization__parent_skill",
                 "mentor__character_sheet__character",
             )
             .prefetch_related(

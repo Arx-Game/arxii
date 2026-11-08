@@ -1,7 +1,7 @@
 """Social check content seed (#1688 slice 2) — stat + skill + specialization.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``skills.specialization``/``checks.checktypespecialization`` stay outside
 ``CONTENT_MODELS`` and keep seeding unconditionally, but no longer wipe and
@@ -88,33 +88,28 @@ def _ensure_social_category():
 
 
 def ensure_social_skills() -> dict[str, object]:
-    """Look up (or sample) the Persuasion + Performance Skill rows + backing Traits.
+    """Look up (or sample) the Persuasion + Performance skills (Skill, a proxy of Trait).
 
     ``skills.Skill``/``traits.Trait`` are content-repo-owned (#2698). A skill
-    whose Trait or Skill row isn't authored is omitted from the returned dict —
+    whose Trait isn't authored as a skill is omitted from the returned dict —
     callers must handle a missing key by skipping the composition that needs it.
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
     skills: dict[str, object] = {}
     for order, (name, tooltip) in enumerate(_SOCIAL_SKILLS):
-        trait = authored_or_sample(
-            Trait,
-            {
-                "trait_type": TraitType.SKILL,
-                "category": TraitCategory.SOCIAL,
-                "is_public": True,
-            },
-            name=name,
-        )
-        if trait is None:
-            continue
         skill = authored_or_sample(
             Skill,
-            {"tooltip": tooltip, "display_order": order, "is_active": True},
-            trait=trait,
+            {
+                "category": TraitCategory.SOCIAL,
+                "is_public": True,
+                "tooltip": tooltip,
+                "display_order": order,
+                "is_active": True,
+            },
+            name=name,
         )
         if skill is None:
             continue
@@ -126,7 +121,7 @@ def ensure_social_specializations(skills: dict[str, object]) -> dict[str, object
     """Seed the specialization rows under their parent social skills.
 
     ``skills.Specialization`` is not content-repo-owned — stays unconditional.
-    A specialization whose parent skill is missing (unauthored Skill/Trait) is
+    A specialization whose parent skill is missing (no authored skill Trait) is
     skipped — its ``parent_skill`` FK is required.
     """
     from world.skills.models import Specialization  # noqa: PLC0415
@@ -219,7 +214,7 @@ def ensure_social_check_compositions(
         skill = skills.get(skill_name)
         if skill is not None:
             authored_or_sample(
-                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
+                CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill
             )
         if spec_name is not None and specs.get(spec_name) is not None:
             CheckTypeSpecialization.objects.get_or_create(

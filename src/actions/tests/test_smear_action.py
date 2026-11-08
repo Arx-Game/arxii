@@ -42,9 +42,7 @@ class SmearActionTests(TestCase):
         cls.smearer = _set_character_location(
             cls.smearer_entry.character_sheet.character, cls.hub.objectdb
         )
-        gossip_spec = Specialization.objects.get(
-            name="Gossip", parent_skill__trait__name="Persuasion"
-        )
+        gossip_spec = Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(
             character=cls.smearer_entry.character_sheet, specialization=gossip_spec, value=10
         )

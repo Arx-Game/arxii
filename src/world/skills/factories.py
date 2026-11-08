@@ -30,13 +30,13 @@ class SkillTraitFactory(TraitFactory):
     category = TraitCategory.COMBAT
 
 
-class SkillFactory(factory.django.DjangoModelFactory):
-    """Factory for creating Skill records."""
+class SkillFactory(SkillTraitFactory):
+    """Factory for creating Skill records: skill-type Traits seen through the proxy."""
 
     class Meta:
         model = Skill
+        django_get_or_create = ("name",)
 
-    trait = factory.SubFactory(SkillTraitFactory)
     tooltip = factory.Faker("sentence")
     display_order = factory.Sequence(lambda n: n)
     is_active = True
@@ -45,7 +45,7 @@ class SkillFactory(factory.django.DjangoModelFactory):
 class MagicSkillFactory(SkillFactory):
     """A Magic-category skill: the only kind a magic skill picker accepts (#4547)."""
 
-    trait = factory.SubFactory(SkillTraitFactory, category=TraitCategory.MAGIC)
+    category = TraitCategory.MAGIC
 
 
 class SpecializationFactory(factory.django.DjangoModelFactory):
@@ -71,7 +71,7 @@ class SkillRatingFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     skill = factory.SubFactory(SkillFactory)
-    trait = factory.LazyAttribute(lambda o: o.skill.trait)
+    trait = factory.LazyAttribute(lambda o: o.skill)
     value = 20
 
 

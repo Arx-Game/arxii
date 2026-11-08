@@ -4,7 +4,7 @@ Idempotent. Names and lore are PLACEHOLDER pending Apostate rewrite. Magnitude
 tuning is deferred by convention (placeholders-now); the aspect weights below
 are the one mechanical knob (Path of the Chosen's ceremony edge).
 
-``skills.skill``, ``traits.trait``, ``checks.checktype``/``checktypetrait``, and
+``traits.trait`` (``Skill`` is its proxy), ``checks.checktype``/``checktypetrait``, and
 ``classes.aspect``/``pathaspect`` are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. ``checks.checktypeaspect`` stays outside ``CONTENT_MODELS`` and keeps
@@ -59,29 +59,18 @@ def ensure_rites_skill_and_specializations() -> dict[str, object]:
     """
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
-    trait = authored_or_sample(
-        Trait,
+    skill = authored_or_sample(
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.SOCIAL,
             "is_public": True,
+            "tooltip": "Conducting ceremonies: funerals, weddings, blessings, sermons.",
+            "display_order": 50,
+            "is_active": True,
         },
         name=RITES_SKILL_NAME,
-    )
-    skill = (
-        authored_or_sample(
-            Skill,
-            {
-                "tooltip": "Conducting ceremonies: funerals, weddings, blessings, sermons.",
-                "display_order": 50,
-                "is_active": True,
-            },
-            trait=trait,
-        )
-        if trait is not None
-        else None
     )
     specs: dict[str, object] = {}
     if skill is not None:
@@ -129,7 +118,7 @@ def ensure_ceremony_check_type(skill) -> object | None:
     if presence is not None:
         authored_or_sample(CheckTypeTrait, {"weight": 1}, check_type=check_type, trait=presence)
     if skill is not None:
-        authored_or_sample(CheckTypeTrait, {"weight": 1}, check_type=check_type, trait=skill.trait)
+        authored_or_sample(CheckTypeTrait, {"weight": 1}, check_type=check_type, trait=skill)
     aspect = authored_or_sample(
         Aspect,
         {"description": "PLACEHOLDER — faith, devotion, and sacred office."},
@@ -176,7 +165,7 @@ def ensure_traditions_and_beings(specs: dict[str, object]) -> None:
     """Seed the four traditions and PLACEHOLDER example beings.
 
     ``rites_specialization`` is a required FK — a tradition whose specialization
-    is missing (the Rites Skill/Trait isn't authored, #2698) is skipped entirely.
+    is missing (the Rites skill Trait isn't authored, #2698) is skipped entirely.
     """
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 

@@ -236,7 +236,7 @@ class BattleTechniqueResolverTests(TestCase):
         ) as rolled:
             resolve_battle_technique(declaration=declaration)
 
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         self.assertEqual(tuple(rolled.call_args.kwargs["extra_traits"]), (term,))
 
 

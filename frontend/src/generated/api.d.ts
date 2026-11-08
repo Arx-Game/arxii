@@ -50565,7 +50565,7 @@ export interface components {
       tooltip?: string;
       /** @description Order for display in character sheets and CG */
       display_order?: number;
-      /** @description Whether this skill is available for use */
+      /** @description Whether this trait is available for use. An inactive skill is left out of character creation, training and the sheet's pickers. */
       is_active?: boolean;
       readonly specializations: components['schemas']['Specialization'][];
     };
@@ -50584,7 +50584,7 @@ export interface components {
       tooltip?: string;
       /** @description Order for display in character sheets and CG */
       display_order?: number;
-      /** @description Whether this skill is available for use */
+      /** @description Whether this trait is available for use. An inactive skill is left out of character creation, training and the sheet's pickers. */
       is_active?: boolean;
     };
     /** @description Serializer for SkillPointBudget configuration. */

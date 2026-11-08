@@ -1062,9 +1062,10 @@ Character statistics and dice rolling mechanics.
 Character abilities with parent skills and specializations, plus weekly training
 allocations that convert AP to development points.
 
-- **Models:** `Skill`, `Specialization`, `CharacterSpecializationValue`, `TrainingAllocation`
-- **The rating is `CharacterTraitValue` (#5010):** a skill's rating is the `traits.CharacterTraitValue`
-  on `skill.trait`, the one row the sheet shows and checks read (`skill_rating`, `set_skill_trait`
+- **Models:** `Skill` (a proxy of `Trait`, no table, #5008; see [traits.md](traits.md) "A skill
+  is a Trait"), `Specialization`, `CharacterSpecializationValue`, `TrainingAllocation`
+- **The rating is `CharacterTraitValue` (#5010):** a skill's rating is the skill's own
+  `traits.CharacterTraitValue`, the one row the sheet shows and checks read (`skill_rating`, `set_skill_trait`
   in `world/skills/services.py`). `CharacterSkillValue` is gone. See skills.md.
 - **One development ledger (#5010):** a skill's progress and rust live in its trait's
   `progression.DevelopmentPoints`; use, GM awards and training (`train_skill`) all go through
@@ -4042,7 +4043,7 @@ GM at a given level may author (#2000, ADR-0097).
   `apply_npc_preset(sheet, preset)` (beside `mint_story_npc`) mirrors CG
   finalize's write shape exactly (`_create_stat_values`/`_create_skill_values`,
   `world.character_creation.services`): trait lines at `display_value *
-  STAT_DISPLAY_DIVISOR`, skill lines as the `CharacterTraitValue` on `skill.trait`
+  STAT_DISPLAY_DIVISOR`, skill lines as the skill's `CharacterTraitValue`
   (a skill's one rating store, #5010, ledger aligned), every line stamped with a
   `CharacterTraitChange` (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`).
   Refuses re-application to a sheet already carrying an NPC_PRESET stamp — no

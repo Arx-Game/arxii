@@ -73,11 +73,9 @@ class IdentificationCheckSeedTests(TestCase):
         self.assertNotIn("perception", identification_stats)
 
     def test_shares_investigation_skill_row_with_search(self):
-        skill = Skill.objects.get(trait__name="Investigation")
+        skill = Skill.objects.get(name="Investigation")
         composed_types = set(
-            CheckTypeTrait.objects.filter(trait=skill.trait).values_list(
-                "check_type__name", flat=True
-            )
+            CheckTypeTrait.objects.filter(trait=skill).values_list("check_type__name", flat=True)
         )
         self.assertEqual(composed_types, {"Search", IDENTIFICATION_CHECK_TYPE_NAME})
 

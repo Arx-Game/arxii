@@ -48,7 +48,7 @@ class BoundaryPlateauTests(TestCase):
         return result.plateau_message, result.new_value
 
     def _tracker(self) -> DevelopmentPoints:
-        return DevelopmentPoints.objects.get(character_sheet=self.identity, trait=self.skill.trait)
+        return DevelopmentPoints.objects.get(character_sheet=self.identity, trait=self.skill)
 
     def test_boundary_rusty_skill_rust_paid_surplus_dissipates_with_message(self) -> None:
         """At a boundary, incoming dev points pay off rust; surplus dissipates loudly."""
@@ -115,8 +115,8 @@ class SkillsAtBoundaryTests(TestCase):
         set_skill_values(self.identity, {skill: 19}, {}, source="test")
         chart = XPCostChart.objects.create(name="Test Breakthrough Chart")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=skill.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=skill, target_rating=20)
 
         prospects = skills_at_boundary(self.character)
         self.assertEqual(len(prospects), 1)
@@ -138,8 +138,8 @@ class PurchaseSkillBreakthroughTests(TestCase):
     def _authored_unlock(self, *, target_rating: int, xp_cost: int) -> TraitRatingUnlock:
         chart = XPCostChart.objects.create(name=f"Chart {target_rating}-{self.skill.pk}")
         XPCostEntry.objects.create(chart=chart, level=target_rating, xp_cost=xp_cost)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        return TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=target_rating)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        return TraitRatingUnlock.objects.create(trait=self.skill, target_rating=target_rating)
 
     def _set_xp(self, *, total_earned: int) -> None:
         ExperiencePointsDataFactory(account=self.account, total_earned=total_earned, total_spent=0)
@@ -182,9 +182,7 @@ class PurchaseSkillBreakthroughTests(TestCase):
 
         skill_value.refresh_from_db()
         self.assertEqual(skill_value.value, 20)
-        tracker = DevelopmentPoints.objects.get(
-            character_sheet=self.identity, trait=self.skill.trait
-        )
+        tracker = DevelopmentPoints.objects.get(character_sheet=self.identity, trait=self.skill)
         self.assertEqual(tracker.total_earned, cumulative_dp_for_level(20))
 
         xp_tracker = ExperiencePointsData.objects.get(account=self.account)

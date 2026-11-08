@@ -79,7 +79,7 @@ class ProvisionPlayerAnimaRitualRetryTests(TestCase):
         # Explicit stat/skill bypass provision_player_anima_ritual's default-resolution
         # branches (Willpower lookup, highest-skill query) — irrelevant to this race.
         cls.stat = TraitFactory(name="ritualretry_stat", trait_type=TraitType.STAT)
-        cls.skill = SkillFactory(trait__name="RitualRetrySkill")
+        cls.skill = SkillFactory(name="RitualRetrySkill")
 
     def _provision(self):
         return provision_player_anima_ritual(

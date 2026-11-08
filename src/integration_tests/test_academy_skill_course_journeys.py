@@ -60,7 +60,7 @@ from world.npc_services.models import SkillCourseEnrollment
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
 from world.progression.models.rewards import DevelopmentPoints, cumulative_dp_for_level
-from world.skills.factories import SkillFactory, SkillTraitFactory
+from world.skills.factories import SkillFactory
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
@@ -120,9 +120,7 @@ class _AcademyCourseCase(JourneyCase):
             room=RoomProfileFactory(objectdb=self.hall),
             name_override="Magister Cadwen",
         )
-        self.occult = SkillFactory(
-            trait=SkillTraitFactory(name="Occult", category=TraitCategory.MAGIC)
-        )
+        self.occult = SkillFactory(name="Occult", category=TraitCategory.MAGIC)
         self.offer = NPCServiceOfferFactory(
             role=self.role,
             kind=OfferKind.SKILL_COURSE,
@@ -212,10 +210,10 @@ class _AcademyCourseCase(JourneyCase):
 
     def occult_rating(self) -> int:
         """Her Occult rating: the one row the sheet shows and a check reads (#5010)."""
-        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.occult.trait).value
+        return CharacterTraitValue.objects.get(character=self.sheet, trait=self.occult).value
 
     def occult_ledger(self) -> DevelopmentPoints:
-        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.occult.trait)
+        return DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.occult)
 
     def occult_banked(self) -> int:
         """Development banked toward her next Occult level (#5010)."""
@@ -245,7 +243,7 @@ class EnrollingInACourse(_AcademyCourseCase):
 
         # The next roll that adds Occult as a skill term is worth her new rating.
         roll = CheckTypeFactory(name="Read the wards", category=CheckCategoryFactory())
-        CheckTypeTraitFactory(check_type=roll, trait=self.occult.trait, weight=Decimal("1.0"))
+        CheckTypeTraitFactory(check_type=roll, trait=self.occult, weight=Decimal("1.0"))
         self.assertEqual(perform_check(self.ysmay, roll).trait_points, 12)
 
     def test_web_path_enrolls_as_telnet_does(self) -> None:
@@ -521,8 +519,8 @@ class ACourseAtABoundary(_AcademyCourseCase):
         # She buys the breakthrough with XP.
         chart = XPCostChart.objects.create(name="Breakthroughs")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=self.occult.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.occult.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=self.occult, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.occult, target_rating=20)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=150, total_spent=0
         )

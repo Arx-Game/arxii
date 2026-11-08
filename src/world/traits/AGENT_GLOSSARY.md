@@ -13,7 +13,7 @@ One of the 12 core character statistics used in character creation and gameplay,
 _Avoid_: ability score, primary attribute
 
 **Skill**:
-A broad learnable competency (Melee Combat, Persuasion) backed one-to-one by a SKILL-type Trait, carrying development and rust progression on the character. Skills are the parent category beneath which Specializations live.
+A broad learnable competency (Melee Combat, Persuasion): a Trait of type SKILL, seen through the `Skill` proxy model (#5008, ADR-5008), carrying development and rust progression on the character. Skills are the parent category beneath which Specializations live.
 _Avoid_: proficiency, talent
 
 **Specialization**:

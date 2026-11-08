@@ -149,9 +149,7 @@ class GossipActionTests(TestCase):
         cls.hub_b1 = RoomProfileFactory(area=cls.tree["b1"], is_social_hub=True)
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
-        cls.gossip_spec = Specialization.objects.get(
-            name="Gossip", parent_skill__trait__name="Persuasion"
-        )
+        cls.gossip_spec = Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(
             character=cls.character.sheet_data, specialization=cls.gossip_spec, value=10
         )
@@ -290,9 +288,7 @@ class SmearGossipTests(TestCase):
         cls.smearer_entry = RosterEntryFactory()
         cls.smearer_sheet = cls.smearer_entry.character_sheet
         cls.smearer = cls.smearer_sheet.character
-        gossip_spec = Specialization.objects.get(
-            name="Gossip", parent_skill__trait__name="Persuasion"
-        )
+        gossip_spec = Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(
             character=cls.smearer_sheet, specialization=gossip_spec, value=10
         )

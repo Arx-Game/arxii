@@ -9707,14 +9707,32 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - trait -> traits.Trait [OneToOne]
 **Pointed to by:**
+  - npc_preset_trait_lines <- roster.NPCPresetTraitLine
   - npc_preset_skill_lines <- roster.NPCPresetSkillLine
+  - check_type_traits <- checks.CheckTypeTrait
+  - modifier_targets <- mechanics.ModifierTarget
+  - capability_derivations <- mechanics.TraitCapabilityDerivation
+  - rank_descriptions <- traits.TraitRankDescription
+  - character_values <- traits.CharacterTraitValue
+  - character_changes <- traits.CharacterTraitChange
+  - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
+  - maturation_spends <- progression.MaturationSpend
+  - development_points <- progression.DevelopmentPoints
+  - development_transactions <- progression.DevelopmentTransaction
+  - weekly_skill_usage <- progression.WeeklySkillUsage
+  - level_stat_point_spends <- progression.LevelStatPointSpend
+  - xp_costs <- progression.TraitXPCost
+  - rating_unlocks <- progression.TraitRatingUnlock
+  - trait_requirements <- progression.TraitRequirement
   - magic_activity_rows <- magic.MagicActivitySkill
   - combat_style <- covenants.CombatStyle
+  - anchored_threads <- magic.Thread
+  - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - language <- species.Language
   - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
   - path_suggestions <- skills.PathSkillSuggestion
@@ -9741,6 +9759,7 @@
   - mentor -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
+- `boundary_message(name: 'str', next_rating: 'int') -> 'str' - The XP-boundary plateau message for a skill named ``name`` (#2115, #5010).`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
 - `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
@@ -11380,6 +11399,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - npc_preset_trait_lines <- roster.NPCPresetTraitLine
+  - npc_preset_skill_lines <- roster.NPCPresetSkillLine
   - check_type_traits <- checks.CheckTypeTrait
   - modifier_targets <- mechanics.ModifierTarget
   - capability_derivations <- mechanics.TraitCapabilityDerivation
@@ -11387,6 +11407,9 @@
   - character_values <- traits.CharacterTraitValue
   - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
+  - legend_spreads <- societies.LegendSpread
+  - technique_styles <- magic.TechniqueStyle
+  - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
@@ -11395,10 +11418,15 @@
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
+  - magic_activity_rows <- magic.MagicActivitySkill
+  - combat_style <- covenants.CombatStyle
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - language <- species.Language
-  - skill <- skills.Skill
+  - course_offers <- npc_services.SkillCourseOfferDetails
+  - specializations <- skills.Specialization
+  - path_suggestions <- skills.PathSkillSuggestion
+  - training_allocations <- skills.TrainingAllocation
 
 ### TraitRankDescription
 **Foreign Keys:**

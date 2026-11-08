@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional, cast
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -21,7 +22,7 @@ from world.contributors.models import CreditedContent
 from world.roster.models import RosterTenure
 
 if TYPE_CHECKING:
-    pass
+    from world.skills.models import Specialization
 
 
 class TraitChangeSource(models.TextChoices):
@@ -119,6 +120,10 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     Defines the available traits that characters can have values in.
     Uses SharedMemoryModel for automatic caching and includes case-insensitive
     lookup methods similar to Arx I's NameLookupModel pattern.
+
+    A skill is a Trait whose ``trait_type`` is SKILL (#5008); ``world.skills.models.Skill``
+    is a proxy of this model that sees only those rows. The skill's tooltip, sheet order,
+    active flag and specializations live on this row.
     """
 
     name = models.CharField(
@@ -146,6 +151,26 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this trait should display by default in character sheets",
     )
+    # db_default too (#5008): the release still running between migrate and the Server
+    # reload inserts Traits without naming these columns.
+    tooltip = models.TextField(
+        blank=True,
+        db_default="",
+        help_text="Short description shown on hover in UI",
+    )
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text="Order for display in character sheets and CG",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_default=True,
+        help_text=(
+            "Whether this trait is available for use. An inactive skill is left out of "
+            "character creation, training and the sheet's pickers."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -172,6 +197,15 @@ class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.trait_type_display()})"
+
+    @cached_property
+    def cached_specializations(self) -> list["Specialization"]:
+        """This skill's specializations; the skills API prefetches them onto this name.
+
+        On Trait rather than the ``Skill`` proxy: the identity map is shared, so a row
+        read through ``Skill`` can come back as the ``Trait`` instance already cached.
+        """
+        return list(self.specializations.all())
 
     @classmethod
     def get_by_name(cls, name: str) -> Optional["Trait"]:

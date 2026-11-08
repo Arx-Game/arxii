@@ -72,13 +72,13 @@ class CgCheckScaleBridgeTests(FinalizationTestMixin, TestCase):
         category = CheckCategoryFactory(name="bridge_test_category")
         check_type = CheckTypeFactory(name="bridge_test_check", category=category)
         CheckTypeTraitFactory(check_type=check_type, trait=strength, weight=Decimal("0.5"))
-        CheckTypeTraitFactory(check_type=check_type, trait=skill.trait, weight=Decimal("1.0"))
+        CheckTypeTraitFactory(check_type=check_type, trait=skill, weight=Decimal("1.0"))
 
         twin = CharacterSheetFactory().character
         CharacterTraitValue.objects.create(
             character=twin.sheet_data, trait=strength, value=20
         )  # display 2, like DEFAULT_STATS
-        CharacterTraitValue.objects.create(character=twin.sheet_data, trait=skill.trait, value=30)
+        CharacterTraitValue.objects.create(character=twin.sheet_data, trait=skill, value=30)
 
         cg_result = perform_check(character, check_type, target_difficulty=0)
         twin_result = perform_check(twin, check_type, target_difficulty=0)
@@ -92,7 +92,7 @@ class CgCheckScaleBridgeTests(FinalizationTestMixin, TestCase):
         draft = self._create_base_draft(skills={str(skill.pk): 30})
         character = finalize_character(draft, add_to_roster=True)
 
-        row = CharacterTraitValue.objects.get(character_id=character.pk, trait=skill.trait)
+        row = CharacterTraitValue.objects.get(character_id=character.pk, trait=skill)
         assert row.value == 30
 
     def test_finalize_stores_stats_internal_scale(self):

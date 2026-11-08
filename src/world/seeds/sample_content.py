@@ -49,6 +49,10 @@ _MISSING_MSG = (
     "set ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a sample one "
     "(see #2698)."
 )
+_PROXY_CLASH_MSG = (
+    "A row matching %r exists, but not as a %s (another type uses that name). "
+    "Skipping the config wired to it; rename or retype that row."
+)
 
 
 def sample_content_enabled() -> bool:
@@ -105,6 +109,12 @@ def authored_or_sample[M: Model](
     existing = model.objects.filter(**lookup).first()
     if existing is not None:
         return existing
+    opts = model._meta  # noqa: SLF001 - Django's public model options
+    if opts.proxy and opts.concrete_model._base_manager.filter(**lookup).exists():  # noqa: SLF001
+        # A proxy's manager filters (Skill shows only skill-type traits): the row exists
+        # as another kind, and creating it again would collide on its unique name.
+        logger.warning(_PROXY_CLASH_MSG, lookup, model.__name__)
+        return None
     if not sample_content_enabled():
         logger.warning(_MISSING_MSG, model.__name__, lookup)
         return None

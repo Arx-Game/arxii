@@ -115,22 +115,19 @@ def _ensure_cooking_check():
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
-    skill_trait = authored_or_sample(
-        Trait,
-        {"trait_type": TraitType.SKILL, "category": TraitCategory.CRAFTING, "is_public": True},
-        name=COOKING_SKILL_NAME,
-    )
-    if skill_trait is None:
-        return None
-    skill = authored_or_sample(
+    skill = skill_trait = authored_or_sample(
         Skill,
         {
+            "category": TraitCategory.CRAFTING,
+            "is_public": True,
             "tooltip": "The table as craft — food, drink, and the art of provision.",
             "display_order": 40,
             "is_active": True,
         },
-        trait=skill_trait,
+        name=COOKING_SKILL_NAME,
     )
+    if skill_trait is None:
+        return None
     brewing = None
     if skill is not None:
         brewing, _created = Specialization.objects.get_or_create(

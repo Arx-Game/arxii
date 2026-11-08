@@ -21,32 +21,28 @@ class SkillModelTests(TestCase):
             description="Close-quarters fighting ability",
         )
 
-    def test_skill_creation(self):
-        """Skill should link to a Trait with type SKILL."""
+    def test_a_skill_is_a_skill_type_trait(self):
+        """Skill is a proxy of Trait (#5008): saving one makes a SKILL trait."""
         from world.skills.models import Skill
 
-        skill = Skill.objects.create(
-            trait=self.trait,
-            tooltip="Fighting with melee weapons",
-            display_order=1,
+        skill = Skill.objects.create(name="Swordplay", category=TraitCategory.COMBAT)
+        assert Trait.objects.get(pk=skill.pk).trait_type == TraitType.SKILL
+        assert str(skill) == "Swordplay"
+
+    def test_skill_objects_sees_only_skills(self):
+        """A cached stat never comes back through Skill, by pk or natural key."""
+        from world.skills.models import Skill
+
+        stat = Trait.objects.create(
+            name="strength_test", trait_type=TraitType.STAT, category=TraitCategory.PHYSICAL
         )
-        assert skill.trait.name == "Melee Combat"
-        assert skill.tooltip == "Fighting with melee weapons"
-        assert skill.is_active is True
-
-    def test_skill_name_property(self):
-        """Skill should expose name from linked trait."""
-        from world.skills.models import Skill
-
-        skill = Skill.objects.create(trait=self.trait)
-        assert skill.name == "Melee Combat"
-
-    def test_skill_category_property(self):
-        """Skill should expose category from linked trait."""
-        from world.skills.models import Skill
-
-        skill = Skill.objects.create(trait=self.trait)
-        assert skill.category == TraitCategory.COMBAT
+        assert Skill.objects.get(pk=self.trait.pk).pk == self.trait.pk
+        assert not Skill.objects.filter(pk=stat.pk).exists()
+        with self.assertRaises(Skill.DoesNotExist):
+            Skill.objects.get(pk=stat.pk)
+        with self.assertRaises(Skill.DoesNotExist):
+            Skill.objects.get_by_natural_key("strength_test")
+        assert Trait.get_by_name("strength_test") == stat
 
 
 class SpecializationModelTests(TestCase):
@@ -59,7 +55,7 @@ class SpecializationModelTests(TestCase):
             trait_type=TraitType.SKILL,
             category=TraitCategory.COMBAT,
         )
-        cls.skill = Skill.objects.create(trait=cls.trait)
+        cls.skill = Skill.objects.get(pk=cls.trait.pk)
 
     def test_specialization_creation(self):
         """Specialization should link to a parent skill."""
@@ -109,7 +105,7 @@ class CharacterSpecializationValueModelTests(TestCase):
 
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
-        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+        self.skill = Skill.objects.get(pk=self.trait.pk)
         self.spec = Specialization.objects.get_or_create(
             name="Swords",
             parent_skill=self.skill,
@@ -200,7 +196,7 @@ class PathSkillSuggestionModelTests(TestCase):
     def setUp(self):
         from world.skills.models import Skill
 
-        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+        self.skill = Skill.objects.get(pk=self.trait.pk)
 
     def test_path_skill_suggestion_creation(self):
         """PathSkillSuggestion should link path to suggested skill value."""
@@ -243,7 +239,7 @@ class FactoryTests(TestCase):
 
         skill = SkillFactory()
         assert skill.pk is not None
-        assert skill.trait.trait_type == TraitType.SKILL
+        assert skill.trait_type == TraitType.SKILL
 
     def test_specialization_factory(self):
         """SpecializationFactory should create valid Specialization."""
@@ -259,7 +255,7 @@ class FactoryTests(TestCase):
 
         rating = SkillRatingFactory()
         assert rating.pk is not None
-        assert rating.trait.skill is not None
+        assert rating.trait.trait_type == TraitType.SKILL
 
     def test_character_specialization_value_factory(self):
         """CharacterSpecializationValueFactory should create valid value."""

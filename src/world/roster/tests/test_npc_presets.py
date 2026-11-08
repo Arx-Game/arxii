@@ -51,7 +51,7 @@ class ApplyNpcPresetServiceTests(TestCase):
 
         apply_npc_preset(self.sheet, self.preset)
 
-        rating = CharacterTraitValue.objects.get(character=self.sheet, trait=line.skill.trait)
+        rating = CharacterTraitValue.objects.get(character=self.sheet, trait=line.skill)
         assert rating.value == 42
 
     def test_provenance_stamps_carry_npc_preset_source(self) -> None:
@@ -68,7 +68,7 @@ class ApplyNpcPresetServiceTests(TestCase):
 
         trait_change = changes.get(trait=trait_line.trait)
         assert trait_change.new_value == 5 * STAT_DISPLAY_DIVISOR
-        skill_change = changes.get(trait=skill_line.skill.trait)
+        skill_change = changes.get(trait=skill_line.skill)
         assert skill_change.new_value == 20
 
     def test_refuses_reapply_on_an_already_stamped_sheet(self) -> None:
@@ -91,13 +91,13 @@ class ApplyNpcPresetServiceTests(TestCase):
 
         control_sheet = CharacterSheetFactory()
         CharacterTraitValue.objects.create(
-            character=control_sheet, trait=skill_line.skill.trait, value=30
+            character=control_sheet, trait=skill_line.skill, value=30
         )
 
         # Seed a conversion range so trait_points is nonzero -- with no rows,
         # calculate_points returns 0 and the comparison below would be vacuous.
         PointConversionRangeFactory(
-            trait_type=skill_line.skill.trait.trait_type,
+            trait_type=skill_line.skill.trait_type,
             min_value=1,
             max_value=100,
             points_per_level=1,
@@ -105,9 +105,7 @@ class ApplyNpcPresetServiceTests(TestCase):
 
         category = CheckCategoryFactory(name="npc_preset_check_category")
         check_type = CheckTypeFactory(name="npc_preset_check", category=category)
-        CheckTypeTraitFactory(
-            check_type=check_type, trait=skill_line.skill.trait, weight=Decimal("1.0")
-        )
+        CheckTypeTraitFactory(check_type=check_type, trait=skill_line.skill, weight=Decimal("1.0"))
 
         preset_result = perform_check(self.sheet.character, check_type, target_difficulty=0)
         control_result = perform_check(control_sheet.character, check_type, target_difficulty=0)

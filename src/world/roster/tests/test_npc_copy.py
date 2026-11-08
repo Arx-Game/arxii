@@ -69,16 +69,16 @@ class NpcCopyTests(TestCase):
         skill = SkillFactory()
         src = self.source.character_sheet
         tgt = self.target.character_sheet
-        CharacterTraitValue.objects.create(character=src, trait=skill.trait, value=30)
-        CharacterTraitValue.objects.create(character=tgt, trait=skill.trait, value=10)
+        CharacterTraitValue.objects.create(character=src, trait=skill, value=30)
+        CharacterTraitValue.objects.create(character=tgt, trait=skill, value=10)
 
         copy_npc_section(self.source, self.target, NPCSection.POWERS, by=self.gm)
 
-        assert CharacterTraitValue.objects.get(character=tgt, trait=skill.trait).value == 30
-        change = CharacterTraitChange.objects.get(character_sheet=tgt, trait=skill.trait)
+        assert CharacterTraitValue.objects.get(character=tgt, trait=skill).value == 30
+        change = CharacterTraitChange.objects.get(character_sheet=tgt, trait=skill)
         assert (change.old_value, change.new_value) == (10, 30)
         assert change.source == TraitChangeSource.STAFF_EDIT
-        assert CharacterTraitValue.objects.get(character=src, trait=skill.trait).value == 30
+        assert CharacterTraitValue.objects.get(character=src, trait=skill).value == 30
 
     def test_copy_powers_grants_gifts_with_their_threads(self) -> None:
         from world.magic.constants import AcquisitionOrigin, TargetKind

@@ -395,7 +395,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
             key=lambda row: row.value,
             reverse=True,
         )
-        skill = next((row.trait.skill for row in rated if hasattr(row.trait, "skill")), None)
+        skill = next((row.trait for row in rated), None)
         if skill is None:
             # Fallback: first active skill in the database (edge case for test accounts).
             skill = Skill.objects.filter(is_active=True).first()

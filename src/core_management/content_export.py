@@ -317,8 +317,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # (NPCPresetTraitLine/NPCPresetSkillLine) stay seeder-owned, mirroring
         # traits.traitrankdescription's asymmetry above.
         "roster.npcstatlinepreset",
-        # skills
-        "skills.skill",
         # societies - house charter (#2875): dependencies listed before
         # dependents for readability, not because the loader needs it -
         # unresolved natural keys retry across passes and this set is

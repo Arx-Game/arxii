@@ -844,9 +844,7 @@ def magic_options(
         "techniques": _named(list({t.pk: t for t in techniques}.values())),
         "resonances": _named(gift.resonances.order_by("name")) if gift else [],
         "stats": stat_options(),
-        "skills": _named(
-            Skill.objects.filter(is_active=True).select_related("trait").order_by("trait__name")
-        ),
+        "skills": _named(Skill.objects.filter(is_active=True).order_by("name")),
         "technique_limit": technique_limit,
     }
 
@@ -862,7 +860,7 @@ def skill_options() -> list[dict[str, Any]]:
     """Every skill, active or not, as an option (the staff Skills editor, the NPC form)."""
     from world.skills.models import Skill  # noqa: PLC0415
 
-    return _named(Skill.objects.select_related("trait").order_by("trait__name"))
+    return _named(Skill.objects.all().order_by("name"))
 
 
 def path_options() -> list[dict[str, Any]]:

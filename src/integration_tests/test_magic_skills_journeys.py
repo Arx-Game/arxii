@@ -137,9 +137,7 @@ class CastingWithATechniqueSkill(JourneyCase):
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
         if skill_value:
-            CharacterTraitValue.objects.create(
-                character=sheet, trait=self.skill.trait, value=skill_value
-            )
+            CharacterTraitValue.objects.create(character=sheet, trait=self.skill, value=skill_value)
         return character
 
     def cast_and_read_the_roll(
@@ -172,7 +170,7 @@ class CastingWithATechniqueSkill(JourneyCase):
     def test_scene_cast_adds_the_path_styles_skill(self) -> None:
         terms, result = self.cast_and_read_the_roll(self.ysmay)
 
-        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),))
+        self.assertEqual(terms, (ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00")),))
         _, untrained = self.cast_and_read_the_roll(self.hobb)
         self.assertEqual(result.trait_points - untrained.trait_points, SKILL_VALUE)
 
@@ -193,12 +191,10 @@ class CastingWithATechniqueSkill(JourneyCase):
         CharacterThreadWeavingUnlockFactory(
             character=sheet,
             unlock=ThreadWeavingUnlockFactory(
-                target_kind=TargetKind.TRAIT, unlock_trait=self.skill.trait
+                target_kind=TargetKind.TRAIT, unlock_trait=self.skill
             ),
         )
-        thread = weave_thread(
-            sheet, TargetKind.TRAIT, self.skill.trait, resonance, name="Occult Thread"
-        )
+        thread = weave_thread(sheet, TargetKind.TRAIT, self.skill, resonance, name="Occult Thread")
         self.cast_and_read_the_roll(self.ysmay)
         unpulled = self.roll_modifiers
 
@@ -235,7 +231,7 @@ class FlirtingWithATechniqueSkill(JourneyCase):
         CharacterPathHistoryFactory(
             character=sheet, path=PathFactory(style=TechniqueStyleFactory(skill=self.skill))
         )
-        CharacterTraitValue.objects.create(character=sheet, trait=self.skill.trait, value=30)
+        CharacterTraitValue.objects.create(character=sheet, trait=self.skill, value=30)
         self.technique = TechniqueFactory(
             name="Mesmerizing Gaze", intensity=3, control=8, anima_cost=2, gift=GiftFactory()
         )
@@ -302,7 +298,7 @@ class FlirtingWithATechniqueSkill(JourneyCase):
         return accepted.data["result"]
 
     def test_thread_on_technique_skill_is_in_the_flirt(self) -> None:
-        thread = self.thread_on(self.skill.trait)
+        thread = self.thread_on(self.skill)
 
         result = self.flirt_with_a_pull_on(thread)
 
@@ -319,7 +315,7 @@ class FlirtingWithATechniqueSkill(JourneyCase):
         self.assertEqual(self.balance(), 9)
 
     def test_thread_on_a_skill_the_flirt_does_not_roll_fizzles(self) -> None:
-        thread = self.thread_on(SkillFactory().trait)
+        thread = self.thread_on(SkillFactory())
 
         result = self.flirt_with_a_pull_on(thread)
 
@@ -360,9 +356,7 @@ class FightingWithATechniqueSkill(JourneyCase):
         CharacterVitals.objects.create(
             character_sheet=sheet, health=50, max_health=50, base_max_health=50
         )
-        CharacterTraitValue.objects.create(
-            character=sheet, trait=self.skill.trait, value=SKILL_VALUE
-        )
+        CharacterTraitValue.objects.create(character=sheet, trait=self.skill, value=SKILL_VALUE)
         self.encounter = CombatEncounterFactory(
             status=RoundStatus.DECLARING, round_number=1, room=self.yard
         )
@@ -395,7 +389,7 @@ class FightingWithATechniqueSkill(JourneyCase):
         with patch("world.combat.services.perform_check", side_effect=spy):
             resolve_round(self.encounter)
 
-        term = ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00"))
         casts = [
             roll
             for roll in rolls
@@ -405,7 +399,7 @@ class FightingWithATechniqueSkill(JourneyCase):
         self.assertEqual(casts[0]["check_type"], self.technique.action_template.check_type)
         self.assertEqual(tuple(casts[0]["extra_traits"]), (term,))
         usage = WeeklySkillUsage.objects.get(
-            character_sheet=self.ysmay.sheet_data, trait=self.skill.trait
+            character_sheet=self.ysmay.sheet_data, trait=self.skill
         )
         self.assertEqual(usage.check_count, 1)
 
@@ -456,7 +450,7 @@ class ResistingLossOfSelf(JourneyCase):
         capture = self.roll_after(self.ysmay, "breakfree")
 
         self.assertEqual(
-            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill, weight=Decimal("0.50")),)
         )
 
     def test_a_friends_rally_adds_nothing_of_his_own(self) -> None:
@@ -489,7 +483,7 @@ class ResistingLossOfSelf(JourneyCase):
 
         self.assertEqual(
             capture.extra_traits,
-            (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),),
+            (ExtraTraitTerm(trait=self.skill, weight=Decimal("0.50")),),
         )
 
 
@@ -581,7 +575,7 @@ class BindingASummonedCompanion(JourneyCase):
         self.assertTrue(result.success, result.message)
         self.assertEqual(capture.check_type.name, BIND_ATTEMPT_CHECK_NAME)
         self.assertEqual(
-            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill, weight=Decimal("0.50")),)
         )
 
     def test_an_unmapped_binding_rolls_without_a_skill(self) -> None:
@@ -626,7 +620,7 @@ class SurvivingADreamsPeril(JourneyCase):
         capture = self.collapse()
 
         self.assertEqual(
-            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("0.50")),)
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill, weight=Decimal("0.50")),)
         )
 
     def test_an_unmapped_peril_rolls_without_a_skill(self) -> None:
@@ -674,7 +668,7 @@ class AnEnhancedActionsConditionEffect(JourneyCase):
         capture = self.fire(enhancement)
 
         self.assertEqual(
-            capture.extra_traits, (ExtraTraitTerm(trait=self.skill.trait, weight=Decimal("1.00")),)
+            capture.extra_traits, (ExtraTraitTerm(trait=self.skill, weight=Decimal("1.00")),)
         )
 
     def test_a_condition_source_adds_nothing(self) -> None:

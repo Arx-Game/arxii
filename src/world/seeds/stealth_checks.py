@@ -10,8 +10,8 @@ moment doesn't exist at deed birth yet.
 
 Weights PLACEHOLDER.
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``, and
-``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait`` (a
+``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT`` is
 on. No longer wipes and rewrites the composition on each run (#2698 Part 1 —
 that reverted authored/staff-tuned weights on every Big Button press);
@@ -35,24 +35,16 @@ def seed_stealth_check_content() -> None:
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
 
     trait = authored_or_sample(
-        Trait,
+        Skill,
         {
-            "trait_type": TraitType.SKILL,
             "category": TraitCategory.PHYSICAL,
             "is_public": True,
+            "tooltip": "Moving unseen and unheard — the act-time half of concealment.",
+            "display_order": 30,
+            "is_active": True,
         },
         name="Stealth",
     )
-    if trait is not None:
-        authored_or_sample(
-            Skill,
-            {
-                "tooltip": "Moving unseen and unheard — the act-time half of concealment.",
-                "display_order": 30,
-                "is_active": True,
-            },
-            trait=trait,
-        )
     stat = authored_or_sample(
         Trait,
         {

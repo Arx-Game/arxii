@@ -69,7 +69,7 @@ class CastThreadTraitsBase(TestCase):
 
 class ApplicableOnCastTests(CastThreadTraitsBase):
     def test_trait_thread_on_technique_skill_applicable_on_cast(self):
-        thread = self.trait_thread(self.technique_skill.trait)
+        thread = self.trait_thread(self.technique_skill)
         cast_check = resolve_cast_check(self.sheet.character, self.technique)
 
         result = applicable_threads_for_cast(
@@ -111,16 +111,16 @@ class ApplicableOnCastTests(CastThreadTraitsBase):
         self.assertEqual(result, [])
 
     def test_without_a_cast_check_trait_threads_stay_out_of_the_cast(self):
-        self.trait_thread(self.technique_skill.trait)
+        self.trait_thread(self.technique_skill)
 
         self.assertEqual(build_cast_applicable_threads(self.sheet, self.technique), [])
 
     def test_declared_pull_on_technique_skill_thread_keeps_its_tier(self):
-        thread = self.trait_thread(self.technique_skill.trait)
+        thread = self.trait_thread(self.technique_skill)
         pull = CastPullDeclaration(resonance=self.resonance, tier=2, threads=(thread,))
         cast_check = CastCheck(
             check_type=self.check_type,
-            extra_traits=(ExtraTraitTerm(self.technique_skill.trait, Decimal("1.00")),),
+            extra_traits=(ExtraTraitTerm(self.technique_skill, Decimal("1.00")),),
         )
 
         result = build_cast_applicable_threads(
@@ -132,7 +132,7 @@ class ApplicableOnCastTests(CastThreadTraitsBase):
 
 class PaidPullContextTests(CastThreadTraitsBase):
     def test_paid_pull_context_has_involved_traits(self):
-        thread = self.trait_thread(self.technique_skill.trait)
+        thread = self.trait_thread(self.technique_skill)
         pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
 
         with patch("world.magic.services.resonance.spend_resonance_for_pull") as spend:
@@ -145,13 +145,11 @@ class PaidPullContextTests(CastThreadTraitsBase):
             )
 
         context = spend.call_args.args[4]
-        self.assertEqual(
-            set(context.involved_traits), {self.stat.pk, self.technique_skill.trait.pk}
-        )
+        self.assertEqual(set(context.involved_traits), {self.stat.pk, self.technique_skill.pk})
         self.assertEqual(context.involved_techniques, (self.technique.pk,))
 
     def test_combat_pull_context_has_involved_traits(self):
-        thread = self.trait_thread(self.technique_skill.trait)
+        thread = self.trait_thread(self.technique_skill)
         pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
         encounter = CombatEncounterFactory()
         participant = CombatParticipantFactory(
@@ -168,6 +166,4 @@ class PaidPullContextTests(CastThreadTraitsBase):
             )
 
         context = spend.call_args.kwargs["action_context"]
-        self.assertEqual(
-            set(context.involved_traits), {self.stat.pk, self.technique_skill.trait.pk}
-        )
+        self.assertEqual(set(context.involved_traits), {self.stat.pk, self.technique_skill.pk})

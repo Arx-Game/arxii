@@ -58,8 +58,8 @@ class ActivitySkillTermsTests(TestCase):
         self.assertEqual(
             {(t.trait, t.weight) for t in terms},
             {
-                (self.skill_a.trait, Decimal("1.00")),
-                (self.skill_b.trait, Decimal("0.50")),
+                (self.skill_a, Decimal("1.00")),
+                (self.skill_b, Decimal("0.50")),
             },
         )
         self.assertTrue(all(isinstance(t, ExtraTraitTerm) for t in terms))
@@ -71,7 +71,7 @@ class ActivitySkillTermsTests(TestCase):
 
         terms = activity_skill_terms(MagicActivity.RITUAL_WORKING)
 
-        self.assertEqual([t.trait for t in terms], [self.skill_a.trait])
+        self.assertEqual([t.trait for t in terms], [self.skill_a])
 
     def test_activity_terms_empty_when_unmapped(self):
         self.assertEqual(activity_skill_terms(MagicActivity.SOUL_TETHER_RESCUE), ())
@@ -102,7 +102,7 @@ class TechniqueSkillTermTests(TestCase):
 
         term = self._term(technique)
 
-        self.assertEqual(term, ExtraTraitTerm(self.override_skill.trait, Decimal("1.00")))
+        self.assertEqual(term, ExtraTraitTerm(self.override_skill, Decimal("1.00")))
 
     def test_inactive_override_gives_no_term(self):
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
@@ -117,14 +117,14 @@ class TechniqueSkillTermTests(TestCase):
 
         term = self._term(technique)
 
-        self.assertEqual(term, ExtraTraitTerm(self.path_skill.trait, Decimal("1.00")))
+        self.assertEqual(term, ExtraTraitTerm(self.path_skill, Decimal("1.00")))
 
     def test_minor_gift_without_a_style_uses_the_path_styles_skill(self):
         """Before #5002 a Minor Gift with no skill of its own added none."""
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         technique = TechniqueFactory(gift=GiftFactory(kind=GiftKind.MINOR))
 
-        self.assertEqual(self._term(technique).trait, self.path_skill.trait)
+        self.assertEqual(self._term(technique).trait, self.path_skill)
 
     def test_after_a_path_change_the_new_paths_style_counts(self):
         new_path = PathFactory(style=TechniqueStyleFactory(skill=self.new_path_skill))
@@ -138,7 +138,7 @@ class TechniqueSkillTermTests(TestCase):
 
         term = self._term(technique)
 
-        self.assertEqual(term.trait, self.new_path_skill.trait)
+        self.assertEqual(term.trait, self.new_path_skill)
 
     def test_a_gifts_own_style_wins_over_the_path_style(self):
         CharacterPathHistoryFactory(character=self.sheet, path=self.path)
@@ -148,12 +148,10 @@ class TechniqueSkillTermTests(TestCase):
         ):
             with self.subTest(kind=gift.kind):
                 term = self._term(TechniqueFactory(gift=gift))
-                self.assertEqual(term, ExtraTraitTerm(self.gift_skill.trait, Decimal("1.00")))
+                self.assertEqual(term, ExtraTraitTerm(self.gift_skill, Decimal("1.00")))
 
     def test_a_gifts_own_style_counts_with_no_path(self):
-        self.assertEqual(
-            self._term(TechniqueFactory(gift=self.minor_gift)).trait, self.gift_skill.trait
-        )
+        self.assertEqual(self._term(TechniqueFactory(gift=self.minor_gift)).trait, self.gift_skill)
 
     def test_inactive_style_skill_gives_no_term(self):
         inactive = SkillFactory(is_active=False)
@@ -222,7 +220,7 @@ class CastingStyleSkillEditTests(TestCase):
         return term.trait if term is not None else None
 
     def test_saving_the_style_form_changes_the_next_casts_skill(self):
-        self.assertEqual(self._skill(), self.first_skill.trait)
+        self.assertEqual(self._skill(), self.first_skill)
         self.client.force_login(self.staff)
 
         response = self.client.post(
@@ -240,7 +238,7 @@ class CastingStyleSkillEditTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302, response.content[:500])
-        self.assertEqual(self._skill(), self.second_skill.trait)
+        self.assertEqual(self._skill(), self.second_skill)
 
 
 class ResolveCastCheckTests(TestCase):
@@ -271,7 +269,7 @@ class ResolveCastCheckTests(TestCase):
             cast,
             CastCheck(
                 check_type=config.check_type,
-                extra_traits=(ExtraTraitTerm(self.skill.trait, Decimal("1.00")),),
+                extra_traits=(ExtraTraitTerm(self.skill, Decimal("1.00")),),
             ),
         )
 
@@ -295,10 +293,10 @@ class InvolvedTraitIdsTests(TestCase):
         check_type = CheckTypeFactory()
         CheckTypeTraitFactory(check_type=check_type, trait=stat)
         terms = (
-            ExtraTraitTerm(skill.trait, Decimal("1.00")),
+            ExtraTraitTerm(skill, Decimal("1.00")),
             ExtraTraitTerm(stat, Decimal("0.50")),
         )
 
         ids = involved_trait_ids(check_type, terms)
 
-        self.assertEqual(ids, (stat.pk, skill.trait.pk))
+        self.assertEqual(ids, (stat.pk, skill.pk))

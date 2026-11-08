@@ -534,7 +534,7 @@ class GatedResumeExtraTraitsTests(TestCase):
             failure_aborts=True,
             step_order=0,
         )
-        cls.term = ExtraTraitTerm(trait=SkillFactory().trait, weight=Decimal("1.00"))
+        cls.term = ExtraTraitTerm(trait=SkillFactory(), weight=Decimal("1.00"))
 
     @patch("actions.services.apply_resolution", return_value=[])
     @patch("actions.services.select_consequence_from_result")

@@ -1,11 +1,12 @@
 # Skills System - Character Abilities and Specializations
 
-Parent skills and specializations for character abilities. Skills are linked to the Trait system for unified check resolution.
+Skills (a proxy of Trait, #5008) and specializations for character abilities.
 
 ## Key Files
 
 ### `models.py`
-- **`Skill`**: Parent skill linked to Trait (Melee Combat, Persuasion, etc.)
+- **`Skill`**: proxy of `Trait` for skill-type traits (Melee Combat, Persuasion, etc.); no
+  table (#5008). See `docs/systems/traits.md`, "A skill is a Trait"
 - **`Specialization`**: Specific application under a parent skill (Swords, Seduction)
 - **`CharacterSpecializationValue`**: Character's specialization value with development tracking
 - **`SkillPointBudget`**: CG configuration (single-row model)
@@ -15,10 +16,6 @@ Parent skills and specializations for character abilities. Skills are linked to 
 - Admin for all models with inline specialization editing
 - SkillPointBudget limited to single row
 
-### `admin_inlines.py`
-- Registration-free pieces both the Skill and Trait admins use (#5006): `SkillOnTraitInline`
-  (the Trait page's Skill section, where a skill is authored), its formset, and
-  `ensure_skill_target_or_warn`. Neither admin module imports the other's.
 
 ### `factories.py`
 - FactoryBoy factories for all models
@@ -26,7 +23,7 @@ Parent skills and specializations for character abilities. Skills are linked to 
 ## Key Concepts
 
 ### Skill Values
-- A character's rating in a skill is the `CharacterTraitValue` on `skill.trait` (#5010): one
+- A character's rating in a skill is the skill's own `CharacterTraitValue` (#5010): one
   row the sheet shows and checks read. Read it with `skill_rating(sheet, skill)` (through the character's trait handler); set it
   directly with `set_skill_trait`
 - Internal: 10, 20, 30... (stored value)
@@ -55,7 +52,7 @@ Parent skills and specializations for character abilities. Skills are linked to 
 
 ## Integration Points
 
-- **Trait System**: Skills link to Trait model for unified checks
+- **Trait System**: a skill is a Trait (the `Skill` proxy), so checks read it like any trait
 - **Character Creation**: Stage 5 uses skills for allocation
 - **Character Sheets**: Display skills with development progress
 - **Progression**: XP and development point advancement (separate system)
@@ -139,6 +136,6 @@ dev_points = base_gain + mentor_bonus
 
 ### Integration Points
 - **Action Points**: AP consumed at weekly cron from `ActionPointPool`
-- **Progression**: Creates `DevelopmentTransaction` audit records with `DevelopmentSource.TRAINING` source and `ProgressionReason.SYSTEM_AWARD` reason. Uses the skill's linked Trait (or parent skill's Trait for specializations) as the transaction trait.
+- **Progression**: Creates `DevelopmentTransaction` audit records with `DevelopmentSource.TRAINING` source and `ProgressionReason.SYSTEM_AWARD` reason. Uses the skill (Skill is a proxy of Trait), or a specialization's parent skill, as the transaction trait.
 - **Relationships**: `get_relationship_tier()` stub in `world.relationships.helpers` (TODO: implement)
 - **Guise**: Mentor FK points to character_sheets.Guise

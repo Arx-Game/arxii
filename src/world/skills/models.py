@@ -1,19 +1,16 @@
 """
 Skills System Models
 
-Parent skills and specializations for character abilities.
-Skills are linked to the Trait system for unified check resolution.
+Skills (a proxy of Trait, #5008) and specializations for character abilities.
 """
 
 from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.db import models
-from django.utils.functional import cached_property
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.contributors.models import CreditedContent
 from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
@@ -23,61 +20,70 @@ if TYPE_CHECKING:
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
-class Skill(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class SkillManager(NaturalKeyManager):
+    """Only skill-type traits (#5008).
+
+    ``Skill`` shares ``Trait``'s identity map and natural-key index, so the cache
+    fast paths are rechecked or delegated to ``Trait``'s manager: a cached stat must
+    not come back from ``Skill.objects.get(pk=...)``, and warming the index through
+    this manager must not leave it holding skills alone.
     """
-    Parent skill definition linked to Trait system.
 
-    Skills are broad categories (Melee Combat, Persuasion) that can have
-    specializations underneath them.
+    def get_queryset(self):
+        return super().get_queryset().filter(trait_type=TraitType.SKILL)
+
+    def get(self, *args, **kwargs):
+        instance = super().get(*args, **kwargs)
+        if instance.trait_type != TraitType.SKILL:
+            msg = "Skill matching query does not exist."
+            raise self.model.DoesNotExist(msg)
+        return instance
+
+    def get_by_natural_key(self, *args):
+        try:
+            trait = Trait.objects.get_by_natural_key(*args)
+        except Trait.DoesNotExist as exc:
+            msg = f"Skill matching natural key {args!r} does not exist."
+            raise self.model.DoesNotExist(msg) from exc
+        if trait.trait_type != TraitType.SKILL:
+            msg = f"Skill matching natural key {args!r} does not exist."
+            raise self.model.DoesNotExist(msg)
+        return trait
+
+    def warm_lookup_table(self) -> None:
+        Trait.objects.warm_lookup_table()
+
+    def cached_all(self) -> list:
+        return [
+            trait for trait in Trait.objects.cached_all() if trait.trait_type == TraitType.SKILL
+        ]
+
+
+class Skill(Trait):
+    """
+    A skill: a Trait whose ``trait_type`` is SKILL, seen through a proxy (#5008, #5015).
+
+    No table of its own. Skills are broad categories (Melee Combat, Persuasion) that can
+    have specializations underneath them; the tooltip, sheet order and active flag are
+    the trait's own fields. Every FK to a skill points here. The identity map is
+    ``Trait``'s, so a row read through ``Skill`` may be the cached ``Trait`` instance:
+    put behaviour a skill needs on ``Trait``, not here.
     """
 
-    trait = models.OneToOneField(
-        Trait,
-        on_delete=models.CASCADE,
-        limit_choices_to={"trait_type": TraitType.SKILL},
-        related_name="skill",
-        help_text="The trait definition this skill is linked to",
-    )
-    tooltip = models.TextField(
-        blank=True,
-        help_text="Short description shown on hover in UI",
-    )
-    display_order = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Order for display in character sheets and CG",
-    )
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Whether this skill is available for use",
-    )
+    objects = SkillManager()
 
-    def __str__(self):
+    class Meta:
+        proxy = True
+
+    def __str__(self) -> str:
         return self.name
 
-    @property
-    def name(self) -> str:
-        """Skill name from linked trait."""
-        return self.trait.name
-
-    class NaturalKeyConfig:
-        fields = ["trait"]
-
-    objects = NaturalKeyManager()
-
-    @property
-    def category(self) -> str:
-        """Skill category from linked trait."""
-        return self.trait.category
-
-    @property
-    def description(self) -> str:
-        """Skill description from linked trait."""
-        return self.trait.description
-
-    @cached_property
-    def cached_specializations(self) -> list["Specialization"]:
-        """Prefetched specializations for this skill."""
-        return list(self.specializations.all())
+    def save(self, *args, **kwargs) -> None:
+        # Only on create: the shared identity map can hand this class to a Trait page
+        # retyping an existing row, and that change must stand.
+        if self._state.adding:
+            self.trait_type = TraitType.SKILL
+        super().save(*args, **kwargs)
 
 
 class Specialization(NaturalKeyMixin, SharedMemoryModel):
@@ -281,7 +287,7 @@ class PathSkillSuggestion(SharedMemoryModel):
 
     class Meta:
         unique_together: ClassVar[list[list[str]]] = [["character_path", "skill"]]
-        ordering = ["character_path", "display_order", "skill__trait__name"]
+        ordering = ["character_path", "display_order", "skill__name"]
 
     def __str__(self):
         return f"{self.character_path.name}: {self.skill.name} = {self.suggested_value}"
@@ -352,5 +358,5 @@ class TrainingAllocation(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        target = self.skill.trait.name if self.skill else self.specialization.name
+        target = self.skill.name if self.skill else self.specialization.name
         return f"{self.character}: {target} ({self.ap_amount} AP)"

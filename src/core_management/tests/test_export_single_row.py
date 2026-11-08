@@ -206,7 +206,7 @@ class RowExportTests(TestCase):
 
         sheet = CharacterSheetFactory()
         stat = TraitFactory(name="row_export_willpower", trait_type=TraitType.STAT)
-        skill = SkillFactory(trait__name="row_export_ritualism")
+        skill = SkillFactory(name="row_export_ritualism")
         synthesized = ensure_character_magic_check_type(sheet, stat=stat, skill=skill)
 
         result = export_single_row(synthesized, content_root=self.root)

@@ -767,13 +767,13 @@ def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
 _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    # A skill's rating is its trait's CharacterTraitValue (#5010); a skill-type trait
-    # with no Skill row is not a trained skill yet and has no sheet entry.
+    # A skill's rating is its trait's CharacterTraitValue (#5010); a skill is a
+    # skill-type trait (#5008).
     Prefetch(
         "trait_values",
         queryset=CharacterTraitValue.objects.filter(
-            trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
-        ).select_related("trait__skill"),
+            trait__trait_type=TraitType.SKILL
+        ).select_related("trait"),
         to_attr="cached_skill_values",
     ),
     Prefetch(
@@ -803,12 +803,10 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             )
         )
 
-    modifiers = skill_modifiers_for_sheet(
-        sheet, [tv.trait.skill for tv in sheet.cached_skill_values]
-    )
+    modifiers = skill_modifiers_for_sheet(sheet, [tv.trait for tv in sheet.cached_skill_values])
     result: list[SkillEntry] = []
     for csv in sheet.cached_skill_values:
-        skill = csv.trait.skill
+        skill = csv.trait
         modifier = modifiers.get(skill.pk, 0)
         result.append(
             SkillEntry(
@@ -2203,7 +2201,7 @@ def _build_natural_weapons(sheet: CharacterSheet) -> list[NaturalWeaponEntry]:
 _COMBAT_STYLE_SELECT_RELATED: tuple[str, ...] = (
     "combat_style",
     "combat_style__hit_stat",
-    "combat_style__skill__trait",
+    "combat_style__skill",
 )
 _COMBAT_STYLE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
@@ -2519,10 +2517,7 @@ def _staff_skill_ratings(sheet: CharacterSheet) -> dict[int, int]:
     """Skill pk to stored rating, read from the character's trait handler (#5010)."""
     ratings = sheet.character.traits.get_traits_by_type(TraitType.SKILL)
     by_trait = {row.trait_id: row.value for row in ratings.values()}
-    return {
-        skill.pk: by_trait[skill.trait_id]
-        for skill in Skill.objects.filter(trait_id__in=list(by_trait))
-    }
+    return {skill.pk: by_trait[skill.pk] for skill in Skill.objects.filter(pk__in=list(by_trait))}
 
 
 def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:

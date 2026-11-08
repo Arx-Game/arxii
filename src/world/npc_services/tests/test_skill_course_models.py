@@ -75,7 +75,7 @@ class SkillCourseOfferDetailsAdminTests(TestCase):
         )
         cls.course = SkillCourseOfferDetailsFactory(
             offer=NPCServiceOfferFactory(role=role, kind=OfferKind.SKILL_COURSE),
-            skill=SkillFactory(trait__name="occult", trait__category=TraitCategory.MAGIC),
+            skill=SkillFactory(name="occult", category=TraitCategory.MAGIC),
         )
 
     def setUp(self):

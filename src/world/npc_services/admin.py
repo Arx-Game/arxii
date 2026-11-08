@@ -123,8 +123,8 @@ class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
         "coin_cost",
         "check_type",
     ]
-    search_fields = ["offer__label", "skill__trait__name"]
-    list_select_related = ["offer", "skill__trait", "check_type"]
+    search_fields = ["offer__label", "skill__name"]
+    list_select_related = ["offer", "skill", "check_type"]
     # Any skill may be taught on a course (spec Decision 7); the category line only says
     # which one it is, it never narrows the picker.
     autocomplete_fields = ["offer", "skill", "check_type"]
@@ -146,7 +146,7 @@ class SkillCourseOfferDetailsAdmin(admin.ModelAdmin):
         """The course skill's trait category, read from the skill rather than typed."""
         if obj.skill_id is None:
             return "Derived, read-only: shown once the course is saved with a skill."
-        return f"Derived, read-only: category {obj.skill.trait.get_category_display()}."
+        return f"Derived, read-only: category {obj.skill.get_category_display()}."
 
     @admin.display(description="Sold by")
     def sold_by(self, obj: SkillCourseOfferDetails) -> str:

@@ -7,6 +7,28 @@ Character stats, trait definitions, and check resolution lookup tables (point co
 
 ---
 
+## A skill is a Trait
+
+A skill is a `Trait` whose `trait_type` is `SKILL` (#5008, ADR-5008). `skills.Skill` is a
+Django proxy of `Trait` (#5015): a typed view with no table of its own, whose default manager
+returns only skill-type traits and whose `save()` sets the type.
+
+- **Its fields** are the trait's: name, category, description, and the skill's hover text
+  (`tooltip`), sheet and creation order (`display_order`) and whether it is offered
+  (`is_active`). Those three are general `Trait` columns; other traits keep their defaults.
+- **Referencing a skill:** a FK to `Skill`. The column holds the trait's pk, and the proxy's
+  manager means admin pickers offer only skills. Specializations hang off it
+  (`Specialization.parent_skill`).
+- **Rating and progress** are the trait's `CharacterTraitValue` (read through the trait
+  handler, `skill_rating(sheet, skill)`) and `progression.DevelopmentPoints` row (#5010).
+- **Identity map:** `Skill` shares `Trait`'s, so a row read through `Skill` can come back as
+  the cached `Trait` instance. Put skill behaviour on `Trait`, not on the proxy.
+- **Why no table:** a profile row exists only to extend a row we cannot modify (Evennia's);
+  `Trait` is ours (owner, #5008). `species.Language` still sits beside its LANGUAGE trait in
+  the old companion shape, deliberately untouched.
+
+---
+
 ## Enums (models.py)
 
 ```python
@@ -34,7 +56,7 @@ from world.traits.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Trait` | Trait definition template with case-insensitive caching | `name`, `trait_type` (TraitType), `category` (TraitCategory), `description`, `is_public` |
+| `Trait` | Trait definition template with case-insensitive caching; `skills.Skill` is its proxy for SKILL traits | `name`, `trait_type` (TraitType), `category` (TraitCategory), `description`, `is_public`, `tooltip`, `display_order`, `is_active` |
 | `TraitRankDescription` | Descriptive labels for trait values during CG | `trait` (FK Trait), `value`, `label`, `description` |
 | `PointConversionRange` | Converts trait values to weighted points (exponential curves) | `trait_type` (TraitType), `min_value`, `max_value`, `points_per_level` |
 | `CheckRank` | Maps point totals to rank levels for check resolution | `rank`, `min_points`, `name`, `description` |
@@ -184,7 +206,7 @@ roll (1-100) -> ResultChartOutcome -> CheckOutcome
 
 All models registered with appropriate admin interfaces:
 
-- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing, and a Skill section (`skills.admin_inlines.SkillOnTraitInline`, shared so neither admin module imports the other) where a skill is authored on one page (#5006; see `docs/systems/skills.md`). The rank-description row's display value is blank on the empty add row, which on a stat trait used to fail the page.
+- `TraitAdmin` - List/filter by `trait_type`, `category`, `is_public` with inline `TraitRankDescription` editing. Skills are authored on `SkillAdmin`, the proxy's page (see `docs/systems/skills.md`); here a skill that has specializations cannot be retyped away from Skill, and saving a skill-type trait makes its modifier target. The rank-description row's display value is blank on the empty add row, which on a stat trait used to fail the page.
 - `CharacterTraitValueAdmin` - Search by character key and trait name, filter by trait type/category
 - `PointConversionRangeAdmin` - List by trait type and value range
 - `CheckRankAdmin` - Ordered by rank

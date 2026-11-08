@@ -12,17 +12,15 @@ class CombatCheckSeedTests(TestCase):
         from world.traits.models import TraitCategory, TraitType
 
         seed_combat_check_content()
-        skill = Skill.objects.get(trait__name="Melee Combat")
-        self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
-        self.assertEqual(skill.trait.category, TraitCategory.COMBAT)
+        skill = Skill.objects.get(name="Melee Combat")
+        self.assertEqual(skill.trait_type, TraitType.SKILL)
+        self.assertEqual(skill.category, TraitCategory.COMBAT)
 
     def test_weapon_specializations_seeded(self):
         from world.skills.models import Specialization
 
         seed_combat_check_content()
-        specs = {
-            s.name for s in Specialization.objects.filter(parent_skill__trait__name="Melee Combat")
-        }
+        specs = {s.name for s in Specialization.objects.filter(parent_skill__name="Melee Combat")}
         self.assertEqual(specs, {"Small Weapons", "Medium Weapons", "Heavy Weapons"})
 
     def test_melee_attack_composition(self):
@@ -64,7 +62,7 @@ class CombatCheckSeedTests(TestCase):
         seed_combat_check_content()
         seed_combat_check_content()  # re-run converges
         for skill in ("Ranged Combat", "Thrown Combat", "Unarmed Combat"):
-            self.assertTrue(Skill.objects.filter(trait__name=skill).exists())
+            self.assertTrue(Skill.objects.filter(name=skill).exists())
         expected = {
             "Melee Attack": {"strength", "Melee Combat"},
             "Ranged Attack": {"agility", "perception"},

@@ -96,8 +96,8 @@ class UnlockShopViewTests(TestCase):
         if xp_cost is not None:
             chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
             XPCostEntry.objects.create(chart=chart, level=20, xp_cost=xp_cost)
-            TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
-            TraitRatingUnlock.objects.create(trait=skill.trait, target_rating=20)
+            TraitXPCost.objects.create(trait=skill, cost_chart=chart)
+            TraitRatingUnlock.objects.create(trait=skill, target_rating=20)
         return skill
 
     def test_list_includes_class_level_and_thread_xp_lock_items(self):

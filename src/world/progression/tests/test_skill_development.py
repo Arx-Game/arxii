@@ -380,7 +380,7 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
             name="skill_independence_check",
             category=cls.category,
         )
-        CheckTypeTrait.objects.create(check_type=cls.check_type, trait=cls.skill.trait, weight=1.0)
+        CheckTypeTrait.objects.create(check_type=cls.check_type, trait=cls.skill, weight=1.0)
 
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
@@ -403,7 +403,7 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
             path_level=1,
         )
 
-        dp = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
+        dp = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill)
         assert dp.total_earned == cumulative_dp_for_level(19)
 
         self.skill_value.refresh_from_db()
@@ -415,7 +415,7 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
         self.skill_value.save()
         DevelopmentPoints.objects.update_or_create(
             character_sheet=self.sheet,
-            trait=self.skill.trait,
+            trait=self.skill,
             defaults={"total_earned": cumulative_dp_for_level(30)},
         )
 

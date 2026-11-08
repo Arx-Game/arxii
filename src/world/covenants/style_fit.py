@@ -86,7 +86,7 @@ class StyleFit:
             return []
         from world.checks.types import ExtraTraitTerm  # noqa: PLC0415
 
-        trait = self.style.skill.trait
+        trait = self.style.skill
         if any(term.trait.pk == trait.pk for term in counted):
             return []
         if check_type is not None and check_type.traits.filter(trait_id=trait.pk).exists():

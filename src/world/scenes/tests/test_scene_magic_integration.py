@@ -478,7 +478,7 @@ class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
 
         rolls, collected = self._flirt_with(technique)
 
-        term = ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00"))
+        term = ExtraTraitTerm(trait=skill, weight=Decimal("1.00"))
         main = [r for r in rolls if "extra_traits" in r]
         assert len(main) == 1
         assert main[0]["check_type"] == self.flirt_template.check_type
@@ -510,7 +510,7 @@ class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
         resonance = ResonanceFactory()
         presence = Trait.objects.get(name="presence")
         skill_thread = ThreadFactory(
-            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=skill.trait
+            owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=skill
         )
         stat_thread = ThreadFactory(
             owner=sheet, resonance=resonance, target_kind=TargetKind.TRAIT, target_trait=presence
@@ -519,7 +519,7 @@ class TestEnhancedSocialActionTechniqueSkill(SceneMagicTestMixin, TestCase):
             owner=sheet,
             resonance=resonance,
             target_kind=TargetKind.TRAIT,
-            target_trait=SkillFactory().trait,
+            target_trait=SkillFactory(),
         )
         offered: list[list[int]] = []
 

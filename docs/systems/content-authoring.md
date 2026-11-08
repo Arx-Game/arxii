@@ -120,8 +120,7 @@ The workbench editor sits at the top of the page, above the queue. For a row
 whose identity is a `name` column (most credited models), the heading itself
 is that name in an editable text input, with "Editing <model> #<pk>" as a
 small caption beside the queue position; a model with no `name` column (a
-handful, like `Skill`, whose identity is its linked `Trait`'s own name) keeps
-the plain heading instead. Opening a row puts its prose textareas next, with
+handful, like `MissionNode`) keeps the plain heading instead. Opening a row puts its prose textareas next, with
 the cursor already in the first one; the row's mechanical fields and credit
 columns sit in a collapsed block under the form, and cannot be submitted
 through it at all. A **Next** control beside the action buttons opens the row

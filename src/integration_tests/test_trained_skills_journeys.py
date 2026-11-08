@@ -87,7 +87,7 @@ class _TrainedSkillCase(JourneyCase):
             check_type = CheckTypeFactory(
                 name=f"Roll {skill.name}", category=CheckCategoryFactory(name=f"Rolls {skill.pk}")
             )
-            CheckTypeTraitFactory(check_type=check_type, trait=skill.trait, weight=Decimal("1.0"))
+            CheckTypeTraitFactory(check_type=check_type, trait=skill, weight=Decimal("1.0"))
             self._checks[skill.pk] = check_type
         return self._checks[skill.pk]
 
@@ -126,7 +126,7 @@ class TrainingASkillByTheWeek(_TrainedSkillCase):
 
         self.assertSheetAndRollAgree(self.skill, 12)
         change = CharacterTraitChange.objects.filter(
-            character_sheet=self.sheet, trait=self.skill.trait
+            character_sheet=self.sheet, trait=self.skill
         ).latest("pk")
         self.assertEqual(
             (change.old_value, change.new_value, change.source),
@@ -147,8 +147,8 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.made_with(self.skill, 19)
         chart = XPCostChart.objects.create(name="Breakthroughs")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.skill, target_rating=20)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=150, total_spent=0
         )
@@ -159,7 +159,7 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.assertIn(f"Breakthrough! {self.skill.name} rises to", told)
         self.assertSheetAndRollAgree(self.skill, 20)
         change = CharacterTraitChange.objects.filter(
-            character_sheet=self.sheet, trait=self.skill.trait
+            character_sheet=self.sheet, trait=self.skill
         ).latest("pk")
         self.assertEqual(
             (change.old_value, change.new_value, change.source),
@@ -170,8 +170,8 @@ class BuyingABreakthrough(_TrainedSkillCase):
         self.made_with(self.skill, 19)
         chart = XPCostChart.objects.create(name="Breakthroughs")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
-        TraitXPCost.objects.create(trait=self.skill.trait, cost_chart=chart)
-        TraitRatingUnlock.objects.create(trait=self.skill.trait, target_rating=20)
+        TraitXPCost.objects.create(trait=self.skill, cost_chart=chart)
+        TraitRatingUnlock.objects.create(trait=self.skill, target_rating=20)
         ExperiencePointsDataFactory(
             account=self.account_of(self.ysmay), total_earned=40, total_spent=0
         )
@@ -217,7 +217,7 @@ class OneWeeklyRustPass(_TrainedSkillCase):
 
     def rust_entries(self, skill: Skill) -> int:
         return DevelopmentTransaction.objects.filter(
-            character_sheet=self.sheet, trait=skill.trait, source=DevelopmentSource.RUST
+            character_sheet=self.sheet, trait=skill, source=DevelopmentSource.RUST
         ).count()
 
     def test_a_trained_skill_does_not_rust_and_an_idle_one_rusts_once(self) -> None:
@@ -231,7 +231,7 @@ class OneWeeklyRustPass(_TrainedSkillCase):
 
         self.assertEqual(self.rust_entries(trained), 0)
         idle_rust = DevelopmentTransaction.objects.get(
-            character_sheet=self.sheet, trait=self.skill.trait, source=DevelopmentSource.RUST
+            character_sheet=self.sheet, trait=self.skill, source=DevelopmentSource.RUST
         )
         self.assertEqual(idle_rust.amount, 6)  # path level 1 + 5
         self.assertSheetAndRollAgree(self.skill, 12)

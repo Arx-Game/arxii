@@ -8,8 +8,8 @@ Stands up the ``Melee Combat`` parent skill (Trait-backed,
 (+ owned weapon specialization)``. Mirrors ``world/seeds/social_checks.py``
 (#1689).
 
-``checks.checkcategory``/``checktype``/``checktypetrait``, ``skills.skill``,
-and ``traits.trait`` are content-repo-owned (#2698) — looked up via
+``checks.checkcategory``/``checktype``/``checktypetrait`` and ``traits.trait``
+(a ``Skill`` is a proxy of Trait) are content-repo-owned (#2698) — looked up via
 ``authored_or_sample()`` rather than invented unless ``SEED_SAMPLE_CONTENT``
 is on. ``skills.specialization``/``checks.checktypespecialization`` stay
 outside ``CONTENT_MODELS`` and keep seeding unconditionally via
@@ -58,26 +58,21 @@ def _ensure_combat_category():
 
 
 def ensure_melee_combat_skill():
-    """Look up (or sample) the Melee Combat Skill + its backing SKILL Trait."""
+    """Look up (or sample) the Melee Combat Skill (a proxy of Trait)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
-    trait = authored_or_sample(
-        Trait,
-        {
-            "trait_type": TraitType.SKILL,
-            "category": TraitCategory.COMBAT,
-            "is_public": True,
-        },
-        name=_MELEE_SKILL_NAME,
-    )
-    if trait is None:
-        return None
     return authored_or_sample(
         Skill,
-        {"tooltip": _MELEE_SKILL_TOOLTIP, "display_order": 0, "is_active": True},
-        trait=trait,
+        {
+            "category": TraitCategory.COMBAT,
+            "is_public": True,
+            "tooltip": _MELEE_SKILL_TOOLTIP,
+            "display_order": 0,
+            "is_active": True,
+        },
+        name=_MELEE_SKILL_NAME,
     )
 
 
@@ -155,9 +150,7 @@ def ensure_melee_combat_check_type(skill, specs) -> object | None:
         name="agility",
     )
     if skill is not None:
-        authored_or_sample(
-            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
-        )
+        authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill)
     for spec in specs.values():
         CheckTypeSpecialization.objects.get_or_create(
             check_type=check_type, specialization=spec, defaults={"weight": weight}
@@ -184,20 +177,21 @@ _STRIKE_CHECKS: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
 
 
 def ensure_strike_skill(name: str, tooltip: str) -> object | None:
-    """Look up (or sample) one strike skill and its backing SKILL Trait."""
+    """Look up (or sample) one strike Skill (a proxy of Trait)."""
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
 
-    trait = authored_or_sample(
-        Trait,
-        {"trait_type": TraitType.SKILL, "category": TraitCategory.COMBAT, "is_public": True},
-        name=name,
-    )
-    if trait is None:
-        return None
     return authored_or_sample(
-        Skill, {"tooltip": tooltip, "display_order": 0, "is_active": True}, trait=trait
+        Skill,
+        {
+            "category": TraitCategory.COMBAT,
+            "is_public": True,
+            "tooltip": tooltip,
+            "display_order": 0,
+            "is_active": True,
+        },
+        name=name,
     )
 
 

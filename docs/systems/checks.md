@@ -291,7 +291,7 @@ from world.checks.types import ExtraTraitTerm
 
 result = perform_check(
     character, check_type, target_difficulty=10,
-    extra_traits=(ExtraTraitTerm(trait=skill.trait, weight=Decimal("1.00")),),
+    extra_traits=(ExtraTraitTerm(trait=skill, weight=Decimal("1.00")),),
 )
 ```
 

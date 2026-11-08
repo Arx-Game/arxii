@@ -261,17 +261,18 @@ def seed_craft_skills() -> None:
         return
     for name, tooltip, order in _CRAFT_SKILLS:
         skill_trait = authored_or_sample(
-            Trait,
-            {"trait_type": TraitType.SKILL, "category": TraitCategory.CRAFTING, "is_public": True},
+            Skill,
+            {
+                "category": TraitCategory.CRAFTING,
+                "is_public": True,
+                "tooltip": f"PLACEHOLDER: {tooltip}",
+                "display_order": order,
+                "is_active": True,
+            },
             name=name,
         )
         if skill_trait is None:
             continue
-        authored_or_sample(
-            Skill,
-            {"tooltip": f"PLACEHOLDER: {tooltip}", "display_order": order, "is_active": True},
-            trait=skill_trait,
-        )
         check_type = authored_or_sample(
             CheckType,
             {

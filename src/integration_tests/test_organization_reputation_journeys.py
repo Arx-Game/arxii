@@ -80,7 +80,7 @@ class ASpyJobGoneWrong(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=self.make_room("Ysmay's Lodging"))
         self.hobb = self.make_player("Hobb", room=self.hub)
         self.wat = self.make_player("Wat", room=self.hub)
-        gossip = Specialization.objects.get(name="Gossip", parent_skill__trait__name="Persuasion")
+        gossip = Specialization.objects.get(name="Gossip", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(
             character=self.hobb.sheet_data, specialization=gossip, value=10
         )

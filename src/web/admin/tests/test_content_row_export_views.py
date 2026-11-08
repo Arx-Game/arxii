@@ -445,7 +445,7 @@ class TestContentRowExportViewsConfigured(TestCase):
 
         sheet = CharacterSheetFactory()
         stat = TraitFactory(name="row_view_willpower", trait_type=TraitType.STAT)
-        skill = SkillFactory(trait__name="row_view_ritualism")
+        skill = SkillFactory(name="row_view_ritualism")
         synthesized = ensure_character_magic_check_type(sheet, stat=stat, skill=skill)
 
         resp = self._export("checks.checktype", synthesized.pk)

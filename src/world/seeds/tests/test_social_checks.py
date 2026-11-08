@@ -23,11 +23,11 @@ class SocialCheckSeedTests(TestCase):
 
     def test_seeds_parent_skills(self):
         for name in ("Persuasion", "Performance"):
-            assert Skill.objects.filter(trait__name=name).exists()
+            assert Skill.objects.filter(name=name).exists()
 
     def test_seeds_specializations_under_their_parents(self):
         persuasion_specs = set(
-            Specialization.objects.filter(parent_skill__trait__name="Persuasion").values_list(
+            Specialization.objects.filter(parent_skill__name="Persuasion").values_list(
                 "name", flat=True
             )
         )
@@ -35,7 +35,7 @@ class SocialCheckSeedTests(TestCase):
             persuasion_specs
         )
         performance_specs = set(
-            Specialization.objects.filter(parent_skill__trait__name="Performance").values_list(
+            Specialization.objects.filter(parent_skill__name="Performance").values_list(
                 "name", flat=True
             )
         )
@@ -104,7 +104,7 @@ class SocialCheckSeedTests(TestCase):
         )
         seduction = CheckType.objects.get(name="Seduction")
         base = perform_check(character, seduction, target_difficulty=0)
-        spec = Specialization.objects.get(name="Seduction", parent_skill__trait__name="Persuasion")
+        spec = Specialization.objects.get(name="Seduction", parent_skill__name="Persuasion")
         CharacterSpecializationValueFactory(character=sheet, specialization=spec, value=30)
         with_spec = perform_check(character, seduction, target_difficulty=0)
         assert with_spec.specialization_points > base.specialization_points

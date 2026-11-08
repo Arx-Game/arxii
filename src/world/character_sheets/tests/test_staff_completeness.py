@@ -122,7 +122,7 @@ class StaffBuildsACompleteSheetTests(TestCase):
         send("post", "staff-kinship", {"family": FamilyFactory().pk})
 
         assert CharacterTraitValue.objects.filter(character=sheet, trait=self.stat).exists()
-        assert CharacterTraitValue.objects.filter(character=sheet, trait=self.skill.trait).exists()
+        assert CharacterTraitValue.objects.filter(character=sheet, trait=self.skill).exists()
         assert CharacterDistinction.objects.filter(character=sheet).exists()
         assert CharacterFormValue.objects.filter(form__character=sheet, option=self.red).exists()
         assert FormMarking.objects.filter(form__character=sheet).exists()

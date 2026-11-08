@@ -734,7 +734,7 @@ class TestSkillsSection(TestCase):
         )
 
         # Create a skill with a specialization
-        cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
+        cls.melee_skill = SkillFactory(name="Melee", category=TraitCategory.COMBAT)
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
         SkillRatingFactory(character=cls.character.sheet_data, skill=cls.melee_skill, value=30)
         CharacterSpecializationValueFactory(
@@ -770,7 +770,7 @@ class TestSkillsSection(TestCase):
         target = ModifierTargetFactory(
             category=ModifierCategoryFactory(name="stat"),
             name="melee",
-            target_trait=self.melee_skill.trait,
+            target_trait=self.melee_skill,
         )
         sailor = DistinctionFactory(name="Old Hand", slug="old-hand", cost_per_rank=0)
         DistinctionEffectFactory(distinction=sailor, target=target, value_per_rank=10)
@@ -791,7 +791,7 @@ class TestSkillsSection(TestCase):
 
     def test_skill_entry_at_boundary_true_when_gated(self) -> None:
         """A skill parked at an XP boundary (19/29/39/49) reports at_boundary=True (#2115)."""
-        gated_skill = SkillFactory(trait__name="Gated Skill", trait__category=TraitCategory.COMBAT)
+        gated_skill = SkillFactory(name="Gated Skill", category=TraitCategory.COMBAT)
         SkillRatingFactory(character=self.character.sheet_data, skill=gated_skill, value=29)
 
         skills = self._get_skills()
@@ -1215,7 +1215,7 @@ class TestMagicSectionFull(TestCase):
         cls.character.save(update_fields=["db_account"])
 
         cls.stat_willpower = StatTraitFactory(name="Willpower")
-        cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
+        cls.melee_skill = SkillFactory(name="Melee", category=TraitCategory.COMBAT)
         cls.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
             service_function_path="",
@@ -2688,7 +2688,7 @@ class TestCharacterSheetQueryCount(TestCase):
         CharacterTraitValueFactory(character=cls.character.sheet_data, trait=str_trait, value=30)
 
         # --- Skills ---
-        melee_skill = SkillFactory(trait__name="QCMelee", trait__category=TraitCategory.COMBAT)
+        melee_skill = SkillFactory(name="QCMelee", category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="QCSwords", parent_skill=melee_skill)
         SkillRatingFactory(character=cls.character.sheet_data, skill=melee_skill, value=20)
         CharacterSpecializationValueFactory(
@@ -2716,9 +2716,7 @@ class TestCharacterSheetQueryCount(TestCase):
         MotifResonanceAssociationFactory(motif_resonance=mr, facet=facet)
 
         stat_will = StatTraitFactory(name="QCWillpower")
-        ritual_skill = SkillFactory(
-            trait__name="QCRitualSkill", trait__category=TraitCategory.COMBAT
-        )
+        ritual_skill = SkillFactory(name="QCRitualSkill", category=TraitCategory.COMBAT)
         # Link character to account for author_account lookup.
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
@@ -3026,7 +3024,7 @@ class TestPrefetchCompleteness(TestCase):
         CharacterTraitValueFactory(character=cls.character.sheet_data, trait=str_trait, value=25)
 
         # Skills + specializations
-        melee_skill = SkillFactory(trait__name="PFMelee", trait__category=TraitCategory.COMBAT)
+        melee_skill = SkillFactory(name="PFMelee", category=TraitCategory.COMBAT)
         swords_spec = SpecializationFactory(name="PFSwords", parent_skill=melee_skill)
         SkillRatingFactory(character=cls.character.sheet_data, skill=melee_skill, value=15)
         CharacterSpecializationValueFactory(
@@ -3051,7 +3049,7 @@ class TestPrefetchCompleteness(TestCase):
         MotifResonanceAssociationFactory(motif_resonance=mr, facet=facet)
 
         stat_will = StatTraitFactory(name="PFWill")
-        ritual_skill = SkillFactory(trait__name="PFRitSkill", trait__category=TraitCategory.COMBAT)
+        ritual_skill = SkillFactory(name="PFRitSkill", category=TraitCategory.COMBAT)
         # Link character to account for author_account lookup.
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
@@ -3147,14 +3145,8 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_magic_zero_queries(self) -> None:
         sheet = self._get_sheet()
-        # 2 queries:
-        #   1. a Trait FK access in _build_magic is not covered by
-        #      _MAGIC_SELECT_RELATED / _MAGIC_PREFETCH_RELATED. Previously this
-        #      test asserted 0 queries because earlier tests in the class warmed
-        #      the SharedMemoryModel identity map with the Trait row; the project
-        #      test runner now flushes the identity map between tests for
-        #      production parity (see core.testing), exposing the real count.
-        #      Tracked as a prefetch-coverage gap for a follow-up PR.
+        # 3 queries (the anima ritual's skill name used to cost a fourth, a Skill's
+        # Trait; a skill is the Trait itself since #5008):
         #   2. character.resonances (CharacterResonanceHandler._by_resonance, #2032) —
         #      _build_magic_resonances reads the character's claimed CharacterResonance
         #      rows via the handler; not part of _MAGIC_PREFETCH_RELATED (a per-Character
@@ -3186,7 +3178,7 @@ class TestPrefetchCompleteness(TestCase):
         #      (3)'s cached character.threads handler — this fixture's character
         #      holds no TECHNIQUE thread, so it returns {} before reading any
         #      catalog table.
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(3):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:

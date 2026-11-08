@@ -1170,7 +1170,7 @@ def wire_penetration_check_type():
         )
     if skill is not None:
         authored_or_sample(
-            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill.trait
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill
         )
     return check_type
 
@@ -1271,7 +1271,7 @@ def wire_flee_check_type():
         )
     if skill is not None:
         authored_or_sample(
-            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill.trait
+            CheckTypeTrait, {"weight": Decimal("0.50")}, check_type=check_type, trait=skill
         )
     return check_type
 

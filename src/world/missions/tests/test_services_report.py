@@ -153,11 +153,10 @@ class ReportMissionTests(TestCase):
     def _seed_persuasion(self, *, has_skill: bool = True) -> None:
         from world.checks.factories import CheckTypeFactory
         from world.skills.factories import SkillFactory, SkillRatingFactory
-        from world.traits.factories import SkillTraitFactory
 
         CheckTypeFactory(name="Persuasion")
         if has_skill:
-            skill = SkillFactory(trait=SkillTraitFactory(name="Persuasion"))
+            skill = SkillFactory(name="Persuasion")
             SkillRatingFactory(character=self.reporter.sheet_data, skill=skill, value=30)
 
     def test_embellished_requires_persuasion(self) -> None:

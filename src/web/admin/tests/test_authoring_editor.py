@@ -15,7 +15,7 @@ from world.buildings.factories import BuildingKindFactory
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
-from world.skills.factories import SkillFactory
+from world.missions.factories import MissionNodeFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 EN_DASH = "\u2013"
@@ -285,15 +285,15 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertNotIn("<h2>", body)
 
     def test_model_with_no_name_column_keeps_the_plain_heading(self) -> None:
-        """#3890: `Skill` has no `name` column of its own (its identity is its `Trait`'s)."""
-        skill = SkillFactory()
+        """#3890: `MissionNode` has no `name` column (its identity is its `key`)."""
+        node = MissionNodeFactory()
         self.client.force_login(self.super)
 
         body = self.client.get(
-            reverse("admin_authoring_editor"), {"model": "skills.Skill", "pk": skill.pk}
+            reverse("admin_authoring_editor"), {"model": "missions.MissionNode", "pk": node.pk}
         ).content.decode()
 
-        self.assertIn(f"<h2>Editing skills.Skill #{skill.pk}</h2>", body)
+        self.assertIn(f"<h2>Editing missions.MissionNode #{node.pk}</h2>", body)
         self.assertNotIn('class="editor-name"', body)
 
 

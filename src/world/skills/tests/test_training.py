@@ -512,7 +512,7 @@ class ProcessWeeklyTrainingTests(TestCase):
 
         # Create fresh mutable data each test
         self.student_skill, _ = self.student_identity.trait_values.update_or_create(
-            trait=self.skill.trait,
+            trait=self.skill,
             defaults={"value": 10},
         )
         CharacterClassLevelFactory(character=self.student_identity, level=1)
@@ -521,14 +521,14 @@ class ProcessWeeklyTrainingTests(TestCase):
         """The skill's development ledger (#5010), optionally seeded with rust or progress."""
         ledger, _ = DevelopmentPoints.objects.update_or_create(
             character_sheet=self.student_identity,
-            trait=self.skill.trait,
+            trait=self.skill,
             defaults={"rust_debt": rust, "total_earned": banked},
         )
         return ledger
 
     def _ledger_row(self) -> DevelopmentPoints:
         return DevelopmentPoints.objects.get(
-            character_sheet=self.student_identity, trait=self.skill.trait
+            character_sheet=self.student_identity, trait=self.skill
         )
 
     def _progress(self) -> int:
@@ -660,7 +660,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         )
         process_weekly_training()
         txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
-        self.assertEqual(txn.trait, self.skill.trait)
+        self.assertEqual(txn.trait, self.skill)
         self.assertEqual(txn.source, DevelopmentSource.TRAINING)
         self.assertEqual(txn.amount, 50)  # 5 * 10 * 1
         self.assertIn("Weekly training", txn.description)
@@ -703,7 +703,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         )
         process_weekly_training()
         txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
-        self.assertEqual(txn.trait, self.skill.trait)
+        self.assertEqual(txn.trait, self.skill)
         self.assertEqual(txn.source, DevelopmentSource.TRAINING)
         self.assertIsNotNone(txn.game_week)  # exempts the parent skill from rust (#5010)
 
