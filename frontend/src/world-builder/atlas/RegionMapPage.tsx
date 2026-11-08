@@ -531,6 +531,14 @@ export function RegionMapPage({
     return () => window.removeEventListener('keydown', onKey);
   }, [mode]);
 
+  // The side panel follows the domain being carved, not the last Select-mode click
+  // (#5011): picking a carve domain, or planting one, selects it too.
+  const pickCarveDomain = (id: number | null) => {
+    setCarveTitleId(id);
+    setSelectedTitleId(id);
+    setSelectedAreaId(data?.footprints.find((f) => f.title_id === id)?.area_id ?? null);
+  };
+
   const plant = async () => {
     if (realmId == null || !plantName.trim()) return;
     try {
@@ -542,7 +550,7 @@ export function RegionMapPage({
       });
       const titleId = result?.data?.title_id;
       await refetchLadder();
-      if (typeof titleId === 'number') setCarveTitleId(titleId);
+      if (typeof titleId === 'number') pickCarveDomain(titleId);
       setPlantName('');
       setPlantOpen(false);
       setMode('carve');
@@ -713,7 +721,7 @@ export function RegionMapPage({
                 }}
                 ladderRows={ladderRows}
                 carveTitleId={carveTitleId}
-                onDomain={setCarveTitleId}
+                onDomain={pickCarveDomain}
                 onCreate={() => setPlantOpen((open) => !open)}
               />
             )}

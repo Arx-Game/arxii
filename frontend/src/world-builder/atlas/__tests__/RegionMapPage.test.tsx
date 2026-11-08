@@ -217,6 +217,26 @@ describe('RegionMapPage', () => {
     expect(screen.getByTestId('plant-form')).toHaveTextContent('under Salvation');
   });
 
+  it('opens the Almanach in its own tab so the map stays put (#5011)', () => {
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    const link = screen.getByRole('link', { name: 'Open in the Almanach' });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener');
+  });
+
+  it('points the side panel at the domain being carved (#5011)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '200');
+    expect(screen.getByRole('heading', { name: 'Kingdom of Luxen' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open in the Almanach' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/titles/200'
+    );
+  });
+
   it('offers brush, fill and loop in carve mode, brush first, with nothing to undo', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} />);
