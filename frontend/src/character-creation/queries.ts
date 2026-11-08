@@ -122,13 +122,20 @@ export const characterCreationKeys = {
   // "Make it yours" options for the draft's chosen techniques (#4099). Keyed
   // by resonance + technique ids too, so a resonance change or a technique
   // (de)selection refetches instead of serving stale flourish/form offers.
-  personalizationOptions: (draftId: number, resonanceId: number | null, techniqueIds: number[]) =>
+  // The gift-resonance facet picks (#5021) open facet-gated flourishes, so they key it too.
+  personalizationOptions: (
+    draftId: number,
+    resonanceId: number | null,
+    techniqueIds: number[],
+    facetIds: number[] = []
+  ) =>
     [
       ...characterCreationKeys.all,
       'personalization-options',
       draftId,
       resonanceId,
       techniqueIds,
+      facetIds,
     ] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
   glimpseTags: (pathId?: number) =>
@@ -549,8 +556,9 @@ export function useCGTechniqueOptions(
 export function usePersonalizationOptions(draft: CharacterDraft) {
   const ids = draft.draft_data.selected_technique_ids ?? [];
   const resonanceId = draft.draft_data.selected_gift_resonance_id ?? null;
+  const facetIds = draft.draft_data.selected_gift_facet_ids ?? [];
   return useQuery({
-    queryKey: characterCreationKeys.personalizationOptions(draft.id, resonanceId, ids),
+    queryKey: characterCreationKeys.personalizationOptions(draft.id, resonanceId, ids, facetIds),
     queryFn: () => getPersonalizationOptions(draft.id),
     enabled: ids.length > 0,
   });

@@ -1106,6 +1106,8 @@ export interface DraftData {
   glimpse_tag_ids?: number[];
   // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
   selected_gift_resonance_id?: number | null;
+  // Optional facets tied to the gift resonance at finalize (#5021), at most five
+  selected_gift_facet_ids?: number[];
   magic_complete?: boolean;
   // Tarot card selection for familyless characters
   tarot_card_name?: string;
