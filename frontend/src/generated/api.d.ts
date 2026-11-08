@@ -14939,9 +14939,12 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List, bind, and unbind the acting character's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings and facets.
      *
-     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     ``list`` runs :class:`ListMotifStylesAction` (styles and facets, #5021).
+     *     ``bind-facet``/``unbind-facet`` resolve the ``Facet`` and ``Resonance`` rows and
+     *     dispatch :class:`BindMotifFacetAction` / :class:`UnbindMotifFacetAction`.
+     *     ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
      *
@@ -14974,9 +14977,12 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description List, bind, and unbind the acting character's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings and facets.
      *
-     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     ``list`` runs :class:`ListMotifStylesAction` (styles and facets, #5021).
+     *     ``bind-facet``/``unbind-facet`` resolve the ``Facet`` and ``Resonance`` rows and
+     *     dispatch :class:`BindMotifFacetAction` / :class:`UnbindMotifFacetAction`.
+     *     ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
      *
@@ -14997,6 +15003,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/motif-styles/bind-facet/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Tie a facet to one of the acting character's claimed resonances (#5021). */
+    post: operations['magic_motif_styles_bind_facet_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/motif-styles/unbind/': {
     parameters: {
       query?: never;
@@ -15007,9 +15030,12 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description List, bind, and unbind the acting character's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings and facets.
      *
-     *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
+     *     ``list`` runs :class:`ListMotifStylesAction` (styles and facets, #5021).
+     *     ``bind-facet``/``unbind-facet`` resolve the ``Facet`` and ``Resonance`` rows and
+     *     dispatch :class:`BindMotifFacetAction` / :class:`UnbindMotifFacetAction`.
+     *     ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
      *
@@ -15024,6 +15050,23 @@ export interface paths {
      *     the original behavior: resolve the caller's active puppet.
      */
     post: operations['magic_motif_styles_unbind_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/motif-styles/unbind-facet/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Untie a facet from one of the acting character's resonances (#5021). */
+    post: operations['magic_motif_styles_unbind_facet_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -74963,7 +75006,43 @@ export interface operations {
       };
     };
   };
+  magic_motif_styles_bind_facet_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_motif_styles_unbind_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_motif_styles_unbind_facet_create: {
     parameters: {
       query?: never;
       header?: never;
