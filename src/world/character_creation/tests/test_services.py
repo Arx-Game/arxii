@@ -575,6 +575,10 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_creates_skill_values(self):
         """Finalization should create CharacterSkillValue records."""
+        from world.progression.models.rewards import (
+            DevelopmentPoints,
+            cumulative_dp_for_level,
+        )
         from world.skills.models import CharacterSkillValue
 
         draft = self._create_complete_draft()
@@ -589,8 +593,11 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
             skill=self.melee_skill,
         )
         assert skill_value.value == 30
-        assert skill_value.development_points == 0
-        assert skill_value.rust_points == 0
+        # The ledger counts from the rating CG set, so 31 is one level away (#5010).
+        ledger = DevelopmentPoints.objects.get(
+            character_sheet_id=character.pk, trait=self.melee_skill.trait
+        )
+        assert ledger.total_earned == cumulative_dp_for_level(30)
 
     def test_finalize_writes_the_magic_skill_allocation_and_no_other_magic_skill(self):
         """draft_data["magic_skills"] is written as given; unallocated Magic skills get no row."""

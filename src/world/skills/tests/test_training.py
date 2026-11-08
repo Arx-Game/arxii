@@ -6,7 +6,11 @@ from django.test import TestCase
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
-from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    DevelopmentTransaction,
+    cumulative_dp_for_level,
+)
 from world.progression.types import DevelopmentSource
 from world.relationships.models import RelationshipAllocation
 from world.relationships.services import get_or_create_side
@@ -20,8 +24,6 @@ from world.skills.factories import (
 )
 from world.skills.models import SkillPointBudget, TrainingAllocation
 from world.skills.services import (
-    _apply_development_to_skill,
-    apply_weekly_rust,
     calculate_training_development,
     create_training_allocation,
     process_weekly_training,
@@ -511,9 +513,28 @@ class ProcessWeeklyTrainingTests(TestCase):
         # Create fresh mutable data each test
         self.student_skill, _ = self.student_identity.skill_values.update_or_create(
             skill=self.skill,
-            defaults={"value": 10, "development_points": 0, "rust_points": 0},
+            defaults={"value": 10},
         )
         CharacterClassLevelFactory(character=self.student_identity, level=1)
+
+    def _ledger(self, *, rust: int = 0, banked: int = 0) -> DevelopmentPoints:
+        """The skill's development ledger (#5010), optionally seeded with rust or progress."""
+        ledger, _ = DevelopmentPoints.objects.update_or_create(
+            character_sheet=self.student_identity,
+            trait=self.skill.trait,
+            defaults={"rust_debt": rust, "total_earned": banked},
+        )
+        return ledger
+
+    def _ledger_row(self) -> DevelopmentPoints:
+        return DevelopmentPoints.objects.get(
+            character_sheet=self.student_identity, trait=self.skill.trait
+        )
+
+    def _progress(self) -> int:
+        """Points banked toward the skill's next level."""
+        self.student_skill.refresh_from_db()
+        return self._ledger_row().total_earned - cumulative_dp_for_level(self.student_skill.value)
 
     def test_awards_development_points(self) -> None:
         """Training awards development points to the skill."""
@@ -522,11 +543,9 @@ class ProcessWeeklyTrainingTests(TestCase):
             skill=self.skill,
             ap_amount=10,
         )
-        trained_skills = process_weekly_training()
-        self.student_skill.refresh_from_db()
+        process_weekly_training()
         # base = 5 * 10 * 1 = 50
-        self.assertEqual(self.student_skill.development_points, 50)
-        self.assertIn(self.student.pk, trained_skills)
+        self.assertEqual(self._progress(), 50)
 
     def test_levels_up_on_threshold(self) -> None:
         """Skill levels up when dev points exceed cost."""
@@ -538,23 +557,21 @@ class ProcessWeeklyTrainingTests(TestCase):
         process_weekly_training()
         self.student_skill.refresh_from_db()
         # base = 5 * 20 * 1 = 100. Cost 10->11 = 100. Level up!
+        self.assertEqual(self._progress(), 0)
         self.assertEqual(self.student_skill.value, 11)
-        self.assertEqual(self.student_skill.development_points, 0)
 
     def test_overflow_carries_over(self) -> None:
         """Excess dev points carry into next level."""
-        self.student_skill.development_points = 50
-        self.student_skill.save()
+        self._ledger(banked=50)
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
             ap_amount=20,
         )
         process_weekly_training()
-        self.student_skill.refresh_from_db()
         # Had 50 + gained 100 = 150. Cost 10->11 = 100. Overflow = 50.
+        self.assertEqual(self._progress(), 50)
         self.assertEqual(self.student_skill.value, 11)
-        self.assertEqual(self.student_skill.development_points, 50)
 
     def test_multiple_level_ups(self) -> None:
         """Can gain multiple levels in one week with enough dev points."""
@@ -569,11 +586,10 @@ class ProcessWeeklyTrainingTests(TestCase):
             ap_amount=20,
         )
         process_weekly_training()
-        self.student_skill.refresh_from_db()
         # base = 5 * 20 * 5 = 500. Cost 10->11=100, 11->12=200. Total=300.
         # 500-300 = 200 left, cost 12->13=300. Can't. So level 12, 200 dev.
+        self.assertEqual(self._progress(), 200)
         self.assertEqual(self.student_skill.value, 12)
-        self.assertEqual(self.student_skill.development_points, 200)
 
     def test_stops_at_x9_boundary(self) -> None:
         """Dev points dissipate at X9 boundaries (19, 29, etc.) — never banked (#2115)."""
@@ -585,10 +601,9 @@ class ProcessWeeklyTrainingTests(TestCase):
             ap_amount=10,
         )
         process_weekly_training()
-        self.student_skill.refresh_from_db()
         # At boundary, surplus dissipates rather than banking.
+        self.assertEqual(self._progress(), 0)
         self.assertEqual(self.student_skill.value, 19)
-        self.assertEqual(self.student_skill.development_points, 0)
 
     def test_boundary_dissipation_is_reported_in_audit_trail(self) -> None:
         """The plateau message from a boundary dissipation lands in the audit description."""
@@ -606,19 +621,18 @@ class ProcessWeeklyTrainingTests(TestCase):
     def test_boundary_still_pays_off_rust(self) -> None:
         """A boundary-parked skill still pays down rust from incoming dev points (#2115)."""
         self.student_skill.value = 19
-        self.student_skill.rust_points = 30
         self.student_skill.save()
+        self._ledger(rust=30)
         TrainingAllocation.objects.create(
             character=self.student_identity,
             skill=self.skill,
             ap_amount=10,
         )
         process_weekly_training()
-        self.student_skill.refresh_from_db()
         # base = 5 * 10 * 1 = 50. 30 pays off rust; the remaining 20 dissipates.
-        self.assertEqual(self.student_skill.rust_points, 0)
+        self.assertEqual(self._progress(), 0)
+        self.assertEqual(self._ledger_row().rust_debt, 0)
         self.assertEqual(self.student_skill.value, 19)
-        self.assertEqual(self.student_skill.development_points, 0)
 
     def test_consumes_ap(self) -> None:
         """AP is consumed from the character's pool."""
@@ -636,16 +650,6 @@ class ProcessWeeklyTrainingTests(TestCase):
         process_weekly_training()
         pool.refresh_from_db()
         self.assertEqual(pool.current, 80)
-
-    def test_returns_trained_skills_set(self) -> None:
-        """Returns dict mapping character PKs to sets of trained skill PKs."""
-        TrainingAllocation.objects.create(
-            character=self.student_identity,
-            skill=self.skill,
-            ap_amount=10,
-        )
-        result = process_weekly_training()
-        self.assertIn(self.skill.pk, result[self.student.pk])
 
     def test_creates_development_transaction(self) -> None:
         """Each allocation creates a DevelopmentTransaction audit record."""
@@ -701,100 +705,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
         self.assertEqual(txn.trait, self.skill.trait)
         self.assertEqual(txn.source, DevelopmentSource.TRAINING)
-
-
-class ApplyWeeklyRustTests(TestCase):
-    """Tests for apply_weekly_rust function."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.identity = CharacterSheetFactory()
-        self.character = self.identity.character
-        RosterEntryFactory(character_sheet__character=self.character)
-        self.skill = SkillFactory()
-        self.skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=11,
-            rust_points=0,
-        )
-        CharacterClassLevelFactory(character=self.identity, level=5)
-
-    def test_adds_rust_to_unused_skill(self) -> None:
-        """Unused skill gains character_level + 5 rust."""
-        apply_weekly_rust(trained_skills={})
-        self.skill_value.refresh_from_db()
-        # level 5 + 5 = 10 rust
-        self.assertEqual(self.skill_value.rust_points, 10)
-
-    def test_no_rust_on_trained_skill(self) -> None:
-        """Trained skill gets no rust."""
-        trained = {self.character.pk: {self.skill.pk}}
-        apply_weekly_rust(trained_skills=trained)
-        self.skill_value.refresh_from_db()
-        self.assertEqual(self.skill_value.rust_points, 0)
-
-    def test_rust_caps_at_level_cost(self) -> None:
-        """Rust cannot exceed current level's development cost."""
-        # Skill 11: cost = (11-9)*100 = 200
-        self.skill_value.rust_points = 195
-        self.skill_value.save()
-        apply_weekly_rust(trained_skills={})
-        self.skill_value.refresh_from_db()
-        # Would add 10, but cap is 200, so 200
-        self.assertEqual(self.skill_value.rust_points, 200)
-
-    def test_rust_accumulates_over_weeks(self) -> None:
-        """Rust accumulates across multiple calls."""
-        apply_weekly_rust(trained_skills={})
-        apply_weekly_rust(trained_skills={})
-        self.skill_value.refresh_from_db()
-        # 10 + 10 = 20
-        self.assertEqual(self.skill_value.rust_points, 20)
-
-
-class RustPayoffTests(TestCase):
-    """Tests for rust being paid off during development."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.identity = CharacterSheetFactory()
-        self.character = self.identity.character
-        self.skill = SkillFactory()
-        self.skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=11,
-            development_points=0,
-            rust_points=0,
-        )
-
-    def test_development_pays_off_rust_first(self) -> None:
-        """When rust exists, dev points pay rust before advancing."""
-        self.skill_value.rust_points = 50
-        self.skill_value.save()
-        # Apply 80 dev points: 50 clears rust, 30 goes to development
-        _apply_development_to_skill(self.skill_value, 80)
-        self.assertEqual(self.skill_value.rust_points, 0)
-        self.assertEqual(self.skill_value.development_points, 30)
-
-    def test_partial_rust_payoff(self) -> None:
-        """Dev points can partially pay off rust."""
-        self.skill_value.rust_points = 100
-        self.skill_value.save()
-        _apply_development_to_skill(self.skill_value, 60)
-        self.assertEqual(self.skill_value.rust_points, 40)
-        self.assertEqual(self.skill_value.development_points, 0)
-
-    def test_rust_then_level_up(self) -> None:
-        """Dev points clear rust, then overflow levels up skill."""
-        self.skill_value.rust_points = 50
-        self.skill_value.save()
-        # Need 50 for rust + 200 for level (11->12) = 250. Give 300.
-        _apply_development_to_skill(self.skill_value, 300)
-        self.assertEqual(self.skill_value.rust_points, 0)
-        self.assertEqual(self.skill_value.value, 12)
-        self.assertEqual(self.skill_value.development_points, 50)
+        self.assertIsNotNone(txn.game_week)  # exempts the parent skill from rust (#5010)
 
 
 class SkillCronRegistrationTests(TestCase):
@@ -829,15 +740,15 @@ class RunWeeklySkillCronTests(TestCase):
             skill=self.trained_skill,
             value=10,
         )
-        self.untrained_sv = CharacterSkillValueFactory(
+        CharacterSkillValueFactory(
             character=self.identity,
             skill=self.untrained_skill,
             value=11,
         )
         CharacterClassLevelFactory(character=self.identity, level=1)
 
-    def test_trains_and_rusts(self) -> None:
-        """Trained skill advances, untrained skill gets rust."""
+    def test_trains_and_leaves_rust_to_the_rollover(self) -> None:
+        """Trained skill advances; rust is the rollover's one pass, not this cron's (#5010)."""
         TrainingAllocation.objects.create(
             character=self.identity,
             skill=self.trained_skill,
@@ -845,9 +756,8 @@ class RunWeeklySkillCronTests(TestCase):
         )
         run_weekly_skill_cron()
         self.trained_sv.refresh_from_db()
-        self.untrained_sv.refresh_from_db()
         # Trained: 5*20*1 = 100 dev. 10->11 costs 100. Level up!
         self.assertEqual(self.trained_sv.value, 11)
-        self.assertEqual(self.trained_sv.rust_points, 0)
-        # Untrained: level 1 + 5 = 6 rust
-        self.assertEqual(self.untrained_sv.rust_points, 6)
+        self.assertFalse(
+            DevelopmentTransaction.objects.filter(source=DevelopmentSource.RUST).exists()
+        )

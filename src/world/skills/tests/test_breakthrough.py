@@ -9,105 +9,82 @@ zero (no retroactive credit).
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.sheet_writers import set_skill_values
 from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import TraitRatingUnlock, TraitXPCost, XPCostChart, XPCostEntry
-from world.progression.models.rewards import ExperiencePointsData
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    ExperiencePointsData,
+    cumulative_dp_for_level,
+)
 from world.roster.factories import grant_test_tenure
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 from world.skills.services import (
-    _apply_development_to_skill,
     purchase_skill_breakthrough,
     skills_at_boundary,
+    train_skill,
 )
 
 
 class BoundaryPlateauTests(TestCase):
-    """#2115 rev-2: dev points pay rust then dissipate at a boundary, with a message."""
+    """#2115 rev-2: dev points pay rust then dissipate at a boundary, with a message.
+
+    Training develops the skill trait's ``DevelopmentPoints`` ledger (#5010).
+    """
 
     def setUp(self) -> None:
         super().setUp()
         self.identity = CharacterSheetFactory()
-        self.character = self.identity.character
         self.skill = SkillFactory()
+
+    def _train(self, value: int, points: int, *, rust: int = 0) -> tuple[str | None, int]:
+        """Rate the skill ``value`` with ``rust`` owed, train ``points``; message, new value."""
+        set_skill_values(self.identity, {self.skill: value}, {}, source="test")
+        tracker = self._tracker()
+        tracker.rust_debt = rust
+        tracker.save(update_fields=["rust_debt"])
+        result = train_skill(self.identity, self.skill, points, description="x")
+        return result.plateau_message, result.new_value
+
+    def _tracker(self) -> DevelopmentPoints:
+        return DevelopmentPoints.objects.get(character_sheet=self.identity, trait=self.skill.trait)
 
     def test_boundary_rusty_skill_rust_paid_surplus_dissipates_with_message(self) -> None:
         """At a boundary, incoming dev points pay off rust; surplus dissipates loudly."""
-        skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=19,
-            development_points=0,
-            rust_points=50,
-        )
-        message = _apply_development_to_skill(skill_value, 80)
-        skill_value.refresh_from_db()
-        self.assertEqual(skill_value.rust_points, 0)
-        self.assertEqual(skill_value.value, 19)
-        self.assertEqual(skill_value.development_points, 0)
-        self.assertIsNotNone(message)
+        message, value = self._train(19, 80, rust=50)
+        self.assertEqual(value, 19)
+        self.assertEqual(self._tracker().rust_debt, 0)
+        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(19))
         assert message is not None
         self.assertIn("threshold", message.lower())
 
     def test_boundary_clean_skill_all_dissipates_with_message(self) -> None:
         """At a boundary with no rust, all incoming dev points dissipate loudly."""
-        skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=19,
-            development_points=0,
-            rust_points=0,
-        )
-        message = _apply_development_to_skill(skill_value, 80)
-        skill_value.refresh_from_db()
-        self.assertEqual(skill_value.value, 19)
-        self.assertEqual(skill_value.development_points, 0)
+        message, value = self._train(19, 80)
+        self.assertEqual(value, 19)
+        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(19))
         self.assertIsNotNone(message)
 
     def test_boundary_rust_fully_absorbs_dev_points_no_message(self) -> None:
         """When rust payoff exactly consumes the award, nothing dissipates — no message."""
-        skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=19,
-            development_points=0,
-            rust_points=100,
-        )
-        message = _apply_development_to_skill(skill_value, 60)
-        skill_value.refresh_from_db()
-        self.assertEqual(skill_value.rust_points, 40)
-        self.assertEqual(skill_value.development_points, 0)
+        message, _value = self._train(19, 60, rust=100)
+        self.assertEqual(self._tracker().rust_debt, 40)
         self.assertIsNone(message)
 
     def test_overflow_on_level_up_to_boundary_dissipates_with_message(self) -> None:
         """Overflow from a level-up that lands exactly on a boundary dissipates loudly."""
-        skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=18,
-            development_points=0,
-            rust_points=0,
-        )
         # Cost 18->19 = (18-9)*100 = 900. Give 950: overflow of 50 lands on the boundary.
-        message = _apply_development_to_skill(skill_value, 950)
-        skill_value.refresh_from_db()
-        self.assertEqual(skill_value.value, 19)
-        self.assertEqual(skill_value.development_points, 0)
+        message, value = self._train(18, 950)
+        self.assertEqual(value, 19)
+        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(19))
         self.assertIsNotNone(message)
 
     def test_not_at_boundary_unaffected(self) -> None:
         """Away from a boundary, dev points accumulate normally with no message."""
-        skill_value = CharacterSkillValueFactory(
-            character=self.identity,
-            skill=self.skill,
-            value=11,
-            development_points=0,
-            rust_points=0,
-        )
-        message = _apply_development_to_skill(skill_value, 80)
-        skill_value.refresh_from_db()
-        self.assertEqual(skill_value.value, 11)
-        self.assertEqual(skill_value.development_points, 80)
+        message, value = self._train(11, 80)
+        self.assertEqual(value, 11)
+        self.assertEqual(self._tracker().total_earned, cumulative_dp_for_level(11) + 80)
         self.assertIsNone(message)
 
 
@@ -120,12 +97,12 @@ class SkillsAtBoundaryTests(TestCase):
         self.character = self.identity.character
 
     def test_empty_when_no_skills_gated(self) -> None:
-        CharacterSkillValueFactory(character=self.identity, skill=SkillFactory(), value=15)
+        set_skill_values(self.identity, {SkillFactory(): 15}, {}, source="test")
         self.assertEqual(skills_at_boundary(self.character), [])
 
     def test_reports_gated_skill_without_authored_unlock(self) -> None:
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.identity, skill=skill, value=19)
+        set_skill_values(self.identity, {skill: 19}, {}, source="test")
         prospects = skills_at_boundary(self.character)
         self.assertEqual(len(prospects), 1)
         self.assertEqual(prospects[0].skill, skill)
@@ -135,7 +112,7 @@ class SkillsAtBoundaryTests(TestCase):
 
     def test_reports_authored_xp_cost(self) -> None:
         skill = SkillFactory()
-        CharacterSkillValueFactory(character=self.identity, skill=skill, value=19)
+        set_skill_values(self.identity, {skill: 19}, {}, source="test")
         chart = XPCostChart.objects.create(name="Test Breakthrough Chart")
         XPCostEntry.objects.create(chart=chart, level=20, xp_cost=100)
         TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
@@ -189,14 +166,12 @@ class PurchaseSkillBreakthroughTests(TestCase):
         self.assertIn("insufficient xp", message.lower())
 
     def test_success_clears_gate_and_resumes_from_zero(self) -> None:
-        """A successful purchase clears the gate; training resumes from zero (no retroactive
-        credit) even if development_points is nonzero at purchase time."""
+        """A successful purchase clears the gate and raises the ledger to the new rating;
+        training resumes from zero toward the next level (no retroactive credit)."""
         skill_value = CharacterSkillValueFactory(
             character=self.identity,
             skill=self.skill,
             value=19,
-            development_points=0,
-            rust_points=0,
         )
         self._authored_unlock(target_rating=20, xp_cost=100)
         self._set_xp(total_earned=150)
@@ -207,16 +182,18 @@ class PurchaseSkillBreakthroughTests(TestCase):
 
         skill_value.refresh_from_db()
         self.assertEqual(skill_value.value, 20)
-        self.assertEqual(skill_value.development_points, 0)
+        tracker = DevelopmentPoints.objects.get(
+            character_sheet=self.identity, trait=self.skill.trait
+        )
+        self.assertEqual(tracker.total_earned, cumulative_dp_for_level(20))
 
         xp_tracker = ExperiencePointsData.objects.get(account=self.account)
         self.assertEqual(xp_tracker.total_spent, 100)
 
         # Training resumes normally now that the gate is clear.
-        post_message = _apply_development_to_skill(skill_value, 50)
-        skill_value.refresh_from_db()
-        self.assertIsNone(post_message)
-        self.assertEqual(skill_value.development_points, 50)
+        result = train_skill(self.identity, self.skill, 50, description="x")
+        self.assertIsNone(result.plateau_message)
+        self.assertEqual(tracker.total_earned, cumulative_dp_for_level(20) + 50)
 
     def test_duplicate_purchase_fails_once_cleared(self) -> None:
         """A second purchase attempt fails — the skill is no longer at a boundary."""
@@ -224,8 +201,6 @@ class PurchaseSkillBreakthroughTests(TestCase):
             character=self.identity,
             skill=self.skill,
             value=19,
-            development_points=0,
-            rust_points=0,
         )
         self._authored_unlock(target_rating=20, xp_cost=100)
         self._set_xp(total_earned=300)

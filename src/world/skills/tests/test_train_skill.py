@@ -1,16 +1,32 @@
-"""Tests for ``train_skill`` and ``points_to_next_boundary`` (#4457)."""
+"""Tests for ``train_skill`` and ``points_to_next_boundary`` (#4457, #5010)."""
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.models import PathStage
 from world.progression.models import MaturationStatCap
-from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.models.rewards import (
+    DevelopmentPoints,
+    DevelopmentTransaction,
+    cumulative_dp_for_level,
+)
 from world.progression.types import DevelopmentSource
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
-from world.skills.models import CharacterSkillValue
 from world.skills.services import points_to_next_boundary, train_skill
 from world.traits.models import CharacterTraitValue
+
+
+def _tracker(sheet, skill, value: int, *, rust: int = 0, banked: int = 0) -> DevelopmentPoints:
+    """A skill rated ``value`` with ``banked`` progress toward the next level and rust."""
+    CharacterTraitValue.objects.update_or_create(
+        character=sheet, trait=skill.trait, defaults={"value": value}
+    )
+    return DevelopmentPoints(
+        character_sheet=sheet,
+        trait=skill.trait,
+        total_earned=cumulative_dp_for_level(value) + banked,
+        rust_debt=rust,
+    )
 
 
 class PointsToNextBoundaryTests(TestCase):
@@ -20,27 +36,27 @@ class PointsToNextBoundaryTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.skill = SkillFactory()
 
-    def _row(self, **kwargs: int) -> CharacterSkillValue:
-        return CharacterSkillValueFactory.build(character=self.sheet, skill=self.skill, **kwargs)
+    def _row(self, value: int, **kwargs: int) -> DevelopmentPoints:
+        return _tracker(self.sheet, self.skill, value, **kwargs)
 
     def test_points_to_next_boundary_from_ten(self) -> None:
-        row = self._row(value=10)
+        row = self._row(10)
         self.assertEqual(points_to_next_boundary(row), 4500)
 
     def test_points_to_next_boundary_counts_rust_and_banked(self) -> None:
-        row = self._row(value=15, rust_points=50, development_points=120)
+        row = self._row(15, rust=50, banked=120)
         self.assertEqual(points_to_next_boundary(row), 50 + (600 - 120) + 700 + 800 + 900)
 
     def test_points_to_next_boundary_at_boundary_is_rust(self) -> None:
-        self.assertEqual(points_to_next_boundary(self._row(value=19, rust_points=30)), 30)
-        self.assertEqual(points_to_next_boundary(self._row(value=19, rust_points=0)), 0)
+        self.assertEqual(points_to_next_boundary(self._row(19, rust=30)), 30)
+        self.assertEqual(points_to_next_boundary(self._row(19)), 0)
 
     def test_points_to_next_boundary_above_fifty_is_none(self) -> None:
-        self.assertIsNone(points_to_next_boundary(self._row(value=52)))
+        self.assertIsNone(points_to_next_boundary(self._row(52)))
 
     def test_points_to_next_boundary_in_a_later_decade(self) -> None:
         """From 20 the next boundary is 29: 1100 + 1200 + ... + 1900."""
-        row = self._row(value=20)
+        row = self._row(20)
         self.assertEqual(points_to_next_boundary(row), sum(range(1100, 2000, 100)))
 
 
@@ -55,20 +71,20 @@ class PointsToNextBoundaryAtABandCapTests(TestCase):
         cls.skill = SkillFactory()
         MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5, skill_cap=6)
 
-    def _row(self, **kwargs: int) -> CharacterSkillValue:
-        return CharacterSkillValueFactory.build(character=self.sheet, skill=self.skill, **kwargs)
+    def _row(self, value: int, **kwargs: int) -> DevelopmentPoints:
+        return _tracker(self.sheet, self.skill, value, **kwargs)
 
     def test_above_fifty_the_count_ends_at_the_cap(self) -> None:
         """Cap 6 is stored 60: from 57, 4800 + 4900 + 5000 less 100 banked."""
-        row = self._row(value=57, development_points=100)
+        row = self._row(57, banked=100)
         self.assertEqual(points_to_next_boundary(row), 4800 + 4900 + 5000 - 100)
 
     def test_at_the_cap_only_rust_is_taken(self) -> None:
-        self.assertEqual(points_to_next_boundary(self._row(value=60, rust_points=12)), 12)
-        self.assertEqual(points_to_next_boundary(self._row(value=64, rust_points=0)), 0)
+        self.assertEqual(points_to_next_boundary(self._row(60, rust=12)), 12)
+        self.assertEqual(points_to_next_boundary(self._row(64)), 0)
 
     def test_below_the_cap_the_boundary_still_comes_first(self) -> None:
-        self.assertEqual(points_to_next_boundary(self._row(value=10)), 4500)
+        self.assertEqual(points_to_next_boundary(self._row(10)), 4500)
 
 
 class TrainSkillTests(TestCase):
@@ -89,6 +105,7 @@ class TrainSkillTests(TestCase):
         self.assertEqual(transaction.amount, 300)
         self.assertEqual(transaction.source, DevelopmentSource.TRAINING)
         self.assertEqual(transaction.trait, self.skill.trait)
+        self.assertIsNotNone(transaction.game_week)
         self.assertEqual(
             CharacterTraitValue.objects.get(character=self.sheet, trait=self.skill.trait).value,
             12,

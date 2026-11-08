@@ -107,7 +107,7 @@ class CharacterSkillValueModelTests(TestCase):
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
 
     def test_character_skill_value_creation(self):
-        """CharacterSkillValue should store skill value with progression tracking."""
+        """CharacterSkillValue should store the skill value the sheet shows."""
         from world.skills.models import CharacterSkillValue
 
         csv = CharacterSkillValue.objects.create(
@@ -116,8 +116,6 @@ class CharacterSkillValueModelTests(TestCase):
             value=20,
         )
         assert csv.value == 20
-        assert csv.development_points == 0
-        assert csv.rust_points == 0
 
     def test_character_skill_display_value(self):
         """Skills display their true stored value (ADR-0193)."""
