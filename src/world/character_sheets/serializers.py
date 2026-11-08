@@ -2305,7 +2305,10 @@ def get_character_sheet_queryset() -> QuerySet[CharacterSheet]:
                 seen_select.add(sr)
                 all_select.append(sr)
         for pr in prefetch_related:
-            key = pr.prefetch_through if isinstance(pr, Prefetch) else pr
+            # Keyed on where the prefetch lands (its ``to_attr`` when set), so two
+            # sections can prefetch one relation into different attributes (the stats
+            # and skill ratings both read ``trait_values``, #5010).
+            key = pr.prefetch_to if isinstance(pr, Prefetch) else pr
             if key not in seen_prefetch:
                 seen_prefetch.add(key)
                 all_prefetch.append(pr)
