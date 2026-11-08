@@ -48,7 +48,9 @@ def bind_motif_facet(
         raise StyleResonanceUnclaimed
 
     with transaction.atomic():
-        motif, _ = Motif.objects.get_or_create(character=sheet)
+        Motif.objects.get_or_create(character=sheet)
+        # Lock the character's Motif so two binds at once cannot both pass the cap count.
+        motif = Motif.objects.select_for_update().get(character=sheet)
         motif_resonance, _ = MotifResonance.objects.get_or_create(motif=motif, resonance=resonance)
         existing = MotifResonanceAssociation.objects.filter(
             motif_resonance=motif_resonance, facet=facet
@@ -70,23 +72,26 @@ def unbind_motif_facet(sheet: CharacterSheet, facet: Facet, resonance: Resonance
     it is the motif's last tie of that facet and a live thread is signed with a flourish
     gated on it (the flourish would stop qualifying).
     """
-    association = MotifResonanceAssociation.objects.filter(
-        motif_resonance__motif__character=sheet,
-        motif_resonance__resonance=resonance,
-        facet=facet,
-    ).first()
-    if association is None:
-        raise FacetNotBound
-    still_carried = (
-        MotifResonanceAssociation.objects.filter(
-            motif_resonance__motif__character=sheet, facet=facet
+    with transaction.atomic():
+        # Same lock as bind, so a bind and an unbind on one Motif never interleave.
+        Motif.objects.select_for_update().filter(character=sheet).first()
+        association = MotifResonanceAssociation.objects.filter(
+            motif_resonance__motif__character=sheet,
+            motif_resonance__resonance=resonance,
+            facet=facet,
+        ).first()
+        if association is None:
+            raise FacetNotBound
+        still_carried = (
+            MotifResonanceAssociation.objects.filter(
+                motif_resonance__motif__character=sheet, facet=facet
+            )
+            .exclude(pk=association.pk)
+            .exists()
         )
-        .exclude(pk=association.pk)
-        .exists()
-    )
-    if not still_carried:
-        _refuse_if_a_signed_flourish_needs(sheet, facet)
-    association.delete()
+        if not still_carried:
+            _refuse_if_a_signed_flourish_needs(sheet, facet)
+        association.delete()
 
 
 def _refuse_if_a_signed_flourish_needs(sheet: CharacterSheet, facet: Facet) -> None:
