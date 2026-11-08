@@ -4,7 +4,8 @@
  * Extracted from YourTurn.tsx (lines 655–685) to share with the
  * non-combat SceneTacticalMap.  Renders one button per move action (a step,
  * a take-off or landing, a pass roll into held ground, #4663, a stunt off a feature,
- * #4675) with the server's note under it; clicking dispatches `{ ref, kwargs: {} }` via the
+ * #4675, a blink, #5019) with the server's note under it, and the Soulfray stage
+ * warning a blink paid in anima carries, as a cast does (never a block); clicking dispatches `{ ref, kwargs: {} }` via the
  * caller-supplied dispatchAction function and toasts the result's message.
  */
 
@@ -92,6 +93,18 @@ export function MovementActions({
             {note && !refused && (
               <span className="block text-[11px] font-normal" data-testid={`move-note-${key}`}>
                 {note}
+              </span>
+            )}
+            {action.soulfray_warning && (
+              <span
+                className={cn(
+                  'block text-[11px] font-semibold',
+                  action.soulfray_warning.has_death_risk ? 'text-red-400' : 'text-amber-400'
+                )}
+                data-testid={`move-soulfray-${key}`}
+              >
+                {action.soulfray_warning.has_death_risk ? 'DANGER: ' : ''}Soulfray Warning:{' '}
+                {action.soulfray_warning.stage_name}
               </span>
             )}
             {refused && action.prerequisite_reasons[0] && (

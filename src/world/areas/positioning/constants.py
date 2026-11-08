@@ -145,7 +145,6 @@ STUNT_ROOM_MISSED = "{name} tries the {feature} and doesn't make it."
 # A turn blink (#5019): what she is told, what the room sees, and the move-list label.
 BLINKED = "You blink to {place}."
 BLINKED_PAID = "You blink to {place} for {cost}."
-BLINK_CANNOT_PAY = "Blinking costs {cost}; you don't have enough."
 BLINK_ROOM = "{name} blinks to {place}."
 BLINK_ENTRY = "Blink to {place}"
 BLINK_ENTRY_PAID = "Blink to {place} ({cost})"

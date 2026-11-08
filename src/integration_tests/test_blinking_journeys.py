@@ -10,8 +10,11 @@ reach: any place in the room, cost: anima) at 4. Her movement is raised to two h
   dispatch or telnet ``position Stage``, she is on the Stage, 2 anima and one hop poorer,
   her reaction count and her declared action untouched, so a dodge later that round still
   gets the full 4.
-- With 1 anima the entry is refused "Blinking costs 2 anima; you don't have enough." and so
-  is the dispatch; walking next door to the Floor still works and costs nothing.
+- Too little anima never stops her (owner ruling 2026-11-08): with 1 anima in a lethal fight
+  the entry stays open and she blinks, her pool runs to 0 and the 1 she lacked is drawn as
+  Soulfray through the cast's own path (severity 10 for an empty pool plus 5 for the deficit,
+  the SoulfrayConfig factory's scales). Already frayed, her entry carries her Soulfray stage
+  warning, as a cast does.
 - Where walking reaches (the Floor), the list offers a walk, not a blink, and it is free.
 - Hobb, who walks, keeps "Move to Stage (blocked: Thorn Hedge)" and no blink entries; a
   dodger whose capability has no Blinks traversal gets no blink entries either.
@@ -41,6 +44,7 @@ from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     OpponentTier,
     ParticipantStatus,
+    RiskLevel,
     StrikeDelivery,
     TargetingMode,
     TargetSelection,
@@ -57,13 +61,19 @@ from world.combat.models import CombatParticipant, CombatRoundAction
 from world.combat.services import resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.conditions.constants import FoundationalCapability
-from world.conditions.factories import CapabilityTypeFactory
-from world.conditions.models import CapabilityType
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionInstanceFactory,
+    ConditionStageFactory,
+    SoulfrayTemplateFactory,
+)
+from world.conditions.models import CapabilityType, ConditionInstance
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
+    ensure_soulfray_config,
 )
 from world.magic.models.anima import CharacterAnima
 from world.mechanics.factories import (
@@ -82,7 +92,8 @@ HEDGE = "Thorn Hedge"
 BLINK_VALUE = 4
 EXTRA_MOVEMENT = 5  # baseline 5 + 5 = 10 movement = 2 hops a round
 BLINK_TO_STAGE = "Blink to Stage (2 anima)"
-CANNOT_PAY = "Blinking costs 2 anima; you don't have enough."
+EMPTY_POOL_SEVERITY = 10  # SoulfrayConfigFactory: severity_scale 10 at anima 0
+DEFICIT_SEVERITY = 5  # deficit_scale 5 x the 1 anima she lacked
 
 
 class RecordingRoll:
@@ -295,23 +306,58 @@ class OnePowerTwoUses(_TheCellar):
 
 
 class TooLittleAnima(_TheCellar):
-    def test_the_blink_is_refused_with_the_reason_and_walking_still_works(self) -> None:
+    """Lack of anima never greys out or refuses a blink; it pays through Soulfray."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.soulfray = SoulfrayTemplateFactory()
+        ensure_soulfray_config()
+        self.encounter.risk_level = RiskLevel.LETHAL
+        self.encounter.save(update_fields=["risk_level"])
+
+    def soulfray_on(self, character) -> ConditionInstance | None:
+        return ConditionInstance.objects.filter(target=character, condition=self.soulfray).first()
+
+    def test_with_one_anima_she_blinks_and_pays_in_soulfray(self) -> None:
         ondrelle = self.fighter("Ondrelle", at=self.doorway, anima=1)
 
         entry = self.moves(ondrelle)[BLINK_TO_STAGE]
-        self.assertFalse(entry.prerequisite_met)
-        self.assertEqual(entry.prerequisite_reasons, [CANNOT_PAY])
+        self.assertTrue(entry.prerequisite_met)
+        self.assertEqual(entry.prerequisite_reasons, [])
 
-        refused = self.web(ondrelle, "move_to_position", position_id=self.stage.pk)
-        self.assertFalse(refused.detail.success)
-        self.assertEqual(refused.detail.message, CANNOT_PAY)
-        self.assertEqual(position_of(ondrelle), self.doorway)
-        self.assertEqual(self.participant(ondrelle).hops_used, 0)
+        result = self.web(ondrelle, "move_to_position", position_id=self.stage.pk)
 
-        walked = self.web(ondrelle, "move_to_position", position_id=self.floor.pk)
-        self.assertTrue(walked.detail.success, walked.detail.message)
-        self.assertEqual(position_of(ondrelle), self.floor)
-        self.assertEqual(self.anima(ondrelle), 1)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, "You blink to Stage for 2 anima.")
+        self.assertEqual(position_of(ondrelle), self.stage)
+        self.assertEqual(self.anima(ondrelle), 0)
+        self.assertEqual(self.participant(ondrelle).hops_used, 1)
+        frayed = self.soulfray_on(ondrelle)
+        self.assertIsNotNone(frayed)
+        self.assertEqual(frayed.severity, EMPTY_POOL_SEVERITY + DEFICIT_SEVERITY)
+
+    def test_typed_on_telnet_with_one_anima(self) -> None:
+        ondrelle = self.fighter("Ondrelle", at=self.doorway, anima=1)
+
+        told = self.telnet(ondrelle, "position Stage")
+
+        self.assertIn("You blink to Stage for 2 anima.", told)
+        self.assertEqual(position_of(ondrelle), self.stage)
+        self.assertIsNotNone(self.soulfray_on(ondrelle))
+
+    def test_already_frayed_her_blink_carries_the_stage_warning(self) -> None:
+        stage = ConditionStageFactory(
+            condition=self.soulfray, stage_order=1, name="Fraying", severity_threshold=1
+        )
+        ondrelle = self.fighter("Ondrelle", at=self.doorway, anima=1)
+        ConditionInstanceFactory(
+            target=ondrelle, condition=self.soulfray, current_stage=stage, severity=1
+        )
+
+        entry = self.moves(ondrelle)[BLINK_TO_STAGE]
+
+        self.assertTrue(entry.prerequisite_met)
+        self.assertEqual(entry.soulfray_warning.stage_name, "Fraying")
 
 
 class OthersDoNotBlink(_TheCellar):

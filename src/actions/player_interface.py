@@ -1360,36 +1360,32 @@ def _blink_entries(
     """One "Blink to <place>" entry per place only her blink reaches this step (#5019).
 
     ``offered`` holds the places the list already offers a walk, climb or leap to; walking
-    wins there. In a declaring round the label names the cost (a dodge's) and the entry is
-    refused with the reason when she cannot pay; outside a fight a blink is free. It costs
+    wins there. In a declaring round the label names the cost (a dodge's); outside a fight a
+    blink is free. Lack of anima never greys it out (owner ruling 2026-11-08): an anima blink
+    carries her Soulfray stage warning, as a cast does, and pays through Soulfray. It costs
     one hop, so it carries the step's refusal too, and a held place's note.
     """
     from world.areas.positioning.constants import (  # noqa: PLC0415
-        BLINK_CANNOT_PAY,
         BLINK_ENTRY,
         BLINK_ENTRY_PAID,
+        ReactionCostKind,
     )
     from world.areas.positioning.services import blink_landings  # noqa: PLC0415
     from world.areas.positioning.traversal import blink_capabilities  # noqa: PLC0415
-    from world.combat.services.reactions import (  # noqa: PLC0415
-        can_pay_capability_use,
-        capability_use_cost,
-    )
+    from world.combat.services.reactions import capability_use_cost  # noqa: PLC0415
+    from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
     if CreatureTraversal.BLINKS not in context.traversals:
         return []  # her traversals already say no capability of hers blinks
     in_fight = context.hops is not None
     entries = []
     seen = set(offered)
+    stage_warning = get_soulfray_warning(character) if in_fight else None
+    met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
     for capability in blink_capabilities(character):
         cost = capability_use_cost(capability.reaction_cost_kind)
-        met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
-        if (
-            met
-            and in_fight
-            and not can_pay_capability_use(character.sheet_data, capability.reaction_cost_kind)
-        ):
-            met, reasons = False, [BLINK_CANNOT_PAY.format(cost=cost)]
+        pays_anima = capability.reaction_cost_kind == ReactionCostKind.ANIMA
+        warning = stage_warning if pays_anima else None
         for place in blink_landings(character, capability.reaction_reach):
             if place.pk in seen:
                 continue
@@ -1409,6 +1405,7 @@ def _blink_entries(
                     prerequisite_met=met,
                     prerequisite_reasons=reasons,
                     is_movement=True,
+                    soulfray_warning=warning,
                 )
             )
     return entries

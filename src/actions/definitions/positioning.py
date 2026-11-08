@@ -21,7 +21,6 @@ from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
 from world.areas.positioning.constants import (
-    BLINK_CANNOT_PAY,
     BLINK_ROOM,
     BLINKED,
     BLINKED_PAID,
@@ -83,11 +82,7 @@ from world.combat.services.movement_budget import (
     hops_left,
     spend_combat_hop,
 )
-from world.combat.services.reactions import (
-    can_pay_capability_use,
-    capability_use_cost,
-    charge_capability_use,
-)
+from world.combat.services.reactions import capability_use_cost, spend_capability_use
 from world.gm.constants import GMLevel
 from world.mechanics.models import ChallengeApproach
 from world.scenes.constants import RoundStatus
@@ -235,14 +230,14 @@ def _blink(
 
     In a declaring round it costs one hop and one use of the capability (a dodge's cost:
     anima, or fatigue for a physical one); it is not a reaction, so later dodges this round
-    are no harder. Landing in held ground stops her there. Outside a fight it is free.
+    are no harder. Too little anima never stops her: the charge runs through the cast's
+    anima-and-Soulfray path (``spend_capability_use``, owner ruling 2026-11-08). Landing in
+    held ground stops her there. Outside a fight it is free.
     """
     participant = _declaring_participant(actor)
     sheet = actor.sheet_data
     cost_kind = capability.reaction_cost_kind
     cost = capability_use_cost(cost_kind)
-    if participant is not None and not can_pay_capability_use(sheet, cost_kind):
-        return ActionResult(success=False, message=BLINK_CANNOT_PAY.format(cost=cost))
     # Read before the move: her own place never counts as held against her.
     held = held_position_ids_against(actor) if participant is not None else frozenset()
     try:
@@ -251,9 +246,7 @@ def _blink(
             blink_to_position(actor, target, reach=capability.reaction_reach, square=square)
             message = BLINKED.format(place=target.name)
             if participant is not None:
-                if not charge_capability_use(sheet, cost_kind):
-                    # Anima went between the check and the charge: undo the move.
-                    raise PositionTransitionError(BLINK_CANNOT_PAY.format(cost=cost))
+                spend_capability_use(sheet, cost_kind, lethal=participant.encounter.is_lethal)
                 spend_combat_hop(participant)
                 message = BLINKED_PAID.format(place=target.name, cost=cost)
                 stopped = _stop_in_held_ground(actor, participant, target, held)

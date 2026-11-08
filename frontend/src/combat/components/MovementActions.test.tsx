@@ -307,4 +307,22 @@ describe('MovementActions', () => {
     await user.click(screen.getByTestId('move-btn-perform_stunt-2-12-6'));
     expect(dispatchAction).toHaveBeenCalledWith({ ref: actions[1].ref, kwargs: {} });
   });
+
+  it('shows a blink with its Soulfray warning and never disables it for it (#5019)', () => {
+    const blink = {
+      ...makeMoveAction(4, 'Blink to Stage (2 anima)'),
+      soulfray_warning: {
+        stage_name: 'Fraying',
+        stage_description: 'Your soul strains.',
+        has_death_risk: true,
+      },
+    };
+    render(<MovementActions actions={[blink]} isLocked={false} dispatchAction={okDispatch} />);
+
+    const button = screen.getByRole('button', { name: /Blink to Stage \(2 anima\)/ });
+    expect(button).toBeEnabled();
+    expect(screen.getByTestId('move-soulfray-move_to_position-4')).toHaveTextContent(
+      'DANGER: Soulfray Warning: Fraying'
+    );
+  });
 });

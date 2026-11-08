@@ -270,6 +270,40 @@ def charge_capability_use(sheet: CharacterSheet, cost_kind: str) -> bool:
     return True
 
 
+def spend_capability_use(sheet: CharacterSheet, cost_kind: str, *, lethal: bool) -> None:
+    """Pay for a use she chooses on her own turn (a turn blink, #5019); never refused.
+
+    Fatigue for a physical capability. Anima goes through the cast's own path: ``deduct_anima``
+    may run past her pool into a deficit (in a lethal encounter), and ``accumulate_soulfray``
+    turns the strain into Soulfray, exactly as an unaffordable technique cast does. Pushing
+    past her limits is the point of the magic, so lack of anima never stops her.
+    """
+    tuning = reaction_tuning()
+    if cost_kind == ReactionCostKind.FATIGUE:
+        from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+        apply_fatigue(sheet, ActionCategory.PHYSICAL, tuning.dodge_fatigue_cost, EffortLevel.LOW)
+        return
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+    from world.magic.services.soulfray import accumulate_soulfray  # noqa: PLC0415
+
+    anima = CharacterAnima.objects.filter(character_id=sheet.pk).first()
+    if anima is None:
+        return  # no anima pool to draw on
+    deficit = deduct_anima(sheet.character, tuning.dodge_anima_cost, lethal=lethal)
+    accumulate_soulfray(
+        character=sheet.character,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=None,
+        lethal=lethal,
+    )
+
+
 def land_dodge(participant: CombatParticipant, dodge: Dodge, success_level: int) -> bool:
     """Move her to her landing when the roll at least partly succeeded; True if she moved."""
     if dodge.landing is None or success_level < DEFENSE_REDUCED_THRESHOLD:
