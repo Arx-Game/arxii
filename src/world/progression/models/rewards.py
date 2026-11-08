@@ -276,7 +276,7 @@ class DevelopmentPoints(SharedMemoryModel):
         starting_level: int = trait_value.value
 
         if is_skill:
-            self.total_earned = max(self.total_earned, cumulative_dp_for_level(starting_level))
+            self.align_to_rating(starting_level)
         if self.rust_debt > 0:
             payoff = min(amount, self.rust_debt)
             self.rust_debt -= payoff
@@ -313,6 +313,19 @@ class DevelopmentPoints(SharedMemoryModel):
             )
 
         return level_ups
+
+    def align_to_rating(self, rating: int) -> None:
+        """Hold ``total_earned`` within the band ``rating`` sits in, without saving (#5010).
+
+        Up to what the rating cost, so a skill set directly counts from where it is.
+        Progress banked toward the next level is kept. A ledger that already pays for the
+        next level belongs to a higher rating that was lowered or removed (a staff edit,
+        the Django admin, an NPC copy dropping a skill), so it drops back to what the
+        rating cost, and the skill cannot climb straight back for free.
+        """
+        floor = cumulative_dp_for_level(rating)
+        if self.total_earned < floor or self.total_earned >= cumulative_dp_for_level(rating + 1):
+            self.total_earned = floor
 
     def _dissipate_above(self, level: int) -> None:
         """Drop ``total_earned`` to what ``level`` cost, discarding any surplus."""

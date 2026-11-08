@@ -170,11 +170,24 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
 
         dev_tracker.award_points(modified_amount)
         cap = dev_tracker.at_skill_cap()
+        cap_note = ""
         if cap is not None:
             # Development stopped at the band's skill cap (#4585); say so on the record.
             from world.skills.services import skill_cap_message
 
             cap_note = skill_cap_message(trait.name, cap)
+        elif trait.trait_type == TraitType.SKILL:
+            # Or parked at an XP boundary, where development from any source stops (#5010).
+            from world.skills.services import boundary_message, is_skill_at_xp_boundary
+
+            rating = (
+                CharacterTraitValue.objects.filter(character=character_sheet, trait=trait)
+                .values_list("value", flat=True)
+                .first()
+            )
+            if rating is not None and is_skill_at_xp_boundary(rating):
+                cap_note = boundary_message(trait.name, rating + 1)
+        if cap_note:
             limit = DevelopmentTransaction._meta.get_field("description").max_length  # noqa: SLF001
             description = (f"{description} {cap_note}" if description else cap_note)[:limit]
 

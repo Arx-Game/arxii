@@ -409,6 +409,25 @@ class AwardCheckDevelopmentParksAtBoundaryTest(TestCase):
         self.skill_value.refresh_from_db()
         assert self.skill_value.value == 19
 
+    def test_a_rating_lowered_outside_the_ledger_does_not_climb_back(self) -> None:
+        """A rating lowered by a path that skips the ledger (the admin) stays lowered."""
+        self.skill_value.value = 15
+        self.skill_value.save()
+        DevelopmentPoints.objects.update_or_create(
+            character_sheet=self.sheet,
+            trait=self.skill.trait,
+            defaults={"total_earned": cumulative_dp_for_level(30)},
+        )
+
+        award_check_development(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            effort_level=EffortLevel.MEDIUM,
+            path_level=1,
+        )
+
+        assert CharacterTraitValue.objects.get(pk=self.skill_value.pk).value == 15
+
 
 class RustDebtPayoffTest(TestCase):
     """Test that award_points pays off rust_debt before counting toward advancement."""

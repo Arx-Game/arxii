@@ -33,7 +33,6 @@ from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
     WeeklySkillUsage,
-    cumulative_dp_for_level,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 
@@ -175,17 +174,15 @@ def align_development_floors(sheet: CharacterSheet, ratings: Mapping[Trait, int]
     }
     new_rows: list[DevelopmentPoints] = []
     for trait, rating in ratings.items():
-        floor = cumulative_dp_for_level(rating)
-        top = max(cumulative_dp_for_level(rating + 1) - 1, floor)
         row = existing.get(trait.pk)
         if row is None:
-            new_rows.append(
-                DevelopmentPoints(character_sheet=sheet, trait=trait, total_earned=floor)
-            )
+            row = DevelopmentPoints(character_sheet=sheet, trait=trait)
+            row.align_to_rating(rating)
+            new_rows.append(row)
             continue
-        aligned = min(max(row.total_earned, floor), top)
-        if aligned != row.total_earned:
-            row.total_earned = aligned
+        before = row.total_earned
+        row.align_to_rating(rating)
+        if row.total_earned != before:
             row.save(update_fields=["total_earned"])
     if new_rows:
         DevelopmentPoints.objects.bulk_create(new_rows)

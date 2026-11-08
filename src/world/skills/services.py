@@ -501,8 +501,13 @@ def skill_cap_message(name: str, stored_cap: int) -> str:
 
 def _boundary_message(skill: Skill, next_rating: int) -> str:
     """Plateau message shown when dev points dissipate at an XP boundary (#2115)."""
+    return boundary_message(skill.name, next_rating)
+
+
+def boundary_message(name: str, next_rating: int) -> str:
+    """The XP-boundary plateau message for a skill named ``name`` (#2115, #5010)."""
     return (
-        f"{skill.name} is at threshold {next_rating / 10:.1f} — training maintains, "
+        f"{name} is at threshold {next_rating / 10:.1f} — training maintains, "
         "does not advance until the breakthrough is unlocked."
     )
 
@@ -562,7 +567,7 @@ def train_skill(
         tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
             character_sheet=sheet, trait=skill.trait
         )
-        tracker.total_earned = max(tracker.total_earned, cumulative_dp_for_level(old_value))
+        tracker.align_to_rating(old_value)
         points_applied = dev_points
         if stop_at_boundary:
             room = points_to_next_boundary(tracker)
