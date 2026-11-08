@@ -282,7 +282,7 @@ class DevelopmentPoints(SharedMemoryModel):
         )
         starting_level: int = trait_value.value
 
-        if skill is not None:
+        if self.trait.trait_type == TraitType.SKILL:
             self.total_earned = max(self.total_earned, cumulative_dp_for_level(starting_level))
         if self.rust_debt > 0:
             payoff = min(amount, self.rust_debt)
