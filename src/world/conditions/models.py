@@ -174,7 +174,9 @@ class CapabilityType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         default="",
         help_text=(
-            "If set, a character with this capability above its innate baseline moves this way."
+            "If set, a character with this capability above its innate baseline moves this way. "
+            "Blinks: on her turn she can also blink to any place her dodge with this "
+            "capability could land, past walls and enemies (#5019)."
         ),
     )
     reaction_reach = models.CharField(
@@ -183,7 +185,8 @@ class CapabilityType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=ReactionReach.NONE,
         help_text=(
             "If not 'No dodge', a character with this capability above its innate baseline "
-            "dodges attacks automatically and may land this far away (#4676)."
+            "dodges attacks automatically and may land this far away (#4676). With Way of "
+            "moving set to Blinks, this is also how far she blinks on her turn (#5019)."
         ),
     )
     reaction_cost_kind = models.CharField(

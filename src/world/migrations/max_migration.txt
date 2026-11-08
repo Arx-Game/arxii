@@ -1,1 +1,1 @@
-0378_fold_skill_into_trait_contract
+0379_blink_traversal

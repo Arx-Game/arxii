@@ -16,12 +16,25 @@ class CreatureTraversal(models.TextChoices):
     WALKS crosses open edges only. CLIMBS and LEAPS also cross a wall that has a way
     past it (an active gating challenge) at one extra hop; they differ in narration only.
     FLIES also uses the aerial layer, so it passes over walls that do not block flight.
+    BLINKS crosses edges as a walker does, and on her turn its holder may also move
+    straight to any place her dodge with that capability could land (``reaction_reach``),
+    crossing no edge at all (#5019). Player characters only: a bestiary entry never blinks
+    (``NPC_TRAVERSAL_CHOICES``).
     """
 
     WALKS = "walks", "Walks"
     CLIMBS = "climbs", "Climbs"
     LEAPS = "leaps", "Leaps"
     FLIES = "flies", "Flies"
+    BLINKS = "blinks", "Blinks"
+
+
+#: The ways of moving a bestiary entry may have: every one but BLINKS (#5019).
+NPC_TRAVERSAL_CHOICES = [
+    (value, label)
+    for value, label in CreatureTraversal.choices
+    if value != CreatureTraversal.BLINKS
+]
 
 
 class ReactionReach(models.TextChoices):
@@ -128,6 +141,14 @@ STUNT_MISSED = "You don't make it."
 STUNT_ROOM_CLEAN = "{name} uses the {feature} to reach {place}."
 STUNT_ROOM_PARTIAL = "{name} uses the {feature} to reach {place}, but not cleanly."
 STUNT_ROOM_MISSED = "{name} tries the {feature} and doesn't make it."
+
+# A turn blink (#5019): what she is told, what the room sees, and the move-list label.
+BLINKED = "You blink to {place}."
+BLINKED_PAID = "You blink to {place} for {cost}."
+BLINK_CANNOT_PAY = "Blinking costs {cost}; you don't have enough."
+BLINK_ROOM = "{name} blinks to {place}."
+BLINK_ENTRY = "Blink to {place}"
+BLINK_ENTRY_PAID = "Blink to {place} ({cost})"
 
 
 class RampartCrackState(models.TextChoices):

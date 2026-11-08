@@ -1190,6 +1190,7 @@ _CROSSING_VERB = {CreatureTraversal.CLIMBS: "Climb over", CreatureTraversal.LEAP
 
 
 _HELD_BY_NOTE = "Held by {name}: you'd stop there."
+_MOVE_KEY = "move_to_position"
 
 
 def _held_place_holders(character: ObjectDB) -> dict[int, str]:
@@ -1350,6 +1351,64 @@ def _stunt_entries(character: ObjectDB, move_met: bool, move_reason: str) -> lis
                 is_movement=True,
             )
         )
+    return entries
+
+
+def _blink_entries(
+    character: ObjectDB, offered: set[int], context: _PositionMoveContext
+) -> list[PlayerAction]:
+    """One "Blink to <place>" entry per place only her blink reaches this step (#5019).
+
+    ``offered`` holds the places the list already offers a walk, climb or leap to; walking
+    wins there. In a declaring round the label names the cost (a dodge's) and the entry is
+    refused with the reason when she cannot pay; outside a fight a blink is free. It costs
+    one hop, so it carries the step's refusal too, and a held place's note.
+    """
+    from world.areas.positioning.constants import (  # noqa: PLC0415
+        BLINK_CANNOT_PAY,
+        BLINK_ENTRY,
+        BLINK_ENTRY_PAID,
+    )
+    from world.areas.positioning.services import blink_landings  # noqa: PLC0415
+    from world.areas.positioning.traversal import blink_capabilities  # noqa: PLC0415
+    from world.combat.services.reactions import (  # noqa: PLC0415
+        can_pay_capability_use,
+        capability_use_cost,
+    )
+
+    in_fight = context.hops is not None
+    entries = []
+    seen = set(offered)
+    for capability in blink_capabilities(character):
+        cost = capability_use_cost(capability.reaction_cost_kind)
+        met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
+        if (
+            met
+            and in_fight
+            and not can_pay_capability_use(character.sheet_data, capability.reaction_cost_kind)
+        ):
+            met, reasons = False, [BLINK_CANNOT_PAY.format(cost=cost)]
+        for place in blink_landings(character, capability.reaction_reach):
+            if place.pk in seen:
+                continue
+            seen.add(place.pk)
+            label = BLINK_ENTRY_PAID if in_fight else BLINK_ENTRY
+            entries.append(
+                PlayerAction(
+                    backend=ActionBackend.REGISTRY,
+                    display_name=label.format(place=place.name, cost=cost),
+                    ref=ActionRef(
+                        backend=ActionBackend.REGISTRY,
+                        registry_key="move_to_position",
+                        position_id=place.pk,
+                    ),
+                    description=_move_description(place, context.move_note, context.holders),
+                    action_category=ActionCategory.PHYSICAL,
+                    prerequisite_met=met,
+                    prerequisite_reasons=reasons,
+                    is_movement=True,
+                )
+            )
     return entries
 
 
@@ -1544,6 +1603,12 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
         result.append(_flight_entry("take_flight", "Take flight", move_met, move_reason, move_note))
 
     result.extend(_gated_position_entries(current, move_context))
+    walkable = {
+        action.ref.position_id
+        for action in result
+        if action.ref.registry_key == _MOVE_KEY and action.ref.position_id is not None
+    }
+    result.extend(_blink_entries(character, walkable, move_context))
 
     result.extend(_stunt_entries(character, move_met, move_reason))
     return result
