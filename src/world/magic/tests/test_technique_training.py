@@ -80,7 +80,6 @@ class ResolveTrainingCheckTest(TestCase):
     def _seed_check_content(self):
         """Minimal CheckType so the service can resolve a check."""
         from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
-        from world.skills.models import Skill
         from world.traits.models import Trait, TraitCategory, TraitType
 
         arcane_trait, _ = Trait.objects.get_or_create(
@@ -89,11 +88,6 @@ class ResolveTrainingCheckTest(TestCase):
                 "trait_type": TraitType.SKILL,
                 "category": TraitCategory.MAGIC,
                 "is_public": True,
-            },
-        )
-        Skill.objects.get_or_create(
-            trait=arcane_trait,
-            defaults={
                 "tooltip": "Understanding the theoretical underpinnings of magical techniques.",
                 "display_order": 0,
                 "is_active": True,
