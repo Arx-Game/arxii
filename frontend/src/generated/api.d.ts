@@ -54621,6 +54621,7 @@ export interface components {
       kind: string;
       member_ids: number[];
       ended: boolean;
+      confers_wedlock: boolean;
     };
     /**
      * @description * `class_level` - Class Level

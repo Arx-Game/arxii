@@ -89,7 +89,39 @@ vi.mock('@/world-builder/queries', () => ({
   }),
 }));
 
+/** The holding house's roll as the house document draws it (#5017): members, a
+ * married-in spouse from another family, one dead, one a player character, and a
+ * dalliance partner the tree draws but the ruler rule refuses. */
+const node = {
+  tier: 'standing',
+  is_deceased: false,
+  believed_deceased: false,
+  is_appable: false,
+  sheet_id: null as number | null,
+  gender: '',
+  age: 30,
+  description: '',
+};
+const houseDoc = {
+  family: {
+    family_id: 4,
+    nodes: [
+      { ...node, id: 11, name: 'Kathryn mar Katta', family_id: 4, sheet_id: 5 },
+      { ...node, id: 12, name: 'Galleron', family_id: 7 },
+      { ...node, id: 13, name: 'Old Marr', family_id: 4, is_deceased: true },
+      { ...node, id: 14, name: 'Aldo mar Katta', family_id: 4 },
+      { ...node, id: 15, name: 'Rook', family_id: 7 },
+    ],
+    parentage: [],
+    unions: [
+      { id: 1, kind: 'Marriage', member_ids: [11, 12], ended: false, confers_wedlock: true },
+      { id: 2, kind: 'Dalliance', member_ids: [14, 15], ended: false, confers_wedlock: false },
+    ],
+  },
+};
+
 vi.mock('../queries', () => ({
+  useHouseDocument: () => ({ data: houseDoc }),
   useTitleDocument: () =>
     currentError
       ? { data: undefined, error: currentError, refetch }
@@ -171,10 +203,12 @@ test('the rung page: Historical Charter, the claims, the chain up and the door t
     '/staff/almanach/titles/8'
   );
   expect(screen.getByText('pledged to Kingdom of Umbros')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'On the map' })).toHaveAttribute(
+  // #5017: the map door is a globe, named for the screen reader only.
+  expect(screen.getByRole('link', { name: 'View on the map' })).toHaveAttribute(
     'href',
     '/staff/world-builder'
   );
+  expect(screen.queryByText('On the map')).toBeNull();
 });
 
 test('a titular rung says so and shows its charter even with nothing held', () => {
@@ -200,32 +234,38 @@ test('a titular rung says so and shows its charter even with nothing held', () =
   }
 });
 
-test('an unnamed rung is named from its own page', async () => {
+test('an unnamed rung is named from its own page: one field, Enter saves (#5017)', async () => {
   mutate.mockClear();
   currentDoc = { ...doc, title: { ...doc.title, name: '', house_id: null, held_by: '' } };
   try {
     renderWithProviders(<TitlePage titleId={3} />);
-    const save = screen.getByRole('button', { name: 'Name' });
-    expect(save).toBeDisabled();
-    await userEvent.type(
-      screen.getByLabelText('name', { selector: '#r-name' }),
-      'Kingdom of Umbros'
-    );
-    await userEvent.click(save);
+    // No label above and no button below: the field alone, reading Name while blank.
+    expect(screen.queryByRole('button', { name: 'Name' })).toBeNull();
+    expect(document.querySelector('label[for="r-name"]')).toBeNull();
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(field).toHaveAttribute('placeholder', 'Name');
+    await userEvent.type(field, 'Kingdom of Umbros{enter}');
     expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Kingdom of Umbros' });
   } finally {
     currentDoc = doc;
   }
 });
 
-test('a named rung offers Rename, enabled only once the name changes', async () => {
+test('a named rung is renamed when the field loses focus, and an unchanged field dispatches nothing (#5017)', async () => {
   mutate.mockClear();
   renderWithProviders(<TitlePage titleId={3} />);
-  const rename = screen.getByRole('button', { name: 'Rename' });
-  expect(rename).toBeDisabled();
-  await userEvent.type(screen.getByLabelText('name', { selector: '#r-name' }), ' II');
-  await userEvent.click(rename);
+  expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull();
+  const field = screen.getByRole('textbox', { name: 'Name' });
+  await userEvent.click(field);
+  await userEvent.tab();
+  expect(mutate).not.toHaveBeenCalled();
+  await userEvent.type(field, ' II');
+  await userEvent.tab();
   expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Duchy of Katta II' });
+  // Enter after blur saved it dispatches nothing more: the field already matches.
+  mutate.mockClear();
+  await userEvent.type(field, '{enter}');
+  expect(mutate).not.toHaveBeenCalled();
 });
 
 test('a vacant rung seats an existing house from its page', async () => {
@@ -356,4 +396,78 @@ test('a page that fails to load says so and offers a retry instead of loading fo
   } finally {
     currentError = null;
   }
+});
+
+test('an unseated title reads Undefined ruler; the slot lists the family roll, spouses marked, the dead last (#5017)', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, holder_id: null, holder: '' } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    expect(screen.queryByText('holder')).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: 'holder' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Undefined ruler' }));
+    const slot = screen.getByRole('group', { name: 'Ruler' });
+    const names = () =>
+      within(slot)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+        .filter((t) => t !== 'Add family member' && t !== 'Cancel');
+    // Rook, a dalliance partner, is on the tree and off the roll: the server would refuse him.
+    expect(names()).toEqual([
+      'Aldo mar Katta',
+      'Galleron married in',
+      'Kathryn mar Katta PC',
+      'Old Marr rip',
+    ]);
+    // Typing narrows the roll; it is never a search of everyone by exact name.
+    await userEvent.type(within(slot).getByRole('searchbox', { name: 'Family member' }), 'gal');
+    expect(names()).toEqual(['Galleron married in']);
+    await userEvent.click(within(slot).getByRole('button', { name: 'Galleron married in' }));
+    expect(mutate).toHaveBeenCalledWith({ title_id: 3, node_id: 12 });
+    expect(screen.queryByRole('group', { name: 'Ruler' })).toBeNull();
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('Add family member creates the person in the holding family and seats them (#5017)', async () => {
+  mutate.mockClear();
+  currentDoc = { ...doc, title: { ...doc.title, holder_id: null, holder: '' } };
+  try {
+    renderWithProviders(<TitlePage titleId={3} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Undefined ruler' }));
+    const slot = screen.getByRole('group', { name: 'Ruler' });
+    await userEvent.click(within(slot).getByRole('button', { name: 'Add family member' }));
+    await userEvent.type(within(slot).getByRole('textbox', { name: 'Name' }), 'Marrow{enter}');
+    expect(mutate).toHaveBeenCalledWith(
+      { family_id: 4, name: 'Marrow' },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+    const options = mutate.mock.calls.at(-1)![1] as {
+      onSuccess: (r: { success: boolean; message: string; data: unknown }) => void;
+    };
+    options.onSuccess({
+      success: true,
+      message: 'Marrow is on record.',
+      data: { kinsperson_id: 44 },
+    });
+    expect(mutate).toHaveBeenLastCalledWith({ title_id: 3, node_id: 44 });
+  } finally {
+    currentDoc = doc;
+  }
+});
+
+test('a seated title names its ruler as a link and offers Change ruler, which lists everyone else (#5017)', async () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  const heldBy = screen.getByText('held by', { selector: '.field .label' }).parentElement!;
+  expect(within(heldBy).getByRole('link', { name: 'Kathryn mar Katta' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/people/11'
+  );
+  await userEvent.click(within(heldBy).getByRole('button', { name: 'Change ruler' }));
+  const slot = screen.getByRole('group', { name: 'Ruler' });
+  expect(within(slot).queryByRole('button', { name: /Kathryn/ })).toBeNull();
+  expect(within(slot).getByRole('button', { name: 'Galleron married in' })).toBeInTheDocument();
+  await userEvent.click(within(slot).getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('group', { name: 'Ruler' })).toBeNull();
 });

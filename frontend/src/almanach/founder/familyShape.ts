@@ -112,7 +112,7 @@ function parentEdge(childId: number, parentId: number): ParentageEdge {
 }
 
 function unionEdge(id: number, memberIds: number[]): UnionEdge {
-  return { id, kind: 'marriage', member_ids: memberIds, ended: false };
+  return { id, kind: 'marriage', member_ids: memberIds, ended: false, confers_wedlock: true };
 }
 
 export interface FounderFamilyShape {

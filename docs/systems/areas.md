@@ -297,8 +297,8 @@ no land, a titular or potential crown, can be selected; its panel reads "holds n
 the Almanach page, and a **Historical Charter** toggle (`aria-pressed`) ghosts the union of the
 footprints whose `charters` name the selected title, a dashed outline over the de facto shading,
 never a fill (`drawRegionMap`'s `ghostPips`; the viewport exposes `data-ghost-pips`). The
-Almanach title page's "On the map" door writes the Atlas's last-location key and a one-shot
-`sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
+Almanach title page's globe ("View on the map", #5017) writes the Atlas's last-location key
+and a one-shot `sessionStorage` focus (`mapFocus.ts`), which the region map page takes on mount.
 
 **Border tools (#4988, slice 3 of #4983).** `set_footprint(..., take_from_siblings=True)` is
 the map's **Adjust**: a pip held by a sibling rung under the same ladder parent, or by one of

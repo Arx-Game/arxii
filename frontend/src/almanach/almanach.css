@@ -521,6 +521,13 @@
   font-size: 0.85rem;
   padding: 0.05rem 0.6rem;
 }
+/* An icon-only door beside a heading (#5017): the globe to the map. */
+.almanach .btn.icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  padding: 0.15rem 0.4rem;
+}
 
 /* --- record rail --- */
 

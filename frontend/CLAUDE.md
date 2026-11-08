@@ -37,6 +37,17 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
   pages, bare costs and limits, and voice lines ApostateCD wrote. The
   `overexplaining-copy` hook (`tools/lint_overexplaining_copy.py`) catches the phrases a
   regex can name; the `overexplaining-copy-reviewer` agent reads a diff for the shape.
+- **A name on screen is what a player expects to see, not what the model calls it** (#5017,
+  owner ruling 2026-11-08: "Names should be what a player/user expects, not what would be the
+  definition of the model for an agent"). Agents write copy with the code open, so the code's
+  words leak onto the page: a link named for where it goes ("On the map"), a button named for
+  the mutation (a "Name" button under a "name" label, reading Name, blank, Name), an empty box
+  labelled with the FK ("holder"), an action named for the operation ("Add someone new"). Ask
+  what a player calls the thing and what every other site does here: a globe icon; the bare
+  field with "Name" as its placeholder, saving on Enter or blur; "Undefined ruler"; "Add
+  family member". Glossary and model terms (holder, rung, node, kinsperson, org, tier,
+  domain) are right in code and wrong on the page, staff pages included. A universal icon
+  beats a verb phrase; a self-evident field gets no label and no button.
 
 ### Build & Code Splitting
 

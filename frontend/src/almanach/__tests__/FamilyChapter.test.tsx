@@ -290,7 +290,7 @@ test('a child with parentage edges to both a head and their spouse renders once,
       { child_id: 3, parent_id: 1, kind: 'biological', is_true: true, via_secret: false },
       { child_id: 3, parent_id: 2, kind: 'biological', is_true: true, via_secret: false },
     ],
-    unions: [{ id: 2, kind: 'marriage', member_ids: [1, 2], ended: false }],
+    unions: [{ id: 2, kind: 'marriage', member_ids: [1, 2], ended: false, confers_wedlock: true }],
   };
 
   const { container } = renderWithProviders(
@@ -330,7 +330,7 @@ test('a child of a member and an outsider consort renders once, under the member
       { child_id: 2, parent_id: 3, kind: 'birth', is_true: true, via_secret: false },
       { child_id: 2, parent_id: 1, kind: 'birth', is_true: true, via_secret: false },
     ],
-    unions: [{ id: 1, kind: 'marriage', member_ids: [1, 3], ended: false }],
+    unions: [{ id: 1, kind: 'marriage', member_ids: [1, 3], ended: false, confers_wedlock: true }],
   };
   renderWithProviders(
     <FamilyChapter

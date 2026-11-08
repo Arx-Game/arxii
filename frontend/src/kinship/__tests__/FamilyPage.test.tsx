@@ -110,7 +110,9 @@ function katta(): FamilyTree {
       { child_id: 104, parent_id: 101, kind: 'biological', is_true: true, via_secret: false },
       { child_id: 104, parent_id: 102, kind: 'biological', is_true: true, via_secret: false },
     ],
-    unions: [{ id: 1, kind: 'Marriage', member_ids: [101, 102], ended: false }],
+    unions: [
+      { id: 1, kind: 'Marriage', member_ids: [101, 102], ended: false, confers_wedlock: true },
+    ],
   };
 }
 

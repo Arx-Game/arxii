@@ -1,9 +1,10 @@
 /**
- * A domain's page (#4239): the title and who holds it, Location as realm,
+ * A domain's page (#4239): the title, who holds it and its ruler (#5017), Location as realm,
  * tier and seat (the map is #4242), the demesne and its holdings, Books,
  * Forces, and the Vassals beneath with Create vassal domain and Add vacant
  * seats. A vacant title offers Create Family, which takes it.
  */
+import { Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -16,10 +17,10 @@ import {
 } from '../queries';
 import { RecordRail, type RecordRailDoor, type RecordRailRow } from '../document/RecordRail';
 import { HoldingRow } from './HoldingRow';
+import { RulerSlot } from './RulerSlot';
 import { PlantRungDialog } from '../ladder/PlantRungDialog';
 import { BatchUnclaimedDialog } from '../ladder/BatchUnclaimedDialog';
 import { CreateFamilyForm } from '../front/CreateFamilyForm';
-import { Picker } from '../shared/Picker';
 import { Books, Forces } from '../shared/chapters';
 import { houseUrl, orgUrl, personUrl, titleUrl } from '../shared/tier';
 import { SECTIONS, STATES } from '../copy';
@@ -32,7 +33,6 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const { data: doc, error, refetch } = useTitleDocument(titleId);
   const plant = useAlmanachMutation('almanach_plant_rung');
   const batch = useAlmanachMutation('almanach_batch_unclaimed');
-  const setHolder = useAlmanachMutation('almanach_set_holder');
   const describe = useAlmanachMutation('almanach_describe_demesne');
   const nameRung = useAlmanachMutation('almanach_name_rung');
   const deleteRung = useAlmanachMutation('almanach_delete_rung');
@@ -47,6 +47,9 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const { data: regionMaps } = useRegionMapsQuery();
   const account = useAccount();
   const [rungName, setRungName] = useState('');
+  // The name the field last sent (#5017): Enter and then a blur, or a blur and then
+  // Enter, save once; the document's refetch clears it.
+  const [sentName, setSentName] = useState<string | null>(null);
   const [moveTo, setMoveTo] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [seatHouseId, setSeatHouseId] = useState('');
@@ -63,6 +66,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
   }, [doc]);
   useEffect(() => {
     setRungName(doc?.title.name ?? '');
+    setSentName(null);
   }, [doc?.title.name]);
   useEffect(() => {
     const list = holdingKinds?.results ?? [];
@@ -97,12 +101,18 @@ export function TitlePage({ titleId }: { titleId: number }) {
       ? stationWords[title.station]
       : null;
   const firstRegionMap = regionMaps?.[0] ?? null;
+  const saveName = () => {
+    const next = rungName.trim();
+    if (next === '' || next === title.name || next === sentName) return;
+    setSentName(next);
+    nameRung.mutate({ title_id: titleId, name: next });
+  };
 
   const rows: RecordRailRow[] = [
     { label: 'tier', value: title.tier },
     { label: 'realm', value: title.realm },
     { label: 'held by', value: title.held_by || 'vacant' },
-    { label: 'holder', value: title.holder || 'none' },
+    { label: 'ruler', value: title.holder || 'undefined' },
     { label: 'sworn to', value: title.sworn_to || 'none' },
     { label: 'seat', value: title.seat || 'none' },
     {
@@ -191,32 +201,34 @@ export function TitlePage({ titleId }: { titleId: number }) {
             </span>{' '}
             {firstRegionMap && (
               <Link
-                className="btn sm quiet"
+                className="btn sm quiet icon"
                 to="/staff/world-builder"
+                aria-label="View on the map"
+                title="View on the map"
                 onClick={() =>
                   rememberMapFocus(account?.id ?? 'anon', firstRegionMap.id, title.title_id)
                 }
               >
-                On the map
+                <Globe className="h-4 w-4" aria-hidden="true" />
               </Link>
             )}
           </h3>
           <div className="field">
-            <label htmlFor="r-name">name</label>
             <input
               id="r-name"
               type="text"
+              aria-label="Name"
+              placeholder="Name"
               value={rungName}
               onChange={(e) => setRungName(e.target.value)}
-            />{' '}
-            <button
-              type="button"
-              className="btn sm quiet"
-              disabled={rungName.trim() === '' || rungName.trim() === title.name}
-              onClick={() => nameRung.mutate({ title_id: titleId, name: rungName.trim() })}
-            >
-              {title.name ? 'Rename' : 'Name'}
-            </button>
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveName();
+                }
+              }}
+            />
           </div>
           <div className="row3">
             <div className="field">
@@ -225,17 +237,14 @@ export function TitlePage({ titleId }: { titleId: number }) {
                 {title.house_id != null ? (
                   <>
                     <Link to={houseUrl(title.house_id)}>{title.held_by}</Link>
-                    {title.holder_id != null && (
-                      <span className="meta">
-                        <Link to={personUrl(title.holder_id)}>{title.holder}</Link>
-                      </span>
-                    )}
-                    <Picker
-                      kind="person"
-                      placeholder="holder"
-                      ariaLabel="holder"
-                      onPick={(hit) => setHolder.mutate({ title_id: titleId, node_id: hit.id })}
-                    />
+                    <span className="meta">
+                      <RulerSlot
+                        titleId={titleId}
+                        houseId={title.house_id}
+                        holderId={title.holder_id}
+                        holderName={title.holder}
+                      />
+                    </span>
                   </>
                 ) : (
                   <button type="button" className="new" onClick={() => setCreateFamily(true)}>
