@@ -132,6 +132,8 @@ class PathServiceHoldsItsContract(HypothesisTestCase):
                 self.assertIsNotNone(edge, f"{here.name} to {there.name} has no edge")
                 cost = edge_crossing_cost(edge, traversal)
                 self.assertIsNotNone(cost, f"{traversal} crossed a closed edge")
+                if traversal == CreatureTraversal.BLINKS:  # crosses edges as a walker (#5019)
+                    self.assertEqual(cost, edge_crossing_cost(edge, CreatureTraversal.WALKS))
                 expected.append(cost)
             self.assertEqual(step_costs(path, traversal=traversal), expected)
             if traversal != CreatureTraversal.FLIES:

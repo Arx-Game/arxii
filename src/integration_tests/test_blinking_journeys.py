@@ -18,6 +18,7 @@ reach: any place in the room, cost: anima) at 4. Her movement is raised to two h
 - Blinking into the Gallery while a Bandit holds it stops her there with no hops left.
 - The room is told "Ondrelle blinks to Stage."
 - Outside a fight the entry is "Blink to Stage" and the blink is free.
+- Staff authoring a capability are offered Blinks as its way of moving; a bestiary entry is not.
 
 Expected values come from the spec (owner answers 1 to 4) and the MovementConfig field
 defaults: 2 anima per use; one hop per blink; reactions are not counted.
@@ -28,7 +29,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from django.test import override_settings
+from django.contrib.auth import get_user_model
+from django.test import Client, override_settings
 
 from actions.player_interface import get_player_actions
 from integration_tests.harness import JourneyCase
@@ -337,6 +339,21 @@ class OthersDoNotBlink(_TheCellar):
         moves = self.moves(dodger)
 
         self.assertFalse([name for name in moves if name.startswith("Blink to")])
+
+
+class StaffAuthoring(_TheCellar):
+    def test_capabilities_offer_blinks_and_bestiary_entries_do_not(self) -> None:
+        staff = get_user_model().objects.create_superuser("staff5019", "s@example.com", "pw-5019")
+        client = Client()
+        client.force_login(staff)
+
+        capability = client.get("/admin/arxii/capabilitytype/add/")
+        bestiary = client.get("/admin/arxii/creaturetemplate/add/")
+
+        self.assertEqual(capability.status_code, 200)
+        self.assertIn('value="blinks"', capability.content.decode())
+        self.assertEqual(bestiary.status_code, 200)
+        self.assertNotIn('value="blinks"', bestiary.content.decode())
 
 
 class OutsideAFight(_TheCellar):
