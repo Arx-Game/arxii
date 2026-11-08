@@ -851,12 +851,17 @@ grounded blinker reaches ground places, an airborne one places in the air; takin
 stay their own moves), and the air over a roofed place stays closed. A reach of "In place" or "No
 dodge" gives no turn blink. `MoveToPositionAction` walks wherever `check_move_to_position` passes
 and blinks only where it refuses and a blink reaches. In a declaring round a blink costs one hop
-plus one dodge's cost (`charge_capability_use`: `MovementConfig.dodge_anima_cost` anima, or
+plus one dodge's cost (`spend_capability_use`: `MovementConfig.dodge_anima_cost` anima, or
 `dodge_fatigue_cost` fatigue by `reaction_cost_kind`); it is not a reaction, so it leaves
-`reactions_used` alone. Outside a fight it is free. Landing in held ground stops her as any entry
-does. The move list offers "Blink to X (2 anima)" (plain "Blink to X" outside a fight) for each
-place only a blink reaches, refused with "Blinking costs 2 anima; you don't have enough." when she
-cannot pay; the room is told "<name> blinks to X.". Telnet `position X` blinks the same way. A
+`reactions_used` alone. Outside a fight it is free. **Lack of anima never greys out or refuses a
+blink** (owner ruling 2026-11-08): the anima goes through the cast's own path, `deduct_anima`
+(which in a lethal encounter runs past her pool into a deficit) and then `accumulate_soulfray`, so
+pushing past her limits costs Soulfray, exactly as an unaffordable cast does. Landing in held
+ground stops her as any entry does. The move list offers "Blink to X (2 anima)" (plain "Blink to
+X" outside a fight) for each place only a blink reaches; an anima blink carries her current
+Soulfray stage warning (`PlayerAction.soulfray_warning`, the field a cast carries), which the move
+list shows under the button, never as a block. The room is told "<name> blinks to X.". Telnet
+`position X` blinks the same way. A
 bestiary entry's `traversal` excludes Blinks (`NPC_TRAVERSAL_CHOICES`): NPCs do not blink.
 
 **Held ground** (`world/combat/services/held_ground.py`). In a live encounter a place is held

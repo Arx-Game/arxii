@@ -93,8 +93,11 @@ defaults apply (2 anima, 1 fatigue, step 2).
 
 **The same power on her turn [BUILT & WIRED] (#5019, ADR-5019).** A dodging capability whose
 `traversal` is Blinks also moves her on her turn: to any place that dodge could land, past walls
-and enemies, for one hop plus one dodge's cost (`charge_capability_use`, the charging half of
-`pay_for_dodge`). It is not a reaction, so it does not make her later dodges that round harder.
+and enemies, for one hop plus one dodge's cost. It is not a reaction, so it does not make her later
+dodges that round harder. Unlike the dodge, it is never refused for lack of anima: she chose it on
+her turn, so it pays through the cast's anima-and-Soulfray path (`spend_capability_use`:
+`deduct_anima` then `accumulate_soulfray`, owner ruling 2026-11-08). The automatic dodge still
+skips when she cannot pay (`pay_for_dodge` through `charge_capability_use`).
 Staff author one capability (Traversal Blinks, a dodge reach, a cost) and grant it from one
 technique; see `docs/systems/areas.md` "Blinking".
 
