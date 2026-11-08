@@ -14,10 +14,10 @@ from world.traits.models import Trait
 
 class ProseFieldsForTests(SimpleTestCase):
     def test_returns_exactly_the_prose_fields(self):
-        # Trait: description is prose; name is an identifier (NON_PROSE); the
+        # Trait: description and tooltip are prose; name is an identifier (NON_PROSE); the
         # two choice-bearing CharFields (trait_type, category) are excluded
         # outright because they carry choices, prose or not.
-        self.assertEqual(prose_fields_for(Trait), ["description"])
+        self.assertEqual(prose_fields_for(Trait), ["description", "tooltip"])
 
     def test_a_model_with_no_prose_fields_returns_empty(self):
         # ContentContributor's only free-text fields are "name" and "notes",

@@ -37157,7 +37157,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this skill.
+        description: A unique integer value identifying this trait.
         required: true
       tags:
       - skills
@@ -50245,6 +50245,30 @@ components:
         * `domain` - Domain
         * `military` - Military
         * `general` - General
+    CategoryB45Enum:
+      enum:
+      - physical
+      - social
+      - mental
+      - meta
+      - magic
+      - combat
+      - general
+      - crafting
+      - war
+      - other
+      type: string
+      description: |-
+        * `physical` - Physical
+        * `social` - Social
+        * `mental` - Mental
+        * `meta` - Meta
+        * `magic` - Magic
+        * `combat` - Combat
+        * `general` - General
+        * `crafting` - Crafting
+        * `war` - War
+        * `other` - Other
     CategoryC06Enum:
       enum:
       - harassment
@@ -90277,7 +90301,7 @@ components:
       - name
     Skill:
       type: object
-      description: Serializer for Skill model with nested specializations.
+      description: 'A skill (a skill-type Trait, #5008) with nested specializations.'
       properties:
         id:
           type: integer
@@ -90285,9 +90309,24 @@ components:
         name:
           type: string
           readOnly: true
+          description: Trait name (e.g., 'strength', 'sewing', 'weaponsmithing')
         category:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/CategoryB45Enum'
           readOnly: true
+          description: |-
+            Category for organization and special rules
+
+            * `physical` - Physical
+            * `social` - Social
+            * `mental` - Mental
+            * `meta` - Meta
+            * `magic` - Magic
+            * `combat` - Combat
+            * `general` - General
+            * `crafting` - Crafting
+            * `war` - War
+            * `other` - Other
         category_display:
           type: string
           description: Get the human-readable category label.
@@ -90295,6 +90334,7 @@ components:
         description:
           type: string
           readOnly: true
+          description: Optional description of what this trait represents
         tooltip:
           type: string
           description: Short description shown on hover in UI
@@ -90305,7 +90345,8 @@ components:
           description: Order for display in character sheets and CG
         is_active:
           type: boolean
-          description: Whether this skill is available for use
+          description: Whether this trait is available for use. An inactive skill
+            is left out of character creation, training and the sheet's pickers.
         specializations:
           type: array
           items:
@@ -90331,9 +90372,24 @@ components:
         name:
           type: string
           readOnly: true
+          description: Trait name (e.g., 'strength', 'sewing', 'weaponsmithing')
         category:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/CategoryB45Enum'
           readOnly: true
+          description: |-
+            Category for organization and special rules
+
+            * `physical` - Physical
+            * `social` - Social
+            * `mental` - Mental
+            * `meta` - Meta
+            * `magic` - Magic
+            * `combat` - Combat
+            * `general` - General
+            * `crafting` - Crafting
+            * `war` - War
+            * `other` - Other
         category_display:
           type: string
           description: Get the human-readable category label.
@@ -90348,7 +90404,8 @@ components:
           description: Order for display in character sheets and CG
         is_active:
           type: boolean
-          description: Whether this skill is available for use
+          description: Whether this trait is available for use. An inactive skill
+            is left out of character creation, training and the sheet's pickers.
       required:
       - category
       - category_display
@@ -97418,7 +97475,7 @@ components:
             * `other` - Other
         category:
           allOf:
-          - $ref: '#/components/schemas/TraitCategoryEnum'
+          - $ref: '#/components/schemas/CategoryB45Enum'
           readOnly: true
           description: |-
             Category for organization and special rules
@@ -97443,30 +97500,6 @@ components:
       - id
       - name
       - trait_type
-    TraitCategoryEnum:
-      enum:
-      - physical
-      - social
-      - mental
-      - meta
-      - magic
-      - combat
-      - general
-      - crafting
-      - war
-      - other
-      type: string
-      description: |-
-        * `physical` - Physical
-        * `social` - Social
-        * `mental` - Mental
-        * `meta` - Meta
-        * `magic` - Magic
-        * `combat` - Combat
-        * `general` - General
-        * `crafting` - Crafting
-        * `war` - War
-        * `other` - Other
     TraitTraitTypeEnum:
       enum:
       - stat

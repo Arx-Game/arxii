@@ -167,7 +167,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         self.assertEqual(getattr(row, f"{field}_id"), self.thaumaturgy.pk)
 
     def test_a_magical_activity_takes_a_magic_skill_only(self) -> None:
-        self.assertEqual(self.offered("magicactivityskill", "skill"), {"Thaumaturgy"})
+        self.assertEqual(self.offered("magicactivityskill", "skill"), {"Thaumaturgy (Skill)"})
         url = reverse("admin:arxii_magicactivityskill_add")
         row = {"activity": MagicActivity.RITUAL_WORKING, "weight": "1.00"}
 
@@ -187,7 +187,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
     def test_a_casting_style_takes_a_magic_skill_only(self) -> None:
         style = TechniqueStyleFactory(name="Incantation")
-        self.assertEqual(self.offered("techniquestyle", "skill"), {"Thaumaturgy"})
+        self.assertEqual(self.offered("techniquestyle", "skill"), {"Thaumaturgy (Skill)"})
 
         self.assert_refused_then_taken(
             reverse("admin:arxii_techniquestyle_change", args=[style.pk]), "skill", style
@@ -209,7 +209,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
     def test_a_technique_takes_a_magic_skill_only(self) -> None:
         technique = TechniqueFactory()
-        self.assertEqual(self.offered("technique", "skill"), {"Thaumaturgy"})
+        self.assertEqual(self.offered("technique", "skill"), {"Thaumaturgy (Skill)"})
 
         self.assert_refused_then_taken(
             reverse("admin:arxii_technique_change", args=[technique.pk]), "skill", technique

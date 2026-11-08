@@ -30317,6 +30317,30 @@ export interface components {
      */
     Category59dEnum: 'spycraft' | 'crime' | 'domain' | 'military' | 'general';
     /**
+     * @description * `physical` - Physical
+     *     * `social` - Social
+     *     * `mental` - Mental
+     *     * `meta` - Meta
+     *     * `magic` - Magic
+     *     * `combat` - Combat
+     *     * `general` - General
+     *     * `crafting` - Crafting
+     *     * `war` - War
+     *     * `other` - Other
+     * @enum {string}
+     */
+    CategoryB45Enum:
+      | 'physical'
+      | 'social'
+      | 'mental'
+      | 'meta'
+      | 'magic'
+      | 'combat'
+      | 'general'
+      | 'crafting'
+      | 'war'
+      | 'other';
+    /**
      * @description * `harassment` - Harassment
      *     * `ooc_abuse` - OOC Abuse
      *     * `red_flag` - FYI / Red Flag
@@ -50553,19 +50577,35 @@ export interface components {
       category: number;
       readonly category_name: string;
     };
-    /** @description Serializer for Skill model with nested specializations. */
+    /** @description A skill (a skill-type Trait, #5008) with nested specializations. */
     Skill: {
       readonly id: number;
+      /** @description Trait name (e.g., 'strength', 'sewing', 'weaponsmithing') */
       readonly name: string;
-      readonly category: string;
+      /**
+       * @description Category for organization and special rules
+       *
+       *     * `physical` - Physical
+       *     * `social` - Social
+       *     * `mental` - Mental
+       *     * `meta` - Meta
+       *     * `magic` - Magic
+       *     * `combat` - Combat
+       *     * `general` - General
+       *     * `crafting` - Crafting
+       *     * `war` - War
+       *     * `other` - Other
+       */
+      readonly category: components['schemas']['CategoryB45Enum'];
       /** @description Get the human-readable category label. */
       readonly category_display: string;
+      /** @description Optional description of what this trait represents */
       readonly description: string;
       /** @description Short description shown on hover in UI */
       tooltip?: string;
       /** @description Order for display in character sheets and CG */
       display_order?: number;
-      /** @description Whether this skill is available for use */
+      /** @description Whether this trait is available for use. An inactive skill is left out of character creation, training and the sheet's pickers. */
       is_active?: boolean;
       readonly specializations: components['schemas']['Specialization'][];
     };
@@ -50576,15 +50616,30 @@ export interface components {
      */
     SkillList: {
       readonly id: number;
+      /** @description Trait name (e.g., 'strength', 'sewing', 'weaponsmithing') */
       readonly name: string;
-      readonly category: string;
+      /**
+       * @description Category for organization and special rules
+       *
+       *     * `physical` - Physical
+       *     * `social` - Social
+       *     * `mental` - Mental
+       *     * `meta` - Meta
+       *     * `magic` - Magic
+       *     * `combat` - Combat
+       *     * `general` - General
+       *     * `crafting` - Crafting
+       *     * `war` - War
+       *     * `other` - Other
+       */
+      readonly category: components['schemas']['CategoryB45Enum'];
       /** @description Get the human-readable category label. */
       readonly category_display: string;
       /** @description Short description shown on hover in UI */
       tooltip?: string;
       /** @description Order for display in character sheets and CG */
       display_order?: number;
-      /** @description Whether this skill is available for use */
+      /** @description Whether this trait is available for use. An inactive skill is left out of character creation, training and the sheet's pickers. */
       is_active?: boolean;
     };
     /** @description Serializer for SkillPointBudget configuration. */
@@ -53880,34 +53935,10 @@ export interface components {
        *     * `war` - War
        *     * `other` - Other
        */
-      readonly category: components['schemas']['TraitCategoryEnum'];
+      readonly category: components['schemas']['CategoryB45Enum'];
       /** @description Optional description of what this trait represents */
       readonly description: string;
     };
-    /**
-     * @description * `physical` - Physical
-     *     * `social` - Social
-     *     * `mental` - Mental
-     *     * `meta` - Meta
-     *     * `magic` - Magic
-     *     * `combat` - Combat
-     *     * `general` - General
-     *     * `crafting` - Crafting
-     *     * `war` - War
-     *     * `other` - Other
-     * @enum {string}
-     */
-    TraitCategoryEnum:
-      | 'physical'
-      | 'social'
-      | 'mental'
-      | 'meta'
-      | 'magic'
-      | 'combat'
-      | 'general'
-      | 'crafting'
-      | 'war'
-      | 'other';
     /**
      * @description * `stat` - Stat
      *     * `skill` - Skill
@@ -87057,7 +87088,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this skill. */
+        /** @description A unique integer value identifying this trait. */
         id: number;
       };
       cookie?: never;
