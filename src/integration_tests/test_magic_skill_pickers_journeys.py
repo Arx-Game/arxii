@@ -175,7 +175,7 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
 
         self.assertEqual(refused.status_code, 200)
         self.assertIn("skill", refused.context["adminform"].form.errors)
-        self.assertFalse(MagicActivityTrait.objects.filter(trait_type="skill").exists())
+        self.assertFalse(MagicActivitySkill.objects.exists())
 
         taken = self.client.post(url, {**row, "skill": self.thaumaturgy.pk})
 
