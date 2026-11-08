@@ -49,7 +49,6 @@ import {
   getPaths,
   getPathSkillSuggestions,
   getPersonalizationOptions,
-  getResonanceAssociations,
   getResonances,
   getRestrictions,
   getSkillPointBudget,
@@ -148,8 +147,6 @@ export const characterCreationKeys = {
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
   restrictions: (effectTypeId?: number) =>
     [...characterCreationKeys.all, 'restrictions', effectTypeId] as const,
-  resonanceAssociations: (category?: string) =>
-    [...characterCreationKeys.all, 'resonance-associations', category] as const,
   techniques: (giftId?: number) => [...characterCreationKeys.all, 'techniques', giftId] as const,
   consequencePoolCatalog: () => [...characterCreationKeys.all, 'consequence-pool-catalog'] as const,
   // Skills system keys
@@ -621,13 +618,6 @@ export function useRestrictions(effectTypeId?: number) {
   return useQuery({
     queryKey: characterCreationKeys.restrictions(effectTypeId),
     queryFn: () => getRestrictions(effectTypeId),
-  });
-}
-
-export function useResonanceAssociations(category?: string) {
-  return useQuery({
-    queryKey: characterCreationKeys.resonanceAssociations(category),
-    queryFn: () => getResonanceAssociations(category),
   });
 }
 
