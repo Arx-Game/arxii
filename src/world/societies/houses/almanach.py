@@ -1557,7 +1557,6 @@ def set_appable(  # noqa: PLR0913 — keyword-only; one arg per slot constraint
     return node
 
 
-@transaction.atomic
 def _of_the_family(node: Kinsperson, family_id: int) -> bool:
     """A member on record, or the wedded spouse of one (#5017).
 
@@ -1577,6 +1576,7 @@ def _of_the_family(node: Kinsperson, family_id: int) -> bool:
     )
 
 
+@transaction.atomic
 def set_personal_holder(*, title: Title, node: Kinsperson) -> Title:
     """Name who holds ``title`` in person (#4239): one of the holding house's family."""
     if title.house_id is None or title.house.family_id is None:
