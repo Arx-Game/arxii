@@ -1874,7 +1874,6 @@
   - leverage_held <- secrets.Leverage
   - leverage_against <- secrets.Leverage
   - accusation_rebuttals <- secrets.AccusationRebuttal
-  - skill_values <- skills.CharacterSkillValue
   - specialization_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
   - standoff_profile <- standoffs.CharacterStandoffProfile
@@ -9694,11 +9693,6 @@
 
 ## world.skills
 
-### CharacterSkillValue
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [FK]
-  - skill -> skills.Skill [FK]
-
 ### CharacterSpecializationValue
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -9723,7 +9717,6 @@
   - combat_style <- covenants.CombatStyle
   - course_offers <- npc_services.SkillCourseOfferDetails
   - specializations <- skills.Specialization
-  - character_values <- skills.CharacterSkillValue
   - path_suggestions <- skills.PathSkillSuggestion
   - training_allocations <- skills.TrainingAllocation
 
@@ -9748,22 +9741,22 @@
   - mentor -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
-- `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' - Apply weekly rust to all untrained skills.`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
+- `cumulative_dp_for_level(level: int) -> int - Total dp needed to reach *level* from the base level of 10.`
 - `get_relationship_tier(character_a: 'CharacterSheet | ObjectDB', character_b: 'CharacterSheet | ObjectDB') -> 'int' - The lower claimed tier of a mutual Mentor/Student tie, else 0 (#3957).`
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' - Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
-- `points_to_next_boundary(skill_value: 'CharacterSkillValue') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
-- `process_weekly_training() -> 'dict[int, set[int]]' - Process all training allocations for the weekly tick.`
+- `next_xp_boundary(value: 'int') -> 'int | None' - The first XP boundary at or above *value* (19, 29, 39, 49), ``None`` above 49.`
+- `points_to_next_boundary(tracker: 'DevelopmentPoints') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
+- `process_weekly_training() -> 'None' - Process all training allocations for the weekly tick.`
 - `purchase_skill_breakthrough(character: 'ObjectDB', skill: 'Skill') -> 'tuple[bool, str]' - Spend XP to break through a skill's XP-boundary plateau (#2115).`
-- `reconcile_skill_stores(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - Bring a skill's two stores up to the higher of the two, and return that rating.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' - Delete a training allocation.`
-- `run_weekly_skill_cron() -> 'None' - Run the full weekly skill development cycle.`
-- `set_skill_sheet_value(sheet: 'CharacterSheet', skill: 'Skill', value: 'int') -> 'None' - The skill's ``CharacterSkillValue`` the sheet shows, the mirror of ``set_skill_trait``.`
-- `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - The skill's ``CharacterTraitValue`` the check engine reads (#2894), stamped (#3055).`
+- `run_weekly_skill_cron() -> 'None' - Run the weekly skill training cycle: process every training allocation.`
+- `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).`
 - `skill_cap_message(name: 'str', stored_cap: 'int') -> 'str' - Message shown when development stops at the band's skill cap (#4585).`
+- `skill_rating(sheet_id: 'int', skill: 'Skill') -> 'int' - The character's rating in ``skill``: its trait's ``CharacterTraitValue``, else 0.`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`

@@ -316,9 +316,8 @@ also writes a `traits.CharacterTraitChange` row (`old_value`/`new_value` spannin
 level-up in the call, `source=DEVELOPMENT_LEVEL_UP`) — the durable record that
 `CharacterTraitValue.value` changed and why, distinct from `DevelopmentTransaction`
 (which audits the dp award itself, not the resulting value mutation). No level-up means
-no `CharacterTraitChange` row. For a SKILL trait, `award_points` also writes the level it
-reached to `skills.CharacterSkillValue` (what the sheet shows) and first reconciles the two
-stores to the higher value (#4496; see skills.md "One rating, two stores"). See `docs/systems/INDEX.md`'s Traits entry for the full
+no `CharacterTraitChange` row. For a SKILL trait that trait row is the skill's one rating
+store, the one the sheet shows (#5010; see skills.md "The rating is `CharacterTraitValue`"). See `docs/systems/INDEX.md`'s Traits entry for the full
 `CharacterTraitChange` shape and its other writers (CG finalize, maturation).
 
 **Band skill cap (#4585).** For a SKILL-typed trait, `award_points` stops leveling at

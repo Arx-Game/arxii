@@ -7,7 +7,6 @@ Parent skills and specializations for character abilities. Skills are linked to 
 ### `models.py`
 - **`Skill`**: Parent skill linked to Trait (Melee Combat, Persuasion, etc.)
 - **`Specialization`**: Specific application under a parent skill (Swords, Seduction)
-- **`CharacterSkillValue`**: The skill rating the sheet shows (progress and rust live in the trait's `DevelopmentPoints`)
 - **`CharacterSpecializationValue`**: Character's specialization value with development tracking
 - **`SkillPointBudget`**: CG configuration (single-row model)
 - **`PathSkillSuggestion`**: Suggested skills for paths (templates, freely redistributable)
@@ -27,6 +26,9 @@ Parent skills and specializations for character abilities. Skills are linked to 
 ## Key Concepts
 
 ### Skill Values
+- A character's rating in a skill is the `CharacterTraitValue` on `skill.trait` (#5010): one
+  row the sheet shows and checks read. Read it with `skill_rating(sheet_id, skill)`; set it
+  directly with `set_skill_trait`
 - Internal: 10, 20, 30... (stored value)
 - Display: 1.0, 2.0, 3.0... (value / 10)
 - CG max: 30 (configurable via SkillPointBudget)

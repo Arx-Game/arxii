@@ -135,8 +135,8 @@ A minted Story NPC used to have a blank sheet — a GM's only path to a real,
 rollable statline was to hand-invent trait/skill values. Presets close that
 gap with a **curated archetype catalog**: staff author the presets in admin;
 GMs select at mint time, never invent values (ADR-0176 stays intact — the
-applied values land as the same real `CharacterTraitValue`/
-`CharacterSkillValue` rows a PC's sheet carries).
+applied values land as the same real `CharacterTraitValue` rows a PC's sheet
+carries, a skill's rating included).
 
 - **Models** (`world.roster.models.npc_presets`): `NPCStatlinePreset`
   (`name` unique, `description`, `NaturalKeyMixin + CreditedContent +
@@ -154,9 +154,8 @@ applied values land as the same real `CharacterTraitValue`/
   `_create_skill_values` in `world.character_creation.services` — rather
   than calling those private draft-dict helpers: trait lines write a
   `CharacterTraitValue` at `display_value * STAT_DISPLAY_DIVISOR`; skill
-  lines write a `CharacterSkillValue` plus the #2894 bridging
-  `CharacterTraitValue` on `skill.trait` (the check engine reads only trait
-  rows); every written value gets a `CharacterTraitChange` provenance stamp
+  lines write the `CharacterTraitValue` on `skill.trait` (a skill's one
+  rating store, #5010) and align its `DevelopmentPoints` ledger; every written value gets a `CharacterTraitChange` provenance stamp
   (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`). Refuses a sheet
   that already carries any NPC_PRESET-sourced stamp — no re-apply path in
   v1 (a second application path invites drift); staff adjust an existing

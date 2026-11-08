@@ -22,7 +22,6 @@ Character skills and specializations with development tracking, linked to the Tr
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSkillValue` | The skill rating the sheet shows | `character` (FK ObjectDB), `skill` (FK Skill), `value` |
 | `CharacterSpecializationValue` | Character's specialization value (no rust) | `character` (FK ObjectDB), `specialization` (FK Specialization), `value`, `development_points` |
 | `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Skill, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `ap_amount` |
 
@@ -63,24 +62,20 @@ and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 co
   above the base level takes `path level + 5`. Languages never rust.
 - Specializations keep their own counter, `CharacterSpecializationValue.development_points`.
 
-### One rating, two stores (#4496)
+### The rating is `CharacterTraitValue` (#5010)
 
-A skill's rating is stored twice: `CharacterSkillValue.value` is what the character
-sheet shows, and the matching `traits.CharacterTraitValue` (on `skill.trait`) is what
-every check reads. **Every writer of a skill's value after creation keeps both equal**
-and records a `traits.CharacterTraitChange`:
+A character's rating in a skill is the `traits.CharacterTraitValue` on `skill.trait`, one
+row that the sheet shows and every check reads. `skill_rating(sheet_id, skill)`
+(`world/skills/services.py`) reads it. Writers record a `traits.CharacterTraitChange`:
 
 | Writer | Source stamped |
 |--------|----------------|
-| Character creation and staff edit (`set_skill_values`) | the caller's (`CHARACTER_CREATION`, `STAFF_EDIT`) |
-| XP breakthrough (`purchase_skill_breakthrough`) | `XP_BREAKTHROUGH` |
-| Level-up from use, training or a GM award (`DevelopmentPoints.award_points`, a SKILL trait) | `DEVELOPMENT_LEVEL_UP` |
+| Character creation and staff edit (`set_skill_values` -> `set_skill_trait`) | the caller's (`CHARACTER_CREATION`, `STAFF_EDIT`) |
+| XP breakthrough (`purchase_skill_breakthrough` -> `set_skill_trait`) | `XP_BREAKTHROUGH` |
+| Level-up from use, training or a GM award (`DevelopmentPoints.award_points`) | `DEVELOPMENT_LEVEL_UP` |
 
-The helpers live in `world/skills/services.py`: `set_skill_trait` (the trait row, with its
-`CharacterTraitChange`), `set_skill_sheet_value` (the sheet row, created if missing) and
-`reconcile_skill_stores`, which raises both stores to the higher of the two before a writer
-adds its progress, so a character whose rows diverged before #4496 is never lowered.
-Rust changes no rating (it is debt on the `DevelopmentPoints` ledger), so it needs no sync.
+`set_skill_trait` also aligns the skill's `DevelopmentPoints` ledger to the rating it writes.
+An NPC copy and a preset write the trait rows in bulk and align the ledger themselves.
 Journeys: `integration_tests/test_trained_skills_journeys.py`.
 
 ### A card's bonus on a skill (#4820, slice 1 of #4813)
@@ -89,8 +84,8 @@ A distinction effect reaches a skill the way it reaches a stat: through a stat-c
 `mechanics.ModifierTarget` whose `target_trait` is the skill's trait. `TraitHandler.get_trait_value`
 folds that target's contributions for `TraitType.SKILL` as for `STAT` (the stat lane, #4726), in
 the skill's own units (`+10 sailing` is +10 shown), and `TraitHandler.get_trait_modifier(trait)`
-is the bonus alone. **The stored rating is never modified**: `CharacterSkillValue.value` and the
-trait row stay the trained value, so a bonus never raises the cost of the next rank, and the
+is the bonus alone. **The stored rating is never modified**: the trait row stays the trained
+value, so a bonus never raises the cost of the next rank, and the
 sheet's `SkillEntry` carries `value` (stored plus `modifier`, the number a roll uses) beside
 `modifier`, with `at_boundary` read from the stored rating.
 
@@ -199,14 +194,14 @@ spec = Specialization.objects.get(pk=1)
 spec.parent_name  # -> self.parent_skill.name
 ```
 
-### CharacterSkillValue / CharacterSpecializationValue
+### Skill ratings / CharacterSpecializationValue
 
 ```python
-from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+from world.skills.models import CharacterSpecializationValue
+from world.skills.services import skill_rating
 
-# Display value (1.0 scale)
-csv = CharacterSkillValue.objects.get(character=char, skill=skill)
-csv.display_value  # e.g., 3.0 for value=30
+skill_rating(sheet.pk, skill)  # the skill trait's CharacterTraitValue.value, 0 if unrated
+spec = CharacterSpecializationValue.objects.get(character=sheet, specialization=spec)
 ```
 
 ### SkillPointBudget (single-row configuration)
@@ -268,7 +263,6 @@ All models registered with appropriate admin interfaces:
   on a saved non-skill trait.
 - `SkillAdmin` - List/filter by category and active status, inline `Specialization` editing, ordered by `display_order`
 - `SpecializationAdmin` - List/filter by `parent_skill` and active status, search by name and parent skill
-- `CharacterSkillValueAdmin` - Shows `value`, `display_value`; filter by skill
 - `CharacterSpecializationValueAdmin` - Shows `value`, `display_value`, `development_points`; filter by parent skill
 - `SkillPointBudgetAdmin` - Single-row model; `has_add_permission` returns False if row exists, `has_delete_permission` always False
 
@@ -303,7 +297,7 @@ per `(character, skill)` and `(character, specialization)`.
 | `points_to_next_boundary(tracker: DevelopmentPoints) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585), read from its ledger (#5010): unpaid rust, then each level's cost up to the stop, less progress banked toward it. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
 | `stored_skill_cap(sheet) -> int or None` / `skill_cap_message(name, stored_cap) -> str` | The band's skill cap as a stored value (`skill_cap_for(sheet) * 10`, `None` for no cap), and the message every raise path shows when development stops at it (#4585) |
 | `next_xp_boundary(value) -> int or None` | The first XP boundary at or above `value`; where `award_points` parks a skill (#5010) |
-| `set_skill_trait(sheet, skill, value, source)` / `set_skill_sheet_value(sheet, skill, value)` / `reconcile_skill_stores(sheet, skill)` | Keep a skill's two stores equal (#4496) |
+| `skill_rating(sheet_id, skill) -> int` / `set_skill_trait(sheet, skill, value, source)` | Read a skill's rating, and set it directly (stamped, ledger aligned); the rating is the skill trait's `CharacterTraitValue` (#5010) |
 | `run_weekly_skill_cron()` | Weekly training only (rust is the rollover's one pass, #5010); registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
 
 ### Training Formula

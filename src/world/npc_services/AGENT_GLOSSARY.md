@@ -32,7 +32,7 @@ _Avoid_: class-3 NPC, class-4 NPC, major NPC.
 
 **Statline Preset** (`NPCStatlinePreset`, #3427):
 A staff-authored curated archetype ("Guard", "Courtier") a GM selects — never edits — at Story NPC
-mint time, giving the NPC real, rollable `CharacterTraitValue`/`CharacterSkillValue` rows instead of
+mint time, giving the NPC real, rollable `CharacterTraitValue` rows (skill ratings included) instead of
 a blank sheet. Lives in `world.roster.models` (beside `mint_story_npc`), not here — the NPC ladder
 above is unrelated (Story NPC statting is a mint-time convenience, not a rung on it). Applies once;
 no re-apply path — a second application invites drift, so staff hand-adjust an existing NPC's values

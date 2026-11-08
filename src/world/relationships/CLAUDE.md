@@ -70,7 +70,7 @@ Per-tie rows:
   Mirrors `TrainingAllocation`.
 - **`RelationshipDepthTransaction`** — the audit of one award: `amount`, `source`
   (`DepthSource` ALLOCATION / SCENE), `scene`, `game_week`. The side's columns are the
-  running sums (the same trade `CharacterSkillValue` makes against `DevelopmentTransaction`).
+  running sums (the same trade `progression.DevelopmentPoints` makes against `DevelopmentTransaction`).
 - **`RelationshipCapstone`** — the receipt of one advance: `journal_entry` (O2O, PROTECT),
   `tier_claimed`, `xp_spent`, or `is_ritual_capstone` + `ritual` for a soul-tether formation
   (`capstone_has_entry_or_is_ritual` check). `title` reads the entry's title.
