@@ -1478,6 +1478,36 @@ separate read-only endpoint, `StyleViewSet` at `/api/items/styles/`
 `src/world/magic/CLAUDE.md`'s "Motif System" section for the full coherence-walker
 detail.
 
+**Player-facing facet binding (#5021) [BUILT & WIRED]:** a player ties facets (Wolf,
+Silk, Red) from the staff-authored vocabulary to the resonances they have claimed,
+writing the `MotifResonanceAssociation` rows the flourish gate
+(`SignatureMotifBonus.qualifies_for`), the ritual-offering facet route
+(`services/drift.py` `qualifying_components_by_target`), the cast-narration fallback and
+the sheet's Motif section already read. Owner rulings (2026-11-08): in play any time and
+optionally in creation for the gift resonance; one facet may sit on several of a
+character's resonances (no move semantics, unlike styles); removing the last tie of a
+facet that a live thread's signed flourish needs is refused until the flourish is
+cleared; free. Service (`services/motif_facet.py`): `bind_motif_facet(sheet, facet,
+resonance)` (claimed resonance required, lazily creates `Motif`/`MotifResonance`,
+idempotent, cap from `MotifResonanceLink.clean()`), `unbind_motif_facet(sheet, facet,
+resonance)`, `motif_facet_bindings(sheet)`, `tie_creation_facets(motif_resonance,
+facet_ids)` (CG finalize). Exceptions: `StyleResonanceUnclaimed` (reused),
+`FacetBindingCapExceeded`, `FacetNotBound`, `FacetNeededByFlourish` (names the flourish).
+Actions (`actions/definitions/motif_facet.py`, REGISTRY): `BindMotifFacetAction`
+(`"bind_motif_facet"`) / `UnbindMotifFacetAction` (`"unbind_motif_facet"`);
+`ListMotifStylesAction` now lists styles and facets (`data.facet_bindings`). Telnet:
+`motif bindfacet <facet>=<resonance>` / `motif unbindfacet <facet>=<resonance>`, the facet
+resolved by `find_facet` (aliases and plurals count). Web: `MotifStyleViewSet`
+`POST bind-facet/` / `unbind-facet/` (`{facet_id, resonance_id}`, same `X-Character-ID`
+scoping); the Spellbook's `MotifFacetPanel`. Admin: `MotifResonanceAssociationInline` on
+`MotifResonanceAdmin` (`MotifFacetFormSet` refuses more than five rows in one save).
+**Creation:** `draft_data.selected_gift_facet_ids` (up to five, validated in
+`CharacterDraftSerializer._validate_gift_facets`, free) is picked under the Gift stage's
+Motif (`GiftFacetsField`); `creation_personalization_options(..., facet_ids=)` then also
+offers a creation-costed flourish gated on a picked facet (when any resonance gate is the
+gift resonance), and `_finalize_technique_personalizations` ties the picks to the gift
+resonance before the flourish is signed.
+
 ### Signature Motif Bonus (#1582 — ADR-0072) [BUILT & WIRED]
 
 A **`SignatureMotifBonus`** is a staff-authored, facet/resonance-gated additive bonus

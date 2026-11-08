@@ -180,6 +180,17 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Web: `MotifStyleViewSet` (`/api/magic/motif-styles/`) + the Style catalog
     `StyleViewSet` (`/api/items/styles/`). Consumer-side wiring (coherence walker,
     style-presentation endorsement) predates this issue — see `docs/systems/magic.md`.
+  - **Motif facet binding (#5021):** `MotifResonanceAssociation` (cap 5/resonance) is
+    player-authorable in play and, for the gift resonance, in creation. Service
+    (`services/motif_facet.py`): `bind_motif_facet` / `unbind_motif_facet` /
+    `motif_facet_bindings` / `tie_creation_facets`; exceptions `FacetBindingCapExceeded` /
+    `FacetNotBound` / `FacetNeededByFlourish` (+ `StyleResonanceUnclaimed`). Actions
+    (`actions/definitions/motif_facet.py`): `BindMotifFacetAction` /
+    `UnbindMotifFacetAction`. Telnet: `motif bindfacet|unbindfacet <facet>=<resonance>`.
+    Web: `MotifStyleViewSet` `bind-facet/` / `unbind-facet/`; admin facet inline on
+    `MotifResonanceAdmin`. CG: `draft_data.selected_gift_facet_ids` opens facet-gated
+    flourishes in `creation_personalization_options(facet_ids=)`. See
+    `docs/systems/magic.md`.
   - **Signature Motif Bonus (ADR-0072 — #1582):** `SignatureMotifBonus` (staff-authored
     catalog; `required_facet` FK, `required_resonance` FK, `flat_intensity_delta`,
     `narrative_snippet`; `qualifies_for(character_sheet)` gate predicate),

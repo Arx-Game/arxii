@@ -749,9 +749,17 @@ admin all converge on the same service layer.
 - **Frontend:** `MotifStylePanel` (`frontend/src/magic/components/`), mounted in the
   Spellbook tab below the read-only Motif card — see `frontend/src/magic/CLAUDE.md`
   for the wire contract.
-- **Not built here:** the character-creation-time facet-binding flow floated in the
-  original spec was ruled out against code (no CG magic-stage hook exists for it) —
-  binding happens post-CG only, same as before.
+- **Facets (#5021):** the same surfaces tie facets to claimed resonances:
+  `services/motif_facet.py` (`bind_motif_facet` / `unbind_motif_facet` /
+  `motif_facet_bindings` / `tie_creation_facets`), `BindMotifFacetAction` /
+  `UnbindMotifFacetAction` (`actions/definitions/motif_facet.py`), `motif bindfacet|
+  unbindfacet <facet>=<resonance>`, `MotifStyleViewSet` `bind-facet/` / `unbind-facet/`,
+  `MotifFacetPanel`, and `MotifResonanceAssociationInline` in admin. Unlike styles a
+  facet may sit on several resonances; the last tie of a facet a signed flourish needs
+  cannot be removed (`FacetNeededByFlourish`) until the flourish is cleared. Creation
+  picks facets for the gift resonance (`draft_data.selected_gift_facet_ids`), which opens
+  flourishes gated on them in `creation_personalization_options(facet_ids=)`; finalize
+  ties them before signing. See `docs/systems/magic.md`.
 
 ### Thread System (Resonance Pivot Spec A)
 
