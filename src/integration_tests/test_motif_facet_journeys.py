@@ -316,3 +316,138 @@ class StaffFixFacetsInAdmin(_FacetCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Maximum 5 facets per resonance.")
         self.assertEqual(self.facets_on(self.wildfire), ["Wolf"])
+
+
+class PickingFacetsInCreation(JourneyCase):
+    """A new player picks Wolf for her gift resonance in the Gift stage (#5021, slice 2).
+
+    Over the REST seam the browser uses (the draft PATCH and ``personalization-options``),
+    then the finalize step that writes the new character's magic.
+    """
+
+    DRAFTS = "/api/character-creation/drafts/"
+
+    def setUp(self) -> None:
+        super().setUp()
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import CharacterDraftFactory
+        from world.magic.factories import (
+            GiftFactory,
+            SignatureMotifBonusFactory,
+            ensure_canonical_affinities,
+        )
+
+        ensure_canonical_affinities()
+        self.frost = ResonanceFactory(name="Frost")
+        self.wolf = FacetFactory(name="Wolf")
+        self.silk = FacetFactory(name="Silk")
+        gift = GiftFactory(name="Ember")
+        self.technique = TechniqueFactory(gift=gift, name="Scorch Lash", level=1)
+        self.howl = SignatureMotifBonusFactory(
+            name="Howl of the Pack",
+            required_facet=self.wolf,
+            required_resonance=None,
+            min_crossing_level=1,
+            creation_point_cost=3,
+        )
+        self.account = AccountFactory()
+        self.client_api = self.api(self.account)
+        self.draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "selected_gift_id": gift.pk,
+                "selected_technique_ids": [self.technique.pk],
+                "selected_gift_resonance_id": self.frost.pk,
+            },
+        )
+
+    def offered_flourishes(self) -> list[str]:
+        response = self.client_api.get(f"{self.DRAFTS}{self.draft.pk}/personalization-options/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return [f["name"] for f in response.json()[0]["flourishes"]]
+
+    def pick_errors(self) -> list[str]:
+        """What the Gift stage's validation says of the draft's flourish pick now."""
+        from world.character_creation.constants import (
+            GIFT_FACETS_KEY,
+            TECHNIQUE_PERSONALIZATIONS_KEY,
+        )
+        from world.magic.services.creation_personalization import (
+            parse_personalization_picks,
+            personalization_pick_errors,
+        )
+
+        self.draft.refresh_from_db()
+        data = self.draft.draft_data
+        picks = parse_personalization_picks(
+            data.get(TECHNIQUE_PERSONALIZATIONS_KEY), technique_ids=[self.technique.pk]
+        )
+        return personalization_pick_errors(
+            picks,
+            techniques=[self.technique],
+            resonance_id=self.frost.pk,
+            facet_ids=data.get(GIFT_FACETS_KEY) or [],
+        )
+
+    def patch_draft(self, draft_data: dict):
+        return self.client_api.patch(
+            f"{self.DRAFTS}{self.draft.pk}/", {"draft_data": draft_data}, format="json"
+        )
+
+    def test_picking_wolf_offers_the_wolf_flourish_and_finalize_ties_and_signs_it(self) -> None:
+        from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import TraditionFactory
+
+        self.assertNotIn("Howl of the Pack", self.offered_flourishes())
+
+        response = self.patch_draft({"selected_gift_facet_ids": [self.wolf.pk]})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("Howl of the Pack", self.offered_flourishes())
+
+        pick = {str(self.technique.pk): {"signature_bonus_id": self.howl.pk}}
+        response = self.patch_draft({TECHNIQUE_PERSONALIZATIONS_KEY: pick})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.pick_errors(), [])
+        self.draft.refresh_from_db()
+
+        self.draft.selected_tradition = TraditionFactory()
+        self.draft.save()
+        sheet = CharacterSheetFactory()
+        finalize_magic_data(self.draft, sheet)
+
+        self.assertEqual(
+            list(
+                MotifResonanceAssociation.objects.filter(
+                    motif_resonance__motif__character=sheet
+                ).values_list("motif_resonance__resonance__name", "facet__name")
+            ),
+            [("Frost", "Wolf")],
+        )
+        thread = Thread.objects.get(owner=sheet, target_technique=self.technique)
+        self.assertEqual(thread.signature_bonus, self.howl)
+
+    def test_dropping_wolf_makes_the_flourish_pick_stale(self) -> None:
+        from world.character_creation.constants import TECHNIQUE_PERSONALIZATIONS_KEY
+
+        pick = {str(self.technique.pk): {"signature_bonus_id": self.howl.pk}}
+        self.patch_draft(
+            {"selected_gift_facet_ids": [self.wolf.pk], TECHNIQUE_PERSONALIZATIONS_KEY: pick}
+        )
+        self.patch_draft({"selected_gift_facet_ids": [self.silk.pk]})
+
+        self.assertNotIn("Howl of the Pack", self.offered_flourishes())
+        self.assertEqual(
+            self.pick_errors(), ["A chosen signature flourish is no longer available."]
+        )
+
+    def test_six_facets_or_an_unknown_one_are_refused(self) -> None:
+        many = [FacetFactory(name=n).pk for n in ("A", "B", "C", "D", "E", "F")]
+        response = self.patch_draft({"selected_gift_facet_ids": many})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Choose at most 5 facets.", str(response.json()))
+
+        response = self.patch_draft({"selected_gift_facet_ids": [999999]})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("A chosen facet no longer exists.", str(response.json()))

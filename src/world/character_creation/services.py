@@ -30,6 +30,7 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    GIFT_FACETS_KEY,
     KIN_ROWS_KEY,
     LINE_PARENT_FATE_KEY,
     OTHER_PARENT_FATE_KEY,
@@ -2830,13 +2831,16 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
     """Step 1d (#4099): seed the Motif from the gift resonance, then write the picks.
 
     The Motif seed is unconditional: any signature flourish (now or in play) needs the
-    character's Motif to carry their gift resonance.
+    character's Motif to carry their gift resonance. The draft's facet picks (#5021) are
+    tied to that resonance before the flourishes are signed, so a facet-gated flourish
+    bought in creation qualifies when ``set_signature_bonus`` checks it.
     """
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.creation_personalization import (  # noqa: PLC0415
         apply_creation_personalizations,
         parse_personalization_picks,
     )
+    from world.magic.services.motif_facet import tie_creation_facets  # noqa: PLC0415
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
         seed_motif_from_gift_resonance,
     )
@@ -2844,7 +2848,8 @@ def _finalize_technique_personalizations(draft: CharacterDraft, sheet: Character
     resonance_id = draft.draft_data.get("selected_gift_resonance_id")
     resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
     if resonance is not None:
-        seed_motif_from_gift_resonance(sheet, resonance)
+        motif_resonance = seed_motif_from_gift_resonance(sheet, resonance)
+        tie_creation_facets(motif_resonance, draft.draft_data.get(GIFT_FACETS_KEY) or [])
     picks = parse_personalization_picks(
         draft.draft_data.get(TECHNIQUE_PERSONALIZATIONS_KEY),
         technique_ids=draft.draft_data.get("selected_technique_ids") or [],

@@ -105,6 +105,27 @@ def _refuse_if_a_signed_flourish_needs(sheet: CharacterSheet, facet: Facet) -> N
         raise FacetNeededByFlourish(signed.signature_bonus.name)
 
 
+def tie_creation_facets(
+    motif_resonance: MotifResonance, facet_ids: list[int]
+) -> list[MotifResonanceAssociation]:
+    """Tie a new character's creation facet picks to their gift resonance (CG finalize).
+
+    ``motif_resonance`` is the one ``seed_motif_from_gift_resonance`` returned. The picks
+    were validated on the draft (distinct, existing, at most the cap); a facet deleted
+    since is skipped. Idempotent.
+    """
+    from world.magic.models import Facet  # noqa: PLC0415
+
+    facets = Facet.objects.in_bulk(facet_ids)
+    return [
+        MotifResonanceAssociation.objects.get_or_create(
+            motif_resonance=motif_resonance, facet=facets[facet_id]
+        )[0]
+        for facet_id in facet_ids
+        if facet_id in facets
+    ]
+
+
 def motif_facet_bindings(sheet: CharacterSheet) -> list[MotifResonanceAssociation]:
     """Return the sheet's facet ties (empty when no Motif exists)."""
     return list(

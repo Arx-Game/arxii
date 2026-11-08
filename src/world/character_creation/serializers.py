@@ -21,6 +21,7 @@ from world.character_creation.constants import (
     CRIME_LINE,
     CRIME_LINE_MAX_LENGTH,
     FIGURE_NAME_MAX_LENGTH,
+    GIFT_FACETS_KEY,
     KIN_ROW_NAME_MAX_LENGTH,
     KIN_ROWS_KEY,
     KIN_ROWS_MAX,
@@ -2117,6 +2118,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_new_family_name(value)
         self._validate_family_facet_picks(value)
         self._validate_technique_personalizations(value)
+        self._validate_gift_facets(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -2153,6 +2155,29 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
                 return False
         return True
+
+    @staticmethod
+    def _validate_gift_facets(data: dict) -> None:
+        """``selected_gift_facet_ids`` (#5021): distinct facet ids, at most the Motif's cap."""
+        from world.magic.models import Facet, MotifResonanceAssociation  # noqa: PLC0415
+
+        raw = data.get(GIFT_FACETS_KEY)
+        if raw is None:
+            return
+        cap = MotifResonanceAssociation.MAX_PER_RESONANCE
+        if (
+            not isinstance(raw, list)
+            or any(not isinstance(v, int) or isinstance(v, bool) for v in raw)
+            or len(set(raw)) != len(raw)
+        ):
+            msg = "selected_gift_facet_ids must be a list of distinct facet ids"
+            raise serializers.ValidationError({GIFT_FACETS_KEY: msg})
+        if len(raw) > cap:
+            msg = f"Choose at most {cap} facets."
+            raise serializers.ValidationError({GIFT_FACETS_KEY: msg})
+        if Facet.objects.filter(pk__in=raw).count() != len(raw):
+            msg = "A chosen facet no longer exists."
+            raise serializers.ValidationError({GIFT_FACETS_KEY: msg})
 
     def _validate_technique_personalizations(self, data: dict) -> None:
         """Shape + hygiene for ``technique_personalizations`` (#4099); cleans text in place."""

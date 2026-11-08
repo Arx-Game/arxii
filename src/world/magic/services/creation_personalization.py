@@ -2,7 +2,9 @@
 
 Offers, validates, prices and applies three catalog picks (a flourish, an early form,
 a price) plus the player's own name and description. A null ``creation_point_cost``
-means a row is not offered in creation. Everything is keyed by technique id; entries
+means a row is not offered in creation. A facet-gated flourish is offered only when its
+facet is among the draft's gift-resonance facet picks (#5021).
+Everything is keyed by technique id; entries
 for techniques the draft no longer selects are ignored.
 """
 
@@ -55,16 +57,32 @@ def parse_personalization_picks(
     return picks
 
 
-def _offered_flourishes(resonance_id: int | None) -> list[SignatureMotifBonus]:
+def _offered_flourishes(
+    resonance_id: int | None, facet_ids: Iterable[int] = ()
+) -> list[SignatureMotifBonus]:
+    """Flourishes a new character could qualify for: the gift resonance's, and (#5021)
+    those gated on a facet the draft picked, when any resonance gate is that resonance.
+
+    The same AND gate as ``SignatureMotifBonus.qualifies_for`` on the Motif finalize
+    writes (the gift resonance, carrying the picked facets).
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
     from world.magic.models import SignatureMotifBonus  # noqa: PLC0415
 
     if resonance_id is None:
         return []
+    resonance_gate = Q(required_resonance_id=resonance_id)
+    gate = Q(required_facet__isnull=True) & resonance_gate
+    picked = list(facet_ids)
+    if picked:
+        gate |= Q(required_facet_id__in=picked) & (
+            Q(required_resonance__isnull=True) | resonance_gate
+        )
     return list(
         SignatureMotifBonus.objects.filter(
+            gate,
             creation_point_cost__isnull=False,
-            required_facet__isnull=True,
-            required_resonance_id=resonance_id,
             min_crossing_level__lte=CREATION_PERSONALIZATION_MAX_LEVEL,
         ).order_by("creation_point_cost", "name")
     )
@@ -110,7 +128,10 @@ def _price_fits(
 
 
 def creation_personalization_options(
-    techniques: Sequence[Technique], *, resonance_id: int | None
+    techniques: Sequence[Technique],
+    *,
+    resonance_id: int | None,
+    facet_ids: Iterable[int] = (),
 ) -> list[PersonalizationOptionSet]:
     """What creation offers per technique. A fixed number of queries regardless of count.
 
@@ -123,7 +144,7 @@ def creation_personalization_options(
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
     techniques = [t for t in techniques if not t.is_ultimate]
-    flourishes = _offered_flourishes(resonance_id)
+    flourishes = _offered_flourishes(resonance_id, facet_ids)
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
         price_components_by_price,
     )
@@ -221,11 +242,14 @@ def personalization_pick_errors(
     *,
     techniques: Sequence[Technique],
     resonance_id: int | None,
+    facet_ids: Iterable[int] = (),
 ) -> list[str]:
     """Every pick must still be on offer for its technique at the draft's resonance."""
     options = {
         o.technique.pk: o
-        for o in creation_personalization_options(techniques, resonance_id=resonance_id)
+        for o in creation_personalization_options(
+            techniques, resonance_id=resonance_id, facet_ids=facet_ids
+        )
     }
     catalog_names_by_id = {t.pk: t.name.casefold() for t in techniques}
     errors: list[str] = []
