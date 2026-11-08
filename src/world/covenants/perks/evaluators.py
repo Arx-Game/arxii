@@ -284,15 +284,19 @@ def surrounded(ctx: SituationContext, params: SituationParams) -> bool:
     return count >= threshold
 
 
-def _distraction_condition_instance(target_character: object) -> ConditionInstance | None:
+def _distraction_condition_instance(bearer_id: int) -> ConditionInstance | None:
     """Shared lookup for TARGET_DISTRACTED / TARGET_SWAYED_BY_ALLY.
+
+    *bearer_id* is the ObjectDB id that bears the target's conditions (see
+    ``_target_bearer_id``): a sheet-backed target's character, or in combat the
+    NPC opponent the subject declared as this round's target (#5020).
 
     Data source, verified: ``ConditionInstance.source_technique``
     (``world/conditions/models.py:1238``) + ``TechniqueFunctionTag``
     (``world/magic/models/techniques.py:609`` — "the SHARED vocabulary both
     per-vow specialties (#2443) and situational perks (#2536) target",
     ``world/magic/constants.py:20``). An active (``resolved_at`` null)
-    condition on *target_character* whose applying technique carries the
+    condition on the bearer whose applying technique carries the
     DISTRACTION or CHARM ``TechniqueFunction`` tag. One query. ``.distinct()``
     guards against the M2M-shaped join (``function_tags``) returning
     duplicate ``ConditionInstance`` rows when a technique carries both tags.
@@ -302,7 +306,7 @@ def _distraction_condition_instance(target_character: object) -> ConditionInstan
 
     return (
         ConditionInstance.objects.filter(
-            target=target_character,
+            target_id=bearer_id,
             resolved_at__isnull=True,
             source_technique__function_tags__function__in=[
                 TechniqueFunction.DISTRACTION,
@@ -317,12 +321,15 @@ def _distraction_condition_instance(target_character: object) -> ConditionInstan
 
 @register(Situation.TARGET_DISTRACTED)
 def target_distracted(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
-    """See ``_distraction_condition_instance``. False when ``target`` is None.
+    """See ``_distraction_condition_instance``. The target is ``ctx.target``'s
+    character, or in combat the NPC opponent the subject declared as this round's
+    target (``_target_bearer_id``, #5020). False when there is neither.
 
     Reads no params (absent from ``SITUATION_PARAM_SPECS``)."""
-    if ctx.target is None:
+    bearer_id = _target_bearer_id(ctx)
+    if bearer_id is None:
         return False
-    return _distraction_condition_instance(ctx.target.character) is not None
+    return _distraction_condition_instance(bearer_id) is not None
 
 
 @register(Situation.TARGET_SWAYED_BY_ALLY)
@@ -342,11 +349,13 @@ def target_swayed_by_ally(ctx: SituationContext, params: SituationParams) -> boo
     handler, "used by the reactive-filter ``shares_covenant`` op"). One query
     for the condition instance; ``shares_covenant_with`` is a cached-handler
     read (no fresh query once the handler is warm). Reads no params (absent
-    from ``SITUATION_PARAM_SPECS``).
+    from ``SITUATION_PARAM_SPECS``). The target is resolved as in
+    ``target_distracted`` (an NPC opponent counts, #5020).
     """
-    if ctx.holder is None or ctx.target is None:
+    bearer_id = _target_bearer_id(ctx)
+    if ctx.holder is None or bearer_id is None:
         return False
-    instance = _distraction_condition_instance(ctx.target.character)
+    instance = _distraction_condition_instance(bearer_id)
     if instance is None or instance.source_character is None:
         return False
     applier = instance.source_character
@@ -398,27 +407,71 @@ def _target_declared_action(ctx: SituationContext) -> CombatRoundAction | None:
     )
 
 
+def _opponent_focused_elsewhere(opponent: CombatOpponent, striker: CombatParticipant) -> bool:
+    """Is *opponent*'s plan this round aimed at someone other than *striker*? (#5020)
+
+    The plan is fixed before anyone resolves (``resolve_round`` selects NPC
+    actions and matures wind-ups first). An attack this round
+    (``CombatOpponentAction``) wins: True when it has at least one target and
+    *striker* is not among its participant targets; an attack that includes
+    the striker is still on the striker (owner ruling 1). With no attack, an
+    unmatured telegraphed wind-up (``PendingOpponentAttack``) at a specific
+    participant other than *striker* counts (ruling 2); a place-covering
+    wind-up (null ``target``) does not. No plan at all is not focus elsewhere
+    (ruling 3). Two queries at most; ``values_list`` over the two target M2Ms
+    reads ids without touching the shared action instances.
+    """
+    from world.combat.models import CombatOpponentAction, PendingOpponentAttack  # noqa: PLC0415
+
+    round_number = striker.encounter.round_number
+    rows = list(
+        CombatOpponentAction.objects.filter(
+            opponent=opponent, round_number=round_number
+        ).values_list("targets", "opponent_targets")
+    )
+    if rows:
+        participant_ids = {pid for pid, _ in rows if pid is not None}
+        if striker.pk in participant_ids:
+            return False
+        return bool(participant_ids) or any(oid is not None for _, oid in rows)
+    windup_target_ids = set(
+        PendingOpponentAttack.objects.filter(
+            opponent=opponent, resolves_round__gt=round_number
+        ).values_list("target_id", flat=True)
+    )
+    windup_target_ids.discard(None)
+    return bool(windup_target_ids) and striker.pk not in windup_target_ids
+
+
 @register(Situation.TARGET_FOCUSED_ELSEWHERE)
 def target_focused_elsewhere(
     ctx: SituationContext,
     params: SituationParams,  # noqa: ARG001
 ) -> bool:
-    """Target's declared CombatRoundAction this round targets someone != subject.
+    """The target is busy with someone other than the subject this round.
 
-    Data source, verified: ``CombatRoundAction.focused_opponent_target`` /
-    ``.focused_ally_target`` (``world/combat/models.py:1073`` — "A PC's
-    declared actions for a round"; only PC/sheet-backed combatants have a
-    ``CombatParticipant`` row, matching ``ctx.target: CharacterSheet``). Only
-    meaningful when the target is a PC/sheet-backed participant in the same
-    encounter as the subject's resolution — an NPC-only opponent (no
-    CharacterSheet) can never populate ``ctx.target`` in the first place, so
-    this correctly reads False for that case rather than needing a special
-    branch. ``focused_opponent_target`` is an NPC (never the subject, since
-    ``subject`` is always a PC) so its presence alone means "elsewhere"; a
-    ``focused_ally_target`` must be compared against the subject directly.
-    One query (see ``_target_declared_action``). Reads no params (absent from
-    ``SITUATION_PARAM_SPECS``).
+    NPC target (#5020, the case #2536 wrote this situation for: "bonus
+    attacking enemies focused on someone else"): when the subject declared an
+    NPC opponent as this round's target (``_subject_focused_opponent``), the
+    answer is that NPC's own plan for the round, read by
+    ``_opponent_focused_elsewhere``. "Elsewhere" means not on the subject, the
+    one striking, so a covenant-ally perk reads the mate's strike (ruling 4).
+    Persona-linked NPCs take this branch too.
+
+    Ally target (a sheet-backed ``ctx.target`` and no NPC opponent declared):
+    the ally's own ``CombatRoundAction`` this round (``_target_declared_action``).
+    A ``focused_opponent_target`` is an NPC, never the subject, so its presence
+    alone means "elsewhere"; a ``focused_ally_target`` is compared against the
+    subject directly.
+
+    Three queries at most. Reads no params (absent from
+    ``SITUATION_PARAM_SPECS``). False outside combat.
     """
+    participant = _resolution_participant(ctx.resolution)
+    if participant is not None:
+        opponent = _subject_focused_opponent(participant)
+        if opponent is not None:
+            return _opponent_focused_elsewhere(opponent, participant)
     action = _target_declared_action(ctx)
     if action is None:
         return False

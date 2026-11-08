@@ -1001,6 +1001,17 @@ another's trigger. All live in `world.covenants.perks.evaluators` and fire throu
 - **`TARGET_LOW_HEALTH`** - the focused opponent's `health_percentage` (or, with none, a sheet
   target's `CharacterVitals.health_percentage`) is below `threshold_percent`, default
   `ALLY_LOW_HEALTH_FRACTION` (50%).
+- **`TARGET_DISTRACTED` / `TARGET_SWAYED_BY_ALLY`** (#5020) read the same "target" as above:
+  a distraction or charm laid on an NPC opponent's own body now counts, where before they read
+  only a sheet-backed `ctx.target` and so never saw a mook.
+- **`TARGET_FOCUSED_ELSEWHERE`** (#5020) - against a declared NPC opponent, reads that NPC's
+  own plan for the round (`_opponent_focused_elsewhere`): its `CombatOpponentAction` this round
+  has targets (players or other opponents) and the subject, the one striking, is not among
+  them; an attack that includes the subject does not count. With no attack row, an unmatured
+  `PendingOpponentAttack` aimed at another participant counts; a place-covering wind-up or no
+  plan at all does not. With no NPC opponent declared, an ally target's own
+  `CombatRoundAction` is read as before. Owner rulings on #5020; journey
+  `src/integration_tests/test_focused_elsewhere_perk_journeys.py`.
 - **`ENEMY_HELD_BY_ALLY`** now also counts two more hold shapes (`_holder_sheet_ids_on_opponent`):
   an active clash-lock condition (`ConditionTemplate.is_clash_lock`) on the opponent whose
   `source_character` is a covenant-mate, and an ACTIVE LOCK/SUSTAINING `Clash` on the opponent

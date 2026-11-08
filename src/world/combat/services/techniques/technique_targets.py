@@ -116,10 +116,13 @@ def _resolve_primary_target_sheet(action: CombatRoundAction) -> CharacterSheet |
       ``world/combat/escalation.py``'s ``opponent.persona.character_sheet``
       for the same resolution pattern) — that gives a real ``CharacterSheet``
       target-keyed situations can read. A bare (non-persona) NPC opponent
-      correctly resolves to ``None``: target-keyed situations (
+      resolves to ``None``. That does not blind the target situations to it:
       ``TARGET_DISTRACTED``/``TARGET_SWAYED_BY_ALLY``/
-      ``TARGET_FOCUSED_ELSEWHERE``/``TARGET_FAVORABLY_DISPOSED``) simply
-      never hold against it, same as any other targetless cast.
+      ``TARGET_FOCUSED_ELSEWHERE`` (#5020), ``TARGET_LOW_HEALTH``,
+      ``TARGET_IS_BOSS`` and ``TARGET_HAS_CONDITION_PROPERTY`` read the
+      subject's declared NPC opponent from the round context instead. Only
+      ``TARGET_FAVORABLY_DISPOSED`` (standing is held per persona) needs the
+      sheet.
 
     For a multi-target/AoE cast only this single primary target is resolved
     — per-target perk evaluation for AoE is a legitimate slice-2+
