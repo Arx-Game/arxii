@@ -21,6 +21,7 @@ from world.progression.services.skill_development import (
     process_weekly_skill_development,
 )
 from world.progression.types import DevelopmentSource
+from world.roster.factories import RosterEntryFactory
 from world.skills.factories import SkillFactory, SkillRatingFactory
 from world.traits.factories import TraitFactory
 from world.traits.models import (
@@ -555,6 +556,8 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
+        # Rust reaches only characters in active play (#5010).
+        RosterEntryFactory(character_sheet=cls.sheet)
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
         cls.trait_language = TraitFactory(
@@ -648,6 +651,24 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         )
         # char_level=5, rust = 5+5 = 10, cap = (12-10)*100 = 200
         assert dev["rust_debt"] == 10
+
+    def test_rust_spares_npcs_and_stops_at_one_level(self) -> None:
+        """An NPC (no roster entry) never rusts; a PC's debt stops at one level's cost."""
+        npc = CharacterSheetFactory()
+        npc_dev = DevelopmentPoints.objects.create(character_sheet=npc, trait=self.trait_unused)
+        CharacterTraitValue.objects.create(character=npc, trait=self.trait_unused, value=12)
+        DevelopmentPoints.objects.create(
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300, rust_debt=195
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
+        )
+
+        process_weekly_skill_development(self.game_week)
+
+        npc_dev.refresh_from_db()
+        pc_dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait_unused)
+        assert (npc_dev.rust_debt, pc_dev.rust_debt) == (0, 200)
 
     def test_rust_creates_audit_transaction(self) -> None:
         """Rust application creates a DevelopmentTransaction with source=RUST."""

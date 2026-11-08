@@ -305,8 +305,9 @@ training and Academy courses) all come through `award_points`. For a SKILL trait
   (`weekly_skill_development_task` -> `process_weekly_skill_development(ended_week)` ->
   `_apply_weekly_rust`) adds `path level + 5` of `rust_debt` to every ledger row above the
   base level, except a trait used in the ended week (`WeeklySkillUsage`) or trained in it (a
-  `TRAINING` `DevelopmentTransaction` stamped with that `game_week`). Languages never rust.
-  It runs once per week (a `RUST` transaction for the week is its idempotency guard).
+  `TRAINING` `DevelopmentTransaction` stamped with that `game_week`). Outstanding debt never
+  exceeds the current level's cost, and only characters on an active, non-dormant roster
+  rust (NPCs and dormant characters do not). Languages never rust. It runs once per week (a `RUST` transaction for the week is its idempotency guard).
 
 Stats and languages still count from the base level, and stats still develop through use
 exactly as before (#5008 decision 6).

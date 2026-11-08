@@ -59,7 +59,9 @@ and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 co
   (`progression.services.skill_development._apply_weekly_rust`). A skill used in the week
   that ended (a `WeeklySkillUsage` row) or trained in it (a `TRAINING`
   `DevelopmentTransaction` stamped with that `game_week`) is exempt; every other ledger row
-  above the base level takes `path level + 5`. Languages never rust.
+  above the base level takes `path level + 5`, and outstanding debt never exceeds the
+  current level's cost. Only characters in active play rust (an active, non-dormant roster
+  entry); NPCs and dormant characters do not. Languages never rust.
 - Specializations keep their own counter, `CharacterSpecializationValue.development_points`.
 
 ### The rating is `CharacterTraitValue` (#5010)

@@ -131,8 +131,9 @@ dev_points = base_gain + mentor_bonus
   the cap. Any new skill raise path must check it too.
 
 ### Rust System
-- Idle skills accumulate `character_level + 5` rust debt per week, at most the current
-  level's cost per week (`apply_skill_rust`)
+- Idle skills accumulate `character_level + 5` rust debt per week; outstanding debt never
+  exceeds the current level's cost (`apply_skill_rust`)
+- Only characters on an active, non-dormant roster rust; NPCs and dormant characters do not
 - Dev points pay off rust before counting toward advancement
 - Training or use in a week prevents rust for that week
 

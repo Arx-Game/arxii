@@ -1,6 +1,6 @@
 ---
 name: two-store-writer-reviewer
-description: Checks a diff that writes, or adds a writer for, a value this codebase keeps in two places (a skill's rating in CharacterSkillValue and CharacterTraitValue, or any other pair where one copy is shown and the other is read by the engine). Use when a diff assigns `.value` on either row, adds a way to raise, lower, grant, reset or copy a skill, or adds a second model that mirrors an existing one, and when reviewing one. Catches the writer that updates one copy while the other goes stale.
+description: Checks a diff that writes, or adds a writer for, a value this codebase keeps in two places (any pair where one copy is shown and the other is read by the engine, or two counters for one fact). Use when a diff adds a writer for a denormalised or mirrored value, or adds a second model that mirrors an existing one, and when reviewing one. Catches the writer that updates one copy while the other goes stale.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -12,7 +12,13 @@ sees.
 
 ## Why this agent exists
 
-A skill's rating is stored twice. `CharacterSkillValue` is what the character
+The worked example below no longer exists: #5010 collapsed the skill pair into
+one rating row (`CharacterTraitValue`) and one progress ledger
+(`progression.DevelopmentPoints`), so a skill now has one writer path
+(`set_skill_trait`, `DevelopmentPoints.award_points`). The class of defect
+remains for any other value stored twice.
+
+A skill's rating was stored twice. `CharacterSkillValue` is what the character
 sheet shows (`world/character_sheets/serializers.py`, `_build_skills`).
 `CharacterTraitValue` is what every check reads (`TraitHandler`, through
 `perform_check`). Character creation and staff edit wrote both through
@@ -31,9 +37,9 @@ test read the store its writer wrote. The two never met until a research pass
 on #4457 asked why training did not reach rolls (#4496).
 
 The rule this enforces: **when a value lives in two stores, every writer that
-changes it writes both, through the one helper that owns the pairing
-(`set_skill_trait` and `set_skill_sheet_value` in `world/skills/services.py`),
-and a diff that adds a writer names the helper it calls.**
+changes it writes both, through the one helper that owns the pairing, and a
+diff that adds a writer names the helper it calls.** Better still, collapse the
+pair into one store, as #5010 did for skills.
 
 ## What to do
 
@@ -54,7 +60,7 @@ and a diff that adds a writer names the helper it calls.**
    the other copy is not affected (a counter only one reader uses, a value
    that never changes the rating). Check the ordering too: a writer that
    computes from one store must not lower the value when the other is higher
-   (`reconcile_skill_stores` takes the higher of the two first).
+   (the deleted `reconcile_skill_stores` took the higher of the two first).
 
 4. **Check the reader that is not the one in the diff.** Name who reads the
    store the writer skipped, and what they now see. A sheet reader sees a
@@ -74,9 +80,6 @@ and a diff that adds a writer names the helper it calls.**
 ## What not to flag
 
 - A write through the pairing helper.
-- Counters that are separate on purpose. `CharacterSkillValue.development_points`
-  and `DevelopmentPoints.total_earned` are two progress counters with different
-  cost curves; merging them is a design question (#4496 non-goal), not a
-  stale-copy defect.
+- Counters that are separate on purpose, where the docs state why.
 - Test setup that writes one store to arrange a divergent state, when the test
   then asserts what the next writer does with it.

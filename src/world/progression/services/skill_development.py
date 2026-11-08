@@ -216,7 +216,8 @@ def apply_skill_rust(
 
     Rust amount is ``character_level + RUST_BASE_AMOUNT``, capped at the
     dp cost of the skill's current level (i.e. the cost from
-    ``current_level - 1`` to ``current_level``). Skills at or below the
+    ``current_level - 1`` to ``current_level``), and outstanding debt stops at
+    that same cost. Skills at or below the
     base CG level (10) have no maintenance cost and receive no rust.
 
     Args:
@@ -235,7 +236,11 @@ def apply_skill_rust(
     # previous one: (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER.
     # For level 11 this is 100, for level 15 it is 500.
     max_rust = (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER
-    rust_amount = min(rust_amount, max_rust)
+    # Outstanding debt never exceeds that one level's cost either, however long the
+    # skill sits idle (the training-side rule before #5010).
+    rust_amount = min(rust_amount, max_rust - cast(int, dev_points.rust_debt))
+    if rust_amount <= 0:
+        return 0
 
     dev_points.rust_debt = cast(int, dev_points.rust_debt) + rust_amount
     dev_points.save(update_fields=["rust_debt"])
@@ -303,9 +308,15 @@ def _apply_weekly_rust(
     # number of used pairs. For large player bases (1000+ active skill usages per
     # week), consider replacing with a subquery or raw SQL NOT IN clause. For MVP
     # scale this is acceptable.
-    rust_qs = DevelopmentPoints.objects.select_related("trait").all()
-
+    from world.roster.models import RosterEntry
     from world.traits.models import TraitType
+
+    # Only characters in active play rust, as training-side rust did before #5010:
+    # dormant rosters and NPCs (which now carry ledger rows from creation) are spared.
+    active_sheets = RosterEntry.objects.active_rosters().exclude_dormant().values("character_sheet")
+    rust_qs = DevelopmentPoints.objects.select_related("trait").filter(
+        character_sheet__in=active_sheets
+    )
 
     # #2993: languages don't rust - you don't forget your native tongue in a
     # quiet month (ratified default #5).
