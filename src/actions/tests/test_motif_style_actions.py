@@ -18,6 +18,7 @@ from actions.definitions import motif_style as motif_actions
 _BIND_SVC = "world.magic.services.motif_style.bind_motif_style"
 _UNBIND_SVC = "world.magic.services.motif_style.unbind_motif_style"
 _LIST_SVC = "world.magic.services.motif_style.motif_style_bindings"
+_LIST_FACETS_SVC = "world.magic.services.motif_facet.motif_facet_bindings"
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ class ListMotifStylesActionTests(TestCase):
         fake_actor = MagicMock()
         fake_actor.sheet_data = object()
 
-        with patch(_LIST_SVC, return_value=[]):
+        with patch(_LIST_SVC, return_value=[]), patch(_LIST_FACETS_SVC, return_value=[]):
             result = action.execute(fake_actor)
 
         self.assertTrue(result.success)
@@ -220,7 +221,7 @@ class ListMotifStylesActionTests(TestCase):
         binding.style = style
         binding.motif_resonance = motif_resonance
 
-        with patch(_LIST_SVC, return_value=[binding]):
+        with patch(_LIST_SVC, return_value=[binding]), patch(_LIST_FACETS_SVC, return_value=[]):
             result = action.execute(fake_actor)
 
         self.assertTrue(result.success)

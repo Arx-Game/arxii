@@ -25,6 +25,7 @@ from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
 from world.character_creation.constants import (
+    GIFT_FACETS_KEY,
     LIFE_LOADED_FOR_KEY,
     ApplicationStatus,
     OfferChapter,
@@ -995,7 +996,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         by_id = Technique.objects.in_bulk(ids)
         techniques = [by_id[i] for i in ids if i in by_id]
         resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-        option_sets = creation_personalization_options(techniques, resonance_id=resonance_id)
+        option_sets = creation_personalization_options(
+            techniques,
+            resonance_id=resonance_id,
+            facet_ids=draft.draft_data.get(GIFT_FACETS_KEY) or [],
+        )
         serializer = CGTechniquePersonalizationOptionsSerializer(
             option_sets, many=True, context={"resonance_id": resonance_id}
         )

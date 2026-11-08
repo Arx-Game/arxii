@@ -41,7 +41,6 @@ import type {
   PathSkillSuggestion,
   PerspectiveEntry,
   Resonance,
-  ResonanceAssociation,
   Restriction,
   Skill,
   SkillPointBudget,
@@ -622,18 +621,6 @@ export async function getConsequencePoolCatalog(): Promise<ConsequencePoolCatalo
   const res = await apiFetch(`${MAGIC_URL}/consequence-pool-catalog/`);
   if (!res.ok) {
     throw new Error('Failed to load consequence pool catalog');
-  }
-  return res.json();
-}
-
-/**
- * Get all resonance associations, optionally filtered by category.
- */
-export async function getResonanceAssociations(category?: string): Promise<ResonanceAssociation[]> {
-  const params = category ? `?category=${category}` : '';
-  const res = await apiFetch(`${MAGIC_URL}/resonance-associations/${params}`);
-  if (!res.ok) {
-    throw new Error('Failed to load resonance associations');
   }
   return res.json();
 }

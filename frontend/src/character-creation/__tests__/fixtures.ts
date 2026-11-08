@@ -21,7 +21,6 @@ import type {
   OriginTemplate,
   Path,
   Resonance,
-  ResonanceAssociation,
   Restriction,
   SchoolingLineRow,
   Species,
@@ -1080,12 +1079,6 @@ export const mockRestrictions: Restriction[] = [
     power_bonus: 15,
     allowed_effect_type_ids: [2],
   },
-];
-
-export const mockResonanceAssociations: ResonanceAssociation[] = [
-  { id: 1, name: 'Shadows', description: 'Darkness and concealment', category: 'Concepts' },
-  { id: 2, name: 'Fire', description: 'Heat and transformation', category: 'Elements' },
-  { id: 3, name: 'Spiders', description: 'Webs, patience, predation', category: 'Animals' },
 ];
 
 export const mockResonances: Resonance[] = [

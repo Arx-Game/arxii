@@ -1038,7 +1038,8 @@
 .interview .field {
   margin: 1.4rem 0 0;
 }
-.interview .field label {
+.interview .field label,
+.interview .field > .label {
   display: block;
   font-family: 'Cinzel', serif;
   font-weight: 600;

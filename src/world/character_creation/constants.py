@@ -755,3 +755,8 @@ PERSONALIZATION_COPY_KEYS: tuple[str, ...] = (
 #: description, flourish/form/price ids. Entries for a technique no longer in
 #: ``selected_technique_ids`` are ignored by costs, validation and finalize alike.
 TECHNIQUE_PERSONALIZATIONS_KEY = "technique_personalizations"
+
+#: ``draft_data`` key for the optional facet pick on the gift resonance (#5021): a list of
+#: up to five ``Facet`` ids. It opens facet-gated flourishes in "make it yours", and
+#: finalize ties them to the gift resonance on the new character's Motif. Free.
+GIFT_FACETS_KEY = "selected_gift_facet_ids"

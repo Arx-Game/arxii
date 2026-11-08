@@ -481,6 +481,8 @@ class ActionRegistryTests(TestCase):
             "bind_motif_style",
             "unbind_motif_style",
             "list_motif_styles",
+            "bind_motif_facet",
+            "unbind_motif_facet",
             "start_room_feature_project",
             "repair_lab_station",
             "start_defense_installation",

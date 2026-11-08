@@ -588,6 +588,19 @@ to bind to. Server 400s (audacity cap exceeded, unclaimed resonance, style not
 bound) surface via each mutation's `.error.message`
 (`data-testid="motif-style-bind-error"` / `"motif-style-unbind-error"`).
 
+### `components/MotifFacetPanel.tsx` (#5021)
+
+Mounted in `SpellbookTab.tsx` below `MotifStylePanel`, own view only; renders nothing
+without a claimed resonance. One group per claimed resonance
+(`data-testid="motif-facet-group-{resonance_id}"`): the facets tied to it as chips, each
+with an "Untie <name>" button, and a `FacetPicker` (no `canCreate`) excluding those already
+tied. Reads `useMotifStyleBindings(characterSheetId).data.facet_bindings`
+(`MotifFacetBinding`), `useCharacterResonances`, `useFacets` (`@/character-creation/queries`);
+writes through `useSetMotifFacet(characterSheetId)` (`{facet_id, resonance_id, tie}` →
+`api.setMotifFacet`, POST `motif-styles/bind-facet/` or `unbind-facet/` with the
+`X-Character-ID` header; invalidates the bindings and the character sheet). A refusal's
+`detail` shows verbatim (`role="alert"`). Tests: `components/MotifFacetPanel.test.tsx`.
+
 ### `components/MotifStylePanel.test.tsx` (#2030)
 
 9 unit tests (mocks `../queries`, no msw — mirrors `SineatingRequestDialog.test.tsx`'s

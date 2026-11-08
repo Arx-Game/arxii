@@ -36,6 +36,7 @@ import {
 import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sheets/api';
 import { priceCostParts } from '@/magic/priceCost';
 import type { TechniqueForm } from '@/magic/types';
+import { MotifFacetPanel } from './MotifFacetPanel';
 import { MotifStylePanel } from './MotifStylePanel';
 import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
 import { TechniqueProgressPanel } from './TechniqueProgressPanel';
@@ -404,6 +405,8 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
       )}
 
       {drawsMain && isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
+
+      {drawsMain && isMyCharacter && magic && <MotifFacetPanel characterSheetId={characterId} />}
 
       {drawsMain && isMyCharacter && magic && (
         <TechniqueProgressPanel characterSheetId={characterId} />

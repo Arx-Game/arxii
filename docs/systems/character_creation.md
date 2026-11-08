@@ -755,6 +755,11 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
   `parse_personalization_picks`; validated by `personalization_pick_errors`
   (`compute_magic_errors`); priced by `priced_personalization_lines`; applied at finalize by
   `apply_creation_personalizations`.
+- `draft_data["selected_gift_facet_ids"]` (#5021, `GIFT_FACETS_KEY`): up to five distinct
+  `Facet` ids, optional and free, picked under the Gift stage's Motif
+  (`GiftFacetsField`). They open creation-costed flourishes gated on a picked facet in
+  `personalization-options` (`creation_personalization_options(facet_ids=)`) and are
+  tied to the gift resonance at finalize (`tie_creation_facets`).
 
 ### Application Workflow (Player)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review

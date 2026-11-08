@@ -362,6 +362,24 @@ reaching thread level 3 in play. Built:
   `docs/systems/magic.md`'s "Technique personalization" section,
   `docs/systems/character_creation.md`'s Magic API section.
 
+## Choosing the imagery your magic is tied to (#5021, BUILT 2026-11-08)
+
+Every reader of a character's facets was built (facet-gated flourishes, the facet route
+for ritual offerings, the cast narration fallback, the sheet's Motif) and nothing wrote
+them, so no facet-gated flourish could ever qualify. Built:
+
+- **In play, any time, free.** `motif bindfacet <facet>=<resonance>` /
+  `motif unbindfacet`, the Spellbook's Facets panel, and `bind-facet/` / `unbind-facet/`
+  on `/api/magic/motif-styles/`: up to five facets on each claimed resonance, one facet
+  on as many resonances as the player likes.
+- **Signed flourishes keep their facet.** Removing the last tie of a facet a signed
+  flourish needs is refused until the flourish is cleared.
+- **Staff fix them** in the facet inline on the Motif Resonance admin page.
+- **In creation (optional).** The Gift stage's Motif takes up to five facets for the gift
+  resonance; a creation-costed flourish gated on a picked facet is then offered in "make
+  it yours", and finalize ties the facets before signing the flourish.
+- Detail: `docs/systems/magic.md` "Player-facing facet binding (#5021)".
+
 ## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
 
 The in-play training loop #2426's roadmap entries deferred as a follow-up is now real —

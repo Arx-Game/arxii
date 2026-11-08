@@ -22,6 +22,7 @@ import type {
   AudereRespondRequest,
   AudereMajoraRespondRequest,
   BindMotifStyleRequest,
+  MotifFacetRequest,
   ChooseUltimateRequest,
   CrossXPLockRequest,
   DissolveRequest,
@@ -993,6 +994,25 @@ export function useBindMotifStyle(characterSheetId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: BindMotifStyleRequest) => api.bindMotifStyle(characterSheetId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.motifStyleBindings(characterSheetId) }).catch(
+        () => {}
+      );
+      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
+    },
+  });
+}
+
+/**
+ * Tie (`tie: true`) or untie a facet on one of the character's claimed resonances
+ * (#5021). Same character scoping and invalidation as useBindMotifStyle: the sheet's
+ * magic.motif.resonances[*].facets mirrors these ties.
+ */
+export function useSetMotifFacet(characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tie, ...body }: MotifFacetRequest & { tie: boolean }) =>
+      api.setMotifFacet(characterSheetId, body, tie),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.motifStyleBindings(characterSheetId) }).catch(
         () => {}

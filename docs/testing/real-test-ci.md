@@ -16,16 +16,23 @@ queue.
    has one "Log in" button.
 2. Builds the frontend bundle once (`pnpm build`) and collects static files.
 3. Starts the server with `arx start` and waits until `/api/status/` answers on :4001.
-4. Runs the Playwright specs that need a live server, with one worker, using
-   `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts` and
-   `e2e/user-journey.spec.ts`. Every other spec mocks the API and runs against
-   `vite preview` under `frontend/playwright.config.ts`. A new spec that talks to
-   :4001 must be added to the spec list in the workflow.
-5. Always uploads one artifact, `real-test-<run id>-<attempt>`: a screenshot and a
+4. Seeds the rows a spec needs beyond the account, after the server is up, through
+   `arx manage shell` and a function in `src/integration_tests/live_seeds.py`
+   (test-factory rows; the database lives for one run). Today that is
+   `seed_motif_facet_spec`: a character the account plays holding one resonance, three
+   facets, and the account's creation draft at the Gift stage.
+5. Runs the Playwright specs that need a live server, with one worker, using
+   `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
+   `e2e/user-journey.spec.ts` and `e2e/motif-facets.spec.ts` (the Spellbook Facets
+   panel and the creation facet field, #5021). Every other spec mocks the API and runs
+   against `vite preview` under `frontend/playwright.config.ts`. A new spec that talks
+   to :4001 must be added to the spec list in the workflow, and its rows to
+   `live_seeds.py` and the seed step.
+6. Always uploads one artifact, `real-test-<run id>-<attempt>`: a screenshot and a
    trace for every test (`frontend/test-results`), the HTML report
    (`frontend/playwright-report`) and the server logs (`src/server/logs`). The final
    step prints the run URL and the artifact URL in the log and the job summary.
-6. Stops the server (also when a spec failed).
+7. Stops the server (also when a spec failed).
 
 ## Triggers and limits (overridable)
 

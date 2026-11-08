@@ -80,6 +80,7 @@ from world.magic.models import (
     MishapPoolTier,
     Motif,
     MotifResonance,
+    MotifResonanceAssociation,
     MotifResonanceStyle,
     PathGiftGrant,
     PathRitualGrant,
@@ -1245,6 +1246,40 @@ class MotifResonanceStyleInline(admin.TabularInline):
     autocomplete_fields = ["style"]
 
 
+class MotifFacetFormSet(OneRowPerFormSet):
+    """Refuses more facets on one resonance than the model's cap (#5021).
+
+    The model's own ``clean()`` counts saved rows only, so two new rows added in one
+    save could each pass it and the second would raise while saving; this counts the
+    rows the save would leave.
+    """
+
+    def clean(self) -> None:
+        super().clean()
+        kept = [
+            form
+            for form in self.forms
+            if form.cleaned_data
+            and form.cleaned_data.get("facet")
+            and not form.cleaned_data.get("DELETE")
+        ]
+        cap = MotifResonanceAssociation.MAX_PER_RESONANCE
+        if len(kept) > cap:
+            msg = f"Maximum {cap} facets per resonance."
+            raise ValidationError(msg)
+
+
+class MotifResonanceAssociationInline(admin.TabularInline):
+    """Staff set or fix the facets a character ties to this resonance (#5021)."""
+
+    model = MotifResonanceAssociation
+    formset = MotifFacetFormSet
+    extra = 1
+    autocomplete_fields = ["facet"]
+    verbose_name = "facet"
+    verbose_name_plural = "facets"
+
+
 class MotifResonanceInline(admin.TabularInline):
     model = MotifResonance
     formset = OneRowPerFormSet
@@ -1267,7 +1302,7 @@ class MotifResonanceAdmin(admin.ModelAdmin):
     list_select_related = ["motif", "resonance", "resonance__affinity"]
     raw_id_fields = ["motif"]
     autocomplete_fields = ["resonance"]
-    inlines = [MotifResonanceStyleInline]
+    inlines = [MotifResonanceStyleInline, MotifResonanceAssociationInline]
 
 
 #: A merge needs a survivor and at least one duplicate.

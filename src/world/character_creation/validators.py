@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from rest_framework import serializers
 
 from world.character_creation.constants import (
+    GIFT_FACETS_KEY,
     REQUIRED_STATS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
@@ -521,7 +522,10 @@ def _technique_personalization_errors(
         return []
     selected = [t for t in available_techniques if t.id in selected_ids]
     return personalization_pick_errors(
-        personalization_picks, techniques=selected, resonance_id=resonance_id
+        personalization_picks,
+        techniques=selected,
+        resonance_id=resonance_id,
+        facet_ids=draft.draft_data.get(GIFT_FACETS_KEY) or [],
     )
 
 

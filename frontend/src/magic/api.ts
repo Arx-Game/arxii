@@ -44,6 +44,7 @@ import type {
   GlimpseDistinctionLinkRequest,
   ImbueRequest,
   ImbueResponse,
+  MotifFacetRequest,
   MotifStyleBindingsResponse,
   PaginatedDriftConversionOfferList,
   PaginatedPendingAlterationList,
@@ -1197,6 +1198,31 @@ export async function bindMotifStyle(
   });
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to bind style');
+  }
+  return res.json();
+}
+
+/**
+ * POST /api/magic/motif-styles/bind-facet/ or .../unbind-facet/ (#5021)
+ *
+ * Tie a facet to (or untie it from) one of the claimed resonances of the
+ * character named by the `X-Character-ID` header. 400s (cap reached,
+ * unclaimed resonance, a signed flourish still needs the facet) carry a
+ * `{detail}` string, surfaced via readErrorDetail.
+ */
+export async function setMotifFacet(
+  characterId: number,
+  body: MotifFacetRequest,
+  tie: boolean
+): Promise<unknown> {
+  const path = tie ? 'bind-facet' : 'unbind-facet';
+  const res = await apiFetch(`${MOTIF_STYLES_URL}/${path}/`, {
+    method: 'POST',
+    headers: { ...jsonHeaders(), 'X-Character-ID': String(characterId) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, tie ? 'Failed to tie facet' : 'Failed to untie facet');
   }
   return res.json();
 }

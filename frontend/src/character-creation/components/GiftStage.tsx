@@ -46,6 +46,7 @@ import {
 import type { CharacterDraft, Tradition, VisibleOffer } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
+import { GiftFacetsField } from './gift/GiftFacetsField';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
@@ -495,6 +496,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <Field id="motif" label="Motif" hint={copy?.magic_motif_desc}>
         <textarea id="motif" rows={4} {...register('motif_description')} />
       </Field>
+      <GiftFacetsField draft={draft} resonanceName={resonanceName} />
 
       <h2 className="section-h" id="glimpse-heading">
         {copy?.magic_glimpse_heading ?? 'The Glimpse'}

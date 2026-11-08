@@ -185,14 +185,24 @@ jobs:
           ls -la src/server/logs || true
           tail -n 80 src/server/logs/*.log || true
           exit 1
+      - name: Seed the rows the facet spec reads
+        # After the server is up, so Evennia's first-start setup has run on an
+        # otherwise empty object table. Test-factory rows in a throwaway database:
+        # see src/integration_tests/live_seeds.py.
+        run: |
+          uv run arx manage shell -c "
+          from integration_tests.live_seeds import seed_motif_facet_spec
+          print(seed_motif_facet_spec(username='e2e_test_account'))
+          "
       - name: Run the live-server Playwright specs
         working-directory: frontend
-        # The only specs that talk to :4001 are these two (the rest mock the
-        # API and run under playwright.config.ts). One worker, as
+        # The only specs that talk to :4001 are these (the rest mock the API
+        # and run under playwright.config.ts). One worker, as
         # tools/skills/real-testing/SKILL.md requires.
         run: >-
           npx playwright test --config e2e.backend.config.ts --workers=1
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
+          e2e/motif-facets.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true

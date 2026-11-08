@@ -51,6 +51,9 @@ vi.mock('../api', () => ({
   // of its render (for the always-mounted Gift Resonance step), independent
   // of which funnel step is currently open.
   getResonances: vi.fn().mockResolvedValue([]),
+  getFacets: vi.fn().mockResolvedValue([]),
+  getNearFacets: vi.fn().mockResolvedValue([]),
+  createFacet: vi.fn(),
   // GlimpseSection (#2427) calls useGlimpseTags() unconditionally as part of
   // the always-mounted Glimpse guided flow.
   getGlimpseTags: vi.fn().mockResolvedValue([]),

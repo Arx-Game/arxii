@@ -698,6 +698,33 @@ class StyleNotBound(MagicError):
 
 
 # =============================================================================
+# Player-facing Motif facet-binding exceptions (#5021)
+# =============================================================================
+
+
+class FacetBindingCapExceeded(MagicError):
+    user_message = "You cannot tie any more facets to that resonance."
+
+
+class FacetNotBound(MagicError):
+    user_message = "That facet is not tied to that resonance."
+
+
+class FacetNeededByFlourish(MagicError):
+    """Raised when unbinding would take away the last binding a signed flourish needs."""
+
+    user_message = "A flourish you have chosen needs that facet. Clear the flourish first."
+
+    def __init__(self, flourish_name: str = "") -> None:
+        super().__init__(flourish_name)
+        if flourish_name:
+            self.user_message = (
+                f"Your {flourish_name} flourish needs that facet. "
+                "Clear the flourish first with 'signature clear'."
+            )
+
+
+# =============================================================================
 # Portal travel — anchor install/dissolve exceptions (#2222)
 # =============================================================================
 

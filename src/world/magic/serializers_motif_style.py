@@ -18,3 +18,10 @@ class MotifStyleBindSerializer(serializers.Serializer):
 
 class MotifStyleUnbindSerializer(serializers.Serializer):
     style_id = serializers.IntegerField()
+
+
+class MotifFacetBindSerializer(serializers.Serializer):
+    """Request body for ``bind-facet`` and ``unbind-facet`` (#5021)."""
+
+    facet_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()

@@ -1094,7 +1094,10 @@ actions, backends, and service functions.
   `motif unbindstyle <style>`. Style/resonance lookup is exact-name matching
   (case-insensitive), since Evennia's partial/fuzzy search is broken on PostgreSQL.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors
-  `CmdSignature`/`CmdSanctum`). No business logic in the command.
+  `CmdSignature`/`CmdSanctum`). No business logic in the command. Facets (#5021):
+  `motif bindfacet <facet>=<resonance>` / `motif unbindfacet <facet>=<resonance>` reach
+  `actions/definitions/motif_facet.py`; the facet resolves through `find_facet`, so an
+  alias or plural ("Wolves") reaches its facet. Bare `motif` lists styles and facets.
 - **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
   `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release` / `order` /
   `mount` / `dismount` / `emote` / `promote`) through

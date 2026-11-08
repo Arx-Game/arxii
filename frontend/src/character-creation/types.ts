@@ -844,17 +844,6 @@ export interface Restriction {
 }
 
 /**
- * Resonance association for motif customization.
- * From /api/magic/resonance-associations/
- */
-export interface ResonanceAssociation {
-  id: number;
-  name: string;
-  description: string;
-  category: string;
-}
-
-/**
  * Facet - flat imagery/symbolism vocabulary for motifs (flattened #3776 Task 1;
  * the prior Category>Subcategory>Specific hierarchy, and the `tree` endpoint
  * with it, are gone).
@@ -912,35 +901,6 @@ export interface GiftListItemNew {
   affinity_breakdown: Record<string, number>;
   description: string;
   technique_count: number;
-}
-
-/**
- * Association attached to a motif resonance.
- */
-export interface MotifResonanceAssociation {
-  id: number;
-  association: number;
-  association_name: string;
-}
-
-/**
- * Motif resonance with associations.
- */
-export interface MotifResonance {
-  id: number;
-  resonance: number;
-  resonance_name: string;
-  is_from_gift: boolean;
-  associations: MotifResonanceAssociation[];
-}
-
-/**
- * Character's magical motif with resonances.
- */
-export interface Motif {
-  id: number;
-  description: string;
-  resonances: MotifResonance[];
 }
 
 // =============================================================================
@@ -1146,6 +1106,8 @@ export interface DraftData {
   glimpse_tag_ids?: number[];
   // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
   selected_gift_resonance_id?: number | null;
+  // Optional facets tied to the gift resonance at finalize (#5021), at most five
+  selected_gift_facet_ids?: number[];
   magic_complete?: boolean;
   // Tarot card selection for familyless characters
   tarot_card_name?: string;

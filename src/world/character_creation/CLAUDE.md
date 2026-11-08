@@ -235,7 +235,10 @@ for the five-branch validation gate this data must satisfy before submission.
   (`TECHNIQUE_PERSONALIZATIONS_KEY`), parsed by `parse_personalization_picks` and
   pre-validated by `compute_magic_errors`/`_validate_technique_personalizations`. A pick
   for a since-deselected technique is silently ignored, never written. Whole call stays
-  inside `finalize_magic_data`'s existing `@transaction.atomic` wrap.
+  inside `finalize_magic_data`'s existing `@transaction.atomic` wrap. Between the seed and
+  the picks, `tie_creation_facets` (#5021) ties `draft_data["selected_gift_facet_ids"]`
+  (`GIFT_FACETS_KEY`, validated by `_validate_gift_facets`) to the gift resonance, so a
+  facet-gated flourish bought in creation qualifies when it is signed.
 - **Trait/skill baseline stamp (#3055):** `_create_stat_values`/`_create_skill_values`/
   `_apply_post_cg_bonuses` (`services.py`) each also write a `traits.CharacterTraitChange`
   row (`source=CHARACTER_CREATION`, `old_value=0` for the brand-new stat/skill rows) —

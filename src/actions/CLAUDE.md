@@ -310,6 +310,10 @@ They do not use the command system, dispatchers, or handlers.
   (`bind_motif_style`/`unbind_motif_style`/`motif_style_bindings`). Shared by telnet
   `CmdMotif` (`commands/motif.py`, `motif <subverb>`) and the web `MotifStyleViewSet`
   (`world/magic/views_motif_style.py`).
+  `motif_facet.py` (#5021) — `BindMotifFacetAction` (`"bind_motif_facet"`) and
+  `UnbindMotifFacetAction` (`"unbind_motif_facet"`), kwargs `facet` + `resonance`, same
+  base and surfaces as the style actions, over `world.magic.services.motif_facet`;
+  `ListMotifStylesAction` lists facets too (`data.facet_bindings`).
   `gift_acquisition.py` (#2116) — 3 REGISTRY actions, all `target_type=SELF`,
   `category="magic"`, thin wrappers over previously-uncalled acquisition services:
   `PurchaseGiftUnlockAction` (key `"purchase_gift_unlock"`, kwargs `gift_unlock_id` +
