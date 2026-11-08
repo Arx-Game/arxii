@@ -216,7 +216,8 @@ def _unwalkable_step(
     try:
         check_move_to_position(actor, target, traversals=traversals)
     except PositionTransitionError as refusal:
-        blink = blink_capability_to(actor, target)
+        blinks = CreatureTraversal.BLINKS in traversals
+        blink = blink_capability_to(actor, target) if blinks else None
         if blink is None:
             return ActionResult(success=False, message=refusal.user_message)
         return _blink(actor, target, blink, square, context)
@@ -250,7 +251,9 @@ def _blink(
             blink_to_position(actor, target, reach=capability.reaction_reach, square=square)
             message = BLINKED.format(place=target.name)
             if participant is not None:
-                charge_capability_use(sheet, cost_kind)
+                if not charge_capability_use(sheet, cost_kind):
+                    # Anima went between the check and the charge: undo the move.
+                    raise PositionTransitionError(BLINK_CANNOT_PAY.format(cost=cost))
                 spend_combat_hop(participant)
                 message = BLINKED_PAID.format(place=target.name, cost=cost)
                 stopped = _stop_in_held_ground(actor, participant, target, held)

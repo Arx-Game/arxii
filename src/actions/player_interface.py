@@ -1376,6 +1376,8 @@ def _blink_entries(
         capability_use_cost,
     )
 
+    if CreatureTraversal.BLINKS not in context.traversals:
+        return []  # her traversals already say no capability of hers blinks
     in_fight = context.hops is not None
     entries = []
     seen = set(offered)
