@@ -9371,8 +9371,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `ThreatPoolEntry.covers_place`; `PendingOpponentAttack.covered_position` and
     `CombatOpponentAction.covered_position`.
   - Services (`world/combat/services/reactions.py`): `reaction_tuning`, `reaction_penalty`,
-    `record_reaction`, `dodge_sources`, `reachable_landings`, `dodge_landing_options`,
+    `record_reaction`, `dodge_sources`, `dodge_landing_options`,
     `choose_dodge`, `pay_for_dodge`, `land_dodge`, `covered_place`, `dodge_cost_line`,
+    `capability_use_cost`, `can_pay_capability_use`, `charge_capability_use` (one use of a
+    capability, a dodge or a turn blink, #5019); `reachable_landings` lives in positioning
+    services,
     `dodge_roll_active`/`DODGE_ROLL_ACTIVE`. `world/combat/services/npc/area_attacks.py`:
     `cover_place`, `place_of_participant`. `world.mechanics.reactions._fresh_reaction_instance`.
   - Action `combat_dodge` (`DodgePlanAction`, kwargs `dodge`, `position_id` or `place`); telnet
@@ -9387,6 +9390,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     from `get_effective_capability_value` above `innate_baseline`. `move_to_position(...,
     traversals=)` and `check_move_to_position(...)` (positioning services) take it; a crossing
     costs its hops via `spend_combat_hop(participant, hops=)` (`movement_budget.py`).
+  - Blinking (#5019, ADR-5019): `CreatureTraversal.BLINKS` (migration 0379; PCs only, bestiary
+    `traversal` uses `NPC_TRAVERSAL_CHOICES`). `blink_capabilities`, `blink_capability_to`
+    (`traversal.py`); `blink_landings`, `check_blink_to_position`, `blink_to_position`
+    (positioning services). `MoveToPositionAction` blinks where the walk is refused; one hop plus
+    `charge_capability_use` in a fight, free outside; "Blink to X (2 anima)" in the move list.
   - Actions `take_flight`, `land` (roof rule: "A roof is in the way."), `pass_held_ground`
     (`actions/definitions/positioning.py`); telnet `position/fly`, `position/land`,
     `position/pass <name>`. `enter_aerial` draws a missing aerial twin.

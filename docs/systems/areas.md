@@ -633,6 +633,9 @@ challenge's approaches beside it.
 | `take_position(objectdb, position)` | Voluntary entry onto the position graph for an UNPLACED actor — restricted to PRIMARY/FEATURE entry kinds + MOVEMENT capability (#2005) |
 | `move_to_position(objectdb, target, *, traversals=frozenset({WALKS}))` | Voluntary move (#4663: `traversals` is the mover's set, from `traversal.player_traversals`; the action passes it): validates same room, current placement, adjacency, the walker rule (`edge_blocks_crossing`: an active gate answers "Crossing that requires getting past <challenge>.", a hard seal "The way is blocked."), an AERIAL target needs the `aerial` property ("You cannot fly.", #4607), no roof between the two positions ("A roof is in the way.", #4608), MOVEMENT capability. A walled edge passes when `best_crossing_cost(edge, traversals)` is not None. The validation is `check_move_to_position(objectdb, target, *, traversals)` (raises `PositionError`, changes nothing), which `move_to_position` calls before `_commit_position`, and which the held-ground pass calls before it rolls. Like `place_in_position` and `force_move_to_position` it writes through `_commit_position`, the one position writer, which also drops the identity-mapped `current_position` cache of the object's `CombatOpponent`/`CombatParticipant` rows (#4607) and, once the move commits, pings each open combat encounter in the room so its battle maps refetch (`notify_room_encounters_on_commit`, #4644) |
 | `player_traversals(sheet) -> frozenset[str]` | `world/areas/positioning/traversal.py`, #4663. WALKS plus each `CapabilityType.traversal` whose `get_effective_capability_value(sheet, capability)` is above its `innate_baseline` (one query for the capability rows that name a traversal). `traversals_of(objectdb)` is the same for any object (WALKS only without a sheet) |
+| `reachable_landings(current, reach) -> list[Position]` / `REACH_ORDER` | Positioning services (moved from `combat/services/reactions.py`, #5019). The places a dodge or a turn blink with a `ReactionReach` can land in, her own place first |
+| `blink_landings(objectdb, reach)` / `check_blink_to_position(objectdb, target, *, reach)` / `blink_to_position(objectdb, target, *, reach, square=None)` | #5019. Where a turn blink reaches (her layer only, her place excluded, roofed air closed); the validation ("You are already there.", "Your blink can't reach X.", "You cannot fly.", "You are in the air; land first.", MOVEMENT); the edge-free move through `_commit_position`. Paying is the caller's |
+| `blink_capabilities(objectdb) -> list[CapabilityType]` / `blink_capability_to(objectdb, target)` | `traversal.py`, #5019. Her Blinks capabilities with a moving reach, held above baseline, strongest first; the strongest whose blink lands on `target` |
 | `cheapest_crossing(edge, traversals) -> tuple[int, str] \| None` / `best_crossing_cost(edge, traversals) -> int \| None` | #4663. The cheapest `edge_crossing_cost` over the mover's traversals and which traversal gave it (ties go to declaration order, so CLIMBS before LEAPS); None when none crosses. The move list's "Climb over" / "Leap over" label reads it |
 | `force_move_to_position(objectdb, target)` | Bypass capability + edge checks (staff/consequence) |
 
@@ -642,7 +645,7 @@ challenge's approaches beside it.
 
 | Action | Registry Key | Prerequisite | Notes |
 |--------|-------------|--------------|-------|
-| `MoveToPositionAction` | `move_to_position` | `CombatMovementPrerequisite` (#4607: in an active encounter, only while DECLARING and with a hop left; the move spends one, or the crossing cost over a wall, #4663: "That crossing takes N hops; you have M left." when short) | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `MoveToPositionAction` | `move_to_position` | `CombatMovementPrerequisite` (#4607: in an active encounter, only while DECLARING and with a hop left; the move spends one, or the crossing cost over a wall, #4663: "That crossing takes N hops; you have M left." when short) | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions`. Where the walk is refused and one of her Blinks capabilities reaches the place, it blinks instead (#5019, see "Blinking") |
 | `TakeFlightAction` | `take_flight` | `CombatMovementPrerequisite` + `CanFlyPrerequisite` ("You cannot fly." without FLIES among her traversals, "You are already in the air.", "A roof is in the way." under a roofed position) | #4663. Calls `enter_aerial`; spends one hop in a DECLARING round; no kwargs. The move list offers "Take flight" to a ground flier |
 | `LandAction` | `land` | `CombatMovementPrerequisite` + `AirbornePrerequisite` ("You are not in the air.", "A roof is in the way." over a roofed anchor) | #4663. Calls `leave_aerial`; one hop in a DECLARING round; no kwargs |
 | `PassHeldGroundAction` | `pass_held_ground` | `CombatMovementPrerequisite` | #4663. Kwargs `position_id`, optional `approach_id`. Rolls to get past the enemy holding an adjacent place (see "Held ground" below); costs what a walk to that place costs (1 hop, or the crossing cost over a wall) and is refused with fewer hops left |
@@ -839,6 +842,22 @@ roll for a wall's gating challenge is unchanged; what changed is that a climber 
 crossing is priced and offered: the move list gives "Climb over to X (N hops)" for a gated edge
 she can cross, and "Move to X (blocked: ...)" stays for a mover who cannot. Taking off and
 landing are `take_flight` and `land`; both refuse under a roof, as `edge_crossing_cost` does.
+
+**Blinking** (#5019, ADR-5019). `CreatureTraversal.BLINKS` crosses edges as a walker does, and
+on her turn it also lets the holder move straight to any place her dodge with that capability
+could land (`reachable_landings(current, capability.reaction_reach)`), crossing no edge, so walls,
+seals and enemies between do not matter. Her own place is excluded, she stays in her layer (a
+grounded blinker reaches ground places, an airborne one places in the air; taking off and landing
+stay their own moves), and the air over a roofed place stays closed. A reach of "In place" or "No
+dodge" gives no turn blink. `MoveToPositionAction` walks wherever `check_move_to_position` passes
+and blinks only where it refuses and a blink reaches. In a declaring round a blink costs one hop
+plus one dodge's cost (`charge_capability_use`: `MovementConfig.dodge_anima_cost` anima, or
+`dodge_fatigue_cost` fatigue by `reaction_cost_kind`); it is not a reaction, so it leaves
+`reactions_used` alone. Outside a fight it is free. Landing in held ground stops her as any entry
+does. The move list offers "Blink to X (2 anima)" (plain "Blink to X" outside a fight) for each
+place only a blink reaches, refused with "Blinking costs 2 anima; you don't have enough." when she
+cannot pay; the room is told "<name> blinks to X.". Telnet `position X` blinks the same way. A
+bestiary entry's `traversal` excludes Blinks (`NPC_TRAVERSAL_CHOICES`): NPCs do not blink.
 
 **Held ground** (`world/combat/services/held_ground.py`). In a live encounter a place is held
 against a mover when a ready enemy stands in it: for a PC, the places of ACTIVE ENEMY opponents;

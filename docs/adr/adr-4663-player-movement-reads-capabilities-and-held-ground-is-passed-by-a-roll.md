@@ -1,7 +1,7 @@
 # ADR-4663: Player movement reads capabilities, and held ground is passed by a roll
 
 **Date:** 2026-10-25
-**Status:** Accepted
+**Status:** Accepted; amended by ADR-5019 (a blink moves without crossing an edge)
 **Issue:** #4663 (slice 2 of #4651)
 
 ## Decision
