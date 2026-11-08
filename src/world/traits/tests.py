@@ -248,6 +248,15 @@ class TraitHandlerTests(TestCase):
         self.assertEqual(self.handler.get_trait_value("swords"), 0)
         self.assertEqual(self.handler.get_base_trait_value("bucket test 3"), 7)
 
+    def test_a_loaded_cache_sees_later_writes(self):
+        """A save after the cache loaded reaches it; a miss leaves nothing behind (#5010)."""
+        self.assertIsInstance(self.handler.get_trait_object(self.trait.name), DefaultTraitValue)
+        row = CharacterTraitValue.objects.create(character=self.sheet, trait=self.trait, value=25)
+        self.assertEqual(self.handler.get_base_trait_value(self.trait.name), 25)
+        row.value = 15
+        row.save()
+        self.assertEqual(self.handler.get_base_trait_value(self.trait.name), 15)
+
     def test_get_trait_value(self):
         """Test getting trait values."""
         # Should return 0 for unset trait

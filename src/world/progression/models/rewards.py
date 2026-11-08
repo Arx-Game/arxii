@@ -347,10 +347,8 @@ class DevelopmentPoints(SharedMemoryModel):
         cap = stored_skill_cap(self.character_sheet)
         if cap is None:
             return None
-        row = CharacterTraitValue.objects.filter(
-            character=self.character_sheet, trait=self.trait
-        ).first()
-        return cap if row is not None and row.value >= cap else None
+        rating = self.character_sheet.character.traits.get_base_trait_value(self.trait.name)
+        return cap if rating >= cap else None
 
     class Meta:
         unique_together: ClassVar[list[str]] = ["character_sheet", "trait"]

@@ -180,12 +180,8 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
             # Or parked at an XP boundary, where development from any source stops (#5010).
             from world.skills.services import boundary_message, is_skill_at_xp_boundary
 
-            rating = (
-                CharacterTraitValue.objects.filter(character=character_sheet, trait=trait)
-                .values_list("value", flat=True)
-                .first()
-            )
-            if rating is not None and is_skill_at_xp_boundary(rating):
+            rating = character_sheet.character.traits.get_base_trait_value(trait.name)
+            if is_skill_at_xp_boundary(rating):
                 cap_note = boundary_message(trait.name, rating + 1)
         if cap_note:
             limit = DevelopmentTransaction._meta.get_field("description").max_length  # noqa: SLF001

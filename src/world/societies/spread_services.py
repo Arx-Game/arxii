@@ -141,7 +141,7 @@ def spread_check_modifiers(character, specialization=None) -> int:
 
     ensure_spread_skills()
     skill = specialization.parent_skill if specialization else _ensure_skill(PERFORMANCE_SKILL_NAME)
-    total = _value_points(skill_rating(character.pk, skill))
+    total = _value_points(skill_rating(character.sheet_data, skill))
     if specialization is not None:
         spec_value = (
             CharacterSpecializationValue.objects.filter(

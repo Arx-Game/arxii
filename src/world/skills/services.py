@@ -94,7 +94,7 @@ def _bulk_path_levels(character_pks: set[int]) -> dict[int, int]:
     return {pk: levels.get(pk, 1) for pk in character_pks}
 
 
-def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
+def _get_skill_value(character: CharacterSheet, skill: Skill) -> int:
     """Look up a character's value for a given skill.
 
     Args:
@@ -104,7 +104,7 @@ def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
     Returns:
         The raw skill value, or 0 if the character has no value for this skill.
     """
-    return skill_rating(character.pk, skill)
+    return skill_rating(character, skill)
 
 
 def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
@@ -377,19 +377,14 @@ def remove_training_allocation(allocation: TrainingAllocation) -> None:
     allocation.delete()
 
 
-def skill_rating(sheet_id: int, skill: Skill) -> int:
-    """The character's rating in ``skill``: its trait's ``CharacterTraitValue``, else 0.
+def skill_rating(sheet: CharacterSheet, skill: Skill) -> int:
+    """The character's stored rating in ``skill``, else 0.
 
-    A skill's rating has one store, the skill trait's ``CharacterTraitValue`` (#5010);
-    the sheet, a check and every reader use it. ``sheet_id`` is the character sheet's
-    (and so the character's) pk.
+    A skill's rating has one store, the skill trait's ``CharacterTraitValue`` (#5010),
+    read through the character's trait handler (``character.traits``), which caches
+    every value and is kept current by ``CharacterTraitValue.save``.
     """
-    rating = (
-        CharacterTraitValue.objects.filter(character_id=sheet_id, trait_id=skill.trait_id)
-        .values_list("value", flat=True)
-        .first()
-    )
-    return rating or 0
+    return sheet.character.traits.get_base_trait_value(skill.trait.name)
 
 
 def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str) -> None:
@@ -407,7 +402,9 @@ def set_skill_trait(sheet: CharacterSheet, skill: Skill, value: int, source: str
         align_development_floors,
     )
 
-    row = CharacterTraitValue.objects.filter(character=sheet, trait=skill.trait).first()
+    row = sheet.character.traits.get_trait_object(skill.trait.name)
+    if not isinstance(row, CharacterTraitValue):
+        row = None
     old = row.value if row else 0
     if row is None:
         CharacterTraitValue.objects.create(character=sheet, trait=skill.trait, value=value)
@@ -524,10 +521,10 @@ def points_to_next_boundary(tracker: DevelopmentPoints) -> int | None:
     with no cap set, where no stop lies ahead. A caller that must not lose any
     development to dissipation clamps what it applies to this number.
     """
-    row = CharacterTraitValue.objects.filter(
-        character=tracker.character_sheet, trait=tracker.trait
-    ).first()
-    value = row.value if row is not None else DP_BASE_LEVEL
+    value = (
+        tracker.character_sheet.character.traits.get_base_trait_value(tracker.trait.name)
+        or DP_BASE_LEVEL
+    )
     cap = stored_skill_cap(tracker.character_sheet)
     if _is_at_xp_boundary(value) or (cap is not None and value >= cap):
         return tracker.rust_debt
@@ -563,7 +560,7 @@ def train_skill(
     """
     with transaction.atomic():
         # A skill the character has no rating in starts at the base level.
-        old_value = skill_rating(sheet.pk, skill) or DP_BASE_LEVEL
+        old_value = skill_rating(sheet, skill) or DP_BASE_LEVEL
         tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
             character_sheet=sheet, trait=skill.trait
         )
@@ -575,7 +572,7 @@ def train_skill(
                 points_applied = min(dev_points, room)
         expected_total = tracker.total_earned + max(points_applied - tracker.rust_debt, 0)
         tracker.award_points(points_applied)
-        new_value = CharacterTraitValue.objects.get(character=sheet, trait=skill.trait).value
+        new_value = skill_rating(sheet, skill)
         plateau_message = None
         if tracker.total_earned < expected_total:
             plateau_message = _skill_plateau_message(skill, new_value, stored_skill_cap(sheet))
@@ -653,10 +650,8 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
     from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
-    skill_value = CharacterTraitValue.objects.filter(
-        character_id=character.pk, trait=skill.trait
-    ).first()
-    if skill_value is None:
+    skill_value = character.traits.get_trait_object(skill.trait.name)
+    if not isinstance(skill_value, CharacterTraitValue):
         return False, f"{skill.name} has no recorded value for this character."
 
     if not _is_at_xp_boundary(skill_value.value):
@@ -737,9 +732,7 @@ def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
 
     gated = {
         row.trait_id: row.value
-        for row in CharacterTraitValue.objects.filter(
-            character_id=character.pk, trait__trait_type=TraitType.SKILL
-        )
+        for row in character.traits.get_traits_by_type(TraitType.SKILL).values()
         if _is_at_xp_boundary(row.value)
     }
     if not gated:

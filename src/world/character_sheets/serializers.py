@@ -144,7 +144,7 @@ from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
-from world.skills.models import CharacterSpecializationValue
+from world.skills.models import CharacterSpecializationValue, Skill
 from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
 from world.societies.houses.models import Domain
@@ -2230,7 +2230,7 @@ def _build_combat_style(sheet: CharacterSheet) -> CombatStyleSection | None:
     skill = style.skill
     skill_value = 0
     if skill is not None:
-        skill_value = skill_rating(sheet.pk, skill)
+        skill_value = skill_rating(sheet, skill)
     from django.db.models import Exists, OuterRef  # noqa: PLC0415
 
     from world.magic.models import CharacterTradition, Tradition  # noqa: PLC0415
@@ -2515,6 +2515,16 @@ def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:
     )
 
 
+def _staff_skill_ratings(sheet: CharacterSheet) -> dict[int, int]:
+    """Skill pk to stored rating, read from the character's trait handler (#5010)."""
+    ratings = sheet.character.traits.get_traits_by_type(TraitType.SKILL)
+    by_trait = {row.trait_id: row.value for row in ratings.values()}
+    return {
+        skill.pk: by_trait[skill.trait_id]
+        for skill in Skill.objects.filter(trait_id__in=list(by_trait))
+    }
+
+
 def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     """The CG rows the sheet holds, by id (#4221). Staff only, so a few plain queries."""
     from world.character_creation.sheet_writers import creation_beginnings  # noqa: PLC0415
@@ -2547,11 +2557,7 @@ def _build_staff_rows(sheet: CharacterSheet) -> StaffEditRows:
     beginnings = creation_beginnings(sheet)
     return StaffEditRows(
         stats=stats,
-        skills=dict(
-            CharacterTraitValue.objects.filter(
-                character=sheet, trait__trait_type=TraitType.SKILL, trait__skill__isnull=False
-            ).values_list("trait__skill", "value")
-        ),
+        skills=_staff_skill_ratings(sheet),
         specializations=dict(
             CharacterSpecializationValue.objects.filter(character=sheet).values_list(
                 "specialization_id", "value"

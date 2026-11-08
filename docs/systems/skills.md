@@ -67,7 +67,7 @@ and use share one cost curve, `cumulative_dp_for_level`, where level N to N+1 co
 ### The rating is `CharacterTraitValue` (#5010)
 
 A character's rating in a skill is the `traits.CharacterTraitValue` on `skill.trait`, one
-row that the sheet shows and every check reads. `skill_rating(sheet_id, skill)`
+row that the sheet shows and every check reads. `skill_rating(sheet, skill)` (through the character's trait handler)
 (`world/skills/services.py`) reads it. Writers record a `traits.CharacterTraitChange`:
 
 | Writer | Source stamped |
@@ -202,7 +202,7 @@ spec.parent_name  # -> self.parent_skill.name
 from world.skills.models import CharacterSpecializationValue
 from world.skills.services import skill_rating
 
-skill_rating(sheet.pk, skill)  # the skill trait's CharacterTraitValue.value, 0 if unrated
+skill_rating(sheet, skill)  # the skill trait's value via character.traits, 0 if unrated
 spec = CharacterSpecializationValue.objects.get(character=sheet, specialization=spec)
 ```
 
@@ -299,7 +299,7 @@ per `(character, skill)` and `(character, specialization)`.
 | `points_to_next_boundary(tracker: DevelopmentPoints) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585), read from its ledger (#5010): unpaid rust, then each level's cost up to the stop, less progress banked toward it. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
 | `stored_skill_cap(sheet) -> int or None` / `skill_cap_message(name, stored_cap) -> str` | The band's skill cap as a stored value (`skill_cap_for(sheet) * 10`, `None` for no cap), and the message every raise path shows when development stops at it (#4585) |
 | `next_xp_boundary(value) -> int or None` | The first XP boundary at or above `value`; where `award_points` parks a skill (#5010) |
-| `skill_rating(sheet_id, skill) -> int` / `set_skill_trait(sheet, skill, value, source)` | Read a skill's rating, and set it directly (stamped, ledger aligned); the rating is the skill trait's `CharacterTraitValue` (#5010) |
+| `skill_rating(sheet, skill) -> int` / `set_skill_trait(sheet, skill, value, source)` | Read a skill's rating, and set it directly (stamped, ledger aligned); the rating is the skill trait's `CharacterTraitValue` (#5010) |
 | `run_weekly_skill_cron()` | Weekly training only (rust is the rollover's one pass, #5010); registered as `skills.weekly_training` in `world/game_clock/tasks.py` |
 
 ### Training Formula

@@ -9756,7 +9756,7 @@
 - `run_weekly_skill_cron() -> 'None' - Run the weekly skill training cycle: process every training allocation.`
 - `set_skill_trait(sheet: 'CharacterSheet', skill: 'Skill', value: 'int', source: 'str') -> 'None' - Set a skill's rating directly: its ``CharacterTraitValue`` (#2894), stamped (#3055).`
 - `skill_cap_message(name: 'str', stored_cap: 'int') -> 'str' - Message shown when development stops at the band's skill cap (#4585).`
-- `skill_rating(sheet_id: 'int', skill: 'Skill') -> 'int' - The character's rating in ``skill``: its trait's ``CharacterTraitValue``, else 0.`
+- `skill_rating(sheet: 'CharacterSheet', skill: 'Skill') -> 'int' - The character's stored rating in ``skill``, else 0.`
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`
