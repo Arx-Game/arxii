@@ -4,6 +4,7 @@
  * Forces, and the Vassals beneath with Create vassal domain and Add vacant
  * seats. A vacant title offers Create Family, which takes it.
  */
+import { Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -47,6 +48,9 @@ export function TitlePage({ titleId }: { titleId: number }) {
   const { data: regionMaps } = useRegionMapsQuery();
   const account = useAccount();
   const [rungName, setRungName] = useState('');
+  // The name the field last sent (#5017): Enter and then a blur, or a blur and then
+  // Enter, save once; the document's refetch clears it.
+  const [sentName, setSentName] = useState<string | null>(null);
   const [moveTo, setMoveTo] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [seatHouseId, setSeatHouseId] = useState('');
@@ -63,6 +67,7 @@ export function TitlePage({ titleId }: { titleId: number }) {
   }, [doc]);
   useEffect(() => {
     setRungName(doc?.title.name ?? '');
+    setSentName(null);
   }, [doc?.title.name]);
   useEffect(() => {
     const list = holdingKinds?.results ?? [];
@@ -97,6 +102,12 @@ export function TitlePage({ titleId }: { titleId: number }) {
       ? stationWords[title.station]
       : null;
   const firstRegionMap = regionMaps?.[0] ?? null;
+  const saveName = () => {
+    const next = rungName.trim();
+    if (next === '' || next === title.name || next === sentName) return;
+    setSentName(next);
+    nameRung.mutate({ title_id: titleId, name: next });
+  };
 
   const rows: RecordRailRow[] = [
     { label: 'tier', value: title.tier },
@@ -191,32 +202,34 @@ export function TitlePage({ titleId }: { titleId: number }) {
             </span>{' '}
             {firstRegionMap && (
               <Link
-                className="btn sm quiet"
+                className="btn sm quiet icon"
                 to="/staff/world-builder"
+                aria-label="View on the map"
+                title="View on the map"
                 onClick={() =>
                   rememberMapFocus(account?.id ?? 'anon', firstRegionMap.id, title.title_id)
                 }
               >
-                On the map
+                <Globe className="h-4 w-4" aria-hidden="true" />
               </Link>
             )}
           </h3>
           <div className="field">
-            <label htmlFor="r-name">name</label>
             <input
               id="r-name"
               type="text"
+              aria-label="Name"
+              placeholder="Name"
               value={rungName}
               onChange={(e) => setRungName(e.target.value)}
-            />{' '}
-            <button
-              type="button"
-              className="btn sm quiet"
-              disabled={rungName.trim() === '' || rungName.trim() === title.name}
-              onClick={() => nameRung.mutate({ title_id: titleId, name: rungName.trim() })}
-            >
-              {title.name ? 'Rename' : 'Name'}
-            </button>
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveName();
+                }
+              }}
+            />
           </div>
           <div className="row3">
             <div className="field">

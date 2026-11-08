@@ -171,10 +171,12 @@ test('the rung page: Historical Charter, the claims, the chain up and the door t
     '/staff/almanach/titles/8'
   );
   expect(screen.getByText('pledged to Kingdom of Umbros')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'On the map' })).toHaveAttribute(
+  // #5017: the map door is a globe, named for the screen reader only.
+  expect(screen.getByRole('link', { name: 'View on the map' })).toHaveAttribute(
     'href',
     '/staff/world-builder'
   );
+  expect(screen.queryByText('On the map')).toBeNull();
 });
 
 test('a titular rung says so and shows its charter even with nothing held', () => {
@@ -200,32 +202,38 @@ test('a titular rung says so and shows its charter even with nothing held', () =
   }
 });
 
-test('an unnamed rung is named from its own page', async () => {
+test('an unnamed rung is named from its own page: one field, Enter saves (#5017)', async () => {
   mutate.mockClear();
   currentDoc = { ...doc, title: { ...doc.title, name: '', house_id: null, held_by: '' } };
   try {
     renderWithProviders(<TitlePage titleId={3} />);
-    const save = screen.getByRole('button', { name: 'Name' });
-    expect(save).toBeDisabled();
-    await userEvent.type(
-      screen.getByLabelText('name', { selector: '#r-name' }),
-      'Kingdom of Umbros'
-    );
-    await userEvent.click(save);
+    // No label above and no button below: the field alone, reading Name while blank.
+    expect(screen.queryByRole('button', { name: 'Name' })).toBeNull();
+    expect(document.querySelector('label[for="r-name"]')).toBeNull();
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(field).toHaveAttribute('placeholder', 'Name');
+    await userEvent.type(field, 'Kingdom of Umbros{enter}');
     expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Kingdom of Umbros' });
   } finally {
     currentDoc = doc;
   }
 });
 
-test('a named rung offers Rename, enabled only once the name changes', async () => {
+test('a named rung is renamed when the field loses focus, and an unchanged field dispatches nothing (#5017)', async () => {
   mutate.mockClear();
   renderWithProviders(<TitlePage titleId={3} />);
-  const rename = screen.getByRole('button', { name: 'Rename' });
-  expect(rename).toBeDisabled();
-  await userEvent.type(screen.getByLabelText('name', { selector: '#r-name' }), ' II');
-  await userEvent.click(rename);
+  expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull();
+  const field = screen.getByRole('textbox', { name: 'Name' });
+  await userEvent.click(field);
+  await userEvent.tab();
+  expect(mutate).not.toHaveBeenCalled();
+  await userEvent.type(field, ' II');
+  await userEvent.tab();
   expect(mutate).toHaveBeenCalledWith({ title_id: 3, name: 'Duchy of Katta II' });
+  // Enter after blur saved it dispatches nothing more: the field already matches.
+  mutate.mockClear();
+  await userEvent.type(field, '{enter}');
+  expect(mutate).not.toHaveBeenCalled();
 });
 
 test('a vacant rung seats an existing house from its page', async () => {
