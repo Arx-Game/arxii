@@ -14,6 +14,7 @@ flagged ``believed_lie``. Renderers get both and choose presentation.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -328,10 +329,8 @@ def binding_marriage_of(person: Kinsperson) -> Union | None:
     A real death needs no writer to end the union: the record keeps it, and
     the status reads Widowed off it.
     """
-    unions = (
-        person.unions.filter(ended_at__isnull=True, kind__confers_wedlock=True)
-        .select_related("kind")
-        .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    unions = person.unions.filter(ended_at__isnull=True, kind__confers_wedlock=True).select_related(
+        "kind"
     )
     for union in unions:
         if any(not m.is_deceased for m in union.members.all() if m.pk != person.pk):
@@ -640,7 +639,7 @@ def viewer_sees_deceased(person: Kinsperson, viewer: object) -> bool:
 
 def unions_of(person: Kinsperson, viewer: object) -> list[Union]:
     """Visible unions ``person`` belongs to."""
-    unions = person.unions.select_related("kind", "secret").prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    unions = person.unions.select_related("kind", "secret")
     return [u for u in unions if fact_visible(u, viewer)]
 
 
@@ -1063,6 +1062,7 @@ def _union_dict(union: Union, member_pks: list[int]) -> dict:
         "kind": union.kind.name,
         "member_ids": member_pks,
         "ended": union.ended_at is not None,
+        "confers_wedlock": union.kind.confers_wedlock,
     }
 
 
@@ -1081,27 +1081,42 @@ def _populate_edges_and_unions(
             continue
         payload.parentage.append(_edge_dict(edge))
 
-    for union in _visible_unions_among(people, viewer):
-        member_pks = [m.pk for m in union.members.all() if m.pk in people]
+    for union, members in _visible_unions_among(people, viewer):
+        member_pks = [m.pk for m in members if m.pk in people]
         min_rendered = 2
         if len(member_pks) < min_rendered:
             continue
         payload.unions.append(_union_dict(union, member_pks))
 
 
-def _visible_unions_among(ids: Iterable[int], viewer: object) -> list[Union]:
-    """Visible unions with at least one member in ``ids``, in one query.
+def _visible_unions_among(
+    ids: Iterable[int], viewer: object
+) -> list[tuple[Union, list[Kinsperson]]]:
+    """Visible unions with at least one member in ``ids``, each with its members.
 
     The per-person ``unions_of`` is right for a relationship walk; a tree
-    builder asking it once per node paid two queries per node (#4209).
+    builder asking it once per node paid two queries per node (#4209). Three
+    queries for the whole set: the unions, their through rows, the people.
+
+    Never ``prefetch_related("members")`` here. A person in two unions (a
+    marriage and a dalliance, a remarriage) is one identity-mapped instance;
+    Django tags it with the last union it saw, so the earlier union lost that
+    member and, at two members, fell out of the tree (#5017; the shape
+    `shared-instance-prefetch-reviewer` reads for, after #4607).
     """
-    unions = (
-        Union.objects.filter(members__in=ids)
-        .distinct()
-        .select_related("kind", "secret")
-        .prefetch_related("members")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel (leak)
+    unions = [
+        u
+        for u in Union.objects.filter(members__in=ids).distinct().select_related("kind", "secret")
+        if fact_visible(u, viewer)
+    ]
+    rows = Union.members.through.objects.filter(union_id__in=[u.pk for u in unions]).values_list(
+        "union_id", "kinsperson_id"
     )
-    return [u for u in unions if fact_visible(u, viewer)]
+    kin_ids_by_union: dict[int, list[int]] = defaultdict(list)
+    for union_id, kin_id in rows:
+        kin_ids_by_union[union_id].append(kin_id)
+    people = _people_by_id({k for ks in kin_ids_by_union.values() for k in ks})
+    return [(u, [people[k] for k in kin_ids_by_union.get(u.pk, [])]) for u in unions]
 
 
 def _fill_payload(
@@ -1149,9 +1164,9 @@ def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
     people = {p.pk: p for p in Kinsperson.objects.filter(pk__in=member_ids)}
     # Union partners of members (``spouses_of`` for the whole set in one
     # query): active unions only, every member of each.
-    for union in _visible_unions_among(member_ids, viewer):
+    for union, members in _visible_unions_among(member_ids, viewer):
         if union.ended_at is None:
-            for partner in union.members.all():
+            for partner in members:
                 people.setdefault(partner.pk, partner)
     # One hop out along every visible parentage edge that touches a member,
     # in one query: the other end joins the roll whether or not it is of the

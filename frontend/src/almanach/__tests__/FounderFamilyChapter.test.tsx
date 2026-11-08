@@ -153,7 +153,13 @@ test('the shape for head + mother + spouse + founder(child) yields the expected 
     },
   ]);
   expect(shape.family.unions).toEqual([
-    { id: spouseId, kind: 'marriage', member_ids: [HEAD_NODE_ID, spouseId], ended: false },
+    {
+      id: spouseId,
+      kind: 'marriage',
+      member_ids: [HEAD_NODE_ID, spouseId],
+      ended: false,
+      confers_wedlock: true,
+    },
   ]);
   expect(shape.keyByNodeId[motherId]).toBe('mother');
   expect(shape.keyByNodeId[HEAD_NODE_ID]).toBe('head');

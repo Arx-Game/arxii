@@ -756,11 +756,13 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   selected (`world-builder/atlas/mapFocus.ts`). The name field stands alone under the heading,
   "Name" as its placeholder, and saves on Enter or when focus leaves (#5017). Under "held by"
   the **ruler slot** (`title/RulerSlot.tsx`) names who holds the title in person: empty it
-  reads "Undefined ruler"; opened, it lists the holding family's roll as the house document
-  draws it (members and their spouses, the dead last, "married in"/"rip"/"PC" after a name),
-  narrowed by typing, with "Add family member" at the foot (`almanach_create_kin` then
-  `almanach_set_holder`); set, the ruler's name links to their page and a pencil reopens the
-  list. It is never a search of everyone by name.
+  reads "Undefined ruler"; opened, it lists exactly who the rule below accepts, read off the
+  house document's tree (members of the family, and anyone in an open wedlock union with one
+  per the tree's `unions` edges, which carry `confers_wedlock` since #5017; the dead last,
+  "married in"/"rip"/"PC" after a name), narrowed by typing, with "Add family member" at the
+  foot (`almanach_create_kin` then `almanach_set_holder`); set, the ruler's name links to
+  their page and a pencil reopens the list. It is never a search of everyone by name, and a
+  dalliance partner or an ex-spouse, whom the tree draws, is not offered.
   The page builds for an inner chain rung too (the empire's own kingdom, a kingdom's own
   duchy, planted with the top and sharing its seat): the liege walk (`liege_for_title`,
   which refuses a non-top through `_require_chain_top`) runs only when `graph.is_top(title)`,

@@ -5915,8 +5915,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -98693,7 +98692,10 @@ components:
             type: integer
         ended:
           type: boolean
+        confers_wedlock:
+          type: boolean
       required:
+      - confers_wedlock
       - ended
       - id
       - kind

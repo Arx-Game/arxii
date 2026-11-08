@@ -3,8 +3,10 @@
  * family's roll instead of searched for by name. Empty it reads Undefined ruler;
  * open it lists the family (members and their spouses, the dead last), narrowed
  * by typing, with Add family member at the foot; set it names the ruler as a
- * link and offers a change. The server's rule matches the roll: a member on
- * record or the wedded spouse of one.
+ * link and offers a change. The roll is exactly who the server's rule accepts:
+ * a member of the family, or someone in an open wedlock union with one (read
+ * off the tree's union edges), so a dalliance partner or an ex-spouse is never
+ * offered.
  */
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
@@ -44,9 +46,19 @@ export function RulerSlot({ titleId, houseId, holderId, holderName }: RulerSlotP
   const [newName, setNewName] = useState('');
 
   const familyId = house?.family.family_id ?? null;
+  const nodes = house?.family.nodes ?? [];
+  const memberIds = new Set(nodes.filter((n) => n.family_id === familyId).map((n) => n.id));
+  const weddedIds = new Set<number>();
+  for (const union of house?.family.unions ?? []) {
+    if (!union.confers_wedlock || union.ended) continue;
+    if (union.member_ids.some((id) => memberIds.has(id))) {
+      union.member_ids.forEach((id) => weddedIds.add(id));
+    }
+  }
   const needle = q.trim().toLowerCase();
-  const roll = (house?.family.nodes ?? [])
+  const roll = nodes
     .filter((node) => node.id !== holderId)
+    .filter((node) => memberIds.has(node.id) || weddedIds.has(node.id))
     .filter((node) => needle === '' || node.name.toLowerCase().includes(needle))
     .sort((a, b) => Number(isDead(a)) - Number(isDead(b)) || a.name.localeCompare(b.name));
 

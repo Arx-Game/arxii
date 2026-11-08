@@ -90,7 +90,8 @@ vi.mock('@/world-builder/queries', () => ({
 }));
 
 /** The holding house's roll as the house document draws it (#5017): members, a
- * married-in spouse from another family, one dead, one a player character. */
+ * married-in spouse from another family, one dead, one a player character, and a
+ * dalliance partner the tree draws but the ruler rule refuses. */
 const node = {
   tier: 'standing',
   is_deceased: false,
@@ -109,9 +110,13 @@ const houseDoc = {
       { ...node, id: 12, name: 'Galleron', family_id: 7 },
       { ...node, id: 13, name: 'Old Marr', family_id: 4, is_deceased: true },
       { ...node, id: 14, name: 'Aldo mar Katta', family_id: 4 },
+      { ...node, id: 15, name: 'Rook', family_id: 7 },
     ],
     parentage: [],
-    unions: [],
+    unions: [
+      { id: 1, kind: 'Marriage', member_ids: [11, 12], ended: false, confers_wedlock: true },
+      { id: 2, kind: 'Dalliance', member_ids: [14, 15], ended: false, confers_wedlock: false },
+    ],
   },
 };
 
@@ -407,6 +412,7 @@ test('an unseated title reads Undefined ruler; the slot lists the family roll, s
         .getAllByRole('button')
         .map((b) => b.textContent)
         .filter((t) => t !== 'Add family member' && t !== 'Cancel');
+    // Rook, a dalliance partner, is on the tree and off the roll: the server would refuse him.
     expect(names()).toEqual([
       'Aldo mar Katta',
       'Galleron married in',

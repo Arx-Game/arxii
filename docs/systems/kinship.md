@@ -144,7 +144,7 @@ character's own roster entry as viewer), `viewer_sees_deceased` (the one
 dead fold the tree and the status share: truth for `OMNISCIENT`, truth or
 public belief otherwise, #3983),
 `incarnation_chain_of` (per-life knowledge), `derive_relationship` (labeled
-precedence walk incl. foster/step/in-law/soul), `family_tree_for` (graph
+precedence walk incl. foster/step/in-law/soul), `family_tree_for` (graph; its `unions` edges carry `confers_wedlock` since #5017, and union members are read off the through rows, never prefetched: a person in two unions is one identity-mapped instance and the prefetch tagged them with the last union only)
 payload for a `Family`: every active member, their union partners, and
 since #4209 every visible parent and child of a member, so a relative who is
 not of the name sits on the roll; each hop is viewer-filtered, and the

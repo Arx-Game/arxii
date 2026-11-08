@@ -187,6 +187,7 @@ class UnionEdgeSerializer(serializers.Serializer):
     kind = serializers.CharField()
     member_ids = serializers.ListField(child=serializers.IntegerField())
     ended = serializers.BooleanField()
+    confers_wedlock = serializers.BooleanField()
 
 
 class FamilyTreeSerializer(serializers.Serializer):

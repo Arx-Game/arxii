@@ -54621,6 +54621,7 @@ export interface components {
       kind: string;
       member_ids: number[];
       ended: boolean;
+      confers_wedlock: boolean;
     };
     /**
      * @description * `class_level` - Class Level
@@ -60469,8 +60470,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

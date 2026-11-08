@@ -627,3 +627,33 @@ class MarriageBindsTests(TestCase):
         kinship.record_union(kind=consort, members=[self.a, self.b])
         assert kinship.binding_marriage_of(self.a) is None
         kinship.record_marriage([self.a, self.c])
+
+
+class UnionEdgeWedlockTests(TestCase):
+    """A tree's union edges name every member and say whether the kind confers
+    wedlock (#5017), so a page listing who may hold a family's title keeps to
+    members and their wedded spouses. A person in two unions used to be tagged
+    with the last one by the many-to-many prefetch (one identity-mapped
+    instance), and the earlier union lost them."""
+
+    def test_union_edges_carry_members_and_confers_wedlock(self) -> None:
+        family = FamilyFactory(name="House Katta")
+        member = _person("Kathryn")
+        kinship.add_membership(kinsperson=member, family=family, basis=MembershipBasis.BORN)
+        spouse = _person("Galleron")
+        lover = _person("Rook")
+        kinship.record_union(kind=UnionKindFactory(name="Marriage"), members=[member, spouse])
+        kinship.record_union(
+            kind=UnionKindFactory(name="Dalliance", confers_wedlock=False), members=[member, lover]
+        )
+        payload = kinship.family_tree_for(family, OMNISCIENT)
+        unions = {u["kind"]: u for u in payload.unions}
+        assert set(unions) == {"Marriage", "Dalliance"}
+        assert sorted(unions["Marriage"]["member_ids"]) == sorted([member.pk, spouse.pk])
+        assert sorted(unions["Dalliance"]["member_ids"]) == sorted([member.pk, lover.pk])
+        assert unions["Marriage"]["confers_wedlock"] is True
+        assert unions["Dalliance"]["confers_wedlock"] is False
+        assert {n["id"] for n in payload.nodes} == {member.pk, spouse.pk, lover.pk}
+        # the per-person walk sees both partners too
+        assert {p.pk for p in kinship.spouses_of(member, OMNISCIENT)} == {spouse.pk, lover.pk}
+        assert kinship.binding_marriage_of(member).kind.name == "Marriage"
