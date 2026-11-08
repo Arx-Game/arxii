@@ -1,7 +1,7 @@
-from django.contrib import admin, messages
+from django.contrib import admin
 
 from world.admin_utils import OneRowPerFormSet
-from world.mechanics.services import ensure_skill_target
+from world.skills.admin_inlines import ensure_skill_target_or_warn
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
@@ -33,20 +33,9 @@ class SkillAdmin(admin.ModelAdmin):
     inlines = [SpecializationInline]
 
     def save_model(self, request, obj, form, change):
-        """Save the skill and make sure a modifier target points at its trait (#4820).
-
-        A skill rolls a distinction's bonus only through a stat-category
-        ``ModifierTarget`` whose ``target_trait`` is the skill's trait; without one a
-        pasted ``+10 <skill>`` is refused. An explicit call, not a signal (ADR-0009).
-        """
+        """Save the skill and make sure a modifier target points at its trait (#4820)."""
         super().save_model(request, obj, form, change)
-        if ensure_skill_target(obj.trait) is None:
-            messages.warning(
-                request,
-                f"No modifier target was made for {obj.name}: another category already "
-                "has a target of that name. Retarget that row to this skill's trait on "
-                "the Modifier targets admin.",
-            )
+        ensure_skill_target_or_warn(request, obj)
 
     @admin.display(description="Name")
     def name(self, obj):

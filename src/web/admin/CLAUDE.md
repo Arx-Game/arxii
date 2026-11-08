@@ -689,7 +689,9 @@ others.
   that param, no new view needed for it); Soulfray Stage Builder (a `<select>`
   of stages, each option labelled `"{stage_order}. {name}"`, + Open, #4089);
   Glimpse tags (a link to `admin:arxii_glimpsetag_changelist` naming the
-  active count). Each row carries one line of fixed help copy under it.
+  active count); Skills (#5006: "New skill", the Trait add form with
+  `?trait_type=skill`, whose Skill section authors the skill in the same Save,
+  and "All skills"). Each row carries one line of fixed help copy under it.
 - **Pick routes** - each `<select>` posts nothing; picking a row and clicking
   Open is a plain GET to a `*_pick` view (`distinction_builder_pick`,
   `tradition_slate_pick`, `upbringing_builder_pick`, `soulfray_builder_pick`,
