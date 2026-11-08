@@ -2379,7 +2379,7 @@ class CharacterDraft(SharedMemoryModel):
             return
         magic_skills = magic_category_skills()
         names = {
-            *magic_skills.filter(pk__in=spent_skill_ids).values_list("trait__name", flat=True),
+            *magic_skills.filter(pk__in=spent_skill_ids).values_list("name", flat=True),
             *Specialization.objects.filter(
                 pk__in=spent_spec_ids, parent_skill__in=magic_skills
             ).values_list("name", flat=True),

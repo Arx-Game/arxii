@@ -146,7 +146,9 @@ class Migration(migrations.Migration):
                     "invalid": "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
                 },
                 help_text="The skill every cast worked in this style adds (#5002): a Path's casts take the Path style's skill, a Gift with its own style takes that style's. A technique's own skill, if set, wins. Blank = casts in this style add no skill. Magic-category skills only, never a combat style's skill.",
-                limit_choices_to=models.Q(("category", "magic"), ("combat_style__isnull", True)),
+                limit_choices_to=models.Q(
+                    ("category", "magic"), ("trait_type", "skill"), ("combat_style__isnull", True)
+                ),
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="technique_styles",
@@ -162,7 +164,9 @@ class Migration(migrations.Migration):
                     "invalid": "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
                 },
                 help_text="Overrides the cast skill for this one technique (#4450). Blank = use the skill of the style the cast is worked in: the Gift's own style if it sets one, else the caster's Path style (#5002). Magic-category skills only, never a combat style's skill.",
-                limit_choices_to=models.Q(("category", "magic"), ("combat_style__isnull", True)),
+                limit_choices_to=models.Q(
+                    ("category", "magic"), ("trait_type", "skill"), ("combat_style__isnull", True)
+                ),
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="override_techniques",
@@ -177,7 +181,9 @@ class Migration(migrations.Migration):
                     "invalid": "Choose a skill in the Magic category that is not a combat style's skill. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
                 },
                 help_text="The skill added to every roll of this activity. Magic-category skills only, never a combat style's skill.",
-                limit_choices_to=models.Q(("category", "magic"), ("combat_style__isnull", True)),
+                limit_choices_to=models.Q(
+                    ("category", "magic"), ("trait_type", "skill"), ("combat_style__isnull", True)
+                ),
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="magic_activity_rows",
                 to="arxii.skill",
@@ -202,7 +208,7 @@ class Migration(migrations.Migration):
                     "invalid": "Choose a skill in the Magic category. A magical roll adds only skills made for magic, so it never counts a skill a character picks elsewhere."
                 },
                 help_text="The style's own skill, added to Strike, technique hit and defense rolls while the character fights this style's way. One style per skill. Magic-category skills only.",
-                limit_choices_to=models.Q(("category", "magic")),
+                limit_choices_to=models.Q(("category", "magic"), ("trait_type", "skill")),
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="combat_style",

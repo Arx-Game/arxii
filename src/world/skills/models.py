@@ -75,7 +75,10 @@ class Skill(Trait):
         return self.name
 
     def save(self, *args, **kwargs) -> None:
-        self.trait_type = TraitType.SKILL
+        # Only on create: the shared identity map can hand this class to a Trait page
+        # retyping an existing row, and that change must stand.
+        if self._state.adding:
+            self.trait_type = TraitType.SKILL
         super().save(*args, **kwargs)
 
 

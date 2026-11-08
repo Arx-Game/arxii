@@ -1292,8 +1292,8 @@ def _probe_magic_skill_courses() -> ProbeResult:
     missing = tuple(
         magic_category_skills()
         .exclude(pk__in=covered)
-        .order_by("trait__name")
-        .values_list("trait__name", flat=True)
+        .order_by("name")
+        .values_list("name", flat=True)
     )
     if not missing:
         return ProbeResult(present=True)

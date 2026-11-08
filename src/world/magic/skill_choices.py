@@ -25,9 +25,10 @@ from __future__ import annotations
 
 from django.db.models import Q
 
-from world.traits.models import TraitCategory
+from world.traits.models import TraitCategory, TraitType
 
-MAGIC_SKILL_CHOICES = Q(category=TraitCategory.MAGIC)
+# trait_type too: model validation reads Skill's base manager, which is unfiltered.
+MAGIC_SKILL_CHOICES = Q(category=TraitCategory.MAGIC, trait_type=TraitType.SKILL)
 
 MAGIC_SKILL_ERROR_MESSAGES = {
     "invalid": (
