@@ -276,7 +276,10 @@ unmount), undone and redone through `atlas_restore_footprint` with the entry's b
 after holders; Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y while in Carve mode. **Clear**
 confirms, then `atlas_clear_footprint`, also an undo entry. Only the domain being carved
 (Carve mode) or the selected one (Select mode) draws an outline; every other footprint is
-shading, since the owner ruled there are no enclaves to disambiguate. The rail's
+shading, since the owner ruled there are no enclaves to disambiguate. In Carve mode the side
+panel follows the domain being carved (picking or planting one selects it too), and its
+"Open in the Almanach" link opens the title page in its own tab, so the map and its undo
+history stay put (#5011). The rail's
 New region form carries a continent choice: a new CONTINENT rung by the region's name
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.

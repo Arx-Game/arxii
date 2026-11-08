@@ -4,7 +4,6 @@
  * so folding loses nothing.
  */
 import { PanelRightClose, PanelRightOpen, type LucideIcon } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 import type { LadderRow } from '@/almanach/types';
 import { Plate, PlateHead } from '@/components/folio';
@@ -102,12 +101,14 @@ function SelectionDetails({
       </p>
       {focusTitleId != null && (
         <>
-          <Link
-            to={`/staff/almanach/titles/${focusTitleId}`}
+          <a
+            href={`/staff/almanach/titles/${focusTitleId}`}
+            target="_blank"
+            rel="noopener"
             className="mt-3 inline-block text-sm underline hover:text-primary"
           >
             Open in the Almanach
-          </Link>
+          </a>
           <div className="mt-3">
             <Button
               type="button"

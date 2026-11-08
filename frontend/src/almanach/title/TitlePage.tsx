@@ -29,7 +29,7 @@ import { rememberMapFocus } from '@/world-builder/atlas/mapFocus';
 import '../almanach.css';
 
 export function TitlePage({ titleId }: { titleId: number }) {
-  const { data: doc } = useTitleDocument(titleId);
+  const { data: doc, error, refetch } = useTitleDocument(titleId);
   const plant = useAlmanachMutation('almanach_plant_rung');
   const batch = useAlmanachMutation('almanach_batch_unclaimed');
   const setHolder = useAlmanachMutation('almanach_set_holder');
@@ -70,9 +70,21 @@ export function TitlePage({ titleId }: { titleId: number }) {
   }, [holdingKinds, holdingKindId]);
 
   if (!doc) {
+    // A failed request says so instead of reading "Loading" forever (#5011).
     return (
       <div className="almanach">
-        <div className="wrap p-6 text-sm text-muted-foreground">Loading the domain…</div>
+        <div className="wrap p-6 text-sm text-muted-foreground">
+          {error ? (
+            <>
+              <p role="alert">{error.message}</p>
+              <button type="button" className="btn sm quiet" onClick={() => void refetch()}>
+                Try again
+              </button>
+            </>
+          ) : (
+            'Loading the domain…'
+          )}
+        </div>
       </div>
     );
   }

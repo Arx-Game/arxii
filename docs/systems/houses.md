@@ -753,6 +753,12 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   land), **Historical Charter** (the chartered fiefs, whose charters hold this rung, and every
   "claimed by X" line), the chain rail above, and an "On the map" door that opens the Atlas on
   the first region map with this title selected (`world-builder/atlas/mapFocus.ts`).
+  The page builds for an inner chain rung too (the empire's own kingdom, a kingdom's own
+  duchy, planted with the top and sharing its seat): the liege walk (`liege_for_title`,
+  which refuses a non-top through `_require_chain_top`) runs only when `graph.is_top(title)`,
+  and an inner rung's `sworn_to` is its chain top's name from `_row_for` (#5011). When the
+  document request fails, the page shows the error and a "Try again" button instead of
+  "Loading the domain…" (#5011).
 
 ### Ladder rules
 

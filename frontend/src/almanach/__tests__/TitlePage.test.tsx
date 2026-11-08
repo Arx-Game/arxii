@@ -78,6 +78,8 @@ const doc: RungDocument = {
 
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
 let currentDoc: RungDocument = doc;
+let currentError: Error | null = null;
+const refetch = vi.fn();
 
 vi.mock('@/world-builder/queries', () => ({
   useRegionMapsQuery: () => ({ data: [{ id: 6, name: 'Catenys' }] }),
@@ -88,7 +90,10 @@ vi.mock('@/world-builder/queries', () => ({
 }));
 
 vi.mock('../queries', () => ({
-  useTitleDocument: () => ({ data: currentDoc }),
+  useTitleDocument: () =>
+    currentError
+      ? { data: undefined, error: currentError, refetch }
+      : { data: currentDoc, error: null, refetch },
   useSearch: () => ({ data: undefined }),
   useHouses: () => ({ data: { results: [] } }),
   useRealmTitles: () => ({
@@ -338,4 +343,17 @@ test('a vacant rung offers no Vacate', () => {
 test('a held rung offers no Delete', () => {
   renderWithProviders(<TitlePage titleId={3} />);
   expect(screen.queryByRole('button', { name: 'Delete rung' })).toBeNull();
+});
+
+test('a page that fails to load says so and offers a retry instead of loading forever', async () => {
+  currentError = new Error('Failed to load the domain.');
+  try {
+    renderWithProviders(<TitlePage titleId={8} />);
+    expect(screen.getByText('Failed to load the domain.')).toBeInTheDocument();
+    expect(screen.queryByText('Loading the domain…')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalled();
+  } finally {
+    currentError = null;
+  }
 });
