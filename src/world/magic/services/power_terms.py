@@ -61,9 +61,10 @@ class PowerTermContext:
     non-combat casts, an NPC-only opponent with no linked ``CharacterSheet``).
     Threaded straight through to ``perks.services.applicable_perks``'s
     ``target=`` kwarg via ``vow_situational_power_term`` below — this is what
-    lets the four target-keyed situations (``TARGET_DISTRACTED``,
-    ``TARGET_SWAYED_BY_ALLY``, ``TARGET_FOCUSED_ELSEWHERE``,
-    ``TARGET_FAVORABLY_DISPOSED``) fire for ``POWER_BONUS``. For a
+    lets the sheet-keyed target situations fire for ``POWER_BONUS``
+    (``TARGET_FAVORABLY_DISPOSED`` needs it; ``TARGET_DISTRACTED``,
+    ``TARGET_SWAYED_BY_ALLY`` and ``TARGET_FOCUSED_ELSEWHERE`` read a bare NPC
+    opponent from ``situation_ctx`` instead, #5020). For a
     multi-target/AoE cast, only the FIRST/primary resolved target is threaded
     — per-target perk evaluation for AoE casts is a legitimate slice-2+
     refinement, not built here. Defaulted so every existing constructor stays
@@ -497,7 +498,9 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     ``TARGET_FOCUSED_ELSEWHERE``, ``TARGET_FAVORABLY_DISPOSED``) fire for
     ``POWER_BONUS`` — previously hard-inert with ``target=None`` always
     passed, now live whenever the resolver can name a PC/sheet-backed
-    primary target. For a multi-target/AoE cast only the FIRST/primary
+    primary target. With ``target=None`` against a bare NPC opponent, the
+    first three still read that NPC through ``situation_ctx`` (#5020). For a
+    multi-target/AoE cast only the FIRST/primary
     resolved target is threaded (see ``PowerTermContext.target_sheet``'s
     docstring) — per-target perk evaluation for AoE is deferred to a future
     slice. Non-target situations (``AT_RANGE``/``IN_MELEE``/``SURROUNDED``/

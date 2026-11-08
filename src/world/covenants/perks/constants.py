@@ -65,16 +65,20 @@ class Situation(models.TextChoices):
     - ``TARGET_DISTRACTED`` — the target carries an applied condition whose
       template links a ``distraction``/``charm`` ``TechniqueFunction`` tag
       (or, absent technique->condition provenance, a name/category match —
-      Task 2 verifies and documents which). Reads ``target``; DB-state,
-      evaluates anywhere (False when ``target`` is None).
+      Task 2 verifies and documents which). Reads ``target``, or in combat
+      the subject's declared NPC opponent (#5020); DB-state, evaluates
+      anywhere (False when there is neither).
     - ``TARGET_SWAYED_BY_ALLY`` — the same distraction/charm condition as
       above, but applied by the holder or one of the holder's covenant-mates
       (the vow-holder's own self-created situation — worked-example
-      calibration, spec §"Worked examples"). Reads ``holder`` + ``target``;
-      DB-state, evaluates anywhere.
-    - ``TARGET_FOCUSED_ELSEWHERE`` — the target's declared action this round
-      targets someone other than the subject. Reads ``subject`` + ``target``
-      + ``resolution``; False outside combat.
+      calibration, spec §"Worked examples"). Reads ``holder`` + ``target``
+      (or the declared NPC opponent, as above); DB-state, evaluates anywhere.
+    - ``TARGET_FOCUSED_ELSEWHERE`` — the target is busy with someone other
+      than the subject this round. For a declared NPC opponent (#5020): its
+      attack this round has targets and the subject is not among them, or,
+      with no attack, it is winding up on another participant. For an ally
+      target: the ally's declared action targets someone else. Reads
+      ``subject`` + ``target`` + ``resolution``; False outside combat.
     - ``ALLY_LOW_HEALTH`` — at least one of the holder's co-present
       covenant-mates (mate's own engagement irrelevant, Tehom's 2026-07-20
       reversal) is below a module-constant health fraction (the "Last

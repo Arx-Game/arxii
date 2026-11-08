@@ -31,9 +31,9 @@ class ResolvePrimaryTargetSheetTests(EvenniaTestCase):
         self.assertEqual(_resolve_primary_target_sheet(action), persona.character_sheet)
 
     def test_bare_npc_opponent_resolves_to_none(self):
-        """A bare (non-persona) NPC opponent has no CharacterSheet -> None,
-        exactly like a targetless cast; target-keyed situations correctly
-        never hold against it."""
+        """A bare (non-persona) NPC opponent has no CharacterSheet -> None.
+        Target-keyed situations that can see an NPC read it from the round
+        context instead (#5020)."""
         from world.combat.factories import CombatOpponentFactory, CombatRoundActionFactory
         from world.combat.services import _resolve_primary_target_sheet
 
