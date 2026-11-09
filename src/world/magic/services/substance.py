@@ -79,10 +79,9 @@ def substance_for_gift(gift: Gift | None) -> GiftSubstance | None:
 
 def gift_thread_for(character: ObjectDB, gift: Gift) -> Thread | None:  # noqa: OBJECTDB_PARAM - a caster
     """Her GIFT thread covering ``gift`` (a direct hold first), or None (no sheet, no thread)."""
-    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
     from world.magic.specialization.services import gift_threads_for  # noqa: PLC0415
 
-    if _get_character_sheet(character) is None:
+    if character.character_sheet is None:
         return None
     threads = gift_threads_for(character, gift)
     return threads[0] if threads else None
@@ -491,12 +490,25 @@ def call_up_offers(
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models import CharacterAnima  # noqa: PLC0415
     from world.magic.services.techniques import (  # noqa: PLC0415
-        _get_character_sheet,
         calculate_effective_anima_cost,
         get_runtime_caster_stats,
     )
 
-    if _get_character_sheet(character) is None:
+    # The cached sheet and threads handler first, so a character with no gift that has a
+    # substance (most of them) costs nothing here: the combat payload reads this per row.
+    if character.character_sheet is None:
+        return []
+    candidates = []
+    seen: set[int] = set()
+    for thread in character.threads.all():
+        if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
+            continue
+        substance = substance_for_gift(thread.target_gift)
+        if substance is None or substance.gift_id in seen:
+            continue
+        seen.add(substance.gift_id)
+        candidates.append(thread)
+    if not candidates:
         return []
     stats = get_runtime_caster_stats(character)
     surplus = max(stats.control - stats.intensity, 0)
@@ -507,14 +519,7 @@ def call_up_offers(
         or 0
     )
     offers: list[CallUpOffer] = []
-    seen: set[int] = set()
-    for thread in character.threads.all():
-        if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
-            continue
-        substance = substance_for_gift(thread.target_gift)
-        if substance is None or substance.gift_id in seen:
-            continue
-        seen.add(substance.gift_id)
+    for thread in candidates:
         plan = plan_substance_call_up(
             character=character,
             gift=thread.target_gift,
