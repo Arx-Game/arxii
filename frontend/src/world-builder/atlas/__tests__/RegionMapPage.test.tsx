@@ -205,6 +205,60 @@ describe('RegionMapPage', () => {
     );
   });
 
+  it('offers the four views on the panel, All by default, and remembers the pick (#5030)', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    const picker = screen.getByRole('group', { name: 'view' });
+    expect(
+      within(picker)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['Geography', 'Domain', 'Domain-Vassal', 'All']);
+    expect(within(picker).getByRole('button', { name: 'All' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-map-view', 'all');
+    expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('Salvation');
+    await user.click(within(picker).getByRole('button', { name: 'Geography' }));
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-map-view', 'geography');
+    unmount();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    expect(screen.getByTestId('region-map-viewport')).toHaveAttribute('data-map-view', 'geography');
+    expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('no domain selected');
+  });
+
+  it('Carve mode starts on Domain-Vassal, keeps a change, and Select gets its own view back (#5030)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    const viewport = screen.getByTestId('region-map-viewport');
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    expect(viewport).toHaveAttribute('data-map-view', 'domain-vassal');
+    const picker = screen.getByRole('group', { name: 'view' });
+    await user.click(within(picker).getByRole('button', { name: 'Geography' }));
+    expect(viewport).toHaveAttribute('data-map-view', 'geography');
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+    expect(viewport).toHaveAttribute('data-map-view', 'geography');
+    expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('Salvation');
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    expect(viewport).toHaveAttribute('data-map-view', 'all');
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    expect(viewport).toHaveAttribute('data-map-view', 'domain-vassal');
+  });
+
+  it('zooms past the lattice range on the map (#5009)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    const viewport = screen.getByTestId('region-map-viewport');
+    const plus = screen.getByRole('button', { name: '+' });
+    for (let i = 0; i < 12; i += 1) await user.click(plus);
+    expect(Number(viewport.getAttribute('data-zoom'))).toBeGreaterThan(1.5);
+    const minus = screen.getByRole('button', { name: '−' });
+    for (let i = 0; i < 30; i += 1) await user.click(minus);
+    expect(Number(viewport.getAttribute('data-zoom'))).toBeLessThan(0.25);
+  });
+
   it('offers the realm ladder in carve mode', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} />);

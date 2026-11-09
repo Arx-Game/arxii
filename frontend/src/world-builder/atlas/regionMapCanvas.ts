@@ -5,9 +5,14 @@
  * every world pip is shifted by the region's first pip before drawing.
  */
 import type { LatticeView } from './latticeState';
+import type { Label } from './mapViews';
 import type { RegionMapFootprint, RegionMapPips, RegionMapSummary } from '../types';
 
 export const PIP_PX = 6;
+/** Zoomed out past this the per-cell lines would be a solid wash, so they are not drawn (#5009). */
+export const MAP_CELL_LINES_HIDE_BELOW = 0.3;
+/** A seat dot's radius on the names layer, in screen pixels at every zoom. */
+export const SEAT_DOT_PX = 3;
 
 /** Flat colour per terrain: the first pass the owner ruled; tile art is a later styling pass. */
 export const TERRAIN_COLORS: Record<string, string> = {
@@ -113,12 +118,15 @@ export interface DrawOptions {
    * as a dashed ghost outline over the de facto shading, never filled.
    */
   ghostPips?: ReadonlySet<string>;
-  showLabels?: boolean;
+  /** False hides the per-cell lines (zoomed far out, #5009); default true. */
+  cellLines?: boolean;
 }
 
 /**
  * Draw the whole map at zoom 1 onto a canvas sized to the region. Terrain first,
- * then rivers, the coast, cell lines, footprints by holder, seats and names.
+ * then rivers, the coast, cell lines, footprints by holder, the charter ghost and the
+ * drag preview. Seats and names are drawn by `drawNamesLayer` on a screen-space canvas
+ * over the viewport (#5030), so they stay crisp and legible at every zoom.
  */
 export function drawRegionMap(
   ctx: CanvasRenderingContext2D,
@@ -135,12 +143,40 @@ export function drawRegionMap(
   const terrainAt = drawTerrain(ctx, data, b);
   drawRivers(ctx, data, b);
   drawCoast(ctx, data, b, terrainAt);
-  drawCellLines(ctx, b);
+  if (options.cellLines !== false) drawCellLines(ctx, b);
   const footprints = [...data.footprints].sort((a, c) => c.level - a.level);
   drawFootprints(ctx, footprints, b, options);
   drawGhost(ctx, b, options);
-  drawSeatsAndNames(ctx, footprints, b, options);
   drawPendingPips(ctx, b, options);
+}
+
+/**
+ * The names layer (#5030): a viewport-sized canvas over the map, untransformed, redrawn on
+ * every view, zoom or pan change. `seats` and `labels` are already in screen pixels.
+ */
+export function drawNamesLayer(
+  ctx: CanvasRenderingContext2D,
+  size: { width: number; height: number },
+  seats: [number, number][],
+  labels: Label[]
+): void {
+  ctx.clearRect(0, 0, size.width, size.height);
+  ctx.fillStyle = '#1a140c';
+  for (const [sx, sy] of seats) {
+    ctx.beginPath();
+    ctx.arc(sx, sy, SEAT_DOT_PX, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.font = '12px "Cormorant Garamond", Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255, 250, 240, 0.9)';
+  ctx.fillStyle = '#1a140c';
+  for (const label of labels) {
+    ctx.strokeText(label.text, label.x, label.y);
+    ctx.fillText(label.text, label.x, label.y);
+  }
 }
 
 /** The outer edge of a set of pips, as a dashed line (#4983). */
@@ -296,43 +332,6 @@ function drawFootprintOutline(
     }
   }
   ctx.stroke();
-}
-
-function drawSeatsAndNames(
-  ctx: CanvasRenderingContext2D,
-  footprints: RegionMapFootprint[],
-  b: RegionBounds,
-  options: DrawOptions
-) {
-  // seats and names
-  for (const footprint of footprints) {
-    if (footprint.seat) {
-      const [sx, sy] = footprint.seat;
-      ctx.fillStyle = '#1a140c';
-      ctx.beginPath();
-      ctx.arc(
-        (sx - b.x0) * PIP_PX + PIP_PX / 2,
-        (sy - b.y0) * PIP_PX + PIP_PX / 2,
-        PIP_PX / 2.2,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-    }
-    if (options.showLabels !== false && footprint.name && footprint.pips.length > 1) {
-      const [cx, cy] = centroid(footprint.pips);
-      ctx.font = `${Math.max(10, PIP_PX * 2)}px "Cormorant Garamond", Georgia, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(255, 250, 240, 0.9)';
-      ctx.fillStyle = '#1a140c';
-      const lx = (cx - b.x0 + 0.5) * PIP_PX;
-      const ly = (cy - b.y0 + 0.5) * PIP_PX;
-      ctx.strokeText(footprint.name, lx, ly);
-      ctx.fillText(footprint.name, lx, ly);
-    }
-  }
 }
 
 function drawPendingPips(ctx: CanvasRenderingContext2D, b: RegionBounds, options: DrawOptions) {

@@ -4,6 +4,7 @@ import type { RegionMapFootprint, RegionMapPips, RegionMapSummary } from '../../
 import { DEFAULT_VIEW } from '../latticeState';
 import {
   centroid,
+  drawNamesLayer,
   drawRegionMap,
   TERRAIN_COLORS,
   footprintAt,
@@ -155,13 +156,18 @@ describe('region map drawing', () => {
       holderColor(4),
     ]);
     expect(paints[7]).toEqual({ style: holderColor(4, 0.65), rect: [12, 6, 6, 6] });
-    expect(context.arc).toHaveBeenCalledTimes(2);
-    expect(context.fillText).toHaveBeenCalledWith('County', expect.any(Number), expect.any(Number));
-    expect(context.fillText).not.toHaveBeenCalledWith(
-      'Barony',
-      expect.any(Number),
-      expect.any(Number)
-    );
+    // seats and names live on the screen-space names layer now (#5030)
+    expect(context.arc).not.toHaveBeenCalled();
+    expect(context.fillText).not.toHaveBeenCalled();
+  });
+
+  it('hides the cell lines when asked (#5009)', () => {
+    const lined = recordingCanvas();
+    drawRegionMap(lined.ctx, drawingData, {});
+    expect(lined.context.stroke).toHaveBeenCalledTimes(2);
+    const bare = recordingCanvas();
+    drawRegionMap(bare.ctx, drawingData, { cellLines: false });
+    expect(bare.context.stroke).toHaveBeenCalledTimes(1);
   });
 
   it('outlines only the footprints asked for', () => {
@@ -188,22 +194,31 @@ describe('region map drawing', () => {
     expect(paints).toEqual(plain.paints);
   });
 
-  it('hides labels on request and draws a removal preview after the seated holdings', () => {
+  it('draws a removal preview after the holdings', () => {
     const { ctx, context } = recordingCanvas();
-    drawRegionMap(ctx, drawingData, {
-      showLabels: false,
-      pending: new Set(['51,31']),
-      pendingRemove: true,
-    });
-    expect(context.arc).toHaveBeenCalledTimes(2);
-    expect(context.fillText).not.toHaveBeenCalled();
+    drawRegionMap(ctx, drawingData, { pending: new Set(['51,31']), pendingRemove: true });
     expect(context.save).toHaveBeenCalledOnce();
     expect(context.setLineDash).toHaveBeenCalledWith([3, 2]);
     expect(context.strokeStyle).toBe('#a0121b');
     expect(context.strokeRect).toHaveBeenCalledWith(7, 7, 4, 4);
     expect(context.strokeRect.mock.invocationCallOrder[0]).toBeGreaterThan(
-      context.fill.mock.invocationCallOrder[1]
+      context.fillRect.mock.invocationCallOrder[0]
     );
     expect(context.restore).toHaveBeenCalledOnce();
+  });
+
+  it('the names layer clears the viewport, dots the seats and writes the placed names (#5030)', () => {
+    const { ctx, context } = recordingCanvas();
+    drawNamesLayer(
+      ctx,
+      { width: 300, height: 200 },
+      [[30, 40]],
+      [{ text: 'County', x: 50, y: 60, w: 50, h: 16, areaId: 10 }]
+    );
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 300, 200);
+    expect(context.arc).toHaveBeenCalledWith(30, 40, 3, 0, Math.PI * 2);
+    expect(context.font).toContain('12px');
+    expect(context.strokeText).toHaveBeenCalledWith('County', 50, 60);
+    expect(context.fillText).toHaveBeenCalledWith('County', 50, 60);
   });
 });

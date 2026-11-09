@@ -10,7 +10,9 @@
  * line. Paint: brush pips to a terrain. Every write dispatches a registry action
  * through `useWorldBuilderAction`; the upload is the one multipart endpoint.
  * Alt-drag pans in any mode. Only the domain being carved draws an outline;
- * neighbours are shading.
+ * neighbours are shading. A view picker on the panel (#5030) says what is drawn:
+ * Geography, Domain, Domain-Vassal or All, anchored on the selected domain; names
+ * and seats are drawn on a screen-space layer so they never stack.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
@@ -38,6 +40,7 @@ import { regionMapFileUrl } from '../api';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import {
   DEFAULT_VIEW,
+  MAP_ZOOM,
   fitView,
   readLatticeView,
   writeLatticeView,
@@ -60,7 +63,16 @@ import {
   type PipChange,
   type PipHolder,
 } from './carveHistory';
-import { PIP_PX, drawRegionMap, footprintAt, pipAt, pipKey, regionBounds } from './regionMapCanvas';
+import {
+  MAP_CELL_LINES_HIDE_BELOW,
+  PIP_PX,
+  drawNamesLayer,
+  drawRegionMap,
+  footprintAt,
+  pipAt,
+  pipKey,
+  regionBounds,
+} from './regionMapCanvas';
 import {
   BRUSH_WIDTHS,
   brushPips,
@@ -72,6 +84,7 @@ import {
 } from './regionMapFill';
 import { BARONY_LEVEL, regionMapTabUrl } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
+import { placeNames, rootsOf, visibleFootprints, type MapView } from './mapViews';
 import { FoldToggle, RegionMapPanel } from './RegionMapPanel';
 import { CarvePickers, SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
@@ -133,9 +146,29 @@ export function RegionMapPage({
   const characterId = useWorldBuilderActor();
   const { mutateAsync: runAction } = useWorldBuilderAction(characterId ?? 0, null);
   const upload = useRegionMapUpload(regionId);
-  const { panelOpen, togglePanel, pickersOpen, togglePickers } = useRegionMapLayout(accountId);
+  const {
+    panelOpen,
+    togglePanel,
+    pickersOpen,
+    togglePickers,
+    view: homeView,
+    setView: setHomeView,
+  } = useRegionMapLayout(accountId);
 
   const [mode, setMode] = useState<MapMode>('select');
+  // #5030: Carve mode starts on Domain-Vassal for the domain being carved, as a default only;
+  // a view picked while carving holds until changed or the mode is left, and never touches
+  // the remembered view the other modes use.
+  const [carveView, setCarveView] = useState<MapView>('domain-vassal');
+  const mapView: MapView = mode === 'carve' ? carveView : homeView;
+  const setMapView = (next: MapView) => {
+    if (mode === 'carve') setCarveView(next);
+    else setHomeView(next);
+  };
+  const switchMode = (next: MapMode) => {
+    if (next === 'carve' && mode !== 'carve') setCarveView('domain-vassal');
+    setMode(next);
+  };
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(focusAreaId);
   // #4983: a title selected by name, which may hold no land; and its Historical Charter.
   const [selectedTitleId, setSelectedTitleId] = useState<number | null>(() => peekMapFocus());
@@ -166,15 +199,16 @@ export function RegionMapPage({
   }, [focusAreaId, regionId]);
 
   // ---- the view: zoom + pan, remembered per region ----
-  const [view, setView] = useState<LatticeView>(() => readLatticeView(accountId, nodeId));
+  const [view, setView] = useState<LatticeView>(() => readLatticeView(accountId, nodeId, MAP_ZOOM));
   useEffect(() => {
-    setView(readLatticeView(accountId, nodeId));
+    setView(readLatticeView(accountId, nodeId, MAP_ZOOM));
   }, [accountId, nodeId]);
   useEffect(() => {
     writeLatticeView(accountId, nodeId, view);
   }, [accountId, nodeId, view]);
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const namesRef = useRef<HTMLCanvasElement>(null);
 
   // The viewport only exists once the map has loaded, so the listener waits for it. Attached
   // by hand because React's onWheel is passive, and preventDefault is what stops Ctrl+scroll
@@ -197,7 +231,7 @@ export function RegionMapPage({
       const rect = viewport.getBoundingClientRect();
       const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_RATE);
       setView((prev) =>
-        zoomAround(prev, factor, event.clientX - rect.left, event.clientY - rect.top)
+        zoomAround(prev, factor, event.clientX - rect.left, event.clientY - rect.top, MAP_ZOOM)
       );
     };
     viewport.addEventListener('wheel', onWheel, { passive: false });
@@ -219,23 +253,23 @@ export function RegionMapPage({
   useEffect(() => {
     if (!canvasW || fittedRef.current === regionId) return;
     fittedRef.current = regionId;
-    const stored = readLatticeView(accountId, nodeId);
+    const stored = readLatticeView(accountId, nodeId, MAP_ZOOM);
     if (stored.zoom !== DEFAULT_VIEW.zoom || stored.panX !== 0 || stored.panY !== 0) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
-    setView(fitView(canvasW, canvasH, viewport.clientWidth, viewport.clientHeight));
+    setView(fitView(canvasW, canvasH, viewport.clientWidth, viewport.clientHeight, MAP_ZOOM));
   }, [accountId, canvasH, canvasW, nodeId, regionId]);
 
   const fitToMap = () => {
     const viewport = viewportRef.current;
     if (!viewport || !canvasW) return;
-    setView(fitView(canvasW, canvasH, viewport.clientWidth, viewport.clientHeight));
+    setView(fitView(canvasW, canvasH, viewport.clientWidth, viewport.clientHeight, MAP_ZOOM));
   };
   const zoomBy = (factor: number) => {
     const viewport = viewportRef.current;
     const cx = viewport ? viewport.clientWidth / 2 : 0;
     const cy = viewport ? viewport.clientHeight / 2 : 0;
-    setView((prev) => zoomAround(prev, factor, cx, cy));
+    setView((prev) => zoomAround(prev, factor, cx, cy, MAP_ZOOM));
   };
 
   const ladderRows = useMemo(() => ladder?.rows ?? [], [ladder]);
@@ -256,6 +290,25 @@ export function RegionMapPage({
     () => ladder?.rows.find((row) => row.title_id === carveTitleId) ?? null,
     [ladder, carveTitleId]
   );
+  // #5030: the view's anchor is the domain being carved, else the selected one, else the
+  // picked realm's roots; the view decides which footprints are drawn at all.
+  const anchorFootprint = useMemo(() => {
+    if (mode === 'carve') return data?.footprints.find((f) => f.title_id === carveTitleId) ?? null;
+    return selected;
+  }, [carveTitleId, data, mode, selected]);
+  const anchors = useMemo(() => {
+    if (anchorFootprint) return [anchorFootprint];
+    return rootsOf(data?.footprints ?? [], realmId);
+  }, [anchorFootprint, data, realmId]);
+  const anchorCaption = anchorFootprint
+    ? anchorFootprint.name || `unnamed ${anchorFootprint.level_display.toLowerCase()}`
+    : `no domain selected: ${realms.find((r) => r.id === realmId)?.name ?? 'the map'}`;
+  const visible = useMemo(
+    () => visibleFootprints(mapView, data?.footprints ?? [], anchors),
+    [anchors, data, mapView]
+  );
+  const cellLines = view.zoom >= MAP_CELL_LINES_HIDE_BELOW;
+
   // The one footprint that draws an edge: the domain being carved, or the selected one.
   const outlineAreaIds = useMemo(() => {
     if (mode === 'carve') {
@@ -272,14 +325,55 @@ export function RegionMapPage({
     if (!canvas || !data) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    drawRegionMap(ctx, data, {
-      pending,
-      pendingRemove,
-      selectedAreaId,
-      outlineAreaIds,
-      ghostPips,
-    });
-  }, [data, ghostPips, outlineAreaIds, pending, pendingRemove, selectedAreaId]);
+    drawRegionMap(
+      ctx,
+      { ...data, footprints: visible },
+      {
+        pending,
+        pendingRemove,
+        selectedAreaId,
+        outlineAreaIds,
+        ghostPips: mapView === 'geography' ? undefined : ghostPips,
+        cellLines,
+      }
+    );
+  }, [
+    cellLines,
+    data,
+    ghostPips,
+    mapView,
+    outlineAreaIds,
+    pending,
+    pendingRemove,
+    selectedAreaId,
+    visible,
+  ]);
+
+  // ---- the names layer: seats and names in screen space, redrawn on view, zoom or pan ----
+  useEffect(() => {
+    const canvas = namesRef.current;
+    const viewport = viewportRef.current;
+    if (!canvas || !viewport || !data || !bounds) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const size = { width: viewport.clientWidth, height: viewport.clientHeight };
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const project = (x: number, y: number): [number, number] => [
+      (x - bounds.x0 + 0.5) * PIP_PX * view.zoom + view.panX,
+      (y - bounds.y0 + 0.5) * PIP_PX * view.zoom + view.panY,
+    ];
+    ctx.font = '12px "Cormorant Garamond", Georgia, serif';
+    const labels = placeNames(
+      mapView,
+      data.footprints,
+      anchors,
+      project,
+      (text) => ctx.measureText(text).width
+    );
+    const seats = visible.filter((f) => f.seat != null).map((f) => project(f.seat![0], f.seat![1]));
+    drawNamesLayer(ctx, size, seats, labels);
+  }, [anchors, bounds, data, mapView, view, visible]);
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
@@ -656,7 +750,7 @@ export function RegionMapPage({
             size="sm"
             variant={mode === m ? 'default' : 'outline'}
             aria-pressed={mode === m}
-            onClick={() => setMode(m)}
+            onClick={() => switchMode(m)}
           >
             {MODE_LABELS[m]}
           </Button>
@@ -841,6 +935,7 @@ export function RegionMapPage({
           )}
           data-testid="region-map-viewport"
           data-zoom={view.zoom.toFixed(2)}
+          data-map-view={mapView}
           data-ghost-pips={ghostPips.size}
           onPointerDown={handlePointerDown}
         >
@@ -856,10 +951,18 @@ export function RegionMapPage({
             }}
             data-testid="region-map-canvas"
           />
+          <canvas
+            ref={namesRef}
+            className="pointer-events-none absolute left-0 top-0"
+            data-testid="region-map-names"
+          />
         </div>
         <RegionMapPanel
           open={panelOpen}
           onToggle={togglePanel}
+          view={mapView}
+          onView={setMapView}
+          anchorCaption={anchorCaption}
           selection={{ selected, selectedLandless, selectedLadderRow, stationWord, focusTitleId }}
           charterOn={charterOn}
           onToggleCharter={() => setCharterOn((on) => !on)}

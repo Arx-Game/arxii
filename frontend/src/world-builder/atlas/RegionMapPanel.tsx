@@ -1,7 +1,7 @@
 /**
- * The region map's side panel (#4242): what is selected, its Historical Charter (#4983) and
- * the terrain legend. It folds to a thin rail (#4993); the selection itself lives on the page,
- * so folding loses nothing.
+ * The region map's side panel (#4242): the view picker (#5030), what is selected, its
+ * Historical Charter (#4983) and the terrain legend. It folds to a thin rail (#4993); the
+ * selection and the view live on the page, so folding loses nothing.
  */
 import { PanelRightClose, PanelRightOpen, type LucideIcon } from 'lucide-react';
 
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 import type { RegionMapFootprint, RegionMapLandlessTitle } from '../types';
+import { MAP_VIEW_LABELS, MAP_VIEWS, type MapView } from './mapViews';
 import { TERRAIN_COLORS } from './regionMapCanvas';
 
 interface FoldToggleProps {
@@ -63,6 +64,10 @@ interface MapSelectionSummary {
 interface RegionMapPanelProps {
   open: boolean;
   onToggle: () => void;
+  /** What the map shows (#5030), and the domain the Domain views are anchored on. */
+  view: MapView;
+  onView: (view: MapView) => void;
+  anchorCaption: string;
   selection: MapSelectionSummary;
   charterOn: boolean;
   onToggleCharter: () => void;
@@ -151,6 +156,9 @@ function SelectionDetails({
 export function RegionMapPanel({
   open,
   onToggle,
+  view,
+  onView,
+  anchorCaption,
   selection,
   charterOn,
   onToggleCharter,
@@ -177,6 +185,31 @@ export function RegionMapPanel({
       />
       {open && (
         <Plate className="h-full rounded-none p-4">
+          <div
+            role="group"
+            aria-label="view"
+            className="mb-1 mr-8 flex flex-wrap gap-1"
+            data-testid="map-view-picker"
+          >
+            {MAP_VIEWS.map((option) => (
+              <Button
+                key={option}
+                type="button"
+                size="sm"
+                variant={view === option ? 'default' : 'outline'}
+                aria-pressed={view === option}
+                onClick={() => onView(option)}
+              >
+                {MAP_VIEW_LABELS[option]}
+              </Button>
+            ))}
+          </div>
+          <p
+            className="mb-4 font-body text-xs italic text-muted-foreground"
+            data-testid="map-view-anchor"
+          >
+            {anchorCaption}
+          </p>
           {hasSelection ? (
             <SelectionDetails
               selection={selection}
