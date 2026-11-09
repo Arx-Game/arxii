@@ -1668,6 +1668,23 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    _SUBSTANCE_FIELDS = (
+        "substance_power_at_full",
+        "substance_present_pct",
+        "substance_anima_per_measure",
+        "substance_resonance_per_measure",
+        "substance_place_cap_pct",
+        "unmet_surroundings_penalty_pct",
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        """The existing settings, then the #5018 gift-substance numbers in their own group."""
+        fields = [f for f in self.get_fields(request, obj) if f not in self._SUBSTANCE_FIELDS]
+        return [
+            (None, {"fields": fields}),
+            ("Gift substance", {"fields": list(self._SUBSTANCE_FIELDS)}),
+        ]
+
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not ResonanceEnvironmentConfig.objects.exists()
 

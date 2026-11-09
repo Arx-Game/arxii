@@ -329,6 +329,7 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
 
     # --- Gift substance (#5018): one place to tune every gift's substance ---
     substance_power_at_full = models.PositiveSmallIntegerField(
+        verbose_name="Power at a full measure",
         default=10,
         help_text=(
             "Power a caster with a level-10 gift thread gains in a room full of her gift's "
@@ -336,21 +337,25 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         ),
     )
     substance_present_pct = models.PositiveSmallIntegerField(
+        verbose_name="Counts as present at (% of a measure)",
         default=50,
         validators=[MinValueValidator(1), MaxValueValidator(100)],
         help_text="Percent of a full measure past ordinary that counts as present. 1 to 100.",
     )
     substance_anima_per_measure = models.PositiveSmallIntegerField(
+        verbose_name="Anima per measure called up",
         default=5,
         help_text="Anima to call up one full measure, before control. High control covers it.",
     )
     substance_resonance_per_measure = models.PositiveSmallIntegerField(
+        verbose_name="Resonance per measure called up",
         default=2,
         help_text=(
             "Resonance to call up one full measure. Spent only on the share control does not cover."
         ),
     )
     substance_place_cap_pct = models.PositiveSmallIntegerField(
+        verbose_name="Largest place discount or surcharge (%)",
         default=50,
         validators=[MaxValueValidator(100)],
         help_text=(
@@ -359,6 +364,7 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         ),
     )
     unmet_surroundings_penalty_pct = models.PositiveSmallIntegerField(
+        verbose_name="Unmet surroundings penalty (% of a typical roll)",
         default=100,
         help_text=(
             "A technique's unmet surroundings restriction costs this percent of a typical "
