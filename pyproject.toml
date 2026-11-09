@@ -9,7 +9,7 @@ dependencies = [
     "evennia @ git+https://github.com/TehomCD/evennia.git",
     "factory-boy==3.3.3",
     "pre-commit==4.7.0",
-    "psycopg==3.3.6",
+    "psycopg==3.3.8",
     "psycopg[binary]",
     "typer>=0.9",
     "python-dotenv>=1.2.2",
