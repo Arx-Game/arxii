@@ -50,7 +50,8 @@ test.describe('a gift substance in a social scene', () => {
     const row = page.getByTestId('gift-call-up-row');
     await expect(row.getByRole('button', { name: 'Call up shadow' })).toBeEnabled();
     await expect(row).toContainText('free, your control covers it');
-    await expect(row).toContainText('Anima: 30 · after: 30');
+    // Free: her anima after equals her anima now.
+    await expect(row).toContainText(/Anima: (\d+) · after: \1 /);
 
     // Scoped to the cast list: the scene log may hold a line with the same name.
     await page

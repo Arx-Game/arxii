@@ -42,11 +42,12 @@ export function SurroundingsLines({ lines }: { lines: SurroundingsLine[] }) {
     <ul className="space-y-0.5 text-xs" data-testid="surroundings-lines">
       {lines.map((line) => (
         <li key={`${line.kind}-${line.text}`} className="flex justify-between gap-2">
-          <span className={cn(toneFor(line))}>{line.text}</span>
+          <span className={cn('min-w-0', toneFor(line))}>{line.text}</span>
           {amountText(line) && (
             <span
               className={cn(
-                'shrink-0 text-right',
+                'text-right',
+                line.kind === 'power' ? 'shrink-0' : 'basis-1/2',
                 line.kind === 'power' && 'font-mono',
                 toneFor(line)
               )}
