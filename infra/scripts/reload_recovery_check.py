@@ -122,6 +122,7 @@ def render(template: str, **extra) -> str:
     context = {
         **{k: v for k, v in DEFAULTS.items() if isinstance(v, (str, int, bool))},
         "base_uv_bin": UV,
+        "caddy_web_fqdn": "reload.example.test",
         **extra,
     }
     return env.get_template(template).render(context)
