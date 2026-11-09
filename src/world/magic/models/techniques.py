@@ -365,29 +365,37 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def _clean_surroundings(self) -> None:
         """The surroundings columns (#5018): DESIGN only, a bound when set, in range."""
-        errors: dict[str, str] = {}
         has_bound = self.surroundings_min is not None or self.surroundings_max is not None
         if not self.surroundings_stat:
             if has_bound:
-                errors["surroundings_stat"] = "Pick the room reading these bounds are for."
-        else:
-            if self.kind != RestrictionKind.DESIGN:
-                errors["surroundings_stat"] = "Only a DESIGN restriction can need surroundings."
-            if not has_bound:
-                errors["surroundings_min"] = "Give an 'at least' or an 'at most' value."
-            low, high = STAT_CLAMPS[StatKey(self.surroundings_stat)]
-            for field in ("surroundings_min", "surroundings_max"):
-                value = getattr(self, field)
-                if value is not None and not low <= value <= high:
-                    errors[field] = f"This reading runs from {low} to {high}."
-            if (
-                self.surroundings_min is not None
-                and self.surroundings_max is not None
-                and self.surroundings_min > self.surroundings_max
-            ):
-                errors["surroundings_max"] = "'At most' cannot be below 'at least'."
+                raise ValidationError(
+                    {"surroundings_stat": "Pick the room reading these bounds are for."}
+                )
+            return
+        errors: dict[str, str] = {}
+        if self.kind != RestrictionKind.DESIGN:
+            errors["surroundings_stat"] = "Only a DESIGN restriction can need surroundings."
+        if not has_bound:
+            errors["surroundings_min"] = "Give an 'at least' or an 'at most' value."
+        errors.update(self._surroundings_bound_errors())
         if errors:
             raise ValidationError(errors)
+
+    def _surroundings_bound_errors(self) -> dict[str, str]:
+        """Each bound inside the reading's range, and at least no higher than at most."""
+        low, high = STAT_CLAMPS[StatKey(self.surroundings_stat)]
+        errors = {
+            field: f"This reading runs from {low} to {high}."
+            for field, value in (
+                ("surroundings_min", self.surroundings_min),
+                ("surroundings_max", self.surroundings_max),
+            )
+            if value is not None and not low <= value <= high
+        }
+        lowest, highest = self.surroundings_min, self.surroundings_max
+        if lowest is not None and highest is not None and lowest > highest:
+            errors["surroundings_max"] = "'At most' cannot be below 'at least'."
+        return errors
 
     @cached_property
     def cached_allowed_effect_types(self) -> list:

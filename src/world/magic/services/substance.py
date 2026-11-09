@@ -267,9 +267,9 @@ def plan_substance_call_up(
 
 
 def _replace(plan: SubstancePlan, **changes: object) -> SubstancePlan:
-    from dataclasses import replace  # noqa: PLC0415
-
-    return replace(plan, **changes)
+    """A copy of ``plan`` with ``changes`` (a frozen dataclass's own ``replace``)."""
+    fields = {**plan.__dict__, **changes}
+    return SubstancePlan(**fields)
 
 
 def substance_power(plan: SubstancePlan) -> int:
