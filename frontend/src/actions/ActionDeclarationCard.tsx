@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
+import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
 import type { CastPreview, PlayerAction } from '@/scenes/actionTypes';
 import { useCharacterResonances } from '@/magic/queries';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
@@ -661,16 +662,19 @@ function ICChip({ intensity, control }: ICChipProps) {
 
 function CostPreview({ preview }: { preview: CastPreview }) {
   return (
-    <p
-      className={cn(
-        'text-xs',
-        preview.intensity > preview.control
-          ? 'text-amber-700 dark:text-amber-400'
-          : 'text-muted-foreground'
-      )}
-    >
-      Cost: {preview.effective_anima_cost} anima
-    </p>
+    <div className="space-y-0.5">
+      <p
+        className={cn(
+          'text-xs',
+          preview.intensity > preview.control
+            ? 'text-amber-700 dark:text-amber-400'
+            : 'text-muted-foreground'
+        )}
+      >
+        Cost: {preview.effective_anima_cost} anima
+      </p>
+      <SurroundingsLines lines={preview.surroundings ?? []} />
+    </div>
   );
 }
 

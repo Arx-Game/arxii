@@ -421,6 +421,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/BoonOptions'
           description: ''
+  /api/action-requests/call-up-offers/:
+    get:
+      operationId: action_requests_call_up_offers_list
+      description: |-
+        Her gifts whose substance she can call up here with no technique (#5018).
+
+        Same ``?initiator_persona=<id>`` contract as ``castable-techniques``. Priced by her
+        own control; never filtered by anima. Calling one up dispatches the
+        ``call_up_substance`` REGISTRY action.
+      parameters:
+      - in: query
+        name: initiator
+        schema:
+          type: number
+      - in: query
+        name: initiator_persona
+        schema:
+          type: integer
+        description: Persona id (owned by the requester) to list call-ups for.
+        required: true
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+        description: |-
+          Request direction relative to the requesting account's played characters.
+
+          * `incoming` - Incoming
+          * `outgoing` - Outgoing
+      - in: query
+        name: scene
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: target
+        schema:
+          type: number
+      tags:
+      - action-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CallUpOffer'
+          description: ''
   /api/action-requests/cast/:
     post:
       operationId: action_requests_cast_create
@@ -5915,8 +5972,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -49826,6 +49882,58 @@ components:
       - organization
       - presumed_importance
       - rank_name
+    CallUpFightOffer:
+      type: object
+      description: Her gift's substance she can call up this round, beside Dig deep
+        (#5018); read-only.
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CallUpOffer'
+        called_up_this_round:
+          type: boolean
+          description: Whether she has already called up her gift this round (once
+            a round).
+      required:
+      - called_up_this_round
+      - offers
+    CallUpOffer:
+      type: object
+      description: |-
+        One gift whose substance she can call up with no technique, priced now (#5018).
+
+        Never a gate: shown and pressable whatever her anima.
+      properties:
+        gift_id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        effective_cost:
+          type: integer
+          readOnly: true
+        resonance_cost:
+          type: integer
+          readOnly: true
+        already_present:
+          type: boolean
+          readOnly: true
+        can_call_up:
+          type: boolean
+          readOnly: true
+        cost_line:
+          type: string
+          readOnly: true
+      required:
+      - already_present
+      - can_call_up
+      - cost_line
+      - effective_cost
+      - gift_id
+      - label
+      - resonance_cost
     CanHonor:
       type: object
       description: |-
@@ -50041,10 +50149,16 @@ components:
         effective_anima_cost:
           type: integer
           readOnly: true
+        surroundings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurroundingsLine'
+          readOnly: true
       required:
       - control
       - effective_anima_cost
       - intensity
+      - surroundings
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -50160,8 +50274,14 @@ components:
             actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
             authored field.
           readOnly: true
+        cast_preview:
+          allOf:
+          - $ref: '#/components/schemas/CastPreview'
+          nullable: true
+          readOnly: true
       required:
       - anima_cost
+      - cast_preview
       - catalog_name
       - control
       - description
@@ -78765,6 +78885,11 @@ components:
           - $ref: '#/components/schemas/DigDeepOffer'
           nullable: true
           readOnly: true
+        call_up:
+          allOf:
+          - $ref: '#/components/schemas/CallUpFightOffer'
+          nullable: true
+          readOnly: true
         strike_weapons:
           type: array
           items:
@@ -78776,6 +78901,7 @@ components:
       - aftermath
       - audere_state
       - available_strain
+      - call_up
       - character_name
       - character_sheet_id
       - character_status
@@ -94846,6 +94972,34 @@ components:
       required:
       - id
       - narration
+    SurroundingsLine:
+      type: object
+      description: One line the cast card shows under its cost about where she stands
+        (#5018).
+      properties:
+        kind:
+          type: string
+          readOnly: true
+          description: power | call_up | blocked | needs (an unmet restriction).
+        text:
+          type: string
+          readOnly: true
+        amount:
+          type: integer
+          readOnly: true
+          description: Signed power, or the penalty.
+        anima:
+          type: integer
+          readOnly: true
+        resonance:
+          type: integer
+          readOnly: true
+      required:
+      - amount
+      - anima
+      - kind
+      - resonance
+      - text
     SustainedAction:
       type: object
       description: Observable countdown and erosion for a multi-round commitment.

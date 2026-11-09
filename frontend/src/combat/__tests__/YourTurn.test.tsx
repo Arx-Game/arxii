@@ -291,6 +291,7 @@ function makeParticipant(
     compulsion: null,
     steady_plan: null,
     dig_deep: null,
+    call_up: null,
     strike_weapons: null,
   };
 }
