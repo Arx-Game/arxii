@@ -240,7 +240,7 @@ class GiftSubstanceManager(NaturalKeyManager):
     """Manager for GiftSubstance with natural key support (keyed on its gift)."""
 
 
-class GiftSubstance(NaturalKeyMixin, SharedMemoryModel):
+class GiftSubstance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """What a gift is made of: the room reading that is its substance (#5018).
 
     A shadow gift works through shadow, which is the room's lighting, falling. A caster

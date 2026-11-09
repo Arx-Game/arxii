@@ -887,6 +887,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     def _castable_listing(self) -> list[str]:
         """Lines for the bare-``cast`` listing: every castable technique and what it does."""
+        from world.magic.services.substance import substance_gift_ids  # noqa: PLC0415
         from world.magic.services.technique_forms import (  # noqa: PLC0415
             available_technique_forms,
         )
@@ -904,6 +905,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         if not links:
             return ["You know no techniques you can cast."]
         lines = ["|wYou can cast:|n"]
+        # #5018: only her gift's techniques read the room; the rest cost nothing extra here.
+        substance_gifts = substance_gift_ids(self.caller)
         for link in links.values():
             technique = link.technique
             # #4099: the player's own name, with the catalog name alongside it so
@@ -924,7 +927,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             )
             if forms_line:
                 lines.append(f"    {forms_line}")
-            lines.extend(f"    {line}" for line in self._surroundings_lines(technique))
+            if technique.gift_id in substance_gifts:
+                lines.extend(f"    {line}" for line in self._surroundings_lines(technique))
         lines.append("")
         lines.append("Use |wcast <technique> [at <target>]|n to work one.")
         return lines

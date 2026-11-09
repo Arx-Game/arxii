@@ -6128,6 +6128,8 @@
 
 ### GiftSubstance
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - gift -> magic.Gift [OneToOne]
 
 ### GiftUnlock

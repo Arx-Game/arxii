@@ -496,6 +496,22 @@ def _opposed_text(plan: SubstancePlan) -> str:
     return f"Too little {plan.label} here"
 
 
+def substance_gift_ids(character: ObjectDB) -> set[int]:  # noqa: OBJECTDB_PARAM - a caster
+    """Every gift whose casts read the room for her: the lineage of each GIFT thread of hers
+    whose gift (or an ancestor) has a substance. Cached threads; one query per gift thread."""
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if character.character_sheet is None:
+        return set()
+    covered: set[int] = set()
+    for thread in character.threads.all():
+        if thread.target_kind != TargetKind.GIFT or thread.target_gift_id is None:
+            continue
+        if substance_for_gift(thread.target_gift) is not None:
+            covered |= set(thread.target_gift.lineage_ids)
+    return covered
+
+
 def call_up_offers(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - a caster
     *,

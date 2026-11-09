@@ -60605,7 +60605,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this title. */
+        id: number;
       };
       cookie?: never;
     };

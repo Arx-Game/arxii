@@ -34,6 +34,8 @@ from __future__ import annotations
 PROSE_FIELD_NAMES = frozenset(
     {
         "announce_template",
+        # #5018: the line the room sees when a gift's substance is called up.
+        "arrival_line",
         "arrival_verb",
         "authored_ic_framing",
         "cast_narration",

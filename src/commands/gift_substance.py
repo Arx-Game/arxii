@@ -34,6 +34,7 @@ class CmdCallUp(DispatchCommand):
 
     key = "callup"
     switch_options = (_CONFIRM_SWITCH,)
+    takes_switches = True
     locks = "cmd:all()"
 
     def func(self) -> None:
