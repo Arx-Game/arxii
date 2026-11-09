@@ -2884,7 +2884,7 @@
 - `advance_opponent(opponent: 'CombatOpponent', move_row: 'CombatOpponentMove | None', attack_rows: 'list[CombatOpponentAction] | None' = None, *, on_hop: 'HopHook | None' = None, profile: 'MovementProfile | None' = None) -> 'Position | None' - Run an opponent's ADVANCE plan in its resolution slot; returns where it moved, or None.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0'), skip_condition_interactions: 'bool' = False) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
 - `apply_damage_to_participant(participant: 'CombatParticipant', damage: 'int', *, force_death: 'bool' = False, ignores_soak: 'bool' = False, resistance_shift: 'int' = 0, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source: 'object | None' = None, source_sheet: 'CharacterSheet | None' = None, on_hit_pool: 'ConsequencePool | None' = None, delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'ParticipantDamageResult' - Apply damage to a PC via their CharacterVitals.`
-- `apply_equipped_armor_soak(character: 'Character', damage: 'int') -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).`
+- `apply_equipped_armor_soak(character: 'Character', damage: 'int', damage_type: 'DamageType | None' = None) -> 'int' - Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).`
 - `apply_interpose_outcome(pre_payload: 'DamagePreApplyPayload', result: 'ChallengeResolutionResult', *, interposer_sheet: 'CharacterSheet | None' = None) -> 'None' - Map a graded interpose resolution onto *pre_payload*.`
 - `apply_position_cover(character: 'Character', damage: 'int', damage_type: 'DamageType | None') -> 'int' - Subtract attack-cover from damage.`
 - `apply_rampart_interception(character_or_opponent: 'Character', damage: 'int', damage_type: 'DamageType | None', *, attacker_ref: 'object | None', delivery: 'str' = StrikeDelivery.MELEE, is_area: 'bool' = False) -> 'int' - Intercept a strike against a rampart-covered position (#2209).`
@@ -2908,7 +2908,7 @@
 - `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' - Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
 - `declare_rally(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a rallying maneuver — inspire an ally, auto-ready (#2015).`
-- `declare_strike(participant: 'CombatParticipant', opponent: 'CombatOpponent', item_instance: 'ItemInstance | None' = None) -> 'CombatRoundAction' - Declare a Strike at ``opponent`` with ``item_instance`` (None: bare hands).`
+- `declare_strike(participant: 'CombatParticipant', opponent: 'CombatOpponent', item_instance: 'ItemInstance | None' = None, *, thrown: 'bool' = False, technique: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare a Strike at ``opponent`` with ``item_instance`` (None: bare hands).`
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', target: 'CombatOpponent | CombatParticipant') -> 'CombatRoundAction' - Declare a taunting maneuver, auto-ready (#2015, #4737).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
@@ -3332,6 +3332,7 @@
   - combat_pull_resistances <- combat.CombatPullResolvedEffect
   - companion_abilities <- companions.CompanionAbility
   - weapon_templates <- items.ItemTemplate
+  - protecting_armor_templates <- items.ItemTemplate
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
@@ -5148,6 +5149,7 @@
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
   - inherent_facets -> magic.Facet [M2M]
+  - also_protects_against -> conditions.DamageType [M2M]
 **Pointed to by:**
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial

@@ -8694,6 +8694,33 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   the live `combat_encounter_state` frame refetches the Last Outcome card.
   `GearArchetype.UNARMED` joins `WEAPON_ARCHETYPES` and the
   `items_weapon_damage_requires_weapon_archetype` constraint (0354).
+- **Thrown and enchanted Strikes (#5026):** `ItemTemplate.can_be_thrown` (one-handed melee
+  only, CheckConstraint `items_thrown_requires_one_handed_melee`) offers a weapon twice in
+  `strike_weapon_options`: as itself and as `StrikeWeapon(thrown=True)` with gear kind THROWN,
+  so reach, the Thrown Attack check and wind follow the throw. `declare_strike(...,
+  thrown=False, technique=None, confirm_soulfray_risk=False)` stores
+  `CombatRoundAction.strike_thrown` and the technique in `focused_action`; a throw deals
+  `thrown_share` percent ("Strike: thrown damage", `ManeuverEffectKey.STRIKE_THROWN_DAMAGE`,
+  `EffectKind.DAMAGE_SHARE`, 75 to start) of the weapon's part, the base-damage floor after
+  it; a style that fits the weapon fits the throw (`strike_style_fit`); a throw rolls the
+  thrown stat (`strike_stat`, `weapon_stat_for(inst, archetype)`). A weapon technique
+  (`Technique.enchants_strike`: a profile with `uses_equipped_weapon`) is cast only into a
+  Strike (`ActionDispatchError.CAST_INTO_STRIKE` in the plain focused slot). The Strike then
+  resolves in `world/combat/services/declarations/enchanted_strike.py`:
+  `resolve_enchanted_strike` runs `use_technique` with `EnchantedStrikeCast` as `resolve_fn`
+  (cost on every attack, deficit and soulfray as any cast), which rolls the technique roll
+  (cast check, technique skill, combat pull, difficulty 0), sets the to-hit line
+  (`strike_to_hit`: `Technique.strike_to_hit_size` on the TO_HIT lane at the cast level;
+  `ModifierSourceKind.TECHNIQUE`, one labelled line via
+  `CombatTechniqueResolver.extra_hit_contributions`) and the typed parts
+  (`StrikeEnchantment.typed_parts`, through `_profile_damage`), then `land_strike` rolls the
+  hit and the damage and applies the weapon's part and each typed part through
+  `apply_damage_to_opponent` on its own; `finish_strike` counts allegiance breaks, fatigue and
+  narration once. The technique roll is a third recorded row (`CombatRollKind.TECHNIQUE`,
+  "Technique roll: ...", its skill and the anima paid); the damage row lists the parts. A
+  typed weapon profile no longer types the weapon's damage (`_weapon_augmented_budget`; the
+  technique path deals a separate weapon part, `_apply_weapon_part`). Armor stands only
+  against the types it covers: see `docs/systems/COMBAT_DEFENSES.md` and ADR-5026-B.
 - **Mounted combat (#1843):** a mount is a companion + a verb-gating condition, not a new
   typeclass or a blanket stat bonus (ADR-0126). `world.companions.services.mount_companion`/
   `dismount_companion` set/clear `Companion.ridden_by` (nullable unique FK →

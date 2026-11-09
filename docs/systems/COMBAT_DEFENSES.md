@@ -40,9 +40,23 @@ NPC attack (ThreatPoolEntry.base_damage)
   → on-hit consequence     fires threat entry's on_hit_consequence_pool
   → thread DR              flat subtraction                           (#1175)
   → damage-type resistance condition-sourced resistance modifier
-  → armor soak             flat subtraction, role-gated               (#508/#1174)
+  → armor soak             flat subtraction, role-gated, by type      (#508/#1174/#5026)
   → health
 ```
+
+**Armor stands only against the damage types it covers (#5026, owner ruling, ADR-5026-B).**
+This holds on every hit in the game, player and NPC, Strike and technique, on both seams
+(`apply_damage_to_participant`, `apply_damage_to_opponent`). Every worn piece stops a
+Physical hit (untyped damage is Physical, #4742); a hit of another type meets only the pieces
+whose `ItemTemplate.also_protects_against` lists that type (`_equipped_armor_soak_pieces`,
+`is_physical` in `world/combat/services/equipment/armor_soak.py`). The resonant pool (covenant
+role, facets, mantles, motif, covenant level) stands against every type. An ordinary NPC's
+`soak_value` stops Physical only (its other protections are resistances); a walled opponent
+(`has_wall` in `world/combat/services/damage/soak.py`: Boss or Hero Killer tier, or any
+opponent with a probing threshold) keeps its soak against every type, and damage gets past
+that wall only the way it did before: probing, combos (`bypass_soak`, `wall_breaker_combo`)
+and the break bar's vulnerability window, which zeroes soak and resistance. `target_soak_of`
+reads the soak for the hit's own type, so a "target's soak" damage input agrees.
 
 ## Evasion (check → multiplier)
 
@@ -276,8 +290,8 @@ Flat damage reduction applied after evasion and barrier.
 - **Thread DR:** `apply_damage_reduction_from_threads`
   (`world/magic/services/threads.py`). Subtracts a survivability baseline
   derived from thread investment.
-- **Armor soak:** `apply_equipped_armor_soak`
-  (`world/combat/services/`). Role-gated — compatible covenant-role armor
+- **Armor soak:** `apply_equipped_armor_soak(character, damage, damage_type)`
+  (`world/combat/services/`). Only pieces that cover the hit's type count (#5026, above). Role-gated — compatible covenant-role armor
   adds on top; incompatible armor competes with a resonant pool via `max`.
   The share comes from `defense_style_for(character)`: a `CombatStyle`'s
   `armor_share_tenths` scales all worn armor; with no style, all armor counts. Which armor is
