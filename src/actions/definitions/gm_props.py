@@ -25,6 +25,7 @@ from actions.base import Action
 from actions.types import ActionResult, TargetType
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_account_or_none, resolve_model_by_pk_or_name
+from world.magic.types.substance import MarkOutcome
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -151,4 +152,115 @@ class StagePropertyAction(Action):
             success=True,
             message=f"{target.db_key} is now {property_obj.name}.",
             data={"object_id": target.pk, "property_id": property_obj.pk},
+        )
+
+
+_MSG_GM_ONLY_SUBSTANCE = "Only the scene's GM, owner, or staff may mark what is present here."
+_MSG_NO_SCENE = "No scene is running here."
+_MSG_NO_SUBSTANCE = "Which substance? Name one staff gave a gift (for example: shadow)."
+
+_MARK_REPLIES = {
+    MarkOutcome.MARKED: "{Label} is now present here for this scene.",
+    MarkOutcome.ALREADY: "{Label} is already present here.",
+    MarkOutcome.REMOVED: "The mark on {label} is removed.",
+    MarkOutcome.HELD_FIXED: "This place is held fixed; {label} cannot be marked here.",
+    MarkOutcome.NO_PLACE: "This place cannot hold a mark.",
+}
+
+
+def _resolve_substance(value: object):
+    """A ``GiftSubstance`` by its gift's pk or by its label (case-insensitive), or None."""
+    from world.magic.models import GiftSubstance  # noqa: PLC0415
+
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if text.isdigit():
+        return GiftSubstance.objects.filter(gift_id=int(text)).select_related("gift").first()
+    return (
+        GiftSubstance.objects.filter(label__iexact=text)
+        .select_related("gift")
+        .order_by("gift_id")
+        .first()
+    )
+
+
+@dataclass
+class MarkSubstancePresentAction(Action):
+    """GM improv (#5018): "is there shadow here?" "Yes." Marks it present for the scene.
+
+    The mark is a room-reading row (``scene_mark:<scene>:<gift>``) set to just what makes
+    the substance present, and it clears when the scene ends, however it ends. No room
+    line: the GM's own words are the answer.
+    """
+
+    key: str = "stage_substance"
+    name: str = "Mark Present Here"
+    icon: str = "sparkles"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
+        from world.magic.services.substance import mark_substance_present  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        if not _account_can_gm_room(actor, account):
+            return ActionResult(success=False, message=_MSG_GM_ONLY_SUBSTANCE)
+        room = actor.location
+        scene = get_active_scene(room) if room is not None else None
+        if scene is None:
+            return ActionResult(success=False, message=_MSG_NO_SCENE)
+        substance = _resolve_substance(kwargs.get("substance"))
+        if substance is None:
+            return ActionResult(success=False, message=_MSG_NO_SUBSTANCE)
+        present = truthy_kwarg(kwargs.get("present", True))
+        outcome = mark_substance_present(
+            scene=scene, substance=substance, room=room, present=present
+        )
+        message = _MARK_REPLIES[outcome].format(
+            label=substance.label, Label=substance.label.capitalize()
+        )
+        return ActionResult(
+            success=outcome in {MarkOutcome.MARKED, MarkOutcome.ALREADY, MarkOutcome.REMOVED},
+            message=message,
+            data={"gift_id": substance.gift_id, "outcome": outcome},
+        )
+
+
+@dataclass
+class GMListSubstancesAction(Action):
+    """The GM Stage tab's list (#5018): every substance staff gave a gift, and what this
+    scene has marked present here."""
+
+    key: str = "gm_list_substances"
+    name: str = "List Substances"
+    icon: str = "list"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.magic.models import GiftSubstance  # noqa: PLC0415
+        from world.magic.services.substance import scene_substance_marks  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        if not _account_can_gm_room(actor, account):
+            return ActionResult(success=False, message=_MSG_GM_ONLY_SUBSTANCE)
+        scene = get_active_scene(actor.location) if actor.location is not None else None
+        substances = [
+            {"gift_id": row.gift_id, "label": row.label}
+            for row in GiftSubstance.objects.order_by("label", "gift_id")
+        ]
+        marked = (
+            [{"gift_id": row.gift_id, "label": row.label} for row in scene_substance_marks(scene)]
+            if scene is not None
+            else []
+        )
+        lines = [f"{row['label']}" for row in substances] or ["No gift has a substance yet."]
+        return ActionResult(
+            success=True,
+            message="Substances: " + ", ".join(lines),
+            data={"substances": substances, "marked": marked},
         )

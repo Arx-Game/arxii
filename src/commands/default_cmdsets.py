@@ -117,6 +117,7 @@ from commands.form import CmdForm
 from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gift_learning import CmdLearn
+from commands.gift_substance import CmdCallUp
 from commands.gm_ops import CmdGMDashboard, CmdGMIdle
 from commands.gm_props import CmdStage
 from commands.gm_tables import CmdGMTable
@@ -593,6 +594,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDefense,
             # #2503 — GM improv stage-prop namespace (conjure a prop / tag a property).
             CmdStage,
+            # #5018 - call up a gift's substance with no technique.
+            CmdCallUp,
             CmdMarket,
             # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
             CmdGame,

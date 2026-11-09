@@ -59,6 +59,7 @@ from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
+from world.magic.serializers_substance import CallUpOfferSerializer
 from world.scenes.constants import RoundStatus
 from world.standoffs.serializers import (
     GMStandoffViewSerializer,
@@ -530,6 +531,15 @@ class SteadyPlanSerializer(serializers.Serializer):
     capability_name = serializers.CharField()
 
 
+class CallUpFightOfferSerializer(serializers.Serializer):
+    """Her gift's substance she can call up this round, beside Dig deep (#5018); read-only."""
+
+    offers = CallUpOfferSerializer(many=True)
+    called_up_this_round = serializers.BooleanField(
+        help_text="Whether she has already called up her gift this round (once a round)."
+    )
+
+
 class DigDeepOfferSerializer(serializers.Serializer):
     """What digging deep costs the viewer's own character right now (#4738); read-only."""
 
@@ -607,6 +617,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     compulsion = serializers.SerializerMethodField()
     steady_plan = serializers.SerializerMethodField()
     dig_deep = serializers.SerializerMethodField()
+    call_up = serializers.SerializerMethodField()
     strike_weapons = serializers.SerializerMethodField()
 
     class Meta:
@@ -639,6 +650,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "compulsion",
             "steady_plan",
             "dig_deep",
+            "call_up",
             "strike_weapons",
         ]
 
@@ -715,6 +727,24 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "dug_deep_this_round": engagement is not None
             and engagement.last_dug_deep_round == obj.encounter.round_number,
             "given_by": self._dig_deep_giver_name(engagement),
+        }
+
+    @extend_schema_field(CallUpFightOfferSerializer(allow_null=True))
+    def get_call_up(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """Her gift's substance she can call up this round (#5018); None for anyone else,
+        and None when she holds no gift with a substance."""
+        if not self._is_viewers_own(obj):
+            return None
+        from world.magic.services.substance import call_up_offers  # noqa: PLC0415
+
+        offers = call_up_offers(obj.character_sheet.character, lethal=obj.encounter.is_lethal)
+        if not offers:
+            return None
+        engagement = self._combat_engagement(obj)
+        return {
+            "offers": CallUpOfferSerializer(offers, many=True).data,
+            "called_up_this_round": engagement is not None
+            and engagement.last_called_up_round == obj.encounter.round_number,
         }
 
     @staticmethod

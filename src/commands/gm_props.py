@@ -21,14 +21,22 @@ if TYPE_CHECKING:
 
 _SUBVERB_PROP = "prop"
 _SUBVERB_PROPERTY = "property"
+_SUBVERB_PRESENT = "present"
+_SUBVERB_ABSENT = "absent"
 
 # subverb -> registry action key.
 _SUBVERBS: dict[str, str] = {
     _SUBVERB_PROP: "stage_prop",
     _SUBVERB_PROPERTY: "stage_property",
+    # #5018: "is there shadow here?" "Yes." Marks a gift's substance present for the scene.
+    _SUBVERB_PRESENT: "stage_substance",
+    _SUBVERB_ABSENT: "stage_substance",
 }
 
-_USAGE = "Usage: stage prop <item template name> | stage property <property name> [=<target>]."
+_USAGE = (
+    "Usage: stage prop <item template name> | stage property <property name> [=<target>] | "
+    "stage present <substance> | stage absent <substance>."
+)
 
 
 class CmdStage(DispatchCommand):
@@ -37,6 +45,8 @@ class CmdStage(DispatchCommand):
     Usage:
         stage prop <item template name>
         stage property <property name> [=<target name>]
+        stage present <substance>   (mark it present here for this scene)
+        stage absent <substance>    (remove that mark)
     """
 
     key = "stage"
@@ -68,6 +78,11 @@ class CmdStage(DispatchCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Resolve the subverb's arguments into dispatch kwargs."""
+        if self._subverb in (_SUBVERB_PRESENT, _SUBVERB_ABSENT):
+            if not self._rest:
+                msg = f"Usage: stage {self._subverb} <substance>."
+                raise CommandError(msg)
+            return {"substance": self._rest, "present": self._subverb == _SUBVERB_PRESENT}
         if self._subverb == _SUBVERB_PROP:
             if not self._rest:
                 msg = "Usage: stage prop <item template name>."
