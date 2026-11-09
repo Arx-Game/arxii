@@ -679,6 +679,24 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   opponent's state chip); no vow added effect can carry morale; the power valuation formula
   and the builder price (per point, like damage) are estimates awaiting tuning.
 
+- **Thrown and enchanted Strikes; armor by damage type (#5026) SHIPPED:** a one-handed
+  weapon staff mark "Can also be thrown" is offered twice on the Strike picker, to slash and
+  to throw; a throw rolls Thrown Combat, reaches the whole room and deals the catalog's
+  "Strike: thrown damage" share (75 percent to start), and the weapon stays in hand. A weapon
+  technique is cast into a Strike from the "Enchant with" row (telnet `strike <opp> with
+  <weapon> [thrown] using <technique> [soulfray]`): it is paid on every attack, hit or miss,
+  through the cast's own cost, never refused for lack of anima; its own technique roll sets a
+  to-hit line (its "Strike to-hit size") and its own typed damage part, while the hit roll
+  stays on the strike skill. Each damage part meets only the armor that covers its type, and
+  its own resistance or weakness. Worn armor stops Physical unless its template lists more
+  types ("Also protects against"); an ordinary NPC's soak stops Physical only; a boss's or
+  Hero Killer's soak is a wall against every type, broken only by probing, combos and the
+  break bar; covenant protection covers every type. Proven by
+  `src/integration_tests/test_thrown_and_enchanted_strike_journeys.py`. **Known gaps:** a
+  Charge and a joust still carry a weapon technique on their own (their own mounted
+  maneuvers; a waiting strike refuses one), and a compelled rage attack may pick one; the
+  technique roll's conditions land only when the blow lands.
+
 - **Any character can Strike with no technique (#4858, slice 1 of #4844):** `strike <opp>
   [with <weapon>]`, `combat strike`, and the web Your Turn "Strike" control (opponent plus a
   weapon pick naming each weapon's gear kind and strike skill) declare a Strike with an

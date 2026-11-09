@@ -33,6 +33,9 @@ def _melee_reaches() -> tuple[str, ...]:
     return (TechniqueReach.SAME, TechniqueReach.ADJACENT)
 
 
+_ERR_CAST_INTO_STRIKE = "That technique enchants a Strike: pick Strike, then enchant with it."
+
+
 def validate_waiting_strike_technique(participant: CombatParticipant, technique: Technique) -> None:
     """Raise ValueError unless ``technique`` can be held as a waiting strike.
 
@@ -46,6 +49,9 @@ def validate_waiting_strike_technique(participant: CombatParticipant, technique:
     sheet = participant.character_sheet
     if not CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
         raise ValueError(_ERR_UNKNOWN)
+    if technique.enchants_strike:
+        # A weapon technique is cast into a Strike and nowhere else (#5026).
+        raise ValueError(_ERR_CAST_INTO_STRIKE)
     if technique.reach not in _melee_reaches():
         raise ValueError(_ERR_NOT_MELEE)
     if technique.target_type != ActionTargetType.SINGLE:

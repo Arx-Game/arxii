@@ -1109,6 +1109,22 @@ pass together. Other success checks still apply. Effect summaries show the autho
 per-hit properties and whole-technique ward scope. See
 [Combat Defense Composition](COMBAT_DEFENSES.md#authored-defense-piercing-4575).
 
+**Weapon techniques are cast into a Strike (#5026, ADR-5026-A).** A technique with a
+damage profile that sets `uses_equipped_weapon` (`Technique.enchants_strike`) is a weapon
+technique: it is cast into a basic Strike from the Strike's "Enchant with" row and is refused
+in the plain focused slot (`ActionDispatchError.CAST_INTO_STRIKE`). The cast is paid through
+`use_technique` on every attack, hit or miss (deficit and Soulfray as any cast; never refused
+for lack of anima). Its technique roll (cast check, technique skill, combat pull, unopposed)
+sets the additions: a to-hit line from `Technique.strike_to_hit_size` (a `ModifierSize`,
+valued on the TO_HIT lane at the cast level, as a sized buff is) and each typed damage part
+(the profile's own budget at the technique roll's power and success level, its damage
+multiplier and the technique-scoped damage modifiers). The weapon's damage stays the
+weapon's, dealt as the weapon's own type; a typed weapon profile no longer turns it into the
+profile's type, and an untyped one still joins it. Outside a Strike (a Charge, a waiting
+strike, a vow or signature profile) a typed weapon profile deals the weapon's part as a hit
+of its own (`CombatTechniqueResolver._apply_weapon_part`). See
+`world/combat/services/declarations/enchanted_strike.py`.
+
 **Smooth execute.** `AbstractDamageProfile.execute_missing_health_multiplier`
 (Decimal, default 0 — a no-op on every technique unless authored otherwise) scales a
 landing hit's damage by `1 + multiplier * missing_health_fraction`, computed off the

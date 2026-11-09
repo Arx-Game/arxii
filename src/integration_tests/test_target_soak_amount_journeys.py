@@ -31,6 +31,9 @@ Expected values come from the ruling and the spec, not from running the code:
 * Staff can give the input to technique damage and Charge damage, and cannot give it to a to-hit
   target or a check target.
 
+Every technique blow here is untyped (Physical), the type soak stands against: an ordinary
+opponent's soak and ordinary armor stop Physical only (#5026).
+
 The outcome checked is the health (or bodies) the opponent lost. The web dispatch path tells
 Hobb no text line in this harness, so there is no narration to pin here.
 """
@@ -115,7 +118,7 @@ class APlateBreakerStrikes(_DamageField):
     def setUp(self) -> None:
         super().setUp()
         self.damage = _technique_damage_target()
-        self.blow = self.technique(self.ember, (STRIKE, self.fire))
+        self.blow = self.technique(self.ember, (STRIKE, None))
 
     def test_soak_twenty_adds_four(self) -> None:
         _grant_plate_breaker(self.sheet, self.damage)
@@ -140,7 +143,7 @@ class APlateBreakerStrikes(_DamageField):
         archer = CombatOpponentFactory(
             encounter=self.encounter, name="Archer", health=200, max_health=200, soak_value=0
         )
-        sweep = self.technique(self.ember, (STRIKE, self.fire), target_type=ActionTargetType.AREA)
+        sweep = self.technique(self.ember, (STRIKE, None), target_type=ActionTargetType.AREA)
 
         self.strike(sweep)
 
@@ -285,7 +288,7 @@ class APlateBreakerInADuel(_DamageField):
         self.mirror.save(update_fields=["health", "max_health"])
 
     def test_her_mirror_takes_the_row_through_her_armor(self) -> None:
-        blow = self.technique(self.ember, (STRIKE, self.fire))
+        blow = self.technique(self.ember, (STRIKE, None))
         before = self.health_of(self.mirror)
         ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=blow.pk, action_slot="focused")
         declared = dispatch_player_action(

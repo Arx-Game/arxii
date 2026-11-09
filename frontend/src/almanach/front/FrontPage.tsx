@@ -12,6 +12,7 @@ import type { SearchHit } from '../types';
 import { CreateFamilyForm } from './CreateFamilyForm';
 import { Picker } from '../shared/Picker';
 import { familyUrl, houseUrl, personUrl, titleUrl } from '../shared/tier';
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -120,12 +121,7 @@ export function FrontPage() {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff">Staff</Link>
-          </span>
-          <span>Almanach de Catenys</span>
-        </span>
+        <Crumbs trail={[{ label: 'Staff', to: '/staff' }, { label: 'Almanach de Catenys' }]} />
         <span className="right">
           <span className="mode">staff</span>
         </span>

@@ -725,7 +725,7 @@ class DuelMirrorPcReductionTests(TestCase):
             ) as thread_dr,
             patch(
                 "world.combat.services.equipment.armor_soak.apply_equipped_armor_soak",
-                side_effect=lambda _character, damage: damage - 3,
+                side_effect=lambda _character, damage, _damage_type=None: damage - 3,
             ) as armor_soak,
         ):
             result = apply_damage_to_opponent(mirror_b, 10)

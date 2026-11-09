@@ -353,6 +353,11 @@ class PlayerAction:
     # #4098: a readied Audere ultimate (only ever a COMBAT action)
     is_ultimate: bool = False
 
+    # #5026: a weapon technique, cast into a Strike from its "Enchant with" row and never
+    # declared on its own; with the damage types its profiles add ("fire").
+    enchants_strike: bool = False
+    enchant_damage_types: tuple[str, ...] = ()
+
 
 class ActionInterrupted(Exception):
     """Raised when a trigger stops an action's intent event."""

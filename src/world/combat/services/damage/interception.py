@@ -268,7 +268,11 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     if dropped or raw_damage <= 0:
         return _zero_opponent_damage_result(opponent)
 
-    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak or ignores_soak)
+    # Soak stands against the types it covers (#5026): an ordinary opponent's against
+    # Physical only, a walled one's (a boss, a Hero Killer) against every type.
+    effective_soak = _effective_soak_for_opponent(
+        opponent, bypass_soak or ignores_soak, damage_type
+    )
 
     resistance = _effective_resistance_for_opponent(opponent, damage_type, resistance_shift)
 
@@ -277,6 +281,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         opponent,
         damage_through,
         armor_soak_applies=not (bypass_soak or ignores_soak),
+        damage_type=damage_type,
     )
 
     # Execute (#2643): smooth ramp off the opponent's PRE-hit health, captured here

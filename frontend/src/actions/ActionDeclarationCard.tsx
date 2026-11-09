@@ -717,7 +717,11 @@ export function ActionDeclarationCard({
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
 
-  const techniques = (data?.results ?? []).filter((a) => a.ref.technique_id !== null);
+  // A weapon technique is cast into a Strike from its "Enchant with" row, never picked
+  // on its own (#5026).
+  const techniques = (data?.results ?? []).filter(
+    (a) => a.ref.technique_id !== null && !a.enchants_strike
+  );
   // What the chosen cast would run at, from the server (#4799).
   const castPreview =
     techniques.find((a) => a.ref.technique_id === actionContext.techniqueId)?.cast_preview ?? null;

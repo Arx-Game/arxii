@@ -27,6 +27,7 @@ SERVICE="{{ app_service }}.service"
 APP_USER="{{ app_user }}"
 UV="{{ base_uv_bin }}"
 SERVER_PORT="{{ app_server_web_port }}"
+WEB_HOST="{{ caddy_web_fqdn }}"
 SERVER_PIDFILE="{{ app_pidfile }}"
 EVIDENCE_DIR="{{ app_reload_evidence_dir }}"
 # Ruled in #4999: about three minutes before a full restart drops every player.
@@ -97,7 +98,7 @@ server_answers() {
   local code owner
   owner="$(port_holders | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n1)"
   [ -n "${owner}" ] && grep -qxF "${owner}" <<<"$(tr ' ' '\n' <<<"$1")" || return 1
-  code="$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${SERVER_PORT}/" || true)"
+  code="$(curl -s -o /dev/null -m 3 -H "Host: ${WEB_HOST}" -w '%{http_code}' "http://127.0.0.1:${SERVER_PORT}/" || true)"
   [ "${code:-000}" -ge 100 ] 2>/dev/null && [ "${code}" -lt 500 ]
 }
 

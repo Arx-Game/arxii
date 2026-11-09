@@ -31964,6 +31964,7 @@ export interface components {
      *     * `capability` - Capability
      *     * `soulfray` - Soulfray
      *     * `favor` - Favor
+     *     * `technique` - Technique roll
      * @enum {string}
      */
     ConsequenceOutcomeModifierSourceKindEnum:
@@ -31981,7 +31982,8 @@ export interface components {
       | 'relationship'
       | 'capability'
       | 'soulfray'
-      | 'favor';
+      | 'favor'
+      | 'technique';
     /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
     ConsequencePoolCatalog: {
       readonly id: number;
@@ -47615,6 +47617,8 @@ export interface components {
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
       readonly cast_preview: components['schemas']['CastPreview'] | null;
       readonly is_ultimate: boolean;
+      readonly enchants_strike: boolean;
+      readonly enchant_damage_types: string[];
     };
     /**
      * @description Owner-authored ``PlayerBoundary`` CRUD shape.
@@ -52557,6 +52561,10 @@ export interface components {
       gear_kind: string;
       /** @description The strike skill its hit roll weights, or the check's name when it has none. */
       strike_skill: string;
+      /** @description The weapon thrown rather than held (#5026); the same item is offered both ways. */
+      thrown: boolean;
+      /** @description Percent of the weapon's damage a throw deals (#5026); null when not thrown. */
+      damage_share: number | null;
     };
     /** @description Serializer for the Style catalog (#2030 — player-facing Motif style-binding). */
     Style: {

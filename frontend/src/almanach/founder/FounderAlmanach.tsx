@@ -24,6 +24,7 @@ import { useClaimableTitles, useHouseClaim } from '@/character-creation/queries'
 import type { HouseClaimStatus, HouseTemplateOption } from '@/character-creation/api';
 import type { CharacterDraft } from '@/character-creation/types';
 
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 import { FOUNDER_CRUMB, STATES, houseHeading } from '../copy';
 import {
@@ -468,11 +469,7 @@ export function FounderAlmanach({ draft }: { draft: CharacterDraft }) {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          {FOUNDER_CRUMB.map((crumb) => (
-            <span key={crumb}>{crumb}</span>
-          ))}
-        </span>
+        <Crumbs trail={FOUNDER_CRUMB.map((crumb) => ({ label: crumb }))} />
         <span className="right">
           <span className="mode">founder</span>
         </span>
