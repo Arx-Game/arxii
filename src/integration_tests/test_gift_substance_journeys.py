@@ -271,6 +271,22 @@ class HerCastCallsUpItsSubstance(_ShadowField):
             ("Calls up shadow", "3 anima, 1 Umbral resonance"),
             [(line["text"], line["detail"]) for line in preview["surroundings"]],
         )
+        # She casts as the card said: 7 anima, 1 resonance, the room dims, "+5".
+        result = self.cast()
+        self.assertEqual(result["technique_result"]["anima_spent"], 7)
+        self.assertEqual(
+            result["technique_result"]["substance_call_up"],
+            {
+                "label": "shadow",
+                "anima": 3,
+                "resonance": 1,
+                "resonance_name": "Umbral",
+                "blocked": "",
+            },
+        )
+        self.assertEqual((self.anima(), self.resonance()), (23, 9))
+        self.assertEqual(_lighting(self.room), -1)
+        self.assertEqual(self.surroundings_line(result), 5)
 
 
 class CallingUpWithNoTechnique(_ShadowField):
