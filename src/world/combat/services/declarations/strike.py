@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from typeclasses.characters import Character
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.outcome_models import ConsequenceOutcome
     from world.checks.types import (
@@ -424,7 +425,7 @@ def _strike_damage(
     return weapon_damage, dealt, damage_type
 
 
-def thrown_share(sheet: object | None) -> int:
+def thrown_share(sheet: CharacterSheet | None) -> int:
     """The percent of its own damage a thrown weapon deals (#5026): the catalog's "Strike:
     thrown damage" with its modifiers. A damage modifier never adds to it (its own kind)."""
     from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415

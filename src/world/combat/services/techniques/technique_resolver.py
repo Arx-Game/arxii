@@ -571,7 +571,8 @@ class CombatTechniqueResolver:
         )
         for profile, budget_bonus in profiles:
             if (
-                weapon_part_due
+                weapon is not None
+                and weapon_part_due
                 and sl >= profile.minimum_success_level
                 and splits_weapon_part(profile, weapon)
             ):
