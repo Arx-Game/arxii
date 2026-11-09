@@ -24,10 +24,10 @@ class EnsureManeuverEffectsTests(TestCase):
         assert {e.key: e.base_value for e in ManeuverEffect.objects.all()} == (
             MANEUVER_EFFECT_DEFAULTS
         )
-        assert len(MANEUVER_EFFECT_DEFAULTS) == 12
+        assert len(MANEUVER_EFFECT_DEFAULTS) == 13  # the Strike's thrown share joined (#5026)
         assert ModifierCategory.objects.filter(name=MANEUVER_EFFECT_CATEGORY_NAME).exists()
         ensure_maneuver_effects()
-        assert ManeuverEffect.objects.count() == 12
+        assert ManeuverEffect.objects.count() == 13
         assert ModifierCategory.objects.filter(name=MANEUVER_EFFECT_CATEGORY_NAME).count() == 1
 
     def test_ensure_keeps_an_edited_value(self):
