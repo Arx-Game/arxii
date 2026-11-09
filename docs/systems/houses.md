@@ -780,6 +780,11 @@ and unavailable on the SQLite test tier. The graph also loads the realm's claims
   and an inner rung's `sworn_to` is its chain top's name from `_row_for` (#5011). When the
   document request fails, the page shows the error and a "Try again" button instead of
   "Loading the domain…" (#5011).
+- **The trail over every Almanach page** (`frontend/src/almanach/shared/Crumbs.tsx`, #5039) is
+  the way back up: Almanach, then the realm's ladder, every chain top above the rung (the
+  document's `chain`), and the page itself. A person's trail passes through their family (the
+  house page when the family has an organization), a family's through its realm. Every step
+  but the last is a link; the last is the page.
 
 ### Ladder rules
 

@@ -38,7 +38,6 @@
  * (no secondary-membership data on the wire).
  */
 import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 
 import { useAlmanachMutation, useHouseDocument } from '../queries';
 import { PUBLISH_STATUS } from '../copy';
@@ -63,6 +62,7 @@ import {
   type RecordRailRow,
   type RecordRailSection,
 } from './RecordRail';
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
 type Leaf =
@@ -396,12 +396,9 @@ export function HouseDocument({ houseId }: { houseId: number }) {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff/almanach">Almanach de Catenys</Link>
-          </span>
-          <span>{house.name}</span>
-        </span>
+        <Crumbs
+          trail={[{ label: 'Almanach de Catenys', to: '/staff/almanach' }, { label: house.name }]}
+        />
         <span className="right">
           <button
             type="button"

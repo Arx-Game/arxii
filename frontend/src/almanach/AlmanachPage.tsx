@@ -44,6 +44,7 @@ import { PersonPage } from './person/PersonPage';
 import { TitlePage } from './title/TitlePage';
 import { StaffFamilyPage } from './family/StaffFamilyPage';
 import type { AlmanachRealm } from './types';
+import { Crumbs } from './shared/Crumbs';
 import './almanach.css';
 import { urls } from '@/utils/urls';
 import { titleUrl } from './shared/tier';
@@ -169,12 +170,12 @@ function RealmLadderPage({ realmId, realms }: { realmId: number; realms: Almanac
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff/almanach">Almanach de Catenys</Link>
-          </span>
-          <span>{realm?.name ?? `Realm ${realmId}`}</span>
-        </span>
+        <Crumbs
+          trail={[
+            { label: 'Almanach de Catenys', to: '/staff/almanach' },
+            { label: realm?.name ?? `Realm ${realmId}` },
+          ]}
+        />
         <span className="right">
           <span className="mode">staff</span>
         </span>
