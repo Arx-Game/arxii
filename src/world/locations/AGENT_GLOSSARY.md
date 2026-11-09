@@ -52,3 +52,8 @@ itself is documented in `src/world/locations/CLAUDE.md`.
   granted it. Its job is **discovery**: without it a new player of a roster character
   cannot learn that a friend's house is open to them or that their family holds a keep.
   _Avoid:_ access list, permissions list.
+- **Sheltered axis** — a reading an enclosure keeps the weather out of
+  (`ENCLOSURE_SHELTERED_AXES`): a roof the wet, walls the wet, wind and lighting. Since
+  #5018 sheltering drops only the weather layer's rows (`weather:` sources) and the climate
+  base; the room's own rows (a builder's, a style's, a decoration's, a call-up, a GM's mark)
+  still count. _Avoid:_ blocked axis, indoor axis.

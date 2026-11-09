@@ -420,7 +420,9 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
 - **Slice 1 (done):** the COLD/HEAT axes + `room_discomfort` / `comfort_score` reads.
 - **Slice 2 (done):** WET/WIND axes + **enclosure** (`RoomProfile.enclosure`,
   `RoomEnclosure` OPEN_AIR/ROOFED/WALLED/SEALED) gating the weather axes via `felt_exposure`
-  (a roof stops rain, walls stop wind; temperature always seeps).
+  (a roof stops rain, walls stop wind; temperature always seeps). Since #5018 the gate keeps out
+  only the weather's rows (and the climate base): a builder's flooded cellar or a style's dark
+  crypt counts indoors, and walls also keep weather's darkness (LIGHTING) out.
 - **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
   with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
   cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`.

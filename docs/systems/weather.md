@@ -15,8 +15,10 @@ walks an authored transition graph)
 - **`WeatherType`** — one authored condition (clear, overcast, storm…) with its
   season/phase eligibility.
 - **`WeatherTypeExposure`** — `(weather_type, stat_key) → value`: how a condition
-  pushes a location's comfort-relevant stats (COLD/HEAT/WET/WIND). Materialized as
-  decaying `LocationValueModifier` rows on the STAT axis.
+  pushes a location's comfort-relevant stats (COLD/HEAT/WET/WIND, and LIGHTING for a dark
+  night, #5018). Materialized as decaying `LocationValueModifier` rows on the STAT axis,
+  source `weather:<area pk>`. A room's enclosure keeps out exactly these rows: a roof the
+  wet, walls the wet, wind and lighting; the room's own rows still count (#5018).
 - **`WeatherTypeShelter`** (ADR-0180) — `(weather_type, damage_type) → value`:
   how a condition *shelters* against a hazard axis. **Cloud cover IS area-wide
   shelter**: overcast writes a radiant-shelter row, which the sunlight system's

@@ -4571,7 +4571,7 @@ the way the Rite of Honors is found by `HONORS_SERVICE_PATH`. No roll.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AffinityInteraction` | 9 directed (caster, place) affinity pairing rows; tuning table | `source_affinity` FK, `environment_affinity` FK, `valence` (ALIGNED/OPPOSED), `kind` (AMPLIFY/REJECT/REPEL/CORRUPT), `severity`, `consequence_pool` FK (nullable — OPPOSED backfire pool) |
-| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty`, `backfire_difficulty_per_magnitude` |
+| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty`, `backfire_difficulty_per_magnitude`, the six gift-substance numbers (#5018) |
 | `ResonanceAlignmentBoonTier` | Authored: which buff `ConditionTemplate` an ALIGNED pairing grants at or above a magnitude band | `affinity_interaction` FK (must be ALIGNED diagonal row), `min_magnitude`, `condition_template` FK. `UniqueConstraint(affinity_interaction, min_magnitude)`. `clean()` validates ALIGNED valence. Tier selection is Python `max()` over `interaction.cached_alignment_boon_tiers` — no `Meta.ordering` |
 
 `AffinityInteraction.consequence_pool` (added migration `magic/0064`) is a nullable FK to
@@ -4589,6 +4589,68 @@ Cached accessors (never query directly):
   boon `ConditionTemplate`s; used by the movement service's clear step.
 - `ConsequencePool.cached_consequences` — `cached_property` returning the resolved
   `Consequence` list; the OPPOSED service reads this, never `pool.entries.filter(...)`.
+
+### A gift's substance (#5018, ADR-5018) [BUILT & WIRED]
+
+A gift may name its substance: `GiftSubstance` (`models/gifts.py`, one-to-one on `Gift`,
+pk = the gift) maps it onto an existing room reading (`stat_key`, a `StatKey`), a
+`direction` (`SubstanceDirection`: shadow is lighting FALLING; water, wind, heat RISING),
+a `full_at` (steps from ordinary that make a full measure), an optional `opposed_by`
+reading (dry for water) and the staff-written `arrival_line` the room sees. A child gift
+with no row uses its parent's (`substance_for_gift`). Edited as the "Substance" inline on
+the Gift admin; `clean()` refuses a full measure under 1, a reading opposing itself, and a
+falling substance on a reading that cannot go below ordinary.
+
+Only a caster with a GIFT thread covering the gift is affected (`gift_thread_for`, via
+`gift_threads_for`). Everything reads one plan, `plan_substance_call_up(character=, gift=,
+room=, control_surplus=)` in `services/substance.py` (pure): how many steps the room needs
+to count as present (`substance_present_pct` of a measure, rounded up; an ordinary room
+lacks it), the row her call-up would set (computed from `felt_reading` without her own row,
+capped at the reading's span), the anima per measure and resonance per measure, the place
+factor (`evaluate_resonance_environment(technique=None)`: aligned cheaper, opposed dearer,
+up to `substance_place_cap_pct`), how much her spare control covers, and whether her
+gift-resonance balance can pay the rest. A fixed setting (sanctum override) or too little
+resonance means no call-up, never a refusal. `richness_after` is the room after any call-up.
+
+- **Power** (`substance_power`): `richness_after × substance_power_at_full ×
+  thread_level_multiplier(shown thread level, floored at 1)`, one ENVIRONMENT line
+  "Surroundings: <label>" in `_derive_power` (`_add_environment_stage`), beside the
+  unchanged resonance-environment line.
+- **Cost**: `_calculate_technique_cost` builds the plan with `control_surplus =
+  max(best control − intensity − technique cost, 0)` and adds `plan.call_up_anima` to the
+  technique's cost before control is taken off; the card (`_cast_preview`,
+  `CastPreview.surroundings`, the castable list's `cast_preview`, the telnet `cast` list)
+  and the charge read the same function. The one `deduct_anima` charges it; nothing checks
+  her anima.
+- **Writes** (`apply_substance_plan`, from `_complete_technique_cast` after the deduct):
+  her resonance under lock, her room row `substance:<sheet pk>` via
+  `set_room_stat_modifier`, and `narrate_room_outcome(room, arrival_line)` (names no one).
+  `TechniqueUseResult.substance_call_up` carries what it took (result serializer
+  `substance_call_up`). Cleared by `clear_caster_substance` from `Character.at_post_move`
+  and `_leave_the_grid`.
+- **No technique** (`CallUpSubstanceAction`, key `call_up_substance`,
+  `actions/definitions/gift_substance.py`): priced by `get_runtime_caster_stats` (her own
+  identity, engagement and social-safety streams), offered by `call_up_offers` (the scene
+  panel's `GET /api/action-requests/call-up-offers/`, a combat participant's `call_up`,
+  telnet `callup`). In a fight it is an immediate act once a round
+  (`CharacterEngagement.last_called_up_round`, locked the way Dig deep's marker is),
+  never the round's declared action. Soulfray: the first press with a cost returns
+  `needs_soulfray_confirm`; `confirm_soulfray_risk` (telnet `callup/confirm`) goes ahead.
+- **GM mark** (`MarkSubstancePresentAction`, key `stage_substance`; telnet `stage
+  present|absent <substance>`; the Stage tab's "Present here"; list
+  `gm_list_substances`): gated by `_account_can_gm_room`; writes
+  `scene_mark:<scene>:<gift>` set to just what makes it present
+  (`mark_substance_present`); `Scene.finish_scene` calls `clear_scene_substance_marks`.
+- **Surroundings restriction** (`Restriction.surroundings_stat/min/max`, DESIGN only, with
+  check constraints; `services/surroundings.py`): unmet, the roll takes one SCENE line
+  "Surroundings: <name> (here: <reading>)" worth `unmet_surroundings_penalty_pct` of
+  `level_baseline(level)`, at the scene cast, technique-enhanced action and combat roll
+  seams. Ignored on a technique whose own gift's substance is that reading.
+
+Tuning lives on `ResonanceEnvironmentConfig`: `substance_power_at_full` (10),
+`substance_present_pct` (50), `substance_anima_per_measure` (5),
+`substance_resonance_per_measure` (2), `substance_place_cap_pct` (50),
+`unmet_surroundings_penalty_pct` (100).
 
 ---
 
