@@ -61,6 +61,7 @@ from commands.pull_parsing import (
 if TYPE_CHECKING:
     from actions.types import ActionRef, DispatchResult
     from world.combat.models import CombatParticipant
+    from world.magic.models import Technique
     from world.magic.types.pull import CastPullDeclaration
 
 # Keyword prefix used to parse strain=<n> from clash command args.
@@ -699,7 +700,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """
         return self._resolve_technique().pk
 
-    def _resolve_technique(self) -> Technique:  # type: ignore[name-defined]  # noqa: F821
+    def _resolve_technique(self) -> Technique:
         """Return the ``Technique`` object named by ``self._technique_name``.
 
         A known technique (via ``CharacterTechnique``) by name, same as
@@ -869,6 +870,20 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             return
         self.msg("\n".join(self._castable_listing()))
 
+    def _surroundings_lines(self, technique: Technique) -> list[str]:
+        """#5018: the cast's cost here and its surroundings lines, as the web card shows."""
+        from actions.player_interface import _cast_preview  # noqa: PLC0415
+        from world.magic.types.substance import SurroundingsKind  # noqa: PLC0415
+
+        preview = _cast_preview(self.caller, technique, lethal=True)
+        if not preview.surroundings:
+            return []
+        lines = [f"Cost here: {preview.effective_anima_cost} anima"]
+        for line in preview.surroundings:
+            amount = f" {line.amount:+d} power" if line.kind == SurroundingsKind.POWER else ""
+            lines.append(f"{line.text}{amount}")
+        return lines
+
     def _castable_listing(self) -> list[str]:
         """Lines for the bare-``cast`` listing: every castable technique and what it does."""
         from world.magic.services.technique_forms import (  # noqa: PLC0415
@@ -908,6 +923,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             )
             if forms_line:
                 lines.append(f"    {forms_line}")
+            lines.extend(f"    {line}" for line in self._surroundings_lines(technique))
         lines.append("")
         lines.append("Use |wcast <technique> [at <target>]|n to work one.")
         return lines

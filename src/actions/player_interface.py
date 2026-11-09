@@ -786,9 +786,10 @@ def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) ->
     cheaper of the variant and base form, and capped at current anima in a non-lethal
     fight. Declared strain is added at declaration, not here.
     """
+    from world.magic.services.surroundings import cast_surroundings_lines  # noqa: PLC0415
     from world.magic.services.techniques import _calculate_technique_cost  # noqa: PLC0415
 
-    stats, _anima, cost, _strain = _calculate_technique_cost(
+    stats, _anima, cost, _strain, plan = _calculate_technique_cost(
         character=character,
         technique=technique,
         strain_commitment=0,
@@ -797,7 +798,10 @@ def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) ->
         preferred_resonance=None,
     )
     return CastPreview(
-        intensity=stats.intensity, control=stats.control, effective_anima_cost=cost.effective_cost
+        intensity=stats.intensity,
+        control=stats.control,
+        effective_anima_cost=cost.effective_cost,
+        surroundings=tuple(cast_surroundings_lines(character, technique, plan)),
     )
 
 

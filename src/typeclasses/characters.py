@@ -751,6 +751,16 @@ class Character(ObjectParent, DefaultCharacter):
         )
         self.db.prelogout_location = location
         self.location = None
+        # #5018: what she called up lasts only while she is there.
+        self._clear_called_up_substance(keep_room=None)
+
+    def _clear_called_up_substance(self, *, keep_room) -> None:
+        """Delete her called-up substance rows outside ``keep_room`` (#5018)."""
+        from world.magic.services.substance import clear_caster_substance
+
+        sheet = self.character_sheet
+        if sheet is not None:
+            clear_caster_substance(sheet, keep_room=keep_room)
 
     def _announce_departure(self, location, *, reason: str) -> None:
         """The room's went-offline line, the logout twin of ``_announce_arrival``.
@@ -924,6 +934,9 @@ class Character(ObjectParent, DefaultCharacter):
         # Guard mirrors at_post_puppet: some Character-typeclass objects have no sheet.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
             refresh_resonance_alignment(character_sheet=self.sheet_data)
+
+        # #5018: what she called up of her gift's substance lasts while she stays.
+        self._clear_called_up_substance(keep_room=self.location)
 
         # Emit MOVED for reactive triggers (e.g. scar-gated presence escalation).
         # Only emit when destination is a real room; no-op if character has no location.

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from actions.serializers import CastPreviewSerializer
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import MAX_RESONANCE_BURN
@@ -323,6 +324,20 @@ class CastableTechniqueSerializer(serializers.Serializer):
     # Lets the standalone-cast UI offer a Soulfray consent toggle up front, the
     # same fee PlayerAction.reactive_anima_cost exposes for the Guard panel.
     reactive_anima_cost = serializers.SerializerMethodField()
+    # #5018: what the cast costs here, with any call-up of her gift's substance, and the
+    # surroundings lines (call-up, power, unmet restriction), priced by the cast's own
+    # cost function so the panel agrees with the charge.
+    cast_preview = serializers.SerializerMethodField()
+
+    @extend_schema_field(CastPreviewSerializer(allow_null=True))
+    def get_cast_preview(self, obj: Technique) -> dict | None:
+        """The cast as it would run here and now (#5018), or None with no character."""
+        from actions.player_interface import _cast_preview  # noqa: PLC0415
+
+        character = self.context.get("character")
+        if character is None:
+            return None
+        return CastPreviewSerializer(_cast_preview(character, obj, lethal=True)).data
 
     def get_name(self, obj: Technique) -> str:
         """The owner's own name for this technique, or the catalog's (#4099)."""
@@ -764,11 +779,30 @@ class ActionResolutionSerializer(serializers.Serializer):
     gate_results = StepResultSerializer(many=True)
 
 
+class SubstanceCallUpSerializer(serializers.Serializer):
+    """What a cast's call-up of her gift's substance spent (#5018)."""
+
+    label = serializers.CharField()
+    anima = serializers.IntegerField()
+    resonance = serializers.IntegerField()
+    resonance_name = serializers.CharField()
+
+
 class TechniqueResultSerializer(serializers.Serializer):
     confirmed = serializers.BooleanField()
     anima_spent = serializers.SerializerMethodField()
     soulfray_stage = serializers.SerializerMethodField()
     mishap_label = serializers.SerializerMethodField()
+    # #5018: what calling up her gift's substance took on this cast, if anything.
+    substance_call_up = serializers.SerializerMethodField()
+
+    @extend_schema_field(SubstanceCallUpSerializer(allow_null=True))
+    def get_substance_call_up(self, obj: object) -> dict | None:
+        from world.magic.types import TechniqueUseResult  # noqa: PLC0415
+
+        if not isinstance(obj, TechniqueUseResult) or obj.substance_call_up is None:
+            return None
+        return SubstanceCallUpSerializer(obj.substance_call_up).data
 
     def get_anima_spent(self, obj: object) -> int | None:
         from world.magic.types import TechniqueUseResult  # noqa: PLC0415
