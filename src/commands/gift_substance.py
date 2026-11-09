@@ -51,7 +51,10 @@ class CmdCallUp(DispatchCommand):
             self.msg("You hold no gift whose substance you can call up.")
             return
         for offer in offers:
-            self.msg(f"Your gift: {offer.plan.label} ({offer.cost_line} here)")
+            if offer.plan.calls_up:
+                self.msg(f"Your gift: {offer.plan.label} ({offer.cost_line} here)")
+            else:
+                self.msg(f"Your gift: {offer.plan.label} ({offer.cost_line})")
 
     def resolve_action_ref(self) -> ActionRef:
         from actions.types import ActionRef  # noqa: PLC0415

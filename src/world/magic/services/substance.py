@@ -362,6 +362,7 @@ def clear_scene_substance_marks(scene: Scene) -> int:
     return deleted
 
 
+@transaction.atomic
 def mark_substance_present(
     *,
     scene: Scene,
