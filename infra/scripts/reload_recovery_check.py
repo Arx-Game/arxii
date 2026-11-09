@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from http import HTTPStatus
 import http.server
 import os
 from pathlib import Path
@@ -122,6 +123,7 @@ def render(template: str, **extra) -> str:
     context = {
         **{k: v for k, v in DEFAULTS.items() if isinstance(v, (str, int, bool))},
         "base_uv_bin": UV,
+        "caddy_web_fqdn": "reload.example.test",
         **extra,
     }
     return env.get_template(template).render(context)
@@ -154,6 +156,9 @@ def setup() -> None:
     sh(f"chown -R {APP_USER}: {PROJECT.parent}")
     as_app(f"cd {PROJECT} && {UV} sync", timeout=1200)
     as_app(f"cd {PROJECT} && {UV} run evennia --init {GAMEDIR.name}")
+    # Match production host validation so the real Server exercises both probes.
+    settings = GAMEDIR / "server/conf/settings.py"
+    settings.write_text(settings.read_text() + "\nALLOWED_HOSTS = ['reload.example.test']\n")
     # Evennia creates the superuser from these on its first database check.
     superuser_env = {
         "EVENNIA_SUPERUSER_USERNAME": SUPERUSER,
@@ -402,6 +407,18 @@ class Checks:
 def clean_reload(c: Checks) -> None:
     player = Player()
     before_portal, before_server = portal(), server()
+    old_code = sh(
+        f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:{SERVER_PORT}/"
+    ).stdout.strip()
+    new_code = sh(
+        f"curl -s -o /dev/null -w '%{{http_code}}' -H 'Host: reload.example.test' "
+        f"http://127.0.0.1:{SERVER_PORT}/"
+    ).stdout.strip()
+    c.expect(int(old_code) == HTTPStatus.BAD_REQUEST, f"old probe returns 400 (saw {old_code})")
+    c.expect(
+        int(new_code) in {HTTPStatus.OK, HTTPStatus.MOVED_PERMANENTLY, HTTPStatus.FOUND},
+        f"configured host answers (saw {new_code})",
+    )
     c.expect(main_pid() == before_portal, "systemd's main process is the Portal")
     rc = sh(f"systemctl reload {UNIT}", check=False).returncode
     c.expect(rc == 0, "systemctl reload exits 0")
