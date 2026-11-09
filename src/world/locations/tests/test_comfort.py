@@ -98,8 +98,13 @@ class EnclosureShelteringTests(TestCase):
         return ward, profile.objectdb
 
     def _weather(self, area, stat_key: StatKey, value: int) -> None:
+        # Tagged as the weather layer's row: enclosure keeps out only the weather (#5018).
         LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=stat_key,
+            value=value,
+            source=f"weather:{area.pk}",
         )
 
     def test_open_air_feels_all_weather(self) -> None:
@@ -198,8 +203,13 @@ class ComfortLevelTests(TestCase):
 
 class WindowEnclosureTests(TestCase):
     def _modifier(self, area, stat_key: StatKey, value: int) -> None:
+        # The weather layer's row: enclosure keeps out only the weather (#5018).
         LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=stat_key,
+            value=value,
+            source=f"weather:{area.pk}",
         )
 
     def _room_with_profile(self):

@@ -169,14 +169,18 @@ EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (
 # is countered by fixtures/style, never by enclosure alone.
 WEATHER_EXPOSURE_AXES: frozenset[StatKey] = frozenset({StatKey.WET, StatKey.WIND})
 
-# Which weather axes each enclosure level fully shelters (#1514). The 0-floor model means
-# "sheltered" = felt as 0. A roof stops rain/snow; walls also stop wind. SEALED matches WALLED
-# for weather — its extra value (temperature insulation) is a later fixtures/style slice.
+# Which axes each enclosure level keeps the *weather* out of (#1514; #5018). A roof stops
+# rain/snow; walls also stop wind and the darkness (or glare) of the sky. Sheltering drops only
+# what comes from outside: the weather layer's rows (``weather:`` sources) and, for WET/WIND,
+# the regional climate base. A room's own rows still count indoors (#5018, rulings 19 and 22):
+# a builder's flooded cellar stays wet under its roof, a crypt style stays dark inside its
+# walls, and a caster's called-up water or a GM's mark counts too. SEALED matches WALLED for
+# weather — its extra value (temperature insulation) is a later fixtures/style slice.
 ENCLOSURE_SHELTERED_AXES: dict[RoomEnclosure, frozenset[StatKey]] = {
     RoomEnclosure.OPEN_AIR: frozenset(),
     RoomEnclosure.ROOFED: frozenset({StatKey.WET}),
-    RoomEnclosure.WALLED: frozenset({StatKey.WET, StatKey.WIND}),
-    RoomEnclosure.SEALED: frozenset({StatKey.WET, StatKey.WIND}),
+    RoomEnclosure.WALLED: frozenset({StatKey.WET, StatKey.WIND, StatKey.LIGHTING}),
+    RoomEnclosure.SEALED: frozenset({StatKey.WET, StatKey.WIND, StatKey.LIGHTING}),
 }
 
 # ---------------------------------------------------------------------------
