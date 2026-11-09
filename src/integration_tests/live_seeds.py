@@ -10,6 +10,7 @@ on the names it writes, so a second run against the same database changes nothin
 from __future__ import annotations
 
 from dataclasses import dataclass
+import secrets
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,7 @@ class ThrownStrikeSeed:
     greatsword_template_id: int
     coat_template_id: int
     staff_username: str
+    staff_password: str
 
 
 #: The names the thrown-strike spec looks for. Invented for the test; no game character.
@@ -117,7 +119,6 @@ THROWN_SPEC_CHARACTER = "Strike Tester"
 THROWN_SPEC_ARCHER = "Bandit archer"
 THROWN_SPEC_TECHNIQUE = "Wreathe the blade"
 THROWN_SPEC_STAFF = "strike_staff"
-THROWN_SPEC_STAFF_PASSWORD = "Ragged-Lantern-5026!"  # noqa: S105 - a throwaway test database only
 THROWN_SPEC_ENCHANT_COST = 4
 
 
@@ -192,18 +193,20 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     from world.vitals.seeds import ensure_foundational_capabilities  # noqa: PLC0415
     from world.vitals.services import get_vitals_consequence_config  # noqa: PLC0415
 
-    if not AccountDB.objects.filter(username=THROWN_SPEC_STAFF).exists():
-        staff = create.create_account(
-            THROWN_SPEC_STAFF, "strike_staff@example.com", THROWN_SPEC_STAFF_PASSWORD
-        )
-        staff.is_staff = True
-        staff.is_superuser = True
-        staff.save()
-        EmailAddress.objects.update_or_create(
-            user=staff,
-            email="strike_staff@example.com",
-            defaults={"primary": True, "verified": True},
-        )
+    # A fresh random password each run, handed to the spec through the seed's result.
+    staff_password = secrets.token_urlsafe(18)
+    staff = AccountDB.objects.filter(username=THROWN_SPEC_STAFF).first()
+    if staff is None:
+        staff = create.create_account(THROWN_SPEC_STAFF, "strike_staff@example.com", staff_password)
+    staff.set_password(staff_password)
+    staff.is_staff = True
+    staff.is_superuser = True
+    staff.save()
+    EmailAddress.objects.update_or_create(
+        user=staff,
+        email="strike_staff@example.com",
+        defaults={"primary": True, "verified": True},
+    )
     # The available-actions read lists movement too, which needs the foundational
     # capabilities and the fall content an empty database lacks.
     with override_settings(SEED_SAMPLE_CONTENT=True):
@@ -214,7 +217,7 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
         character_sheet__character__db_key=THROWN_SPEC_CHARACTER
     ).first()
     if existing is not None:
-        return _thrown_seed_for(existing)
+        return _thrown_seed_for(existing, staff_password)
 
     seed_check_resolution_tables()
     ensure_maneuver_effects()
@@ -350,10 +353,11 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
         greatsword_template_id=greatsword.pk,
         coat_template_id=coat.pk,
         staff_username=THROWN_SPEC_STAFF,
+        staff_password=staff_password,
     )
 
 
-def _thrown_seed_for(entry: object) -> ThrownStrikeSeed:
+def _thrown_seed_for(entry: object, staff_password: str) -> ThrownStrikeSeed:
     """The ids an earlier ``seed_thrown_strike_spec`` run wrote, read back by name."""
     from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
     from world.items.models import EquippedItem, ItemTemplate  # noqa: PLC0415
@@ -372,4 +376,5 @@ def _thrown_seed_for(entry: object) -> ThrownStrikeSeed:
         greatsword_template_id=ItemTemplate.objects.get(name="Greatsword").pk,
         coat_template_id=ItemTemplate.objects.get(name="Salamander-hide coat").pk,
         staff_username=THROWN_SPEC_STAFF,
+        staff_password=staff_password,
     )

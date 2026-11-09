@@ -27,6 +27,8 @@ interface Seed {
   greatsword_template_id: number;
   coat_template_id: number;
   staff_username: string;
+  /** Made fresh by each seed run. */
+  staff_password: string;
 }
 
 /** The ids the seed wrote; read when a test runs, so other configs can list this file. */
@@ -39,7 +41,6 @@ let SEED: Seed;
 test.beforeAll(() => {
   SEED = readSeed();
 });
-const STAFF_PASSWORD = 'Ragged-Lantern-5026!';
 
 interface RollLine {
   label: string;
@@ -183,7 +184,7 @@ test.describe('thrown and enchanted Strikes (#5026)', () => {
     page,
   }) => {
     // The admin signs in through the site's own login page.
-    await logIn(page, SEED.staff_username, STAFF_PASSWORD);
+    await logIn(page, SEED.staff_username, SEED.staff_password);
 
     await page.goto(`/admin/arxii/itemtemplate/${SEED.greatsword_template_id}/change/`);
     await page.locator('#id_can_be_thrown').check();

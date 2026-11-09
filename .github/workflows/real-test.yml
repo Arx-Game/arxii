@@ -204,7 +204,7 @@ jobs:
           from integration_tests.live_seeds import seed_thrown_strike_spec
           seed = seed_thrown_strike_spec(username='e2e_test_account')
           open('/tmp/thrown-strike-seed.json', 'w').write(json.dumps(dataclasses.asdict(seed)))
-          print(seed)
+          print({k: v for k, v in dataclasses.asdict(seed).items() if k != 'staff_password'})
           "
       - name: Run the live-server Playwright specs
         working-directory: frontend
