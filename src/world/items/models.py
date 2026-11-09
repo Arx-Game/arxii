@@ -576,9 +576,26 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="Base weapon-damage contribution (weapon archetypes only).",
     )
+    can_be_thrown = models.BooleanField(
+        default=False,
+        help_text=(
+            "The wielder can throw this weapon as well as strike in melee, picking each "
+            "Strike (#5026). Thrown, it uses the Thrown skill, reaches anywhere in the room "
+            "and deals the 'Strike: thrown damage' share. One-handed melee weapons only."
+        ),
+    )
     base_armor_soak = models.PositiveIntegerField(
         default=0,
         help_text="Base damage-mitigation soak when worn (armor archetypes only).",
+    )
+    also_protects_against = models.ManyToManyField(
+        "arxii.DamageType",
+        blank=True,
+        related_name="protecting_armor_templates",
+        help_text=(
+            "Armor always stops physical blows (#5026). Tick any other damage type its soak "
+            "also stands against. Most armor ticks none."
+        ),
     )
     max_durability = models.PositiveIntegerField(
         default=0,
@@ -663,6 +680,14 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     | models.Q(base_armor_soak=0)
                 ),
                 name="items_armor_soak_requires_armor_archetype",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(can_be_thrown=False)
+                    | models.Q(gear_archetype=GearArchetype.MELEE_ONE_HAND)
+                ),
+                name="items_thrown_requires_one_handed_melee",
+                violation_error_message="Only one-handed melee weapons can also be thrown.",
             ),
             models.CheckConstraint(
                 check=(

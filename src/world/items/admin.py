@@ -1,8 +1,10 @@
 """Django admin configuration for items."""
 
+from typing import Any
+
 from django.contrib import admin
-from django.db.models import Count
-from django.forms import ModelForm
+from django.db.models import Count, ManyToManyField
+from django.forms import CheckboxSelectMultiple, ModelForm, ModelMultipleChoiceField
 from django.http import HttpRequest, HttpResponse
 
 from world.admin_utils import OneRowPerFormSet
@@ -301,7 +303,9 @@ class ItemTemplateAdmin(admin.ModelAdmin):
                     "weapon_class",
                     "base_weapon_damage",
                     "weapon_damage_type",
+                    "can_be_thrown",
                     "base_armor_soak",
+                    "also_protects_against",
                     "max_durability",
                     "minimum_quality_tier",
                 ]
@@ -361,6 +365,14 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         ItemCheckModifierInline,
         ItemTemplatePropertyInline,
     ]
+
+    def formfield_for_manytomany(
+        self, db_field: ManyToManyField, request: HttpRequest, **kwargs: Any
+    ) -> ModelMultipleChoiceField | None:
+        """The damage types armor also stops show as checkboxes (#5026): a short list."""
+        if db_field.name == "also_protects_against":  # noqa: STRING_LITERAL - admin hook field name
+            kwargs["widget"] = CheckboxSelectMultiple
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 class ItemStyleInline(admin.TabularInline):

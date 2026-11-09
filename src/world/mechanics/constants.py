@@ -195,6 +195,8 @@ class ManeuverEffectKey(models.TextChoices):
     # A missed attack builds intensity, and intensity adds to hit (#4858).
     MISS_INTENSITY = "miss_intensity", "Miss: intensity gained"
     INTENSITY_TO_HIT = "intensity_to_hit", "Intensity: to hit per point"
+    # The share of its own damage a thrown weapon deals (#5026).
+    STRIKE_THROWN_DAMAGE = "strike_thrown_damage", "Strike: thrown damage"
 
 
 class AmountInput(models.TextChoices):
@@ -230,6 +232,8 @@ class EffectKind(models.TextChoices):
     INTENSITY = "intensity", "Intensity"
     CONDITION_SEVERITY = "condition_severity", "Condition severity"
     CONDITION_DURATION = "condition_duration", "Condition duration"
+    # A percent of some other damage (#5026), so a flat damage modifier never adds to it.
+    DAMAGE_SHARE = "damage_share", "Damage share (percent)"
 
 
 # The kinds a technique scope can narrow: the ones a technique's cast reads (#4822).
@@ -260,6 +264,7 @@ MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: EffectKind.DAMAGE,
     ManeuverEffectKey.MISS_INTENSITY: EffectKind.INTENSITY,
     ManeuverEffectKey.INTENSITY_TO_HIT: EffectKind.TO_HIT,
+    ManeuverEffectKey.STRIKE_THROWN_DAMAGE: EffectKind.DAMAGE_SHARE,
 }
 
 # Today's number for each effect: what a maneuver gives with no modifier anywhere.
@@ -280,4 +285,6 @@ MANEUVER_EFFECT_DEFAULTS: dict[str, int] = {
     ManeuverEffectKey.STRIKE_BARE_HANDS_DAMAGE: 2,
     ManeuverEffectKey.MISS_INTENSITY: 1,
     ManeuverEffectKey.INTENSITY_TO_HIT: 1,
+    # Percent of the weapon's own damage a throw deals; a placeholder, tuned in the catalog.
+    ManeuverEffectKey.STRIKE_THROWN_DAMAGE: 75,
 }
