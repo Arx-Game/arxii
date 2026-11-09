@@ -184,6 +184,13 @@ export interface PlayerAction {
    * null / absent for anything that is not a combat cast.
    */
   cast_preview?: CastPreview | null;
+  /**
+   * A weapon technique (#5026): it is cast into a Strike from the Strike's "Enchant with"
+   * row, never declared on its own. Absent / false for every other action.
+   */
+  enchants_strike?: boolean;
+  /** The damage types a weapon technique adds to a Strike ("fire"), once each. */
+  enchant_damage_types?: string[];
 }
 
 export interface CastPreview {

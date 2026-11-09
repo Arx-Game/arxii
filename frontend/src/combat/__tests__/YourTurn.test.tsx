@@ -3063,12 +3063,16 @@ describe('YourTurn: Strike as the first focused pick (#4858)', () => {
           name: 'Rapier',
           gear_kind: 'One-Handed Melee',
           strike_skill: 'Melee Combat',
+          thrown: false,
+          damage_share: null,
         },
         {
           item_instance_id: null,
           name: 'bare hands',
           gear_kind: 'Unarmed',
           strike_skill: 'Unarmed Combat',
+          thrown: false,
+          damage_share: null,
         },
       ],
     };
@@ -3110,12 +3114,16 @@ describe('YourTurn: Strike as the first focused pick (#4858)', () => {
           name: 'Rapier',
           gear_kind: 'One-Handed Melee',
           strike_skill: 'Melee Combat',
+          thrown: false,
+          damage_share: null,
         },
         {
           item_instance_id: null,
           name: 'bare hands',
           gear_kind: 'Unarmed',
           strike_skill: 'Unarmed Combat',
+          thrown: false,
+          damage_share: null,
         },
       ],
     };

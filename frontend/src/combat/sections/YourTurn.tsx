@@ -41,7 +41,11 @@ import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
-import { StrikeControl, type StrikeWeaponOption } from '../components/StrikeControl';
+import {
+  StrikeControl,
+  type StrikeChoice,
+  type StrikeWeaponOption,
+} from '../components/StrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -1954,6 +1958,7 @@ function useRestoreDeclaredStrike(
 
 interface StrikePickArgs {
   weapons: StrikeWeaponOption[];
+  enchantments: PlayerAction[];
   picked: boolean;
   declaredStrike: RoundActionTyped | null;
   focusedContext: ActionContext;
@@ -1962,7 +1967,7 @@ interface StrikePickArgs {
   disabled: boolean;
   pending: boolean;
   onPick: () => void;
-  onStrike: (opponentId: number, itemInstanceId: number | null) => void;
+  onStrike: (opponentId: number, choice: StrikeChoice) => void;
 }
 
 /** The weapon a declared Strike used (null: bare hands); undefined when none is declared. */
@@ -1997,7 +2002,10 @@ function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
     panel: (
       <StrikeControl
         weapons={args.weapons}
+        enchantments={args.enchantments}
         declaredItemInstanceId={declaredStrikeWeapon(args.declaredStrike)}
+        declaredThrown={args.declaredStrike?.strike_thrown ?? false}
+        declaredTechniqueId={args.declaredStrike?.focused_action ?? null}
         targetOpponentId={focusedOpponentId(args.focusedContext)}
         declaredTargetName={declaredStrikeTargetName(args.declaredStrike, args.activeOpponents)}
         error={args.error}
@@ -2401,6 +2409,10 @@ export function YourTurn({
   // (Decision 4: no client-side reach/prerequisite duplication).
   // Melee techniques a waiting strike can hold (#4608), and the one held this round.
   const meleeTechniques = waitingStrikeTechniques(availableActions);
+  // Weapon techniques, cast into a Strike from its "Enchant with" row (#5026).
+  const strikeEnchantments = availableActions.filter(
+    (a) => a.ref.backend === 'combat' && a.ref.technique_id != null && a.enchants_strike
+  );
   const heldTechniqueId =
     declaredManeuver === 'await_opening' ? (ownRoundAction?.focused_action ?? null) : null;
   const heldTechniqueName =
@@ -2733,10 +2745,15 @@ export function YourTurn({
     }
   }
 
-  async function handleStrike(opponentId: number, itemInstanceId: number | null) {
+  async function handleStrike(opponentId: number, choice: StrikeChoice) {
     setStrikeError(null);
-    const kwargs: Record<string, number> = { opponent_id: opponentId };
-    if (itemInstanceId !== null) kwargs.weapon_id = itemInstanceId;
+    const kwargs: Record<string, number | boolean> = { opponent_id: opponentId };
+    if (choice.itemInstanceId !== null) kwargs.weapon_id = choice.itemInstanceId;
+    if (choice.thrown) kwargs.thrown = true;
+    if (choice.techniqueId !== null) {
+      kwargs.technique_id = choice.techniqueId;
+      kwargs.confirm_soulfray_risk = choice.confirmSoulfrayRisk;
+    }
     try {
       const result = await dispatchManeuver({ registryKey: 'combat_strike', kwargs });
       if (isDispatchFailure(result)) {
@@ -2836,6 +2853,7 @@ export function YourTurn({
             }}
             leadingPick={buildStrikePick({
               weapons: myParticipantSelf?.strike_weapons ?? [],
+              enchantments: strikeEnchantments,
               picked: strikePicked,
               declaredStrike,
               focusedContext,
@@ -2848,8 +2866,8 @@ export function YourTurn({
                 setStrikePicked(true);
                 setFocusedContext({ ...focusedContext, techniqueId: undefined });
               },
-              onStrike: (opponentId, itemInstanceId) => {
-                handleStrike(opponentId, itemInstanceId).catch(() => {});
+              onStrike: (opponentId, choice) => {
+                handleStrike(opponentId, choice).catch(() => {});
               },
             })}
             readOnly={isLocked}
