@@ -1,5 +1,12 @@
 import {
   boundsContaining,
+  clampZoom,
+  fitView,
+  LATTICE_ZOOM,
+  MAP_ZOOM,
+  readLatticeView,
+  writeLatticeView,
+  zoomAround,
   carveCell,
   cellKey,
   computeFloorRail,
@@ -187,5 +194,33 @@ describe('localStorage persistence — every access try/catch wrapped', () => {
 
   it('falls back to an empty floor list when nothing is stored', () => {
     expect(readGrownFloors('acct-1', 99)).toEqual([]);
+  });
+});
+
+describe('zoom ranges (#5009): the lattice keeps its own, the region map gets a map-sized one', () => {
+  it('clamps to the lattice range by default and to the map range when asked', () => {
+    expect(LATTICE_ZOOM).toEqual({ min: 0.25, max: 1.5 });
+    expect(MAP_ZOOM).toEqual({ min: 0.05, max: 8 });
+    expect(clampZoom(0.01)).toBe(0.25);
+    expect(clampZoom(9)).toBe(1.5);
+    expect(clampZoom(0.01, MAP_ZOOM)).toBe(0.05);
+    expect(clampZoom(9, MAP_ZOOM)).toBe(8);
+    expect(clampZoom(3, MAP_ZOOM)).toBe(3);
+  });
+
+  it('zoomAround and fitView take the range', () => {
+    const view = { zoom: 1, panX: 0, panY: 0 };
+    expect(zoomAround(view, 4, 0, 0).zoom).toBe(1.5);
+    expect(zoomAround(view, 4, 0, 0, MAP_ZOOM).zoom).toBe(4);
+    // a 2400 px canvas in a 240 px viewport: the lattice stops at 0.25, the map fits at 0.1
+    expect(fitView(2400, 2400, 240, 240).zoom).toBe(0.25);
+    expect(fitView(2400, 2400, 240, 240, MAP_ZOOM).zoom).toBeCloseTo(0.1);
+  });
+
+  it('a stored map view is read back within the map range', () => {
+    window.localStorage.clear();
+    writeLatticeView('a', 1_000_001, { zoom: 6, panX: 1, panY: 2 });
+    expect(readLatticeView('a', 1_000_001).zoom).toBe(1.5);
+    expect(readLatticeView('a', 1_000_001, MAP_ZOOM)).toEqual({ zoom: 6, panX: 1, panY: 2 });
   });
 });

@@ -288,7 +288,25 @@ The side panel (`RegionMapPanel.tsx`) and the realm and domain pickers each fold
 remembered per account in `localStorage`, shared by the Atlas view and the tab); folded pickers
 still name the picked domain. Over the map, plain scroll moves the map and Ctrl or Cmd+scroll zooms it
 around the cursor, as does a trackpad pinch; the handler prevents the default, so the page neither
-scrolls nor zooms. The pips query refetches whenever its tab regains focus, so a carve in another
+scrolls nor zooms. The map has its own zoom range (#5009, `MAP_ZOOM` in `latticeState.ts`, 0.05 to
+8, against the lattice's 0.25 to 1.5: `clampZoom`, `zoomAround`, `fitView` and `readLatticeView`
+take the range), pips stay crisp squares (`image-rendering: pixelated`), and the per-cell lines are
+not drawn below `MAP_CELL_LINES_HIDE_BELOW` (0.3).
+
+**Views (#5030).** The side panel's picker, in the owner's words, says what the map draws:
+**Geography** (terrain, rivers and coast only), **Domain** (the anchor's land as one shape, named
+once), **Domain-Vassal** (the anchor and everything beneath it on the ladder) and **All**. The
+anchor is the selected domain at any tier, or the domain being carved; with none, the picked
+realm's roots (`mapViews.ts`: `rootsOf`, `visibleFootprints`, `placeNames`, pure). The choice is
+remembered per account with the fold state (`useRegionMapLayout.ts`); Carve mode starts on
+Domain-Vassal as a default only and keeps a change until the mode is left, without touching the
+remembered view. Seats and names are drawn on a screen-space canvas over the viewport
+(`drawNamesLayer`), redrawn on every view, zoom or pan change, so they are crisp at every zoom
+and never stack: Domain names the anchor wherever it is; Domain-Vassal names the anchor's direct
+children always and deeper tiers where they fit, never the anchor (its name is the panel's
+heading); All names what fits, top tiers placed first, a name whose box would cross a placed one
+skipped. "Fits" is the footprint's projected width against the measured name. A click selects
+through every footprint whatever the view, which is how the anchor is chosen. The pips query refetches whenever its tab regains focus, so a carve in another
 tab shows on return. Undo stays per tab: an undo restores the holders it recorded, so it can
 overwrite a newer edit to the same pips from another tab.
 

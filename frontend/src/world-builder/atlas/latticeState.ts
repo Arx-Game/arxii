@@ -260,8 +260,17 @@ export const DEFAULT_VIEW: LatticeView = { zoom: 1, panX: 0, panY: 0 };
 /** Below this the tiles drop their kind label so a whole district reads as a shape. */
 export const ZOOM_LABELS_HIDE_BELOW = 0.6;
 
-export function clampZoom(zoom: number): number {
-  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
+/** How far a view may zoom. The lattice's tiles are large; a map's pips are small (#5009). */
+export interface ZoomRange {
+  min: number;
+  max: number;
+}
+export const LATTICE_ZOOM: ZoomRange = { min: ZOOM_MIN, max: ZOOM_MAX };
+/** The region map: twenty times further out than fit, and 48 px a pip in. */
+export const MAP_ZOOM: ZoomRange = { min: 0.05, max: 8 };
+
+export function clampZoom(zoom: number, range: ZoomRange = LATTICE_ZOOM): number {
+  return Math.min(range.max, Math.max(range.min, zoom));
 }
 
 /**
@@ -273,9 +282,10 @@ export function zoomAround(
   view: LatticeView,
   factor: number,
   cursorX: number,
-  cursorY: number
+  cursorY: number,
+  range: ZoomRange = LATTICE_ZOOM
 ): LatticeView {
-  const zoom = clampZoom(view.zoom * factor);
+  const zoom = clampZoom(view.zoom * factor, range);
   const ratio = zoom / view.zoom;
   return {
     zoom,
@@ -289,10 +299,11 @@ export function fitView(
   canvasW: number,
   canvasH: number,
   viewW: number,
-  viewH: number
+  viewH: number,
+  range: ZoomRange = LATTICE_ZOOM
 ): LatticeView {
   if (canvasW <= 0 || canvasH <= 0 || viewW <= 0 || viewH <= 0) return DEFAULT_VIEW;
-  const zoom = clampZoom(Math.min(viewW / canvasW, viewH / canvasH, 1));
+  const zoom = clampZoom(Math.min(viewW / canvasW, viewH / canvasH, 1), range);
   return {
     zoom,
     panX: (viewW - canvasW * zoom) / 2,
@@ -304,7 +315,11 @@ function viewStorageKey(accountId: number | string, nodeId: number): string {
   return `world-builder-lattice:${accountId}:${nodeId}:view`;
 }
 
-export function readLatticeView(accountId: number | string, nodeId: number): LatticeView {
+export function readLatticeView(
+  accountId: number | string,
+  nodeId: number,
+  range: ZoomRange = LATTICE_ZOOM
+): LatticeView {
   try {
     const raw = window.localStorage.getItem(viewStorageKey(accountId, nodeId));
     if (!raw) return DEFAULT_VIEW;
@@ -316,7 +331,7 @@ export function readLatticeView(accountId: number | string, nodeId: number): Lat
     ) {
       return DEFAULT_VIEW;
     }
-    return { zoom: clampZoom(parsed.zoom), panX: parsed.panX, panY: parsed.panY };
+    return { zoom: clampZoom(parsed.zoom, range), panX: parsed.panX, panY: parsed.panY };
   } catch {
     return DEFAULT_VIEW;
   }
