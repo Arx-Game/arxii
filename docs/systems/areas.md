@@ -314,10 +314,11 @@ press on a barony's seat dot starts a seat drag whose drop dispatches `atlas_mov
 land in the undo history.
 
 The layout tool (#4986, `world/societies/houses/layout.py`, see `docs/systems/houses.md`
-"Laying out a realm") writes land only through `set_footprint`: it partitions a kingdom's
-`footprint_of` into contiguous duchies, counties and single-pip seat baronies and carves each
-child's pips, so the kingdom's rows move down by the containment rule above; nothing here
-draws a kingdom's outline, that stays the owner's Brush and Loop.
+"Laying out a realm") writes land only through `set_footprint`: it tiles a kingdom's
+`footprint_of` into even counties, groups them into duchies (a county or a duchy may span
+water, #5029), seats a single-pip barony in each county and carves each child's pips, so the
+kingdom's rows move down by the containment rule above; nothing here draws a kingdom's
+outline, that stays the owner's Brush and Loop.
 
 ## AreaClosure Materialized View
 

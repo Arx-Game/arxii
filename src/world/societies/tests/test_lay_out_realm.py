@@ -1,5 +1,6 @@
-"""Laying out a realm (#4983 slice 2, #4986): the walk that plants and partitions a
-drawn kingdom from a layout, and the refusals that keep a typo from planting twice."""
+"""Laying out a realm (#4983 slice 2, #4986): the walk that plants a drawn kingdom's
+ladder from a layout, counties first and duchies as groups of them (#5029), and the
+refusals that keep a typo from planting twice."""
 
 from __future__ import annotations
 
@@ -108,8 +109,11 @@ class LayOutRealmTests(TestCase):
         assert sum(d["pips"] for d in kingdom.duchies) == len(self.outline)
         assert kingdom.duchies[0]["capital"] is True
         assert kingdom.planted[TitleTier.DUCHY] == 2  # the crown's own chain duchy exists already
-        assert kingdom.planted[TitleTier.COUNTY] == 2 * 3 - 1
-        assert len(kingdom.names) == 3 + 6  # every duchy and county takes a name from the bank
+        # counties 2 per duchy; the capital duchy takes capital x1.5 of them, so 3 (#5029)
+        assert kingdom.planted[TitleTier.COUNTY] == 3 + 2 + 2 - 1
+        assert len(kingdom.names) == 3 + 7  # every duchy and county takes a name from the bank
+        sizes = [d["pips"] for d in kingdom.duchies]
+        assert sizes[0] > max(sizes[1:]), sizes
 
     def test_lay_out_plants_contiguous_duchies_with_the_capital_largest(self) -> None:
         layout = parse_layout(
@@ -129,7 +133,11 @@ class LayOutRealmTests(TestCase):
         seat_county = Title.objects.get(seat_domain=self.kingdom.seat_domain, tier=TitleTier.COUNTY)
         assert seat_county.name == "Lux"
         counties = Title.objects.filter(realm=self.realm, tier=TitleTier.COUNTY)
-        assert counties.count() == 6
+        # the capital duchy takes capital x2 of the two counties, so 4 + 2 + 2 (#5029)
+        assert counties.count() == 8
+        land = self.outline - self.water
+        county_sizes = [len(footprint_of(rung_area_for_title(c)) & land) for c in counties]
+        assert max(county_sizes) <= 2 * min(county_sizes), county_sizes
         for county in counties:
             county_pips = footprint_of(rung_area_for_title(county))
             seat_barony = Title.objects.get(seat_domain=county.seat_domain, tier=TitleTier.BARONY)
@@ -138,7 +146,7 @@ class LayOutRealmTests(TestCase):
             assert domain.population == 120 * len(county_pips)
             assert domain.description.startswith("PLACEHOLDER:") or county == seat_county
         baronies = Title.objects.filter(realm=self.realm, tier=TitleTier.BARONY)
-        assert baronies.count() == 12  # a seat barony and one more per county
+        assert baronies.count() == 16  # a seat barony and one more per county
         assert Domain.objects.get(pk=rung_area_for_title(chain_duchy).pk).prosperity == 65
         other = next(d for d in duchies if d.pk != chain_duchy.pk)
         assert Domain.objects.get(pk=rung_area_for_title(other).pk).prosperity == 45
@@ -251,8 +259,9 @@ class LayOutRealmTests(TestCase):
     def test_names_are_drawn_heaviest_first(self) -> None:
         layout = parse_layout("realm | counties 1 | baronies 1\nkingdom Luxen | duchies 2\n")
         report = preview_layout(self.realm, layout)
-        # weights descend down PLACE_NAMES; two duchies and two counties take the top four
-        assert set(report.kingdoms[0].names) == set(PLACE_NAMES[:4])
+        # weights descend down PLACE_NAMES; two duchies and three counties (the capital
+        # duchy takes x1.5 of one, rounded up) take the top five
+        assert set(report.kingdoms[0].names) == set(PLACE_NAMES[:5])
 
     def test_names_word_draws_only_from_that_culture_and_a_plain_line_never_does(self) -> None:
         layout = parse_layout(
