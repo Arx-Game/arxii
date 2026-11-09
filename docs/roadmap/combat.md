@@ -693,8 +693,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   Hero Killer's soak is a wall against every type, broken only by probing, combos and the
   break bar; covenant protection covers every type. Proven by
   `src/integration_tests/test_thrown_and_enchanted_strike_journeys.py`. **Known gaps:** a
-  waiting strike and a Charge still carry a weapon technique on its own (their own maneuvers);
-  the technique roll's conditions land only when the blow lands.
+  Charge and a joust still carry a weapon technique on their own (their own mounted
+  maneuvers; a waiting strike refuses one), and a compelled rage attack may pick one; the
+  technique roll's conditions land only when the blow lands.
 
 - **Any character can Strike with no technique (#4858, slice 1 of #4844):** `strike <opp>
   [with <weapon>]`, `combat strike`, and the web Your Turn "Strike" control (opponent plus a

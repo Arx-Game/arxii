@@ -62,6 +62,7 @@ export function waitingStrikeTechniques(actions: PlayerAction[]): PlayerAction[]
     (a) =>
       a.ref.backend === 'combat' &&
       a.ref.technique_id != null &&
+      !a.enchants_strike &&
       (a.reach === 'same' || a.reach === 'adjacent')
   );
 }

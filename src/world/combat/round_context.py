@@ -38,7 +38,7 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ParticipantStatus, PullBurnAction
+from world.combat.constants import CombatManeuver, ParticipantStatus, PullBurnAction
 from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
@@ -251,6 +251,10 @@ class CombatRoundContext(RoundContext):
         from actions.constants import CombatActionSlot  # noqa: PLC0415
 
         focused = existing.focused_action if existing else None
+        if existing is not None and existing.maneuver == CombatManeuver.STRIKE:
+            # A Strike's technique is its enchantment (#5026), never a focused cast of its
+            # own: a passive dispatch replaces the Strike, as it did before it carried one.
+            focused = None
         physical = existing.physical_passive if existing else None
         social = existing.social_passive if existing else None
         mental = existing.mental_passive if existing else None

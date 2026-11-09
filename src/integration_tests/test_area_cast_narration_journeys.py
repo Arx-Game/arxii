@@ -101,7 +101,8 @@ class AreaCastNarration(JourneyCase):
         TechniqueDamageProfileFactory(
             technique=technique,
             base_damage=6,
-            damage_type=self.fire,
+            # Physical, the type the opponents' soak stands against (#5026).
+            damage_type=None,
             damage_intensity_multiplier=Decimal(0),
             damage_per_extra_sl=0,
             minimum_success_level=1,

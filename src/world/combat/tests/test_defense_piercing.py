@@ -41,6 +41,7 @@ from world.magic.factories import (
 from world.magic.models.signature import SignatureMotifBonusDamageProfile
 from world.magic.specialization.models import TechniqueVariant, TechniqueVariantDamageProfile
 from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.services import get_vitals_consequence_config
 
 
 class DefensePiercingDamageTests(TestCase):
@@ -132,7 +133,11 @@ class DefensePiercingDamageTests(TestCase):
             vital_bonus_amount=3,
             vital_target=VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
         )
-        damage_type = DamageTypeFactory()
+        # A Physical hit: worn armor stops Physical only (#5026), so the control meets it.
+        damage_type = DamageTypeFactory(name="Physical")
+        config = get_vitals_consequence_config()
+        config.physical_damage_type = damage_type
+        config.save(update_fields=["physical_damage_type"])
         condition = ConditionTemplateFactory()
         ConditionResistanceModifierFactory(
             condition=condition, damage_type=damage_type, modifier_value=4
