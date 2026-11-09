@@ -628,20 +628,27 @@ kingdom | potential
   drawn deterministically per run; counties default 2-4, baronies 1-2, capital x1.5); a
   `kingdom <name>` line names a drawn KINGDOM rung already on the ladder; `titular` and
   `potential` plant a landless crown instead (an unnamed line must be `potential`); words:
-  `duchies`/`counties`/`baronies N|A-B`, `capital xW`, `seat <name>` (names the crown's own
+  `duchies`/`counties`/`baronies N|A-B`, `capital xW` (the capital duchy takes W times a
+  sibling's counties, rounded half up; every county is even in pips, #5029), `seat <name>` (names the crown's own
   chain county), `names <culture>` (kingdom lines only: that kingdom draws its place names
   from the named culture instead of the realm's, #4994), `held` / `claimable` on a duchy line (`is_claimable` off or on), `sworn
   <crown>` (`pledged_liege`, any realm, KINGDOM or EMPIRE), `chartered <a>, <b>`
   (`CharteredFief` rows, names from this layout or the ladder), `claimed by <character> |
   basis <text>` (a `TitleClaim`), `lore <text>` (the seat `Domain.description`). Every error
   is a `LayoutError` whose text starts `line N:`.
-- **`partition(pips, land, count, weights, seed_hint, rng_seed)`** (`partition.py`, pure) —
-  weighted multi-source region growing over 4-connected land: the capital's seed is the
-  crown's seat pip when it lies inside, else the land nearest the centroid; the rest by
-  farthest-point sampling; unreachable land (another island) joins the nearest region; water
-  inside the outline goes to the region it touches most, so a realm keeps its waters (#4317).
-  Fewer regions come back than asked when the land is short; never an empty one. No
-  `random`: the tie-break is a crc32 of the seed and the pip.
+- **`lay_out_land(pips, land, counts, seed_hint, rng_seed)`** (`partition.py`, pure; built
+  bottom-up since #5029, ADR-5029) — `tile` splits the kingdom's footprint into `sum(counts)`
+  even counties: the capital's seed is the crown's seat pip when it lies inside, else the land
+  nearest the centroid; the other seeds go to landmasses in proportion to their size, none to a
+  landmass under half a county, so an offshore island joins the county across the water and a
+  landmass about a county's size stays whole; tiles grow over 4-connected land and hop water
+  when walled in; land no tile reached joins the nearest; water inside the outline goes to
+  the tile it touches most, so a realm keeps its waters (#4317). `group` then makes the
+  duchies: group 0 holds the seat's county, each takes its count of free neighbouring counties
+  (the most shared border first, then the nearest) and the nearest free county when it has no
+  neighbour left (an archipelago). A duchy is never smaller than its county count says. Fewer
+  tiles come back than asked when the land is short; never an empty one. No `random`: the
+  tie-break is a crc32 of the seed and the pip.
 - **`preview_layout(realm, layout)` / `lay_out_realm(realm, layout) -> LayoutReport`** — the
   same walk, the second writing one transaction per kingdom (a refused kingdom rolls back
   alone and says why in its `KingdomReport.refusals`). The crown's own seat chain is the

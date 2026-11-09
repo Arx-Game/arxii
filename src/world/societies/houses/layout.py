@@ -323,7 +323,7 @@ from world.societies.houses.partition import (  # noqa: E402
     Pip,
     capital_seed,
     farthest_pips,
-    partition,
+    lay_out_land,
 )
 from world.societies.houses.services import HousesServiceError  # noqa: E402
 
@@ -568,22 +568,28 @@ class _Walk:
         capital_w = line.capital or defaults.capital
         wanted = line.duchies or defaults.duchies or Range(2, 4)
         count = max(_pick(self.seed, f"{line.line_no}:duchies", wanted), len(line.children) + 1)
+        # the duchy lines fill the non-capital duchies in order; the capital is the crown's chain
+        lines: list[ChildLine | None] = [None, *line.children]
+        lines += [None] * (count - len(lines))
+        counts = [
+            self._county_count(line, child_line, index, capital_w)
+            for index, child_line in enumerate(lines)
+        ]
         seat_hint = self._seat_pip(crown, pips)
-        regions = partition(
-            pips, land, count, [capital_w, *([1.0] * (count - 1))], seat_hint, self.seed
-        )
-        if len(regions) < len(line.children) + 1:
+        # bottom-up (#5029): even counties over the whole land, grouped into duchies, so a
+        # duchy is never smaller than its county count says and an island is a county's
+        duchies = lay_out_land(pips, land, counts, seat_hint, self.seed)
+        if len(duchies) < len(line.children) + 1:
             raise LayoutError(line.line_no, f"{line.name} has too little land for its duchies")
-        children = list(line.children)
-        for index, region in enumerate(regions):
+        for index, counties in enumerate(duchies):
             capital = index == 0
-            child_line = children.pop(0) if (not capital and children) else None
+            child_line = lines[index]
             if child_line is not None and child_line.name:
                 self._claim_name(child_line.name, child_line.line_no)
             duchy = _Rung(
                 tier=TitleTier.DUCHY,
                 name=(child_line.name if child_line and child_line.name else self.names.draw()),
-                pips=region,
+                pips=set().union(*counties),
                 parent=root,
                 capital=capital,
                 chain=capital,
@@ -594,25 +600,31 @@ class _Walk:
                 self._apply_words(duchy, child_line)
             root.children.append(duchy)
             self._remember(duchy)
-            self._plan_counties(duchy, child_line, land, seat_hint if capital else None, line)
+            self._plan_counties(
+                duchy, child_line, counties, land, seat_hint if capital else None, line
+            )
         return root
 
-    def _plan_counties(
+    def _county_count(
+        self, line: KingdomLine, child_line: ChildLine | None, index: int, capital_w: float
+    ) -> int:
+        """How many counties duchy ``index`` takes: its line's range or the realm's, and
+        for the capital duchy that times the capital weight, so the capital is the
+        largest duchy by counties with every county even (#5029)."""
+        span = (child_line.counties if child_line else None) or self.layout.defaults.counties
+        picked = _pick(self.seed, f"{line.line_no}:{index}:counties", span)
+        return max(1, int(picked * capital_w + 0.5)) if index == 0 else picked
+
+    def _plan_counties(  # noqa: PLR0913 - the duchy, its line, its counties and the seat
         self,
         duchy: _Rung,
         child_line: ChildLine | None,
+        regions: list[set[Pip]],
         land: set[Pip],
         seat_hint: Pip | None,
         line: KingdomLine,
     ) -> None:
         defaults = self.layout.defaults
-        span = (child_line.counties if child_line else None) or defaults.counties
-        count = _pick(self.seed, f"{duchy.line_no}:{duchy.name}:counties", span)
-        capital_w = line.capital or defaults.capital
-        duchy_land = duchy.pips & land
-        regions = partition(
-            duchy.pips, duchy_land, count, [capital_w, *([1.0] * (count - 1))], seat_hint, self.seed
-        )
         baronies = _pick(
             self.seed,
             f"{duchy.line_no}:{duchy.name}:baronies",

@@ -1,5 +1,5 @@
-"""Partitioning a drawn footprint into contiguous children (#4983 slice 2, #4986):
-pure geometry, no database."""
+"""Tiling a drawn footprint into even counties and grouping them into duchies (#4983
+slice 2, #4986; bottom-up since #5029): pure geometry, no database."""
 
 from __future__ import annotations
 
@@ -9,12 +9,15 @@ from world.societies.houses.partition import (
     Pip,
     centroid_land,
     farthest_pips,
-    partition,
+    group,
+    lay_out_land,
+    tile,
 )
 
 
-def rectangle(width: int, height: int) -> set[Pip]:
-    return {(x, y) for x in range(width) for y in range(height)}
+def rectangle(width: int, height: int, *, at: Pip = (0, 0)) -> set[Pip]:
+    ox, oy = at
+    return {(ox + x, oy + y) for x in range(width) for y in range(height)}
 
 
 def connected(pips: set[Pip]) -> bool:
@@ -33,80 +36,76 @@ def connected(pips: set[Pip]) -> bool:
     return seen == pips
 
 
-class PartitionTests(SimpleTestCase):
-    def test_regions_are_contiguous_and_cover_the_footprint(self) -> None:
+def within(sizes: list[int], target: float, tolerance: float) -> bool:
+    return all(abs(size - target) <= target * tolerance for size in sizes)
+
+
+class TileTests(SimpleTestCase):
+    def test_tiles_are_even_cover_the_footprint_and_hold_the_seat(self) -> None:
         pips = rectangle(20, 12)
-        regions = partition(pips, pips, 3, [2.0, 1.0, 1.0], seed_hint=(3, 3), rng_seed=7)
-        assert len(regions) == 3
-        assert set().union(*regions) == pips
-        assert sum(len(r) for r in regions) == len(pips)
-        for region in regions:
-            assert connected(region), region
-        assert (3, 3) in regions[0]
-        assert len(regions[0]) > max(len(regions[1]), len(regions[2]))
+        tiles = tile(pips, pips, 6, seed_hint=(3, 3), rng_seed=7)
+        assert len(tiles) == 6
+        assert set().union(*tiles) == pips
+        assert sum(len(t) for t in tiles) == len(pips)
+        assert (3, 3) in tiles[0]
+        assert within([len(t) for t in tiles], 40, 0.25), [len(t) for t in tiles]
+        for t in tiles:
+            assert connected(t), t
 
-    def test_the_capital_stays_largest_at_five_children(self) -> None:
-        # the spec's own line: kingdom Umbros | duchies 5 | capital x2
-        pips = rectangle(24, 12)
-        regions = partition(pips, pips, 5, [2.0, 1.0, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=5)
-        assert len(regions) == 5
-        assert len(regions[0]) > max(len(r) for r in regions[1:])
-        # and the default weight at four children
-        regions = partition(pips, pips, 4, [1.5, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=5)
-        assert len(regions[0]) > max(len(r) for r in regions[1:])
+    def test_an_offshore_island_joins_a_mainland_county(self) -> None:
+        # the owner's Norbyria: a coast and an 8-pip island across a strait. On the
+        # top-down split the island became a duchy of its own (#5029).
+        mainland = rectangle(20, 10)
+        strait = rectangle(3, 10, at=(20, 0))
+        island = rectangle(4, 2, at=(23, 4))
+        pips = mainland | strait | island
+        land = mainland | island
+        tiles = tile(pips, land, 6, seed_hint=(2, 2), rng_seed=3)
+        assert len(tiles) == 6
+        assert set().union(*tiles) == pips
+        holders = {next(i for i, t in enumerate(tiles) if pip in t) for pip in island}
+        assert len(holders) == 1, holders
+        [holder] = holders
+        assert tiles[holder] & mainland, "the island is part of a mainland county, not its own"
+        assert within([len(t & land) for t in tiles], len(land) / 6, 0.3), [
+            len(t & land) for t in tiles
+        ]
 
-    def test_equal_weights_split_the_land_evenly_around_a_lake(self) -> None:
-        # the live probe: a 10 by 20 outline with a 5 by 5 lake, two seeds of equal weight,
-        # came out 116 land pips to 59 because the smaller seed's frontier starved
-        pips = rectangle(10, 20)
-        lake = {(x, y) for x in range(5, 10) for y in range(5, 10)}
-        land = pips - lake
-        regions = partition(pips, land, 2, [1.0, 1.0], seed_hint=None, rng_seed=10)
-        sizes = sorted(len(r & land) for r in regions)
-        assert sizes[1] - sizes[0] <= len(land) // 5, sizes
+    def test_a_landmass_the_size_of_a_county_stays_whole(self) -> None:
+        big = rectangle(10, 10)
+        small = rectangle(6, 6, at=(14, 2))
+        water = rectangle(4, 10, at=(10, 0))
+        pips = big | small | water
+        land = big | small
+        tiles = tile(pips, land, 4, seed_hint=(1, 1), rng_seed=5)
+        assert len(tiles) == 4
+        assert any(t & land == small for t in tiles), [sorted(t & land)[:3] for t in tiles]
+        for t in tiles:
+            if t & land != small:
+                assert (t & land) <= big
 
-    def test_water_goes_to_the_region_it_touches_most(self) -> None:
+    def test_water_goes_to_the_tile_it_touches(self) -> None:
         pips = rectangle(20, 10)
-        lake = {(x, y) for x in range(8, 12) for y in range(4, 6)}
+        lake = rectangle(4, 2, at=(8, 4))
         land = pips - lake
-        regions = partition(pips, land, 2, [1.0, 1.0], seed_hint=(1, 1), rng_seed=1)
-        assert set().union(*regions) == pips
-        for region in regions:
-            assert connected(region & land)
+        tiles = tile(pips, land, 2, seed_hint=(1, 1), rng_seed=1)
+        assert set().union(*tiles) == pips
         for pip in lake:
-            holder = next(r for r in regions if pip in r)
+            holder = next(t for t in tiles if pip in t)
             x, y = pip
-            touching = sum(
-                step in holder for step in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
-            )
-            assert touching >= 1
+            assert any(step in holder for step in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
 
-    def test_two_islands_stay_contiguous(self) -> None:
-        west = rectangle(6, 6)
-        east = {(x + 12, y) for (x, y) in rectangle(6, 6)}
-        strait = {(x, y) for x in range(6, 12) for y in range(6)}
-        pips = west | east | strait
-        land = west | east
-        regions = partition(pips, land, 2, [1.0, 1.0], seed_hint=(0, 0), rng_seed=3)
-        assert set().union(*regions) == pips
-        for region in regions:
-            assert connected(region & land), region & land
-        assert {frozenset(r & land) for r in regions} == {frozenset(west), frozenset(east)}
-
-    def test_too_little_land_gives_fewer_regions(self) -> None:
+    def test_too_little_land_gives_fewer_tiles_and_no_land_gives_none(self) -> None:
         pips = {(0, 0), (1, 0), (2, 0)}
-        regions = partition(pips, pips, 5, [1.0] * 5, seed_hint=None, rng_seed=0)
-        assert len(regions) == 3
-        assert all(regions)
-
-    def test_no_land_gives_no_regions(self) -> None:
-        pips = rectangle(4, 4)
-        assert partition(pips, set(), 2, [1.0, 1.0], seed_hint=None, rng_seed=0) == []
+        tiles = tile(pips, pips, 5, seed_hint=None, rng_seed=0)
+        assert len(tiles) == 3
+        assert all(tiles)
+        assert tile(rectangle(4, 4), set(), 2, seed_hint=None, rng_seed=0) == []
 
     def test_determinism(self) -> None:
         pips = rectangle(15, 9)
-        first = partition(pips, pips, 4, [1.5, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=11)
-        second = partition(pips, pips, 4, [1.5, 1.0, 1.0, 1.0], seed_hint=None, rng_seed=11)
+        first = tile(pips, pips, 4, seed_hint=None, rng_seed=11)
+        second = tile(pips, pips, 4, seed_hint=None, rng_seed=11)
         assert first == second
 
     def test_centroid_and_farthest_pips(self) -> None:
@@ -118,3 +117,57 @@ class PartitionTests(SimpleTestCase):
         assert len(far) == 2
         assert far[1] != far[0]
         assert farthest_pips({(0, 0)}, (0, 0), 3) == []
+
+
+class GroupTests(SimpleTestCase):
+    def test_groups_hold_the_capital_tile_and_take_their_counts_from_neighbours(self) -> None:
+        pips = rectangle(24, 12)
+        tiles = tile(pips, pips, 8, seed_hint=(2, 2), rng_seed=2)
+        groups = group(tiles, [4, 2, 2])
+        assert [len(g) for g in groups] == [4, 2, 2]
+        assert 0 in groups[0]
+        assert sorted(i for g in groups for i in g) == list(range(8))
+        for g in groups:
+            assert connected(set().union(*(tiles[i] for i in g))), g
+
+    def test_counts_are_fitted_when_there_are_fewer_tiles(self) -> None:
+        pips = rectangle(6, 1)
+        tiles = tile(pips, pips, 3, seed_hint=None, rng_seed=0)
+        groups = group(tiles, [4, 2, 2, 2])
+        assert len(groups) == 3
+        assert all(len(g) == 1 for g in groups)
+
+
+class LayOutLandTests(SimpleTestCase):
+    def test_duchies_are_groups_of_even_counties_with_the_capital_largest(self) -> None:
+        pips = rectangle(24, 12)
+        duchies = lay_out_land(pips, pips, [4, 2, 2, 2], seed_hint=(2, 2), rng_seed=9)
+        assert [len(d) for d in duchies] == [4, 2, 2, 2]
+        sizes = [sum(len(c) for c in d) for d in duchies]
+        assert sizes[0] > max(sizes[1:]), sizes
+        assert set().union(*(c for d in duchies for c in d)) == pips
+        assert (2, 2) in duchies[0][0]
+
+    def test_an_archipelago_gets_duchies_sized_by_their_counties(self) -> None:
+        # ten islands of 25 land each in a sea: Inferna's shape (#5029)
+        islands = [rectangle(5, 5, at=(x * 8, y * 8)) for x in range(5) for y in range(2)]
+        land = set().union(*islands)
+        pips = rectangle(37, 13)
+        assert land <= pips
+        duchies = lay_out_land(pips, land, [4, 2, 2, 2], seed_hint=(1, 1), rng_seed=4)
+        assert [len(d) for d in duchies] == [4, 2, 2, 2]
+        owned = set().union(*(c for d in duchies for c in d))
+        assert land <= owned
+        sizes = [sum(len(c & land) for c in d) for d in duchies]
+        assert within(sizes[:1], 100, 0.3), sizes
+        assert within(sizes[1:], 50, 0.3), sizes
+        for d in duchies:
+            for county in d:
+                assert county & land, "every county holds land"
+
+    def test_too_little_land_gives_fewer_duchies_each_with_a_county(self) -> None:
+        pips = {(0, 0), (1, 0), (2, 0)}
+        duchies = lay_out_land(pips, pips, [2, 2, 2], seed_hint=None, rng_seed=0)
+        assert 1 <= len(duchies) <= 3
+        assert all(d and all(c for c in d) for d in duchies)
+        assert lay_out_land(rectangle(4, 4), set(), [2, 2], seed_hint=None, rng_seed=0) == []
