@@ -303,6 +303,21 @@ ARMOR_ARCHETYPES = frozenset(
     }
 )
 
+# Item template families (#5041): each family has its own admin authoring page that
+# offers only these gear archetypes, in declaration order. Shield counts as both weapon
+# and armor, so it is a family of its own; Other stays on the all-kinds page only.
+WEAPON_TEMPLATE_KINDS: tuple[GearArchetype, ...] = tuple(
+    kind for kind in GearArchetype if kind in WEAPON_ARCHETYPES and kind not in ARMOR_ARCHETYPES
+)
+ARMOR_TEMPLATE_KINDS: tuple[GearArchetype, ...] = tuple(
+    kind for kind in GearArchetype if kind in ARMOR_ARCHETYPES and kind not in WEAPON_ARCHETYPES
+)
+SHIELD_TEMPLATE_KINDS: tuple[GearArchetype, ...] = (GearArchetype.SHIELD,)
+WORN_TEMPLATE_KINDS: tuple[GearArchetype, ...] = (
+    GearArchetype.CLOTHING,
+    GearArchetype.JEWELRY,
+)
+
 
 # Base points contributed per worn in-vogue facet match, before quality and
 # the FashionStyleBonus.weight multiplier are applied (Outfits Phase B, #513).

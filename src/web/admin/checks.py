@@ -177,7 +177,7 @@ def check_credited_admin_fieldsets(app_configs, **kwargs):  # noqa: ARG001
     errors = []
     credited = set(credited_content_models())
     for model, admin_cls in admin.site._registry.items():  # noqa: SLF001
-        if model not in credited or not admin_cls.fieldsets:
+        if model._meta.concrete_model not in credited or not admin_cls.fieldsets:  # noqa: SLF001
             continue
         declared = _declared_fieldset_fields(admin_cls.fieldsets)
         missing = [name for name in CREDIT_FIELD_NAMES if name not in declared]

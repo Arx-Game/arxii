@@ -75,7 +75,8 @@ def _attach_credit_admin_extras():
     precedes web.admin in INSTALLED_APPS), so the registry is complete -
     the same window ``_patch_external_admins`` uses. Mutates the registered
     ModelAdmin INSTANCES, so Django's own admin checks still validate the
-    result. Idempotent via the membership guards. Credited models with no
+    result. Idempotent via the membership guards. A proxy of a credited model
+    (#5041) counts as credited. Credited models with no
     registered admin are skipped - the Authoring Workbench is their surface.
     """
     from django.contrib import admin  # noqa: PLC0415
@@ -86,9 +87,11 @@ def _attach_credit_admin_extras():
         credit_status,
     )
 
-    for model in credited_content_models():
-        instance = admin.site._registry.get(model)  # noqa: SLF001
-        if instance is None:
+    credited = set(credited_content_models())
+    # Keyed on the concrete model so a proxy's own page (an ItemTemplate family, #5041)
+    # gets the same column and filter as its concrete model's page.
+    for model, instance in admin.site._registry.items():  # noqa: SLF001
+        if model._meta.concrete_model not in credited:  # noqa: SLF001
             continue
         if CreditStatusListFilter not in instance.list_filter:
             instance.list_filter = [*instance.list_filter, CreditStatusListFilter]

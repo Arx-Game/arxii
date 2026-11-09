@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from evennia_extensions.models import Media
@@ -32,7 +32,11 @@ from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
+    ARMOR_TEMPLATE_KINDS,
     PROVENANCE_EVENT_TYPES,
+    SHIELD_TEMPLATE_KINDS,
+    WEAPON_TEMPLATE_KINDS,
+    WORN_TEMPLATE_KINDS,
     BodyRegion,
     ContainerAccessPolicy,
     EquipmentLayer,
@@ -757,6 +761,74 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         To invalidate: del instance.cached_interaction_bindings
         """
         return list(self.interaction_bindings.select_related("interaction_type").all())
+
+
+class ItemTemplateFamilyManager(NaturalKeyManager):
+    """The item templates of one family: those whose gear archetype it lists (#5041).
+
+    A family is ``ItemTemplate`` seen through a proxy (no table of its own) whose
+    ``family_kinds`` names its gear archetypes, so each family gets its own staff
+    authoring page showing only its own fields. Every FK still points at
+    ``ItemTemplate``. The identity map is ``ItemTemplate``'s, so a row read through a
+    family may be the cached ``ItemTemplate`` instance: put behaviour a template needs
+    on ``ItemTemplate``, not on a family.
+    """
+
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset().filter(gear_archetype__in=self.model.family_kinds)
+
+
+class WeaponTemplate(ItemTemplate):
+    """Weapon item templates: melee, ranged, thrown, lance and unarmed (#5041)."""
+
+    family_kinds: ClassVar[tuple[str, ...]] = WEAPON_TEMPLATE_KINDS
+
+    objects = ItemTemplateFamilyManager()
+
+    class Meta:
+        proxy = True
+
+
+class ArmorTemplate(ItemTemplate):
+    """Armor item templates: light, medium and heavy armor, and robes (#5041)."""
+
+    family_kinds: ClassVar[tuple[str, ...]] = ARMOR_TEMPLATE_KINDS
+
+    objects = ItemTemplateFamilyManager()
+
+    class Meta:
+        proxy = True
+
+
+class ShieldTemplate(ItemTemplate):
+    """Shield item templates, the one kind that is both weapon and armor (#5041)."""
+
+    family_kinds: ClassVar[tuple[str, ...]] = SHIELD_TEMPLATE_KINDS
+
+    objects = ItemTemplateFamilyManager()
+
+    class Meta:
+        proxy = True
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        # Only on create: the shared identity map can hand this class to the all-kinds
+        # page retyping an existing row, and that change must stand.
+        if self._state.adding:
+            self.gear_archetype = GearArchetype.SHIELD
+        super().save(*args, **kwargs)
+
+
+class WornTemplate(ItemTemplate):
+    """Clothing and jewelry item templates: worn, with no combat stats (#5041)."""
+
+    family_kinds: ClassVar[tuple[str, ...]] = WORN_TEMPLATE_KINDS
+
+    objects = ItemTemplateFamilyManager()
+
+    class Meta:
+        proxy = True
+        verbose_name = "clothing and jewelry template"
+        verbose_name_plural = "clothing and jewelry templates"
 
 
 class ItemTemplateProperty(NaturalKeyMixin, SharedMemoryModel):
