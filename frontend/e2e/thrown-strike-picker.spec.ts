@@ -171,7 +171,64 @@ const ARCHER = {
   status: 'active',
 };
 
-async function openFight(page: Page, sent: unknown[], soulfray: boolean): Promise<void> {
+/** The three rows the live server recorded for an enchanted throw that hit (the real-test
+ * run, `thrown-and-enchanted-strike.spec.ts`), newest first as the API returns them. */
+function line(label: string, value: string, detail: string) {
+  return { label, value, detail, lapsed: false };
+}
+function outcome(id: number, summary: string, breakdown: Record<string, unknown>) {
+  return {
+    id,
+    character: ME,
+    check_type: 1,
+    pool: null,
+    selected_consequence: null,
+    modifier_total: 0,
+    summary,
+    outcome_display: [],
+    modifiers: [],
+    combat_interaction_id: 300,
+    challenge_record_id: null,
+    action_interaction_id: null,
+    roll_breakdown: breakdown,
+    combat_round: 1,
+    created_at: '2026-11-09T02:43:00Z',
+  };
+}
+const ROUND_ROWS = [
+  outcome(3, '12 damage: 5 physical, 7 fire', {
+    heading: 'Damage roll',
+    lines: [
+      line('Parrying dagger, thrown', '', 'weapon damage and quality'),
+      line('Thrown Combat', '30', 'strike skill'),
+    ],
+    result: '12 damage: 5 physical, 7 fire',
+    result_note: '',
+  }),
+  outcome(2, 'Hit, fair', {
+    heading: "Hit roll against Bandit archer's defense",
+    lines: [
+      line('Thrown Combat', '30', 'strike skill for thrown'),
+      line('Strength', '', 'stat for thrown'),
+      line('Wreathe the blade', '+2', 'from the technique roll'),
+    ],
+    result: 'Hit, fair',
+    result_note: 'then the damage roll',
+  }),
+  outcome(1, 'Success: +2 to hit, fire damage', {
+    heading: 'Technique roll: Wreathe the blade',
+    lines: [line('Anima', '4', 'paid for this attack, hit or miss')],
+    result: 'Success: +2 to hit, fire damage',
+    result_note: 'then the hit roll',
+  }),
+];
+
+async function openFight(
+  page: Page,
+  sent: unknown[],
+  soulfray: boolean,
+  resolved = false
+): Promise<void> {
   await mockRestRoutes(page, { activeEncounterId: ENCOUNTER_ID });
   await page.route(`**/api/combat/${ENCOUNTER_ID}/`, async (route) => {
     await route.fulfill({
@@ -210,6 +267,11 @@ async function openFight(page: Page, sent: unknown[], soulfray: boolean): Promis
       json: { count: 1, next: null, previous: null, results: [enchantment(soulfray)] },
     })
   );
+  if (resolved) {
+    await page.route('**/api/checks/consequence-outcomes/**', (route) =>
+      route.fulfill({ json: { count: 3, next: null, previous: null, results: ROUND_ROWS } })
+    );
+  }
   await page.route(`**/api/actions/characters/${ME}/dispatch/`, async (route) => {
     sent.push(route.request().postDataJSON());
     await route.fulfill({ json: { success: true, message: null, deferred: false } });
@@ -283,5 +345,20 @@ test.describe('#5026 the Strike picker: throw and enchant', () => {
     }
     await page.getByTestId('soulfray-accept-checkbox').check();
     await expect(page.getByTestId('soulfray-accept-checkbox')).toBeChecked();
+  });
+
+  test('the round shows the technique roll, the hit roll and the damage by type', async ({
+    page,
+  }) => {
+    await openFight(page, [], false, true);
+
+    const section = page.getByTestId('outcome-roulette-section');
+    await expect(section).toContainText('Technique roll: Wreathe the blade');
+    await expect(section).toContainText('paid for this attack, hit or miss');
+    await expect(section).toContainText('from the technique roll');
+    await expect(section).toContainText('12 damage: 5 physical, 7 fire');
+    if (SCREENSHOTS) {
+      await section.screenshot({ path: `${SCREENSHOTS}/s04-round-rolls.png` });
+    }
   });
 });
