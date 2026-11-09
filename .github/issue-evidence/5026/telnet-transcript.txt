@@ -1,0 +1,5 @@
+You ready a throw at Bandit archer with your Parrying dagger, enchanted with Wreathe the blade.
+---
+You ready a throw at Bandit archer with your Parrying dagger, enchanted with Wreathe the blade.
+Bandit archer moves to Barn.
+You throw your Parrying dagger, enchanted with Wreathe the blade, at Bandit archer. A fair hit: 12 damage (5 physical, 7 fire). The Parrying dagger is back in your hand.
