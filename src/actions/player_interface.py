@@ -773,10 +773,24 @@ def _combat_actions(
                 eligible_fury_anchors=eligible_fury_anchors,
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(character, technique, lethal=lethal),
+                enchants_strike=technique.enchants_strike,
+                enchant_damage_types=_enchant_damage_types(technique),
             )
         )
 
     return result
+
+
+def _enchant_damage_types(technique: Technique) -> tuple[str, ...]:
+    """The damage types a weapon technique adds to a Strike (#5026), lower case, once each;
+    empty for any other technique."""
+    if not technique.enchants_strike:
+        return ()
+    words: list[str] = []
+    for profile in technique.cached_damage_profiles:
+        if profile.damage_type is not None and profile.damage_type.name.lower() not in words:
+            words.append(profile.damage_type.name.lower())
+    return tuple(words)
 
 
 def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) -> CastPreview:

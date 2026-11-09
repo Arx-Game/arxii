@@ -39,6 +39,8 @@ class CombatRollKind(models.TextChoices):
     HIT = "hit", "Hit roll"
     DAMAGE = "damage", "Damage roll"
     DEFENSE = "defense", "Defense roll"
+    # The roll of a technique cast into a Strike, before its hit roll (#5026).
+    TECHNIQUE = "technique", "Technique roll"
 
 
 class EffectType(models.TextChoices):
@@ -112,6 +114,9 @@ class ModifierSourceKind(models.TextChoices):
     # #4333: the bonus an invocation of a being's favor adds to the check it was
     # declared on, labelled with the being.
     FAVOR = "favor", "Favor"
+    # #5026: what a technique cast into a Strike adds to that Strike's hit roll, set by
+    # the technique roll and labelled with the technique.
+    TECHNIQUE = "technique", "Technique roll"
 
 
 # Kinds ``perform_check`` already counts on its own, so a caller never feeds them back in

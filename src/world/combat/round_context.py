@@ -38,7 +38,7 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ParticipantStatus, PullBurnAction
+from world.combat.constants import CombatManeuver, ParticipantStatus, PullBurnAction
 from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
@@ -53,6 +53,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.magic.models import Technique
     from world.magic.types.pull import CastPullDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -134,6 +135,13 @@ def resolve_focused_target_objectdb(
 
 # kwargs key for effort level — used as a guard and a lookup in _record_combat_declaration.
 _EFFORT_LEVEL_KEY: str = "effort_level"
+
+
+def _refuse_weapon_technique(technique: Technique) -> None:
+    """A weapon technique is cast into a Strike, from its "Enchant with" row, and nowhere
+    else (#5026): there is no second way to cast one."""
+    if technique.enchants_strike:
+        raise ActionDispatchError(ActionDispatchError.CAST_INTO_STRIKE)
 
 
 class CombatRoundContext(RoundContext):
@@ -243,6 +251,10 @@ class CombatRoundContext(RoundContext):
         from actions.constants import CombatActionSlot  # noqa: PLC0415
 
         focused = existing.focused_action if existing else None
+        if existing is not None and existing.maneuver == CombatManeuver.STRIKE:
+            # A Strike's technique is its enchantment (#5026), never a focused cast of its
+            # own: a passive dispatch replaces the Strike, as it did before it carried one.
+            focused = None
         physical = existing.physical_passive if existing else None
         social = existing.social_passive if existing else None
         mental = existing.mental_passive if existing else None
@@ -448,6 +460,7 @@ class CombatRoundContext(RoundContext):
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
+            _refuse_weapon_technique(technique)
             self._commit_focused_pull(participant, technique, kwargs)
 
         # The frontend dispatches the focused action and each passive as SEPARATE

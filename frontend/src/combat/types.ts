@@ -88,6 +88,8 @@ export interface RoundActionTyped extends RoundAction {
   focused_opponent_target?: number | null;
   /** The weapon a declared Strike is made with (#4858); null for bare hands. */
   item_instance?: number | null;
+  /** A declared Strike throws its weapon (#5026). */
+  strike_thrown?: boolean;
   /** Technique PK of the declared focused action (the held strike for "await_opening"). */
   focused_action?: number | null;
   /** ComboDefinition PK when this round's action has been upgraded to a combo, else null (#3381). */

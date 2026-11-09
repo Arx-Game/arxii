@@ -4,11 +4,14 @@ Mechanics System Admin
 Admin configuration for game mechanics models.
 """
 
+from typing import Any
+
 from django.contrib import admin
+from django.forms import ModelForm
 from django.http import HttpRequest
 
 from world.admin_utils import OneRowPerFormSet
-from world.mechanics.constants import EffectKind
+from world.mechanics.constants import MANEUVER_EFFECT_BASE_HELP, EffectKind
 from world.mechanics.models import (
     AestheticAxisConfig,
     Application,
@@ -135,6 +138,20 @@ class ManeuverEffectAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request: HttpRequest, obj: ManeuverEffect | None = None):
         return [*super().get_readonly_fields(request, obj), "key"]
+
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: ManeuverEffect | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm]:
+        """An effect with its own base-value help shows it (#5026: the thrown share)."""
+        form = super().get_form(request, obj, change, **kwargs)
+        help_text = MANEUVER_EFFECT_BASE_HELP.get(obj.key) if obj is not None else None
+        if help_text is not None and "base_value" in form.base_fields:  # noqa: STRING_LITERAL
+            form.base_fields["base_value"].help_text = help_text  # noqa: STRING_LITERAL
+        return form
 
     def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
         return False

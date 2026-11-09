@@ -399,12 +399,16 @@ class StrikingWithClaws(_ClawedField):
                     "name": CLAWS,
                     "gear_kind": "Unarmed",
                     "strike_skill": "Unarmed Combat",
+                    "thrown": False,
+                    "damage_share": None,
                 },
                 {
                     "item_instance_id": None,
                     "name": "bare hands",
                     "gear_kind": "Unarmed",
                     "strike_skill": "Unarmed Combat",
+                    "thrown": False,
+                    "damage_share": None,
                 },
             ],
         )

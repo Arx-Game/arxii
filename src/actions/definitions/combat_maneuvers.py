@@ -347,13 +347,34 @@ def _resolve_strike_item(actor: ObjectDB, weapon_id: int | None, weapon_name: st
     return next((item for item in items if item.display_name.lower().startswith(wanted)), False)
 
 
+def _strike_ready_line(
+    actor: ObjectDB,
+    opponent_name: str,
+    item: Any,
+    thrown: bool,
+    technique: Technique | None,
+) -> str:
+    """ "You ready a throw at Bandit with your dagger, enchanted with Wreathe the blade."."""
+    weapon = item.display_name if item is not None else "bare hands"
+    line = f"You ready a {'throw' if thrown else 'strike'} at {opponent_name} with your {weapon}"
+    if technique is not None:
+        from world.magic.services.technique_personalization import (  # noqa: PLC0415
+            technique_display_name,
+        )
+
+        line = f"{line}, enchanted with {technique_display_name(actor, technique)}"
+    return f"{line}."
+
+
 @dataclass
 class StrikeAction(Action):
-    """Declare a basic Strike: attack an opponent with no technique (#4858).
+    """Declare a basic Strike at an opponent (#4858).
 
     ``opponent_id`` names the target; ``weapon_id`` (web) or ``weapon_name`` (telnet)
-    names one of the actor's equipped weapons, and neither means bare hands. Wraps
-    ``declare_strike``; the Strike is the round's one action.
+    names one of the actor's equipped weapons, and neither means bare hands. ``thrown``
+    throws a weapon that can be thrown (#5026). ``technique_id`` casts a weapon technique
+    into the Strike (#5026), paid when it resolves; ``confirm_soulfray_risk`` is the
+    soulfray accept box. Wraps ``declare_strike``; the Strike is the round's one action.
     """
 
     key: str = "combat_strike"
@@ -363,15 +384,19 @@ class StrikeAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(
+    def execute(  # noqa: PLR0913 - the Strike's picks arrive as kwargs
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         opponent_id: int | None = None,
         weapon_id: int | None = None,
         weapon_name: str | None = None,
+        thrown: bool = False,
+        technique_id: int | None = None,
+        confirm_soulfray_risk: bool = False,
         **kwargs: Any,
     ) -> ActionResult:
+        from actions.kwarg_parsing import truthy_kwarg  # noqa: PLC0415
         from world.combat.services import declare_strike  # noqa: PLC0415
         from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
@@ -384,13 +409,23 @@ class StrikeAction(Action):
         item = _resolve_strike_item(actor, weapon_id, weapon_name)
         if item is False:
             return ActionResult(success=False, message="You have no such weapon equipped.")
+        technique = _resolve_technique(technique_id)
+        if technique_id is not None and technique is None:
+            return ActionResult(success=False, message="You know no such technique.")
+        throw = truthy_kwarg(thrown)
         try:
-            declare_strike(participant, opponent, item)
+            declare_strike(
+                participant,
+                opponent,
+                item,
+                thrown=throw,
+                technique=technique,
+                confirm_soulfray_risk=truthy_kwarg(confirm_soulfray_risk),
+            )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
-        weapon = item.display_name if item is not None else "bare hands"
         return ActionResult(
-            success=True, message=f"You ready a strike at {opponent.name} with your {weapon}."
+            success=True, message=_strike_ready_line(actor, opponent.name, item, throw, technique)
         )
 
 

@@ -24,6 +24,22 @@ _Avoid_: basic attack, auto-attack, melee attack (a Strike can be ranged), swing
 The skill a Strike's hit and damage rolls use: Melee, Ranged, Thrown or Unarmed Combat, whichever skill the attack check type for the weapon's gear kind weights (`STRIKE_CHECK_TYPE_BY_ARCHETYPE` names the check types: Melee, Ranged, Thrown and Unarmed Attack). A check type that weights no skill (production's Ranged Attack) rolls on stats alone. Distinct from a combat style's skill (slice 2 of #4844), which stacks with it.
 _Avoid_: weapon skill, attack skill
 
+**Thrown Strike** (#5026):
+A Strike that throws a weapon whose item template is marked "can be thrown" (one-handed melee only). The same equipped weapon is offered twice, to strike and to throw; a throw uses the Thrown strike skill, reaches anywhere in the room and deals the "Strike: thrown damage" share of the weapon's own damage. The weapon returns at once: nothing moves it. A style that fits the weapon fits the throw.
+_Avoid_: thrown weapon (a Thrown-kind item is its own weapon), ranged Strike, toss
+
+**Enchanted Strike** (#5026, ADR-5026-A):
+A Strike with a weapon technique cast into it from the Strike's "Enchant with" row: a per-hit cast, paid through the technique's own cost on every attack, hit or miss, overspending into Soulfray rather than refused. Weapon techniques are cast this way only; there is no lasting weapon enchantment. Its typed damage part is dealt apart from the weapon's part, each meeting the armor and resistance for its own type.
+_Avoid_: weapon buff, imbued weapon, enchanted weapon (nothing is stored on the item), weapon technique attack
+
+**Technique roll** (#5026):
+The enchanted Strike's first roll: the technique's cast check (its check type and technique skill, plus the combat pull), unopposed. Its power and success level set what the enchantment adds (the to-hit line from the technique's "Strike to-hit size", its typed damage parts); the hit roll that follows stays on the strike skill.
+_Avoid_: enchant roll, cast roll (outside a Strike a technique's offense roll is its hit), magic roll
+
+**Wall** (#5026, ADR-5026-B):
+An opponent's soak that stands against every damage type: a Boss or Hero Killer, or any opponent with a probing threshold. Every other opponent's soak stops Physical only. A wall is broken, never bypassed: probing, combos and the break bar's vulnerability window are the ways past it.
+_Avoid_: shield, barrier (a barrier is a force field), boss armor
+
 **Charge** (#1843):
 The CHARGE maneuver — a mounted PC (see `world/companions/AGENT_GLOSSARY.md`'s Mounted entry) closes distance to a declared opponent >= 1 hop away, then attacks. Resolution force-moves the rider onto the opponent's position and falls through to the normal weapon-attack pipeline; the **Charge: to hit** and **Charge: damage** maneuver effects (the base value doubled for an equipped Lance, then plus the rider's modifiers, floored at 0 once; see the mechanics glossary's Maneuver effect) fold into the existing check-modifier/damage-budget seams — never a bespoke bonus path — and **Charge: reach** is how many hops a charge may cover (#4783, replacing flat constants). Requires Mounted; declaring it unmounted or against an already-in-reach target is rejected.
 _Avoid_: rush, gap-close, sprint attack

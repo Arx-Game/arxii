@@ -42,7 +42,11 @@ import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
 import { WaitingStrikeControl } from '../components/WaitingStrikeControl';
-import { StrikeControl, type StrikeWeaponOption } from '../components/StrikeControl';
+import {
+  StrikeControl,
+  type StrikeChoice,
+  type StrikeWeaponOption,
+} from '../components/StrikeControl';
 import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
@@ -71,11 +75,13 @@ import {
   useUpgradeCombo,
 } from '../queries';
 import { isDispatchFailure } from '../types';
+import { hopDistance } from '../reach';
 import type {
   DispatchActionRequest,
   DispatchResult,
   EncounterDetail,
   Participant,
+  PositionAdjacencyItem,
   PositionNode,
   RoundActionTyped,
   RoundCombo,
@@ -1955,6 +1961,9 @@ function useRestoreDeclaredStrike(
 
 interface StrikePickArgs {
   weapons: StrikeWeaponOption[];
+  enchantments: PlayerAction[];
+  /** The picked target and its distance from the striker ("Bandit · 2 positions away"). */
+  targetSummary: string | null;
   picked: boolean;
   declaredStrike: RoundActionTyped | null;
   focusedContext: ActionContext;
@@ -1963,7 +1972,7 @@ interface StrikePickArgs {
   disabled: boolean;
   pending: boolean;
   onPick: () => void;
-  onStrike: (opponentId: number, itemInstanceId: number | null) => void;
+  onStrike: (opponentId: number, choice: StrikeChoice) => void;
 }
 
 /** The weapon a declared Strike used (null: bare hands); undefined when none is declared. */
@@ -1988,6 +1997,23 @@ function declaredStrikeTargetName(
   return foe?.name ?? null;
 }
 
+/** "Bandit archer · 2 positions away" for the picked opponent; the name alone when either
+ * side is unplaced; null with no opponent picked. */
+function strikeTargetSummary(
+  context: ActionContext,
+  opponents: { id: number; name: string; current_position?: { id: number } | null }[],
+  adjacency: PositionAdjacencyItem[],
+  actorPositionId: number | null
+): string | null {
+  const opponentId = focusedOpponentId(context);
+  const foe = opponents.find((o) => o.id === opponentId);
+  if (foe === undefined) return null;
+  const hops = hopDistance(adjacency, actorPositionId, foe.current_position?.id ?? null);
+  if (hops === null) return foe.name;
+  if (hops === 0) return `${foe.name} · beside you`;
+  return `${foe.name} · ${hops === 1 ? '1 position' : `${hops} positions`} away`;
+}
+
 /** Strike as the focused card's first pick, or undefined when there is nothing to strike with. */
 function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
   if (args.weapons.length === 0) return undefined;
@@ -1998,8 +2024,12 @@ function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
     panel: (
       <StrikeControl
         weapons={args.weapons}
+        enchantments={args.enchantments}
         declaredItemInstanceId={declaredStrikeWeapon(args.declaredStrike)}
+        declaredThrown={args.declaredStrike?.strike_thrown ?? false}
+        declaredTechniqueId={args.declaredStrike?.focused_action ?? null}
         targetOpponentId={focusedOpponentId(args.focusedContext)}
+        targetSummary={args.targetSummary}
         declaredTargetName={declaredStrikeTargetName(args.declaredStrike, args.activeOpponents)}
         error={args.error}
         disabled={args.disabled}
@@ -2402,6 +2432,10 @@ export function YourTurn({
   // (Decision 4: no client-side reach/prerequisite duplication).
   // Melee techniques a waiting strike can hold (#4608), and the one held this round.
   const meleeTechniques = waitingStrikeTechniques(availableActions);
+  // Weapon techniques, cast into a Strike from its "Enchant with" row (#5026).
+  const strikeEnchantments = availableActions.filter(
+    (a) => a.ref.backend === 'combat' && a.ref.technique_id != null && a.enchants_strike
+  );
   const heldTechniqueId =
     declaredManeuver === 'await_opening' ? (ownRoundAction?.focused_action ?? null) : null;
   const heldTechniqueName =
@@ -2734,10 +2768,15 @@ export function YourTurn({
     }
   }
 
-  async function handleStrike(opponentId: number, itemInstanceId: number | null) {
+  async function handleStrike(opponentId: number, choice: StrikeChoice) {
     setStrikeError(null);
-    const kwargs: Record<string, number> = { opponent_id: opponentId };
-    if (itemInstanceId !== null) kwargs.weapon_id = itemInstanceId;
+    const kwargs: Record<string, number | boolean> = { opponent_id: opponentId };
+    if (choice.itemInstanceId !== null) kwargs.weapon_id = choice.itemInstanceId;
+    if (choice.thrown) kwargs.thrown = true;
+    if (choice.techniqueId !== null) {
+      kwargs.technique_id = choice.techniqueId;
+      kwargs.confirm_soulfray_risk = choice.confirmSoulfrayRisk;
+    }
     try {
       const result = await dispatchManeuver({ registryKey: 'combat_strike', kwargs });
       if (isDispatchFailure(result)) {
@@ -2837,6 +2876,13 @@ export function YourTurn({
             }}
             leadingPick={buildStrikePick({
               weapons: myParticipantSelf?.strike_weapons ?? [],
+              enchantments: strikeEnchantments,
+              targetSummary: strikeTargetSummary(
+                focusedContext,
+                activeOpponents,
+                encounter?.position_adjacency ?? [],
+                actorPositionId
+              ),
               picked: strikePicked,
               declaredStrike,
               focusedContext,
@@ -2849,8 +2895,8 @@ export function YourTurn({
                 setStrikePicked(true);
                 setFocusedContext({ ...focusedContext, techniqueId: undefined });
               },
-              onStrike: (opponentId, itemInstanceId) => {
-                handleStrike(opponentId, itemInstanceId).catch(() => {});
+              onStrike: (opponentId, choice) => {
+                handleStrike(opponentId, choice).catch(() => {});
               },
             })}
             readOnly={isLocked}

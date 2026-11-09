@@ -218,11 +218,12 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
         lines = [asdict(line) for line in breakdown.lines]
         for modifier in self._visible_kinds_filter(list(obj.modifiers.all())):
             signed = f"+{modifier.value}" if modifier.value >= 0 else str(modifier.value)
-            detail = (
-                "misses add to hit"
-                if modifier.source_label == INTENSITY_MODIFIER_LABEL
-                else modifier.get_source_kind_display()
-            )
+            if modifier.source_label == INTENSITY_MODIFIER_LABEL:
+                detail = "misses add to hit"
+            elif modifier.source_kind == ModifierSourceKind.TECHNIQUE:
+                detail = "from the technique roll"
+            else:
+                detail = modifier.get_source_kind_display()
             lines.append(
                 {"label": modifier.source_label, "value": signed, "detail": detail, "lapsed": False}
             )

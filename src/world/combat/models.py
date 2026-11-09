@@ -1812,6 +1812,13 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
             "STRIKE (empty means bare hands)."
         ),
     )
+    strike_thrown = models.BooleanField(
+        default=False,
+        help_text=(
+            "A Strike made by throwing its weapon (#5026): only a weapon its template marks "
+            "as able to be thrown. Rewritten with each declaration."
+        ),
+    )
     succor_resolution = models.FloatField(
         null=True,
         blank=True,

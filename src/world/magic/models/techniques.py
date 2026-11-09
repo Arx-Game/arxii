@@ -669,6 +669,17 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
     anima_cost = models.PositiveIntegerField(
         help_text="Anima cost to use this technique.",
     )
+    strike_to_hit_size = models.PositiveSmallIntegerField(
+        choices=ModifierSize.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "How much this technique adds to the hit roll of the Strike it is cast into "
+            "(#5026), valued from the to-hit table at the level the technique roll reaches. "
+            "Only a weapon technique (a damage profile that uses the equipped weapon) is "
+            "cast into a Strike. Blank: it adds nothing to hit. Paramount cannot be authored."
+        ),
+    )
     description = models.TextField(
         blank=True,
         help_text="Description of what this technique does.",
@@ -839,6 +850,10 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
             raise ValidationError({"reach_hops": msg})
         validate_outcome_narration(self.hit_narration, "hit_narration")
         validate_outcome_narration(self.miss_narration, "miss_narration")
+        if self.strike_to_hit_size == ModifierSize.PARAMOUNT:
+            raise ValidationError(
+                {"strike_to_hit_size": "Paramount is reached only through a vow's size step."}
+            )
         if self.is_ultimate and self.pk:
             in_pool = (
                 self.granted_by_path_gifts.exists()
@@ -879,6 +894,12 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         To invalidate: ``del instance.cached_damage_profiles``.
         """
         return list(self.damage_profiles.select_related("damage_type"))
+
+    @property
+    def enchants_strike(self) -> bool:
+        """Whether this is a weapon technique, cast into a Strike (#5026): one of its damage
+        profiles uses the equipped weapon."""
+        return any(profile.uses_equipped_weapon for profile in self.cached_damage_profiles)
 
     @cached_property
     def cached_capability_grants(self) -> list:
@@ -1298,8 +1319,10 @@ class AbstractDamageProfile(SharedMemoryModel):
     uses_equipped_weapon = models.BooleanField(
         default=False,
         help_text=(
-            "When True, the wielder's equipped-weapon effective damage is added "
-            "to this profile's budget and its damage_type fills in when null."
+            "When True, this is a weapon technique, cast into a Strike (#5026). The "
+            "weapon's damage is dealt as the weapon's own type; this profile's damage is "
+            "dealt as its own type, each meeting the target's resistance to that type. "
+            "Blank damage type: the profile's damage joins the weapon's."
         ),
     )
     execute_missing_health_multiplier = models.DecimalField(

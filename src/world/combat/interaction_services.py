@@ -220,13 +220,13 @@ def render_action_declaration_label(
     for the card's target tag (``target_persona_for_round_action``), so the label
     and the tag agree and cost one read between them. Left out, it is resolved here.
     """
-    technique = action.focused_action
-    if technique is None:
-        from world.combat.constants import CombatManeuver  # noqa: PLC0415
+    from world.combat.constants import CombatManeuver  # noqa: PLC0415
 
-        if action.maneuver == CombatManeuver.STRIKE and action.focused_opponent_target_id:
-            # A basic Strike (#4858) carries no technique.
-            return f"Strike at {action.focused_opponent_target.name}"
+    technique = action.focused_action
+    if action.maneuver == CombatManeuver.STRIKE and action.focused_opponent_target_id:
+        # A basic Strike (#4858); a technique cast into it is its enchantment (#5026).
+        return f"Strike at {action.focused_opponent_target.name}"
+    if technique is None:
         return "passives only"
 
     from world.magic.services.technique_personalization import (  # noqa: PLC0415

@@ -191,6 +191,8 @@ class PlayerActionSerializer(serializers.Serializer):
     eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
     cast_preview = CastPreviewSerializer(read_only=True, allow_null=True)
     is_ultimate = serializers.BooleanField(read_only=True)
+    enchants_strike = serializers.BooleanField(read_only=True)
+    enchant_damage_types = serializers.ListField(child=serializers.CharField(), read_only=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""
