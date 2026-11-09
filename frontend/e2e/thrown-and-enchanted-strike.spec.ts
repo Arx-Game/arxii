@@ -39,7 +39,7 @@ let SEED: Seed;
 test.beforeAll(() => {
   SEED = readSeed();
 });
-const STAFF_PASSWORD = 'StrikeStaff123!';
+const STAFF_PASSWORD = 'Ragged-Lantern-5026!';
 
 interface RollLine {
   label: string;
@@ -101,9 +101,9 @@ test.describe('thrown and enchanted Strikes (#5026)', () => {
     ]);
 
     const available = await page.request.get(
-      `/api/actions/characters/${SEED.character_id}/available/`
+      `/api/actions/characters/${SEED.character_id}/available/?page_size=100`
     );
-    expect(available.ok()).toBe(true);
+    expect(available.ok(), await available.text()).toBe(true);
     const actions = (await available.json()) as {
       results: {
         display_name: string;
@@ -182,10 +182,8 @@ test.describe('thrown and enchanted Strikes (#5026)', () => {
   test('admin refuses a throwable two-handed weapon and keeps armor that also stops fire', async ({
     page,
   }) => {
-    await page.goto('/admin/login/');
-    await page.locator('#id_username').fill(SEED.staff_username);
-    await page.locator('#id_password').fill(STAFF_PASSWORD);
-    await page.locator('input[type="submit"]').click();
+    // The admin signs in through the site's own login page.
+    await logIn(page, SEED.staff_username, STAFF_PASSWORD);
 
     await page.goto(`/admin/arxii/itemtemplate/${SEED.greatsword_template_id}/change/`);
     await page.locator('#id_can_be_thrown').check();

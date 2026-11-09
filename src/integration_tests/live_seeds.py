@@ -117,7 +117,7 @@ THROWN_SPEC_CHARACTER = "Strike Tester"
 THROWN_SPEC_ARCHER = "Bandit archer"
 THROWN_SPEC_TECHNIQUE = "Wreathe the blade"
 THROWN_SPEC_STAFF = "strike_staff"
-THROWN_SPEC_STAFF_PASSWORD = "StrikeStaff123!"  # noqa: S105 - a throwaway test database only
+THROWN_SPEC_STAFF_PASSWORD = "Ragged-Lantern-5026!"  # noqa: S105 - a throwaway test database only
 THROWN_SPEC_ENCHANT_COST = 4
 
 
@@ -131,6 +131,8 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     """
     from decimal import Decimal  # noqa: PLC0415
 
+    from allauth.account.models import EmailAddress  # noqa: PLC0415
+    from django.test import override_settings  # noqa: PLC0415
     from evennia.accounts.models import AccountDB  # noqa: PLC0415
     from evennia.utils import create  # noqa: PLC0415
 
@@ -138,12 +140,14 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     from evennia_extensions.factories import CharacterFactory, ObjectDBFactory  # noqa: PLC0415
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.areas.positioning.factories import PositionFactory  # noqa: PLC0415
+    from world.areas.positioning.plummet_content import ensure_fall_content  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         connect_positions,
         place_in_position,
     )
     from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
     from world.checks.constants import ModifierLane, ModifierSize  # noqa: PLC0415
+    from world.checks.factories import CheckTypeFactory  # noqa: PLC0415
     from world.checks.models import CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.checks.modifier_models import ModifierValue  # noqa: PLC0415
     from world.combat.constants import (  # noqa: PLC0415
@@ -184,7 +188,26 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.seeds import ensure_foundational_capabilities  # noqa: PLC0415
     from world.vitals.services import get_vitals_consequence_config  # noqa: PLC0415
+
+    if not AccountDB.objects.filter(username=THROWN_SPEC_STAFF).exists():
+        staff = create.create_account(
+            THROWN_SPEC_STAFF, "strike_staff@example.com", THROWN_SPEC_STAFF_PASSWORD
+        )
+        staff.is_staff = True
+        staff.is_superuser = True
+        staff.save()
+        EmailAddress.objects.update_or_create(
+            user=staff,
+            email="strike_staff@example.com",
+            defaults={"primary": True, "verified": True},
+        )
+    # The available-actions read lists movement too, which needs the foundational
+    # capabilities and the fall content an empty database lacks.
+    with override_settings(SEED_SAMPLE_CONTENT=True):
+        ensure_foundational_capabilities()
+        ensure_fall_content()
 
     existing = RosterEntry.objects.filter(
         character_sheet__character__db_key=THROWN_SPEC_CHARACTER
@@ -218,10 +241,14 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
         (THROWN_STRIKE_CHECK_TYPE_NAME, thrown_skill),
         (MELEE_STRIKE_CHECK_TYPE_NAME, melee_skill),
     ):
-        check_type, _ = CheckType.objects.get_or_create(name=check_name)
+        check_type = CheckType.objects.filter(name=check_name).first() or CheckTypeFactory(
+            name=check_name
+        )
         CheckTypeTrait.objects.get_or_create(check_type=check_type, trait=strength)
         CheckTypeTrait.objects.get_or_create(check_type=check_type, trait=skill)
-    magic_check, _ = CheckType.objects.get_or_create(name="Fire Magic Cast")
+    magic_check = CheckType.objects.filter(name="Fire Magic Cast").first() or CheckTypeFactory(
+        name="Fire Magic Cast"
+    )
     CheckTypeTrait.objects.get_or_create(check_type=magic_check, trait=willpower)
 
     account = AccountDB.objects.get(username=username)
@@ -309,14 +336,6 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     CharacterTechniqueFactory(character=sheet, technique=technique)
 
     begin_declaration_phase(encounter)
-
-    if not AccountDB.objects.filter(username=THROWN_SPEC_STAFF).exists():
-        staff = create.create_account(
-            THROWN_SPEC_STAFF, "strike_staff@example.com", THROWN_SPEC_STAFF_PASSWORD
-        )
-        staff.is_staff = True
-        staff.is_superuser = True
-        staff.save()
 
     return ThrownStrikeSeed(
         character_id=character.pk,

@@ -3,8 +3,13 @@
 from typing import Any
 
 from django.contrib import admin
-from django.db.models import Count, ManyToManyField
-from django.forms import CheckboxSelectMultiple, ModelForm, ModelMultipleChoiceField
+from django.db.models import Count, Field, ManyToManyField
+from django.forms import (
+    CheckboxSelectMultiple,
+    Field as FormField,
+    ModelForm,
+    ModelMultipleChoiceField,
+)
 from django.http import HttpRequest, HttpResponse
 
 from world.admin_utils import OneRowPerFormSet
@@ -369,10 +374,26 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     def formfield_for_manytomany(
         self, db_field: ManyToManyField, request: HttpRequest, **kwargs: Any
     ) -> ModelMultipleChoiceField | None:
-        """The damage types armor also stops show as checkboxes (#5026): a short list."""
+        """The damage types armor also stops show as checkboxes (#5026): a short list, with
+        Physical left out, since every piece of armor stops it."""
         if db_field.name == "also_protects_against":  # noqa: STRING_LITERAL - admin hook field name
+            from world.conditions.models import DamageType  # noqa: PLC0415
+            from world.vitals.services import get_vitals_consequence_config  # noqa: PLC0415
+
             kwargs["widget"] = CheckboxSelectMultiple
+            kwargs["queryset"] = DamageType.objects.exclude(
+                pk=get_vitals_consequence_config().physical_damage_type_id
+            )
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def formfield_for_dbfield(
+        self, db_field: Field, request: HttpRequest, **kwargs: Any
+    ) -> FormField | None:
+        """Staff read the throwable flag as the demo names it (#5026)."""
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "can_be_thrown" and formfield is not None:  # noqa: STRING_LITERAL - field name
+            formfield.label = "Can also be thrown"
+        return formfield
 
 
 class ItemStyleInline(admin.TabularInline):
