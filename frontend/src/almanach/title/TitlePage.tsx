@@ -27,6 +27,7 @@ import { SECTIONS, STATES } from '../copy';
 import { useRegionMapsQuery } from '@/world-builder/queries';
 import { useAccount } from '@/store/hooks';
 import { rememberMapFocus } from '@/world-builder/atlas/mapFocus';
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
 export function TitlePage({ titleId }: { titleId: number }) {
@@ -135,13 +136,19 @@ export function TitlePage({ titleId }: { titleId: number }) {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff/almanach">Almanach</Link>
-          </span>
-          <span>{title.realm}</span>
-          <span>{title.name || 'unnamed'}</span>
-        </span>
+        <Crumbs
+          trail={[
+            { label: 'Almanach', to: '/staff/almanach' },
+            ...chain.map((link) => ({
+              label: link.name || `unnamed ${link.tier}`,
+              to:
+                link.title_id == null
+                  ? `/staff/almanach/realms/${title.realm_id}`
+                  : titleUrl(link.title_id),
+            })),
+            { label: title.name || 'unnamed' },
+          ]}
+        />
         <span className="right">
           <span className="status">
             {stationWord ?? (title.house_id != null ? 'held' : 'vacant')}

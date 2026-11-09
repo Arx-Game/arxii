@@ -23,6 +23,7 @@ import {
   tierMark,
   titleUrl,
 } from '../shared/tier';
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
 type Status = PersonDocument['person']['status'];
@@ -136,13 +137,13 @@ export function PersonPage({ personId }: { personId: number }) {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff/almanach">Almanach</Link>
-          </span>
-          {family && <span>{family.name}</span>}
-          <span>{person.display_name}</span>
-        </span>
+        <Crumbs
+          trail={[
+            { label: 'Almanach', to: '/staff/almanach' },
+            ...(family ? [{ label: family.name, to: familyLink ?? undefined }] : []),
+            { label: person.display_name },
+          ]}
+        />
         <span className="right">
           <span className="status">{person.is_pc ? 'PC' : person.tier_display.label}</span>
           <span className="mode">staff</span>

@@ -163,3 +163,32 @@ test("a player character's name is read-only and the tier seg is locked", () => 
     mockDoc = doc;
   }
 });
+
+test('the trail over the page links the family, a house when it has one (#5039)', () => {
+  mockDoc = {
+    ...doc,
+    family: { id: 1, name: 'Katta', kind: 'Noble', basis: '', organization_id: null },
+  };
+  try {
+    const { unmount } = renderWithProviders(<PersonPage personId={11} />);
+    let trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(trail).getByRole('link', { name: 'Katta' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/families/1'
+    );
+    expect(within(trail).queryByRole('link', { name: 'Kathryn mar Katta' })).toBeNull();
+    unmount();
+    mockDoc = {
+      ...doc,
+      family: { id: 1, name: 'Katta', kind: 'Noble', basis: '', organization_id: 2 },
+    };
+    renderWithProviders(<PersonPage personId={11} />);
+    trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(trail).getByRole('link', { name: 'Katta' })).toHaveAttribute(
+      'href',
+      '/staff/almanach/houses/2'
+    );
+  } finally {
+    mockDoc = doc;
+  }
+});

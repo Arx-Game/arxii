@@ -11,6 +11,7 @@ import { useAlmanachMutation, useFamilyDocument, useTemplates } from '../queries
 import { RecordRail, type RecordRailRow } from '../document/RecordRail';
 import { Openings } from '../shared/chapters';
 import { houseUrl, personUrl, statusFromFlags, statusMark, tierMark } from '../shared/tier';
+import { Crumbs } from '../shared/Crumbs';
 import '../almanach.css';
 
 export function StaffFamilyPage({ familyId }: { familyId: number }) {
@@ -49,13 +50,23 @@ export function StaffFamilyPage({ familyId }: { familyId: number }) {
   return (
     <div className="almanach">
       <div className="bar">
-        <span className="crumb">
-          <span>
-            <Link to="/staff/almanach">Almanach</Link>
-          </span>
-          {family.realm && <span>{family.realm}</span>}
-          <span>{family.name}</span>
-        </span>
+        <Crumbs
+          trail={[
+            { label: 'Almanach', to: '/staff/almanach' },
+            ...(family.realm
+              ? [
+                  {
+                    label: family.realm,
+                    to:
+                      family.realm_id == null
+                        ? undefined
+                        : `/staff/almanach/realms/${family.realm_id}`,
+                  },
+                ]
+              : []),
+            { label: family.name },
+          ]}
+        />
         <span className="right">
           <span className="status">{family.kind || 'family'}</span>
           <span className="mode">staff</span>

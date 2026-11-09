@@ -471,3 +471,22 @@ test('a seated title names its ruler as a link and offers Change ruler, which li
   await userEvent.click(within(slot).getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('group', { name: 'Ruler' })).toBeNull();
 });
+
+test('the trail over the page is the way up, every step a link but the title itself (#5039)', () => {
+  renderWithProviders(<TitlePage titleId={3} />);
+  const trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
+  expect(within(trail).getByRole('link', { name: 'Almanach' })).toHaveAttribute(
+    'href',
+    '/staff/almanach'
+  );
+  expect(within(trail).getByRole('link', { name: 'Umbros' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/realms/1'
+  );
+  expect(within(trail).getByRole('link', { name: 'Kingdom of Umbros' })).toHaveAttribute(
+    'href',
+    '/staff/almanach/titles/8'
+  );
+  expect(within(trail).queryByRole('link', { name: 'Duchy of Katta' })).toBeNull();
+  expect(trail).toHaveTextContent('Duchy of Katta');
+});
