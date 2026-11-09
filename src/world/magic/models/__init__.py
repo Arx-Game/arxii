@@ -135,6 +135,7 @@ from world.magic.models.gifts import (
     CharacterTradition,
     Gift,
     GiftManager,
+    GiftSubstance,
     Tradition,
     TraditionManager,
 )
@@ -381,6 +382,7 @@ __all__ = [
     "Gift",
     "GiftAcquisitionConfig",
     "GiftManager",
+    "GiftSubstance",
     "GiftUnlock",
     # Glimpse guided flow (#2427)
     "GlimpseTag",

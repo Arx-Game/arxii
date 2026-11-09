@@ -887,3 +887,13 @@ class ComponentMode(models.TextChoices):
     MATERIAL = "material", "Tied to the resonance"
     FACET = "facet", "Carries a motif facet of the resonance"
     KEEPSAKE = "keepsake", "Means enough to the performer"
+
+
+class SubstanceDirection(models.TextChoices):
+    """Which way a gift's substance grows along its room reading (#5018).
+
+    Shadow grows as lighting FALLS; water, wind and fire grow as wet, wind and heat RISE.
+    """
+
+    RISING = "rising", "Grows as the reading rises"
+    FALLING = "falling", "Grows as the reading falls"

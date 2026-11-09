@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -323,6 +324,45 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         help_text=(
             "Extra corruption accrued to the caster per defiling cast (atop the baseline "
             "abyssal-cast accrual), routed through CORRUPTION_ACCRUING."
+        ),
+    )
+
+    # --- Gift substance (#5018): one place to tune every gift's substance ---
+    substance_power_at_full = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Power a caster with a level-10 gift thread gains in a room full of her gift's "
+            "substance (and loses in one full of its opposite). Scaled by her thread level."
+        ),
+    )
+    substance_present_pct = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Percent of a full measure past ordinary that counts as present. 1 to 100.",
+    )
+    substance_anima_per_measure = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Anima to call up one full measure, before control. High control covers it.",
+    )
+    substance_resonance_per_measure = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Resonance to call up one full measure. Spent only on the share control does not cover."
+        ),
+    )
+    substance_place_cap_pct = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Largest discount (a place of matching magic) or surcharge (a hostile place) on "
+            "calling up, as a percent. The place's magnitude sets it, up to this. 0 to 100."
+        ),
+    )
+    unmet_surroundings_penalty_pct = models.PositiveSmallIntegerField(
+        default=100,
+        help_text=(
+            "A technique's unmet surroundings restriction costs this percent of a typical "
+            "roll at the caster's level."
         ),
     )
 

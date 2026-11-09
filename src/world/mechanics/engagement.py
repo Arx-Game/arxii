@@ -91,6 +91,15 @@ class CharacterEngagement(SharedMemoryModel):
             "the roll or band gave."
         ),
     )
+    last_called_up_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The combat round number in which this character last called up her gift's "
+            "substance with no technique (#5018). Once a round, like dig deep, and kept "
+            "separately from it."
+        ),
+    )
     fury_control_surrendered = models.PositiveIntegerField(
         default=0,
         help_text="Control surrendered to Fury in this engagement, for display.",
