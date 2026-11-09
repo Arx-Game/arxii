@@ -252,14 +252,30 @@ def _connected_without(region: set[Pip], pip: Pip) -> bool:
 def _rebalance(regions: list[set[Pip]], weights: list[float], rng_seed: int) -> None:
     """Growth alone can wall a seed in (a central seed closes the land behind a corner
     one), so afterwards boundary pips move from regions above their weighted share to
-    neighbours below it, one at a time, never breaking either region's connection."""
+    neighbours below it, one at a time, never breaking either region's connection.
+    Balanced landmass by landmass: the tiles standing on one island share that island's
+    land in proportion to their weights, so two counties on one island are halves of it
+    rather than a centre and a corner, whatever the rest of the map holds (#5029 round 2)."""
     if not regions[1:]:
         return
+    owned_land = set().union(*regions)
+    for landmass in _components(owned_land):
+        members = [i for i, r in enumerate(regions) if r & landmass]
+        if not members[1:]:
+            continue
+        parts = [regions[i] & landmass for i in members]
+        share = sum(weights[i] for i in members)
+        targets = [len(landmass) * weights[i] / share for i in members]
+        _balance(parts, targets, rng_seed)
+        for i, part in zip(members, parts, strict=True):
+            regions[i] = (regions[i] - landmass) | part
+
+
+def _balance(regions: list[set[Pip]], targets: list[float], rng_seed: int) -> None:
+    """Move boundary pips from the region most above its target to a neighbour below it,
+    one at a time, until none is a whole pip over or no move keeps both connected."""
     owner: dict[Pip, int] = {p: i for i, region in enumerate(regions) for p in region}
-    total = sum(weights)
-    owned = len(owner)
-    targets = [owned * w / total for w in weights]
-    for _ in range(owned):
+    for _ in range(len(owner)):
         excess = [len(r) - t for r, t in zip(regions, targets, strict=True)]
         donor = max(range(len(regions)), key=lambda i: excess[i])
         if excess[donor] < 1:

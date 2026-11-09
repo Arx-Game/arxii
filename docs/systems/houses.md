@@ -642,7 +642,8 @@ kingdom | potential
   nearest the centroid; the other seeds go to landmasses in proportion to their size, none to a
   landmass under half a county, so an offshore island joins the county across the water and a
   landmass about a county's size stays whole; tiles grow over 4-connected land and hop water
-  when walled in; land no tile reached joins the nearest; water inside the outline goes to
+  when walled in, and are then balanced landmass by landmass, so two counties on one island
+  are halves of it; land no tile reached joins the nearest; water inside the outline goes to
   the tile it touches most, so a realm keeps its waters (#4317). `group` then makes the
   duchies: group 0 holds the seat's county, each takes its count of free neighbouring counties
   (the most shared border first, then the nearest) and the nearest free county when it has no

@@ -84,6 +84,21 @@ class TileTests(SimpleTestCase):
             if t & land != small:
                 assert (t & land) <= big
 
+    def test_two_counties_on_one_island_split_it_evenly(self) -> None:
+        # two islands of 100 and three counties: one island carries two, and those two are
+        # halves, not a centre piece and a corner (the round-2 challenge on #5032: 39/61)
+        west = rectangle(10, 10)
+        east = rectangle(10, 10, at=(20, 0))
+        pips = rectangle(30, 10)
+        land = west | east
+        tiles = tile(pips, land, 3, seed_hint=None, rng_seed=5)
+        assert len(tiles) == 3
+        on_west = sorted(len(t & west) for t in tiles if t & west)
+        on_east = sorted(len(t & east) for t in tiles if t & east)
+        split, whole = (on_west, on_east) if len(on_west) == 2 else (on_east, on_west)
+        assert whole == [100], (on_west, on_east)
+        assert split[1] - split[0] <= 10, split
+
     def test_water_goes_to_the_tile_it_touches(self) -> None:
         pips = rectangle(20, 10)
         lake = rectangle(4, 2, at=(8, 4))
