@@ -41,6 +41,7 @@ from world.items.constants import (
 | `Keepsake` (#4530) | An item a player declared stands for a tie, a deed, a being, an organization, a person or a place, in their own words | `item_instance`, `character_sheet`, `subject_kind` + the one matching `subject_*` field, `text`, `shown_on_examine`, `created_at`; unique per (item, character); see "Keepsakes, trophies and the items a being asks for" |
 | `DistinctionItemGrant` (#4398) | A keepsake a distinction mints into its holder's inventory at finalize, materialized as a physical object on the character like minted coin (a row-only grant is invisible to the inventory API); sidecar on the items side (ADR-0010), sibling of `currency.DistinctionStartingGrant`; see `docs/systems/distinctions.md` | `distinction` (FK), `item_template` (FK, PROTECT); unique `(distinction, item_template)`; natural key the same; a kit is several rows; a retired template (`is_active=False`) is neither minted nor advertised |
 | `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`), `requires_attunement` (BooleanField, default `False` — #3430; gates `ItemCheckModifier`/on-use eligibility on `ItemInstance.attuned_to_character_sheet`, see "Enchantment authoring" below), `can_be_thrown` (#5026; a one-handed melee weapon its wielder may also throw, picking per Strike; CheckConstraint `items_thrown_requires_one_handed_melee`), `also_protects_against` (#5026; M2M to `DamageType`: the types besides Physical this armor's soak stands against; empty is ordinary armor, which stops Physical only, see `docs/systems/COMBAT_DEFENSES.md`) |
+| `WeaponTemplate`, `ArmorTemplate`, `ShieldTemplate`, `WornTemplate` (#5041) | Proxy models on `ItemTemplate` (no table): one item template family each, for its own admin authoring page | `family_kinds` (the family's gear archetypes, from `world/items/constants.py`); `objects` is an `ItemTemplateFamilyManager` filtering `gear_archetype__in` them. Every FK still points at `ItemTemplate` |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
@@ -588,8 +589,8 @@ grant whose use fails (kit gone or spent, reach lost) expires the row and raises
 
 ### Admin Authoring
 
-`ItemTemplateAppearanceEffectInline` (TabularInline) on `ItemTemplateAdmin`, alongside
-`TemplateInteractionInline`. Fields: `trait` (autocomplete), `target_option` (autocomplete).
+`ItemTemplateAppearanceEffectInline` (TabularInline) on the all-kinds `ItemTemplateAdmin`,
+alongside `TemplateInteractionInline` (neither is on the family pages; see "Authoring pages"). Fields: `trait` (autocomplete), `target_option` (autocomplete).
 
 ### Seed Data
 
@@ -641,10 +642,35 @@ adds 10. PLACEHOLDER scale — revisit during playtest tuning.
 
 ### Admin Authoring
 
-`DisguiseKitEffectInline` (TabularInline) on `ItemTemplateAdmin`, alongside
+`DisguiseKitEffectInline` (TabularInline) on the all-kinds `ItemTemplateAdmin`, alongside
 `ItemTemplateAppearanceEffectInline`.
 
 ---
+
+## Authoring pages (#5041)
+
+Item templates are authored on five admin pages. Four are family pages, one per proxy
+model, and each shows only its own fields and offers only its own gear archetypes
+(no preselected default):
+
+| Page | Gear archetypes | Fields beyond name, description, active, physical, credit | Inlines |
+|---|---|---|---|
+| Weapon templates (`WeaponTemplate`) | one- and two-handed melee, ranged, thrown, lance, unarmed | weapon class, base weapon damage, weapon damage type, can also be thrown | slots, check modifiers, default properties |
+| Armor templates (`ArmorTemplate`) | light, medium, heavy armor, robe | base armor soak, also protects against | slots, garment mitigations, check modifiers, default properties |
+| Shield templates (`ShieldTemplate`) | always Shield (no picker; `ShieldTemplate.save` sets it on create) | soak, also protects against, weapon class, bash damage, damage type | same as armor |
+| Clothing and jewelry templates (`WornTemplate`) | clothing, jewelry | supports open close | same as armor |
+| Item templates (`ItemTemplateAdmin`, all kinds) | every kind | every field it has always shown | all seven |
+
+Every family page also carries a collapsed "Resonance tie" group (tied resonance,
+resonance tier, requires attunement), since any held or worn piece can be a touchstone.
+Containers, consumables, materials and anything of kind Other stay on the all-kinds
+page, which is also where a template moves between families. Every inline on every page
+opens with no rows (`extra = 0`). Family pages use `ItemTemplate`'s permissions, so no new
+grants are needed. The shared pieces live in `world/items/template_admin_parts.py`
+(`ItemTemplateAdminBase`, `ItemTemplateFamilyAdminBase`, the inline classes), so no admin
+module imports another. `core.app_domains.credited_content_models()` leaves proxy models
+out (the authoring workbench lists each template once); the credit column and the
+workbench link reach the family pages through `_meta.concrete_model`.
 
 ## Integration with Capability/Challenge System
 
@@ -756,8 +782,9 @@ component; no attunement step.
 
 `ItemCheckModifier` (template-level flat check-type bonus, e.g. "+5 Stealth while
 equipped") and `ItemTemplateProperty` (template-authored default `Property` grants,
-materialized onto every instance) are authored inline on `ItemTemplateAdmin`
-(`ItemCheckModifierInline` / `ItemTemplatePropertyInline`, `src/world/items/admin.py`) —
+materialized onto every instance) are authored inline on `ItemTemplateAdmin` and every
+family page (`ItemCheckModifierInline` / `ItemTemplatePropertyInline`,
+`src/world/items/template_admin_parts.py`) —
 staff no longer need a shell to give a template its mechanics.
 
 `ItemTemplate.requires_attunement` (`BooleanField`, default `False`) gates whether a
