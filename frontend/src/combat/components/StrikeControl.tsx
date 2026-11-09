@@ -49,6 +49,8 @@ export interface StrikeControlProps {
   declaredTechniqueId?: number | null;
   /** The opponent picked in the Focused Action's target selection, if any. */
   targetOpponentId: number | null;
+  /** "Bandit archer · 2 positions away": the picked target and how far it stands. */
+  targetSummary?: string | null;
   /** The opponent this round's declared Strike is aimed at, when one is declared. */
   declaredTargetName: string | null;
   error: string | null;
@@ -104,6 +106,7 @@ export function StrikeControl({
   declaredThrown,
   declaredTechniqueId,
   targetOpponentId,
+  targetSummary = null,
   declaredTargetName,
   error,
   disabled,
@@ -143,6 +146,11 @@ export function StrikeControl({
         >
           Striking {declaredTargetName}
         </div>
+      )}
+      {targetSummary !== null && (
+        <p className="text-xs text-muted-foreground" data-testid="strike-target">
+          Target: <span className="font-medium text-foreground">{targetSummary}</span>
+        </p>
       )}
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         With

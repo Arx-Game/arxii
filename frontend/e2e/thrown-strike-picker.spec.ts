@@ -260,7 +260,12 @@ async function openFight(
         completed_at: null,
         position_nodes: NODES,
         position_edges: EDGES,
-        position_adjacency: [],
+        position_adjacency: [
+          { position_id: 1, adjacent_position_ids: [2] },
+          { position_id: 2, adjacent_position_ids: [1, 3] },
+          { position_id: 3, adjacent_position_ids: [2, 4] },
+          { position_id: 4, adjacent_position_ids: [3] },
+        ],
         held_positions: [],
         pending_attacks: [],
       },
@@ -317,6 +322,9 @@ test.describe('#5026 the Strike picker: throw and enchant', () => {
       .getByTestId('combatant-target-picker')
       .getByRole('button', { name: /Bandit archer/ })
       .click();
+    await expect(page.getByTestId('strike-target')).toContainText(
+      'Target: Bandit archer · 2 positions away'
+    );
     if (SCREENSHOTS) {
       await control.screenshot({ path: `${SCREENSHOTS}/s01-strike-picker.png` });
       await page.screenshot({ path: `${SCREENSHOTS}/s02-game-page.png`, fullPage: true });

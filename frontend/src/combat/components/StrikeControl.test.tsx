@@ -172,6 +172,19 @@ describe('StrikeControl', () => {
     });
   });
 
+  it('names the picked target and how far it stands', () => {
+    render(
+      <StrikeControl
+        {...baseProps}
+        targetSummary="Bandit archer · 2 positions away"
+        onStrike={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('strike-target')).toHaveTextContent(
+      'Target: Bandit archer · 2 positions away'
+    );
+  });
+
   it('waits for a target before it can strike', () => {
     render(<StrikeControl {...baseProps} targetOpponentId={null} onStrike={vi.fn()} />);
     expect(screen.getByTestId('strike-confirm-btn')).toBeDisabled();

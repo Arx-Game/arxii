@@ -267,6 +267,15 @@ MANEUVER_EFFECT_KIND: dict[str, str] = {
     ManeuverEffectKey.STRIKE_THROWN_DAMAGE: EffectKind.DAMAGE_SHARE,
 }
 
+# Staff help for an effect whose base value needs more than its kind's unit to read (#5026).
+# A key with no entry shows the generic help on the base value.
+MANEUVER_EFFECT_BASE_HELP: dict[str, str] = {
+    ManeuverEffectKey.STRIKE_THROWN_DAMAGE: (
+        "Percent of the weapon's own damage a thrown attack deals. One number for every "
+        "throwable weapon; 75 is a placeholder. A flat damage bonus never adds to this share."
+    ),
+}
+
 # Today's number for each effect: what a maneuver gives with no modifier anywhere.
 # Charge hops, Cover per coverer, partial protection and surge intensity are
 # percentages or counts as their kind says; morale is per success level. A Strike's base

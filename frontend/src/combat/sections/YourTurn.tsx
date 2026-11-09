@@ -74,11 +74,13 @@ import {
   useUpgradeCombo,
 } from '../queries';
 import { isDispatchFailure } from '../types';
+import { hopDistance } from '../reach';
 import type {
   DispatchActionRequest,
   DispatchResult,
   EncounterDetail,
   Participant,
+  PositionAdjacencyItem,
   PositionNode,
   RoundActionTyped,
   RoundCombo,
@@ -1959,6 +1961,8 @@ function useRestoreDeclaredStrike(
 interface StrikePickArgs {
   weapons: StrikeWeaponOption[];
   enchantments: PlayerAction[];
+  /** The picked target and its distance from the striker ("Bandit · 2 positions away"). */
+  targetSummary: string | null;
   picked: boolean;
   declaredStrike: RoundActionTyped | null;
   focusedContext: ActionContext;
@@ -1992,6 +1996,23 @@ function declaredStrikeTargetName(
   return foe?.name ?? null;
 }
 
+/** "Bandit archer · 2 positions away" for the picked opponent; the name alone when either
+ * side is unplaced; null with no opponent picked. */
+function strikeTargetSummary(
+  context: ActionContext,
+  opponents: { id: number; name: string; current_position?: { id: number } | null }[],
+  adjacency: PositionAdjacencyItem[],
+  actorPositionId: number | null
+): string | null {
+  const opponentId = focusedOpponentId(context);
+  const foe = opponents.find((o) => o.id === opponentId);
+  if (foe === undefined) return null;
+  const hops = hopDistance(adjacency, actorPositionId, foe.current_position?.id ?? null);
+  if (hops === null) return foe.name;
+  if (hops === 0) return `${foe.name} · beside you`;
+  return `${foe.name} · ${hops === 1 ? '1 position' : `${hops} positions`} away`;
+}
+
 /** Strike as the focused card's first pick, or undefined when there is nothing to strike with. */
 function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
   if (args.weapons.length === 0) return undefined;
@@ -2007,6 +2028,7 @@ function buildStrikePick(args: StrikePickArgs): LeadingPick | undefined {
         declaredThrown={args.declaredStrike?.strike_thrown ?? false}
         declaredTechniqueId={args.declaredStrike?.focused_action ?? null}
         targetOpponentId={focusedOpponentId(args.focusedContext)}
+        targetSummary={args.targetSummary}
         declaredTargetName={declaredStrikeTargetName(args.declaredStrike, args.activeOpponents)}
         error={args.error}
         disabled={args.disabled}
@@ -2854,6 +2876,12 @@ export function YourTurn({
             leadingPick={buildStrikePick({
               weapons: myParticipantSelf?.strike_weapons ?? [],
               enchantments: strikeEnchantments,
+              targetSummary: strikeTargetSummary(
+                focusedContext,
+                activeOpponents,
+                encounter?.position_adjacency ?? [],
+                actorPositionId
+              ),
               picked: strikePicked,
               declaredStrike,
               focusedContext,
