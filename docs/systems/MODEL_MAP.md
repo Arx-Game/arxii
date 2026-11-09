@@ -2917,7 +2917,7 @@
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
 - `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', partial_protection: 'int', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
 - `drain_reactive_upkeep(encounter: 'CombatEncounter') -> 'None' - Debit per-round upkeep from each active participant's sustained conditions.`
-- `effective_soak_from_armor(character: 'Character') -> 'int' - Sum effective armor soak across the character's equipped armor pieces.`
+- `effective_soak_from_armor(character: 'Character') -> 'int' - Sum effective armor soak across the character's equipped armor pieces against a`
 - `effective_weapon_profile(character: 'Character') -> 'WeaponContribution | None' - The character's strongest equipped weapon as a combat contribution.`
 - `elevation_bonus(attacker_sheet: 'CharacterSheet', attacker_pos: 'Position', target_pos: 'Position') -> 'int' - Flat to-hit bonus when attacker is elevated/aerial and target is not.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
