@@ -237,9 +237,12 @@ describe('RegionMapPage', () => {
     const picker = screen.getByRole('group', { name: 'view' });
     await user.click(within(picker).getByRole('button', { name: 'Geography' }));
     expect(viewport).toHaveAttribute('data-map-view', 'geography');
+    expect(viewport).toHaveAttribute('data-visible', '0');
     await user.selectOptions(screen.getByTestId('carve-realm'), '1');
     await user.selectOptions(screen.getByTestId('carve-domain'), '100');
     expect(viewport).toHaveAttribute('data-map-view', 'geography');
+    // the domain being carved is drawn even in Geography
+    expect(viewport).toHaveAttribute('data-visible', '1');
     expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('Salvation');
     await user.click(screen.getByRole('button', { name: 'Select' }));
     expect(viewport).toHaveAttribute('data-map-view', 'all');

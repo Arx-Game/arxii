@@ -303,10 +303,15 @@ export function RegionMapPage({
   const anchorCaption = anchorFootprint
     ? anchorFootprint.name || `unnamed ${anchorFootprint.level_display.toLowerCase()}`
     : `no domain selected: ${realms.find((r) => r.id === realmId)?.name ?? 'the map'}`;
-  const visible = useMemo(
-    () => visibleFootprints(mapView, data?.footprints ?? [], anchors),
-    [anchors, data, mapView]
-  );
+  // The domain being carved is always drawn, whatever the view: Geography while carving
+  // shows the terrain and only that one outline (#5030).
+  const visible = useMemo(() => {
+    const shown = visibleFootprints(mapView, data?.footprints ?? [], anchors);
+    if (mode === 'carve' && anchorFootprint && !shown.includes(anchorFootprint)) {
+      return [...shown, anchorFootprint];
+    }
+    return shown;
+  }, [anchorFootprint, anchors, data, mapView, mode]);
   const cellLines = view.zoom >= MAP_CELL_LINES_HIDE_BELOW;
 
   // The one footprint that draws an edge: the domain being carved, or the selected one.
@@ -936,6 +941,7 @@ export function RegionMapPage({
           data-testid="region-map-viewport"
           data-zoom={view.zoom.toFixed(2)}
           data-map-view={mapView}
+          data-visible={visible.length}
           data-ghost-pips={ghostPips.size}
           onPointerDown={handlePointerDown}
         >
