@@ -101,6 +101,28 @@ test.describe('thrown and enchanted Strikes (#5026)', () => {
       [true, 75],
     ]);
 
+    // The live game page draws the same dagger twice in the Strike picker.
+    await page.goto('/game');
+    await page
+      .locator(
+        'button[title="Connect as Strike Tester"], button[title="Switch to Strike Tester"], ' +
+          'button[title="Strike Tester"], button:has-text("Strike Tester")'
+      )
+      .first()
+      .click();
+    await page
+      .getByRole('navigation', { name: 'Sidebar modes' })
+      .getByRole('button', { name: 'Combat', exact: true })
+      .click({ timeout: 30000 });
+    await page.getByTestId('leading-pick').click();
+    await expect(page.getByTestId(`strike-weapon-${SEED.dagger_id}`)).toContainText(
+      'one-handed melee · Melee Combat'
+    );
+    await expect(page.getByTestId(`strike-weapon-${SEED.dagger_id}-thrown`)).toContainText(
+      'Thrown Combat · 75% damage'
+    );
+    await page.getByTestId('strike-control').screenshot({ path: shotPath('live-picker.png') });
+
     const available = await page.request.get(
       `/api/actions/characters/${SEED.character_id}/available/?page_size=100`
     );

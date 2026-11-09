@@ -264,6 +264,9 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
     character.db_account = account
     character.save()
+    # The playable puppet lock, so the web client can enter the world as her and draw
+    # the Strike picker live; a factory character only carries pperm(Developer).
+    account.at_post_create_character(character)
     CharacterVitals.objects.create(
         character_sheet=sheet, health=100, max_health=100, base_max_health=100
     )
