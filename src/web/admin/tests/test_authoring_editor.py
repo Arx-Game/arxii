@@ -15,7 +15,9 @@ from world.buildings.factories import BuildingKindFactory
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
+from world.items.factories import ItemTemplateFactory
 from world.missions.factories import MissionNodeFactory
+from world.skills.factories import SkillFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 EN_DASH = "\u2013"
@@ -79,6 +81,26 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertIn('<textarea name="lore_content" id="id_lore_content">', body)
         self.assertIn('<textarea name="mechanics_content" id="id_mechanics_content">', body)
         self.assertIn("The old lore text.", body)
+
+    def test_a_proxy_label_opens_its_concrete_row(self) -> None:
+        # The related-entries pane labels a skill neighbor "skills.Skill" (every FK to a
+        # skill loads the Skill proxy); proxies are not in credited_content_models()
+        # (#5041), so the editor resolves the label to the concrete model first.
+        skill = SkillFactory(name="Proxy Label Skill")
+        dagger = ItemTemplateFactory(name="Proxy Label Dagger", gear_archetype="melee_one_hand")
+        self.client.force_login(self.super)
+
+        for label, pk, name in (
+            ("skills.Skill", skill.pk, "Proxy Label Skill"),
+            ("items.WeaponTemplate", dagger.pk, "Proxy Label Dagger"),
+        ):
+            with self.subTest(label=label):
+                resp = self.client.get(
+                    reverse("admin_authoring_editor"), {"model": label, "pk": pk}
+                )
+                self.assertEqual(resp.status_code, 200)
+                self.assertContains(resp, name)
+                self.assertNotContains(resp, "is not a credited content model")
 
     def test_textareas_render_in_declaration_order(self) -> None:
         entry = self._entry()
