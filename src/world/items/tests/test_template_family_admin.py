@@ -4,9 +4,11 @@ from django.contrib import admin
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.html import escape
 
 from core.app_domains import credited_content_models
 from evennia_extensions.factories import AccountFactory
+from web.admin.authoring.links import workbench_editor_url
 from world.items.constants import (
     ARMOR_TEMPLATE_KINDS,
     WEAPON_TEMPLATE_KINDS,
@@ -21,6 +23,8 @@ from world.items.models import (
     WeaponTemplate,
     WornTemplate,
 )
+from world.skills.models import Skill
+from world.traits.models import Trait
 
 FAMILY_PAGES = {
     "weapontemplate": WeaponTemplate,
@@ -69,6 +73,30 @@ class ItemTemplateFamilyAdminTests(TestCase):
                 self.assertIn(template, listed)
                 self.assertFalse(listed & (everyone - {template}))
 
+    def test_a_family_list_links_each_credit_to_the_workbench_as_an_item_template(self) -> None:
+        # Empty the identity map so the list loads its rows as WeaponTemplate instances.
+        ItemTemplate.flush_instance_cache()
+        response = self.client.get(reverse("admin:arxii_weapontemplate_changelist"))
+        expected = workbench_editor_url("items.ItemTemplate", self.sword.pk)
+        self.assertContains(response, escape(expected))
+        self.assertNotContains(response, "items.WeaponTemplate")
+        offered = response.context["cl"].filter_specs[1].lookup_choices
+        self.assertEqual([value for value, _label in offered], list(WEAPON_TEMPLATE_KINDS))
+
+    def test_the_family_pages_sit_beside_item_templates_on_the_admin_home(self) -> None:
+        response = self.client.get(reverse("admin:index"))
+        items = next(
+            app
+            for app in response.context["app_list"]
+            if any(entry["object_name"] == "ItemTemplate" for entry in app["models"])
+        )
+        names = [entry["object_name"] for entry in items["models"]]
+        start = names.index("ItemTemplate")
+        self.assertEqual(
+            names[start : start + 5],
+            ["ItemTemplate", "WeaponTemplate", "ArmorTemplate", "ShieldTemplate", "WornTemplate"],
+        )
+
     def test_each_add_page_offers_only_its_kinds_and_fields_with_no_inline_rows(self) -> None:
         expected_kinds = {
             "weapontemplate": WEAPON_TEMPLATE_KINDS,
@@ -87,6 +115,8 @@ class ItemTemplateFamilyAdminTests(TestCase):
                     self.assertNotIn(absent, form.fields)
                 if page == "shieldtemplate":
                     self.assertNotIn("gear_archetype", form.fields)
+                    # The fixed kind still shows, as a read-only row, before the first save.
+                    self.assertContains(response, '<div class="readonly">Shield</div>', html=True)
                     continue
                 offered = [value for value, _label in form.fields["gear_archetype"].choices]
                 self.assertEqual(offered, ["", *expected_kinds[page]])
@@ -168,5 +198,7 @@ class ItemTemplateFamilyPlumbingTests(TestCase):
     def test_the_workbench_counts_item_templates_once(self) -> None:
         found = credited_content_models()
         self.assertIn(ItemTemplate, found)
-        for proxy in FAMILY_PAGES.values():
+        # Every proxy of a credited model is left out, the older Skill proxy of Trait too.
+        for proxy in (*FAMILY_PAGES.values(), Skill):
             self.assertNotIn(proxy, found)
+        self.assertIn(Trait, found)

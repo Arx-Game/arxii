@@ -77,7 +77,9 @@ def credit_status(obj):
         state = _CREDIT_WRITTEN
     else:
         state = _CREDIT_UNWRITTEN
-    model = type(obj)
+    # A proxy row (an ItemTemplate family page, #5041) opens as its concrete model,
+    # the one the workbench knows.
+    model = obj._meta.concrete_model  # noqa: SLF001
     if not prose_fields_for(model):
         return state
     url = workbench_editor_url(f"{domain_of(model)}.{model.__name__}", obj.pk)

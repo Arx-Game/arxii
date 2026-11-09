@@ -157,6 +157,17 @@ class ArxAdminSite(admin.AdminSite):
         "other": "Other",
     }
 
+    def _index_sort_key(self, entry: dict) -> str:
+        """A model's place in its admin home module: its name, unless its admin names a key.
+
+        ``index_sort_key`` on a ModelAdmin keeps related pages together, as the item
+        template family pages sit beside Item templates (#5041).
+        """
+        model_admin = self._registry.get(entry.get("model"))
+        # Optional on any admin, Evennia's and third-party ones included, so no attribute access.
+        key = getattr(model_admin, "index_sort_key", None)  # noqa: GETATTR_LITERAL
+        return key or entry["name"]
+
     def _build_recent_models(self, app_dict, excluded):
         """Build list of pinned models with export exclusion status.
 
@@ -317,7 +328,7 @@ class ArxAdminSite(admin.AdminSite):
             app_label_key = self._domain_key(app)
             group = app_to_group.get(app_label_key, "other")
             self._mark_export_exclusion(app, excluded, app_label_key)
-            app["models"].sort(key=lambda x: x["name"])
+            app["models"].sort(key=self._index_sort_key)
             app["app_group"] = group
             app["app_group_name"] = self.GROUP_NAMES[group]
             grouped_apps[group].append(app)

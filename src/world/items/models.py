@@ -771,7 +771,10 @@ class ItemTemplateFamilyManager(NaturalKeyManager):
     authoring page showing only its own fields. Every FK still points at
     ``ItemTemplate``. The identity map is ``ItemTemplate``'s, so a row read through a
     family may be the cached ``ItemTemplate`` instance: put behaviour a template needs
-    on ``ItemTemplate``, not on a family.
+    on ``ItemTemplate``, not on a family. The family managers serve the family admin
+    pages, whose lookups always go through a filtered queryset; a bare
+    ``WeaponTemplate.objects.get(pk=...)`` can hand back a cached row of any family, so
+    code outside the admin reads ``ItemTemplate.objects``.
     """
 
     def get_queryset(self) -> models.QuerySet:

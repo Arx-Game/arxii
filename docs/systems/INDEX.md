@@ -7263,7 +7263,7 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   page in `world/items/admin.py` showing only its family's fields; the all-kinds
   `ItemTemplateAdmin` stays for everything else. Shared admin pieces (inlines, all
   `extra = 0`; `ItemTemplateAdminBase`; `ItemTemplateFamilyAdminBase`) live in
-  `world/items/template_admin_parts.py`. `credited_content_models()` leaves proxies out.
+  `world/items/template_admin_parts.py`. `credited_content_models()` leaves every proxy out (the `Skill` proxy of `Trait` too).
   See docs/systems/items.md ("Authoring pages").
 
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`

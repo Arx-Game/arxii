@@ -9,6 +9,7 @@ from django.http import HttpRequest, HttpResponse
 
 from world.admin_utils import OneRowPerFormSet
 from world.contributors.admin import CREDIT_FIELDSET
+from world.items.constants import GearArchetype
 from world.items.crafting.models import (
     AccentArchetypeAllowance,
     AccentExclusion,
@@ -58,6 +59,7 @@ from world.items.models import (
 )
 from world.items.template_admin_parts import (
     DisguiseKitEffectInline,
+    FamilyGearArchetypeFilter,
     GarmentMitigationInline,
     ItemCheckModifierInline,
     ItemTemplateAdminBase,
@@ -351,7 +353,7 @@ _ARMOR_FIELDS = ["base_armor_soak", "also_protects_against"]
 
 class _FamilyAdminBase(ItemTemplateFamilyAdminBase):
     search_fields = ["name"]
-    list_filter = ["is_active", "gear_archetype"]
+    list_filter = ["is_active", FamilyGearArchetypeFilter]
     list_select_related = ["minimum_quality_tier"]
     raw_id_fields = ["image", "weapon_damage_type"]
 
@@ -359,6 +361,8 @@ class _FamilyAdminBase(ItemTemplateFamilyAdminBase):
 @admin.register(WeaponTemplate)
 class WeaponTemplateAdmin(_FamilyAdminBase):
     """Weapons only: no armor, container, consumable or cosmetic options."""
+
+    index_sort_key = "Item templates 1"  # beside Item templates on the admin home
 
     list_display = [
         "name",
@@ -384,6 +388,8 @@ class WeaponTemplateAdmin(_FamilyAdminBase):
 class ArmorTemplateAdmin(_FamilyAdminBase):
     """Armor and robes only: soak and protected damage types, no weapon options."""
 
+    index_sort_key = "Item templates 2"  # beside Item templates on the admin home
+
     list_display = ["name", "gear_archetype", "base_armor_soak", "is_active"]
     fieldsets = [
         _FAMILY_TOP,
@@ -404,11 +410,13 @@ class ArmorTemplateAdmin(_FamilyAdminBase):
 class ShieldTemplateAdmin(_FamilyAdminBase):
     """Shields only: both soak and bash damage. Gear archetype is always Shield."""
 
+    index_sort_key = "Item templates 3"  # beside Item templates on the admin home
+
     list_display = ["name", "base_armor_soak", "base_weapon_damage", "is_active"]
     list_filter = ["is_active"]
     fieldsets = [
         _FAMILY_TOP,
-        ("Shield", {"fields": [*_ARMOR_FIELDS, *_WEAPON_FIELDS]}),
+        ("Shield", {"fields": ["shield_gear_archetype", *_ARMOR_FIELDS, *_WEAPON_FIELDS]}),
         _FAMILY_PHYSICAL,
         _FAMILY_RESONANCE,
         CREDIT_FIELDSET,
@@ -420,10 +428,19 @@ class ShieldTemplateAdmin(_FamilyAdminBase):
         ItemTemplatePropertyInline,
     ]
 
+    readonly_fields = ["shield_gear_archetype"]
+
+    @admin.display(description="Gear archetype")
+    def shield_gear_archetype(self, obj: ShieldTemplate | None) -> str:  # noqa: ARG002
+        """The kind this page always writes, shown even before the first save."""
+        return GearArchetype.SHIELD.label
+
 
 @admin.register(WornTemplate)
 class WornTemplateAdmin(_FamilyAdminBase):
     """Clothing and jewelry only: no combat stats."""
+
+    index_sort_key = "Item templates 4"  # beside Item templates on the admin home
 
     list_display = ["name", "gear_archetype", "is_active"]
     raw_id_fields = ["image"]

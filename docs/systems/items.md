@@ -668,7 +668,7 @@ page, which is also where a template moves between families. Every inline on eve
 opens with no rows (`extra = 0`). Family pages use `ItemTemplate`'s permissions, so no new
 grants are needed. The shared pieces live in `world/items/template_admin_parts.py`
 (`ItemTemplateAdminBase`, `ItemTemplateFamilyAdminBase`, the inline classes), so no admin
-module imports another. `core.app_domains.credited_content_models()` leaves proxy models
+module imports another. `core.app_domains.credited_content_models()` leaves every proxy model (the `Skill` proxy of `Trait` too)
 out (the authoring workbench lists each template once); the credit column and the
 workbench link reach the family pages through `_meta.concrete_model`.
 

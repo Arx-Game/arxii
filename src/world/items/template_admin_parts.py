@@ -13,7 +13,7 @@ from typing import Any
 
 from django.contrib import admin
 from django.contrib.auth import get_permission_codename
-from django.db.models import Field, ManyToManyField
+from django.db.models import Field, ManyToManyField, QuerySet
 from django.forms import (
     CheckboxSelectMultiple,
     Field as FormField,
@@ -114,6 +114,21 @@ class ItemTemplateAdminBase(admin.ModelAdmin):
         if db_field.name == "can_be_thrown" and formfield is not None:  # noqa: STRING_LITERAL - field name
             formfield.label = "Can also be thrown"
         return formfield
+
+
+class FamilyGearArchetypeFilter(admin.SimpleListFilter):
+    """The gear archetype list filter on a family page, offering only that family's kinds."""
+
+    title = "gear archetype"
+    parameter_name = "gear_archetype"
+
+    def lookups(self, request: HttpRequest, model_admin: admin.ModelAdmin) -> list[tuple[str, str]]:  # noqa: ARG002
+        return [(kind, GearArchetype(kind).label) for kind in model_admin.model.family_kinds]
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet) -> QuerySet:  # noqa: ARG002
+        if self.value():
+            return queryset.filter(gear_archetype=self.value())
+        return queryset
 
 
 class ItemTemplateFamilyAdminBase(ItemTemplateAdminBase):

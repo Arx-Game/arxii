@@ -70,17 +70,20 @@ class ArxAdminSiteTestCase(TestCase):
             )
 
     def test_get_app_list_sorts_models_alphabetically(self):
-        """Models within each app should be sorted alphabetically by name."""
+        """Models within each app are sorted by name, or by their admin's index_sort_key.
+
+        The key lets related pages sit together (the item template family pages
+        beside Item templates, #5041); every other model sorts by its own name.
+        """
         request = self.factory.get("/admin/")
         User = get_user_model()
         request.user = User(username="test", is_staff=True, is_superuser=True)
 
         app_list = self.site.get_app_list(request)
 
-        # Check that models are sorted alphabetically in each app
         for app in app_list:
             if app.get("models"):
-                model_names = [model["name"] for model in app["models"]]
+                model_names = [self.site._index_sort_key(model) for model in app["models"]]
                 sorted_names = sorted(model_names)
                 self.assertEqual(
                     model_names,
