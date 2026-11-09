@@ -102,6 +102,22 @@ function overlaps(a: Label, b: Label): boolean {
   return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
 }
 
+function fitsWidth(
+  pips: RegionMapFootprint['pips'],
+  width: number,
+  project: (x: number, y: number) => [number, number]
+): boolean {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const [x] of pips) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+  }
+  const [left] = project(minX - 0.5, 0);
+  const [right] = project(maxX + 0.5, 0);
+  return right - left >= width;
+}
+
 /**
  * The names a view draws, placed in screen space. Domain names the anchors wherever they
  * are; Domain-Vassal names the anchors' direct children always and the deeper tiers where
@@ -135,17 +151,7 @@ export function placeNames(
     if (!f.name || f.pips.length === 0) continue;
     const w = measure(f.name) + LABEL_PAD_PX;
     const h = LABEL_PX + 4;
-    if (!exempt.has(f.area_id)) {
-      let minX = Infinity;
-      let maxX = -Infinity;
-      for (const [x] of f.pips) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-      }
-      const [left] = project(minX - 0.5, 0);
-      const [right] = project(maxX + 0.5, 0);
-      if (right - left < w) continue;
-    }
+    if (!exempt.has(f.area_id) && !fitsWidth(f.pips, w, project)) continue;
     const [cx, cy] = centroid(f.pips);
     const [x, y] = project(cx, cy);
     const label: Label = { text: f.name, x, y, w, h, areaId: f.area_id };

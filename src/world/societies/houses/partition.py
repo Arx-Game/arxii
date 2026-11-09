@@ -157,15 +157,10 @@ def _grow(land: set[Pip], seeds: list[Pip], weights: list[float], rng_seed: int)
     while free:
         progress = False
         for index in range(len(seeds)):
-            if not frontiers[index]:
-                # a frontier the other seeds ate from under this one is rebuilt from the
-                # region's own edge, so a seed never starves while it still borders free land
-                frontiers[index] = _boundary(regions[index], land, owner)
-            if not frontiers[index]:
-                hop = _hop(index, regions, free) if free else None
-                if hop is None:
-                    continue
-                frontiers[index] = [hop]
+            frontier = _available_frontier(index, frontiers, regions, land, (owner, free))
+            if not frontier:
+                continue
+            frontiers[index] = frontier
             # each round a seed earns weight/min(weight) pips and spends whole ones, so the
             # ratio between seeds survives however many there are
             earned[index] += weights[index] / unit
@@ -173,24 +168,41 @@ def _grow(land: set[Pip], seeds: list[Pip], weights: list[float], rng_seed: int)
             if share < 1:
                 continue
             earned[index] -= share
-            frontier = frontiers[index]
-            frontier.sort(key=lambda p: _tie_key(p, rng_seed), reverse=True)
-            taken = 0
-            next_frontier: list[Pip] = []
-            while frontier and taken < share:
-                pip = frontier.pop()
-                if pip in owner:
-                    continue
-                owner[pip] = index
-                regions[index].add(pip)
-                free.discard(pip)
-                taken += 1
-                progress = True
-                next_frontier.extend(n for n in _neighbours(pip) if n in free)
-            frontiers[index] = [p for p in frontier + next_frontier if p not in owner]
+            frontiers[index], taken = _claim_frontier(
+                frontiers[index], share, index, (regions, owner, free), rng_seed
+            )
+            progress = progress or taken > 0
         if not progress:
             break
     return regions
+
+
+def _available_frontier(index, frontiers, regions, land, state):
+    """Rebuild an exhausted frontier or hop to the nearest free landmass."""
+    owner, free = state
+    frontier = frontiers[index] or _boundary(regions[index], land, owner)
+    if frontier:
+        return frontier
+    hop = _hop(index, regions, free) if free else None
+    return [hop] if hop is not None else []
+
+
+def _claim_frontier(frontier, share, index, state, rng_seed):
+    """Claim up to a region's share and return its remaining frontier."""
+    regions, owner, free = state
+    frontier.sort(key=lambda p: _tie_key(p, rng_seed), reverse=True)
+    taken = 0
+    next_frontier = []
+    while frontier and taken < share:
+        pip = frontier.pop()
+        if pip in owner:
+            continue
+        owner[pip] = index
+        regions[index].add(pip)
+        free.discard(pip)
+        taken += 1
+        next_frontier.extend(n for n in _neighbours(pip) if n in free)
+    return [p for p in frontier + next_frontier if p not in owner], taken
 
 
 def _nearest(pip: Pip, region: set[Pip]) -> int:
@@ -280,25 +292,33 @@ def _balance(regions: list[set[Pip]], targets: list[float], rng_seed: int) -> No
         donor = max(range(len(regions)), key=lambda i: excess[i])
         if excess[donor] < 1:
             return
-        candidates: list[tuple[float, int, Pip]] = []
-        for pip in regions[donor]:
-            for n in _neighbours(pip):
-                taker = owner.get(n)
-                if taker is None or taker == donor or excess[taker] >= -1:
-                    continue
-                candidates.append((excess[taker], _tie_key(pip, rng_seed), pip))
-        moved = False
-        for _deficit, _key, pip in sorted(candidates):
-            taker = next(owner[n] for n in _neighbours(pip) if owner.get(n) not in (None, donor))
-            if not _connected_without(regions[donor], pip):
-                continue
-            regions[donor].discard(pip)
-            regions[taker].add(pip)
-            owner[pip] = taker
-            moved = True
-            break
+        candidates = _balance_candidates(regions[donor], owner, donor, excess, rng_seed)
+        moved = _move_candidate(candidates, regions, owner, donor)
         if not moved:
             return
+
+
+def _balance_candidates(region, owner, donor, excess, rng_seed):
+    candidates = []
+    for pip in region:
+        for neighbour in _neighbours(pip):
+            taker = owner.get(neighbour)
+            if taker is None or taker == donor or excess[taker] >= -1:
+                continue
+            candidates.append((excess[taker], _tie_key(pip, rng_seed), pip))
+    return candidates
+
+
+def _move_candidate(candidates, regions, owner, donor):
+    for _deficit, _key, pip in sorted(candidates):
+        taker = next(owner[n] for n in _neighbours(pip) if owner.get(n) not in (None, donor))
+        if not _connected_without(regions[donor], pip):
+            continue
+        regions[donor].discard(pip)
+        regions[taker].add(pip)
+        owner[pip] = taker
+        return True
+    return False
 
 
 def _attach_islands(regions: list[set[Pip]], land: set[Pip]) -> None:

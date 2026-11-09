@@ -198,6 +198,16 @@ describe('mapViews: names that do not stack (#5030)', () => {
     expect(vassal).not.toContain('Aberwen'); // a grandchild still has to fit
   });
 
+  it('places a name on a very large footprint without exhausting the argument stack', () => {
+    const large = {
+      ...west,
+      pips: Array.from({ length: 150000 }, (_, x) => [x, 0] as [number, number]),
+    };
+    expect(placeNames('all', [large], [], project(1), measure).map((label) => label.text)).toEqual([
+      west.name,
+    ]);
+  });
+
   it('Geography names nothing', () => {
     expect(placeNames('geography', all, [west], project(1), measure)).toEqual([]);
   });

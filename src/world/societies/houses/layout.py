@@ -271,23 +271,29 @@ def parse_layout(text: str) -> Layout:
             seen_realm = True
             _apply_fields(index, defaults, fields)
             continue
-        if kind == KIND_DUCHY:
-            if not indented or not kingdoms:
-                raise LayoutError(index, "a duchy line sits two spaces under its kingdom")
-            child = ChildLine(tier=TitleTier.DUCHY, name=name, line_no=index)
-            _apply_fields(index, child, fields)
-            kingdoms[-1].children.append(child)
-            continue
-        if indented:
-            raise LayoutError(index, "a kingdom line starts at the margin")
-        kingdom = KingdomLine(name=name, line_no=index)
-        _apply_fields(index, kingdom, fields)
-        if not kingdom.name and kingdom.station != TitleStation.POTENTIAL:
-            raise LayoutError(index, "an unnamed kingdom line must be potential")
-        if kingdom.station == TitleStation.TITULAR and not kingdom.name:
-            raise LayoutError(index, "a titular kingdom needs a name")
-        kingdoms.append(kingdom)
+        _parse_kingdom_line(index, (kind, name, fields, indented), kingdoms)
+
     return Layout(defaults=defaults, kingdoms=kingdoms)
+
+
+def _parse_kingdom_line(index, parsed, kingdoms):
+    kind, name, fields, indented = parsed
+    if kind == KIND_DUCHY:
+        if not indented or not kingdoms:
+            raise LayoutError(index, "a duchy line sits two spaces under its kingdom")
+        child = ChildLine(tier=TitleTier.DUCHY, name=name, line_no=index)
+        _apply_fields(index, child, fields)
+        kingdoms[-1].children.append(child)
+        return
+    if indented:
+        raise LayoutError(index, "a kingdom line starts at the margin")
+    kingdom = KingdomLine(name=name, line_no=index)
+    _apply_fields(index, kingdom, fields)
+    if not kingdom.name and kingdom.station != TitleStation.POTENTIAL:
+        raise LayoutError(index, "an unnamed kingdom line must be potential")
+    if kingdom.station == TitleStation.TITULAR and not kingdom.name:
+        raise LayoutError(index, "a titular kingdom needs a name")
+    kingdoms.append(kingdom)
 
 
 # ---------------------------------------------------------------------------
@@ -582,28 +588,30 @@ class _Walk:
         if len(duchies) < len(line.children) + 1:
             raise LayoutError(line.line_no, f"{line.name} has too little land for its duchies")
         for index, counties in enumerate(duchies):
-            capital = index == 0
-            child_line = lines[index]
-            if child_line is not None and child_line.name:
-                self._claim_name(child_line.name, child_line.line_no)
-            duchy = _Rung(
-                tier=TitleTier.DUCHY,
-                name=(child_line.name if child_line and child_line.name else self.names.draw()),
-                pips=set().union(*counties),
-                parent=root,
-                capital=capital,
-                chain=capital,
-                preexisting=capital,
-                line_no=child_line.line_no if child_line else line.line_no,
-            )
-            if child_line is not None:
-                self._apply_words(duchy, child_line)
-            root.children.append(duchy)
-            self._remember(duchy)
-            self._plan_counties(
-                duchy, child_line, counties, land, seat_hint if capital else None, line
-            )
+            self._plan_duchy(root, line, lines[index], (counties, land, seat_hint, index))
         return root
+
+    def _plan_duchy(self, root, line, child_line, geometry):
+        """Plan one duchy and its counties."""
+        counties, land, seat_hint, index = geometry
+        capital = index == 0
+        if child_line is not None and child_line.name:
+            self._claim_name(child_line.name, child_line.line_no)
+        duchy = _Rung(
+            tier=TitleTier.DUCHY,
+            name=(child_line.name if child_line and child_line.name else self.names.draw()),
+            pips=set().union(*counties),
+            parent=root,
+            capital=capital,
+            chain=capital,
+            preexisting=capital,
+            line_no=child_line.line_no if child_line else line.line_no,
+        )
+        if child_line is not None:
+            self._apply_words(duchy, child_line)
+        root.children.append(duchy)
+        self._remember(duchy)
+        self._plan_counties(duchy, child_line, counties, land, seat_hint if capital else None, line)
 
     def _county_count(
         self, line: KingdomLine, child_line: ChildLine | None, index: int, capital_w: float
@@ -855,13 +863,17 @@ class _Walk:
             )
         if rung.parent is not None and rung.tier != TitleTier.BARONY:
             domain.prosperity = PROSPERITY_CAPITAL if rung.capital else PROSPERITY_CHILD
+        domain.description = self._figure_description(rung, domain.description)
+        domain.save(update_fields=["population", "prosperity", "description"])
+
+    def _figure_description(self, rung: _Rung, current: str) -> str:
         if rung.lore:
-            domain.description = rung.lore
-        elif rung.parent is not None or rung.existing is None:
+            return rung.lore
+        if rung.parent is not None or rung.existing is None:
             parent = rung.parent.name if rung.parent is not None else self.realm.name
             what = rung.name or f"An undefined {rung.tier}"
-            domain.description = f"{PLACEHOLDER} {what} of {parent}."
-        domain.save(update_fields=["population", "prosperity", "description"])
+            return f"{PLACEHOLDER} {what} of {parent}."
+        return current
 
     def _write_links(self, root: _Rung, report: KingdomReport) -> None:
         def walk(rung: _Rung) -> None:
@@ -872,24 +884,26 @@ class _Walk:
                 if crown is None:
                     raise LayoutError(rung.line_no, f"no crown named {rung.sworn} to swear to")
                 set_pledged_liege(rung.title, crown)
-            for fief_name in rung.chartered:
-                fief = self._title_named(fief_name)
-                if fief is None:
-                    raise LayoutError(rung.line_no, f"no rung named {fief_name} to charter")
-                charter_fief(
-                    title=rung.title, fief=fief, basis=f"By the layout, line {rung.line_no}"
-                )
-                report.charters.append(f"{rung.name or rung.tier} charters {fief.name}")
-            for who, basis in rung.claims:
-                sheet = self._sheet_named(who)
-                if sheet is None:
-                    raise LayoutError(rung.line_no, f"no character named {who} to claim it")
-                record_claim(title=rung.title, claimant=sheet, basis=basis)
-                report.claims.append(f"{who} claims {rung.name or rung.tier}")
+            self._write_rung_links(rung, report)
             for child in rung.children:
                 walk(child)
 
         walk(root)
+
+    def _write_rung_links(self, rung: _Rung, report: KingdomReport) -> None:
+        """Write charters and claims for one planned rung."""
+        for fief_name in rung.chartered:
+            fief = self._title_named(fief_name)
+            if fief is None:
+                raise LayoutError(rung.line_no, f"no rung named {fief_name} to charter")
+            charter_fief(title=rung.title, fief=fief, basis=f"By the layout, line {rung.line_no}")
+            report.charters.append(f"{rung.name or rung.tier} charters {fief.name}")
+        for who, basis in rung.claims:
+            sheet = self._sheet_named(who)
+            if sheet is None:
+                raise LayoutError(rung.line_no, f"no character named {who} to claim it")
+            record_claim(title=rung.title, claimant=sheet, basis=basis)
+            report.claims.append(f"{who} claims {rung.name or rung.tier}")
 
     def _title_named(self, name: str) -> Title | None:
         planned = self.by_name.get(name)

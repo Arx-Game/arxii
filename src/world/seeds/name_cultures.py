@@ -314,6 +314,20 @@ _CULTURE_REALMS: dict[str, str] = {
 }
 
 
+def _link_culture(culture, area_name, realm_name, area_model, realm_model):
+    """Fill in missing area and realm links without replacing existing ones."""
+    if area_name and culture.area_id is None:
+        area = area_model.objects.filter(name__iexact=area_name).first()
+        if area is not None:
+            culture.area = area
+            culture.save(update_fields=["area"])
+    if realm_name and culture.realm_id is None:
+        realm = realm_model.objects.filter(name=realm_name).first()
+        if realm is not None:
+            culture.realm = realm
+            culture.save(update_fields=["realm"])
+
+
 def ensure_name_cultures() -> int:
     """Seed the regional name pools. Idempotent; re-links areas and realms on re-run.
 
@@ -326,17 +340,7 @@ def ensure_name_cultures() -> int:
     ensured = 0
     for culture_name, (area_name, given_names, surnames) in _CULTURES.items():
         culture, _ = NameCulture.objects.get_or_create(name=culture_name)
-        if area_name and culture.area_id is None:
-            area = Area.objects.filter(name__iexact=area_name).first()
-            if area is not None:
-                culture.area = area
-                culture.save(update_fields=["area"])
-        realm_name = _CULTURE_REALMS.get(culture_name)
-        if realm_name and culture.realm_id is None:
-            realm = Realm.objects.filter(name=realm_name).first()
-            if realm is not None:
-                culture.realm = realm
-                culture.save(update_fields=["realm"])
+        _link_culture(culture, area_name, _CULTURE_REALMS.get(culture_name), Area, Realm)
         for value in given_names:
             _, created = NameCultureEntry.objects.get_or_create(
                 culture=culture, part=NamePart.GIVEN, value=value

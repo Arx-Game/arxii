@@ -117,6 +117,13 @@ class TileTests(SimpleTestCase):
         assert all(tiles)
         assert tile(rectangle(4, 4), set(), 2, seed_hint=None, rng_seed=0) == []
 
+    def test_disconnected_land_is_covered_without_overlapping(self) -> None:
+        land = rectangle(8, 4) | rectangle(3, 3, at=(12, 0))
+        tiles = tile(land, land, 4, seed_hint=(0, 0), rng_seed=13)
+        assert set().union(*tiles) == land
+        assert sum(map(len, tiles)) == len(land)
+        assert all(tiles)
+
     def test_determinism(self) -> None:
         pips = rectangle(15, 9)
         first = tile(pips, pips, 4, seed_hint=None, rng_seed=11)
