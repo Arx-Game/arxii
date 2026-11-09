@@ -418,17 +418,24 @@ def _spread_seeds(centroids: list[Pip], count: int) -> list[int]:
     return seeds
 
 
-def group(tiles: list[set[Pip]], counts: list[int]) -> list[list[int]]:
+def group(tiles: list[set[Pip]], counts: list[int], land: set[Pip]) -> list[list[int]]:
     """Group tiles into duchies, as tile indices. Group 0 holds tile 0 (the capital's
-    county); each group takes ``counts[i]`` tiles, a free neighbour first (the most shared
-    border, then the nearest to the group's seed), and the nearest free tile when it has
-    no free neighbour (an archipelago). The other groups' seeds spread by farthest-point
-    over the tiles' centroids. ``counts`` is fitted to the tiles there are."""
+    county); each group takes ``counts[i]`` tiles. Even pips first (the owner's order): a
+    group's land target is its share of the land by count, and each pick is the free tile
+    whose land is nearest what the group still needs per county, among its free neighbours
+    when it has any (contiguity third), ties by the most shared border and then the
+    nearest to the group's seed. On one landmass of even tiles this is the neighbour walk;
+    on an archipelago it hands whole islands and halves out so no duchy sits at 100 land
+    while another holds 200. The other groups' seeds spread by farthest-point over the
+    tiles' centroids. ``counts`` is fitted to the tiles there are."""
     if not tiles:
         return []
     counts = _fit_counts(counts, len(tiles))
     centroids = [_centroid(t) for t in tiles]
     shared = _shared_borders(tiles)
+    land_of = [len(t & land) for t in tiles]
+    total_land = sum(land_of)
+    targets = [total_land * c / sum(counts) for c in counts]
     seeds = _spread_seeds(centroids, len(counts))
     groups = [[s] for s in seeds]
     taken = set(seeds)
@@ -439,7 +446,9 @@ def group(tiles: list[set[Pip]], counts: list[int]) -> list[list[int]]:
             free = [i for i in range(len(tiles)) if i not in taken]
             if len(groups[g]) >= counts[g] or not free:
                 continue
-            pick = _pick_tile(groups[g], seeds[g], free, shared, centroids)
+            held = sum(land_of[i] for i in groups[g])
+            need = (targets[g] - held) / (counts[g] - len(groups[g]))
+            pick = _pick_tile(groups[g], seeds[g], free, shared, centroids, land_of, need)
             groups[g].append(pick)
             taken.add(pick)
             progress = True
@@ -452,18 +461,35 @@ def group(tiles: list[set[Pip]], counts: list[int]) -> list[list[int]]:
     return groups
 
 
-def _pick_tile(
+def _pick_tile(  # noqa: PLR0913 - one argument per fact the pick weighs
     members: list[int],
     seed: int,
     free: list[int],
     shared: list[dict[int, int]],
     centroids: list[Pip],
+    land_of: list[int],
+    need: float,
 ) -> int:
-    """The free tile a group takes next: the most shared border with its members, then
-    the nearest to its seed; any free tile when none borders it."""
-    border = {i: sum(shared[m][i] for m in members) for i in free}
-    pool = [i for i in free if border[i] > 0] or free
-    return max(pool, key=lambda i: (border[i], -_distance(centroids[i], centroids[seed]), -i))
+    """The free tile a group takes next. Land is judged in steps of a quarter of ``need``,
+    so tiles within that of the need are equals and the most shared border, then the
+    nearest to the seed, decides among them: on one landmass of even tiles this is the
+    neighbour walk. A group whose every free neighbour is a step or more off its need
+    reaches past them to the best free tile anywhere (even pips first, contiguity third):
+    on an archipelago that is how a duchy of two counties gets an island and a half
+    instead of two halves while another holds two islands."""
+    step = max(1.0, 0.25 * need)
+
+    def key(i: int) -> tuple[int, int, int, int]:
+        border = sum(shared[m][i] for m in members)
+        off = int(abs(land_of[i] - need) / step)
+        return (off, -border, _distance(centroids[i], centroids[seed]), i)
+
+    adjacent = [i for i in free if any(shared[m].get(i) for m in members)]
+    if adjacent:
+        best = min(adjacent, key=key)
+        if key(best)[0] == 0:
+            return best
+    return min(free, key=key)
 
 
 def _nearest_group(index: int, groups: list[list[int]], centroids: list[Pip]) -> int:
@@ -481,4 +507,4 @@ def lay_out_land(
     of the whole footprint, grouped by adjacency, so no duchy is smaller than its count
     says and a small island is part of a county rather than a duchy of its own (#5029)."""
     tiles = tile(pips, land, sum(counts), seed_hint, rng_seed)
-    return [[tiles[i] for i in g] for g in group(tiles, counts)]
+    return [[tiles[i] for i in g] for g in group(tiles, counts, land)]

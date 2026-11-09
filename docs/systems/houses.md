@@ -645,9 +645,12 @@ kingdom | potential
   when walled in, and are then balanced landmass by landmass, so two counties on one island
   are halves of it; land no tile reached joins the nearest; water inside the outline goes to
   the tile it touches most, so a realm keeps its waters (#4317). `group` then makes the
-  duchies: group 0 holds the seat's county, each takes its count of free neighbouring counties
-  (the most shared border first, then the nearest) and the nearest free county when it has no
-  neighbour left (an archipelago). A duchy is never smaller than its county count says. Fewer
+  duchies, even pips first (the owner's order): each duchy's land target is its share by
+  county count, and each pick is the free county whose land is nearest what the duchy still
+  needs per county, among its free neighbours when one is within a quarter of that need
+  (ties: the most shared border, then the nearest), else the best free county anywhere, so on
+  an archipelago a two-county duchy takes an island and a half rather than two halves while
+  another holds two islands. A duchy is never smaller than its county count says. Fewer
   tiles come back than asked when the land is short; never an empty one. No `random`: the
   tie-break is a crc32 of the seed and the pip.
 - **`preview_layout(realm, layout)` / `lay_out_realm(realm, layout) -> LayoutReport`** — the

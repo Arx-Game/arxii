@@ -138,7 +138,7 @@ class GroupTests(SimpleTestCase):
     def test_groups_hold_the_capital_tile_and_take_their_counts_from_neighbours(self) -> None:
         pips = rectangle(24, 12)
         tiles = tile(pips, pips, 8, seed_hint=(2, 2), rng_seed=2)
-        groups = group(tiles, [4, 2, 2])
+        groups = group(tiles, [4, 2, 2], pips)
         assert [len(g) for g in groups] == [4, 2, 2]
         assert 0 in groups[0]
         assert sorted(i for g in groups for i in g) == list(range(8))
@@ -148,7 +148,7 @@ class GroupTests(SimpleTestCase):
     def test_counts_are_fitted_when_there_are_fewer_tiles(self) -> None:
         pips = rectangle(6, 1)
         tiles = tile(pips, pips, 3, seed_hint=None, rng_seed=0)
-        groups = group(tiles, [4, 2, 2, 2])
+        groups = group(tiles, [4, 2, 2, 2], pips)
         assert len(groups) == 3
         assert all(len(g) == 1 for g in groups)
 
@@ -179,6 +179,20 @@ class LayOutLandTests(SimpleTestCase):
         for d in duchies:
             for county in d:
                 assert county & land, "every county holds land"
+
+    def test_duchies_follow_the_weights_in_land_where_whole_islands_allow(self) -> None:
+        # eight islands of 100 and counties 4, 2, 2, 2: ten pieces, six whole islands and four
+        # halves. Even pips first (owner): the capital takes wholes and halves toward 320, the
+        # others toward 160, so no duchy sits at 100 while another holds 200 (#5032 round 3)
+        cells = [(cx, cy) for cx in range(4) for cy in range(4) if (cx + cy) % 2 == 0]
+        islands = [rectangle(10, 10, at=(cx * 10, cy * 10)) for cx, cy in cells]
+        land = set().union(*islands)
+        pips = rectangle(40, 40)
+        duchies = lay_out_land(pips, land, [4, 2, 2, 2], seed_hint=(1, 1), rng_seed=5)
+        sizes = [sum(len(c & land) for c in d) for d in duchies]
+        assert [len(d) for d in duchies] == [4, 2, 2, 2]
+        assert within(sizes[:1], 320, 0.15), sizes
+        assert within(sizes[1:], 160, 0.15), sizes
 
     def test_too_little_land_gives_fewer_duchies_each_with_a_county(self) -> None:
         pips = {(0, 0), (1, 0), (2, 0)}
