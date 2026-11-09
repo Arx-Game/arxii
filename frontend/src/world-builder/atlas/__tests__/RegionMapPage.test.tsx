@@ -250,6 +250,40 @@ describe('RegionMapPage', () => {
     expect(viewport).toHaveAttribute('data-map-view', 'domain-vassal');
   });
 
+  it('resizes the names layer with the viewport, so a fold reveals names, not a clipped strip', async () => {
+    // jsdom has no layout and no ResizeObserver: stand in for both
+    const observers: ResizeObserverCallback[] = [];
+    class FakeResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        observers.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    let width = 600;
+    const widthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(() => width);
+    const heightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(() => 400);
+    try {
+      renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+      const names = screen.getByTestId('region-map-names');
+      expect(names).toHaveAttribute('width', '600');
+      width = 900;
+      act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)));
+      expect(names).toHaveAttribute('width', '900');
+      expect(names).toHaveAttribute('height', '400');
+    } finally {
+      widthSpy.mockRestore();
+      heightSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('zooms past the lattice range on the map (#5009)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} />);

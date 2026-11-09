@@ -354,16 +354,32 @@ export function RegionMapPage({
     visible,
   ]);
 
-  // ---- the names layer: seats and names in screen space, redrawn on view, zoom or pan ----
+  // ---- the names layer: seats and names in screen space, redrawn on view, zoom, pan or
+  // a change of viewport size (folding the panel or the pickers, resizing the window) ----
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const measure = () =>
+      setViewportSize((prev) =>
+        prev.width === viewport.clientWidth && prev.height === viewport.clientHeight
+          ? prev
+          : { width: viewport.clientWidth, height: viewport.clientHeight }
+      );
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [mapLoaded]);
   useEffect(() => {
     const canvas = namesRef.current;
-    const viewport = viewportRef.current;
-    if (!canvas || !viewport || !data || !bounds) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const size = { width: viewport.clientWidth, height: viewport.clientHeight };
+    if (!canvas || !data || !bounds) return;
+    const size = viewportSize;
     canvas.width = size.width;
     canvas.height = size.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const project = (x: number, y: number): [number, number] => [
       (x - bounds.x0 + 0.5) * PIP_PX * view.zoom + view.panX,
       (y - bounds.y0 + 0.5) * PIP_PX * view.zoom + view.panY,
@@ -378,7 +394,7 @@ export function RegionMapPage({
     );
     const seats = visible.filter((f) => f.seat != null).map((f) => project(f.seat![0], f.seat![1]));
     drawNamesLayer(ctx, size, seats, labels);
-  }, [anchors, bounds, data, mapView, view, visible]);
+  }, [anchors, bounds, data, mapView, view, viewportSize, visible]);
 
   // ---- pointer handling: pan, select, or drag pips ----
   const [panning, setPanning] = useState(false);
