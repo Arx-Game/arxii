@@ -36,6 +36,8 @@ from world.combat.services.equipment.equipped_weapon import (
     _weapon_augmented_budget,
     _wear_equipped_weapon,
     effective_weapon_profile,
+    splits_weapon_part,
+    weapon_damage_with_bonus,
 )
 from world.combat.services.techniques.technique_targets import (
     _resolve_condition_target,
@@ -105,6 +107,18 @@ def _charge_effect(
     base = get_maneuver_effect(key).base_value
     modifiers = effect_modifier_total(sheet, key, kind_wide=kind_wide, inputs=inputs)
     return max(0, (base * 2 if lance else base) + modifiers)
+
+
+def _profile_hit_type(
+    profile: AbstractDamageProfile, weapon: WeaponContribution | None
+) -> DamageType | None:
+    """The damage type a profile's own hit lands as (#5026): its own type; an untyped weapon
+    profile with a weapon in hand takes the weapon's; None is Physical."""
+    if profile.damage_type is not None:
+        return profile.damage_type
+    if profile.uses_equipped_weapon and weapon is not None:
+        return weapon.damage_type
+    return None
 
 
 @dataclass(frozen=True)
@@ -205,6 +219,9 @@ class CombatTechniqueResolver:
     # The attacker's combat style on this roll (#4884). None: worked out from the weapon
     # the roll is made with; a Strike passes the fit it already read for its record.
     style_fit: StyleFit | None = None
+    # Labelled lines a Strike adds to its hit roll (#5026): what a technique cast into it
+    # adds to hit, set by the technique roll. Nothing else adds them.
+    extra_hit_contributions: tuple[ModifierContribution, ...] = ()
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
@@ -241,7 +258,13 @@ class CombatTechniqueResolver:
             hit_stat = fit.hit_stat_name
             if hit_stat is not None:
                 return hit_stat
-            return weapon_stat_for(self.strike_weapon.item_instance)
+            from world.items.constants import GearArchetype  # noqa: PLC0415
+
+            # A throw rolls a thrown weapon's stat unless the weapon's class sets one (#5026).
+            return weapon_stat_for(
+                self.strike_weapon.item_instance,
+                GearArchetype.THROWN if self.strike_weapon.thrown else None,
+            )
         return weapon_stat_override(character)
 
     def roll_check_with_breakdown(self) -> tuple[CheckResult, ModifierBreakdown]:
@@ -266,7 +289,7 @@ class CombatTechniqueResolver:
         # AND is perform_check's own signal for check-based development-point
         # accrual (#3039). Folding it into extra_contributions here as well would
         # double-count the roll bonus.
-        extra_contributions: list[ModifierContribution] = []
+        extra_contributions: list[ModifierContribution] = list(self.extra_hit_contributions)
         if self.pull_flat_bonus:
             extra_contributions.append(
                 ModifierContribution(
@@ -402,6 +425,8 @@ class CombatTechniqueResolver:
             else 0
         )
         stat_override = self._stat_override(character, style_fit)
+        # A Strike's hit roll is its own (#5026): a technique cast into it never floors it.
+        ultimate_source = None if self.strike_weapon is not None else self.action.focused_action
         result = check_fn(
             character,
             self.offense_check_type,
@@ -416,7 +441,7 @@ class CombatTechniqueResolver:
         spend_contributing_conditions(breakdown)
         from world.magic.services.ultimates import floor_ultimate_check  # noqa: PLC0415
 
-        return floor_ultimate_check(result, self.action.focused_action), breakdown
+        return floor_ultimate_check(result, ultimate_source), breakdown
 
     def _sum_intensity_bump_pulls(self) -> int:
         """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
@@ -514,8 +539,16 @@ class CombatTechniqueResolver:
         # condition one profile consumes does not change the next profile's bonus.
         technique_bonus.read_opponent(target.objectdb)
         for profile, budget_bonus in profiles:
+            if sl >= profile.minimum_success_level and splits_weapon_part(profile, weapon):
+                # A typed weapon profile deals the weapon's damage as the weapon's own type,
+                # its own part apart (#5026): each meets the soak and resistance for its type.
+                weapon_result = self._apply_weapon_part(target, profile, weapon, multiplier)
+                if weapon_result is not None:
+                    results.append(weapon_result)
+                    weapon_landed = True
             # The soak (#4892) is read per profile: it is what stands against this hit, and a
-            # duelist's armor an earlier profile broke no longer counts.
+            # duelist's armor an earlier profile broke no longer counts. It is the soak for
+            # this profile's own damage type (#5026).
             scaled, profile_damage_type = self._profile_damage(
                 profile,
                 weapon,
@@ -525,7 +558,7 @@ class CombatTechniqueResolver:
                 eff_intensity=eff_intensity,
                 budget_bonus=budget_bonus,
                 technique_bonus=technique_bonus,
-                target_soak=target_soak_of(target),
+                target_soak=target_soak_of(target, _profile_hit_type(profile, weapon)),
             )
             if scaled <= 0:
                 continue
@@ -548,6 +581,41 @@ class CombatTechniqueResolver:
             )
             weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
         return results, weapon_landed
+
+    def _apply_weapon_part(
+        self,
+        target: CombatOpponent,
+        profile: AbstractDamageProfile,
+        weapon: WeaponContribution,
+        multiplier: Decimal,
+    ) -> OpponentDamageResult | None:
+        """Deal the equipped weapon's part of a typed weapon profile (#5026): the weapon's
+        damage and the weapon-damage bonus, scaled by the cast's success multiplier, as the
+        weapon's own type. None when it comes to nothing or the target is already down."""
+        from world.conditions.services import (  # noqa: PLC0415
+            resolved_damage_type,
+            scaled_outgoing_damage,
+        )
+
+        weapon_type = resolved_damage_type(weapon.damage_type)
+        amount = scaled_outgoing_damage(
+            self.participant.character_sheet.character,
+            int(weapon_damage_with_bonus(weapon, self.participant.character_sheet) * multiplier),
+            weapon_type,
+        )
+        if amount <= 0:
+            return None
+        target.refresh_from_db()
+        if target.status == OpponentStatus.DEFEATED:
+            return None
+        return _svc.apply_damage_to_opponent(
+            target,
+            amount,
+            damage_type=weapon_type,
+            ignores_soak=profile.ignores_soak,
+            source_sheet=self.participant.character_sheet,
+            execute_missing_health_multiplier=profile.execute_missing_health_multiplier,
+        )
 
     def _effective_damage_profiles(self) -> list[AbstractDamageProfile]:
         """Collect resolved technique and active signature rows for this cast."""

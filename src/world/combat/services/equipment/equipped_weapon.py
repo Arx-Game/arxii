@@ -63,25 +63,37 @@ def _weapon_augmented_budget(
     weapon: WeaponContribution | None,
     sheet: object | None = None,
 ) -> tuple[int, DamageType | None]:
-    """Fold an equipped weapon's contribution into a damage profile's budget.
+    """Fold an equipped weapon's contribution into an untyped damage profile's budget.
 
-    For a ``uses_equipped_weapon`` profile with an equipped weapon, adds the
-    weapon's damage to the formula budget, then the covenant-role weapon-damage
-    bonus (via ``_combat_target_bonus``) when a sheet is supplied. If the
-    profile authored no damage_type of its own, the weapon's type is used.
-    Returns ``(budget, damage_type)``; non-weapon profiles (or an unarmed
-    attacker) pass through unchanged.
+    For a ``uses_equipped_weapon`` profile with no damage type of its own and an equipped
+    weapon, adds the weapon's damage to the formula budget, then the covenant-role
+    weapon-damage bonus (``weapon_damage_with_bonus``), and the hit takes the weapon's
+    type. A typed weapon profile never turns the weapon's damage into its type (#5026,
+    owner ruling): the weapon's part is dealt on its own (``weapon_part_of``), so it passes
+    through unchanged here, as do non-weapon profiles and an unarmed attacker.
+    Returns ``(budget, damage_type)``.
     """
     profile_damage_type = profile.damage_type
-    if profile.uses_equipped_weapon and weapon is not None:
-        budget += weapon.damage
-        if sheet is not None:
-            from world.items.constants import WEAPON_DAMAGE_TARGET_NAME  # noqa: PLC0415
-
-            budget += _combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)
-        if profile_damage_type is None:
-            profile_damage_type = weapon.damage_type
+    if profile.uses_equipped_weapon and weapon is not None and profile_damage_type is None:
+        budget += weapon_damage_with_bonus(weapon, sheet)
+        profile_damage_type = weapon.damage_type
     return budget, profile_damage_type
+
+
+def weapon_damage_with_bonus(weapon: WeaponContribution, sheet: object | None = None) -> int:
+    """The weapon's damage plus the covenant-role weapon-damage bonus when a sheet is given."""
+    damage = weapon.damage
+    if sheet is not None:
+        from world.items.constants import WEAPON_DAMAGE_TARGET_NAME  # noqa: PLC0415
+
+        damage += _combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)
+    return damage
+
+
+def splits_weapon_part(profile: AbstractDamageProfile, weapon: WeaponContribution | None) -> bool:
+    """Whether ``profile`` deals the equipped weapon's damage as a part of its own (#5026):
+    a typed weapon profile with a weapon in hand."""
+    return profile.uses_equipped_weapon and weapon is not None and profile.damage_type is not None
 
 
 def _wear_equipped_weapon(character: Character) -> None:

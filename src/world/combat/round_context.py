@@ -53,6 +53,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.magic.models import Technique
     from world.magic.types.pull import CastPullDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -134,6 +135,13 @@ def resolve_focused_target_objectdb(
 
 # kwargs key for effort level — used as a guard and a lookup in _record_combat_declaration.
 _EFFORT_LEVEL_KEY: str = "effort_level"
+
+
+def _refuse_weapon_technique(technique: Technique) -> None:
+    """A weapon technique is cast into a Strike, from its "Enchant with" row, and nowhere
+    else (#5026): there is no second way to cast one."""
+    if technique.enchants_strike:
+        raise ActionDispatchError(ActionDispatchError.CAST_INTO_STRIKE)
 
 
 class CombatRoundContext(RoundContext):
@@ -448,6 +456,7 @@ class CombatRoundContext(RoundContext):
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
+            _refuse_weapon_technique(technique)
             self._commit_focused_pull(participant, technique, kwargs)
 
         # The frontend dispatches the focused action and each passive as SEPARATE

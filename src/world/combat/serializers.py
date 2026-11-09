@@ -519,6 +519,13 @@ class StrikeWeaponOptionSerializer(serializers.Serializer):
     strike_skill = serializers.CharField(
         help_text="The strike skill its hit roll weights, or the check's name when it has none."
     )
+    thrown = serializers.BooleanField(
+        help_text="The weapon thrown rather than held (#5026); the same item is offered both ways."
+    )
+    damage_share = serializers.IntegerField(
+        allow_null=True,
+        help_text="Percent of the weapon's damage a throw deals (#5026); null when not thrown.",
+    )
 
 
 class SteadyPlanSerializer(serializers.Serializer):
@@ -650,11 +657,15 @@ class ParticipantSerializer(serializers.ModelSerializer):
         from world.combat.services import strike_weapon_options  # noqa: PLC0415
         from world.combat.services.declarations.strike import (  # noqa: PLC0415
             strike_skill_names,
+            thrown_share,
         )
         from world.items.constants import GearArchetype  # noqa: PLC0415
 
         weapons = strike_weapon_options(obj.character_sheet.character)
         skills = strike_skill_names({weapon.check_type_name for weapon in weapons})
+        share = (
+            thrown_share(obj.character_sheet) if any(weapon.thrown for weapon in weapons) else None
+        )
         return [
             {
                 "item_instance_id": (
@@ -663,6 +674,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
                 "name": weapon.name,
                 "gear_kind": GearArchetype(weapon.gear_archetype).label,
                 "strike_skill": skills[weapon.check_type_name],
+                "thrown": weapon.thrown,
+                "damage_share": share if weapon.thrown else None,
             }
             for weapon in weapons
         ]
@@ -1125,6 +1138,7 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "is_ready",
             "maneuver",
             "item_instance",
+            "strike_thrown",
             "cast_destination",
             "cast_position_a",
             "cast_position_b",

@@ -54,15 +54,17 @@ def weapon_stat_override(character: CharacterType) -> str | int | None:
     return weapon_stat_for(_select_equipped_weapon(character))
 
 
-def weapon_stat_for(inst: ItemInstance | None) -> str | int | None:
+def weapon_stat_for(inst: ItemInstance | None, archetype: str | None = None) -> str | int | None:
     """The stat override for one weapon instance, or None (bare hands, unmapped kind).
 
     The same rule as ``weapon_stat_override``, for a weapon the caller already chose: a
     Strike rolls with the weapon the player picked, not the strongest one (#4858).
+    ``archetype`` is the gear kind the weapon is used as, when it is not the template's own:
+    a throwable dagger thrown rolls as a thrown weapon (#5026). A weapon class still wins.
     """
     if inst is None:
         return None
     weapon_class = inst.template.weapon_class
     if weapon_class is not None:
         return weapon_class.strength_tenths
-    return WEAPON_ARCHETYPE_STAT_MAP.get(inst.template.gear_archetype)
+    return WEAPON_ARCHETYPE_STAT_MAP.get(archetype or inst.template.gear_archetype)

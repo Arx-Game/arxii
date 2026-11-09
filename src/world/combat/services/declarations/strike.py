@@ -18,6 +18,7 @@ the hit roll and then the damage roll.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -50,14 +51,17 @@ if TYPE_CHECKING:
     from world.checks.types import (
         CheckResult,
         ModifierBreakdown,
+        ModifierContribution,
         RollBreakdown,
         RollLine,
         RollSnapshot,
     )
+    from world.combat.services.declarations.enchanted_strike import StrikeEnchantment
     from world.combat.types import OpponentDamageResult
     from world.conditions.models import DamageType
     from world.covenants.style_fit import StyleFit
     from world.items.models import ItemInstance
+    from world.magic.models import Technique
     from world.mechanics.derived_amounts import DerivedInputs
 
     StrikeRoll = tuple[CheckType, ModifierBreakdown, str, int | None, RollSnapshot, str]
@@ -81,21 +85,35 @@ def bare_hands() -> StrikeWeapon:
     )
 
 
-def strike_weapon_for_item(item_instance: ItemInstance) -> StrikeWeapon | None:
-    """``item_instance`` as a Strike weapon, or None when its gear kind is not a weapon."""
+def strike_weapon_for_item(
+    item_instance: ItemInstance, *, thrown: bool = False
+) -> StrikeWeapon | None:
+    """``item_instance`` as a Strike weapon, or None when its gear kind is not a weapon.
+
+    ``thrown`` is the weapon used as a thrown one (#5026): None unless its template can be
+    thrown, and then its gear kind is Thrown, so reach, the strike skill and wind follow.
+    """
     archetype = item_instance.template.gear_archetype
     if archetype not in WEAPON_ARCHETYPES:
         return None
+    if thrown:
+        if not item_instance.template.can_be_thrown:
+            return None
+        archetype = GearArchetype.THROWN
     return StrikeWeapon(
         item_instance=item_instance,
         name=item_instance.display_name,
         gear_archetype=archetype,
         check_type_name=STRIKE_CHECK_TYPE_BY_ARCHETYPE[archetype],
+        thrown=thrown,
     )
 
 
 def strike_weapon_options(character: Character) -> list[StrikeWeapon]:
-    """What ``character`` can Strike with: each equipped weapon, then bare hands."""
+    """What ``character`` can Strike with: each equipped weapon, then bare hands.
+
+    A weapon that can also be thrown is offered twice, to strike and to throw (#5026).
+    """
     options: list[StrikeWeapon] = []
     seen: set[int] = set()
     for equipped in character.equipped_items:
@@ -106,6 +124,9 @@ def strike_weapon_options(character: Character) -> list[StrikeWeapon]:
         if weapon is not None:
             seen.add(inst.pk)
             options.append(weapon)
+            throw = strike_weapon_for_item(inst, thrown=True)
+            if throw is not None:
+                options.append(throw)
     options.append(bare_hands())
     return options
 
@@ -145,10 +166,38 @@ def strike_reaches(attacker: Character, weapon: StrikeWeapon, opponent: CombatOp
 
 
 def _weapon_of(action: CombatRoundAction) -> StrikeWeapon:
-    """The weapon a declared Strike is made with: its item, or bare hands."""
+    """The weapon a declared Strike is made with: its item (thrown when declared so and it
+    can still be thrown), or bare hands."""
     if action.item_instance is None:
         return bare_hands()
+    if action.strike_thrown:
+        throw = strike_weapon_for_item(action.item_instance, thrown=True)
+        if throw is not None:
+            return throw
     return strike_weapon_for_item(action.item_instance) or bare_hands()
+
+
+def strike_style_fit(character: Character, weapon: StrikeWeapon) -> StyleFit:
+    """The striker's combat style for ``weapon`` (#4884). A style that fits a throwable
+    weapon fits both its uses (#5026, owner ruling): a throw fits a style that lists
+    either Thrown or the weapon's own kind."""
+    from world.covenants.constants import StyleLapse  # noqa: PLC0415
+    from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
+
+    fit = style_fit_for_attack(character, weapon.gear_archetype)
+    if weapon.thrown and weapon.item_instance is not None and fit.lapse == StyleLapse.WEAPON:
+        as_held = style_fit_for_attack(character, weapon.item_instance.template.gear_archetype)
+        if as_held.lapse != StyleLapse.WEAPON:
+            return as_held
+    return fit
+
+
+def strike_stat(weapon: StrikeWeapon) -> str | int | None:
+    """The stat a Strike with ``weapon`` rolls (#4858): a throw rolls a thrown weapon's
+    stat unless the weapon's class sets its own (#5026)."""
+    from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
+
+    return weapon_stat_for(weapon.item_instance, GearArchetype.THROWN if weapon.thrown else None)
 
 
 # ---------------------------------------------------------------------------
@@ -156,16 +205,25 @@ def _weapon_of(action: CombatRoundAction) -> StrikeWeapon:
 # ---------------------------------------------------------------------------
 
 
-def declare_strike(
+def declare_strike(  # noqa: PLR0913 - the Strike's picks: target, weapon, use, enchantment
     participant: CombatParticipant,
     opponent: CombatOpponent,
     item_instance: ItemInstance | None = None,
+    *,
+    thrown: bool = False,
+    technique: Technique | None = None,
+    confirm_soulfray_risk: bool = False,
 ) -> CombatRoundAction:
     """Declare a Strike at ``opponent`` with ``item_instance`` (None: bare hands).
 
     The weapon must be one of the character's equipped weapons. The strike skill for its
     gear kind must have an authored check type. The Strike is the round's one action:
     it replaces any technique declared this round.
+
+    ``thrown`` throws a weapon whose template can be thrown (#5026). ``technique`` is a
+    weapon technique the character knows, cast into this Strike (#5026): its cost is paid
+    when the Strike resolves, hit or miss, and ``confirm_soulfray_risk`` is the soulfray
+    accept box's answer. Never refused for lack of anima: an overspend goes to soulfray.
 
     Raises ValueError with a plain message for each refusal.
     """
@@ -186,38 +244,29 @@ def declare_strike(
         raise ValueError(msg)
 
     character = participant.character_sheet.character
-    if item_instance is None:
-        weapon = bare_hands()
-    else:
-        weapon = next(
-            (
-                option
-                for option in strike_weapon_options(character)
-                if option.item_instance is not None and option.item_instance.pk == item_instance.pk
-            ),
-            None,
-        )
-        if weapon is None:
-            msg = "Cannot strike: you have no such weapon equipped."
-            raise ValueError(msg)
+    weapon = _declared_weapon(character, item_instance, thrown=thrown)
     if strike_check_type(weapon) is None:
         msg = f"Cannot strike with {weapon.name}: {weapon.check_type_name} is not set up yet."
         raise ValueError(msg)
     if not strike_reaches(character, weapon, opponent):
         msg = f"Cannot strike: {opponent.name} is out of reach of your {weapon.name}."
         raise ValueError(msg)
+    if technique is not None:
+        _validate_enchantment(participant, technique)
 
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
         defaults={
-            "focused_action": None,
+            "focused_action": technique,
             "focused_category": ActionCategory.PHYSICAL,
             "effort_level": EffortLevel.MEDIUM,
             "focused_opponent_target": opponent,
             "focused_ally_target": None,
             "maneuver": CombatManeuver.STRIKE,
             "item_instance": item_instance,
+            "strike_thrown": weapon.thrown,
+            "confirm_soulfray_risk": confirm_soulfray_risk if technique is not None else False,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -226,6 +275,52 @@ def declare_strike(
         },
     )
     return action
+
+
+def _declared_weapon(
+    character: Character, item_instance: ItemInstance | None, *, thrown: bool
+) -> StrikeWeapon:
+    """The Strike option a declaration names, or a ValueError naming why there is none."""
+    if item_instance is None:
+        if thrown:
+            msg = "Cannot strike: bare hands cannot be thrown."
+            raise ValueError(msg)
+        return bare_hands()
+    options = [
+        option
+        for option in strike_weapon_options(character)
+        if option.item_instance is not None and option.item_instance.pk == item_instance.pk
+    ]
+    if not options:
+        msg = "Cannot strike: you have no such weapon equipped."
+        raise ValueError(msg)
+    weapon = next((option for option in options if option.thrown == thrown), None)
+    if weapon is None:
+        msg = f"Cannot throw your {item_instance.display_name}: it is not made for throwing."
+        raise ValueError(msg)
+    return weapon
+
+
+def _validate_enchantment(participant: CombatParticipant, technique: Technique) -> None:
+    """Refuse a technique that cannot be cast into this character's Strike (#5026): one she
+    does not know, one that is not a weapon technique, or one not set up for combat. Anima
+    is never checked: an overspend goes to soulfray when the Strike resolves."""
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
+    sheet = participant.character_sheet
+    if not CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
+        msg = "Cannot strike: you do not know that technique."
+        raise ValueError(msg)
+    if not technique.enchants_strike:
+        msg = f"Cannot strike: {technique.name} does not enchant a weapon. Cast it on its own."
+        raise ValueError(msg)
+    if (
+        technique.action_template_id is None
+        or resolve_cast_check(sheet.character, technique) is None
+    ):
+        msg = f"Cannot strike: {technique.name} cannot be used in combat."
+        raise ValueError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +403,11 @@ def _strike_damage(
     inputs = DerivedInputs(target_soak=target_soak)
     weapon_damage, floor = _weapon_damage(participant, weapon, inputs)
     multiplier = get_damage_multiplier(damage_roll.success_level or 0)
-    rolled = max(floor, int(weapon_damage * multiplier))
+    rolled = int(weapon_damage * multiplier)
+    if weapon.thrown:
+        # A throw deals a share of the weapon's own damage (#5026); the floor still holds.
+        rolled = rolled * thrown_share(participant.character_sheet) // 100
+    rolled = max(floor, rolled)
     total = max(
         0,
         rolled
@@ -323,6 +422,15 @@ def _strike_damage(
     )
     dealt = scaled_outgoing_damage(participant.character_sheet.character, total, damage_type)
     return weapon_damage, dealt, damage_type
+
+
+def thrown_share(sheet: object | None) -> int:
+    """The percent of its own damage a thrown weapon deals (#5026): the catalog's "Strike:
+    thrown damage" with its modifiers. A damage modifier never adds to it (its own kind)."""
+    from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+    from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
+
+    return effect_value(sheet, ManeuverEffectKey.STRIKE_THROWN_DAMAGE)
 
 
 def _skill_rating(participant: CombatParticipant, check_type: CheckType) -> int | None:
@@ -347,11 +455,13 @@ def _roll_hit(
     action: CombatRoundAction,
     check_type: CheckType,
     style_fit: StyleFit,
+    extra_contributions: tuple[ModifierContribution, ...] = (),
 ) -> tuple[CheckResult, ModifierBreakdown]:
     """The hit roll through the shared attack-roll seam, with its modifiers.
 
     ``style_fit`` is the striker's combat style for this weapon (#4884): its hit stat
-    replaces the weapon's, and its skill adds while it fits.
+    replaces the weapon's, and its skill adds while it fits. ``extra_contributions`` is
+    the one labelled line a technique cast into the Strike adds to hit (#5026).
     """
     from world.combat.services.techniques.technique_resolver import (  # noqa: PLC0415
         CombatTechniqueResolver,
@@ -366,6 +476,7 @@ def _roll_hit(
         offense_check_fn=None,
         strike_weapon=_weapon_of(action),
         style_fit=style_fit,
+        extra_hit_contributions=extra_contributions,
     )
     return resolver.roll_check_with_breakdown()
 
@@ -394,34 +505,90 @@ def strike_narration(  # noqa: PLR0913 - one narration line, its parts
     damage: int | None,
     defeated: bool = False,
     second_person: bool = False,
+    enchantment: str = "",
+    parts: str = "",
 ) -> str:
     """The line a Strike is told in: second person for the striker, third for the room.
 
     ``damage`` None is a miss. "You strike Bandit with your rapier. A good hit: 11 damage."
     and "Hobb strikes Bandit with a rapier. A good hit: 11 damage." Bare hands and a
     natural weapon take no article: "Hobb strikes Bandit with Talons."
+
+    A throw (#5026) reads "throws": "You throw your dagger at Bandit. A fair hit: 4 damage.
+    The dagger is back in your hand." ``enchantment`` names the technique cast into the
+    Strike ("wreathed in Wreathe the blade"); ``parts`` lists the damage by type when there
+    is more than one ("3 physical, 7 fire").
     """
     from core.text import with_indefinite_article  # noqa: PLC0415
 
     if second_person:
-        subject, verb = "You", "strike"
-        with_weapon = f"with your {weapon.name}"
+        subject = "You"
+        verb = "throw" if weapon.thrown else "strike"
+        with_weapon = f"your {weapon.name}" if weapon.thrown else f"with your {weapon.name}"
     else:
-        subject, verb = actor, "strikes"
-        with_weapon = (
-            f"with {weapon.name}"
+        subject = actor
+        verb = "throws" if weapon.thrown else "strikes"
+        article_name = (
+            weapon.name
             if weapon.item_instance is None or is_natural_weapon(weapon.item_instance)
-            else f"with {with_indefinite_article(weapon.name)}"
+            else with_indefinite_article(weapon.name)
         )
-    if damage is None:
-        miss = "miss" if second_person else "misses"
-        return f"{subject} {verb} at {target} {with_weapon} and {miss}."
+        with_weapon = article_name if weapon.thrown else f"with {article_name}"
+    if enchantment:
+        with_weapon = f"{with_weapon}, enchanted with {enchantment},"
+    back = ""
+    if weapon.thrown:
+        owner = "your" if second_person else "their"
+        back = f" The {weapon.name} is back in {owner} hand."
+    if weapon.thrown:
+        head = f"{subject} {verb} {with_weapon} at {target}".rstrip(",")
+        if damage is None:
+            return f"{head} and {'miss' if second_person else 'misses'}.{back}"
+    else:
+        if damage is None:
+            miss = "miss" if second_person else "misses"
+            return f"{subject} {verb} at {target} {with_weapon.rstrip(',')} and {miss}."
+        head = f"{subject} {verb} {target} {with_weapon}".rstrip(",")
     tail = ", defeating them" if defeated else ""
     quality = with_indefinite_article(hit_quality(success_level))
-    return (
-        f"{subject} {verb} {target} {with_weapon}. "
-        f"{quality[0].upper()}{quality[1:]} hit: {damage} damage{tail}."
-    )
+    split = f" ({parts})" if parts else ""
+    return f"{head}. {quality[0].upper()}{quality[1:]} hit: {damage} damage{split}{tail}.{back}"
+
+
+@dataclass
+class StrikeLanding:
+    """What a Strike's rolls came to (#4858, #5026): the hit roll, every roll row to record
+    in order, and each damage part dealt (the weapon's, then the enchantment's by type)."""
+
+    hit: CheckResult
+    rolls: list[StrikeRoll] = field(default_factory=list)
+    damage_results: list[OpponentDamageResult] = field(default_factory=list)
+    part_labels: list[str] = field(default_factory=list)
+
+    @property
+    def landed(self) -> bool:
+        return bool(self.damage_results)
+
+    @property
+    def damage_dealt(self) -> int | None:
+        """All parts together; None on a miss."""
+        if not self.damage_results:
+            return None
+        return sum(result.damage_dealt for result in self.damage_results)
+
+    @property
+    def defeated(self) -> bool:
+        return any(result.defeated for result in self.damage_results)
+
+    @property
+    def parts_text(self) -> str:
+        """ "3 physical, 7 fire": each part as dealt, when there is more than one."""
+        if len(self.damage_results) < 2:  # noqa: PLR2004 - one part needs no split
+            return ""
+        return ", ".join(
+            f"{result.damage_dealt} {label}"
+            for result, label in zip(self.damage_results, self.part_labels, strict=True)
+        )
 
 
 def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
@@ -429,11 +596,10 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
     action: CombatRoundAction,
     weapon: StrikeWeapon,
     target: CombatOpponent,
-    hit: CheckResult,
-    damage: OpponentDamageResult | None,
-    rolls: list[StrikeRoll],
+    landing: StrikeLanding,
+    enchantment: str = "",
 ) -> None:
-    """Record the Strike's interaction and its two rolls, narrate it to the room in the
+    """Record the Strike's interaction and its rolls, narrate it to the room in the
     third person, and tell the striker in the second person (telnet hears that line
     instead of the room's)."""
     from world.checks.services import record_consequence_outcome  # noqa: PLC0415
@@ -460,7 +626,7 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
         push_interaction(interaction)
-        for check_type, breakdown, summary, skill_rating, snapshot, kind in rolls:
+        for check_type, breakdown, summary, skill_rating, snapshot, kind in landing.rolls:
             record_consequence_outcome(
                 sheet,
                 check_type,
@@ -480,9 +646,11 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         actor=active_persona_for_sheet(sheet).name,
         target=target.name,
         weapon=weapon,
-        success_level=hit.success_level,
-        damage=damage.damage_dealt if damage is not None else None,
-        defeated=bool(damage is not None and damage.defeated),
+        success_level=landing.hit.success_level,
+        damage=landing.damage_dealt,
+        defeated=landing.defeated,
+        enchantment=enchantment,
+        parts=landing.parts_text,
     )
     broadcast_action_outcome(
         encounter=participant.encounter,
@@ -499,26 +667,125 @@ def _broadcast_strike(  # noqa: PLR0913 - one narration, its parts
         character.msg(narrate(second_person=True), session=sessions)
 
 
-def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -> ActionOutcome:
-    """Resolve a declared Strike: the hit roll, then the damage roll if it lands.
+def _damage_type_word(damage_type: DamageType | None) -> str:
+    """ "physical", "fire": a damage part's type as the damage row names it."""
+    return damage_type.name.lower() if damage_type is not None else "physical"
 
-    Each roll is recorded with its result line as the summary ("Hit, good", "Miss",
-    "11 damage"); ``strike_roll_breakdowns`` lays the rows out at read time.
+
+def land_strike(  # noqa: PLR0913 - the Strike's parts and its enchantment
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    target: CombatOpponent,
+    weapon: StrikeWeapon,
+    check_type: CheckType,
+    enchantment: StrikeEnchantment | None = None,
+) -> StrikeLanding:
+    """The hit roll, then on a hit the damage roll and each damage part (#4858, #5026).
+
+    ``enchantment`` is a technique cast into the Strike, already rolled: its roll's row
+    comes first, its to-hit line joins the hit roll as one labelled contribution, and on a
+    hit its typed parts land after the weapon's part, each through the damage step on its
+    own (the soak that covers its type, then resistance). A part is not applied once the
+    weapon's part has defeated the target. The Strike's damage roll never scales a typed
+    part; the technique roll never scales the weapon's.
     """
     from world.checks.types import ModifierBreakdown as _Breakdown  # noqa: PLC0415
-    from world.combat.services.techniques.allegiance_break import (  # noqa: PLC0415
-        _attempt_allegiance_breaks_for_action,
-    )
+    from world.combat.services.damage.soak import target_soak_of  # noqa: PLC0415
     from world.combat.services.techniques.intensity import (  # noqa: PLC0415
         is_miss,
         record_miss_intensity,
     )
-    from world.combat.services.techniques.npc_regard import (  # noqa: PLC0415
-        _maybe_record_npc_regard_on_defeat,
-    )
-    from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
-    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
 
+    character = participant.character_sheet.character
+    style_fit = strike_style_fit(character, weapon)
+    rating = _skill_rating(participant, check_type)
+    snapshot = _roll_snapshot(weapon, check_type, style_fit, participant)
+    extra = (enchantment.to_hit_contribution,) if enchantment and enchantment.to_hit else ()
+    hit, hit_breakdown = _roll_hit(participant, action, check_type, style_fit, extra)
+    missed = is_miss(hit.success_level)
+    landing = StrikeLanding(hit=hit)
+    if enchantment is not None:
+        landing.rolls.append(enchantment.roll_row())
+    landing.rolls.append(
+        (
+            check_type,
+            hit_breakdown,
+            hit_result_line(hit.success_level, missed=missed),
+            rating,
+            snapshot,
+            CombatRollKind.HIT,
+        )
+    )
+    if missed:
+        record_miss_intensity(participant)
+        return landing
+
+    damage_roll = _svc.perform_check(
+        character, check_type, target_difficulty=0, stat_override=strike_stat(weapon)
+    )
+    weapon_type = resolved_damage_type(
+        weapon.item_instance.effective_weapon_damage_type
+        if weapon.item_instance is not None
+        else None
+    )
+    _weapon_damage_before, dealt, damage_type = _strike_damage(
+        participant, weapon, damage_roll, target_soak_of(target, weapon_type)
+    )
+    typed_parts = enchantment.typed_parts(target, weapon_type) if enchantment else []
+    # An untyped weapon profile's damage joins the weapon's (#5026 Decision 14).
+    dealt += sum(amount for amount, part_type in typed_parts if part_type is None)
+    weapon_result = _svc.apply_damage_to_opponent(
+        target, dealt, damage_type=damage_type, source_sheet=participant.character_sheet
+    )
+    landing.damage_results.append(weapon_result)
+    landing.part_labels.append(_damage_type_word(damage_type))
+    for amount, part_type in typed_parts:
+        if part_type is None or amount <= 0:
+            continue
+        target.refresh_from_db()
+        if target.status != OpponentStatus.ACTIVE:
+            break
+        landing.damage_results.append(
+            _svc.apply_damage_to_opponent(
+                target,
+                amount,
+                damage_type=part_type,
+                source_sheet=participant.character_sheet,
+            )
+        )
+        landing.part_labels.append(_damage_type_word(part_type))
+    if weapon.item_instance is not None:
+        from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
+
+        decrement_item_durability(item_instance=weapon.item_instance)
+    landing.rolls.append(
+        (
+            check_type,
+            _Breakdown(),
+            _damage_summary(landing),
+            rating,
+            snapshot,
+            CombatRollKind.DAMAGE,
+        )
+    )
+    return landing
+
+
+def _damage_summary(landing: StrikeLanding) -> str:
+    """ "11 damage", or "10 damage: 3 physical, 7 fire" when the Strike dealt parts."""
+    total = f"{landing.damage_dealt} damage"
+    parts = landing.parts_text
+    return f"{total}: {parts}" if parts else total
+
+
+def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -> ActionOutcome:
+    """Resolve a declared Strike: the hit roll, then the damage roll if it lands.
+
+    Each roll is recorded with its result line as the summary ("Hit, good", "Miss",
+    "11 damage"); ``strike_roll_breakdowns`` lays the rows out at read time. A technique
+    cast into the Strike (#5026) resolves it inside its cast (``resolve_enchanted_strike``).
+    """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
     outcome.participant_id = participant.pk
     target = action.focused_opponent_target
@@ -543,64 +810,46 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
         _broadcast_fizzle_no_one_in_reach(participant, action)
         return outcome
 
-    from world.covenants.style_fit import style_fit_for_attack  # noqa: PLC0415
-
-    style_fit = style_fit_for_attack(character, weapon.gear_archetype)
-    rating = _skill_rating(participant, check_type)
-    snapshot = _roll_snapshot(weapon, check_type, style_fit, participant)
-    hit, hit_breakdown = _roll_hit(participant, action, check_type, style_fit)
-    missed = is_miss(hit.success_level)
-    rolls: list[StrikeRoll] = [
-        (
-            check_type,
-            hit_breakdown,
-            hit_result_line(hit.success_level, missed=missed),
-            rating,
-            snapshot,
-            CombatRollKind.HIT,
-        )
-    ]
-    damage: OpponentDamageResult | None = None
-    if missed:
-        record_miss_intensity(participant)
-    else:
-        damage_roll = _svc.perform_check(
-            character,
-            check_type,
-            target_difficulty=0,
-            stat_override=weapon_stat_for(weapon.item_instance),
-        )
-        from world.combat.services.damage.soak import target_soak_of  # noqa: PLC0415
-
-        _weapon_damage_before, dealt, damage_type = _strike_damage(
-            participant, weapon, damage_roll, target_soak_of(target)
-        )
-        damage = _svc.apply_damage_to_opponent(
-            target, dealt, damage_type=damage_type, source_sheet=participant.character_sheet
-        )
-        outcome.damage_results.append(damage)
-        if weapon.item_instance is not None:
-            from world.items.services.durability import (  # noqa: PLC0415
-                decrement_item_durability,
-            )
-
-            decrement_item_durability(item_instance=weapon.item_instance)
-        rolls.append(
-            (
-                check_type,
-                _Breakdown(),
-                f"{damage.damage_dealt} damage",
-                rating,
-                snapshot,
-                CombatRollKind.DAMAGE,
-            )
+    if action.focused_action is not None:
+        from world.combat.services.declarations.enchanted_strike import (  # noqa: PLC0415
+            resolve_enchanted_strike,
         )
 
+        return resolve_enchanted_strike(participant, action, outcome, weapon, check_type)
+
+    landing = land_strike(participant, action, target, weapon, check_type)
+    finish_strike(participant, action, outcome, weapon, target, landing)
+    return outcome
+
+
+def finish_strike(  # noqa: PLR0913 - the resolved Strike's parts
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    outcome: ActionOutcome,
+    weapon: StrikeWeapon,
+    target: CombatOpponent,
+    landing: StrikeLanding,
+    *,
+    enchantment: str = "",
+) -> None:
+    """What every resolved Strike does once, after all its damage (#4858, #5026): its
+    allegiance breaks, fatigue, record and narration, and an NPC's regard on a defeat.
+
+    The Strike's own fatigue is counted here once; a technique cast into it accrues its
+    cast fatigue inside its cast (``use_technique``), never a second time here."""
+    from world.combat.services.techniques.allegiance_break import (  # noqa: PLC0415
+        _attempt_allegiance_breaks_for_action,
+    )
+    from world.combat.services.techniques.npc_regard import (  # noqa: PLC0415
+        _maybe_record_npc_regard_on_defeat,
+    )
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    outcome.damage_results.extend(landing.damage_results)
     _attempt_allegiance_breaks_for_action(participant, outcome)
     apply_fatigue(participant.character_sheet, ActionCategory.PHYSICAL, 0, action.effort_level)
-    _broadcast_strike(participant, action, weapon, target, hit, damage, rolls)
+    _broadcast_strike(participant, action, weapon, target, landing, enchantment)
     _maybe_record_npc_regard_on_defeat(participant, action, target, outcome)
-    return outcome
 
 
 # ---------------------------------------------------------------------------
@@ -609,18 +858,20 @@ def _resolve_strike(participant: CombatParticipant, action: CombatRoundAction) -
 
 
 def _gear_kind_words(weapon: StrikeWeapon) -> str:
-    """ "one-handed melee", "bare hands": the weapon's kind as a row reads it."""
+    """ "one-handed melee", "thrown", "bare hands": the weapon's kind as a row reads it."""
     if weapon.is_bare_hands:
         return "bare hands"
     return GearArchetype(weapon.gear_archetype).label.lower()
 
 
 def _weapon_label(weapon: StrikeWeapon) -> str:
-    """ "Rapier, fine quality", "Bare hands": the weapon as the damage row names it."""
+    """ "Rapier, fine quality", "Dagger, thrown", "Bare hands": the weapon as the damage row
+    names it."""
     if weapon.item_instance is None:
         return "Bare hands"
     tier = weapon.item_instance.quality_tier
-    return f"{weapon.name}, {tier.name.lower()} quality" if tier is not None else weapon.name
+    label = f"{weapon.name}, {tier.name.lower()} quality" if tier is not None else weapon.name
+    return f"{label}, thrown" if weapon.thrown else label
 
 
 def _style_skill_rating(participant: CombatParticipant, style_fit: StyleFit) -> int | None:
@@ -646,10 +897,9 @@ def _roll_snapshot(
 ) -> RollSnapshot:
     """What the Strike's breakdown names, captured at roll time (#4858, #4884)."""
     from world.checks.types import RollSnapshot  # noqa: PLC0415
-    from world.combat.stat_mapping import weapon_stat_for  # noqa: PLC0415
 
     hit_stat = style_fit.hit_stat_name
-    override = hit_stat if hit_stat is not None else weapon_stat_for(weapon.item_instance)
+    override = hit_stat if hit_stat is not None else strike_stat(weapon)
     if override is not None:
         stats = [_stat_label(check_type, override)]
     else:
@@ -707,7 +957,8 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     """The rows of each Strike roll among ``outcomes``, keyed by outcome pk.
 
     A Strike records its hit roll (``CombatRollKind.HIT``) and then, if it landed, its
-    damage roll (``DAMAGE``) on its interaction. Every row reads what the roll stored when
+    damage roll (``DAMAGE``) on its interaction; an enchanted Strike records its technique
+    roll (``TECHNIQUE``) first (#5026). Every row reads what the roll stored when
     it was made (the skill rating, the weapon and its kind, the stat), so a later change to
     the character or the weapon never rewrites the record. The skill row names the skill
     the check type weights, and is left out when it weights none. A hit that went on to a
@@ -718,7 +969,7 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     from world.checks.constants import CombatRollKind  # noqa: PLC0415
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
 
-    strike_kinds = (CombatRollKind.HIT, CombatRollKind.DAMAGE)
+    strike_kinds = (CombatRollKind.TECHNIQUE, CombatRollKind.HIT, CombatRollKind.DAMAGE)
     strike_outcomes = [o for o in outcomes if o.combat_roll_kind in strike_kinds]
     if not strike_outcomes:
         return {}
@@ -747,7 +998,9 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
     breakdowns: dict[int, RollBreakdown] = {}
     for o in strike_outcomes:
         skill, _stats = traits[o.check_type_id]
-        if o.combat_roll_kind == CombatRollKind.HIT:
+        if o.combat_roll_kind == CombatRollKind.TECHNIQUE:
+            breakdowns[o.pk] = _technique_roll_breakdown(o)
+        elif o.combat_roll_kind == CombatRollKind.HIT:
             breakdowns[o.pk] = _hit_roll_breakdown(
                 o,
                 skill,
@@ -757,6 +1010,24 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
         else:
             breakdowns[o.pk] = _damage_roll_breakdown(o, skill)
     return breakdowns
+
+
+def _technique_roll_breakdown(outcome: ConsequenceOutcome) -> RollBreakdown:
+    """A technique cast into a Strike (#5026), as rows: its technique skill and the anima
+    the attack cost, then what the roll added. It goes on to the hit roll either way."""
+    from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
+
+    lines: list[RollLine] = []
+    if outcome.stat_label:
+        lines.append(RollLine(outcome.stat_label, _skill_value(outcome), "technique skill"))
+    if outcome.against_label:
+        lines.append(RollLine("Anima", outcome.against_label, "paid for this attack, hit or miss"))
+    return RollBreakdown(
+        heading=f"Technique roll: {outcome.weapon_label or ''}".strip(),
+        lines=lines,
+        result=outcome.summary,
+        result_note="then the hit roll",
+    )
 
 
 def _skill_value(outcome: ConsequenceOutcome) -> str:

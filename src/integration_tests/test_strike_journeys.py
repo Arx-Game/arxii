@@ -277,12 +277,16 @@ class StrikeWithAWeapon(_StrikeField):
                     "name": sword.display_name,
                     "gear_kind": "One-Handed Melee",
                     "strike_skill": "Melee Combat",
+                    "thrown": False,
+                    "damage_share": None,
                 },
                 {
                     "item_instance_id": None,
                     "name": "bare hands",
                     "gear_kind": "Unarmed",
                     "strike_skill": "Unarmed Combat",
+                    "thrown": False,
+                    "damage_share": None,
                 },
             ],
         )

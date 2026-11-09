@@ -208,12 +208,15 @@ class StrikeWeapon:
 
     ``item_instance`` is None for bare hands, whose gear kind is Unarmed.
     ``check_type_name`` names the strike skill's check type the hit roll uses.
+    ``thrown`` is a throwable one-handed weapon used as a thrown one (#5026): its gear kind
+    is then Thrown, so reach, the strike skill and wind follow the throw.
     """
 
     item_instance: ItemInstance | None
     name: str
     gear_archetype: str
     check_type_name: str
+    thrown: bool = False
 
     @property
     def is_bare_hands(self) -> bool:

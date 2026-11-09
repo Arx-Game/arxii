@@ -12,19 +12,46 @@ if TYPE_CHECKING:
     from world.conditions.models import DamageType
 
 
-def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) -> int:
-    """Return the effective soak value, bypassed by bypass_soak or vulnerability."""
+# Tiers whose soak is a wall that stands against every damage type (#5026, owner ruling):
+# a boss's defenses must be broken, and a Hero Killer's armor stops every type like a boss's.
+_WALLED_TIERS = frozenset({OpponentTier.BOSS, OpponentTier.HERO_KILLER})
+
+
+def has_wall(opponent: CombatOpponent) -> bool:
+    """Whether ``opponent``'s soak is a wall that stands against every damage type (#5026).
+
+    A boss or a Hero Killer, or any opponent with a probing threshold (the wall the
+    existing probing, combos, ``wall_breaker_combo`` and break bar exist to break). Every
+    other opponent's soak stops Physical only; its other protections are resistances.
+    """
+    return opponent.tier in _WALLED_TIERS or opponent.probing_threshold is not None
+
+
+def _effective_soak_for_opponent(
+    opponent: CombatOpponent, bypass_soak: bool, damage_type: DamageType | None = None
+) -> int:
+    """Return the effective soak value, bypassed by bypass_soak or vulnerability.
+
+    An ordinary opponent's soak stops a Physical hit only (#5026); a walled opponent's
+    (``has_wall``) stops every type. ``damage_type`` None is a Physical hit.
+    """
     if bypass_soak or _is_vulnerable(opponent):
+        return 0
+    from world.combat.services.equipment.armor_soak import is_physical  # noqa: PLC0415
+
+    if not has_wall(opponent) and not is_physical(damage_type):
         return 0
     return opponent.soak_value
 
 
-def target_soak_of(opponent: CombatOpponent) -> int:
-    """The soak that stands against a hit on ``opponent``, for a derived amount (#4892).
+def target_soak_of(opponent: CombatOpponent, damage_type: DamageType | None = None) -> int:
+    """The soak that stands against a hit of ``damage_type`` on ``opponent``, for a derived
+    amount (#4892). None is a Physical hit.
 
-    An ordinary opponent's ``soak_value``, 0 while it is vulnerable; a swarm has no soak; a
-    duel mirror's is the mirrored player's worn-armor soak, read without wearing it. Thread
-    damage reduction and the mitigation leak are not soak and are left out.
+    An ordinary opponent's ``soak_value`` against a Physical hit (#5026), 0 while it is
+    vulnerable; a swarm has no soak; a duel mirror's is the mirrored player's worn-armor
+    soak against that type, read without wearing it. Thread damage reduction and the
+    mitigation leak are not soak and are left out.
     """
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
         return 0
@@ -33,12 +60,18 @@ def target_soak_of(opponent: CombatOpponent) -> int:
             equipped_armor_soak,
         )
 
-        return equipped_armor_soak(opponent.mirrors_participant.character_sheet.character)
-    return _effective_soak_for_opponent(opponent, bypass_soak=False)
+        return equipped_armor_soak(
+            opponent.mirrors_participant.character_sheet.character, damage_type
+        )
+    return _effective_soak_for_opponent(opponent, bypass_soak=False, damage_type=damage_type)
 
 
 def _duel_mirror_pc_reduction(
-    opponent: CombatOpponent, damage: int, *, armor_soak_applies: bool
+    opponent: CombatOpponent,
+    damage: int,
+    *,
+    armor_soak_applies: bool,
+    damage_type: DamageType | None = None,
 ) -> int:
     """Reduce a duel mirror's hit by the mirrored PC's own thread DR and armor soak (#4758).
 
@@ -57,7 +90,7 @@ def _duel_mirror_pc_reduction(
     character = opponent.mirrors_participant.character_sheet.character
     damage = apply_damage_reduction_from_threads(character, damage)
     if armor_soak_applies:
-        damage = apply_equipped_armor_soak(character, damage)
+        damage = apply_equipped_armor_soak(character, damage, damage_type)
     return damage
 
 

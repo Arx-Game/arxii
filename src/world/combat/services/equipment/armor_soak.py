@@ -7,21 +7,57 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.conditions.models import DamageType
     from world.items.models import ItemInstance
+
+
+def is_physical(damage_type: DamageType | None) -> bool:
+    """Whether a hit of ``damage_type`` is Physical (#5026): untyped damage is (#4742), and
+    so is the configured Physical row. With no Physical row configured (an empty database)
+    only untyped damage is."""
+    if damage_type is None:
+        return True
+    from world.conditions.services import resolved_damage_type  # noqa: PLC0415
+
+    physical = resolved_damage_type(None)
+    return physical is not None and physical.pk == damage_type.pk
+
+
+def _templates_covering(template_ids: set[int], damage_type: DamageType | None) -> set[int]:
+    """Which of ``template_ids`` stand against a hit of ``damage_type`` (#5026): every
+    template stops Physical; another type only where the template lists it among the
+    types it also protects against. One query, and none for a Physical hit."""
+    if is_physical(damage_type) or not template_ids:
+        return set(template_ids)
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    through = ItemTemplate.also_protects_against.through
+    return set(
+        through.objects.filter(
+            itemtemplate_id__in=template_ids, damagetype_id=damage_type.pk
+        ).values_list("itemtemplate_id", flat=True)
+    )
 
 
 def _equipped_armor_soak_pieces(
     character: Character,
+    damage_type: DamageType | None = None,
 ) -> Iterator[tuple[ItemInstance, int]]:
-    """Yield (item_instance, soak) for each worn armor piece with positive soak."""
+    """Yield (item_instance, soak) for each worn armor piece with positive soak that stands
+    against a hit of ``damage_type`` (#5026: ordinary armor stops Physical only; a piece
+    whose template lists more types stops those too). None is a Physical hit."""
     from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
 
-    for equipped in list(character.equipped_items):
-        inst = equipped.item_instance
-        if inst.template.gear_archetype in ARMOR_ARCHETYPES:
-            soak = inst.effective_armor_soak
-            if soak > 0:
-                yield inst, soak
+    pieces = [
+        (equipped.item_instance, equipped.item_instance.effective_armor_soak)
+        for equipped in list(character.equipped_items)
+        if equipped.item_instance.template.gear_archetype in ARMOR_ARCHETYPES
+    ]
+    pieces = [(inst, soak) for inst, soak in pieces if soak > 0]
+    covering = _templates_covering({inst.template_id for inst, _ in pieces}, damage_type)
+    for inst, soak in pieces:
+        if inst.template_id in covering:
+            yield inst, soak
 
 
 def effective_soak_from_armor(character: Character) -> int:
@@ -56,6 +92,7 @@ def _resonant_armor_soak(character: Character) -> int:
 
 def _split_armor_soak_by_compatibility(
     character: Character,
+    damage_type: DamageType | None = None,
 ) -> tuple[int, int, list[ItemInstance], list[ItemInstance]]:
     """Split worn armor's effective soak into role-compatible vs incompatible buckets (#1174).
 
@@ -65,6 +102,9 @@ def _split_armor_soak_by_compatibility(
     With no engaged primary role, all armor is incompatible (it then competes via ``max``
     against a 0 resonant pool → armor-only). PRIMARY-only (#2641, Layer 3 — chassis): a
     secondary vow never widens gear compatibility.
+
+    Only pieces that stand against a hit of ``damage_type`` are split (#5026); None is a
+    Physical hit.
 
     Returns ``(compat_soak, incompat_soak, compat_pieces, incompat_pieces)`` where the
     piece lists are the ItemInstances whose physical soak fell in each bucket (for
@@ -77,7 +117,7 @@ def _split_armor_soak_by_compatibility(
         if hasattr(character, "covenant_roles")
         else []
     )
-    pieces = list(_equipped_armor_soak_pieces(character))
+    pieces = list(_equipped_armor_soak_pieces(character, damage_type))
     # The reach costs queries: build it only when there is armor to test and a vow to test with.
     reach = style_gear_reach(character) if engaged_roles and pieces else None
     compat_soak = incompat_soak = 0
@@ -94,8 +134,16 @@ def _split_armor_soak_by_compatibility(
     return compat_soak, incompat_soak, compat_pieces, incompat_pieces
 
 
-def apply_equipped_armor_soak(character: Character, damage: int) -> int:
+def apply_equipped_armor_soak(
+    character: Character, damage: int, damage_type: DamageType | None = None
+) -> int:
     """Reduce ``damage`` by role-gated equipped-armor soak (#1174, #2533, #4759).
+
+    Armor stands only against the damage types it covers (#5026, owner ruling): every
+    piece stops a Physical hit (``damage_type`` None is Physical); a hit of another type
+    meets only the pieces whose template lists it in ``also_protects_against``. The
+    resonant pool (covenant role, facets, mantles, motif, covenant level) stands against
+    every type.
 
     Worn armor is split by covenant-role compatibility. How much of it counts comes from
     ``defense_style_for`` (#4759): the character's ``CombatStyle`` share scales ALL worn
@@ -124,7 +172,7 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
     from world.covenants.defense import mitigation_leak  # noqa: PLC0415
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
-    soak, contributors = _worn_soak(character)
+    soak, contributors = _worn_soak(character, damage_type)
     if soak <= 0:
         return damage
 
@@ -135,13 +183,16 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> int:
     return damage - soaked + mitigation_leak(character, soaked)
 
 
-def equipped_armor_soak(character: Character) -> int:
-    """The soak ``apply_equipped_armor_soak`` would subtract from a hit, read without wearing
-    any armor (#4892): what a technique's target's soak input reads for a duelist."""
-    return _worn_soak(character)[0]
+def equipped_armor_soak(character: Character, damage_type: DamageType | None = None) -> int:
+    """The soak ``apply_equipped_armor_soak`` would subtract from a hit of ``damage_type``,
+    read without wearing any armor (#4892): what a technique's target's soak input reads for
+    a duelist."""
+    return _worn_soak(character, damage_type)[0]
 
 
-def _worn_soak(character: Character) -> tuple[int, list[ItemInstance]]:
+def _worn_soak(
+    character: Character, damage_type: DamageType | None = None
+) -> tuple[int, list[ItemInstance]]:
     """The character's soak against one hit and the armor pieces whose soak counts in it.
 
     The rule ``apply_equipped_armor_soak`` documents: the style share scales the
@@ -151,7 +202,7 @@ def _worn_soak(character: Character) -> tuple[int, list[ItemInstance]]:
     from world.covenants.defense import defense_style_for  # noqa: PLC0415
 
     compat_soak, incompat_soak, compat_pieces, incompat_pieces = _split_armor_soak_by_compatibility(
-        character
+        character, damage_type
     )
     defense = defense_style_for(character)
     compat_soak = compat_soak * defense.armor_share_tenths // 10

@@ -53866,6 +53866,7 @@ components:
       - capability
       - soulfray
       - favor
+      - technique
       type: string
       description: |-
         * `condition` - Condition
@@ -53883,6 +53884,7 @@ components:
         * `capability` - Capability
         * `soulfray` - Soulfray
         * `favor` - Favor
+        * `technique` - Technique roll
     ConsequencePoolCatalog:
       type: object
       description: Read-only serializer for the curated technique-cast consequence-pool
@@ -83844,6 +83846,14 @@ components:
         is_ultimate:
           type: boolean
           readOnly: true
+        enchants_strike:
+          type: boolean
+          readOnly: true
+        enchant_damage_types:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - action_category
       - action_template
@@ -83855,6 +83865,8 @@ components:
       - difficulty
       - display_name
       - eligible_fury_anchors
+      - enchant_damage_types
+      - enchants_strike
       - enhancements
       - is_movement
       - is_ultimate
@@ -94532,11 +94544,22 @@ components:
           type: string
           description: The strike skill its hit roll weights, or the check's name
             when it has none.
+        thrown:
+          type: boolean
+          description: The weapon thrown rather than held (#5026); the same item is
+            offered both ways.
+        damage_share:
+          type: integer
+          nullable: true
+          description: Percent of the weapon's damage a throw deals (#5026); null
+            when not thrown.
       required:
+      - damage_share
       - gear_kind
       - item_instance_id
       - name
       - strike_skill
+      - thrown
     Style:
       type: object
       description: Serializer for the Style catalog (#2030 — player-facing Motif style-binding).

@@ -94,6 +94,11 @@ _REDIRECT_AWAY_KEYWORD = "away"
 # of Soulfray. Stripped off the raw text before the ally/with/into parsing.
 _SOULFRAY_TOKEN = "soulfray"  # noqa: S105 - a maneuver keyword, not a credential
 
+# A Strike's enchantment clause and its throw word (#5026):
+# ``strike <opponent> with <weapon> thrown using <technique> [soulfray]``.
+_USING_SEPARATOR = " using "
+_THROWN_TOKEN = "thrown"  # noqa: S105 - a maneuver keyword, not a credential
+
 
 def _split_padded(text: str, separator: str) -> tuple[str, str] | None:
     """Split ``text`` on ``separator``, padding so a leading clause may be empty.
@@ -146,8 +151,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat dodge [<place>|here|off] - where you land if you dodge this round
         combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
-        combat strike <opp> [with <weapon>] - attack with an equipped weapon, or bare
-                                     hands when no weapon is named (also: strike)
+        combat strike <opp> [with <weapon> [thrown]] [using <technique> [soulfray]]
+                                   - attack with an equipped weapon, or bare hands when
+                                     no weapon is named; throw a throwable weapon; cast a
+                                     weapon technique into the blow (also: strike)
         combat await <technique> [soulfray] - wait for an opening: strike first at the
                                      first enemy to come within reach or attack you
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
@@ -399,17 +406,38 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         }
 
     def _resolve_strike_args(self, text: str) -> dict[str, Any]:
-        """Parse ``<opponent> [with <weapon>]`` for a basic Strike (#4858).
+        """Parse ``<opponent> [with <weapon> [thrown]] [using <technique> [soulfray]]``.
 
-        With no ``with`` clause the Strike is bare-handed. The weapon name is matched
-        against the striker's equipped weapons by ``StrikeAction`` itself.
+        A basic Strike (#4858). With no ``with`` clause the Strike is bare-handed. The
+        weapon name is matched against the striker's equipped weapons by ``StrikeAction``
+        itself. ``thrown`` after the weapon throws it (#5026); ``using <technique>`` casts
+        a weapon technique into the Strike, and a trailing ``soulfray`` accepts the
+        Soulfray risk of that cast, as ``await ... soulfray`` does (#5026).
         """
+        usage = "Usage: combat strike <opponent> [with <weapon> [thrown]] [using <technique>]."
+        kwargs: dict[str, Any] = {}
+        using = _split_padded(text, _USING_SEPARATOR)
+        if using is not None:
+            text, technique_text = using
+            technique_text = technique_text.strip()
+            lowered = technique_text.lower()
+            if lowered == _SOULFRAY_TOKEN or lowered.endswith(f" {_SOULFRAY_TOKEN}"):
+                technique_text = technique_text[: -len(_SOULFRAY_TOKEN)].strip()
+                kwargs["confirm_soulfray_risk"] = True
+            if not technique_text:
+                raise CommandError(usage)
+            kwargs["technique_id"] = self._find_technique_id(technique_text)
         clause = _split_padded(text, _WITH_SEPARATOR)
         opponent_text, weapon_text = clause if clause is not None else (text.strip(), "")
+        weapon_text = weapon_text.strip()
+        if weapon_text.lower() == _THROWN_TOKEN or weapon_text.lower().endswith(
+            f" {_THROWN_TOKEN}"
+        ):
+            weapon_text = weapon_text[: -len(_THROWN_TOKEN)].strip()
+            kwargs["thrown"] = True
         if not opponent_text or (clause is not None and not weapon_text):
-            msg = "Usage: combat strike <opponent> [with <weapon>]."
-            raise CommandError(msg)
-        kwargs: dict[str, Any] = {"opponent_id": self._resolve_opponent_pk(opponent_text)}
+            raise CommandError(usage)
+        kwargs["opponent_id"] = self._resolve_opponent_pk(opponent_text)
         if weapon_text:
             kwargs["weapon_name"] = weapon_text
         return kwargs
@@ -811,6 +839,11 @@ class CmdStrike(CmdCombat):
     Usage:
         strike <opponent>                - attack with your bare hands
         strike <opponent> with <weapon>  - attack with one of your equipped weapons
+        strike <opponent> with <weapon> thrown
+                                         - throw a weapon made for throwing
+        strike <opponent> with <weapon> using <technique> [soulfray]
+                                         - cast a weapon technique into the blow; it
+                                           costs its anima on this attack, hit or miss
 
     The same action as ``combat strike``: a hit roll on the strike skill for the
     weapon's kind, then a damage roll if it lands. It is your action for the round.
@@ -824,6 +857,6 @@ class CmdStrike(CmdCombat):
         self._subverb = "strike"
         self._rest = (self.args or "").strip()
         if not self._rest:
-            self.msg("Usage: strike <opponent> [with <weapon>].")
+            self.msg("Usage: strike <opponent> [with <weapon> [thrown]] [using <technique>].")
             return
         super(CmdCombat, self).func()  # resolve_action_ref + resolve_action_args + dispatch

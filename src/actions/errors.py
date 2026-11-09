@@ -39,6 +39,7 @@ class ActionDispatchError(Exception):
     CANNOT_ACT = "cannot_act"
     STRAIN_OVER_BUDGET = "strain_over_budget"
     LETHAL_RISK_UNACKNOWLEDGED = "lethal_risk_unacknowledged"
+    CAST_INTO_STRIKE = "cast_into_strike"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -66,6 +67,7 @@ class ActionDispatchError(Exception):
         CANNOT_ACT: "You are in no state to act.",
         STRAIN_OVER_BUDGET: "You do not have the anima to push that hard.",
         LETHAL_RISK_UNACKNOWLEDGED: ("Acknowledge the lethal risk of this duel before acting."),
+        CAST_INTO_STRIKE: "That technique enchants a Strike: pick Strike, then enchant with it.",
     }
     _FALLBACK = "That action could not be completed."
 

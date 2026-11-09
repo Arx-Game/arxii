@@ -403,8 +403,9 @@ def apply_damage_to_participant(  # noqa: PLR0913
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.
+    # Armor stands only against the types it covers (#5026): Physical always.
     if not ignores_soak:
-        effective_damage = apply_equipped_armor_soak(character, effective_damage)
+        effective_damage = apply_equipped_armor_soak(character, effective_damage, damage_type)
 
     # Attack-cover from PositionShelter (applies_to_attacks=True rows, #2011).
     effective_damage = apply_position_cover(character, effective_damage, damage_type)
