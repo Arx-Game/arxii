@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
     from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.types.substance import SubstanceCallUp
     from world.mechanics.types import AppliedEffect
 
 
@@ -161,3 +162,5 @@ class TechniqueUseResult:
     price_paid: Restriction | None = None
     #: The cast's runtime intensity, so a combat rider can judge an impressive cast (#4147).
     runtime_intensity: int = 0
+    #: #5018: what calling up her gift's substance spent and did on this cast, if any.
+    substance_call_up: SubstanceCallUp | None = None

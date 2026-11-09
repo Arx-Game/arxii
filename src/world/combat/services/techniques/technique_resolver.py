@@ -401,6 +401,15 @@ class CombatTechniqueResolver:
                     )
                 )
 
+        # #5018: a surroundings restriction the room fails is one named SCENE penalty.
+        from world.magic.services.surroundings import (  # noqa: PLC0415
+            surroundings_contributions,
+        )
+
+        extra_contributions.extend(
+            surroundings_contributions(character, self.action.focused_action)
+        )
+
         # The style skill (#4884) joins the cast's own skill terms while the character
         # fights the style's way: the weapon and every held vow on the style.
         style_fit = self._attack_style_fit(character)

@@ -11,6 +11,16 @@
 
 ### Magic
 
+- **Gift substance (#5018, ADR-5018):** `GiftSubstance` maps a gift onto a room reading
+  (shadow = LIGHTING falling). `world/magic/services/substance.py`: `substance_for_gift`,
+  `plan_substance_call_up` (one pure plan read by the card, the charge and the power line),
+  `substance_power`, `apply_substance_plan`, `call_up_offers`, `mark_substance_present`,
+  `clear_caster_substance`, `clear_scene_substance_marks`; `get_runtime_caster_stats`
+  (`services/techniques.py`). Actions `call_up_substance`, `stage_substance`,
+  `gm_list_substances`; telnet `callup`, `stage present|absent`; REST
+  `GET /api/action-requests/call-up-offers/`; combat participant `call_up`.
+  `Restriction.surroundings_stat/min/max` + `services/surroundings.py` (heavy named
+  penalty, never a refusal). Details: [magic.md](magic.md) "A gift's substance".
 - **Defense piercing (#4575):** shared damage profiles author `ignores_soak`,
   per-hit signed-point `resistance_shift`, and `bypasses_wards`. Soak stops at zero;
   resistance can become more vulnerable; a ward-bypassing cast carries its
@@ -1810,7 +1820,10 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
   polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
   `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
-  cascade, #1514/#1522), `resolve_area_art(room_profile)` (#3477 — a room's own
+  cascade, #1514/#1522; since #5018 an enclosure keeps out only `weather:` rows and the climate
+  base, so a room's own rows count indoors, and walls also keep weather's LIGHTING out),
+  `felt_reading(room, stat_key=, exclude_source=)` (#5018: the unclamped reading, optionally
+  without one writer's own row), `resolve_area_art(room_profile)` (#3477 — a room's own
   `ObjectDisplayData.thumbnail` wins outright, else most-specific-wins up `Area.art`, mirroring
   `get_effective_climate`), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/

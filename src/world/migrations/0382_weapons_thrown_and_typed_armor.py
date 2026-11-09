@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0379_blink_traversal"),
-    ]
+    dependencies = [("arxii", "0381_restriction_surroundings_constraints")]
 
     operations = [
         migrations.AddField(

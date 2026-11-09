@@ -185,7 +185,7 @@ jobs:
           ls -la src/server/logs || true
           tail -n 80 src/server/logs/*.log || true
           exit 1
-      - name: Seed the rows the facet spec reads
+      - name: Seed the rows the facet and gift substance specs read
         # After the server is up, so Evennia's first-start setup has run on an
         # otherwise empty object table. Test-factory rows in a throwaway database:
         # see src/integration_tests/live_seeds.py.
@@ -193,6 +193,8 @@ jobs:
           uv run arx manage shell -c "
           from integration_tests.live_seeds import seed_motif_facet_spec
           print(seed_motif_facet_spec(username='e2e_test_account'))
+          from integration_tests.live_seeds import seed_gift_substance_spec
+          print(seed_gift_substance_spec(username='e2e_test_account'))
           "
       - name: Seed the fight the thrown-strike spec reads
         # #5026: a character with a throwable dagger and a fire weapon technique, an
@@ -214,7 +216,8 @@ jobs:
         run: >-
           npx playwright test --config e2e.backend.config.ts --workers=1
           e2e/account-settings.spec.ts e2e/user-journey.spec.ts
-          e2e/motif-facets.spec.ts e2e/thrown-and-enchanted-strike.spec.ts
+          e2e/motif-facets.spec.ts e2e/gift-substance.spec.ts
+          e2e/thrown-and-enchanted-strike.spec.ts
       - name: Stop the server
         if: always()
         run: uv run arx stop || true

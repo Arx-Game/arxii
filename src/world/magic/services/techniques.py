@@ -18,7 +18,11 @@ from flows.events.payloads import (
     TechniqueCastPayload,
     TechniquePreCastPayload,
 )
-from world.magic.constants import AffinityInteractionKind, PowerStage
+from world.magic.constants import (
+    RESONANCE_ENVIRONMENT_LEDGER_LABEL,
+    AffinityInteractionKind,
+    PowerStage,
+)
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
 from world.magic.services.resonance_environment import (
@@ -65,6 +69,7 @@ if TYPE_CHECKING:
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.personalization import PricePayment
     from world.magic.types.pull import CastPullDeclaration
+    from world.magic.types.substance import SubstancePlan
     from world.mechanics.models import ModifierTarget
 
 
@@ -510,6 +515,26 @@ def _environment_amplifies(environment: ResonanceEnvironmentEffect | None) -> bo
     )
 
 
+def _add_environment_stage(
+    builder: PowerLedgerBuilder,
+    *,
+    environment: ResonanceEnvironmentEffect | None,
+    substance_power: int,
+    substance_label: str,
+) -> None:
+    """The ENVIRONMENT stage: the place's resonance reaction (#639) and her substance (#5018).
+
+    The two lines read different things, so affinity is not counted twice: the first reads
+    the room's resonances, the second the room reading her gift's substance is.
+    """
+    if _environment_amplifies(environment):
+        builder.add(
+            PowerStage.ENVIRONMENT, RESONANCE_ENVIRONMENT_LEDGER_LABEL, environment.magnitude
+        )
+    if substance_power:
+        builder.add(PowerStage.ENVIRONMENT, f"Surroundings: {substance_label}", substance_power)
+
+
 def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogonal cast input
     *,
     channeled_intensity: int,
@@ -520,8 +545,14 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     situation_ctx: object | None = None,
     target_sheet: CharacterSheet | None = None,
     price_payment: PricePayment | None = None,
+    substance_power: int = 0,
+    substance_label: str = "",
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
+
+    ``substance_power`` / ``substance_label`` (#5018): her gift's substance in the room,
+    after any call-up this cast makes, as one ENVIRONMENT line ("Surroundings: shadow").
+    Computed once in ``use_technique`` from the cast's ``SubstancePlan``; 0 adds no line.
 
     ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
     ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
@@ -619,9 +650,12 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
 
-    # --- ENVIRONMENT stage (#639 Task 4): a place's cast-time resonance reaction ---
-    if _environment_amplifies(environment):
-        builder.add(PowerStage.ENVIRONMENT, "resonance environment", environment.magnitude)
+    _add_environment_stage(
+        builder,
+        environment=environment,
+        substance_power=substance_power,
+        substance_label=substance_label,
+    )
 
     return builder.clamp_floor().build()
 
@@ -678,6 +712,25 @@ def get_runtime_technique_stats(
             _sheet=sheet,
         )
 
+    return _caster_stream_stats(
+        character, sheet, base_intensity=technique.intensity, base_control=technique.control
+    )
+
+
+def _caster_stream_stats(
+    character: ObjectDB,
+    sheet: CharacterSheet | None,
+    *,
+    base_intensity: int,
+    base_control: int,
+) -> RuntimeTechniqueStats:
+    """The caster's own intensity and control streams on top of a base (#5018 split).
+
+    Identity modifiers (CharacterModifier), process modifiers (her CharacterEngagement),
+    the social safety bonus when she is not engaged, and the IntensityTier control
+    modifier. A cast passes its technique's intensity and control as the base; the
+    no-technique call-up passes 0 and 0.
+    """
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
@@ -703,8 +756,8 @@ def get_runtime_technique_stats(
         social_safety = _get_social_safety_bonus()
 
     # Sum
-    runtime_intensity = technique.intensity + identity_intensity + process_intensity
-    runtime_control = technique.control + identity_control + process_control + social_safety
+    runtime_intensity = base_intensity + identity_intensity + process_intensity
+    runtime_control = base_control + identity_control + process_control + social_safety
 
     # IntensityTier control modifier
     tier_control = _get_intensity_tier_control_modifier(runtime_intensity)
@@ -716,6 +769,17 @@ def get_runtime_technique_stats(
         # engagement's control_modifier far down, and a negative figure would raise the
         # anima cost without limit. The old per-cast Fury penalty floored the same way.
         control=max(runtime_control, 0),
+    )
+
+
+def get_runtime_caster_stats(character: ObjectDB) -> RuntimeTechniqueStats:
+    """Her own intensity and control with no technique (#5018): what prices a call-up.
+
+    The same identity, engagement and social-safety streams a cast adds on top of its
+    technique, so outside a fight her control usually covers a small call-up.
+    """
+    return _caster_stream_stats(
+        character, _get_character_sheet(character), base_intensity=0, base_control=0
     )
 
 
@@ -1195,23 +1259,39 @@ def _calculate_technique_cost(  # noqa: PLR0913
     apply_variant: bool,
     preferred_resonance,
 ):
-    """Calculate runtime stats, anima cost, and effective strain."""
+    """Calculate runtime stats, anima cost, effective strain and the substance plan.
+
+    #5018: the cast's call-up of its gift's substance is added to the technique's own cost
+    before control is taken off, so her spare control (control over intensity beyond what
+    the technique itself needs) covers it first. The card (``_cast_preview``) and the
+    charge read this one function, so they agree.
+    """
+    from world.magic.services.substance import plan_substance_call_up  # noqa: PLC0415
+
     stats = get_runtime_technique_stats(
         technique, character, apply_variant=apply_variant, preferred_resonance=preferred_resonance
     )
+    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
+    best_delta = max(stats.control - stats.intensity, base_stats.control - base_stats.intensity)
+    plan = plan_substance_call_up(
+        character=character,
+        gift=technique.gift,
+        room=character.location,
+        control_surplus=max(best_delta - technique.anima_cost, 0),
+    )
+    total_base_cost = technique.anima_cost + plan.call_up_anima
     anima = CharacterAnima.objects.filter(character_id=character.pk).first()
     anima_current = anima.current if anima is not None else 0
     runtime_cost = calculate_effective_anima_cost(
-        base_cost=technique.anima_cost,
+        base_cost=total_base_cost,
         runtime_intensity=stats.intensity,
         runtime_control=stats.control,
         current_anima=anima_current,
         strain_commitment=0,
         lethal=True,
     )
-    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
     base_cost = calculate_effective_anima_cost(
-        base_cost=technique.anima_cost,
+        base_cost=total_base_cost,
         runtime_intensity=base_stats.intensity,
         runtime_control=base_stats.control,
         current_anima=anima_current,
@@ -1221,14 +1301,14 @@ def _calculate_technique_cost(  # noqa: PLR0913
     requested_cost = min(runtime_cost.effective_cost, base_cost.effective_cost) + strain_commitment
     actual_cost = min(requested_cost, anima_current) if not lethal else requested_cost
     cost = AnimaCostResult(
-        base_cost=technique.anima_cost,
+        base_cost=total_base_cost,
         effective_cost=actual_cost,
         control_delta=runtime_cost.control_delta,
         current_anima=anima_current,
         deficit=max(actual_cost - anima_current, 0),
     )
     effective_strain = min(strain_commitment, actual_cost) if not lethal else strain_commitment
-    return stats, anima, cost, effective_strain
+    return stats, anima, cost, effective_strain, plan
 
 
 def _strain_power_bonus(effective_strain: int, strain_config, strain_power_enabled: bool) -> int:
@@ -1330,8 +1410,11 @@ def _prepare_technique_cast(  # noqa: PLR0913
     price_payment=None,
     cast_check=None,
     burn_result: ResonanceBurnResult | None = None,
+    substance_plan: SubstancePlan | None = None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
+    from world.magic.services.substance import substance_power  # noqa: PLC0415
+
     effective_targets = targets or []
     caster_room = character.location
     room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
@@ -1344,6 +1427,8 @@ def _prepare_technique_cast(  # noqa: PLR0913
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
+        substance_power=substance_power(substance_plan) if substance_plan is not None else 0,
+        substance_label=substance_plan.label if substance_plan is not None else "",
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
@@ -1458,9 +1543,33 @@ def _complete_technique_cast(  # noqa: PLR0913
     defer_soulfray_reveal: bool = False,
     cast_pull: CastPullDeclaration | None = None,
     pulled_resonance: Resonance | None = None,
+    substance_plan: SubstancePlan | None = None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
+    # #5018: the call-up's anima rode the one deduct above; now its room row, its
+    # resonance and the room's unattributed line, before the cast resolves.
+    substance_call_up = None
+    if substance_plan is not None and substance_plan.calls_up:
+        from world.magic.services.substance import apply_substance_plan  # noqa: PLC0415
+
+        call_up_sheet = _get_character_sheet(character)
+        if call_up_sheet is not None:
+            substance_call_up = apply_substance_plan(substance_plan, sheet=call_up_sheet)
+    elif substance_plan is not None and substance_plan.blocked:
+        from world.magic.types.substance import SubstanceCallUp  # noqa: PLC0415
+
+        # Nothing was called up although the room lacked it; the result says why.
+        substance_call_up = SubstanceCallUp(
+            label=substance_plan.label,
+            anima=0,
+            resonance=0,
+            resonance_name=(
+                substance_plan.resonance.name if substance_plan.resonance is not None else ""
+            ),
+            room_changed=False,
+            blocked=substance_plan.blocked,
+        )
     # Carried drift (#4732): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415
@@ -1536,6 +1645,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         strain_power_bonus=preparation.strain_power_bonus,
         price_paid=price_payment.price if price_payment is not None else None,
         runtime_intensity=stats.intensity,
+        substance_call_up=substance_call_up,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
@@ -1629,7 +1739,7 @@ def use_technique(  # noqa: PLR0913
     wheels (the scene action path), passes it; that caller must never drop it.
     """
     _validate_strain_commitment(strain_commitment)
-    stats, anima, cost, effective_strain = _calculate_technique_cost(
+    stats, anima, cost, effective_strain, substance_plan = _calculate_technique_cost(
         character=character,
         technique=technique,
         strain_commitment=strain_commitment,
@@ -1651,7 +1761,7 @@ def use_technique(  # noqa: PLR0913
         )
     if fury is not None and fury.surrender():
         # The trade is on her engagement now; this cast reads it like any later one.
-        stats, anima, cost, effective_strain = _calculate_technique_cost(
+        stats, anima, cost, effective_strain, substance_plan = _calculate_technique_cost(
             character=character,
             technique=technique,
             strain_commitment=strain_commitment,
@@ -1701,6 +1811,7 @@ def use_technique(  # noqa: PLR0913
         price_payment=price_payment,
         cast_check=cast_check,
         burn_result=burn_result,
+        substance_plan=substance_plan,
     )
     if preparation is None:
         if fury is not None:
@@ -1736,4 +1847,5 @@ def use_technique(  # noqa: PLR0913
         defer_soulfray_reveal=defer_soulfray_reveal,
         cast_pull=cast_pull,
         pulled_resonance=pulled_resonance,
+        substance_plan=substance_plan,
     )

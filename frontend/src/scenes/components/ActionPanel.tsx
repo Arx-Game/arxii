@@ -23,6 +23,9 @@ import {
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
+import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
+import { GiftCallUpRow } from './GiftCallUpRow';
+import { CastSpendLine } from './CastSpendLine';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
@@ -754,6 +757,7 @@ export function ActionPanel({ sceneId }: Props) {
                 <div id="cast-section" className="mt-2 space-y-2">
                   {castLedgerResult?.result?.power_ledger && (
                     <div className="space-y-2" data-testid="cast-ledger-result">
+                      <CastSpendLine result={castLedgerResult.result} />
                       <PowerLedgerPanel ledger={castLedgerResult.result.power_ledger} />
                       <Button
                         size="sm"
@@ -767,6 +771,13 @@ export function ActionPanel({ sceneId }: Props) {
                         Done
                       </Button>
                     </div>
+                  )}
+
+                  {!castLedgerResult && characterId != null && (
+                    <GiftCallUpRow
+                      characterId={characterId}
+                      initiatorPersonaId={initiatorPersonaId}
+                    />
                   )}
 
                   {!castLedgerResult && isCastLoading && (
@@ -801,7 +812,7 @@ export function ActionPanel({ sceneId }: Props) {
                                 {tech.name}
                               </span>
                               <span className="ml-2 shrink-0 text-muted-foreground">
-                                {tech.anima_cost} anima
+                                {tech.cast_preview?.effective_anima_cost ?? tech.anima_cost} anima
                               </span>
                             </span>
                             <TechniqueEffectSummaryDisplay
@@ -828,6 +839,17 @@ export function ActionPanel({ sceneId }: Props) {
                         summary={selectedTechnique.effect_summary}
                         variant="full"
                       />
+
+                      {selectedTechnique.cast_preview && (
+                        <div className="space-y-0.5">
+                          <p className="text-xs text-muted-foreground">
+                            Cost: {selectedTechnique.cast_preview.effective_anima_cost} anima
+                          </p>
+                          <SurroundingsLines
+                            lines={selectedTechnique.cast_preview.surroundings ?? []}
+                          />
+                        </div>
+                      )}
 
                       <TechniqueFormPicker
                         technique={selectedTechnique}

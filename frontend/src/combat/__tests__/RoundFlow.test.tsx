@@ -60,6 +60,7 @@ function makeParticipant(id: number, name: string): Participant {
     compulsion: null,
     steady_plan: null,
     dig_deep: null,
+    call_up: null,
     strike_weapons: null,
   };
 }

@@ -1057,8 +1057,101 @@ function GrantItemTab({
 // actor.location fallback when neither `target`/`target_id` is supplied).
 // ---------------------------------------------------------------------------
 
+type StageMode = 'prop' | 'property' | 'present';
+
+interface SubstanceEntry {
+  gift_id: number;
+  label: string;
+}
+
+// "Present here" (#5018): the GM answers "is there shadow here?" with yes, for the rest of
+// the scene. The list comes from `gm_list_substances`, the shape `gm_list_conditions` uses.
+function StagePresentHere({ characterId }: { characterId: number }) {
+  const dispatch = useDispatchPlayerAction(characterId);
+  const [substances, setSubstances] = useState<SubstanceEntry[]>([]);
+  const [marked, setMarked] = useState<SubstanceEntry[]>([]);
+  const [chosen, setChosen] = useState('');
+
+  function load() {
+    dispatch
+      .mutateAsync({ ref: { backend: 'registry', registry_key: 'gm_list_substances' }, kwargs: {} })
+      .then((result) => {
+        const data = (result.data ?? {}) as {
+          substances?: SubstanceEntry[];
+          marked?: SubstanceEntry[];
+        };
+        setSubstances(data.substances ?? []);
+        setMarked(data.marked ?? []);
+      })
+      .catch(() => toast.error('Could not load substances.'));
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when the mode opens
+  useEffect(load, [characterId]);
+
+  function mark(giftId: number, present: boolean) {
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'stage_substance' },
+        kwargs: { substance: giftId, present },
+      })
+      .then((result) => {
+        reportResult(result, present ? 'Marked present.' : 'Mark removed.');
+        load();
+      })
+      .catch(() => toast.error('Could not mark it.'));
+  }
+
+  return (
+    <div className="space-y-2" data-testid="gm-stage-present-here">
+      <div className="space-y-1">
+        <Label htmlFor="gm-stage-substance">Substance</Label>
+        <select
+          id="gm-stage-substance"
+          className={SELECT_CLASS}
+          value={chosen}
+          onChange={(e) => setChosen(e.target.value)}
+          data-testid="gm-stage-substance-select"
+        >
+          <option value="">Select a substance…</option>
+          {substances.map((entry) => (
+            <option key={entry.gift_id} value={entry.gift_id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Button
+        disabled={dispatch.isPending || chosen === ''}
+        onClick={() => mark(Number(chosen), true)}
+        data-testid="gm-stage-mark-present"
+      >
+        Mark present
+      </Button>
+      {marked.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold">Marked in this scene</p>
+          {marked.map((entry) => (
+            <div key={entry.gift_id} className="flex items-center justify-between text-sm">
+              <span>{entry.label}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={dispatch.isPending}
+                onClick={() => mark(entry.gift_id, false)}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StageTab({ characterId, targetCharacterId }: TabProps) {
-  const [mode, setMode] = useState<'prop' | 'property'>('prop');
+  const [mode, setMode] = useState<StageMode>('prop');
   const [search, setSearch] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [propertyName, setPropertyName] = useState('');
@@ -1108,14 +1201,16 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
           id="gm-stage-mode"
           className={SELECT_CLASS}
           value={mode}
-          onChange={(e) => setMode(e.target.value as 'prop' | 'property')}
+          onChange={(e) => setMode(e.target.value as StageMode)}
           data-testid="gm-stage-mode-select"
         >
           <option value="prop">Prop</option>
           <option value="property">Property</option>
+          <option value="present">Present here</option>
         </select>
       </div>
-      {mode === 'prop' ? (
+      {mode === 'present' && <StagePresentHere characterId={characterId} />}
+      {mode === 'prop' && (
         <div className="space-y-1">
           <Label htmlFor="gm-stage-search">Item template</Label>
           <Input
@@ -1138,7 +1233,8 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
             ))}
           </select>
         </div>
-      ) : (
+      )}
+      {mode === 'property' && (
         <>
           <div className="space-y-1">
             <Label htmlFor="gm-stage-property-name">Property</Label>
@@ -1162,9 +1258,11 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
           </div>
         </>
       )}
-      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
-        {renderDispatch2()}
-      </Button>
+      {mode !== 'present' && (
+        <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
+          {renderDispatch2()}
+        </Button>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import type {
   BoonOptions,
   IncomingConsentRequest,
   Place,
+  CallUpOffer,
   CastableTechnique,
   CastPullRequestBody,
   CastRequestBody,
@@ -488,6 +489,28 @@ export function useCastableTechniques(initiatorPersonaId: number | null) {
   return useQuery({
     queryKey: ['castable-techniques', initiatorPersonaId],
     queryFn: () => fetchCastableTechniques(initiatorPersonaId!),
+    enabled: initiatorPersonaId !== null,
+  });
+}
+
+/**
+ * The gifts whose substance she can call up here with no technique (#5018).
+ *
+ * GET /api/action-requests/call-up-offers/?initiator_persona=<id>. Priced by her own
+ * control; never filtered by anima. Pressing one dispatches `call_up_substance`.
+ */
+export async function fetchCallUpOffers(initiatorPersonaId: number): Promise<CallUpOffer[]> {
+  const res = await apiFetch(
+    `/api/action-requests/call-up-offers/?initiator_persona=${initiatorPersonaId}`
+  );
+  if (!res.ok) throw new Error('Failed to load your gift');
+  return res.json() as Promise<CallUpOffer[]>;
+}
+
+export function useCallUpOffers(initiatorPersonaId: number | null) {
+  return useQuery({
+    queryKey: ['call-up-offers', initiatorPersonaId],
+    queryFn: () => fetchCallUpOffers(initiatorPersonaId!),
     enabled: initiatorPersonaId !== null,
   });
 }

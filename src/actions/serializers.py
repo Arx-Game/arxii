@@ -36,6 +36,7 @@ from actions.constants import ActionBackend, ActionCategory, PersonaMenuGroupKey
 from actions.errors import ActionDispatchError
 from actions.result_extraction import extract_dispatch_message_data
 from actions.types import ActionRef, ActionResult, DispatchResult, PersonaMenu, PlayerAction
+from world.magic.serializers_substance import SurroundingsLineSerializer
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -143,6 +144,7 @@ class CastPreviewSerializer(serializers.Serializer):
     intensity = serializers.IntegerField(read_only=True)
     control = serializers.IntegerField(read_only=True)
     effective_anima_cost = serializers.IntegerField(read_only=True)
+    surroundings = SurroundingsLineSerializer(many=True, read_only=True)
 
 
 class StrainAvailabilitySerializer(serializers.Serializer):

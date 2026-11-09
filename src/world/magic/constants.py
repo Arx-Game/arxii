@@ -887,3 +887,19 @@ class ComponentMode(models.TextChoices):
     MATERIAL = "material", "Tied to the resonance"
     FACET = "facet", "Carries a motif facet of the resonance"
     KEEPSAKE = "keepsake", "Means enough to the performer"
+
+
+class SubstanceDirection(models.TextChoices):
+    """Which way a gift's substance grows along its room reading (#5018).
+
+    Shadow grows as lighting FALLS; water, wind and fire grow as wet, wind and heat RISE.
+    """
+
+    RISING = "rising", "rises"
+    FALLING = "falling", "falls"
+
+
+#: The power-ledger label of a place's resonance reaction (#639). Narration reads it to say
+#: "the place's resonance swells the working"; a gift's substance line (#5018) shares the
+#: ENVIRONMENT stage but is not the place's resonance, so narration must tell them apart.
+RESONANCE_ENVIRONMENT_LEDGER_LABEL = "resonance environment"

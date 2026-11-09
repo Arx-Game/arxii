@@ -1,1 +1,1 @@
-0380_weapons_thrown_and_typed_armor
+0382_weapons_thrown_and_typed_armor

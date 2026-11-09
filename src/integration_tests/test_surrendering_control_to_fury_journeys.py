@@ -452,6 +452,7 @@ class SeeingTheTrade(_AtTheFord):
                 "intensity": TECHNIQUE_INTENSITY + 8,
                 "control": 40 - SEETHING_SURRENDERS,
                 "effective_anima_cost": 0,
+                "surroundings": [],
             },
         )
         # The cast itself runs at the intensity the card showed.
@@ -481,7 +482,8 @@ class SeeingTheTrade(_AtTheFord):
             if row["ref"].get("technique_id") == self.technique.pk
         )
         self.assertEqual(
-            cast["cast_preview"], {"intensity": 50, "control": 40, "effective_anima_cost": 5}
+            cast["cast_preview"],
+            {"intensity": 50, "control": 40, "effective_anima_cost": 5, "surroundings": []},
         )
 
 

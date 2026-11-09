@@ -314,6 +314,13 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
             lapse_conversion_offers(self)
 
+            # #5018: a GM's "yes, there are shadows here" lasts the scene, however it ends.
+            from world.magic.services.substance import (  # noqa: PLC0415
+                clear_scene_substance_marks,
+            )
+
+            clear_scene_substance_marks(self)
+
 
 class SceneClock(SharedMemoryModel):
     """An authored countdown on the beat a scene is running (#3567).

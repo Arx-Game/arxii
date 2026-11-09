@@ -31,9 +31,9 @@ export function PowerLedgerPanel({ ledger }: { ledger: PowerLedger | null | unde
       </CardHeader>
       <CardContent className="space-y-1 text-xs">
         <ul className="space-y-1">
-          {ledger.entries.map((entry) => (
+          {ledger.entries.map((entry, index) => (
             <li
-              key={entry.stage}
+              key={`${index}-${entry.stage}`}
               data-testid={`power-ledger-row-${entry.stage}`}
               className={cn(
                 'flex items-baseline justify-between gap-2',

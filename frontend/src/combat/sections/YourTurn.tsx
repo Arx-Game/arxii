@@ -37,6 +37,7 @@ import {
   NO_TARGET_TECHNIQUE_KEY,
   type Compulsion,
 } from '@/combat/components/CompulsionBanner';
+import { CallUpInFight } from '@/combat/components/CallUpInFight';
 import { DigDeep } from '@/combat/components/DigDeep';
 import { MovementActions } from '../components/MovementActions';
 import { availableActionsKeys } from '@/scenes/actionQueries';
@@ -3048,6 +3049,15 @@ export function YourTurn({
       {myParticipantSelf?.dig_deep && (
         <DigDeep
           offer={myParticipantSelf.dig_deep}
+          isLocked={readOnly || !isDeclaringPhase}
+          dispatchAction={dispatchAction}
+          onDispatched={refreshEncounter}
+        />
+      )}
+
+      {myParticipantSelf?.call_up && (
+        <CallUpInFight
+          offer={myParticipantSelf.call_up}
           isLocked={readOnly || !isDeclaringPhase}
           dispatchAction={dispatchAction}
           onDispatched={refreshEncounter}

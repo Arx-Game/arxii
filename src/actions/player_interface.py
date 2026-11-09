@@ -800,9 +800,10 @@ def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) ->
     cheaper of the variant and base form, and capped at current anima in a non-lethal
     fight. Declared strain is added at declaration, not here.
     """
+    from world.magic.services.surroundings import cast_surroundings_lines  # noqa: PLC0415
     from world.magic.services.techniques import _calculate_technique_cost  # noqa: PLC0415
 
-    stats, _anima, cost, _strain = _calculate_technique_cost(
+    stats, _anima, cost, _strain, plan = _calculate_technique_cost(
         character=character,
         technique=technique,
         strain_commitment=0,
@@ -811,7 +812,10 @@ def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) ->
         preferred_resonance=None,
     )
     return CastPreview(
-        intensity=stats.intensity, control=stats.control, effective_anima_cost=cost.effective_cost
+        intensity=stats.intensity,
+        control=stats.control,
+        effective_anima_cost=cost.effective_cost,
+        surroundings=tuple(cast_surroundings_lines(character, technique, plan)),
     )
 
 
@@ -1968,6 +1972,7 @@ def _build_enhancement_index(
         get_runtime_technique_stats,
         get_soulfray_warning,
     )
+    from world.magic.services.substance import plan_substance_call_up  # noqa: PLC0415
     from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
 
     by_action_key: dict[str, list[AvailableEnhancement]] = {}
@@ -1985,7 +1990,7 @@ def _build_enhancement_index(
         return by_action_key
 
     soulfray_warning = get_soulfray_warning(character) if rows else None
-    stats_cache: dict[int, tuple[int, int]] = {}
+    stats_cache: dict[int, tuple[int, int, int]] = {}
 
     for row in rows:
         technique = row.technique
@@ -1993,12 +1998,20 @@ def _build_enhancement_index(
             continue
         if technique.pk not in stats_cache:
             stats = get_runtime_technique_stats(technique, character)
-            stats_cache[technique.pk] = (stats.intensity, stats.control)
-        intensity, control = stats_cache[technique.pk]
+            # #5018: a call-up of her gift's substance rides the cost before control, as
+            # in the cast's own cost function. No gift thread with a substance: no query.
+            plan = plan_substance_call_up(
+                character=character,
+                gift=technique.gift,
+                room=character.location,
+                control_surplus=max(stats.control - stats.intensity - technique.anima_cost, 0),
+            )
+            stats_cache[technique.pk] = (stats.intensity, stats.control, plan.call_up_anima)
+        intensity, control, call_up_anima = stats_cache[technique.pk]
 
         if anima is not None:
             cost = calculate_effective_anima_cost(
-                base_cost=technique.anima_cost,
+                base_cost=technique.anima_cost + call_up_anima,
                 runtime_intensity=intensity,
                 runtime_control=control,
                 current_anima=anima.current,

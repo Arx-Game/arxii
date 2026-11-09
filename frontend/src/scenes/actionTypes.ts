@@ -197,6 +197,37 @@ export interface CastPreview {
   intensity: number;
   control: number;
   effective_anima_cost: number;
+  /**
+   * Where she stands (#5018): the call-up of her gift's substance this cast makes, its
+   * power line, and any surroundings restriction the room fails. Shown under the cost.
+   */
+  surroundings?: SurroundingsLine[];
+}
+
+/** One line a cast card shows about where she stands (#5018). */
+export interface SurroundingsLine {
+  /** power | call_up | blocked | needs */
+  kind: string;
+  text: string;
+  /** Signed power for a power line, the penalty for a needs line. */
+  amount: number;
+  anima: number;
+  resonance: number;
+  /** A call-up line's right-hand cost; empty for the other kinds. */
+  detail: string;
+}
+
+/** One gift whose substance she can call up with no technique, priced now (#5018). */
+export interface CallUpOffer {
+  gift_id: number;
+  label: string;
+  effective_cost: number;
+  resonance_cost: number;
+  already_present: boolean;
+  can_call_up: boolean;
+  cost_line: string;
+  /** "Anima: 18 · after: 18 · Umbral resonance after: unchanged". */
+  balance_line: string;
 }
 
 export interface PlayerActionsResponse {
@@ -373,6 +404,17 @@ export interface TechniqueResultData {
   anima_spent: number;
   soulfray_stage: string | null;
   mishap_label: string | null;
+  /** What calling up her gift's substance took on this cast (#5018), if anything. */
+  substance_call_up?: SubstanceCallUpData | null;
+}
+
+export interface SubstanceCallUpData {
+  label: string;
+  anima: number;
+  resonance: number;
+  resonance_name: string;
+  /** Why nothing was called up: too_little_resonance, held_fixed, or empty. */
+  blocked: string;
 }
 
 export interface ActionResolutionStepData {
@@ -551,6 +593,8 @@ export interface CastableTechnique {
    * null when the technique carries no protective reactive-trigger handler.
    */
   reactive_anima_cost?: number | null;
+  /** The cast as it would run here and now (#5018): cost with any call-up, and lines. */
+  cast_preview?: CastPreview | null;
 }
 
 export interface CastPullRequestBody {
