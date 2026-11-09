@@ -337,7 +337,9 @@ class CastableTechniqueSerializer(serializers.Serializer):
         character = self.context.get("character")
         if character is None:
             return None
-        return CastPreviewSerializer(_cast_preview(character, obj, lethal=True)).data
+        # A standalone scene cast is never lethal (cast_services: lethal=False), so the
+        # card prices it the same way: capped at her anima, as the charge is.
+        return CastPreviewSerializer(_cast_preview(character, obj, lethal=False)).data
 
     def get_name(self, obj: Technique) -> str:
         """The owner's own name for this technique, or the catalog's (#4099)."""
