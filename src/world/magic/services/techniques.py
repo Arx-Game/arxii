@@ -18,7 +18,11 @@ from flows.events.payloads import (
     TechniqueCastPayload,
     TechniquePreCastPayload,
 )
-from world.magic.constants import AffinityInteractionKind, PowerStage
+from world.magic.constants import (
+    RESONANCE_ENVIRONMENT_LEDGER_LABEL,
+    AffinityInteractionKind,
+    PowerStage,
+)
 from world.magic.models import CharacterAnima, IntensityTier
 from world.magic.services.anima import deduct_anima
 from world.magic.services.resonance_environment import (
@@ -524,7 +528,9 @@ def _add_environment_stage(
     the room's resonances, the second the room reading her gift's substance is.
     """
     if _environment_amplifies(environment):
-        builder.add(PowerStage.ENVIRONMENT, "resonance environment", environment.magnitude)
+        builder.add(
+            PowerStage.ENVIRONMENT, RESONANCE_ENVIRONMENT_LEDGER_LABEL, environment.magnitude
+        )
     if substance_power:
         builder.add(PowerStage.ENVIRONMENT, f"Surroundings: {substance_label}", substance_power)
 

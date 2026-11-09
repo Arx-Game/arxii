@@ -219,6 +219,8 @@ class HerCastCallsUpItsSubstance(_ShadowField):
         self.assertEqual(_lighting(self.room), -1)
         self.assertTold(self.tomas, ARRIVAL)
         self.assertNotIn("Mira", ARRIVAL)
+        # Her substance is not the place's resonance (found by real testing, #5018).
+        self.assertNotTold(self.tomas, "the place's resonance swells")
 
     def test_a_second_shadow_caster_finds_it_already_there(self) -> None:
         self.cast()

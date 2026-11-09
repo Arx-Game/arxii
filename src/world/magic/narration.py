@@ -137,11 +137,24 @@ def _penetration_clause(power_ledger: PowerLedger) -> str:
 
 
 def _environment_clause(power_ledger: PowerLedger) -> str:
-    """Return the ENVIRONMENT-amplification clause (ADD with positive amount), or ``""``."""
-    from world.magic.constants import LedgerOp, PowerStage  # noqa: PLC0415
+    """Return the place's-resonance clause (its ENVIRONMENT line, positive), or ``""``.
+
+    Only the place's resonance line (#639) reads this way; a gift's substance line (#5018)
+    shares the stage but is the room's reading, not the place's resonance.
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        RESONANCE_ENVIRONMENT_LEDGER_LABEL,
+        LedgerOp,
+        PowerStage,
+    )
 
     for entry in power_ledger.entries:
-        if entry.stage == PowerStage.ENVIRONMENT and entry.op == LedgerOp.ADD and entry.amount > 0:
+        if (
+            entry.stage == PowerStage.ENVIRONMENT
+            and entry.source_label == RESONANCE_ENVIRONMENT_LEDGER_LABEL
+            and entry.op == LedgerOp.ADD
+            and entry.amount > 0
+        ):
             return "— the place's resonance swells the working"
     return ""
 

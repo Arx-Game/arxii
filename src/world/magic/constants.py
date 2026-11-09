@@ -897,3 +897,9 @@ class SubstanceDirection(models.TextChoices):
 
     RISING = "rising", "Grows as the reading rises"
     FALLING = "falling", "Grows as the reading falls"
+
+
+#: The power-ledger label of a place's resonance reaction (#639). Narration reads it to say
+#: "the place's resonance swells the working"; a gift's substance line (#5018) shares the
+#: ENVIRONMENT stage but is not the place's resonance, so narration must tell them apart.
+RESONANCE_ENVIRONMENT_LEDGER_LABEL = "resonance environment"
