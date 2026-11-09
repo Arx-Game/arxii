@@ -48,7 +48,10 @@ from integration_tests.test_defense_style_journeys import (
     _TheYard,
 )
 from integration_tests.test_strike_journeys import _StrikeField
-from integration_tests.test_technique_effect_damage_journeys import _DamageField
+from integration_tests.test_technique_effect_damage_journeys import (
+    _DamageField,
+    grant_damage_modifier,
+)
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions, place_in_position
 from world.checks.constants import ModifierLane, ModifierSize
@@ -312,6 +315,17 @@ class EnchantingTheStrike(_ThrowingField):
             f"{FIRE_PART + FIRE_WEAKNESS} fire",
         )
 
+    def test_a_kind_wide_damage_modifier_counts_once_on_the_weapon_part(self) -> None:
+        grant_damage_modifier(self.sheet, "Any damage", 3)
+        technique = self.wreathe_the_blade()
+
+        lost = self.throw_at(
+            self.archer, "Success", "Success", "Success", technique_id=technique.pk
+        )
+
+        # +3 reaches the steel through "Strike: base damage" and never the fire part.
+        self.assertEqual(lost, (THROWN_DAMAGE + 3 - ARCHER_SOAK) + (FIRE_PART + FIRE_WEAKNESS))
+
     def test_a_failed_technique_roll_still_pays_and_adds_nothing(self) -> None:
         technique = self.wreathe_the_blade()
 
@@ -392,6 +406,23 @@ class FireOnNPCsBeyondTheStrike(_DamageField):
         self.bandit.vulnerability_rounds_remaining = 2
         self.bandit.save(update_fields=["vulnerability_rounds_remaining"])
         self.assertEqual(self.strike(self.bolt), 6)
+
+    def test_a_hero_killer_and_a_probing_wall_stand_against_fire(self) -> None:
+        self.bandit.tier = OpponentTier.HERO_KILLER
+        self.bandit.soak_value = 2
+        self.bandit.save(update_fields=["tier", "soak_value"])
+        self.assertEqual(self.strike(self.bolt), 6 - 2)
+
+        walled = CombatOpponentFactory(
+            encounter=self.encounter,
+            name="Gate captain",
+            health=200,
+            max_health=200,
+            soak_value=2,
+            probing_threshold=5,
+        )
+        self.bandit = walled
+        self.assertEqual(self.strike(self.bolt), 6 - 2)
 
 
 class AWeaponTechniqueIsCastOnlyIntoAStrike(_DamageField):

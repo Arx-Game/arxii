@@ -734,14 +734,14 @@ def land_strike(  # noqa: PLR0913 - the Strike's parts and its enchantment
     )
     typed_parts = enchantment.typed_parts(target, weapon_type) if enchantment else []
     # An untyped weapon profile's damage joins the weapon's (#5026 Decision 14).
-    dealt += sum(amount for amount, part_type in typed_parts if part_type is None)
+    dealt += sum(part.amount for part in typed_parts if part.damage_type is None)
     weapon_result = _svc.apply_damage_to_opponent(
         target, dealt, damage_type=damage_type, source_sheet=participant.character_sheet
     )
     landing.damage_results.append(weapon_result)
     landing.part_labels.append(_damage_type_word(damage_type))
-    for amount, part_type in typed_parts:
-        if part_type is None or amount <= 0:
+    for part in typed_parts:
+        if part.damage_type is None or part.amount <= 0:
             continue
         target.refresh_from_db()
         if target.status != OpponentStatus.ACTIVE:
@@ -749,12 +749,15 @@ def land_strike(  # noqa: PLR0913 - the Strike's parts and its enchantment
         landing.damage_results.append(
             _svc.apply_damage_to_opponent(
                 target,
-                amount,
-                damage_type=part_type,
+                part.amount,
+                damage_type=part.damage_type,
+                ignores_soak=part.profile.ignores_soak,
+                resistance_shift=part.profile.resistance_shift,
                 source_sheet=participant.character_sheet,
+                execute_missing_health_multiplier=part.profile.execute_missing_health_multiplier,
             )
         )
-        landing.part_labels.append(_damage_type_word(part_type))
+        landing.part_labels.append(_damage_type_word(part.damage_type))
     if weapon.item_instance is not None:
         from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 

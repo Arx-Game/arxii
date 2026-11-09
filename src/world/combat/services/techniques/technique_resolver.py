@@ -121,6 +121,18 @@ def _profile_hit_type(
     return None
 
 
+def _is_technique_scoped(target: ModifierTarget) -> bool:
+    """Whether a damage target narrows to a cast by its technique, gift, function,
+    resonance or damage type, rather than naming only the kind of effect."""
+    return bool(
+        target.scope_technique_id
+        or target.scope_gift_id
+        or target.scope_technique_function
+        or target.scope_resonance_id
+        or target.scope_damage_type_id
+    )
+
+
 @dataclass(frozen=True)
 class TechniqueDamageBonus:
     """The caster's modifiers on one cast's damage, by resolved damage type (#4822).
@@ -144,10 +156,24 @@ class TechniqueDamageBonus:
         return cls(sheet=None, context=None, targets=[])
 
     @classmethod
-    def for_cast(cls, sheet: CharacterSheet, technique: Technique) -> TechniqueDamageBonus:
+    def for_cast(
+        cls,
+        sheet: CharacterSheet,
+        technique: Technique,
+        *,
+        technique_scoped_only: bool = False,
+    ) -> TechniqueDamageBonus:
         """The bonus for ``sheet`` casting ``technique``; with no damage-kind modifier
-        target in the game there is nothing to match, so no context is built."""
+        target in the game there is nothing to match, so no context is built.
+
+        ``technique_scoped_only`` leaves out the targets that name only the kind "damage"
+        (#5026): an enchanted Strike's typed part counts only modifiers scoped to the
+        technique, its gift, function, resonance or damage type, because a kind-wide damage
+        modifier already reaches the Strike through "Strike: base damage".
+        """
         targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
+        if technique_scoped_only:
+            targets = [target for target in targets if _is_technique_scoped(target)]
         if not targets:
             return cls.none()
         return cls(
@@ -538,8 +564,18 @@ class CombatTechniqueResolver:
         # What the target carries is read before its first profile lands (#4823), so a
         # condition one profile consumes does not change the next profile's bonus.
         technique_bonus.read_opponent(target.objectdb)
+        # The weapon's part is dealt once per target (#5026): never once per typed weapon
+        # profile, and not at all when an untyped weapon profile already folds it in.
+        weapon_part_due = not any(
+            profile.uses_equipped_weapon and profile.damage_type is None for profile, _ in profiles
+        )
         for profile, budget_bonus in profiles:
-            if sl >= profile.minimum_success_level and splits_weapon_part(profile, weapon):
+            if (
+                weapon_part_due
+                and sl >= profile.minimum_success_level
+                and splits_weapon_part(profile, weapon)
+            ):
+                weapon_part_due = False
                 # A typed weapon profile deals the weapon's damage as the weapon's own type,
                 # its own part apart (#5026): each meets the soak and resistance for its type.
                 weapon_result = self._apply_weapon_part(target, profile, weapon, multiplier)

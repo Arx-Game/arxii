@@ -61,7 +61,8 @@ def _equipped_armor_soak_pieces(
 
 
 def effective_soak_from_armor(character: Character) -> int:
-    """Sum effective armor soak across the character's equipped armor pieces."""
+    """Sum effective armor soak across the character's equipped armor pieces against a
+    Physical hit, which every piece stops (#5026)."""
     return sum(soak for _, soak in _equipped_armor_soak_pieces(character))
 
 

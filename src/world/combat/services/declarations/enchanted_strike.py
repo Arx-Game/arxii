@@ -49,6 +49,20 @@ if TYPE_CHECKING:
     from world.magic.types.power_ledger import PowerLedger
 
 
+@dataclass(frozen=True)
+class TypedPart:
+    """One damage part an enchantment adds to a landed Strike (#5026).
+
+    ``damage_type`` None means the part joins the weapon's (an untyped weapon profile).
+    ``profile`` carries the authored per-hit controls (soak piercing, resistance shift,
+    execute) the part is applied with, as the profile's own hit in a cast would be.
+    """
+
+    amount: int
+    damage_type: DamageType | None
+    profile: AbstractDamageProfile
+
+
 @dataclass
 class StrikeEnchantment:
     """A technique cast into one Strike, rolled: what it adds to that Strike (#5026)."""
@@ -80,7 +94,7 @@ class StrikeEnchantment:
 
     def typed_parts(
         self, target: CombatOpponent, weapon_type: DamageType | None
-    ) -> list[tuple[int, DamageType | None]]:
+    ) -> list[TypedPart]:
         """Each damage part the enchantment adds to a landed Strike on ``target``.
 
         One ``(amount, damage type)`` per profile that reaches its minimum success level
@@ -100,7 +114,7 @@ class StrikeEnchantment:
         if multiplier <= 0:
             return []
         self.technique_bonus.read_opponent(target.objectdb)
-        parts: list[tuple[int, DamageType | None]] = []
+        parts: list[TypedPart] = []
         for profile, budget_bonus in self.profiles:
             joins_weapon = profile.damage_type is None and profile.uses_equipped_weapon
             hit_type = weapon_type if joins_weapon else profile.damage_type
@@ -117,7 +131,7 @@ class StrikeEnchantment:
             )
             if amount <= 0:
                 continue
-            parts.append((amount, None if joins_weapon else part_type))
+            parts.append(TypedPart(amount, None if joins_weapon else part_type, profile))
         return parts
 
     def roll_row(self) -> StrikeRoll:
@@ -287,7 +301,10 @@ class EnchantedStrikeCast:
                 success_level=technique_roll.success_level,
             ),
             resolver=resolver,
-            technique_bonus=TechniqueDamageBonus.for_cast(sheet, technique),
+            # Kind-wide damage modifiers reach the Strike once, through its weapon part.
+            technique_bonus=TechniqueDamageBonus.for_cast(
+                sheet, technique, technique_scoped_only=True
+            ),
             profiles=profiles,
             eff_intensity=eff_intensity,
             bounced=bounced,
@@ -302,14 +319,25 @@ class EnchantedStrikeCast:
         )
         applied: list = []
         removed: list = []
-        # The technique's conditions ride the blow: they land only when the Strike does,
-        # at the technique roll's success level, as a technique's own conditions do.
+        morale_shifts: list = []
+        # The technique's conditions and morale ride the blow: they land only when the
+        # Strike does, at the technique roll's success level, as a cast's own do. A limited
+        # vow effect is spent only by a Strike that landed it.
         if self.landing.landed and not bounced:
             applied, removed = resolver._apply_conditions(  # noqa: SLF001 - its conditions
                 technique_roll, eff_intensity=eff_intensity, fired_vow_effects=fired
             )
+            morale_shifts = resolver._apply_morale(  # noqa: SLF001 - its morale row
+                technique_roll, eff_intensity=eff_intensity
+            )
+            if technique_roll.success_level >= 1:
+                record_vow_effect_firings(fired, encounter=self.participant.encounter)
         if technique_roll.success_level >= 1 and not bounced:
-            record_vow_effect_firings(fired, encounter=self.participant.encounter)
+            from world.magic.services.effect_handlers import (  # noqa: PLC0415
+                manifest_bound_entity,
+            )
+
+            manifest_bound_entity(participant=self.participant, technique=technique)
         return CombatTechniqueResolution(
             check_result=technique_roll,
             damage_results=list(self.landing.damage_results),
@@ -318,6 +346,7 @@ class EnchantedStrikeCast:
             scaled_damage=self.landing.damage_dealt or 0,
             power_ledger=combat_ledger,
             removed_conditions=removed,
+            morale_shifts=morale_shifts,
         )
 
     def _roll_technique(self, resolver: CombatTechniqueResolver) -> CheckResult:
