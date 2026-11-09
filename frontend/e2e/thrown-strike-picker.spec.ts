@@ -199,8 +199,9 @@ const ROUND_ROWS = [
   outcome(3, '12 damage: 5 physical, 7 fire', {
     heading: 'Damage roll',
     lines: [
-      line('Parrying dagger, thrown', '', 'weapon damage and quality'),
+      line('Parrying dagger, thrown', '', 'weapon damage and quality, at the thrown share'),
       line('Thrown Combat', '30', 'strike skill'),
+      line('Wreathe the blade, fire', '', 'technique part'),
     ],
     result: '12 damage: 5 physical, 7 fire',
     result_note: '',
@@ -215,10 +216,13 @@ const ROUND_ROWS = [
     result: 'Hit, fair',
     result_note: 'then the damage roll',
   }),
-  outcome(1, 'Success: +2 to hit, fire damage', {
+  outcome(1, 'Success: +2 to hit, 4 fire', {
     heading: 'Technique roll: Wreathe the blade',
-    lines: [line('Anima', '4', 'paid for this attack, hit or miss')],
-    result: 'Success: +2 to hit, fire damage',
+    lines: [
+      line('Fire Magic', '30', 'technique skill'),
+      line('Anima', '4', 'paid for this attack, hit or miss'),
+    ],
+    result: 'Success: +2 to hit, 4 fire',
     result_note: 'then the hit roll',
   }),
 ];
@@ -350,6 +354,7 @@ test.describe('#5026 the Strike picker: throw and enchant', () => {
   test('the round shows the technique roll, the hit roll and the damage by type', async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1400, height: 1800 });
     await openFight(page, [], false, true);
 
     const section = page.getByTestId('outcome-roulette-section');
@@ -357,6 +362,7 @@ test.describe('#5026 the Strike picker: throw and enchant', () => {
     await expect(section).toContainText('paid for this attack, hit or miss');
     await expect(section).toContainText('from the technique roll');
     await expect(section).toContainText('12 damage: 5 physical, 7 fire');
+    await expect(section).toContainText('technique part');
     if (SCREENSHOTS) {
       await section.screenshot({ path: `${SCREENSHOTS}/s04-round-rolls.png` });
     }
