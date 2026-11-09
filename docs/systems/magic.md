@@ -4598,8 +4598,10 @@ pk = the gift) maps it onto an existing room reading (`stat_key`, a `StatKey`), 
 a `full_at` (steps from ordinary that make a full measure), an optional `opposed_by`
 reading (dry for water) and the staff-written `arrival_line` the room sees. A child gift
 with no row uses its parent's (`substance_for_gift`). Edited as the "Substance" inline on
-the Gift admin; `clean()` refuses a full measure under 1, a reading opposing itself, and a
-falling substance on a reading that cannot go below ordinary.
+the Gift admin; `clean()` refuses a full measure under 1 or beyond what the reading can reach
+from ordinary, a reading opposing itself, and a falling substance on a reading that cannot go
+below ordinary. Exported with the catalog (`CONTENT_MODELS` `magic.giftsubstance`, natural key
+`gift`).
 
 Only a caster with a GIFT thread covering the gift is affected (`gift_thread_for`, via
 `gift_threads_for`). Everything reads one plan, `plan_substance_call_up(character=, gift=,

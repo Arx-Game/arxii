@@ -11,7 +11,7 @@ function amountText(line: SurroundingsLine): string {
   if (line.kind === 'power') {
     return `${line.amount > 0 ? '+' : ''}${line.amount} power`;
   }
-  return '';
+  return line.detail ?? '';
 }
 
 function toneFor(line: SurroundingsLine): string {
@@ -28,6 +28,9 @@ function toneFor(line: SurroundingsLine): string {
   if (line.kind === 'needs') {
     return 'text-red-600 dark:text-red-400';
   }
+  if (line.kind === 'blocked') {
+    return 'text-amber-700 dark:text-amber-400';
+  }
   return 'text-muted-foreground';
 }
 
@@ -41,7 +44,15 @@ export function SurroundingsLines({ lines }: { lines: SurroundingsLine[] }) {
         <li key={`${line.kind}-${line.text}`} className="flex justify-between gap-2">
           <span className={cn(toneFor(line))}>{line.text}</span>
           {amountText(line) && (
-            <span className={cn('font-mono', toneFor(line))}>{amountText(line)}</span>
+            <span
+              className={cn(
+                'shrink-0 text-right',
+                line.kind === 'power' && 'font-mono',
+                toneFor(line)
+              )}
+            >
+              {amountText(line)}
+            </span>
           )}
         </li>
       ))}

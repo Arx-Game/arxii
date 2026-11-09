@@ -1556,6 +1556,20 @@ def _complete_technique_cast(  # noqa: PLR0913
         call_up_sheet = _get_character_sheet(character)
         if call_up_sheet is not None:
             substance_call_up = apply_substance_plan(substance_plan, sheet=call_up_sheet)
+    elif substance_plan is not None and substance_plan.blocked:
+        from world.magic.types.substance import SubstanceCallUp  # noqa: PLC0415
+
+        # Nothing was called up although the room lacked it; the result says why.
+        substance_call_up = SubstanceCallUp(
+            label=substance_plan.label,
+            anima=0,
+            resonance=0,
+            resonance_name=(
+                substance_plan.resonance.name if substance_plan.resonance is not None else ""
+            ),
+            room_changed=False,
+            blocked=substance_plan.blocked,
+        )
     # Carried drift (#4732): one focus roll per cast, on every cast path, before
     # resolve_fn gathers the cast's modifiers so a conflict it applies reaches this roll.
     from world.magic.services.drift import check_resonance_focus  # noqa: PLC0415

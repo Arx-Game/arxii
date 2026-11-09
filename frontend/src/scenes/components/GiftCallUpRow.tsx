@@ -72,6 +72,7 @@ export function GiftCallUpRow({ characterId, initiatorPersonaId }: GiftCallUpRow
               {offer.cost_line}
             </span>
           </div>
+          <p className="text-xs text-muted-foreground">{offer.balance_line}</p>
           {confirming?.giftId === offer.gift_id && (
             <div className="space-y-1 rounded-md border border-amber-500/60 bg-amber-950/40 p-2 text-xs">
               <p>{confirming.message}</p>

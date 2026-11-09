@@ -28,6 +28,7 @@ class Migration(migrations.Migration):
                 (
                     "label",
                     models.CharField(
+                        verbose_name="Name in lines",
                         help_text='What the cast card and the roll breakdown call it ("shadow", "water").',
                         max_length=60,
                     ),
@@ -35,6 +36,7 @@ class Migration(migrations.Migration):
                 (
                     "stat_key",
                     models.CharField(
+                        verbose_name="Room reading",
                         choices=[
                             ("crime", "Crime"),
                             ("order", "Order"),
@@ -57,9 +59,10 @@ class Migration(migrations.Migration):
                 (
                     "direction",
                     models.CharField(
+                        verbose_name="More substance when the reading",
                         choices=[
-                            ("rising", "Grows as the reading rises"),
-                            ("falling", "Grows as the reading falls"),
+                            ("rising", "rises"),
+                            ("falling", "falls"),
                         ],
                         help_text="Shadow grows as lighting falls; water, wind and fire grow as theirs rise.",
                         max_length=10,
@@ -67,14 +70,16 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "full_at",
-                    models.PositiveSmallIntegerField(
+                    models.PositiveIntegerField(
+                        verbose_name="Full measure",
                         default=2,
-                        help_text="Steps from ordinary that count as a full measure (full strength). Lighting: 2 (pitch dark). Wet, wind and heat run 0 to 100000; pick the value staff treat as soaking, gale or blazing.",
+                        help_text="Steps from ordinary that count as a full measure (full strength). Lighting: 2 (pitch dark). Wet, wind and heat run 0 to 100000; pick the value staff treat as soaking, gale or blazing. No more than the reading can reach.",
                     ),
                 ),
                 (
                     "opposed_by",
                     models.CharField(
+                        verbose_name="Opposed by",
                         blank=True,
                         choices=[
                             ("crime", "Crime"),
@@ -98,6 +103,7 @@ class Migration(migrations.Migration):
                 (
                     "arrival_line",
                     models.CharField(
+                        verbose_name="When it arrives, the room sees",
                         help_text='The line the room sees whenever it is called up, by a cast or with no technique ("The shadows in the room deepen."). It never names the caster.',
                         max_length=200,
                     ),
@@ -174,6 +180,7 @@ class Migration(migrations.Migration):
             model_name="restriction",
             name="surroundings_max",
             field=models.SmallIntegerField(
+                verbose_name="At most",
                 blank=True,
                 help_text="DESIGN only: the reading must be at most this. Blank = no ceiling.",
                 null=True,
@@ -183,6 +190,7 @@ class Migration(migrations.Migration):
             model_name="restriction",
             name="surroundings_min",
             field=models.SmallIntegerField(
+                verbose_name="At least",
                 blank=True,
                 help_text="DESIGN only: the reading must be at least this. Blank = no floor.",
                 null=True,
@@ -192,6 +200,7 @@ class Migration(migrations.Migration):
             model_name="restriction",
             name="surroundings_stat",
             field=models.CharField(
+                verbose_name="Room reading",
                 blank=True,
                 choices=[
                     ("crime", "Crime"),

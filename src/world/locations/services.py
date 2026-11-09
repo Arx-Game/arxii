@@ -624,7 +624,8 @@ class AxisBreakdown(NamedTuple):
     ``pressure`` is what pushes the axis up (climate base + positive cascade
     contributions), ``mitigation`` what pulls it down (fixtures/style, as a
     magnitude), ``net`` the felt value after the 0-floor and enclosure gate.
-    ``sheltered`` marks a weather axis the room's enclosure zeroes outright.
+    ``sheltered`` marks a weather axis the room's enclosure keeps the weather out of: the
+    weather's rows and the climate base drop, the room's own rows still count (#5018).
     An authored override reports as pure pressure (it IS the value).
     """
 

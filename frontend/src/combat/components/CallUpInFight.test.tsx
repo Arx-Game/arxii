@@ -11,6 +11,7 @@ const shadow = {
   already_present: false,
   can_call_up: true,
   cost_line: '3 anima, 1 Umbral resonance',
+  balance_line: 'Anima: 30 · after: 27 · Umbral resonance after: 9',
 };
 
 describe('CallUpInFight', () => {

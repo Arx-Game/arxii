@@ -881,7 +881,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         lines = [f"Cost here: {preview.effective_anima_cost} anima"]
         for line in preview.surroundings:
             amount = f" {line.amount:+d} power" if line.kind == SurroundingsKind.POWER else ""
-            lines.append(f"{line.text}{amount}")
+            detail = f": {line.detail}" if line.detail else ""
+            lines.append(f"{line.text}{detail}{amount}")
         return lines
 
     def _castable_listing(self) -> list[str]:

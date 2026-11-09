@@ -895,8 +895,8 @@ class SubstanceDirection(models.TextChoices):
     Shadow grows as lighting FALLS; water, wind and fire grow as wet, wind and heat RISE.
     """
 
-    RISING = "rising", "Grows as the reading rises"
-    FALLING = "falling", "Grows as the reading falls"
+    RISING = "rising", "rises"
+    FALLING = "falling", "falls"
 
 
 #: The power-ledger label of a place's resonance reaction (#639). Narration reads it to say

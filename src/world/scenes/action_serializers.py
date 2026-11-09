@@ -786,6 +786,9 @@ class SubstanceCallUpSerializer(serializers.Serializer):
     anima = serializers.IntegerField()
     resonance = serializers.IntegerField()
     resonance_name = serializers.CharField()
+    blocked = serializers.CharField(
+        help_text="Why nothing was called up: too_little_resonance, held_fixed, or blank."
+    )
 
 
 class TechniqueResultSerializer(serializers.Serializer):

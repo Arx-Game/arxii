@@ -282,6 +282,7 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     # #5018: a technique that needs surroundings its own gift does not make (wet air for a
     # storm technique). Never a refusal: unmet, the cast takes a heavy named roll penalty.
     surroundings_stat = models.CharField(
+        verbose_name="Room reading",
         max_length=20,
         choices=StatKey.choices,
         blank=True,
@@ -292,11 +293,13 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
     surroundings_min = models.SmallIntegerField(
+        verbose_name="At least",
         null=True,
         blank=True,
         help_text="DESIGN only: the reading must be at least this. Blank = no floor.",
     )
     surroundings_max = models.SmallIntegerField(
+        verbose_name="At most",
         null=True,
         blank=True,
         help_text="DESIGN only: the reading must be at most this. Blank = no ceiling.",

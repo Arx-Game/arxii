@@ -110,6 +110,9 @@ class SubstanceCallUp:
     resonance: int
     resonance_name: str
     room_changed: bool
+    #: Why nothing was called up although the room lacked it (``SubstanceBlock``), so the
+    #: result can say "no resonance left to call up shadow"; blank when it was called up.
+    blocked: str = ""
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,9 @@ class SurroundingsLine:
     amount: int = 0
     anima: int = 0
     resonance: int = 0
+    #: The right-hand cost for a call-up line ("free, your control covers it", "3 anima,
+    #: 1 Umbral resonance"); blank for the other kinds.
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,6 +145,38 @@ class CallUpOffer:
 
     plan: SubstancePlan
     effective_cost: int
+    #: Her anima now, and her balance in the gift's resonance now, for the row's
+    #: "Anima: 18 · after: 18" line.
+    current_anima: int = 0
+    resonance_balance: int = 0
+
+    @property
+    def anima_after(self) -> int:
+        return (
+            max(self.current_anima - self.effective_cost, 0)
+            if self.plan.calls_up
+            else (self.current_anima)
+        )
+
+    @property
+    def resonance_after(self) -> int:
+        if not self.plan.calls_up:
+            return self.resonance_balance
+        return max(self.resonance_balance - self.plan.resonance_cost, 0)
+
+    @property
+    def balance_line(self) -> str:
+        """ "Anima: 18 · after: 18 · Umbral resonance after: unchanged"."""
+        name = self.plan.resonance.name if self.plan.resonance is not None else "gift"
+        after = (
+            "unchanged"
+            if self.resonance_after == self.resonance_balance
+            else str(self.resonance_after)
+        )
+        return (
+            f"Anima: {self.current_anima} · after: {self.anima_after} · "
+            f"{name} resonance after: {after}"
+        )
 
     @property
     def gift_id(self) -> int:

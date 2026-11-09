@@ -28,6 +28,7 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterTenureFactory,
 )
+from world.weather.constants import WEATHER_SOURCE_PREFIX
 
 HEARTH = "Great Hearth"
 
@@ -101,7 +102,7 @@ class BreakdownServiceTests(ComfortHudBase):
             stat_key=StatKey.WET,
             value=5,
             # The weather layer's row: walls keep out the weather, not the room's own (#5018).
-            source=f"weather:{self.building.area.pk}",
+            source=f"{WEATHER_SOURCE_PREFIX}{self.building.area.pk}",
         )
         rows = {row.stat_key: row for row in room_exposure_breakdown(self.room)}
         wet = rows[StatKey.WET]

@@ -17,6 +17,8 @@ export function CastSpendLine({ result }: { result: CastResultPayload }) {
       {callUp &&
         callUp.resonance > 0 &&
         ` · ${callUp.resonance} ${callUp.resonance_name} resonance spent`}
+      {callUp?.blocked === 'too_little_resonance' &&
+        ` · no resonance left to call up ${callUp.label}`}
     </p>
   );
 }

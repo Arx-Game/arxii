@@ -49926,8 +49926,12 @@ components:
         cost_line:
           type: string
           readOnly: true
+        balance_line:
+          type: string
+          readOnly: true
       required:
       - already_present
+      - balance_line
       - can_call_up
       - cost_line
       - effective_cost
@@ -94994,9 +94998,14 @@ components:
         resonance:
           type: integer
           readOnly: true
+        detail:
+          type: string
+          readOnly: true
+          description: A call-up line's right-hand cost; blank otherwise.
       required:
       - amount
       - anima
+      - detail
       - kind
       - resonance
       - text

@@ -26,6 +26,7 @@ from world.locations.services import (
     room_discomfort,
     room_enclosure,
 )
+from world.weather.constants import WEATHER_SOURCE_PREFIX
 
 
 class ComfortAxesTests(TestCase):
@@ -104,7 +105,7 @@ class EnclosureShelteringTests(TestCase):
             area=area,
             stat_key=stat_key,
             value=value,
-            source=f"weather:{area.pk}",
+            source=f"{WEATHER_SOURCE_PREFIX}{area.pk}",
         )
 
     def test_open_air_feels_all_weather(self) -> None:
@@ -209,7 +210,7 @@ class WindowEnclosureTests(TestCase):
             area=area,
             stat_key=stat_key,
             value=value,
-            source=f"weather:{area.pk}",
+            source=f"{WEATHER_SOURCE_PREFIX}{area.pk}",
         )
 
     def _room_with_profile(self):

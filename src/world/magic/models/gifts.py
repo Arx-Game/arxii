@@ -236,7 +236,11 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return techniques
 
 
-class GiftSubstance(SharedMemoryModel):
+class GiftSubstanceManager(NaturalKeyManager):
+    """Manager for GiftSubstance with natural key support (keyed on its gift)."""
+
+
+class GiftSubstance(NaturalKeyMixin, SharedMemoryModel):
     """What a gift is made of: the room reading that is its substance (#5018).
 
     A shadow gift works through shadow, which is the room's lighting, falling. A caster
@@ -257,28 +261,33 @@ class GiftSubstance(SharedMemoryModel):
         help_text="The gift this is the substance of.",
     )
     label = models.CharField(
+        verbose_name="Name in lines",
         max_length=60,
         help_text='What the cast card and the roll breakdown call it ("shadow", "water").',
     )
     stat_key = models.CharField(
+        verbose_name="Room reading",
         max_length=20,
         choices=StatKey.choices,
         help_text="The room reading the substance is. Lighting runs -2 (pitch dark) to +2.",
     )
     direction = models.CharField(
+        verbose_name="More substance when the reading",
         max_length=10,
         choices=SubstanceDirection.choices,
         help_text="Shadow grows as lighting falls; water, wind and fire grow as theirs rise.",
     )
-    full_at = models.PositiveSmallIntegerField(
+    full_at = models.PositiveIntegerField(
+        verbose_name="Full measure",
         default=2,
         help_text=(
             "Steps from ordinary that count as a full measure (full strength). Lighting: 2 "
             "(pitch dark). Wet, wind and heat run 0 to 100000; pick the value staff treat "
-            "as soaking, gale or blazing."
+            "as soaking, gale or blazing. No more than the reading can reach."
         ),
     )
     opposed_by = models.CharField(
+        verbose_name="Opposed by",
         max_length=20,
         choices=StatKey.choices,
         blank=True,
@@ -288,12 +297,19 @@ class GiftSubstance(SharedMemoryModel):
         ),
     )
     arrival_line = models.CharField(
+        verbose_name="When it arrives, the room sees",
         max_length=200,
         help_text=(
             "The line the room sees whenever it is called up, by a cast or with no "
             'technique ("The shadows in the room deepen."). It never names the caster.'
         ),
     )
+
+    objects = GiftSubstanceManager()
+
+    class NaturalKeyConfig:
+        fields = ["gift"]
+        dependencies = ["magic.Gift"]
 
     class Meta:
         verbose_name = "Gift substance"
@@ -309,12 +325,21 @@ class GiftSubstance(SharedMemoryModel):
             errors["full_at"] = "Full measure must be at least 1 step."
         if self.opposed_by and self.opposed_by == self.stat_key:
             errors["opposed_by"] = "A reading cannot oppose itself; leave this blank."
-        if self.stat_key and self.direction == SubstanceDirection.FALLING:
-            floor = STAT_CLAMPS[StatKey(self.stat_key)][0]
-            if floor >= STAT_DEFAULTS[StatKey(self.stat_key)]:
+        if self.stat_key and self.direction:
+            low, high = STAT_CLAMPS[StatKey(self.stat_key)]
+            ordinary = STAT_DEFAULTS[StatKey(self.stat_key)]
+            reach = (
+                ordinary - low if self.direction == SubstanceDirection.FALLING else high - ordinary
+            )
+            if self.direction == SubstanceDirection.FALLING and reach <= 0:
                 errors["direction"] = (
                     "This reading cannot go below ordinary, so a substance cannot grow as it "
                     "falls. Use Lighting for shadow, or 'rises'."
+                )
+            elif self.full_at and self.full_at > reach:
+                errors["full_at"] = (
+                    f"This reading only goes {reach} steps from ordinary that way; a full "
+                    "measure cannot be more than that."
                 )
         if errors:
             raise ValidationError(errors)

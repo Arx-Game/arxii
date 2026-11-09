@@ -30187,6 +30187,7 @@ export interface components {
       readonly already_present: boolean;
       readonly can_call_up: boolean;
       readonly cost_line: string;
+      readonly balance_line: string;
     };
     /**
      * @description Eligibility preview computed by ``_compute_can_honor`` — never persisted.
@@ -52731,6 +52732,8 @@ export interface components {
       readonly amount: number;
       readonly anima: number;
       readonly resonance: number;
+      /** @description A call-up line's right-hand cost; blank otherwise. */
+      readonly detail: string;
     };
     /** @description Observable countdown and erosion for a multi-round commitment. */
     SustainedAction: {

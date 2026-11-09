@@ -206,6 +206,8 @@ export interface SurroundingsLine {
   amount: number;
   anima: number;
   resonance: number;
+  /** A call-up line's right-hand cost; empty for the other kinds. */
+  detail: string;
 }
 
 /** One gift whose substance she can call up with no technique, priced now (#5018). */
@@ -217,6 +219,8 @@ export interface CallUpOffer {
   already_present: boolean;
   can_call_up: boolean;
   cost_line: string;
+  /** "Anima: 18 · after: 18 · Umbral resonance after: unchanged". */
+  balance_line: string;
 }
 
 export interface PlayerActionsResponse {
@@ -402,6 +406,8 @@ export interface SubstanceCallUpData {
   anima: number;
   resonance: number;
   resonance_name: string;
+  /** Why nothing was called up: too_little_resonance, held_fixed, or empty. */
+  blocked: string;
 }
 
 export interface ActionResolutionStepData {

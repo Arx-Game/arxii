@@ -424,19 +424,17 @@ def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
     lines: list[SurroundingsLine] = []
     if plan.calls_up:
         if plan.uncovered_anima == 0 and plan.resonance_cost == 0:
-            text = f"Calls up {label}: free, your control covers it"
+            detail = "free, your control covers it"
         else:
             resonance = plan.resonance.name if plan.resonance is not None else "resonance"
-            text = (
-                f"Calls up {label}: {plan.uncovered_anima} anima, "
-                f"{plan.resonance_cost} {resonance} resonance"
-            )
+            detail = f"{plan.uncovered_anima} anima, {plan.resonance_cost} {resonance} resonance"
         lines.append(
             SurroundingsLine(
                 kind=SurroundingsKind.CALL_UP,
-                text=text,
+                text=_call_up_text(plan),
                 anima=plan.uncovered_anima,
                 resonance=plan.resonance_cost,
+                detail=detail,
             )
         )
     elif plan.blocked == SubstanceBlock.TOO_LITTLE_RESONANCE:
@@ -465,6 +463,28 @@ def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
             SurroundingsLine(kind=SurroundingsKind.POWER, text=_opposed_text(plan), amount=power)
         )
     return lines
+
+
+def _call_up_text(plan: SubstancePlan) -> str:
+    """ "Calls up shadow", against an opposed room, or noting what the place does to it."""
+    text = f"Calls up {plan.label}"
+    if plan.place_shift_pct < 0:
+        return f"{text}, the place makes it cheaper"
+    if plan.place_shift_pct > 0:
+        return f"{text}, the place makes it dearer"
+    if plan.richness_before < 0:
+        return f"{text} against the {_opposite_word(plan)}"
+    return text
+
+
+def _opposite_word(plan: SubstancePlan) -> str:
+    substance = plan.substance
+    if substance is not None and substance.stat_key == StatKey.LIGHTING:
+        falling = substance.direction == SubstanceDirection.FALLING
+        return "light" if falling else "dark"
+    if substance is not None and substance.opposed_by:
+        return StatKey(substance.opposed_by).label.lower()
+    return "room"  # noqa: STRING_LITERAL - player-facing prose, not an identifier
 
 
 def _opposed_text(plan: SubstancePlan) -> str:
@@ -535,5 +555,20 @@ def call_up_offers(
             current_anima=current,
             lethal=lethal,
         )
-        offers.append(CallUpOffer(plan=plan, effective_cost=cost.effective_cost))
+        balance = (
+            CharacterResonance.objects.filter(
+                character_sheet=thread.owner, resonance=thread.resonance
+            )
+            .values_list("balance", flat=True)
+            .first()
+            or 0
+        )
+        offers.append(
+            CallUpOffer(
+                plan=plan,
+                effective_cost=cost.effective_cost,
+                current_anima=current,
+                resonance_balance=balance,
+            )
+        )
     return offers

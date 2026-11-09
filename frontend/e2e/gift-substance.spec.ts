@@ -50,6 +50,7 @@ test.describe('a gift substance in a social scene', () => {
     const row = page.getByTestId('gift-call-up-row');
     await expect(row.getByRole('button', { name: 'Call up shadow' })).toBeEnabled();
     await expect(row).toContainText('free, your control covers it');
+    await expect(row).toContainText('Anima: 30 · after: 30');
 
     // Scoped to the cast list: the scene log may hold a line with the same name.
     await page
@@ -58,9 +59,8 @@ test.describe('a gift substance in a social scene', () => {
       .first()
       .click();
     const lines = page.getByTestId('surroundings-lines').last();
-    await expect(lines).toContainText('Calls up shadow: free, your control covers it', {
-      timeout: 15000,
-    });
+    await expect(lines).toContainText('Calls up shadow', { timeout: 15000 });
+    await expect(lines).toContainText('free, your control covers it');
     await expect(lines).toContainText('Shadow here after the call-up');
     await expect(lines).toContainText('+5 power');
     await page.screenshot({

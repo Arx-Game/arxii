@@ -15,6 +15,9 @@ class SurroundingsLineSerializer(serializers.Serializer):
     amount = serializers.IntegerField(read_only=True, help_text="Signed power, or the penalty.")
     anima = serializers.IntegerField(read_only=True)
     resonance = serializers.IntegerField(read_only=True)
+    detail = serializers.CharField(
+        read_only=True, help_text="A call-up line's right-hand cost; blank otherwise."
+    )
 
 
 class CallUpOfferSerializer(serializers.Serializer):
@@ -30,3 +33,4 @@ class CallUpOfferSerializer(serializers.Serializer):
     already_present = serializers.BooleanField(read_only=True, source="plan.already_present")
     can_call_up = serializers.BooleanField(read_only=True, source="plan.calls_up")
     cost_line = serializers.CharField(read_only=True)
+    balance_line = serializers.CharField(read_only=True)

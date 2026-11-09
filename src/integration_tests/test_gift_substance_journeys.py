@@ -29,6 +29,8 @@ from integration_tests.harness import JourneyCase
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.checks import services as check_services
+from world.checks.constants import ModifierLane
+from world.checks.modifier_models import ModifierLevelBaseline
 from world.combat.constants import ParticipantStatus, RiskLevel
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatRoundAction
@@ -206,10 +208,11 @@ class HerCastCallsUpItsSubstance(_ShadowField):
         self.assertIn(
             {
                 "kind": "call_up",
-                "text": "Calls up shadow: free, your control covers it",
+                "text": "Calls up shadow",
                 "amount": 0,
                 "anima": 0,
                 "resonance": 0,
+                "detail": "free, your control covers it",
             },
             preview["surroundings"],
         )
@@ -218,11 +221,12 @@ class HerCastCallsUpItsSubstance(_ShadowField):
         self.assertEqual(self.surroundings_line(result), 5)
         self.assertEqual(_lighting(self.room), -1)
         self.assertTold(self.tomas, ARRIVAL)
-        self.assertNotIn("Mira", ARRIVAL)
+        (arrival,) = [line for line in self.said(self.tomas).splitlines() if ARRIVAL in line]
+        self.assertNotIn("Mira", arrival)
         # Her substance is not the place's resonance (found by real testing, #5018).
         self.assertNotTold(self.tomas, "the place's resonance swells")
 
-    def test_a_second_shadow_caster_finds_it_already_there(self) -> None:
+    def test_leaving_the_room_takes_her_shadow_with_her(self) -> None:
         self.cast()
         self.assertEqual(self.card()["surroundings"][0]["text"], "Shadow here")
 
@@ -230,6 +234,8 @@ class HerCastCallsUpItsSubstance(_ShadowField):
 
         self.assertEqual(_lighting(self.room), 0)
         self.assertFalse(LocationValueModifier.objects.filter(source__startswith="substance:"))
+        self.mira.move_to(self.room, quiet=True)
+        self.assertEqual(self.card()["surroundings"][0]["text"], "Calls up shadow")
 
     def test_in_a_fight_it_costs_anima_and_resonance_on_top_of_the_cast(self) -> None:
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
@@ -239,8 +245,8 @@ class HerCastCallsUpItsSubstance(_ShadowField):
 
         self.assertEqual(preview["effective_anima_cost"], 7)
         self.assertIn(
-            "Calls up shadow: 3 anima, 1 Umbral resonance",
-            [line["text"] for line in preview["surroundings"]],
+            ("Calls up shadow", "3 anima, 1 Umbral resonance"),
+            [(line["text"], line["detail"]) for line in preview["surroundings"]],
         )
 
 
@@ -273,8 +279,12 @@ class CallingUpWithNoTechnique(_ShadowField):
 
         self.assertEqual(offers[0]["label"], "shadow")
         self.assertEqual(offers[0]["cost_line"], "free, your control covers it")
+        self.assertEqual(
+            offers[0]["balance_line"], "Anima: 30 · after: 30 · Umbral resonance after: unchanged"
+        )
         result = self.web(self.mira, "call_up_substance", gift_id=offers[0]["gift_id"])
         self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, "You call up shadow. Cost: free.")
         self.assertEqual(_lighting(self.room), -1)
 
     def test_in_a_fight_it_is_once_a_round_and_not_her_action(self) -> None:
@@ -354,7 +364,12 @@ class TheGMMarksItPresent(_ShadowField):
 
 
 class WallsAndRoofsKeepTheWeatherOut(JourneyCase):
-    """A moonless night with rain over a region: the street, a walled hall, a cellar."""
+    """A moonless night with rain over a region: the street, a walled hall, a cellar.
+
+    Kept as a unit of the felt reading (U-keep): it walks the enclosure by source table
+    (weather row, the room's own row, open air, roof, walls) that no single player surface
+    enumerates; the caster journeys above read the same reading through the cast card.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -403,6 +418,8 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
         )
         self.technique.restrictions.add(self.needs_wet)
         self.technique.__dict__.pop("cached_restrictions", None)
+        # Staff's typical roll at her level: what the penalty is a share of.
+        ModifierLevelBaseline.objects.create(lane=ModifierLane.CHECK, level=0, baseline=58)
 
     def labels(self) -> dict[str, int]:
         real = check_services.collect_check_modifiers
@@ -415,13 +432,14 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
 
         with patch.object(check_services, "collect_check_modifiers", side_effect=spy):
             self.cast()
+        self.assertTrue(seen, "the cast gathered its roll modifiers")
         return {c.source_label: c.value for b in seen for c in b.contributions}
 
     def test_unmet_it_is_a_heavy_named_penalty_never_a_refusal(self) -> None:
         lines = [line["text"] for line in self.card()["surroundings"]]
 
         self.assertIn("Needs wet air: very heavy penalty here", lines)
-        self.assertIn("Surroundings: Needs wet air (here: dry)", self.labels())
+        self.assertEqual(self.labels()["Surroundings: Needs wet air (here: dry)"], -58)
 
     def test_on_a_gift_whose_own_substance_it_names_it_does_nothing(self) -> None:
         self.substance.stat_key = StatKey.WET
@@ -430,21 +448,47 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
 
         self.assertNotIn("Surroundings: Needs wet air (here: dry)", self.labels())
 
-    def test_staff_authoring_refuses_impossible_shapes(self) -> None:
-        bad = GiftSubstance(
+
+class AuthoringShapes(JourneyCase):
+    """U-keep: the validation branches staff meet in admin (the live admin pass is in the
+    PR's real-testing report); no player journey reaches them."""
+
+    def test_a_substance_must_fit_its_reading(self) -> None:
+        falling_wet = GiftSubstance(
             gift=GiftFactory(),
             label="water",
             stat_key=StatKey.WET,
             direction=SubstanceDirection.FALLING,
-            full_at=0,
+            full_at=2,
             arrival_line="Mist gathers.",
         )
         with self.assertRaises(ValidationError) as raised:
-            bad.full_clean()
-        self.assertEqual(set(raised.exception.message_dict), {"full_at", "direction"})
-        self.needs_wet.surroundings_min = 3
-        self.needs_wet.surroundings_max = 2
-        self.needs_wet.surroundings_stat = StatKey.LIGHTING
+            falling_wet.full_clean()
+        self.assertIn("cannot go below ordinary", raised.exception.message_dict["direction"][0])
+
+        too_far = GiftSubstance(
+            gift=GiftFactory(),
+            label="shadow",
+            stat_key=StatKey.LIGHTING,
+            direction=SubstanceDirection.FALLING,
+            full_at=5,
+            arrival_line="The shadows deepen.",
+        )
         with self.assertRaises(ValidationError) as raised:
-            self.needs_wet.full_clean()
-        self.assertIn("surroundings_min", raised.exception.message_dict)
+            too_far.full_clean()
+        self.assertIn("only goes 2 steps", raised.exception.message_dict["full_at"][0])
+
+    def test_a_surroundings_restriction_needs_sane_bounds(self) -> None:
+        restriction = RestrictionFactory(name="Needs dark", kind=RestrictionKind.DESIGN)
+        restriction.surroundings_stat = StatKey.LIGHTING
+        restriction.surroundings_min = 3
+        restriction.surroundings_max = 2
+        with self.assertRaises(ValidationError) as raised:
+            restriction.full_clean()
+        self.assertEqual(
+            raised.exception.message_dict["surroundings_min"], ["This reading runs from -2 to 2."]
+        )
+        self.assertEqual(
+            raised.exception.message_dict["surroundings_max"],
+            ["'At most' cannot be below 'at least'."],
+        )
