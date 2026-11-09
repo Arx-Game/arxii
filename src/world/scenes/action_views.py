@@ -22,6 +22,7 @@ from actions.registry import get_action
 from actions.types import TargetType
 from world.conditions.constants import TARGET_EFFECT_ALTERATION, TARGET_EFFECT_CONDITION
 from world.magic.exceptions import MagicError
+from world.magic.serializers_substance import CallUpOfferSerializer
 from world.magic.types.pull import CastPullDeclaration
 from world.magic.views_actor import PuppetActorMixin
 from world.scenes.action_constants import ActionRequestStatus, BoonSumTier
@@ -933,6 +934,50 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 [ct.technique for ct in links], many=True, context=context
             ).data
         )
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "initiator_persona",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Persona id (owned by the requester) to list call-ups for.",
+            ),
+        ],
+        responses={200: CallUpOfferSerializer(many=True)},
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="call-up-offers",
+        pagination_class=None,
+    )
+    def call_up_offers(self, request: Request) -> Response:
+        """Her gifts whose substance she can call up here with no technique (#5018).
+
+        Same ``?initiator_persona=<id>`` contract as ``castable-techniques``. Priced by her
+        own control; never filtered by anima. Calling one up dispatches the
+        ``call_up_substance`` REGISTRY action.
+        """
+        from world.magic.services.substance import call_up_offers  # noqa: PLC0415
+
+        initiator_persona_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
+        try:
+            initiator_persona_id = int(initiator_persona_id_str or "")
+        except ValueError:
+            return Response(
+                {"detail": "initiator_persona must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if initiator_persona_id not in get_account_personas(request):
+            return Response(
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        persona = get_object_or_404(Persona, pk=initiator_persona_id)
+        offers = call_up_offers(persona.character_sheet.character)
+        return Response(CallUpOfferSerializer(offers, many=True).data)
 
     @extend_schema(
         parameters=[

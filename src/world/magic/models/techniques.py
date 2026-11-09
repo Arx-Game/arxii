@@ -26,6 +26,7 @@ from world.achievements.models import DiscoverableContent
 from world.checks.constants import ModifierSize
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
+from world.locations.constants import STAT_CLAMPS, StatKey
 from world.magic.constants import (
     CREATION_PERSONALIZATION_MAX_LEVEL,
     CUSTOM_TECHNIQUE_NAME_MAX_LENGTH,
@@ -278,6 +279,31 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "price. Its own authored rules decide stacking and refreshing. Blank = none."
         ),
     )
+    # #5018: a technique that needs surroundings its own gift does not make (wet air for a
+    # storm technique). Never a refusal: unmet, the cast takes a heavy named roll penalty.
+    surroundings_stat = models.CharField(
+        verbose_name="Room reading",
+        max_length=20,
+        choices=StatKey.choices,
+        blank=True,
+        help_text=(
+            "DESIGN only: the room reading this technique needs. Blank = none. On a technique "
+            "whose own gift's substance is this reading it does nothing and refunds nothing, "
+            "since that gift already needs it."
+        ),
+    )
+    surroundings_min = models.SmallIntegerField(
+        verbose_name="At least",
+        null=True,
+        blank=True,
+        help_text="DESIGN only: the reading must be at least this. Blank = no floor.",
+    )
+    surroundings_max = models.SmallIntegerField(
+        verbose_name="At most",
+        null=True,
+        blank=True,
+        help_text="DESIGN only: the reading must be at most this. Blank = no ceiling.",
+    )
 
     objects = RestrictionManager()
 
@@ -285,6 +311,22 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name = "Restriction"
         verbose_name_plural = "Restrictions"
         constraints = [
+            models.CheckConstraint(
+                check=models.Q(surroundings_stat="") | models.Q(kind=RestrictionKind.DESIGN),
+                name="restriction_surroundings_design_only",
+            ),
+            models.CheckConstraint(
+                check=models.Q(surroundings_stat="")
+                | models.Q(surroundings_min__isnull=False)
+                | models.Q(surroundings_max__isnull=False),
+                name="restriction_surroundings_has_bound",
+            ),
+            models.CheckConstraint(
+                check=models.Q(surroundings_min__isnull=True)
+                | models.Q(surroundings_max__isnull=True)
+                | models.Q(surroundings_min__lte=models.F("surroundings_max")),
+                name="restriction_surroundings_min_le_max",
+            ),
             models.CheckConstraint(
                 check=models.Q(creation_point_cost__isnull=True)
                 | models.Q(kind=RestrictionKind.PRICE),
@@ -310,6 +352,7 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         so it is checked here (for an existing row) and on each requirement row.
         """
         super().clean()
+        self._clean_surroundings()
         if self.kind == RestrictionKind.PRICE:
             return
         errors: dict[str, str] = {}
@@ -319,6 +362,40 @@ class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["kind"] = "Remove this restriction's consumed components before changing kind."
         if errors:
             raise ValidationError(errors)
+
+    def _clean_surroundings(self) -> None:
+        """The surroundings columns (#5018): DESIGN only, a bound when set, in range."""
+        has_bound = self.surroundings_min is not None or self.surroundings_max is not None
+        if not self.surroundings_stat:
+            if has_bound:
+                raise ValidationError(
+                    {"surroundings_stat": "Pick the room reading these bounds are for."}
+                )
+            return
+        errors: dict[str, str] = {}
+        if self.kind != RestrictionKind.DESIGN:
+            errors["surroundings_stat"] = "Only a DESIGN restriction can need surroundings."
+        if not has_bound:
+            errors["surroundings_min"] = "Give an 'at least' or an 'at most' value."
+        errors.update(self._surroundings_bound_errors())
+        if errors:
+            raise ValidationError(errors)
+
+    def _surroundings_bound_errors(self) -> dict[str, str]:
+        """Each bound inside the reading's range, and at least no higher than at most."""
+        low, high = STAT_CLAMPS[StatKey(self.surroundings_stat)]
+        errors = {
+            field: f"This reading runs from {low} to {high}."
+            for field, value in (
+                ("surroundings_min", self.surroundings_min),
+                ("surroundings_max", self.surroundings_max),
+            )
+            if value is not None and not low <= value <= high
+        }
+        lowest, highest = self.surroundings_min, self.surroundings_max
+        if lowest is not None and highest is not None and lowest > highest:
+            errors["surroundings_max"] = "'At most' cannot be below 'at least'."
+        return errors
 
     @cached_property
     def cached_allowed_effect_types(self) -> list:

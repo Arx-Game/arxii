@@ -279,6 +279,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-requests/call-up-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Her gifts whose substance she can call up here with no technique (#5018).
+     *
+     *     Same ``?initiator_persona=<id>`` contract as ``castable-techniques``. Priced by her
+     *     own control; never filtered by anima. Calling one up dispatches the
+     *     ``call_up_substance`` REGISTRY action.
+     */
+    get: operations['action_requests_call_up_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/cast/': {
     parameters: {
       query?: never;
@@ -30145,6 +30168,27 @@ export interface components {
       readonly kin_pool: components['schemas']['KinSlotPool'] | null;
       readonly kin_node: components['schemas']['KinSlot'] | null;
     };
+    /** @description Her gift's substance she can call up this round, beside Dig deep (#5018); read-only. */
+    CallUpFightOffer: {
+      offers: components['schemas']['CallUpOffer'][];
+      /** @description Whether she has already called up her gift this round (once a round). */
+      called_up_this_round: boolean;
+    };
+    /**
+     * @description One gift whose substance she can call up with no technique, priced now (#5018).
+     *
+     *     Never a gate: shown and pressable whatever her anima.
+     */
+    CallUpOffer: {
+      readonly gift_id: number;
+      readonly label: string;
+      readonly effective_cost: number;
+      readonly resonance_cost: number;
+      readonly already_present: boolean;
+      readonly can_call_up: boolean;
+      readonly cost_line: string;
+      readonly balance_line: string;
+    };
     /**
      * @description Eligibility preview computed by ``_compute_can_honor`` — never persisted.
      *
@@ -30246,6 +30290,7 @@ export interface components {
       readonly intensity: number;
       readonly control: number;
       readonly effective_anima_cost: number;
+      readonly surroundings: components['schemas']['SurroundingsLine'][];
     };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
@@ -30308,6 +30353,7 @@ export interface components {
        *     authored field.
        */
       readonly reactive_anima_cost: number | null;
+      readonly cast_preview: components['schemas']['CastPreview'] | null;
     };
     /**
      * @description For staff triaging GM scenario-catalog suggestions (#2127).
@@ -44814,6 +44860,7 @@ export interface components {
       readonly compulsion: components['schemas']['Compulsion'] | null;
       readonly steady_plan: components['schemas']['SteadyPlan'] | null;
       readonly dig_deep: components['schemas']['DigDeepOffer'] | null;
+      readonly call_up: components['schemas']['CallUpFightOffer'] | null;
       readonly strike_weapons: components['schemas']['StrikeWeaponOption'][] | null;
     };
     /**
@@ -52676,6 +52723,18 @@ export interface components {
       /** @description What caused the surge, e.g. 'Mira taunts Tomas.'. Only the surged player, GMs and staff get it; everyone else reads the generic narration. */
       cause?: string;
     };
+    /** @description One line the cast card shows under its cost about where she stands (#5018). */
+    SurroundingsLine: {
+      /** @description power | call_up | blocked | needs (an unmet restriction). */
+      readonly kind: string;
+      readonly text: string;
+      /** @description Signed power, or the penalty. */
+      readonly amount: number;
+      readonly anima: number;
+      readonly resonance: number;
+      /** @description A call-up line's right-hand cost; blank otherwise. */
+      readonly detail: string;
+    };
     /** @description Observable countdown and erosion for a multi-round commitment. */
     SustainedAction: {
       id: number;
@@ -55976,6 +56035,39 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['BoonOptions'];
+        };
+      };
+    };
+  };
+  action_requests_call_up_offers_list: {
+    parameters: {
+      query: {
+        initiator?: number;
+        /** @description Persona id (owned by the requester) to list call-ups for. */
+        initiator_persona: number;
+        /**
+         * @description Request direction relative to the requesting account's played characters.
+         *
+         *     * `incoming` - Incoming
+         *     * `outgoing` - Outgoing
+         */
+        role?: 'incoming' | 'outgoing';
+        scene?: number;
+        status?: string;
+        target?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CallUpOffer'][];
         };
       };
     };

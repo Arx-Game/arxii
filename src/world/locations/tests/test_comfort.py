@@ -26,6 +26,7 @@ from world.locations.services import (
     room_discomfort,
     room_enclosure,
 )
+from world.weather.constants import WEATHER_SOURCE_PREFIX
 
 
 class ComfortAxesTests(TestCase):
@@ -98,8 +99,13 @@ class EnclosureShelteringTests(TestCase):
         return ward, profile.objectdb
 
     def _weather(self, area, stat_key: StatKey, value: int) -> None:
+        # Tagged as the weather layer's row: enclosure keeps out only the weather (#5018).
         LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=stat_key,
+            value=value,
+            source=f"{WEATHER_SOURCE_PREFIX}{area.pk}",
         )
 
     def test_open_air_feels_all_weather(self) -> None:
@@ -198,8 +204,13 @@ class ComfortLevelTests(TestCase):
 
 class WindowEnclosureTests(TestCase):
     def _modifier(self, area, stat_key: StatKey, value: int) -> None:
+        # The weather layer's row: enclosure keeps out only the weather (#5018).
         LocationValueModifier.objects.create(
-            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=stat_key,
+            value=value,
+            source=f"{WEATHER_SOURCE_PREFIX}{area.pk}",
         )
 
     def _room_with_profile(self):

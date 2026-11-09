@@ -69,6 +69,7 @@ from world.magic.models import (
     FuryTier,
     Gift,
     GiftAcquisitionConfig,
+    GiftSubstance,
     GiftUnlock,
     GlimpseTag,
     ImbuingProseTemplate,
@@ -304,6 +305,26 @@ class RestrictionAdmin(admin.ModelAdmin):
     filter_horizontal = ["allowed_effect_types"]
     autocomplete_fields = ["inflicted_condition"]
     inlines = [PriceComponentRequirementInline]
+    _SURROUNDINGS_FIELDS = ("surroundings_stat", "surroundings_min", "surroundings_max")
+
+    def get_fieldsets(self, request, obj=None):
+        """The default form, with the #5018 surroundings columns in their own section."""
+        fields = [f for f in self.get_fields(request, obj) if f not in self._SURROUNDINGS_FIELDS]
+        return [
+            (None, {"fields": fields}),
+            (
+                "Surroundings (DESIGN only)",
+                {
+                    "fields": list(self._SURROUNDINGS_FIELDS),
+                    "description": (
+                        "A room reading this technique needs, such as wet air for a storm "
+                        "technique. Unmet, the cast takes a very heavy roll penalty; it is "
+                        "never refused. On a technique whose own gift's substance is this "
+                        "reading it does nothing and refunds nothing."
+                    ),
+                },
+            ),
+        ]
 
     def get_queryset(self, request):
         return (
@@ -966,6 +987,18 @@ class GiftAdminForm(forms.ModelForm):
         return cleaned
 
 
+class GiftSubstanceInline(admin.StackedInline):
+    """What the gift is made of (#5018): the room reading every cast of it reads."""
+
+    model = GiftSubstance
+    extra = 0
+    max_num = 1
+    can_delete = True
+    verbose_name = "Substance"
+    verbose_name_plural = "Substance"
+    fields = ["label", "stat_key", "direction", "full_at", "opposed_by", "arrival_line"]
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     form = GiftAdminForm
@@ -975,7 +1008,7 @@ class GiftAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances", "ultimate_techniques"]
     readonly_fields = ["get_grant_sources"]
-    inlines = [GiftChildInline]
+    inlines = [GiftSubstanceInline, GiftChildInline]
 
     @admin.display(description="Techniques")
     def get_technique_count(self, obj):
@@ -1634,6 +1667,23 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "backfire_difficulty_per_magnitude",
         "updated_at",
     )
+
+    _SUBSTANCE_FIELDS = (
+        "substance_power_at_full",
+        "substance_present_pct",
+        "substance_anima_per_measure",
+        "substance_resonance_per_measure",
+        "substance_place_cap_pct",
+        "unmet_surroundings_penalty_pct",
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        """The existing settings, then the #5018 gift-substance numbers in their own group."""
+        fields = [f for f in self.get_fields(request, obj) if f not in self._SUBSTANCE_FIELDS]
+        return [
+            (None, {"fields": fields}),
+            ("Gift substance", {"fields": list(self._SUBSTANCE_FIELDS)}),
+        ]
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not ResonanceEnvironmentConfig.objects.exists()

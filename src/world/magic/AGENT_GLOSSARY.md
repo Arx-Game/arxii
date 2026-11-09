@@ -578,3 +578,12 @@ _Avoid_: correction check, drift roll, purification.
 **Thread retune** (#4735, slice 6 of #4672):
 Moving one thread to another resonance by performing the retune rite (the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`). Within the thread's affinity it keeps every point; across affinities it is a Fall or a Redemption of that one thread, converting its `developed_points` at the authored pair rate (floored at 1). A live thread already on the same anchor in the new resonance takes the points and the moved one retires. It changes no balance and no affinity, unlike a **Fall** or **Redemption** of the character.
 _Avoid_: reweave (weaving makes a new thread), thread conversion (the full Fall re-anchors every thread), respec.
+
+**Gift substance**:
+What a gift works through, named once per gift as a room reading and a direction (`GiftSubstance`): shadow is the room's lighting falling, water its wet rising. Every cast of the gift needs it present; the room after any call-up adds or takes power by her gift thread's level (#5018, ADR-5018). A child gift with none uses its parent's. _Avoid_: element, medium, resonance (a resonance is identity and currency; a substance is a reading of the room).
+
+**Calling up**:
+Making a gift's substance present in the room: automatically as part of a cast where it is missing, or with no technique (`call_up_substance`, telnet `callup`). Priced through the cast's anima formula, so control covers small amounts, with the uncovered share spending her gift resonance; it writes her own room row, lasting while she stays, and an unattributed room line. Never refused for anima. _Avoid_: summon, conjure, generate.
+
+**Present (substance)**:
+At least `substance_present_pct` of a full measure past the reading's ordinary value, in the substance's direction. An ordinary room lacks it. A scene's GM may mark it present for the scene (`stage_substance`). _Avoid_: available, active.

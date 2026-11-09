@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from flows.scene_data_manager import SceneDataManager
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult, ExtraTraitTerm
+    from world.magic.types.substance import SurroundingsLine
     from world.mechanics.types import ChallengeResolutionResult
     from world.scenes.action_availability import AvailableEnhancement
     from world.scenes.models import Persona, Scene
@@ -530,6 +531,9 @@ class CastPreview:
     intensity: int
     control: int
     effective_anima_cost: int
+    #: #5018: her gift's substance here: the call-up this cast makes and its power line,
+    #: and any surroundings restriction it fails. Shown under the cost.
+    surroundings: tuple[SurroundingsLine, ...] = ()
 
 
 @dataclass(frozen=True)

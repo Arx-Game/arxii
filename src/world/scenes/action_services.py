@@ -1425,11 +1425,17 @@ def _resolve_action_against_persona(
         technique_check_modifiers = 0
         technique_breakdown = None
         if tech_check_type is not None:
+            from world.magic.services.surroundings import (  # noqa: PLC0415
+                surroundings_contributions,
+            )
+
             technique_breakdown = collect_check_modifiers(
                 action_request.initiator_persona.character_sheet,
                 tech_check_type,
                 scene=action_request.scene,
                 extra_traits=technique_terms,
+                # #5018: a surroundings restriction the room fails is a named penalty.
+                extra_contributions=surroundings_contributions(character, action_request.technique),
             )
             technique_check_modifiers = technique_breakdown.extra_modifiers_total
         result = _resolve_enhanced_action(

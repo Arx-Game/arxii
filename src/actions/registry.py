@@ -259,6 +259,7 @@ from actions.definitions.gift_acquisition import (
     AcceptThreadWeavingOfferAction,
     PurchaseGiftUnlockAction,
 )
+from actions.definitions.gift_substance import CallUpSubstanceAction
 from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
@@ -284,7 +285,12 @@ from actions.definitions.gm_combat import (
     UpdateEncounterSettingsAction,
 )
 from actions.definitions.gm_npcs import MintStoryNPCAction
-from actions.definitions.gm_props import StagePropAction, StagePropertyAction
+from actions.definitions.gm_props import (
+    GMListSubstancesAction,
+    MarkSubstancePresentAction,
+    StagePropAction,
+    StagePropertyAction,
+)
 from actions.definitions.gm_standoff import (
     GMOpenStandoffAction,
     GMStandoffConfirmAction,
@@ -948,6 +954,9 @@ _ALL_ACTIONS: list[Action] = [
     GMTriggerDramaticBeatAction(),
     StagePropAction(),
     StagePropertyAction(),
+    MarkSubstancePresentAction(),
+    GMListSubstancesAction(),
+    CallUpSubstanceAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),

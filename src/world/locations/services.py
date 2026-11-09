@@ -36,6 +36,7 @@ from world.locations.models import (
     LocationValueOverride,
 )
 from world.societies.models import OrganizationMembership
+from world.weather.constants import WEATHER_SOURCE_PREFIX
 from world.weather.services import (
     climate_exposure_base,
     current_temperature_shift,
@@ -189,6 +190,8 @@ def _resolve_cascade(
     profile: RoomProfile,
     ancestor_ids: list[int],
     axis_filter: models.Q,
+    *,
+    exclude: models.Q | None = None,
 ) -> tuple[int | None, int]:
     """Resolve one axis's raw cascade, unclamped (shared by effective_value/felt_exposure).
 
@@ -198,7 +201,9 @@ def _resolve_cascade(
     default nor any clamp is applied here — callers add their base (axis default or climate)
     and clamp, so climate can combine with local modifiers before the 0-floor.
     """
-    override_val, positive_sum, negative_sum = _cascade_parts(profile, ancestor_ids, axis_filter)
+    override_val, positive_sum, negative_sum = _cascade_parts(
+        profile, ancestor_ids, axis_filter, exclude=exclude
+    )
     if override_val is not None:
         return override_val, 0
     return None, positive_sum - negative_sum
@@ -208,12 +213,18 @@ def _cascade_parts(
     profile: RoomProfile,
     ancestor_ids: list[int],
     axis_filter: models.Q,
+    *,
+    exclude: models.Q | None = None,
 ) -> tuple[int | None, int, int]:
     """One axis's cascade, decomposed: ``(override, positive_sum, negative_sum)`` (#1514).
 
     ``negative_sum`` is a magnitude (>= 0). The decomposition feeds the owner
     build-HUD's pressure-vs-mitigation readout; ``_resolve_cascade`` recombines
     the parts for the plain summed read.
+
+    ``exclude`` (#5018) drops matching modifier rows from the sum: an enclosure keeping
+    the weather's rows out, or a writer reading the room without its own row. Overrides
+    are never excluded (a sanctum's fixed setting beats everything).
     """
     overrides = list(
         LocationValueOverride.objects.filter(axis_filter)
@@ -229,6 +240,8 @@ def _cascade_parts(
     modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
         models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
     )
+    if exclude is not None:
+        modifiers = modifiers.exclude(exclude)
     positive_sum = 0
     negative_sum = 0
     for mod in modifiers:
@@ -439,39 +452,86 @@ def _exposure_context(room: DefaultObject) -> _ExposureContext:
     return _ExposureContext(profile, ancestor_ids, climate, temperature_shift, sheltered_axes)
 
 
-def _felt_exposure_for_axis(ctx: _ExposureContext, stat_key: StatKey) -> int:
-    """One axis's felt exposure given already-resolved room/climate state (#1514, #1522).
+class FeltReading(NamedTuple):
+    """One axis as a person standing in the room feels it, before the clamp (#5018).
+
+    ``override`` is a fixed setting (a warded sanctum) that beats everything; otherwise
+    ``raw`` is the base plus every counted modifier, unclamped, so a writer can work out
+    what one more row would do. ``value`` is the clamped figure ``felt_exposure`` returns.
+    """
+
+    stat_key: StatKey
+    override: int | None
+    raw: int
+
+    @property
+    def value(self) -> int:
+        return _clamp(self.override if self.override is not None else self.raw, self.stat_key)
+
+
+def _weather_exclusion() -> models.Q:
+    """The rows an enclosure keeps out of a sheltered axis: the weather layer's own."""
+    return models.Q(source__startswith=WEATHER_SOURCE_PREFIX)
+
+
+def _felt_reading_for_axis(
+    ctx: _ExposureContext, stat_key: StatKey, *, exclude: models.Q | None = None
+) -> FeltReading:
+    """One axis's felt reading given already-resolved room/climate state (#1514, #5018).
 
     Folds the regional climate base (for exposure axes) into the same pre-floor sum as the
     local cascade modifiers — so a desert's HEAT base and a cooling fixture's negative HEAT
     modifier combine before the 0-floor. A warded-sanctum override still trumps both climate
     and modifiers. Non-exposure stats fall back to ``STAT_DEFAULTS`` as their base.
+
+    A sheltered axis (``ENCLOSURE_SHELTERED_AXES``) keeps the weather out, not the room's
+    own: the climate base and every ``weather:`` row drop, while builder, style, decoration,
+    call-up and GM-mark rows still count (#5018, rulings 19 and 22).
     """
-    if stat_key in WEATHER_EXPOSURE_AXES and stat_key in ctx.sheltered_axes:
-        return 0
-    if stat_key in EXPOSURE_STAT_KEYS:
+    sheltered = stat_key in ctx.sheltered_axes
+    if stat_key in EXPOSURE_STAT_KEYS and not (sheltered and stat_key in WEATHER_EXPOSURE_AXES):
         base = climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
     else:
         base = STAT_DEFAULTS.get(stat_key, 0)
     if ctx.profile is None:
-        return _clamp(base, stat_key)
+        return FeltReading(stat_key, None, base)
+    if sheltered:
+        exclude = _weather_exclusion() if exclude is None else exclude | _weather_exclusion()
     override_val, modifier_sum = _resolve_cascade(
-        ctx.profile, ctx.ancestor_ids, models.Q(key_type=KeyType.STAT, stat_key=stat_key)
+        ctx.profile,
+        ctx.ancestor_ids,
+        models.Q(key_type=KeyType.STAT, stat_key=stat_key),
+        exclude=exclude,
     )
-    if override_val is not None:
-        return _clamp(override_val, stat_key)
-    return _clamp(base + modifier_sum, stat_key)
+    return FeltReading(stat_key, override_val, base + modifier_sum)
+
+
+def _felt_exposure_for_axis(ctx: _ExposureContext, stat_key: StatKey) -> int:
+    """One axis's felt exposure, clamped (see ``_felt_reading_for_axis``)."""
+    return _felt_reading_for_axis(ctx, stat_key).value
+
+
+def felt_reading(
+    room: DefaultObject, *, stat_key: StatKey, exclude_source: str = ""
+) -> FeltReading:
+    """A room's felt reading on one axis, optionally without one source's row (#5018).
+
+    ``exclude_source`` names a modifier ``source`` to leave out (exact match), so a writer
+    that owns that row (a caster's call-up, a GM's mark) can read the room as it would be
+    without it and set its row to just what it needs.
+    """
+    exclude = models.Q(source=exclude_source) if exclude_source else None
+    return _felt_reading_for_axis(_exposure_context(room), stat_key, exclude=exclude)
 
 
 def felt_exposure(room: DefaultObject, *, stat_key: StatKey) -> int:
     """A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).
 
-    Weather axes (WET, WIND) are fully blocked — felt as 0 — when the room's enclosure
-    shelters them (a roof stops rain/snow; walls stop wind). Temperature axes (COLD, HEAT)
-    always seep through and are felt in full; insulation against them comes from
-    fixtures/style, not enclosure. The room's regional climate baseline (#1522) folds into
-    the exposure axes before the 0-floor. Non-weather, non-exposure stats are returned
-    unchanged.
+    Enclosure keeps the weather out: under a roof the weather's WET rows and the climate's
+    wet base read as nothing; walls do the same for WIND and for LIGHTING (#5018). A room's
+    own rows still count. Temperature axes (COLD, HEAT) always seep through and are felt in
+    full; insulation against them comes from fixtures/style, not enclosure. The room's
+    regional climate baseline (#1522) folds into the exposure axes before the 0-floor.
     """
     return _felt_exposure_for_axis(_exposure_context(room), stat_key)
 
@@ -564,7 +624,8 @@ class AxisBreakdown(NamedTuple):
     ``pressure`` is what pushes the axis up (climate base + positive cascade
     contributions), ``mitigation`` what pulls it down (fixtures/style, as a
     magnitude), ``net`` the felt value after the 0-floor and enclosure gate.
-    ``sheltered`` marks a weather axis the room's enclosure zeroes outright.
+    ``sheltered`` marks a weather axis the room's enclosure keeps the weather out of: the
+    weather's rows and the climate base drop, the room's own rows still count (#5018).
     An authored override reports as pure pressure (it IS the value).
     """
 
@@ -588,6 +649,7 @@ def room_exposure_breakdown(room: DefaultObject) -> list[AxisBreakdown]:
     for stat_key in EXPOSURE_STAT_KEYS:
         base = climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
         sheltered = stat_key in WEATHER_EXPOSURE_AXES and stat_key in ctx.sheltered_axes
+        # Pressure keeps showing what the roof is blocking; ``net`` is what gets through.
         pressure = max(0, base)
         mitigation = max(0, -base)
         if ctx.profile is not None:

@@ -380,6 +380,31 @@ them, so no facet-gated flourish could ever qualify. Built:
   it yours", and finalize ties the facets before signing the flourish.
 - Detail: `docs/systems/magic.md` "Player-facing facet binding (#5021)".
 
+## Where you stand matters: a gift's substance (#5018, ADR-5018, BUILT 2026-11-09)
+
+What was built, in one PR (seven parts):
+
+1. **Stronger and weaker.** Staff name a gift's substance once (`GiftSubstance`, the Gift
+   admin's Substance inline); every cast of that gift by a caster with a GIFT thread on it
+   gains or loses up to 10 power ("Surroundings: shadow"), scaled by her thread level.
+2. **Her cast calls it up.** Where the substance is missing (an ordinary room counts), the
+   cast calls it up: its anima rides the cast's own cost before control, so social-scene
+   casts usually stay free; the uncovered share spends gift resonance; a matching place is
+   cheaper, a hostile one dearer. The room changes for everyone while she stays, and sees
+   an unattributed Narrator line. Never refused for anima.
+3. **No technique.** "Your gift" on the scene panel, Call up beside Dig deep in a fight
+   (once a round, not her action), telnet `callup`.
+4. **Other surroundings.** A DESIGN restriction may need a reading its gift does not make;
+   unmet, a heavy named roll penalty, never a refusal.
+5. **Walls keep weather's darkness out.** A walled room drops weather-sourced lighting.
+6. **The GM says yes.** `stage present <substance>` / the Stage tab's "Present here" marks
+   it for the scene; the scene ending clears it.
+7. **A roof keeps out the rain, not the cellar's own water.** Enclosure drops only the
+   weather's wet and wind; a room's own rows count.
+
+Remains for staff: authoring substances on real gifts, dark weather types and styles, and
+tuning the six numbers on Resonance environment settings.
+
 ## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
 
 The in-play training loop #2426's roadmap entries deferred as a follow-up is now real —

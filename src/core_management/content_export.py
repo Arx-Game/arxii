@@ -234,6 +234,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.faceteffectbonus",  # a facet's bonus to a maneuver effect (#4815)
         "magic.gift",
         "magic.giftunlock",
+        "magic.giftsubstance",  # what a gift is made of (#5018)
         "magic.glimpsetag",
         "magic.intensitytier",
         # #3034: the row-level "authored_by IS NULL" split lives in

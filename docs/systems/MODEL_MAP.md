@@ -5696,6 +5696,7 @@
 - `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' - End a room tenancy (#670, ladder #3902): departure, or taking back what you gave.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' - End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' - A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
+- `felt_reading(room: 'DefaultObject', *, stat_key: 'StatKey', exclude_source: 'str' = '') -> 'FeltReading' - A room's felt reading on one axis, optionally without one source's row (#5018).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' - Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, kind: 'str', area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, granted_by: 'Persona | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Create a new LocationTenancy row at rung ``kind`` (#3902).`
 - `has_standing(persona: 'Persona | None', room: 'DefaultObject', *, at_least: 'str' = LocationRole.GUEST) -> 'bool' - Whether ``persona`` holds at least ``at_least`` at ``room`` (#3902).`
@@ -6102,6 +6103,7 @@
   - effect_modifier_targets <- mechanics.ModifierTarget
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
+  - substance <- magic.GiftSubstance
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
   - major_gift_technique_requirements <- progression.MajorGiftTechniqueRequirement
@@ -6123,6 +6125,12 @@
   - capability_project_details <- societies.OrganizationCapabilityProjectDetails
 
 ### GiftAcquisitionConfig
+
+### GiftSubstance
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - gift -> magic.Gift [OneToOne]
 
 ### GiftUnlock
 **Foreign Keys:**

@@ -243,11 +243,17 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         check_modifier_total = 0
         cast_breakdown = None
         if cast_check is not None and character_sheet is not None:
+            from world.magic.services.surroundings import (  # noqa: PLC0415
+                surroundings_contributions,
+            )
+
             cast_breakdown = collect_check_modifiers(
                 character_sheet,
                 cast_check.check_type,
                 scene=scene,
                 extra_traits=cast_check.extra_traits,
+                # #5018: a surroundings restriction the room fails is a named penalty.
+                extra_contributions=surroundings_contributions(character, technique),
             )
             check_modifier_total = cast_breakdown.extra_modifiers_total
         resolution = start_action_resolution(

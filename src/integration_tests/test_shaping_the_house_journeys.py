@@ -136,7 +136,7 @@ class StagingAProp(JourneyCase):
     def test_the_gm_conjures_a_torch_and_tags_the_room(self) -> None:
         self.assertIn("Usage: stage prop", self.telnet(self.ysmay, "stage"))
         self.assertIn(
-            "Unknown stage action 'frobnicate'. Try: prop, property.",
+            "Unknown stage action 'frobnicate'. Try: absent, present, prop, property.",
             self.telnet(self.ysmay, "stage frobnicate"),
         )
         self.assertIn(
