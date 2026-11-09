@@ -82,6 +82,9 @@ class StrikeEnchantment:
     # Set once the cast has settled, for the technique roll's row.
     anima_cost: int = 0
     added_types: list[str] = field(default_factory=list)
+    # Each typed part's amount as the technique roll set it, before the target's armor and
+    # resistance, by type word; filled when the Strike lands (``typed_parts``).
+    part_amounts: dict[str, int] = field(default_factory=dict)
 
     @property
     def to_hit_contribution(self) -> ModifierContribution:
@@ -132,6 +135,9 @@ class StrikeEnchantment:
             if amount <= 0:
                 continue
             parts.append(TypedPart(amount, None if joins_weapon else part_type, profile))
+            if not joins_weapon and part_type is not None:
+                word = part_type.name.lower()
+                self.part_amounts[word] = self.part_amounts.get(word, 0) + amount
         return parts
 
     def roll_row(self) -> StrikeRoll:
@@ -164,11 +170,16 @@ class StrikeEnchantment:
         )
 
     def result_line(self) -> str:
-        """ "Success: +2 to hit, fire damage", or "Failure: nothing added"."""
+        """ "Success: +2 to hit, 4 fire", "Success: +2 to hit, fire damage" (a miss), or
+        "Failure: nothing added"."""
         added: list[str] = []
         if self.to_hit:
             added.append(f"+{self.to_hit} to hit")
-        added.extend(f"{word} damage" for word in self.added_types)
+        # "4 fire" once the blow landed and the amount is known; "fire damage" on a miss.
+        added.extend(
+            f"{self.part_amounts[word]} {word}" if word in self.part_amounts else f"{word} damage"
+            for word in self.added_types
+        )
         outcome = self.roll.outcome_name
         if self.bounced:
             return f"{outcome}: stopped by a ward"

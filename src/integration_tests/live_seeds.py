@@ -186,6 +186,7 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     from world.roster.models import RosterEntry  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
+    from world.skills.factories import MagicSkillFactory  # noqa: PLC0415
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
     from world.vitals.seeds import ensure_foundational_capabilities  # noqa: PLC0415
@@ -313,8 +314,11 @@ def seed_thrown_strike_spec(*, username: str) -> ThrownStrikeSeed:  # noqa: PLR0
     ModifierValue.objects.get_or_create(
         lane=ModifierLane.TO_HIT, level=1, size=ModifierSize.MODERATE, defaults={"value": 2}
     )
+    fire_magic = MagicSkillFactory(name="Fire Magic")
+    CharacterTraitValue.objects.create(character=sheet, trait=fire_magic, value=30)
     technique = TechniqueFactory(
         name=THROWN_SPEC_TECHNIQUE,
+        skill=fire_magic,
         gift=GiftFactory(name="Ember"),
         anima_cost=THROWN_SPEC_ENCHANT_COST,
         intensity=1,

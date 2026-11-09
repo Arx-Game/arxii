@@ -87,6 +87,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterAnima
 from world.magic.models.modifier_level import CastPowerLevel
+from world.skills.factories import MagicSkillFactory
 from world.traits.factories import CharacterTraitValueFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import CharacterTraitValue, Trait
 from world.vitals.services import get_vitals_consequence_config
@@ -162,8 +163,11 @@ class _ThrowingField(_StrikeField):
         )
         magic = CheckTypeFactory(name="Fire Magic Cast")
         CheckTypeTraitFactory(check_type=magic, trait=StatTraitFactory(name="Willpower"))
+        fire_magic = MagicSkillFactory(name="Fire Magic")
+        CharacterTraitValue.objects.create(character=self.sheet, trait=fire_magic, value=30)
         technique = TechniqueFactory(
             name="Wreathe the blade",
+            skill=fire_magic,
             gift=GiftFactory(name="Ember"),
             anima_cost=ENCHANT_COST,
             intensity=1,
@@ -271,6 +275,9 @@ class ThrowingTheDagger(_ThrowingField):
         with self.forced_rolls("Success", "Success", "Success"):
             resolve_round(self.encounter)
         self.assertTold(self.hobb, "The Parrying dagger is back in your hand.")
+        self.assertTold(
+            self.hobb, "You throw your Parrying dagger, enchanted with Wreathe the blade"
+        )
 
 
 class EnchantingTheStrike(_ThrowingField):
@@ -296,8 +303,22 @@ class EnchantingTheStrike(_ThrowingField):
             },
             technique_row["roll_breakdown"]["lines"],
         )
+        self.assertIn(
+            {"label": "Fire Magic", "value": "30", "detail": "technique skill", "lapsed": False},
+            technique_row["roll_breakdown"]["lines"],
+        )
+        # The fire part as the technique roll set it, before the archer's weakness.
         self.assertEqual(
-            technique_row["roll_breakdown"]["result"], "Success: +2 to hit, fire damage"
+            technique_row["roll_breakdown"]["result"], f"Success: +2 to hit, {FIRE_PART} fire"
+        )
+        self.assertIn(
+            {
+                "label": "Wreathe the blade, fire",
+                "value": "",
+                "detail": "technique part",
+                "lapsed": False,
+            },
+            damage_row["roll_breakdown"]["lines"],
         )
         self.assertEqual(hit_row["roll_breakdown"]["lines"][0]["label"], "Thrown Combat")
         self.assertIn(

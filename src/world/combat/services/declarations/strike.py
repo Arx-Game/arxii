@@ -998,6 +998,21 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
             ).values_list("combat_interaction_id", flat=True)
         )
     traits = strike_check_traits({o.check_type_id for o in strike_outcomes})
+    # The technique cast into each enchanted Strike (#5026), by interaction: what its
+    # damage row names the typed parts after. One query, only when a damage row is shown.
+    damage_interactions = {
+        o.combat_interaction_id
+        for o in strike_outcomes
+        if o.combat_roll_kind == CombatRollKind.DAMAGE and o.combat_interaction_id
+    }
+    enchantments: dict[int, str] = {}
+    if damage_interactions:
+        enchantments = dict(
+            ConsequenceOutcome.objects.filter(
+                combat_interaction_id__in=damage_interactions,
+                combat_roll_kind=CombatRollKind.TECHNIQUE,
+            ).values_list("combat_interaction_id", "weapon_label")
+        )
 
     breakdowns: dict[int, RollBreakdown] = {}
     for o in strike_outcomes:
@@ -1012,7 +1027,9 @@ def strike_roll_breakdowns(outcomes: Sequence[ConsequenceOutcome]) -> dict[int, 
                 went_on_to_damage=o.combat_interaction_id in went_on,
             )
         else:
-            breakdowns[o.pk] = _damage_roll_breakdown(o, skill)
+            breakdowns[o.pk] = _damage_roll_breakdown(
+                o, skill, enchantments.get(o.combat_interaction_id) or ""
+            )
     return breakdowns
 
 
@@ -1085,13 +1102,32 @@ def style_roll_line(outcome: ConsequenceOutcome) -> RollLine | None:
     return RollLine(outcome.style_name, str(rating) if rating is not None else "", "style skill")
 
 
-def _damage_roll_breakdown(outcome: ConsequenceOutcome, skill: str | None) -> RollBreakdown:
-    """A Strike's damage roll as rows: the weapon and its quality, the skill, the result."""
+def _damage_roll_breakdown(
+    outcome: ConsequenceOutcome, skill: str | None, enchantment: str = ""
+) -> RollBreakdown:
+    """A Strike's damage roll as rows: the weapon and its quality, the skill, then (an
+    enchanted Strike, #5026) each typed part the technique added, then the result.
+
+    The parts come from the result the roll stored ("12 damage: 5 physical, 7 fire"): the
+    first is the weapon's, each later one the technique's. Each row names its type only, as
+    dealt; the target's armor and resistance values never show.
+    """
     from world.checks.types import RollBreakdown, RollLine  # noqa: PLC0415
 
     bare = outcome.weapon_kind == "bare hands"
-    detail = "the weakest Unarmed weapon" if bare else "weapon damage and quality"
-    lines = [RollLine(outcome.weapon_label or "", "", detail)]
+    label = outcome.weapon_label or ""
+    if bare:
+        detail = "the weakest Unarmed weapon"
+    elif label.endswith(", thrown"):
+        detail = "weapon damage and quality, at the thrown share"
+    else:
+        detail = "weapon damage and quality"
+    lines = [RollLine(label, "", detail)]
     if skill is not None:
         lines.append(RollLine(skill, _skill_value(outcome), "strike skill"))
+    _total, _sep, parts = (outcome.summary or "").partition(": ")
+    if enchantment and parts:
+        for part in parts.split(", ")[1:]:
+            _amount, _space, damage_type = part.partition(" ")
+            lines.append(RollLine(f"{enchantment}, {damage_type}", "", "technique part"))
     return RollBreakdown(heading="Damage roll", lines=lines, result=outcome.summary)
