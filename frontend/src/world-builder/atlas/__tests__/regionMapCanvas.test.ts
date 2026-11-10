@@ -182,6 +182,17 @@ describe('region map drawing', () => {
     expect(outlined.paints[4]).toEqual({ style: holderColor(4, 0.65), rect: [6, 6, 6, 6] });
   });
 
+  it('draws border lines around the footprints asked for, at their widths, after the fills (#5056)', () => {
+    const bordered = recordingCanvas();
+    const widths: number[] = [];
+    bordered.context.stroke.mockImplementation(() => widths.push(bordered.context.lineWidth));
+    drawRegionMap(bordered.ctx, drawingData, { borderWidths: new Map([[11, 0.5]]) });
+    // the coast, the cell lines, then the border
+    expect(widths).toEqual([1, 1, 0.5]);
+    // a bordered footprint is not emphasised: it fills at the plain alpha
+    expect(bordered.paints[4]).toEqual({ style: holderColor(4, 0.45), rect: [6, 6, 6, 6] });
+  });
+
   it('draws a charter ghost as a dashed outline over the union, with no fill', () => {
     const plain = recordingCanvas();
     drawRegionMap(plain.ctx, drawingData, {});

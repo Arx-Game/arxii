@@ -114,6 +114,12 @@ export interface DrawOptions {
    */
   outlineAreaIds?: ReadonlySet<number>;
   /**
+   * Border lines by area id and width (#5056): the tier below the view's anchor, and in
+   * Domain-Vassal every tier beneath, drawn after every fill so a neighbour's shading never
+   * covers a line. A bordered footprint is not emphasised.
+   */
+  borderWidths?: ReadonlyMap<number, number>;
+  /**
    * A title's Historical Charter (#4983): the union of its chartered fiefs' pips, drawn
    * as a dashed ghost outline over the de facto shading, never filled.
    */
@@ -300,16 +306,24 @@ function drawFootprints(
     }
     if (outlined) drawFootprintOutline(ctx, footprint, b);
   }
+  // borders (#5056): lightest first, so a duchy's line sits over its counties' lines
+  const bordered = footprints
+    .filter((f) => options.borderWidths?.has(f.area_id))
+    .sort((a, c) => options.borderWidths!.get(a.area_id)! - options.borderWidths!.get(c.area_id)!);
+  for (const footprint of bordered) {
+    drawFootprintOutline(ctx, footprint, b, options.borderWidths!.get(footprint.area_id)!);
+  }
 }
 
 function drawFootprintOutline(
   ctx: CanvasRenderingContext2D,
   footprint: RegionMapFootprint,
-  b: RegionBounds
+  b: RegionBounds,
+  lineWidth = 2
 ) {
   const own = new Set(footprint.pips.map(([x, y]) => pipKey(x, y)));
   ctx.strokeStyle = '#1a140c';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = lineWidth;
   ctx.beginPath();
   for (const [x, y] of footprint.pips) {
     const px = (x - b.x0) * PIP_PX;

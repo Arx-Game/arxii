@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import type { RegionMapFootprint } from '../../types';
 import { PIP_PX } from '../regionMapCanvas';
-import { MAP_VIEW_LABELS, MAP_VIEWS, placeNames, rootsOf, visibleFootprints } from '../mapViews';
+import {
+  borderWidths,
+  MAP_VIEW_LABELS,
+  MAP_VIEWS,
+  placeNames,
+  rootsOf,
+  visibleFootprints,
+} from '../mapViews';
 
 function footprint(
   overrides: Partial<RegionMapFootprint> & Pick<RegionMapFootprint, 'area_id' | 'level'>
@@ -115,13 +122,36 @@ describe('mapViews: the four views (#5030)', () => {
     expect(visibleFootprints('geography', all, [west])).toEqual([]);
   });
 
-  it('Domain shows the anchors alone', () => {
-    expect(visibleFootprints('domain', all, [west]).map((f) => f.name)).toEqual(['Vestyr']);
+  it('Domain shows the anchors and the tier below them (#5056)', () => {
+    expect(
+      visibleFootprints('domain', all, [west])
+        .map((f) => f.name)
+        .sort()
+    ).toEqual(['Carradyn', 'Vestyr']);
+    expect(
+      visibleFootprints('domain', all, [duchy])
+        .map((f) => f.name)
+        .sort()
+    ).toEqual(['Aberwen', 'Carradyn']);
+    // a kingdom with nothing beneath it is drawn alone
     expect(
       visibleFootprints('domain', all, [west, east])
         .map((f) => f.name)
         .sort()
-    ).toEqual(['Norbyria', 'Vestyr']);
+    ).toEqual(['Carradyn', 'Norbyria', 'Vestyr']);
+  });
+
+  it('Domain draws a border on the tier below; Domain-Vassal on every tier, lighter as it goes down (#5056)', () => {
+    expect(borderWidths('domain', all, [west])).toEqual(new Map([[duchy.area_id, 2]]));
+    expect(borderWidths('domain-vassal', all, [west])).toEqual(
+      new Map([
+        [duchy.area_id, 2],
+        [county.area_id, 1],
+        [barony.area_id, 0.5],
+      ])
+    );
+    expect(borderWidths('all', all, [west])).toEqual(new Map());
+    expect(borderWidths('geography', all, [west])).toEqual(new Map());
   });
 
   it('Domain-Vassal shows the anchor and everything beneath it, at every tier', () => {
@@ -186,10 +216,12 @@ describe('mapViews: names that do not stack (#5030)', () => {
     expect(near).toContain('Aberwen');
   });
 
-  it('Domain names the anchor whatever its size; Domain-Vassal names the children, not the anchor', () => {
+  it('Domain names the tier below the anchor whatever its size, and the anchor only when nothing is beneath it; Domain-Vassal names the children, not the anchor', () => {
     expect(
       placeNames('domain', [barony], [barony], project(0.2), measure).map((l) => l.text)
     ).toEqual(['Seat']);
+    const domain = placeNames('domain', all, [west], project(0.2), measure).map((l) => l.text);
+    expect(domain).toEqual(['Carradyn']);
     const vassal = placeNames('domain-vassal', all, [west], project(0.2), measure).map(
       (l) => l.text
     );

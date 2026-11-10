@@ -228,6 +228,25 @@ describe('RegionMapPage', () => {
     expect(screen.getByTestId('map-view-anchor')).toHaveTextContent('no domain selected');
   });
 
+  it('Domain view borders the tier below the selected domain (#5056)', async () => {
+    vi.mocked(useRegionMapPipsQuery).mockReturnValue({
+      data: { ...payload, footprints: [...payload.footprints, SEAT_BARONY] },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useRegionMapPipsQuery>);
+    const user = userEvent.setup();
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    const viewport = screen.getByTestId('region-map-viewport');
+    const picker = screen.getByRole('group', { name: 'view' });
+    await user.click(within(picker).getByRole('button', { name: 'Domain' }));
+    expect(viewport).toHaveAttribute('data-map-view', 'domain');
+    // the county and its seat barony are drawn, the barony with a border
+    expect(viewport).toHaveAttribute('data-visible', '2');
+    expect(viewport).toHaveAttribute('data-bordered', '1');
+    await user.click(within(picker).getByRole('button', { name: 'All' }));
+    expect(viewport).toHaveAttribute('data-bordered', '0');
+  });
+
   it('Carve mode starts on Domain-Vassal, keeps a change, and Select gets its own view back (#5030)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
