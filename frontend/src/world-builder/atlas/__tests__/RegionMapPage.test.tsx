@@ -395,6 +395,38 @@ describe('RegionMapPage', () => {
     vi.mocked(useRealms).mockImplementation(realRealms);
   });
 
+  it('the Carve-mode realm picker drops the carve target and selection too (#5058)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRealms).mockReturnValue({
+      data: {
+        results: [
+          { id: 1, name: 'Luxen' },
+          { id: 2, name: 'Inferna' },
+        ],
+      },
+    } as unknown as ReturnType<typeof useRealms>);
+    vi.mocked(useLadder).mockImplementation(((realmId: number | null) =>
+      realmId === 1
+        ? realLadder(realmId, 'staff')
+        : {
+            data: { rows: [], unclaimed_by_tier: {} },
+            refetch: vi.fn(),
+          }) as unknown as typeof useLadder);
+    renderWithProviders(<RegionMapPage regionId={1} focusAreaId={10} />);
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Salvation' })).toBeInTheDocument();
+    await user.selectOptions(screen.getByTestId('carve-realm'), '2');
+    expect(screen.getByTestId('carve-domain')).toHaveValue('');
+    expect(within(panel).queryByRole('heading', { name: 'Salvation' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create domain' }));
+    expect(screen.getByTestId('plant-form')).toHaveTextContent('at the top');
+    vi.mocked(useLadder).mockImplementation(realLadder);
+    vi.mocked(useRealms).mockImplementation(realRealms);
+  });
+
   it('offers brush, fill and loop in carve mode, brush first, with nothing to undo', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RegionMapPage regionId={1} />);
