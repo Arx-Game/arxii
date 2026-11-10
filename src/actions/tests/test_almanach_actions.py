@@ -667,6 +667,39 @@ class AlmanachActionTests(TestCase):
             )
         ) == [feature.pk]
 
+    def test_edit_house_patron_pick_names_the_houses_god(self) -> None:
+        """#5064: a staff pick on a ``sets_patron`` question sets ``patron_nickname``,
+        the same rule founding applies, and two such picks are refused."""
+        from world.societies.houses.models import HouseCharterOption, HouseCharterQuestion
+        from world.worship.factories import BeingNicknameFactory
+
+        patron = HouseCharterQuestion.objects.create(
+            name="Umbral Patron Deity", prompt="Whom?", sets_patron=True
+        )
+        knight = BeingNicknameFactory(name="The One True Knight")
+        mother = BeingNicknameFactory(name="The Veiled Mother")
+        calyx = HouseCharterOption.objects.create(
+            definition=patron, name="Calyx", being=knight.being, being_nickname=knight
+        )
+        gloria = HouseCharterOption.objects.create(
+            definition=patron, name="Gloria", being=mother.being, being_nickname=mother
+        )
+
+        result = AlmanachEditHouseAction().run(
+            self.staff, org_id=self.crown.pk, facet_option_ids=[calyx.pk]
+        )
+        assert result.success, result.message
+        self.crown.refresh_from_db()
+        assert self.crown.patron_nickname_id == knight.pk
+
+        result = AlmanachEditHouseAction().run(
+            self.staff, org_id=self.crown.pk, facet_option_ids=[calyx.pk, gloria.pk]
+        )
+        assert not result.success
+        assert result.message
+        self.crown.refresh_from_db()
+        assert self.crown.patron_nickname_id == knight.pk
+
     def test_edit_house_replaces_observances_and_refuses_bad_rows(self) -> None:
         """#4206: ``observances`` replaces the house's days wholesale through the
         claim gate's own validator; an absent kwarg leaves them alone."""

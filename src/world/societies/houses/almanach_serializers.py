@@ -113,10 +113,35 @@ class AlmanachHouseFacetSerializer(serializers.Serializer):
     entry it opens."""
 
     definition = serializers.CharField()
+    definition_id = serializers.IntegerField()
     option = serializers.CharField()
+    option_id = serializers.IntegerField()
     description = serializers.CharField(allow_blank=True)
     being_name = serializers.CharField(allow_blank=True)
     target_entry_id = serializers.IntegerField(allow_null=True)
+
+
+class AlmanachCharterOptionSerializer(serializers.Serializer):
+    """One answer a staff house may pick (#5064; mirrors
+    ``almanach_reads.charter_questions_for_house``)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+    target_entry_id = serializers.IntegerField(allow_null=True)
+
+
+class AlmanachCharterQuestionSerializer(serializers.Serializer):
+    """A charter question of the house's realm with its active options (#5064):
+    what the House chapter's picker offers."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    prompt = serializers.CharField(allow_blank=True)
+    min_picks = serializers.IntegerField()
+    max_picks = serializers.IntegerField()
+    sets_patron = serializers.BooleanField()
+    options = AlmanachCharterOptionSerializer(many=True)
 
 
 class AlmanachHousePatronSerializer(serializers.Serializer):
@@ -169,6 +194,7 @@ class AlmanachHouseDocumentHouseSerializer(serializers.Serializer):
     default_succession_law = AlmanachSuccessionLawSerializer(allow_null=True)
     patron = AlmanachHousePatronSerializer(allow_null=True)
     facets = AlmanachHouseFacetSerializer(many=True)
+    charter_questions = AlmanachCharterQuestionSerializer(many=True)
     features = AlmanachHouseFeatureSerializer(many=True)
     offices = AlmanachHouseOfficeSerializer(many=True)
     observances = AlmanachHouseObservanceSerializer(many=True)

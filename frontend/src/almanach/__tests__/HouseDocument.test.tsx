@@ -38,12 +38,15 @@ const doc: HouseDocumentPayload = {
     facets: [
       {
         definition: 'Patron',
+        definition_id: 3,
         option: 'Calyx',
+        option_id: 31,
         description: 'The knight who kept the first vigil.',
         being_name: 'Calyx',
         target_entry_id: 77,
       },
     ],
+    charter_questions: [],
     features: [],
     offices: [],
     observances: [
@@ -139,6 +142,115 @@ test('a house with no charter answers shows no Quiddity heading, and answers gro
   renderWithProviders(<HouseDocument houseId={9} />);
   expect(screen.queryByText(/Quiddity/)).not.toBeInTheDocument();
   expect(screen.queryByText('Patron')).not.toBeInTheDocument();
+});
+
+const QUIDDITY = {
+  id: 1,
+  name: 'House Quiddity',
+  prompt: 'What drives your house?',
+  min_picks: 1,
+  max_picks: 1,
+  sets_patron: false,
+  options: [
+    { id: 11, name: 'Glamour', description: 'Beauty as a weapon.', target_entry_id: 23 },
+    { id: 12, name: 'Vendetta', description: 'A grudge kept warm.', target_entry_id: 29 },
+  ],
+};
+const VICES = {
+  id: 2,
+  name: 'House Vices',
+  prompt: 'Which two?',
+  min_picks: 0,
+  max_picks: 2,
+  sets_patron: false,
+  options: [
+    { id: 21, name: 'Greed', description: '', target_entry_id: null },
+    { id: 22, name: 'Envy', description: '', target_entry_id: null },
+    { id: 23, name: 'Sloth', description: '', target_entry_id: null },
+  ],
+};
+
+test("a single-pick charter question is a select; saving sends the house's whole facet list (#5064)", async () => {
+  const mutate = vi.fn();
+  vi.mocked(queries.useAlmanachMutation).mockReturnValue({ mutate, mutateAsync: vi.fn() } as never);
+  const infernal: HouseDocumentPayload = {
+    ...doc,
+    house: {
+      ...doc.house,
+      facets: [
+        {
+          definition: 'House Quiddity',
+          definition_id: 1,
+          option: 'Vendetta',
+          option_id: 12,
+          description: 'A grudge kept warm.',
+          being_name: '',
+          target_entry_id: 29,
+        },
+      ],
+      charter_questions: [QUIDDITY],
+    },
+  };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: infernal,
+    isLoading: false,
+  } as never);
+
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const picker = screen.getByRole('combobox', { name: 'House Quiddity' });
+  expect(picker).toHaveValue('12');
+  expect(screen.getByRole('link', { name: 'Vendetta' })).toHaveAttribute('href', '/codex?entry=29');
+  await userEvent.selectOptions(picker, '11');
+  expect(screen.getByRole('link', { name: 'Glamour' })).toHaveAttribute('href', '/codex?entry=23');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).toHaveBeenCalledWith({ org_id: 9, facet_option_ids: [11] });
+});
+
+test('a several-pick question is pressed chips capped at its maximum, and a pick on another question rides along (#5064)', async () => {
+  const mutate = vi.fn();
+  vi.mocked(queries.useAlmanachMutation).mockReturnValue({ mutate, mutateAsync: vi.fn() } as never);
+  const infernal: HouseDocumentPayload = {
+    ...doc,
+    house: {
+      ...doc.house,
+      facets: [
+        {
+          definition: 'House Quiddity',
+          definition_id: 1,
+          option: 'Glamour',
+          option_id: 11,
+          description: 'Beauty as a weapon.',
+          being_name: '',
+          target_entry_id: 23,
+        },
+      ],
+      charter_questions: [QUIDDITY, VICES],
+    },
+  };
+  vi.mocked(queries.useHouseDocument).mockReturnValue({
+    data: infernal,
+    isLoading: false,
+  } as never);
+
+  renderWithProviders(<HouseDocument houseId={9} />);
+  const vices = screen.getByRole('group', { name: 'House Vices' });
+  await userEvent.click(within(vices).getByRole('button', { name: 'Greed' }));
+  await userEvent.click(within(vices).getByRole('button', { name: 'Envy' }));
+  await userEvent.click(within(vices).getByRole('button', { name: 'Sloth' }));
+  expect(within(vices).getByRole('button', { name: 'Greed' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(within(vices).getByRole('button', { name: 'Envy' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  expect(within(vices).getByRole('button', { name: 'Sloth' })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).toHaveBeenCalledWith({ org_id: 9, facet_option_ids: [11, 21, 22] });
 });
 
 test("the patron reads by the house's own name and a pick that is a god opens its page (#4205)", () => {
