@@ -84,7 +84,7 @@ import {
 } from './regionMapFill';
 import { BARONY_LEVEL, regionMapTabUrl } from './constants';
 import { clearMapFocus, peekMapFocus } from './mapFocus';
-import { placeNames, rootsOf, visibleFootprints, type MapView } from './mapViews';
+import { borderWidths, placeNames, rootsOf, visibleFootprints, type MapView } from './mapViews';
 import { FoldToggle, RegionMapPanel } from './RegionMapPanel';
 import { CarvePickers, SelectPickers } from './SelectPickers';
 import { useMapSelection } from './useMapSelection';
@@ -314,6 +314,12 @@ export function RegionMapPage({
   }, [anchorFootprint, anchors, data, mapView, mode]);
   const cellLines = view.zoom >= MAP_CELL_LINES_HIDE_BELOW;
 
+  // The lines between the tier below the anchor (#5056): the view's borders.
+  const borders = useMemo(
+    () => borderWidths(mapView, data?.footprints ?? [], anchors),
+    [anchors, data, mapView]
+  );
+
   // The one footprint that draws an edge: the domain being carved, or the selected one.
   const outlineAreaIds = useMemo(() => {
     if (mode === 'carve') {
@@ -338,11 +344,13 @@ export function RegionMapPage({
         pendingRemove,
         selectedAreaId,
         outlineAreaIds,
+        borderWidths: borders,
         ghostPips: mapView === 'geography' ? undefined : ghostPips,
         cellLines,
       }
     );
   }, [
+    borders,
     cellLines,
     data,
     ghostPips,
@@ -958,6 +966,7 @@ export function RegionMapPage({
           data-zoom={view.zoom.toFixed(2)}
           data-map-view={mapView}
           data-visible={visible.length}
+          data-bordered={borders.size}
           data-ghost-pips={ghostPips.size}
           onPointerDown={handlePointerDown}
         >
