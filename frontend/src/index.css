@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+  /* A native select's option list takes its colours from the option elements, not
+     from the select: with none set, a dark page gets a white list with near-white
+     letters (#5060). The popover tokens are the same pair every menu uses. */
+  option {
+    background-color: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+  }
+
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
