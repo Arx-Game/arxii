@@ -367,7 +367,7 @@ All models registered with filters, search, and inline editing:
   clue still targets), Unpublish (also clears `is_featured`/`featured_order`), Grant to current
   holders (runs every one of the entry's grant rows through `grant_to_current_holders` plus
   `grant_entry_to_species_holders`). Inlines, in this order (#5062): the realm table first
-  (`RealmGrantInline`, "Known to everyone who began in a realm", #4531: the primary way an
+  (`RealmGrantInline`, "Autogranted: Realm codex grants", #4531: the primary way an
   entry is known, the owner's reason for the codex), then the five narrower grant tables
   (`BeginningsGrantInline`, `TraditionGrantInline`, `OrganizationGrantInline`,
   `PathGrantInline`, `DistinctionGrantInline`), each showing a read-only "Holders today"

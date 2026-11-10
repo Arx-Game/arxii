@@ -206,7 +206,7 @@ class RealmGrantInline(_GrantInline):
     formset = OneRowPerFormSet
     fields = ["realm", "holders_today"]
     autocomplete_fields = ["realm"]
-    verbose_name_plural = "Known to everyone who began in a realm: Realm codex grants"
+    verbose_name_plural = "Autogranted: Realm codex grants"
 
 
 class PathGrantInline(_GrantInline):
@@ -299,13 +299,9 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
             {
                 "fields": ("is_public", "is_featured", "featured_order"),
                 "description": (
-                    "Public: everyone can read it, including visitors who are not logged in. "
-                    "Leave it off and say who knows it in the tables below. The first table "
-                    "is a realm: everyone who began there knows the entry, present and future "
-                    "characters alike. The others are the narrower paths: born into a "
-                    "beginning, taught by a tradition, taught on joining an organization, a "
-                    "path, a distinction, or found through a Mystery. An entry a clue leads "
-                    "to cannot be public."
+                    "Public: everyone, visitors included. Otherwise the tables below say who "
+                    "knows it; Autogranted is everyone who began in the realm. An entry a "
+                    "clue leads to cannot be public."
                 ),
             },
         ),
