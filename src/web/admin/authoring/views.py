@@ -469,6 +469,10 @@ def _resolve_target(model_label: str, pk: str) -> _EditorTarget:
         model = None
     if model is None:
         return _EditorTarget(None, None, model_label, pk, error="Unknown model.")
+    # A proxy label (`Skill`, an ItemTemplate family, #5041) edits its concrete model's
+    # row: the related-entries pane labels a neighbor by its Python class, and every FK
+    # to a skill loads a `Skill`. `credited_content_models()` lists concrete models only.
+    model = model._meta.concrete_model  # noqa: SLF001
     if model not in credited_content_models():
         return _EditorTarget(
             None, None, model_label, pk, error=f"{model.__name__} is not a credited content model."

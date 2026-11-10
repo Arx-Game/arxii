@@ -289,7 +289,8 @@ class StaffTuneWornItems(JourneyCase):
     def test_the_item_template_page_offers_the_size_and_paramount_is_refused(self) -> None:
         template = ItemTemplateFactory(name="Padded Boots")
         body = self.client.get(f"/admin/arxii/itemtemplate/{template.pk}/change/").content
-        self.assertIn(b"check_modifiers-0-modifier_size", body)
+        # The inline opens with no rows (#5041); "Add another" copies its empty-form row.
+        self.assertIn(b"check_modifiers-__prefix__-modifier_size", body)
         self.assertIn(b"Exceptional", body)
 
         # The admin's own inline formset, bound to what the page posts: Paramount is refused.

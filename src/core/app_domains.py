@@ -134,6 +134,10 @@ def credited_content_models() -> list[type[models.Model]]:
     found = [
         m
         for m in dj_apps.get_models()
-        if issubclass(m, CreditedContent) and not m._meta.abstract  # noqa: SLF001
+        if issubclass(m, CreditedContent)
+        and not m._meta.abstract  # noqa: SLF001
+        # A proxy (an ItemTemplate family, #5041) shares its concrete model's rows;
+        # listing it too would show every row twice in the authoring workbench.
+        and not m._meta.proxy  # noqa: SLF001
     ]
     return sorted(found, key=lambda m: (domain_of(m), m.__name__.lower()))

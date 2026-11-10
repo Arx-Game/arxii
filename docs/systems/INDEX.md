@@ -7255,13 +7255,24 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   weapon then leaves their Wearing list) feeds the Physical section's Natural weapons
   block. See docs/systems/items.md ("Natural weapons").
 
+- **Item template family pages (#5041):** four proxy models on `ItemTemplate` (no table):
+  `WeaponTemplate`, `ArmorTemplate`, `ShieldTemplate`, `WornTemplate` (clothing and jewelry),
+  each with `family_kinds` (`WEAPON_TEMPLATE_KINDS` / `ARMOR_TEMPLATE_KINDS` /
+  `SHIELD_TEMPLATE_KINDS` / `WORN_TEMPLATE_KINDS` in `world/items/constants.py`) and an
+  `ItemTemplateFamilyManager` that keeps only those gear archetypes. Each has its own admin
+  page in `world/items/admin.py` showing only its family's fields; the all-kinds
+  `ItemTemplateAdmin` stays for everything else. Shared admin pieces (inlines, all
+  `extra = 0`; `ItemTemplateAdminBase`; `ItemTemplateFamilyAdminBase`) live in
+  `world/items/template_admin_parts.py`. `credited_content_models()` leaves every proxy out (the `Skill` proxy of `Trait` too).
+  See docs/systems/items.md ("Authoring pages").
+
 - **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
   (template check-bonus + default-Property authoring; `checks/services.py`'s
   `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
   `materialize.apply_template_properties` of the latter) were runtime-wired but
-  shell-only — now inline on `ItemTemplateAdmin`
+  shell-only — now inline on `ItemTemplateAdmin` and the family pages
   (`ItemCheckModifierInline`/`ItemTemplatePropertyInline`,
-  `src/world/items/admin.py`). New `ItemTemplate.requires_attunement` gates a
+  `src/world/items/template_admin_parts.py`). New `ItemTemplate.requires_attunement` gates a
   flagged template's `ItemCheckModifier` contribution and `use_item` dispatch on
   `ItemInstance.attuned_to_character_sheet`: the EQUIPMENT block's queryset
   constrains equipped-and-attuned to the SAME joined instance in one `.filter()`

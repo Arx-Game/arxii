@@ -25,7 +25,8 @@ def workbench_url(obj) -> str:
     from core_management.prose_fields import prose_fields_for  # noqa: PLC0415
     from web.admin.authoring.links import workbench_page_url  # noqa: PLC0415
 
-    model = type(obj)
+    # A proxy row (an ItemTemplate family page, #5041) opens as its concrete model.
+    model = obj._meta.concrete_model  # noqa: SLF001
     if model not in credited_content_models() or not prose_fields_for(model):
         return ""
     # The page, with the row open, never the bare editor fragment (#4155).

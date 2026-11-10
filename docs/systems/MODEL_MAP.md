@@ -4884,6 +4884,50 @@
   - gem_instance -> items.ItemInstance [OneToOne]
   - set_by_account -> evennia.AccountDB [FK] (nullable)
 
+### ArmorTemplate
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
+  - on_use_pool -> actions.ConsequencePool [FK] (nullable)
+  - on_use_check_type -> checks.CheckType [FK] (nullable)
+  - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - tied_resonance -> magic.Resonance [FK] (nullable)
+  - resonance_tier -> magic.ResonanceTier [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
+  - weapon_class -> items.WeaponClass [FK] (nullable)
+  - weapon_damage_type -> conditions.DamageType [FK] (nullable)
+  - polish_category -> buildings.PolishCategory [FK] (nullable)
+  - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
+  - also_protects_against -> conditions.DamageType [M2M]
+**Pointed to by:**
+  - lore_effects <- buildings.MaterialLoreEffect
+  - building_uses <- buildings.BuildingMaterial
+  - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
+  - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
+  - natural_weapon_gifts <- magic.Gift
+  - price_requirements <- magic.PriceComponentRequirement
+  - class_level_item_requirements <- progression.ItemRequirement
+  - ritual_requirements <- magic.RitualComponentRequirement
+  - technique_grants <- magic.TechniqueGrant
+  - default_properties <- items.ItemTemplateProperty
+  - slots <- items.TemplateSlot
+  - instances <- items.ItemInstance
+  - interaction_bindings <- items.TemplateInteraction
+  - appearance_effects <- items.ItemTemplateAppearanceEffect
+  - disguise_kit_effects <- items.DisguiseKitEffect
+  - check_modifiers <- items.ItemCheckModifier
+  - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
+  - stock_listings <- items.StockListing
+  - distinction_grants <- items.DistinctionItemGrant
+  - secrets_about <- secrets.Secret
+  - worship_requests <- worship.RequestedItem
+
 ### AudacityTuning
 
 ### CachetWallet
@@ -5344,6 +5388,50 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - item_instance -> items.ItemInstance [OneToOne]
 
+### ShieldTemplate
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
+  - on_use_pool -> actions.ConsequencePool [FK] (nullable)
+  - on_use_check_type -> checks.CheckType [FK] (nullable)
+  - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - tied_resonance -> magic.Resonance [FK] (nullable)
+  - resonance_tier -> magic.ResonanceTier [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
+  - weapon_class -> items.WeaponClass [FK] (nullable)
+  - weapon_damage_type -> conditions.DamageType [FK] (nullable)
+  - polish_category -> buildings.PolishCategory [FK] (nullable)
+  - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
+  - also_protects_against -> conditions.DamageType [M2M]
+**Pointed to by:**
+  - lore_effects <- buildings.MaterialLoreEffect
+  - building_uses <- buildings.BuildingMaterial
+  - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
+  - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
+  - natural_weapon_gifts <- magic.Gift
+  - price_requirements <- magic.PriceComponentRequirement
+  - class_level_item_requirements <- progression.ItemRequirement
+  - ritual_requirements <- magic.RitualComponentRequirement
+  - technique_grants <- magic.TechniqueGrant
+  - default_properties <- items.ItemTemplateProperty
+  - slots <- items.TemplateSlot
+  - instances <- items.ItemInstance
+  - interaction_bindings <- items.TemplateInteraction
+  - appearance_effects <- items.ItemTemplateAppearanceEffect
+  - disguise_kit_effects <- items.DisguiseKitEffect
+  - check_modifiers <- items.ItemCheckModifier
+  - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
+  - stock_listings <- items.StockListing
+  - distinction_grants <- items.DistinctionItemGrant
+  - secrets_about <- secrets.Secret
+  - worship_requests <- worship.RequestedItem
+
 ### ShowcaseState
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -5440,6 +5528,94 @@
 ### WeaponClass
 **Pointed to by:**
   - item_templates <- items.ItemTemplate
+
+### WeaponTemplate
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
+  - on_use_pool -> actions.ConsequencePool [FK] (nullable)
+  - on_use_check_type -> checks.CheckType [FK] (nullable)
+  - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - tied_resonance -> magic.Resonance [FK] (nullable)
+  - resonance_tier -> magic.ResonanceTier [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
+  - weapon_class -> items.WeaponClass [FK] (nullable)
+  - weapon_damage_type -> conditions.DamageType [FK] (nullable)
+  - polish_category -> buildings.PolishCategory [FK] (nullable)
+  - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
+  - also_protects_against -> conditions.DamageType [M2M]
+**Pointed to by:**
+  - lore_effects <- buildings.MaterialLoreEffect
+  - building_uses <- buildings.BuildingMaterial
+  - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
+  - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
+  - natural_weapon_gifts <- magic.Gift
+  - price_requirements <- magic.PriceComponentRequirement
+  - class_level_item_requirements <- progression.ItemRequirement
+  - ritual_requirements <- magic.RitualComponentRequirement
+  - technique_grants <- magic.TechniqueGrant
+  - default_properties <- items.ItemTemplateProperty
+  - slots <- items.TemplateSlot
+  - instances <- items.ItemInstance
+  - interaction_bindings <- items.TemplateInteraction
+  - appearance_effects <- items.ItemTemplateAppearanceEffect
+  - disguise_kit_effects <- items.DisguiseKitEffect
+  - check_modifiers <- items.ItemCheckModifier
+  - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
+  - stock_listings <- items.StockListing
+  - distinction_grants <- items.DistinctionItemGrant
+  - secrets_about <- secrets.Secret
+  - worship_requests <- worship.RequestedItem
+
+### WornTemplate
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
+  - on_use_pool -> actions.ConsequencePool [FK] (nullable)
+  - on_use_check_type -> checks.CheckType [FK] (nullable)
+  - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - tied_resonance -> magic.Resonance [FK] (nullable)
+  - resonance_tier -> magic.ResonanceTier [FK] (nullable)
+  - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
+  - weapon_class -> items.WeaponClass [FK] (nullable)
+  - weapon_damage_type -> conditions.DamageType [FK] (nullable)
+  - polish_category -> buildings.PolishCategory [FK] (nullable)
+  - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
+  - also_protects_against -> conditions.DamageType [M2M]
+**Pointed to by:**
+  - lore_effects <- buildings.MaterialLoreEffect
+  - building_uses <- buildings.BuildingMaterial
+  - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
+  - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
+  - natural_weapon_gifts <- magic.Gift
+  - price_requirements <- magic.PriceComponentRequirement
+  - class_level_item_requirements <- progression.ItemRequirement
+  - ritual_requirements <- magic.RitualComponentRequirement
+  - technique_grants <- magic.TechniqueGrant
+  - default_properties <- items.ItemTemplateProperty
+  - slots <- items.TemplateSlot
+  - instances <- items.ItemInstance
+  - interaction_bindings <- items.TemplateInteraction
+  - appearance_effects <- items.ItemTemplateAppearanceEffect
+  - disguise_kit_effects <- items.DisguiseKitEffect
+  - check_modifiers <- items.ItemCheckModifier
+  - garment_mitigations <- items.GarmentMitigation
+  - gem_details <- items.GemDetails
+  - stock_listings <- items.StockListing
+  - distinction_grants <- items.DistinctionItemGrant
+  - secrets_about <- secrets.Secret
+  - worship_requests <- worship.RequestedItem
 
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' - Attach ``facet`` to ``item_instance``.`

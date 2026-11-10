@@ -1,19 +1,15 @@
 """Django admin configuration for items."""
 
-from typing import Any
-
 from django.contrib import admin
-from django.db.models import Count, Field, ManyToManyField
+from django.db.models import Count
 from django.forms import (
-    CheckboxSelectMultiple,
-    Field as FormField,
     ModelForm,
-    ModelMultipleChoiceField,
 )
 from django.http import HttpRequest, HttpResponse
 
 from world.admin_utils import OneRowPerFormSet
 from world.contributors.admin import CREDIT_FIELDSET
+from world.items.constants import GearArchetype
 from world.items.crafting.models import (
     AccentArchetypeAllowance,
     AccentExclusion,
@@ -27,24 +23,20 @@ from world.items.crafting.models import (
 from world.items.models import (
     AccentLevel,
     Adornment,
+    ArmorTemplate,
     AudacityTuning,
-    DisguiseKitEffect,
     DistinctionItemGrant,
     EquippedItem,
     FashionStyle,
     FashionStyleBonus,
-    GarmentMitigation,
     GemDetails,
     GemGrade,
     GemInstanceDetails,
     InteractionType,
-    ItemCheckModifier,
     ItemInstance,
     ItemLineage,
     ItemStyle,
     ItemTemplate,
-    ItemTemplateAppearanceEffect,
-    ItemTemplateProperty,
     Keepsake,
     MakeoverConsentRequest,
     Mantle,
@@ -57,12 +49,25 @@ from world.items.models import (
     PendingRareFind,
     QualityTier,
     RecycleRequest,
+    ShieldTemplate,
     Silhouette,
     StreamMaterialPool,
     Style,
-    TemplateInteraction,
-    TemplateSlot,
     WeaponClass,
+    WeaponTemplate,
+    WornTemplate,
+)
+from world.items.template_admin_parts import (
+    DisguiseKitEffectInline,
+    FamilyGearArchetypeFilter,
+    GarmentMitigationInline,
+    ItemCheckModifierInline,
+    ItemTemplateAdminBase,
+    ItemTemplateAppearanceEffectInline,
+    ItemTemplateFamilyAdminBase,
+    ItemTemplatePropertyInline,
+    TemplateInteractionInline,
+    TemplateSlotInline,
 )
 
 
@@ -217,61 +222,8 @@ class WeaponClassAdmin(admin.ModelAdmin):
         return obj.template_total
 
 
-class TemplateSlotInline(admin.TabularInline):
-    model = TemplateSlot
-    formset = OneRowPerFormSet
-    extra = 1
-
-
-class TemplateInteractionInline(admin.TabularInline):
-    model = TemplateInteraction
-    formset = OneRowPerFormSet
-    extra = 1
-
-
-class ItemTemplateAppearanceEffectInline(admin.TabularInline):
-    model = ItemTemplateAppearanceEffect
-    formset = OneRowPerFormSet
-    extra = 1
-    autocomplete_fields = ["trait", "target_option"]
-    verbose_name = "Appearance Effect"
-    verbose_name_plural = "Appearance Effects"
-
-
-class DisguiseKitEffectInline(admin.TabularInline):
-    model = DisguiseKitEffect
-    extra = 1
-    verbose_name = "Disguise Kit Effect"
-    verbose_name_plural = "Disguise Kit Effects"
-
-
-class GarmentMitigationInline(admin.TabularInline):
-    model = GarmentMitigation
-    formset = OneRowPerFormSet
-    extra = 1
-    raw_id_fields = ["resonance"]
-
-
-class ItemCheckModifierInline(admin.TabularInline):
-    model = ItemCheckModifier
-    formset = OneRowPerFormSet
-    extra = 1
-    autocomplete_fields = ["check_type"]
-    verbose_name = "Check Modifier"
-    verbose_name_plural = "Check Modifiers"
-
-
-class ItemTemplatePropertyInline(admin.TabularInline):
-    model = ItemTemplateProperty
-    formset = OneRowPerFormSet
-    extra = 1
-    autocomplete_fields = ["property"]
-    verbose_name = "Default Property"
-    verbose_name_plural = "Default Properties"
-
-
 @admin.register(ItemTemplate)
-class ItemTemplateAdmin(admin.ModelAdmin):
+class ItemTemplateAdmin(ItemTemplateAdminBase):
     list_display = [
         "name",
         "weapon_class",
@@ -371,29 +323,140 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         ItemTemplatePropertyInline,
     ]
 
-    def formfield_for_manytomany(
-        self, db_field: ManyToManyField, request: HttpRequest, **kwargs: Any
-    ) -> ModelMultipleChoiceField | None:
-        """The damage types armor also stops show as checkboxes (#5026): a short list, with
-        Physical left out, since every piece of armor stops it."""
-        if db_field.name == "also_protects_against":  # noqa: STRING_LITERAL - admin hook field name
-            from world.conditions.models import DamageType  # noqa: PLC0415
-            from world.vitals.services import get_vitals_consequence_config  # noqa: PLC0415
 
-            kwargs["widget"] = CheckboxSelectMultiple
-            kwargs["queryset"] = DamageType.objects.exclude(
-                pk=get_vitals_consequence_config().physical_damage_type_id
-            )
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
+# The family authoring pages (#5041). Each shows only its own family's gear archetypes
+# and fields; the all-kinds page above stays for everything else.
+_FAMILY_PHYSICAL = (
+    "Physical properties",
+    {
+        "fields": [
+            "weight",
+            "size",
+            "value",
+            "max_durability",
+            "minimum_quality_tier",
+            "image",
+        ]
+    },
+)
+_FAMILY_RESONANCE = (
+    "Resonance tie",
+    {
+        "fields": ["tied_resonance", "resonance_tier", "requires_attunement"],
+        "classes": ["collapse"],
+    },
+)
+_FAMILY_TOP = (None, {"fields": ["name", "description", "is_active"]})
+_WEAPON_FIELDS = ["weapon_class", "base_weapon_damage", "weapon_damage_type"]
+_ARMOR_FIELDS = ["base_armor_soak", "also_protects_against"]
 
-    def formfield_for_dbfield(
-        self, db_field: Field, request: HttpRequest, **kwargs: Any
-    ) -> FormField | None:
-        """Staff read the throwable flag as the demo names it (#5026)."""
-        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
-        if db_field.name == "can_be_thrown" and formfield is not None:  # noqa: STRING_LITERAL - field name
-            formfield.label = "Can also be thrown"
-        return formfield
+
+class _FamilyAdminBase(ItemTemplateFamilyAdminBase):
+    search_fields = ["name"]
+    list_filter = ["is_active", FamilyGearArchetypeFilter]
+    list_select_related = ["minimum_quality_tier"]
+    raw_id_fields = ["image", "weapon_damage_type"]
+
+
+@admin.register(WeaponTemplate)
+class WeaponTemplateAdmin(_FamilyAdminBase):
+    """Weapons only: no armor, container, consumable or cosmetic options."""
+
+    index_sort_key = "Item templates 1"  # beside Item templates on the admin home
+
+    list_display = [
+        "name",
+        "gear_archetype",
+        "weapon_class",
+        "base_weapon_damage",
+        "weapon_damage_type",
+        "can_be_thrown",
+        "is_active",
+    ]
+    list_select_related = ["minimum_quality_tier", "weapon_class", "weapon_damage_type"]
+    fieldsets = [
+        _FAMILY_TOP,
+        ("Weapon", {"fields": ["gear_archetype", *_WEAPON_FIELDS, "can_be_thrown"]}),
+        _FAMILY_PHYSICAL,
+        _FAMILY_RESONANCE,
+        CREDIT_FIELDSET,
+    ]
+    inlines = [TemplateSlotInline, ItemCheckModifierInline, ItemTemplatePropertyInline]
+
+
+@admin.register(ArmorTemplate)
+class ArmorTemplateAdmin(_FamilyAdminBase):
+    """Armor and robes only: soak and protected damage types, no weapon options."""
+
+    index_sort_key = "Item templates 2"  # beside Item templates on the admin home
+
+    list_display = ["name", "gear_archetype", "base_armor_soak", "is_active"]
+    fieldsets = [
+        _FAMILY_TOP,
+        ("Armor", {"fields": ["gear_archetype", *_ARMOR_FIELDS]}),
+        _FAMILY_PHYSICAL,
+        _FAMILY_RESONANCE,
+        CREDIT_FIELDSET,
+    ]
+    inlines = [
+        TemplateSlotInline,
+        GarmentMitigationInline,
+        ItemCheckModifierInline,
+        ItemTemplatePropertyInline,
+    ]
+
+
+@admin.register(ShieldTemplate)
+class ShieldTemplateAdmin(_FamilyAdminBase):
+    """Shields only: both soak and bash damage. Gear archetype is always Shield."""
+
+    index_sort_key = "Item templates 3"  # beside Item templates on the admin home
+
+    list_display = ["name", "base_armor_soak", "base_weapon_damage", "is_active"]
+    list_filter = ["is_active"]
+    fieldsets = [
+        _FAMILY_TOP,
+        ("Shield", {"fields": ["shield_gear_archetype", *_ARMOR_FIELDS, *_WEAPON_FIELDS]}),
+        _FAMILY_PHYSICAL,
+        _FAMILY_RESONANCE,
+        CREDIT_FIELDSET,
+    ]
+    inlines = [
+        TemplateSlotInline,
+        GarmentMitigationInline,
+        ItemCheckModifierInline,
+        ItemTemplatePropertyInline,
+    ]
+
+    readonly_fields = ["shield_gear_archetype"]
+
+    @admin.display(description="Gear archetype")
+    def shield_gear_archetype(self, obj: ShieldTemplate | None) -> str:  # noqa: ARG002
+        """The kind this page always writes, shown even before the first save."""
+        return GearArchetype.SHIELD.label
+
+
+@admin.register(WornTemplate)
+class WornTemplateAdmin(_FamilyAdminBase):
+    """Clothing and jewelry only: no combat stats."""
+
+    index_sort_key = "Item templates 4"  # beside Item templates on the admin home
+
+    list_display = ["name", "gear_archetype", "is_active"]
+    raw_id_fields = ["image"]
+    fieldsets = [
+        _FAMILY_TOP,
+        ("Clothing or jewelry", {"fields": ["gear_archetype", "supports_open_close"]}),
+        _FAMILY_PHYSICAL,
+        _FAMILY_RESONANCE,
+        CREDIT_FIELDSET,
+    ]
+    inlines = [
+        TemplateSlotInline,
+        GarmentMitigationInline,
+        ItemCheckModifierInline,
+        ItemTemplatePropertyInline,
+    ]
 
 
 class ItemStyleInline(admin.TabularInline):

@@ -123,6 +123,12 @@ _Avoid_: allowance (that's the automatic even split), donation, gem grant (super
   a PC seller's stall/offer is never gated (`NpcRegard` never holds a PC's
   opinion, ADR-0085). _Avoid:_ shop discount/markup (frames it as a fixed
   price rule rather than the NPC's own standing-driven judgment).
+- **Item template family** — one of the groups of gear archetypes that has its own
+  admin authoring page (#5041): weapon, armor, shield, and clothing and jewelry. Each is
+  a proxy model on `ItemTemplate` (`WeaponTemplate`, `ArmorTemplate`, `ShieldTemplate`,
+  `WornTemplate`) whose `family_kinds` lists its gear archetypes. Kind Other belongs to
+  no family and is authored on the all-kinds page. _Avoid:_ item type, item category
+  (a gear archetype is the per-template kind; a family groups them for authoring).
 - **Revealing (garment)** — `ItemTemplate.is_revealing`: the garment occupies
   its slots but leaves the covered skin exposed — no sun coverage
   (`world.species.sun_exposure`), and the future tattoo/skin-visibility
