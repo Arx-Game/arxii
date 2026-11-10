@@ -479,15 +479,26 @@ class CombatTechniqueResolver:
         return floor_ultimate_check(result, ultimate_source), breakdown
 
     def _sum_intensity_bump_pulls(self) -> int:
-        """Sum INTENSITY_BUMP scaled_values from active CombatPulls."""
-        encounter = self.participant.encounter
-        character = self.participant.character_sheet.character
-        pull_bonus = 0
-        for pull in character.combat_pulls.active_for_encounter(encounter):
-            for eff in pull.resolved_effects_cached:
-                if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
-                    pull_bonus += eff.scaled_value
-        return pull_bonus
+        """This round's INTENSITY_BUMP pull effects that relate to this cast (#5066).
+
+        The cast is the focused technique rolled on ``offense_check_type`` with
+        ``offense_extra_traits``; ``round_pull_bonus`` keeps only the effects whose
+        threads are in that action. Nothing without a technique.
+        """
+        from world.combat.pull_helpers import round_pull_bonus  # noqa: PLC0415
+        from world.magic.types.magic_skills import CastCheck  # noqa: PLC0415
+
+        technique = self.action.focused_action
+        if technique is None:
+            return 0
+        return round_pull_bonus(
+            self.participant,
+            kind=EffectKind.INTENSITY_BUMP,
+            technique_id=technique.pk,
+            cast_check=CastCheck(
+                check_type=self.offense_check_type, extra_traits=self.offense_extra_traits
+            ),
+        )
 
     def _resolved_opponent_targets(self) -> list[CombatOpponent]:
         """Return the ordered list of CombatOpponents to act on for this action.

@@ -4,54 +4,61 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+from world.combat.models import CombatParticipant, CombatRoundAction
 from world.magic.constants import EffectKind
 
 if TYPE_CHECKING:
     from world.checks.types import ModifierContribution
+    from world.magic.models import Technique
+    from world.magic.types.magic_skills import CastCheck
 
 
 def _sum_active_flat_bonuses(
     participant: CombatParticipant,
-    encounter: CombatEncounter,
+    *,
+    technique: Technique,
+    cast_check: CastCheck | None,
 ) -> int:
-    """Sum scaled_value across FLAT_BONUS resolved-effect rows on the
-    participant's active CombatPull rows for this encounter.
+    """This round's committed FLAT_BONUS pull effects that relate to one use of ``technique``.
 
-    Reads through CharacterCombatPullHandler so the cached/prefetched
-    list is honored — avoids re-querying.
+    A pull's bonus reaches only the uses its threads relate to (#5066): see
+    ``round_pull_bonus``, which matches each effect's thread against this use by the
+    test that decided what could be pulled.
     """
-    character = participant.character_sheet.character
-    total = 0
-    for pull in character.combat_pulls.active_for_encounter(encounter):
-        for eff in pull.resolved_effects_cached:
-            if eff.kind == EffectKind.FLAT_BONUS and eff.scaled_value:
-                total += eff.scaled_value
-    return total
+    from world.combat.pull_helpers import round_pull_bonus  # noqa: PLC0415
+
+    return round_pull_bonus(
+        participant,
+        kind=EffectKind.FLAT_BONUS,
+        technique_id=technique.pk,
+        cast_check=cast_check,
+    )
 
 
 def compute_intensity_for_clash(
     participant: CombatParticipant,
     action: CombatRoundAction,
 ) -> int:
-    """Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.
+    """Return technique.intensity + related INTENSITY_BUMP pull bonuses for the clash floor gate.
 
-    Used exclusively to gate the clash-open check (intensity_floor). Future
+    Used exclusively to gate the clash-open check (intensity_floor). Only pull effects
+    whose threads relate to this action's technique count (#5066). Future
     intensity-ramp contributions (conditions, items, environment) can be added
     here and they will tighten the floor automatically.
     """
+    from world.combat.pull_helpers import round_pull_bonus  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
     technique = action.focused_action
     if technique is None:
         return 0
-    base = technique.intensity
-    encounter = participant.encounter
-    pull_bonus = 0
-    character = participant.character_sheet.character
-    for pull in character.combat_pulls.active_for_encounter(encounter):
-        for eff in pull.resolved_effects_cached:
-            if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
-                pull_bonus += eff.scaled_value
-    return base + pull_bonus
+    pull_bonus = round_pull_bonus(
+        participant,
+        kind=EffectKind.INTENSITY_BUMP,
+        technique_id=technique.pk,
+        cast_check=resolve_cast_check(participant.character_sheet.character, technique),
+    )
+    return technique.intensity + pull_bonus
 
 
 # ---------------------------------------------------------------------------
