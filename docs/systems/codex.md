@@ -366,11 +366,15 @@ All models registered with filters, search, and inline editing:
   granted to a group, reached by a clue, or unreachable. Actions: Publish (skips any entry a
   clue still targets), Unpublish (also clears `is_featured`/`featured_order`), Grant to current
   holders (runs every one of the entry's grant rows through `grant_to_current_holders` plus
-  `grant_entry_to_species_holders`). Inlines: the five grant tables (`BeginningsGrantInline`,
-  `TraditionGrantInline`, `OrganizationGrantInline`, `PathGrantInline`,
-  `DistinctionGrantInline`), each showing a read-only "Holders today" count from
-  `holder_roster_entries()`, plus a read-only `ClueInline` listing the clues that target the
-  entry. `GrantReachOnSaveMixin` applies every newly added grant row to the characters already
+  `grant_entry_to_species_holders`). Inlines, in this order (#5062): the realm table first
+  (`RealmGrantInline`, "Known to everyone who began in a realm", #4531: the primary way an
+  entry is known, the owner's reason for the codex), then the five narrower grant tables
+  (`BeginningsGrantInline`, `TraditionGrantInline`, `OrganizationGrantInline`,
+  `PathGrantInline`, `DistinctionGrantInline`), each showing a read-only "Holders today"
+  count from `holder_roster_entries()`, a read-only `ClueInline` listing the clues that
+  target the entry, and the filings table last, since a filing is not a path to the entry.
+  Django renders every fieldset before any inline, so the "Who knows this" description
+  points at the tables below it. `GrantReachOnSaveMixin` applies every newly added grant row to the characters already
   in its group on save; it is also mixed into `BeginningsAdmin`, `TraditionAdmin`, `PathAdmin`,
   `DistinctionAdmin`, and (#3788) `societies.admin.OrganizationAdmin` (its own
   `OrganizationCodexGrantInline`, "Codex grants: what every member knows"), and

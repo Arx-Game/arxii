@@ -206,7 +206,7 @@ class RealmGrantInline(_GrantInline):
     formset = OneRowPerFormSet
     fields = ["realm", "holders_today"]
     autocomplete_fields = ["realm"]
-    verbose_name_plural = "Public within a realm: Realm codex grants"
+    verbose_name_plural = "Known to everyone who began in a realm: Realm codex grants"
 
 
 class PathGrantInline(_GrantInline):
@@ -264,15 +264,18 @@ class ClueInline(admin.TabularInline):
 class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     """Admin interface for CodexEntry: leads with who knows it (#3775)."""
 
+    # The realm table leads (#5062): "everyone who began in this realm knows it" is the
+    # primary way an entry is known, the owner's reason for the codex. Filings are not a
+    # path to the entry, so they come last.
     inlines = [
-        CodexEntryFilingInline,
+        RealmGrantInline,
         BeginningsGrantInline,
         TraditionGrantInline,
         OrganizationGrantInline,
-        RealmGrantInline,
         PathGrantInline,
         DistinctionGrantInline,
         ClueInline,
+        CodexEntryFilingInline,
     ]
     list_display = ["name", "subject", "is_public", "known_via", "prerequisite_count"]
     list_filter = [ReachListFilter, "is_public", "subject__category", "subject"]
@@ -297,11 +300,12 @@ class CodexEntryAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
                 "fields": ("is_public", "is_featured", "featured_order"),
                 "description": (
                     "Public: everyone can read it, including visitors who are not logged in. "
-                    "Leave it off when a character has to get it by a path: born into it, "
-                    "born anywhere in a realm, taught by a tradition, taught on joining an "
-                    "organization, taught by "
-                    "another character, or found through a Mystery. The grant tables below "
-                    "are those paths. An entry a clue leads to cannot be public."
+                    "Leave it off and say who knows it in the tables below. The first table "
+                    "is a realm: everyone who began there knows the entry, present and future "
+                    "characters alike. The others are the narrower paths: born into a "
+                    "beginning, taught by a tradition, taught on joining an organization, a "
+                    "path, a distinction, or found through a Mystery. An entry a clue leads "
+                    "to cannot be public."
                 ),
             },
         ),
