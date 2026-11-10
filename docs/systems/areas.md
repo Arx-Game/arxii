@@ -279,7 +279,10 @@ confirms, then `atlas_clear_footprint`, also an undo entry. Only the domain bein
 shading, since the owner ruled there are no enclaves to disambiguate. In Carve mode the side
 panel follows the domain being carved (picking or planting one selects it too), and its
 "Open in the Almanach" link opens the title page in its own tab, so the map and its undo
-history stay put (#5011). The rail's
+history stay put (#5011). Changing the realm in either mode's picker drops the carve target
+and the selection, since both belong to the realm they were picked in, and Create domain
+plants beneath the carve target only when it is a rung of the picked realm's ladder, else at
+the top (#5058). The rail's
 New region form carries a continent choice: a new CONTINENT rung by the region's name
 (the default, `new_continent`), an existing continent (`area_id`), or none; an area page's
 On the map prefers the region linked to that area.

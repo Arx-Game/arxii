@@ -9,6 +9,7 @@ import type { RegionMapPips } from '../../types';
 import { RegionMapPage } from '../RegionMapPage';
 
 const mutateAsync = vi.fn();
+const plantAsync = vi.fn();
 const toastError = vi.fn();
 
 vi.mock('sonner', () => ({
@@ -78,13 +79,14 @@ vi.mock('@/almanach/queries', () => ({
     },
     refetch: vi.fn(),
   })),
-  useAlmanachMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useAlmanachMutation: vi.fn(() => ({ mutateAsync: plantAsync, isPending: false })),
 }));
 
-import { useLadder } from '@/almanach/queries';
+import { useLadder, useRealms } from '@/almanach/queries';
 import { useRegionMapPipsQuery } from '../../queries';
 
 const realLadder = vi.mocked(useLadder).getMockImplementation()!;
+const realRealms = vi.mocked(useRealms).getMockImplementation()!;
 
 const payload: RegionMapPips = {
   region: {
@@ -179,6 +181,8 @@ describe('RegionMapPage', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     mutateAsync.mockReset();
     toastError.mockReset();
+    plantAsync.mockReset();
+    plantAsync.mockResolvedValue({ success: true, message: '', data: { title_id: 900 } });
     mutateAsync.mockResolvedValue({ success: true, message: '', data: { changed: [] } });
     window.localStorage.clear();
     vi.mocked(useRegionMapPipsQuery).mockReturnValue({
@@ -345,6 +349,50 @@ describe('RegionMapPage', () => {
       'href',
       '/staff/almanach/titles/200'
     );
+  });
+
+  it('a realm change drops the carve target and selection of the realm left (#5058)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useRealms).mockReturnValue({
+      data: {
+        results: [
+          { id: 1, name: 'Luxen' },
+          { id: 2, name: 'Inferna' },
+        ],
+      },
+    } as unknown as ReturnType<typeof useRealms>);
+    vi.mocked(useLadder).mockImplementation(((realmId: number | null) =>
+      realmId === 1
+        ? realLadder(realmId, 'staff')
+        : {
+            data: { rows: [], unclaimed_by_tier: {} },
+            refetch: vi.fn(),
+          }) as unknown as typeof useLadder);
+    renderWithProviders(<RegionMapPage regionId={1} />);
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    await user.selectOptions(screen.getByTestId('carve-realm'), '1');
+    await user.selectOptions(screen.getByTestId('carve-domain'), '100');
+    const panel = screen.getByTestId('region-map-panel');
+    expect(within(panel).getByRole('heading', { name: 'Salvation' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.selectOptions(screen.getByTestId('select-realm'), '2');
+    expect(within(panel).queryByRole('heading', { name: 'Salvation' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Carve' }));
+    expect(screen.getByTestId('carve-realm')).toHaveValue('2');
+    expect(screen.getByTestId('carve-domain')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Create domain' }));
+    expect(screen.getByTestId('plant-form')).toHaveTextContent('at the top');
+    await user.selectOptions(screen.getByLabelText('tier'), 'kingdom');
+    await user.type(screen.getByLabelText('domain name'), 'Inferna');
+    await user.click(screen.getByRole('button', { name: 'Plant' }));
+    expect(plantAsync).toHaveBeenCalledWith({
+      realm_id: 2,
+      tier: 'kingdom',
+      name: 'Inferna',
+      parent_title_id: undefined,
+    });
+    vi.mocked(useLadder).mockImplementation(realLadder);
+    vi.mocked(useRealms).mockImplementation(realRealms);
   });
 
   it('offers brush, fill and loop in carve mode, brush first, with nothing to undo', async () => {

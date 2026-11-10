@@ -666,6 +666,17 @@ export function RegionMapPage({
     setSelectedAreaId(data?.footprints.find((f) => f.title_id === id)?.area_id ?? null);
   };
 
+  // A carve target and a selection belong to the realm they were picked in: changing
+  // the realm, in either mode, drops both, or Carve would keep aiming at a rung of the
+  // realm just left with its picker reading blank (#5058).
+  const changeRealm = (id: number | null) => {
+    if (id === realmId) return;
+    setRealmId(id);
+    setCarveTitleId(null);
+    setSelectedTitleId(null);
+    setSelectedAreaId(null);
+  };
+
   const plant = async () => {
     if (realmId == null || !plantName.trim()) return;
     try {
@@ -673,7 +684,7 @@ export function RegionMapPage({
         realm_id: realmId,
         tier: plantTier,
         name: plantName.trim(),
-        parent_title_id: carveTitleId ?? undefined,
+        parent_title_id: carveTarget?.title_id,
       });
       const titleId = result?.data?.title_id;
       await refetchLadder();
@@ -827,7 +838,7 @@ export function RegionMapPage({
           <SelectPickers
             realms={realms}
             realmId={realmId}
-            onRealm={setRealmId}
+            onRealm={changeRealm}
             ladderRows={ladderRows}
             focusTitleId={focusTitleId}
             onTitle={(id) => {
@@ -842,10 +853,7 @@ export function RegionMapPage({
               <CarvePickers
                 realms={realms}
                 realmId={realmId}
-                onRealm={(id) => {
-                  setRealmId(id);
-                  setCarveTitleId(null);
-                }}
+                onRealm={changeRealm}
                 ladderRows={ladderRows}
                 carveTitleId={carveTitleId}
                 onDomain={pickCarveDomain}
