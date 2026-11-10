@@ -690,10 +690,12 @@ kingdom | potential
   prosperity 65 on the capital child, 45 on the others; every generated `Domain.description`
   starts with `PLACEHOLDER:` so the lore pass finds them; a `lore` word replaces it.
 - **Action** `almanach_lay_out` (`realm_id`, `layout`, `commit`; staff only): `commit=false`
-  previews; `data` carries `LayoutReport.as_data()`. The realm ladder page's **lay out…**
-  button opens `LayOutDialog` (`frontend/src/almanach/ladder/LayOutDialog.tsx`): a textarea,
-  Preview renders the report per kingdom, Lay out plants and refetches the ladder and the
-  region maps; the last text is kept per realm in `localStorage`.
+  previews; `data` carries `LayoutReport.as_data()`. The realm ladder page's **load preset…**
+  button opens `LayOutDialog` (`frontend/src/almanach/ladder/LayOutDialog.tsx`, titled "Load
+  preset for <realm>", the owner's word for the pasted text, #5054): a textarea, Preview
+  renders the report per kingdom, Load plants and refetches the ladder and the region maps;
+  the last text is kept per realm in `localStorage`. The dialog is capped at the viewport and
+  the text and report scroll inside it, so the buttons never leave the screen (#5054).
 
 ### House record
 

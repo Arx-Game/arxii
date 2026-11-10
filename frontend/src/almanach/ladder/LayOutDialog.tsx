@@ -1,8 +1,9 @@
 /**
- * LayOutDialog (#4983 slice 2, #4986): the owner pastes a realm's layout, Preview
+ * LayOutDialog (#4983 slice 2, #4986): the owner pastes a realm's preset, Preview
  * shows what the walk would plant (per kingdom: counts, duchies with their pips, the
- * names drawn, charters, claims, refusals), Lay out plants it. The last text is kept
- * per realm in localStorage, a convenience only.
+ * names drawn, charters, claims, refusals), Load plants it. The last text is kept
+ * per realm in localStorage, a convenience only. The dialog never grows past the
+ * viewport: the text and the report scroll together and the buttons stay in reach (#5054).
  */
 import { useEffect, useState } from 'react';
 
@@ -14,7 +15,6 @@ import {
   DialogTitle,
   NO_DESCRIPTION,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 
 export interface LayoutKingdomReport {
   name: string;
@@ -95,19 +95,18 @@ export function LayOutDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-3xl" {...NO_DESCRIPTION}>
-        <DialogTitle>Lay out {realmName}</DialogTitle>
-        <div className="grid gap-2">
-          <Label htmlFor="layout-text">layout</Label>
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col" {...NO_DESCRIPTION}>
+        <DialogTitle>Load preset for {realmName}</DialogTitle>
+        <div data-testid="preset-scroll" className="grid min-h-0 flex-1 gap-4 overflow-y-auto">
           <textarea
-            id="layout-text"
-            className="min-h-40 w-full rounded-md border bg-background p-2 font-mono text-sm"
+            aria-label="preset"
+            className="min-h-40 w-full shrink-0 rounded-md border bg-background p-2 font-mono text-sm"
             value={text}
             onChange={(event) => setText(event.target.value)}
             spellCheck={false}
           />
+          {report && <LayoutReportView report={report} />}
         </div>
-        {report && <LayoutReportView report={report} />}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
@@ -129,7 +128,7 @@ export function LayOutDialog({
               })
             }
           >
-            Lay out
+            Load
           </Button>
         </DialogFooter>
       </DialogContent>
