@@ -189,12 +189,12 @@ test('the record rail renders the Charter section from useCharter', () => {
   }
 });
 
-test('lay out opens the layout dialog and Preview dispatches almanach_lay_out without committing', async () => {
+test('Load preset opens the preset dialog and Preview dispatches almanach_lay_out without committing', async () => {
   mockDispatches.length = 0;
   renderPage();
-  await userEvent.click(screen.getByRole('button', { name: /lay out/i }));
+  await userEvent.click(screen.getByRole('button', { name: 'load preset…' }));
   const dialog = screen.getByRole('dialog');
-  await userEvent.type(within(dialog).getByLabelText('layout'), 'kingdom Perdition | duchies 2');
+  await userEvent.type(within(dialog).getByLabelText('preset'), 'kingdom Perdition | duchies 2');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }));
   expect(mockDispatches).toEqual([
     ['almanach_lay_out', { realm_id: 1, layout: 'kingdom Perdition | duchies 2', commit: false }],
