@@ -134,6 +134,7 @@ class CodexEntryAdminTests(TestCase):
         response = self.client.get(reverse("admin:arxii_codexentry_change", args=[self.granted.pk]))
         body = response.content.decode()
         self.assertIn("Autogranted: Realm codex grants", body)
+        self.assertIn("Autogranted is everyone who began in the realm.", body)
         self.assertLess(body.index("realm_grants"), body.index("beginnings_grants"))
         self.assertLess(body.index("realm_grants"), body.index("filings-TOTAL_FORMS"))
 
