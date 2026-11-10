@@ -507,6 +507,30 @@ export function RegionMapPage({
     window.addEventListener('pointerup', onUp);
   };
 
+  const commitCarve = async (pips: Pip[], remove: boolean, titleId: number) => {
+    // Every batch that landed is undoable, even when a later batch is refused or
+    // the request fails, so the entry is pushed whatever way the loop ends.
+    const changed: PipChange[] = [];
+    busyRef.current = true;
+    try {
+      for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
+        const result = await runAction({
+          key: 'atlas_carve_footprint',
+          kwargs: {
+            title_id: titleId,
+            [remove ? 'remove' : 'add']: part,
+            ...(adjust ? { take_from_siblings: true } : {}),
+          },
+        });
+        if (result.success === false) break;
+        changed.push(...parseChanged(result.data));
+      }
+    } finally {
+      busyRef.current = false;
+      setHistory((h) => pushEntry(h, { titleId: titleId, changed }));
+    }
+  };
+
   const commit = async (pips: [number, number][], remove: boolean) => {
     if (characterId == null) {
       toast.error(
@@ -520,27 +544,7 @@ export function RegionMapPage({
           toast.error(NO_DOMAIN_MESSAGE);
           return;
         }
-        // Every batch that landed is undoable, even when a later batch is refused or
-        // the request fails, so the entry is pushed whatever way the loop ends.
-        const changed: PipChange[] = [];
-        busyRef.current = true;
-        try {
-          for (const part of chunk(pips, MAX_PIPS_PER_CALL)) {
-            const result = await runAction({
-              key: 'atlas_carve_footprint',
-              kwargs: {
-                title_id: carveTitleId,
-                [remove ? 'remove' : 'add']: part,
-                ...(adjust ? { take_from_siblings: true } : {}),
-              },
-            });
-            if (result.success === false) break;
-            changed.push(...parseChanged(result.data));
-          }
-        } finally {
-          busyRef.current = false;
-          setHistory((h) => pushEntry(h, { titleId: carveTitleId, changed }));
-        }
+        await commitCarve(pips, remove, carveTitleId);
       } else if (mode === 'paint') {
         await runAction({
           key: 'atlas_paint_terrain',

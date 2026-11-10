@@ -522,19 +522,7 @@ def strike_narration(  # noqa: PLR0913 - one narration line, its parts
     """
     from core.text import with_indefinite_article  # noqa: PLC0415
 
-    if second_person:
-        subject = "You"
-        verb = "throw" if weapon.thrown else "strike"
-        with_weapon = f"your {weapon.name}" if weapon.thrown else f"with your {weapon.name}"
-    else:
-        subject = actor
-        verb = "throws" if weapon.thrown else "strikes"
-        article_name = (
-            weapon.name
-            if weapon.item_instance is None or is_natural_weapon(weapon.item_instance)
-            else with_indefinite_article(weapon.name)
-        )
-        with_weapon = article_name if weapon.thrown else f"with {article_name}"
+    subject, verb, with_weapon = _strike_subject(actor, weapon, second_person)
     if enchantment:
         with_weapon = f"{with_weapon}, enchanted with {enchantment},"
     back = ""
@@ -554,6 +542,23 @@ def strike_narration(  # noqa: PLR0913 - one narration line, its parts
     quality = with_indefinite_article(hit_quality(success_level))
     split = f" ({parts})" if parts else ""
     return f"{head}. {quality[0].upper()}{quality[1:]} hit: {damage} damage{split}{tail}.{back}"
+
+
+def _strike_subject(actor: str, weapon: StrikeWeapon, second_person: bool) -> tuple[str, str, str]:
+    """Choose subject, verb and weapon phrase for the narration's audience."""
+    from core.text import with_indefinite_article  # noqa: PLC0415
+
+    if second_person:
+        verb = "throw" if weapon.thrown else "strike"
+        phrase = f"your {weapon.name}" if weapon.thrown else f"with your {weapon.name}"
+        return "You", verb, phrase
+    verb = "throws" if weapon.thrown else "strikes"
+    article_name = (
+        weapon.name
+        if weapon.item_instance is None or is_natural_weapon(weapon.item_instance)
+        else with_indefinite_article(weapon.name)
+    )
+    return actor, verb, article_name if weapon.thrown else f"with {article_name}"
 
 
 @dataclass
