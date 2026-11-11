@@ -186,6 +186,16 @@ class CreditTests(PactTestBase):
         self.assertEqual(self._period(pact).project.current_progress, 2)
         self.assertEqual(deed_favor_used_this_week(self.sheet), 8)
 
+    def test_a_deed_for_a_pledge_and_a_pact_with_one_being_counts_once(self) -> None:
+        take_pledge(self.sheet, PledgeFactory(being=self.being, favor_target=20))
+        pact = self._sign()
+
+        self._deed(5)
+
+        self.assertEqual(PactCredit.objects.get().base, 0)
+        self.assertEqual(self._period(pact).project.current_progress, 5)
+        self.assertEqual(deed_favor_used_this_week(self.sheet), 5)
+
     def test_pact_only_deeds_count_base_favor_against_the_cap(self) -> None:
         """A Chosen earns at 200%: the cap still counts base favor, not credited."""
         make_chosen(self.sheet, self.being)

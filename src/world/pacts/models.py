@@ -320,11 +320,22 @@ class PactCredit(SharedMemoryModel):
 
     The itemised list behind the pact card ("Deeds +4, rite +2"). The counter is
     the period project's ``current_progress``; these rows say where it came from.
-    Mirrors ``PledgeCredit`` without its earning-rate breakdown.
+    Mirrors ``PledgeCredit``. ``base`` is what one favor write takes from the weekly
+    deed cap, counted once: a write that also credited a pledge is counted on its
+    ``PledgeCredit``, and a write credited to several open periods of one pact is
+    counted on the first period's row only; every other row carries 0.
     """
 
     period = models.ForeignKey(PactPeriodDetails, on_delete=models.CASCADE, related_name="credits")
     source = models.CharField(max_length=20, choices=PledgeCreditSource.choices)
+    base = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Favor before the earning rate; what the weekly deed cap counts. 0 when the same "
+            "favor write is already counted (on its pledge credit, or on an earlier period's "
+            "credit)."
+        ),
+    )
     credited = models.PositiveIntegerField(help_text="Favor credited toward the period.")
     game_week = models.ForeignKey(
         "arxii.GameWeek",

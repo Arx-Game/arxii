@@ -175,7 +175,14 @@ def bump_devotion(
         pledge_credit = record_pledge_credit(
             character_sheet, being, base=base, rate=rate, credited=amount, source=source
         )
-        record_pact_credit(character_sheet, being, amount, source)
+        # A write the pledge credit already counts takes nothing more from the deed cap.
+        record_pact_credit(
+            character_sheet,
+            being,
+            amount,
+            source,
+            base=0 if pledge_credit is not None else base,
+        )
     return DevotionBump(
         standing=standing,
         credited=amount,

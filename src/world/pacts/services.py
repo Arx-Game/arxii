@@ -20,7 +20,10 @@
     would reach the next worse stage, that stage's resist check rolls first at its
     difficulty minus the favor band's ease (a botch lands as Failure): Critical Success
     adds nothing, Success stops one below the stage, Partial Success adds half (rounded
-    up), Failure adds it all. A rise that stays inside the stage needs no roll.
+    up), Failure adds it all. A rise that stays inside the stage needs no roll. Only the
+    next worse stage rolls: a failed roll applies the full rise even if it passes a
+    second threshold (it cannot while ``severity_per_miss`` is no larger than the stage
+    spacing, which the builder warns on).
 
 * **Breach**: when the last stage applies the pact dissolves (BREACH), a PACT patronage
   is released, the stage's settle pool fires against the holder, she sees the closing
@@ -39,7 +42,7 @@ import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from world.pacts.constants import CharacterPactCommitmentKind, CharacterPactEnding
@@ -404,11 +407,16 @@ def record_pact_credit(
     being: WorshippedBeing,
     credited: int,
     source: FavorSource | None,
+    *,
+    base: int = 0,
 ) -> list[PactCredit]:
     """Credit ``credited`` favor to every open commitment period of her pact with ``being``.
 
     Called by ``bump_devotion`` beside ``record_pledge_credit``. A pledge's closing and
-    lapse awards are not served favor and never count.
+    lapse awards are not served favor and never count. ``base`` is the favor before the
+    earning rate that this write takes from the weekly deed cap; the caller passes 0 when
+    the write's ``PledgeCredit`` already counts it. It is stored on the first period's
+    row only, so a pact with several open periods counts one write once.
     """
     if credited <= 0:
         return []
@@ -430,12 +438,18 @@ def record_pact_credit(
 
     week = get_current_game_week()
     written: list[PactCredit] = []
-    for period in periods:
+    for index, period in enumerate(periods):
         project = period.project
         project.current_progress += credited
         project.save(update_fields=["current_progress", "updated_at"])
         written.append(
-            PactCredit.objects.create(period=period, source=kind, credited=credited, game_week=week)
+            PactCredit.objects.create(
+                period=period,
+                source=kind,
+                base=max(base, 0) if index == 0 else 0,
+                credited=credited,
+                game_week=week,
+            )
         )
     return written
 
@@ -450,44 +464,21 @@ def pact_beings_for(sheet: CharacterSheet) -> list[WorshippedBeing]:
     ]
 
 
-def pact_deed_favor_this_week(sheet: CharacterSheet, *, exclude_being_ids: set[int]) -> int:
-    """Base deed favor her pact-only deeds took from this week's deed cap.
+def pact_deed_favor_this_week(sheet: CharacterSheet) -> int:
+    """Base deed favor her pact credits took from this week's deed cap.
 
-    A deed for a being she also holds an open pledge to is counted on its
-    ``PledgeCredit`` (``exclude_being_ids``). The rest are read from ``PactCredit``,
-    one commitment per pact (every commitment period of a pact gets the same credit),
-    and turned back from credited favor to base favor at her current earning rate
-    with that being; ``PactCredit`` keeps no base of its own.
+    Exact and counted once: ``PactCredit.base`` is 0 on every row whose favor write is
+    already counted (on its ``PledgeCredit``, or on the first period's row), so the sum
+    beside the pledge credits' base is the week's whole deed favor.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
-    from world.worship.favor_services import earning_rate  # noqa: PLC0415
 
-    rows = (
-        PactCredit.objects.filter(
-            period__pact__character_sheet=sheet,
-            source=PledgeCreditSource.DEED,
-            game_week=get_current_game_week(),
-        )
-        .exclude(period__pact__offer__being_id__in=exclude_being_ids)
-        .select_related("period__pact__offer__being")
-        .order_by("period__commitment_id", "pk")
-    )
-    first_commitment: dict[int, int] = {}
-    credited_by_being: dict[int, int] = defaultdict(int)
-    beings: dict[int, WorshippedBeing] = {}
-    for row in rows:
-        pact = row.period.pact
-        commitment_id = first_commitment.setdefault(pact.pk, row.period.commitment_id)
-        if row.period.commitment_id != commitment_id:
-            continue
-        being = pact.offer.being
-        beings[being.pk] = being
-        credited_by_being[being.pk] += row.credited
-    total = 0
-    for being_id, credited in credited_by_being.items():
-        rate = max(earning_rate(sheet, beings[being_id]), 1)
-        total += math.ceil(credited * 100 / rate)
-    return total
+    total = PactCredit.objects.filter(
+        period__pact__character_sheet=sheet,
+        source=PledgeCreditSource.DEED,
+        game_week=get_current_game_week(),
+    ).aggregate(total=Sum("base"))["total"]
+    return total or 0
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +487,11 @@ def pact_deed_favor_this_week(sheet: CharacterSheet, *, exclude_being_ids: set[i
 
 
 def resolve_pact_period(project: Project) -> None:
-    """The PACT_PERIOD tiered resolver: Success when met (or easing out), else Failure."""
+    """The PACT_PERIOD tiered resolver: Success when met (or easing out), else Failure.
+
+    ``grade_pact_period`` does the grading. A short period rolls only the next worse
+    stage's resist check, even when the rise would pass a second threshold.
+    """
     from world.projects.services import resolve_project  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 

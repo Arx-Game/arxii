@@ -245,24 +245,19 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
 def deed_favor_used_this_week(sheet: CharacterSheet) -> int:
     """Base favor ``sheet`` has earned from deeds in the current game week.
 
-    Deeds for a pledge's being are counted on their ``PledgeCredit``; deeds for a being
-    she holds only a pact with (#4341) on their ``PactCredit``. A deed credited to both
-    a pledge and a pact with the same being is counted once, on the pledge.
+    The pledge credits' base plus the pact credits' base (#4341). Each deed is counted
+    once: a deed credited to a pledge and a pact with the same being carries its base on
+    the ``PledgeCredit`` and 0 on the ``PactCredit`` (see ``record_pact_credit``).
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.pacts.services import pact_deed_favor_this_week  # noqa: PLC0415
 
-    pledged = PledgeCredit.objects.filter(
+    total = PledgeCredit.objects.filter(
         pledge_details__character_sheet=sheet,
         source=PledgeCreditSource.DEED,
         game_week=get_current_game_week(),
-    )
-    total = pledged.aggregate(total=Sum("base"))["total"] or 0
-    pledge_being_ids = set(pledged.values_list("pledge_details__pledge__being_id", flat=True))
-    open_details = open_pledge_for(sheet)
-    if open_details is not None:
-        pledge_being_ids.add(open_details.pledge.being_id)
-    return total + pact_deed_favor_this_week(sheet, exclude_being_ids=pledge_being_ids)
+    ).aggregate(total=Sum("base"))["total"]
+    return (total or 0) + pact_deed_favor_this_week(sheet)
 
 
 def _deed_beings(sheet: CharacterSheet, details: PledgeDetails | None) -> list[WorshippedBeing]:

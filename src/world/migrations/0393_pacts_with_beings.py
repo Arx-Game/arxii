@@ -495,6 +495,17 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "base",
+                    models.PositiveIntegerField(
+                        default=0,
+                        help_text=(
+                            "Favor before the earning rate; what the weekly deed cap counts. 0 "
+                            "when the same favor write is already counted (on its pledge "
+                            "credit, or on an earlier period's credit)."
+                        ),
+                    ),
+                ),
+                (
                     "credited",
                     models.PositiveIntegerField(help_text="Favor credited toward the period."),
                 ),
