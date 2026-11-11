@@ -331,6 +331,52 @@ class AlmanachRenameHoldingAction(_AlmanachAction):
 
 
 @dataclass
+class AlmanachSetCapacityAction(_AlmanachAction):
+    """Name a holding's capacity by hand, or clear it back to the terrain's (#5069
+    slice 2): a capital city and a border fort sit on the same ground. Kwargs:
+    ``domain_id``, ``capacity`` (a number, or null to read the terrain again)."""
+
+    key: str = "almanach_set_capacity"
+    name: str = "Set Capacity"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.societies.houses.demography import set_capacity_override  # noqa: PLC0415
+        from world.societies.houses.models import Domain  # noqa: PLC0415
+
+        domain = Domain.objects.filter(pk=kwargs.get("domain_id")).first()
+        if domain is None:
+            return ActionResult(success=False, message=_NO_SUCH_DOMAIN)
+        raw = kwargs.get("capacity")
+        capacity: int | None
+        if raw in (None, ""):
+            capacity = None
+        else:
+            try:
+                capacity = int(raw)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message=_CAPACITY_IS_A_NUMBER)
+            if capacity < 0:
+                return ActionResult(success=False, message=_CAPACITY_IS_A_NUMBER)
+        domain = set_capacity_override(domain, capacity)
+        word = "reads the terrain again" if capacity is None else f"holds {capacity:,}"
+        return ActionResult(
+            success=True,
+            message=f"{domain.name or domain.area.name} {word}.",
+            data={"domain_id": domain.pk, "population_capacity": domain.population_capacity},
+        )
+
+
+_NO_SUCH_DOMAIN = "No such land."
+_CAPACITY_IS_A_NUMBER = "Capacity is a whole number of people, or blank."
+
+
+@dataclass
 class AlmanachRemoveHoldingAction(_AlmanachAction):
     """Remove a holding and its income stream. Kwargs: ``holding_id``."""
 

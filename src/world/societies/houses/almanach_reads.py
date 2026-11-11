@@ -111,6 +111,7 @@ from world.societies.houses.constants import (
     TitleStation,
     TitleTier,
 )
+from world.societies.houses.demography import population_now
 from world.societies.houses.models import (
     Domain,
     DomainHolding,
@@ -145,6 +146,7 @@ class LadderRow:
     sworn_to: str
     demesne: int
     vassals: int
+    population: int
     claimable: bool
     seat_domain_id: int | None
     comes_with: str
@@ -298,6 +300,20 @@ class _RealmGraph:
     children_by_area: dict[int | None, list[int]]
     top_tier_house_ids: set[int]
     first_claim_by_title: dict[int, TitleClaim]
+    population_by_area: dict[int, int]
+
+    def population_under(self, area_id: int | None) -> int:
+        """The people on ``area_id``'s own land plus every Domain beneath it (#5069): a
+        county's or a barony's own figure, a duchy's or a kingdom's the sum."""
+        if area_id is None:
+            return 0
+        own = self.population_by_area.get(area_id)
+        if own is not None:
+            return own
+        return sum(
+            self.population_by_area.get(pk, 0)
+            for pk in _subtree_area_ids(area_id, self.children_by_area)
+        )
 
     def is_top(self, t: Title) -> bool:
         """Whether ``t`` is the highest-tier title sharing its seat (its
@@ -374,8 +390,15 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
     top_tier_house_ids = {
         t.house_id for t in titles if TITLE_TIER_RANK[t.tier] == top_tier_rank and t.house_id
     }
+    # The people on every piece of land, once, by formula (#5069): a county's and a
+    # barony's own, summed on read for the rungs above them.
+    population_by_area = {
+        domain.pk: population_now(domain)
+        for domain in Domain.objects.filter(area__realm_id=realm_id)
+    }
 
     return _RealmGraph(
+        population_by_area=population_by_area,
         titles_by_pk={t.pk: t for t in titles},
         parent_title_by_title=parent_title_by_title,
         children_by_parent_title=dict(children_by_parent_title),
@@ -472,6 +495,7 @@ def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
         sworn_to=sworn_to,
         demesne=_demesne_for(t, graph, own_area_id),
         vassals=_vassals_for(t, graph),
+        population=graph.population_under(own_area_id),
         claimable=t.is_claimable,
         seat_domain_id=t.seat_domain_id,
         comes_with=comes_with,
@@ -537,6 +561,7 @@ def _row_summary(row: LadderRow) -> dict:
         "held_by": row.house_name,
         "demesne": row.demesne,
         "vassals": row.vassals,
+        "population": row.population,
     }
 
 

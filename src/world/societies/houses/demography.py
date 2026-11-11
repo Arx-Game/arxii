@@ -120,9 +120,35 @@ def refresh_terrain_counts(area: Area) -> int:
             for terrain, pips in counts.items()
         ]
     )
-    domain.population_capacity = capacity_from(counts, level=area.level)
+    # A staff figure stands in for the terrain's (a capital and a fort on the same ground).
+    if domain.capacity_override is not None:
+        domain.population_capacity = domain.capacity_override
+    else:
+        domain.population_capacity = capacity_from(counts, level=area.level)
     domain.save(update_fields=["population_capacity"])
     return domain.population_capacity
+
+
+def set_capacity_override(domain: Domain, capacity: int | None) -> Domain:
+    """Set (or clear, with ``None``) the staff figure a holding's capacity reads instead
+    of its terrain, rebasing first so the curve starts from today's people."""
+    rebase_population(domain)
+    domain.capacity_override = capacity
+    domain.save(update_fields=["capacity_override"])
+    refresh_terrain_counts(domain.area)
+    return domain
+
+
+def prosperity_modifier_for(domain: Domain) -> int:
+    """The terrain's pull on a laid-out holding's prosperity: each calibration's
+    modifier weighted by the share of the holding's pips that terrain is, rounded."""
+    counts = dict(domain.terrain_counts.values_list("terrain", "pips"))
+    total = sum(counts.values())
+    if total == 0:
+        return 0
+    modifiers = {row.terrain: row.prosperity_modifier for row in TerrainCalibration.objects.all()}
+    weighted = sum(pips * modifiers.get(terrain, 0) for terrain, pips in counts.items())
+    return round(weighted / total)
 
 
 def refresh_terrain_counts_for(areas: Iterable[Area]) -> int:
