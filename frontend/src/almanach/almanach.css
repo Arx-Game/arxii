@@ -344,6 +344,13 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* a group row inside the table (Held / Vassals, #5069): a heading in the table's own
+ * small caps, the rows beneath it belonging to it */
+.almanach .lad tr.grp th {
+  padding-top: 0.7rem;
+  border-bottom: none;
+  color: hsl(var(--foreground));
+}
 .almanach .lad .d1 td:first-child {
   padding-left: 1.4rem;
 }

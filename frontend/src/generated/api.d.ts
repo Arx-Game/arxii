@@ -37694,6 +37694,7 @@ export interface components {
       sworn_to: string;
       demesne: number;
       vassals: number;
+      population: number;
       claimable: boolean;
       seat_domain_id: number | null;
       comes_with: string;
@@ -60613,8 +60614,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
