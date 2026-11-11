@@ -1,0 +1,306 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css only. `forms.css`
+(form rows, help lines, `.submit-row`) is linked by `change_form.html`, so a page
+extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:arxii_application_changelist' %}">Applications</a>
+  {% if application.pk %}&rsaquo; {{ application.name }}{% endif %}
+  &rsaquo; Power Builder
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/power_builder/_css.html" %}
+{% comment %}The page title is admin's own content title (base.html), so no heading here.{% endcomment %}
+<div id="power-builder-root">
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="pb-columns">
+    <div class="pb-main">
+      <form method="post" id="pb-form">
+        {% csrf_token %}
+
+        <div class="module" id="application-module">
+          <h2>What people can do
+            <span class="pb-chips"><span class="pb-chip">this page's subject</span>
+              {% if page %}<span class="pb-chip">{{ page.doing|length }} technique{{ page.doing|length|pluralize }}, {{ page.others_doing }} other source{{ page.others_doing|pluralize }} do it</span>{% endif %}</span>
+          </h2>
+          {% if form.non_field_errors %}<p class="errornote">{{ form.non_field_errors }}</p>{% endif %}
+          <table class="tuning-table pb-table">
+            <tbody>
+              <tr><th scope="row">{{ form.name.label_tag }}</th><td>{{ form.name.errors }}{{ form.name }}</td>
+                <th scope="row">{{ form.capability.label_tag }}</th><td>{{ form.capability.errors }}{{ form.capability }}</td></tr>
+              <tr><th scope="row">{{ form.required_effect_property.label_tag }}</th>
+                <td>{{ form.required_effect_property.errors }}{{ form.required_effect_property }}
+                  <div class="help">{{ form.required_effect_property.help_text }}</div></td>
+                <th scope="row">{{ form.target_property.label_tag }}</th>
+                <td>{{ form.target_property.errors }}{{ form.target_property }}
+                  <div class="help">{{ form.target_property.help_text }}</div></td></tr>
+              <tr><th scope="row">{{ form.way_of_moving.label_tag }}</th>
+                <td>{{ form.way_of_moving.errors }}{{ form.way_of_moving }}</td>
+                <th scope="row">{{ form.dodges.label_tag }}</th>
+                <td>{{ form.dodges.errors }}<label class="pb-box" for="{{ form.dodges.id_for_label }}">{{ form.dodges }} dodges attacks automatically, landing this way</label></td></tr>
+              <tr><th scope="row">{{ form.description.label_tag }}</th>
+                <td colspan="3">{{ form.description.errors }}{{ form.description }}</td></tr>
+            </tbody>
+          </table>
+          {% if sentence %}<p class="help pb-sentence">{{ sentence }}</p>{% endif %}
+        </div>
+
+        {% if page %}
+        <div class="module" id="compare-module">
+          <h2>Compare at
+            <span class="pb-chips"><span class="pb-chip">reference character, not saved</span></span>
+          </h2>
+          {% if reference.errors %}<p class="errornote">Numbers only, 0 or more (rank 1 or more). Using the defaults.</p>{% endif %}
+          <div class="pb-compare">
+            {% for field in reference %}
+            <span class="pb-compare-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              <input type="number" form="pb-compare" class="pb-num" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+                     value="{{ field.value|default_if_none:field.initial }}" min="0"></span>
+            {% endfor %}
+            <input type="submit" form="pb-compare" value="Compare">
+          </div>
+          <p class="help pb-sentence">Change these to see every row's strength at another level. The defaults are a mid-level character; they are page controls only. Strength sets the dodge bonus and how far she lands (the bands in the rail).</p>
+        </div>
+
+        <div class="module" id="techniques-module">
+          <h2>Techniques that do it
+            <span class="pb-chips"><span class="pb-chip">any gift</span></span>
+          </h2>
+          {% if page.doing %}
+          <table class="tuning-table pb-table">
+            <thead><tr><th scope="col">Technique</th><th scope="col">Gift &middot; path</th>
+              <th scope="col">Its properties</th><th scope="col">Grants {{ page.capability.name }}</th>
+              <th scope="col">Strength at reference</th><th scope="col">Each use</th><th scope="col"></th></tr></thead>
+            <tbody>
+              {% for row in page.doing %}
+              <tr>
+                <td>{{ row.technique.name }}</td>
+                <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
+                  base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}
+                  <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
+                <td>{{ row.strength }}; {{ row.better }} one level better</td>
+                <td>{{ row.cost }}</td>
+                <td><a href="{{ row.edit_url }}">edit all</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="help pb-sentence">No technique does it yet.</p>
+          {% endif %}
+          <p class="help pb-sentence">Path is the path whose grant of the gift lists the technique.{% if page.required %} Untick {{ page.required.name }} or remove the grant and the row moves to "one step away" on save.{% else %} Remove the grant and the row leaves the page on save.{% endif %}</p>
+        </div>
+
+        <div class="module" id="others-module">
+          <h2>Other ways to do it
+            <span class="pb-chips"><span class="pb-chip">not techniques</span></span>
+          </h2>
+          {% if page.others %}
+          <table class="tuning-table pb-table">
+            <thead><tr><th scope="col">Source</th><th scope="col">Kind</th>
+              <th scope="col">Gives {{ page.capability.name }}</th><th scope="col">Its properties</th>
+              <th scope="col">Strength at reference</th><th scope="col">Each use</th>
+              <th scope="col">Does {{ application.name }}</th><th scope="col"></th></tr></thead>
+            <tbody>
+              {% for row in page.others %}
+              <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.kind }}</td>
+                <td>{{ row.form.non_field_errors }}
+                  {% if row.kind == "trained ability" %}
+                    {{ row.form.base_value.errors }}{{ row.form.trait_multiplier.errors }}
+                    base {{ row.form.base_value }} + {{ row.form.trait_multiplier }} per point
+                  {% elif row.kind == "condition" %}
+                    {{ row.form.value.errors }}{{ row.form.value }}
+                    <label class="pb-box" for="{{ row.form.scales_with_severity.id_for_label }}">{{ row.form.scales_with_severity }} scales with severity</label>
+                  {% else %}
+                    {{ row.form.value_per_rank.errors }}{{ row.form.value_per_rank }} per rank
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.template %}
+                    {{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span>
+                  {% elif row.property_names %}
+                    {{ row.property_names|join:", " }}
+                  {% else %}
+                    <span class="pb-muted">carries none</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.strength }}</td>
+                <td>{{ page.fatigue_cost }} physical fatigue</td>
+                <td>{% if row.does %}<span class="pb-yes">yes</span>{% else %}<span class="pb-no">no</span>: {{ row.reason }}{% endif %}</td>
+                <td>{% if row.link_url %}<a href="{{ row.link_url }}">{{ row.link_label }}</a>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="help pb-sentence">Nothing else gives {{ page.capability.name }}.</p>
+          {% endif %}
+          <p class="help pb-sentence">Every source of {{ page.capability.name }} is listed, including those that cannot do {{ application.name }}, so the strengths can be compared. Trained ability and distinctions carry no properties, so they only do applications that need none. A species reaches this page through its species gift, which lists under techniques. Gear cannot give a capability today, so it has no row.</p>
+        </div>
+
+        <div class="module" id="near-module">
+          <h2>One step away
+            <span class="pb-chips"><span class="pb-chip">near misses</span></span>
+          </h2>
+          {% if page.required %}
+          <div class="pb-sub">Grant {{ page.capability.name }} but lack {{ page.required.name }}</div>
+          {% if page.lacks_property %}
+          <table class="tuning-table pb-table">
+            <thead><tr><th scope="col">Technique</th><th scope="col">Gift &middot; path</th>
+              <th scope="col">Its properties</th><th scope="col">Grants {{ page.capability.name }}</th><th scope="col"></th></tr></thead>
+            <tbody>
+              {% for row in page.lacks_property %}
+              <tr>
+                <td>{{ row.technique.name }}</td>
+                <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>base {{ row.grant.base_value }} per power {{ row.grant.intensity_multiplier|floatformat:"-2" }}
+                  <label class="pb-box" for="{{ row.form.remove_grant.id_for_label }}">{{ row.form.remove_grant }} remove grant</label></td>
+                <td><a href="{{ row.edit_url }}">edit all</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="help pb-sentence">None.</p>
+          {% endif %}
+
+          <div class="pb-sub">Carry {{ page.required.name }} but do not grant {{ page.capability.name }}</div>
+          {% if page.lacks_grant %}
+          <table class="tuning-table pb-table">
+            <thead><tr><th scope="col">Technique</th><th scope="col">Gift &middot; path</th>
+              <th scope="col">Its properties</th><th scope="col">Grant {{ page.capability.name }}</th><th scope="col"></th></tr></thead>
+            <tbody>
+              {% for row in page.lacks_grant %}
+              <tr>
+                <td>{{ row.technique.name }}</td>
+                <td>{{ row.gift_label }} &middot; {{ row.path_label }}</td>
+                <td>{{ row.form.properties.errors }}<span class="pb-boxes">{% for box in row.form.properties %}<label class="pb-box" for="{{ box.id_for_label }}">{{ box.tag }} {{ box.choice_label }}</label>{% endfor %}</span></td>
+                <td>{{ row.form.grant_base.errors }}{{ row.form.grant_per_power.errors }}
+                  <label class="pb-box" for="{{ row.form.grant_it.id_for_label }}">{{ row.form.grant_it }} grant it</label>
+                  base {{ row.form.grant_base }} per power {{ row.form.grant_per_power }}</td>
+                <td><a href="{{ row.edit_url }}">edit all</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="help pb-sentence">None.</p>
+          {% endif %}
+          <p class="help pb-sentence">Tick the property or the grant here and the technique does it on save.</p>
+          {% else %}
+          <p class="help pb-sentence">This application needs no property, so every technique that grants {{ page.capability.name }} does it.</p>
+          {% endif %}
+        </div>
+
+        <div class="module" id="add-module">
+          <h2>Add a technique that does this
+            <span class="pb-chips"><span class="pb-chip">new technique</span></span>
+          </h2>
+          {% if new.non_field_errors %}<p class="errornote">{{ new.non_field_errors }}</p>{% endif %}
+          <table class="tuning-table pb-table">
+            <tbody>
+              <tr><th scope="row"><label for="id_new-gift">Gift</label></th>
+                <td>{{ new.gift.errors }}
+                  <select name="new-gift" id="id_new-gift">
+                    <option value="">---------</option>
+                    {% for gift, label, substance in gift_options %}
+                    <option value="{{ gift.pk }}" data-substance="{{ substance.name|default:'' }}"
+                      {% if new.gift.value|stringformat:"s" == gift.pk|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="help">Its substance property is ticked as well, if it has one; untick it below.</div></td></tr>
+              <tr><th scope="row"><label for="id_new-path_grant">Path</label></th>
+                <td>{{ new.path_grant.errors }}
+                  <select name="new-path_grant" id="id_new-path_grant">
+                    <option value="">no path</option>
+                    {% for grant in path_options %}
+                    <option value="{{ grant.pk }}" data-gift="{{ grant.gift_id }}"
+                      {% if new.path_grant.value|stringformat:"s" == grant.pk|stringformat:"s" %}selected{% endif %}>{{ grant.path.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="help">The paths that already have this gift. A minor gift may have none. The technique is added to that path's techniques for the gift.</div></td></tr>
+              <tr><th scope="row">{{ new.name.label_tag }}</th><td>{{ new.name.errors }}{{ new.name }}</td></tr>
+              <tr><th scope="row">Properties</th>
+                <td>
+                  {% if page.required %}<label class="pb-box" for="{{ new.with_app_property.id_for_label }}">{{ new.with_app_property }} {{ page.required.name }}</label><span class="pb-pre">from this application</span>{% endif %}
+                  <span data-substance-row><label class="pb-box" for="{{ new.with_substance.id_for_label }}">{{ new.with_substance }} <span data-substance-label>substance property</span></label><span class="pb-pre">gift's substance</span></span>
+                </td></tr>
+              <tr><th scope="row">Grants {{ page.capability.name }}</th>
+                <td>{{ new.grant_base.errors }}{{ new.grant_per_power.errors }}
+                  base {{ new.grant_base }} per power {{ new.grant_per_power }}</td></tr>
+            </tbody>
+          </table>
+          <p class="help pb-sentence">Saves the technique with the shared cast template, then "edit all" opens it for cost, check, conditions and everything else. It starts at level {{ new_level }}, intensity {{ new_intensity }}, control {{ new_control }}, physical, effect type {{ default_effect_type.name|default:"(none yet)" }} and that effect type's anima cost.</p>
+        </div>
+        {% endif %}
+
+        <div class="submit-row">
+          <a href="{% if application.pk %}{% url 'admin_power_builder' application.pk %}{% else %}{% url 'admin_power_builder_new' %}{% endif %}" class="closelink">Discard changes</a>
+          <input type="submit" name="save" value="Save" class="default">
+        </div>
+      </form>
+      <form method="get" id="pb-compare"></form>
+    </div>
+
+    <aside class="pb-rail">
+      {% include "admin/power_builder/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var gift = document.getElementById("id_new-gift");
+  var path = document.getElementById("id_new-path_grant");
+  if (!gift || !path) { return; }
+  var substanceRow = document.querySelector("[data-substance-row]");
+  var substanceLabel = document.querySelector("[data-substance-label]");
+
+  // Only the paths with a grant of the chosen gift are offered, and the substance
+  // tick names the chosen gift's substance property (hidden when it has none).
+  function refresh() {
+    var chosen = gift.value;
+    for (var option of path.options) {
+      if (!option.value) { continue; }
+      var fits = option.dataset.gift === chosen;
+      option.hidden = !fits;
+      option.disabled = !fits;
+      if (!fits && option.selected) { path.value = ""; }
+    }
+    var picked = gift.options[gift.selectedIndex];
+    var substance = picked ? picked.dataset.substance : "";
+    substanceLabel.textContent = substance || "";
+    substanceRow.hidden = !substance;
+  }
+  gift.addEventListener("change", refresh);
+  refresh();
+})();
+</script>
+{% endblock %}

@@ -2571,6 +2571,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - covenant_role -> covenants.CovenantRole [FK] (nullable)
   - dodge_landing -> areas.Position [FK] (nullable)
+  - dodge_technique -> magic.Technique [FK] (nullable)
 **Pointed to by:**
   - mirror_surface <- combat.CombatOpponent
   - vow_effect_firings <- combat.VowAddedEffectFiring
@@ -2592,7 +2593,7 @@
 **Foreign Keys:**
   - participant -> combat.CombatParticipant [FK]
   - encounter -> combat.CombatEncounter [FK]
-  - resonance -> magic.Resonance [FK]
+  - burned_resonance -> magic.Resonance [FK] (nullable)
   - threads -> magic.Thread [M2M]
 **Pointed to by:**
   - resolved_effects <- combat.CombatPullResolvedEffect
@@ -3387,6 +3388,7 @@
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
+- `condition_capability_contributions(character_sheet: 'CharacterSheet') -> list[world.conditions.types.ConditionCapabilityContribution] - What each active condition adds to each capability, with its marks (#5066).`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
 - `condition_target_contributions(character_sheet: 'CharacterSheet', modifier_target: 'ModifierTarget', *, lane: str, inputs: world.mechanics.derived_amounts.DerivedInputs | None = None) -> list[world.checks.types.ModifierContribution] - One CONDITION contribution per active ConditionModifierEffect on a target (#4726).`
@@ -3402,7 +3404,7 @@
 - `expire_scene_scoped_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] - Remove all SCENE-duration conditions from the given targets.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet - Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int - Get the total aggro priority from all conditions.`
-- `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
+- `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character from conditions and thread grants.`
 - `get_breath_hold_config() -> world.conditions.models.BreathHoldConfig - Return the BreathHoldConfig singleton (pk=1), creating it lazily (#4741).`
 - `get_capability_status(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus - Get the status of a capability for a target based on active conditions.`
 - `get_capability_value(character_sheet: 'CharacterSheet', capability: world.conditions.models.CapabilityType) -> int - Get the total value of a capability for a character.`
@@ -3462,6 +3464,7 @@
 - `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
 - `take_breath(target: 'ObjectDB') -> list[world.conditions.models.ConditionTemplate] - She breathes: every held-breath condition on her ends (#4741).`
+- `thread_passive_capability_grants(character_sheet: 'CharacterSheet') -> dict[int, int] - Thread-passive capability grants (#751 B2), by capability pk.`
 - `turn_order_modifier_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total turn order modifier per target from active conditions (positive = acts earlier).`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool - Remove suppression from a condition.`
 
@@ -6310,6 +6313,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - gift -> magic.Gift [OneToOne]
+  - property -> mechanics.Property [FK] (nullable)
 
 ### GiftUnlock
 **Foreign Keys:**
@@ -6552,7 +6556,6 @@
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - combo_slots <- combat.ComboSlot
-  - combat_pulls <- combat.CombatPull
   - alternate_self_grants <- forms.AlternateSelf
   - tied_item_templates <- items.ItemTemplate
   - garment_mitigations <- items.GarmentMitigation
@@ -7179,7 +7182,7 @@
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None, technique: 'Technique | None' = None) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None, technique: 'Technique | None' = None, burn_resonance: 'ResonanceModel | None' = None) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None, resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' - Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None - Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
@@ -7190,7 +7193,7 @@
 - `seed_thread_survivability_tuning() -> 'None' - Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' - Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int', **_ritual_dispatch_kwargs: 'object') -> 'ThreadImbueResult' - Deduct resonance balance and greedily advance thread level.`
-- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '') -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
+- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_resonance: 'ResonanceModel | None' = None, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '') -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' - Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `strain_to_intensity(*, strain_commitment: 'int', config: 'StrainCurve') -> 'int' - Convert committed anima into a diminishing-return power bonus.`
 - `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' - Universal soft-capped survivability baseline from thread investment (#1175),`
@@ -7198,7 +7201,7 @@
 - `technique_skill_term(character: 'ObjectDB', technique: 'Technique') -> 'ExtraTraitTerm | None' - The technique skill as a roll term for ``character``, or None.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' - Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonance: 'Resonance | None' = None, fury: 'FuryCast | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, pull_target: 'ObjectDB | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, apply_variant: 'bool' = True, preferred_resonance=None, situation_ctx: 'object | None' = None, target_sheet: 'CharacterSheet | None' = None, strain_config: 'object | None' = None, strain_power_enabled: 'bool' = True, defer_soulfray_reveal: 'bool' = False, cast_check: 'CastCheck | None' = None, combat_burn_for: 'str' = '', pulled_resonances: 'tuple[Resonance, ...]' = (), fury: 'FuryCast | None' = None) -> 'TechniqueUseResult' - Orchestrate technique use from cost validation through post-cast events.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None, is_cosmetic: 'bool' = False) -> 'list[str]' - Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' - Create a new Thread anchored to the given target.`
 
@@ -7213,7 +7216,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - capability -> conditions.CapabilityType [FK]
-  - target_property -> mechanics.Property [FK]
+  - target_property -> mechanics.Property [FK] (nullable)
   - required_effect_property -> mechanics.Property [FK] (nullable)
   - default_template -> mechanics.ChallengeTemplate [FK] (nullable)
 **Pointed to by:**
@@ -7421,6 +7424,7 @@
   - battle_terrain_effects <- battles.TerrainPropertyEffect
   - battle_weather_effects <- battles.WeatherTypePropertyEffect
   - resonances <- magic.Resonance
+  - gift_substances <- magic.GiftSubstance
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
   - threat_pool_entries <- combat.ThreatPoolEntry
@@ -7491,6 +7495,7 @@
 - `begin_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'CharacterEngagement' - Ensure the character has an engagement; create one if none exists.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `coherence_cache_scope() - Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
+- `condition_capability_contributions(character_sheet: 'CharacterSheet') -> list[world.conditions.types.ConditionCapabilityContribution] - What each active condition adds to each capability, with its marks (#5066).`
 - `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the authored covenant-level passive bonus across engaged PRIMARY`
 - `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' - Raw engaged-PRIMARY-covenant-role bonus for ``target`` — no per-gear marginal`
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum covenant-role contributions across equipped items, gated on engagement.`
@@ -7506,7 +7511,6 @@
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
 - `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' - Perception-relative outfit bonus vs. a society's current fashion (#513).`
 - `get_aesthetic_config() -> 'AestheticAxisConfig' - Lazy-create and return the singleton aesthetic-axis config (pk=1).`
-- `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] - Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' - Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' - Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None, inputs: 'DerivedInputs | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
@@ -7525,7 +7529,10 @@
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `skill_modifiers_for_sheet(character_sheet: 'CharacterSheet', skills: 'Iterable[Skill]') -> 'dict[int, int]' - ``skill.pk`` to the modifier a roll on that skill gets, for the sheet (#4820).`
+- `source_carries_required_mark(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` carries the effect property ``app`` needs (or it needs none).`
+- `source_matches_application(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` reaches ``app`` (#5066): the same capability, held above the`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
+- `thread_passive_capability_grants(character_sheet: 'CharacterSheet') -> dict[int, int] - Thread-passive capability grants (#751 B2), by capability pk.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' - Update CharacterModifier values when rank changes.`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).`
@@ -9603,7 +9610,7 @@
 ### SceneActionPullDeclaration
 **Foreign Keys:**
   - request -> scenes.SceneActionRequest [OneToOne]
-  - resonance -> magic.Resonance [FK]
+  - burn_resonance -> magic.Resonance [FK] (nullable)
   - threads -> magic.Thread [M2M]
 
 ### SceneActionRequest

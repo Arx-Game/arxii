@@ -11,7 +11,7 @@ import core.natural_keys
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0387_dormancy"),
+        ("arxii", "0391_application_anywhere_constraints"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

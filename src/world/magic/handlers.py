@@ -12,7 +12,6 @@ from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch
 from django.utils.functional import cached_property
 
 from world.magic.constants import SHIP_VITAL_BONUS_TARGETS, EffectKind, TargetKind
@@ -941,8 +940,8 @@ class CharacterTechniqueHandler:
     """Per-character technique inventory with effect properties pre-resolved.
 
     Single underlying ``cached_property`` prefetches every Technique the
-    character has been granted plus the Gift → Resonance → Property chain
-    that drives clash-opposition matching. Subset methods do list-comps over
+    character has been granted; each technique's own marks (``Technique.properties``,
+    #5066) drive clash-opposition matching. Subset methods do list-comps over
     the cache.
 
     Mutation contract: services that grant or revoke a CharacterTechnique
@@ -960,31 +959,14 @@ class CharacterTechniqueHandler:
     @cached_property
     def _state(self) -> list[Technique]:
         """ONE prefetched list of every Technique the character has."""
-        from world.magic.models import Resonance  # noqa: PLC0415
-        from world.mechanics.models import Property  # noqa: PLC0415
-
         return list(
             Technique.objects.filter(
                 character_grants__character__character=self.character,
-            )
-            .select_related(
+            ).select_related(
                 "gift",
                 "effect_type",
                 "action_template",
                 "action_template__check_type",
-            )
-            .prefetch_related(
-                Prefetch(
-                    "gift__resonances",
-                    queryset=Resonance.objects.prefetch_related(
-                        Prefetch(
-                            "properties",
-                            queryset=Property.objects.all(),
-                            to_attr="cached_properties",
-                        ),
-                    ),
-                    to_attr="cached_resonances",
-                ),
             )
         )
 
@@ -997,22 +979,24 @@ class CharacterTechniqueHandler:
         return [t for t in self._state if t.clash_capable]
 
     def effect_property_ids_for(self, technique: Technique) -> frozenset[int]:
-        """Return the effect-Property pks carried by ``technique``.
+        """Return the effect-Property pks carried by ``technique``: its own marks (#5066).
 
-        Resolved via the prefetched Gift → Resonance → Property chain. Returns
-        an empty frozenset for techniques the character doesn't have or
-        techniques without a Gift.
+        Read from the prefetched ``Technique.properties``, never the gift's resonances.
+        Returns an empty frozenset for techniques the character doesn't have.
         """
-        for t in self._state:
-            if t.pk != technique.pk:
-                continue
-            if t.gift_id is None:
-                return frozenset()
-            ids: set[int] = set()
-            for resonance in t.gift.cached_resonances:
-                ids.update(p.pk for p in resonance.cached_properties)
-            return frozenset(ids)
-        return frozenset()
+        if not any(t.pk == technique.pk for t in self._state):
+            return frozenset()
+        return self._marks_of([technique])[technique.pk]
+
+    @staticmethod
+    def _marks_of(techniques: list[Technique]) -> dict[int, frozenset[int]]:
+        """The techniques' marks, in one query; never cached, so a mark staff tick reaches
+        the next read (#5066)."""
+        from world.magic.services.technique_marks import (  # noqa: PLC0415
+            effect_property_ids_by_technique,
+        )
+
+        return effect_property_ids_by_technique(t.pk for t in techniques)
 
     def helper_eligible_for(
         self,
@@ -1027,14 +1011,9 @@ class CharacterTechniqueHandler:
         """
         if not clash_property_ids:
             return []
-        eligible: list[Technique] = []
-        for t in self._state:
-            if not t.clash_capable:
-                continue
-            t_props = self.effect_property_ids_for(t)
-            if t_props & clash_property_ids:
-                eligible.append(t)
-        return eligible
+        capable = [t for t in self._state if t.clash_capable]
+        marks = self._marks_of(capable)
+        return [t for t in capable if marks[t.pk] & clash_property_ids]
 
     @cached_property
     def _holds(self) -> dict[int, CharacterTechnique]:

@@ -1,43 +1,53 @@
-"""Journeys for one blink power used two ways: a dodge and a move on her turn (#5019).
+"""Journeys for one blink power used two ways: a dodge and a move on her turn (#5019, #5066).
 
 The cellar is four places: Doorway - Floor - Gallery - Stage in a ring, every edge open but
-Doorway - Stage, which a Thorn Hedge (an active gating challenge) closes. Ondrelle knows one
-technique, Blink Step, whose capability grant gives her "blink" (Traversal: Blinks, dodge
-reach: any place in the room, cost: anima) at 4. Her movement is raised to two hops a round.
+Doorway - Stage, which a Thorn Hedge (an active gating challenge) closes. Staff have authored
+two applications of the capability ``traversal`` that need the ``teleport`` property:
+**Evade** (dodges, landing by blinking) and **Blink** (on her turn she moves by blinking).
+Nobody authored a blink capability. Ondrelle knows Blink Step, a technique marked
+``teleport`` that grants traversal 10 and costs 2 anima. Her movement is raised to two hops
+a round. Every technique roll is forced to a bare success, so each use's strength is 10:
+anywhere in the room by the MovementConfig bands (1 / 5 / 10).
 
-- Shot at, she dodges with it to her planned Gallery, pays 2 anima and the roll gets her 4.
+- Shot at, she dodges with it to her planned Gallery: a cast of Blink Step, 2 anima, and the
+  roll gets her strength 10.
 - On her turn the move list offers "Blink to Stage (2 anima)", past the hedge. Taken by web
-  dispatch or telnet ``position Stage``, she is on the Stage, 2 anima and one hop poorer,
-  her reaction count and her declared action untouched, so a dodge later that round still
-  gets the full 4.
+  dispatch or telnet ``position Stage``, it is a cast of Blink Step: she is on the Stage,
+  2 anima and one hop poorer, her reaction count and her declared action untouched, so a
+  dodge later that round still gets the full 10.
+- A failed technique roll leaves her where she is, paid, with the hop spent.
 - Too little anima never stops her (owner ruling 2026-11-08): with 1 anima in a lethal fight
-  the entry stays open and she blinks, her pool runs to 0 and the 1 she lacked is drawn as
-  Soulfray through the cast's own path (severity 10 for an empty pool plus 5 for the deficit,
-  the SoulfrayConfig factory's scales). Already frayed, her entry carries her Soulfray stage
+  the entry stays open and she blinks; her pool runs to 0 and the 1 she lacked is drawn as
+  Soulfray through the cast's own path. Already frayed, her entry carries her Soulfray stage
   warning, as a cast does.
 - Where walking reaches (the Floor), the list offers a walk, not a blink, and it is free.
 - Hobb, who walks, keeps "Move to Stage (blocked: Thorn Hedge)" and no blink entries; a
-  dodger whose capability has no Blinks traversal gets no blink entries either.
+  dodger whose source matches only a dodging application gets no blink entries either.
 - Blinking into the Gallery while a Bandit holds it stops her there with no hops left.
 - The room is told "Ondrelle blinks to Stage."
-- Outside a fight the entry is "Blink to Stage" and the blink is free.
-- Staff authoring a capability are offered Blinks as its way of moving; a bestiary entry is not.
+- Outside a fight a blink is still a cast of her technique (#5066 decision 9): her control is
+  higher out of combat, so it costs nothing ("Blink to Stage"); once she is engaged (intensity
+  raised) the same blink costs its 2 anima again.
+- Staff authoring an application are offered Blinks and Phases as its way of moving; a
+  bestiary entry is offered neither.
 
-Expected values come from the spec (owner answers 1 to 4) and the MovementConfig field
-defaults: 2 anima per use; one hop per blink; reactions are not counted.
+Expected values come from the spec (#5019 owner answers 1 to 4; #5066 decisions 3, 4, 9,
+11) and the field defaults: one hop per blink; reactions are not counted; the out-of-combat
+control bonus is SoulfrayConfig.social_safety_bonus's default 10.
 """
 
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 
+from actions.factories import ActionTemplateFactory
 from actions.player_interface import get_player_actions
 from integration_tests.harness import JourneyCase
-from world.areas.positioning.constants import CreatureTraversal, ReactionCostKind, ReactionReach
+from world.areas.positioning.constants import CreatureTraversal
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import connect_positions, place_in_position, position_of
 from world.checks.factories import CheckTypeFactory
@@ -81,6 +91,8 @@ from world.mechanics.factories import (
     ChallengeTemplateFactory,
     CharacterEngagementFactory,
     ModifierCategoryFactory,
+    MovementApplicationFactory,
+    PropertyFactory,
 )
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.scenes.constants import RoundStatus
@@ -89,7 +101,7 @@ from world.vitals.models import CharacterVitals
 from world.vitals.seeds import ensure_foundational_capabilities
 
 HEDGE = "Thorn Hedge"
-BLINK_VALUE = 4
+BLINK_VALUE = 10
 EXTRA_MOVEMENT = 5  # baseline 5 + 5 = 10 movement = 2 hops a round
 BLINK_TO_STAGE = "Blink to Stage (2 anima)"
 EMPTY_POOL_SEVERITY = 10  # SoulfrayConfigFactory: severity_scale 10 at anima 0
@@ -141,20 +153,42 @@ class _TheCellar(JourneyCase):
             status=RoundStatus.DECLARING, round_number=1, room=self.room
         )
         self.defense = CheckTypeFactory(name="Evade")
-        self.blink = CapabilityTypeFactory(
-            name="blink",
-            innate_baseline=0,
-            traversal=CreatureTraversal.BLINKS,
-            reaction_reach=ReactionReach.ANY_PLACE,
-            reaction_cost_kind=ReactionCostKind.ANIMA,
+        self.traversal = CapabilityTypeFactory(name="traversal", innate_baseline=0)
+        self.teleport = PropertyFactory(name="teleport")
+        MovementApplicationFactory(
+            name="Evade",
+            capability=self.traversal,
+            required_effect_property=self.teleport,
+            dodges=True,
+            way_of_moving=CreatureTraversal.BLINKS,
         )
-        self.blink_step = TechniqueFactory(name="Blink Step")
+        MovementApplicationFactory(
+            name="Blink",
+            capability=self.traversal,
+            required_effect_property=self.teleport,
+            way_of_moving=CreatureTraversal.BLINKS,
+        )
+        self.blink_step = TechniqueFactory(
+            name="Blink Step",
+            anima_cost=2,
+            intensity=1,
+            control=1,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory(name="Blink Cast")),
+        )
+        self.blink_step.properties.add(self.teleport)
         TechniqueCapabilityGrantFactory(
             technique=self.blink_step,
-            capability=self.blink,
+            capability=self.traversal,
             base_value=BLINK_VALUE,
             intensity_multiplier=0,
         )
+        self.technique_roll = MagicMock(success_level=1)
+        patcher = patch(
+            "world.combat.services.movement_use.roll_technique",
+            side_effect=lambda *_a, **_k: self.technique_roll,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def raise_capability(self, character, capability: CapabilityType, value: int) -> None:
         target, _ = ModifierTarget.objects.get_or_create(
@@ -174,14 +208,17 @@ class _TheCellar(JourneyCase):
             source=ModifierSource.objects.create(),
         )
 
-    def fighter(self, name: str, *, at, blinks: bool = True, in_fight: bool = True, anima=20):
+    def fighter(  # noqa: PLR0913 - one fighter, her switches
+        self, name: str, *, at, blinks: bool = True, in_fight: bool = True, anima=20, engaged=True
+    ):
         character = self.make_player(name, room=self.room)
         sheet = character.sheet_data
         CharacterVitals.objects.create(
             character_sheet=sheet, health=100, max_health=100, base_max_health=100
         )
         CharacterAnimaFactory(character=sheet, current=anima, maximum=20)
-        CharacterEngagementFactory(character=sheet)
+        if engaged:
+            CharacterEngagementFactory(character=sheet)
         if in_fight:
             CombatParticipantFactory(
                 encounter=self.encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
@@ -305,6 +342,25 @@ class OnePowerTwoUses(_TheCellar):
         self.assertEqual(self.participant(self.ondrelle).hops_used, 2)
 
 
+class TheRollSetsHowFar(_TheCellar):
+    def setUp(self) -> None:
+        super().setUp()
+        self.ondrelle = self.fighter("Ondrelle", at=self.doorway)
+
+    def test_a_failed_roll_leaves_her_in_place_paid(self) -> None:
+        self.technique_roll = MagicMock(success_level=0)
+
+        result = self.web(self.ondrelle, "move_to_position", position_id=self.stage.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(
+            result.detail.message, "Your blink fails; you stay where you are (2 anima)."
+        )
+        self.assertEqual(position_of(self.ondrelle), self.doorway)
+        self.assertEqual(self.anima(self.ondrelle), 18)
+        self.assertEqual(self.participant(self.ondrelle).hops_used, 1)
+
+
 class TooLittleAnima(_TheCellar):
     """Lack of anima never greys out or refuses a blink; it pays through Soulfray."""
 
@@ -373,14 +429,16 @@ class OthersDoNotBlink(_TheCellar):
         self.assertEqual(position_of(hobb), self.doorway)
 
     def test_a_dodge_that_does_not_blink_gives_no_turn_blink(self) -> None:
-        teleport = CapabilityTypeFactory(
-            name="teleport",
-            innate_baseline=0,
-            reaction_reach=ReactionReach.ANY_PLACE,
-            reaction_cost_kind=ReactionCostKind.ANIMA,
+        """Trained dodging matches a dodging application that needs no property; it gives
+        her no turn blink (Blink needs teleport, which training does not carry)."""
+        MovementApplicationFactory(
+            name="Sidestep",
+            capability=self.traversal,
+            dodges=True,
+            way_of_moving=CreatureTraversal.BLINKS,
         )
         dodger = self.fighter("Malvaine", at=self.doorway, blinks=False)
-        self.raise_capability(dodger, teleport, BLINK_VALUE)
+        self.raise_capability(dodger, self.traversal, BLINK_VALUE)
 
         moves = self.moves(dodger)
 
@@ -388,23 +446,28 @@ class OthersDoNotBlink(_TheCellar):
 
 
 class StaffAuthoring(_TheCellar):
-    def test_capabilities_offer_blinks_and_bestiary_entries_do_not(self) -> None:
+    def test_applications_offer_blinks_and_phases_and_bestiary_entries_do_not(self) -> None:
         staff = get_user_model().objects.create_superuser("staff5019", "s@example.com", "pw-5019")
         client = Client()
         client.force_login(staff)
 
+        application = client.get("/admin/arxii/application/add/")
         capability = client.get("/admin/arxii/capabilitytype/add/")
         bestiary = client.get("/admin/arxii/creaturetemplate/add/")
 
+        self.assertEqual(application.status_code, 200)
+        self.assertIn('value="blinks"', application.content.decode())
+        self.assertIn('value="phases"', application.content.decode())
         self.assertEqual(capability.status_code, 200)
-        self.assertIn('value="blinks"', capability.content.decode())
+        self.assertNotIn('value="blinks"', capability.content.decode())
         self.assertEqual(bestiary.status_code, 200)
         self.assertNotIn('value="blinks"', bestiary.content.decode())
+        self.assertNotIn('value="phases"', bestiary.content.decode())
 
 
 class OutsideAFight(_TheCellar):
-    def test_a_blink_outside_a_fight_is_free(self) -> None:
-        ondrelle = self.fighter("Ondrelle", at=self.doorway, in_fight=False)
+    def test_in_a_calm_scene_her_control_makes_the_cast_free(self) -> None:
+        ondrelle = self.fighter("Ondrelle", at=self.doorway, in_fight=False, engaged=False)
 
         self.assertIn("Blink to Stage", self.moves(ondrelle))
         result = self.web(ondrelle, "move_to_position", position_id=self.stage.pk)
@@ -413,3 +476,14 @@ class OutsideAFight(_TheCellar):
         self.assertEqual(result.detail.message, "You blink to Stage.")
         self.assertEqual(position_of(ondrelle), self.stage)
         self.assertEqual(self.anima(ondrelle), 20)
+
+    def test_when_the_scene_heats_up_the_same_blink_costs_again(self) -> None:
+        """Engaged (a duel of wits, a competition), she loses the out-of-combat control."""
+        ondrelle = self.fighter("Ondrelle", at=self.doorway, in_fight=False, engaged=True)
+
+        self.assertIn(BLINK_TO_STAGE, self.moves(ondrelle))
+        result = self.web(ondrelle, "move_to_position", position_id=self.stage.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, "You blink to Stage for 2 anima.")
+        self.assertEqual(self.anima(ondrelle), 18)

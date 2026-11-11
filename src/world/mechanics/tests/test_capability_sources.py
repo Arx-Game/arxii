@@ -31,12 +31,14 @@ class TechniqueSourceTests(TestCase):
         cls.gift = GiftFactory(name="Pyromancy")
         cls.gift.resonances.add(cls.resonance)
         cls.flame_property = PropertyFactory(name="flame")
-        cls.resonance.properties.add(cls.flame_property)
+        # The resonance carries a property too; it must never reach the source (#5066).
+        cls.resonance.properties.add(PropertyFactory(name="ardour"))
         cls.technique = TechniqueFactory(
             name="Flame Lance",
             gift=cls.gift,
             intensity=10,
         )
+        cls.technique.properties.add(cls.flame_property)
         cls.grant = TechniqueCapabilityGrantFactory(
             technique=cls.technique,
             capability=cls.capability,
@@ -61,7 +63,7 @@ class TechniqueSourceTests(TestCase):
         assert src.value == 15
         assert src.source_name == "Flame Lance"
         assert src.source_id == self.technique.id
-        # effect_property_ids are derived from resonance M2M to Property
+        # effect_property_ids are the technique's own marks, not its gift's resonance's
         assert src.effect_property_ids == [self.flame_property.id]
 
     def test_zero_value_excluded(self) -> None:
@@ -361,3 +363,35 @@ class TechniqueSourceQueryCountTests(TestCase):
             f"exists — #2708 C1); got no_config={no_config_count}, "
             f"with_config={with_config_count}.",
         )
+
+
+class ConditionSourceTests(TestCase):
+    """A condition is a source carrying its own properties; a debuff lowers it (#5066)."""
+
+    def test_one_source_per_condition_with_its_properties_and_the_debuff_netted(self) -> None:
+        from world.conditions.factories import (
+            ConditionCapabilityEffectFactory,
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        traversal = CapabilityTypeFactory(name="traversal_condsrc")
+        incorporeal = PropertyFactory(name="incorporeal_condsrc")
+        smoke = ConditionTemplateFactory(name="Smoke Form condsrc")
+        smoke.properties.add(incorporeal)
+        ConditionCapabilityEffectFactory(condition=smoke, capability=traversal, value=5)
+        mired = ConditionTemplateFactory(name="Mired condsrc")
+        ConditionCapabilityEffectFactory(condition=mired, capability=traversal, value=-3)
+        ConditionInstanceFactory(target=sheet.character, condition=smoke)
+        ConditionInstanceFactory(target=sheet.character, condition=mired)
+
+        sources = [
+            s
+            for s in get_capability_sources_for_character(sheet.character)
+            if s.source_type == CapabilitySourceType.CONDITION and s.capability_id == traversal.pk
+        ]
+
+        assert [(s.source_name, s.value, s.effect_property_ids) for s in sources] == [
+            ("Smoke Form condsrc", 2, [incorporeal.pk])
+        ]

@@ -394,7 +394,7 @@ def resolve_enchanted_strike(
     """
     from django.db import transaction  # noqa: PLC0415
 
-    from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_resonances  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.combat.services.combos.combo_outcome import _apply_combo_rider  # noqa: PLC0415
     from world.combat.services.damage.vulnerability import (  # noqa: PLC0415
@@ -452,7 +452,7 @@ def resolve_enchanted_strike(
         + _vulnerability_intensity_bonus(action),
         situation_ctx=CombatRoundContext(participant),
         target_sheet=_resolve_primary_target_sheet(action),
-        pulled_resonance=round_pull_resonance(participant),
+        pulled_resonances=round_pull_resonances(participant),
     )
     if not use.confirmed or cast.landing is None or cast.enchantment is None:
         # Stopped before it went off: nothing paid, and the blow lands plain.

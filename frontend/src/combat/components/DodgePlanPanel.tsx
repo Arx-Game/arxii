@@ -5,14 +5,26 @@
  * land, through the `combat_dodge` registry action. Shown only when the viewer's own
  * participant row carries a `dodge_plan` (the server sends it to its owner only, and
  * only when something she has lets her dodge).
+ *
+ * #5066: the technique answering her dodges, whether to keep dodging into Soulfray, and
+ * an automatic defensive thread pull, all through the `dodge_settings` registry action.
  */
 
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { components } from '@/generated/api';
 import { isDispatchFailure, type DispatchActionRequest, type DispatchResult } from '@/combat/types';
-import { dodgeRequest, steadyRequest } from '@/combat/dodging';
+import { dodgeRequest, dodgeSettingsRequest, steadyRequest } from '@/combat/dodging';
+import { SoulfrayAcceptGate } from '@/combat/components/SoulfrayAcceptGate';
 
 type DodgePlan = components['schemas']['DodgePlan'];
 type SteadyPlan = components['schemas']['SteadyPlan'];
@@ -65,6 +77,7 @@ export function DodgePlanPanel({
           currentPositionId={currentPositionId}
           isLocked={isLocked}
           send={send}
+          sendSettings={(kwargs) => dispatchPlan(dodgeSettingsRequest(kwargs))}
         />
       )}
       {steadyPlan && (
@@ -91,22 +104,38 @@ export function DodgePlanPanel({
   );
 }
 
+type Send = (kwargs: Record<string, unknown>) => void;
+
 function DodgeSection({
   plan,
   currentPositionId,
   isLocked,
   send,
+  sendSettings,
 }: {
   plan: DodgePlan;
   currentPositionId: number | null;
   isLocked: boolean;
-  send: (kwargs: Record<string, unknown>) => void;
+  send: Send;
+  sendSettings: Send;
 }) {
   const elsewhere = plan.options.filter((option) => option.id !== currentPositionId);
   const inPlace = plan.enabled && plan.landing_id === null;
 
   return (
     <div className="space-y-1.5" data-testid="dodge-plan">
+      {plan.soulfray_check_in && (
+        <SoulfrayAcceptGate
+          warning={plan.soulfray_check_in}
+          body="Your automatic dodges cast into Soulfray."
+          acceptLabel="Keep dodging into Soulfray"
+          accepted={plan.into_soulfray}
+          onAcceptChange={(on) => sendSettings({ into_soulfray: on })}
+          disabled={isLocked}
+          testId="dodge-soulfray-check-in"
+          checkboxTestId="dodge-soulfray-check-in-toggle"
+        />
+      )}
       <DodgeOption
         label="Dodge in place"
         chosen={inPlace}
@@ -134,6 +163,125 @@ function DodgeSection({
       <p className="text-xs text-muted-foreground" data-testid="dodge-cost">
         {plan.cost_line}
       </p>
+      {plan.techniques.length > 0 && (
+        <DodgeTechniquePicker plan={plan} isLocked={isLocked} sendSettings={sendSettings} />
+      )}
+      <div className="flex items-center gap-2 text-sm">
+        <Switch
+          id="dodge-into-soulfray"
+          data-testid="dodge-into-soulfray"
+          checked={plan.into_soulfray}
+          disabled={isLocked}
+          onCheckedChange={(on) => sendSettings({ into_soulfray: on })}
+        />
+        <label htmlFor="dodge-into-soulfray">Dodge even into Soulfray</label>
+      </div>
+      <AutoPullControls plan={plan} isLocked={isLocked} sendSettings={sendSettings} />
+    </div>
+  );
+}
+
+function DodgeTechniquePicker({
+  plan,
+  isLocked,
+  sendSettings,
+}: {
+  plan: DodgePlan;
+  isLocked: boolean;
+  sendSettings: Send;
+}) {
+  const chosen = plan.techniques.find((t) => t.id === plan.technique_id) ?? null;
+
+  return (
+    <div className="space-y-1" data-testid="dodge-technique">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Dodge with</span>
+        <Select
+          value={chosen ? String(chosen.id) : ''}
+          onValueChange={(value) => sendSettings({ technique_id: Number(value) })}
+          disabled={isLocked}
+        >
+          <SelectTrigger
+            data-testid="dodge-technique-select"
+            aria-label="Dodge with"
+            className="h-8 flex-1 text-xs"
+          >
+            <SelectValue placeholder="Choose a technique" />
+          </SelectTrigger>
+          <SelectContent>
+            {plan.techniques.map((technique) => (
+              <SelectItem key={technique.id} value={String(technique.id)}>
+                {technique.is_default ? `${technique.name} (default)` : technique.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {chosen && !chosen.is_default && (
+          <button
+            type="button"
+            data-testid="dodge-technique-save-default"
+            disabled={isLocked}
+            onClick={() => sendSettings({ technique_id: chosen.id, save_default: true })}
+            className="rounded border border-border px-2 py-1 text-xs hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Save as my default
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const PULL_TIERS = [1, 2, 3] as const;
+
+function AutoPullControls({
+  plan,
+  isLocked,
+  sendSettings,
+}: {
+  plan: DodgePlan;
+  isLocked: boolean;
+  sendSettings: Send;
+}) {
+  const [tier, setTier] = useState<number>(plan.auto_pull_tier ?? 1);
+
+  return (
+    <div className="space-y-1" data-testid="dodge-auto-pull">
+      <div className="flex items-center gap-2 text-sm">
+        <Switch
+          id="dodge-auto-pull"
+          data-testid="dodge-auto-pull-toggle"
+          checked={plan.auto_pull}
+          disabled={isLocked}
+          onCheckedChange={(on) =>
+            sendSettings(on ? { auto_pull: true, pull_tier: tier } : { auto_pull: false })
+          }
+        />
+        <label htmlFor="dodge-auto-pull">Pull threads for defense when attacked</label>
+        <Select
+          value={String(tier)}
+          onValueChange={(value) => {
+            setTier(Number(value));
+            if (plan.auto_pull) sendSettings({ auto_pull: true, pull_tier: Number(value) });
+          }}
+          disabled={isLocked}
+        >
+          <SelectTrigger
+            data-testid="dodge-auto-pull-tier"
+            aria-label="Tier"
+            className="h-8 w-24 text-xs"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PULL_TIERS.map((t) => (
+              <SelectItem key={t} value={String(t)}>
+                Tier {t}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 # ADR-4663: Player movement reads capabilities, and held ground is passed by a roll
 
 **Date:** 2026-10-25
-**Status:** Accepted; amended by ADR-5019 (a blink moves without crossing an edge)
+**Status:** Accepted; amended by ADR-5019 (a blink moves without crossing an edge); superseded in part by ADR-5066 (the way of moving comes from an application matched on the source's properties, not from `CapabilityType.traversal`)
 **Issue:** #4663 (slice 2 of #4651)
 
 ## Decision

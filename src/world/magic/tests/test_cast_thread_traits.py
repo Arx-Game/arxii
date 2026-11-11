@@ -117,7 +117,7 @@ class ApplicableOnCastTests(CastThreadTraitsBase):
 
     def test_declared_pull_on_technique_skill_thread_keeps_its_tier(self):
         thread = self.trait_thread(self.technique_skill)
-        pull = CastPullDeclaration(resonance=self.resonance, tier=2, threads=(thread,))
+        pull = CastPullDeclaration(tier=2, threads=(thread,))
         cast_check = CastCheck(
             check_type=self.check_type,
             extra_traits=(ExtraTraitTerm(self.technique_skill, Decimal("1.00")),),
@@ -133,7 +133,7 @@ class ApplicableOnCastTests(CastThreadTraitsBase):
 class PaidPullContextTests(CastThreadTraitsBase):
     def test_paid_pull_context_has_involved_traits(self):
         thread = self.trait_thread(self.technique_skill)
-        pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
+        pull = CastPullDeclaration(tier=1, threads=(thread,))
 
         with patch("world.magic.services.resonance.spend_resonance_for_pull") as spend:
             spend.return_value.resolved_effects = []
@@ -144,13 +144,13 @@ class PaidPullContextTests(CastThreadTraitsBase):
                 effective_power=5,
             )
 
-        context = spend.call_args.args[4]
+        context = spend.call_args.args[3]
         self.assertEqual(set(context.involved_traits), {self.stat.pk, self.technique_skill.pk})
         self.assertEqual(context.involved_techniques, (self.technique.pk,))
 
     def test_combat_pull_context_has_involved_traits(self):
         thread = self.trait_thread(self.technique_skill)
-        pull = CastPullDeclaration(resonance=self.resonance, tier=1, threads=(thread,))
+        pull = CastPullDeclaration(tier=1, threads=(thread,))
         encounter = CombatEncounterFactory()
         participant = CombatParticipantFactory(
             encounter=encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE

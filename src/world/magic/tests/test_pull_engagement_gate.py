@@ -156,7 +156,6 @@ class CovenantRolePullRaisesTypedErrorTests(TestCase):
         with self.assertRaises(CovenantRoleNotEngagedError):
             spend_resonance_for_pull(
                 character_sheet=sheet,
-                resonance=resonance,
                 threads=[thread],
                 tier=1,
                 action_context=_make_pull_ctx(),

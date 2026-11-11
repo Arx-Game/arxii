@@ -94,11 +94,7 @@ class TechniqueSocialPullTests(APITestCase):
 
     def _accept(self, *, with_pull: bool) -> tuple[list[int], int]:
         """Accept a technique flirt; return (roll modifiers seen, roll total points)."""
-        pull = (
-            CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,))
-            if with_pull
-            else None
-        )
+        pull = CastPullDeclaration(tier=1, threads=(self.thread,)) if with_pull else None
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,

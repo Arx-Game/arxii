@@ -239,7 +239,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
     #     isolated unit tests that do not wire a CombatParticipant degrade
     #     gracefully (situation_ctx=None, exactly as a non-combat cast).
     from world.combat.models import CombatParticipant  # noqa: PLC0415
-    from world.combat.pull_helpers import round_pull_resonance  # noqa: PLC0415
+    from world.combat.pull_helpers import round_pull_resonances  # noqa: PLC0415
 
     participant = CombatParticipant.objects.filter(
         encounter_id=clash.encounter_id,
@@ -376,7 +376,7 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         # CHECK_BONUS threading, #2536 Task 5) rather than re-resolving it.
         situation_ctx=round_ctx,
         # #4732: the contribution's committed pull counts toward its focus roll.
-        pulled_resonance=round_pull_resonance(participant) if participant is not None else None,
+        pulled_resonances=round_pull_resonances(participant) if participant is not None else (),
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should
@@ -527,47 +527,15 @@ def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: 
     return entry.clash_npc_pressure or 0
 
 
-def _technique_effect_property_ids(
-    technique: Technique, *, character: object | None = None
-) -> frozenset[int]:
-    """Derive effect Property pks from a Technique's Gift's Resonances.
+def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
+    """The effect Property pks a Technique carries: its own marks (#5066).
 
-    When a ``character`` is provided, resolves the gift's resonances via
-    ``gift_resonances_for(character, technique.gift)`` — the derive-on-read
-    seam that reads the woven GIFT thread's resonance (ADR-0052). Falls back
-    to ``technique.gift.cached_resonances`` (the authored supported set) when
-    no character is available (e.g. NPC techniques) — matching
-    ``gift_resonances_for``'s own sheetless fallback.
-
-    Returns an empty frozenset for techniques without a gift.
-
-    Used by ``_detect_clash_flavor`` to compute the opposition surface for
-    clash creation. The per-character ``CharacterTechniqueHandler`` is the
-    cached path for inventory walks; this helper covers the one-off
-    detect-time lookup.
+    A clash opposes substance against substance, so it reads what each technique is
+    (``Technique.properties``, ticked per technique by staff), never its gift's
+    resonances. Used by ``_detect_clash_flavor`` for the opposition surface; the
+    per-character ``CharacterTechniqueHandler`` is the cached path for inventory walks.
     """
-    if technique.gift_id is None:
-        return frozenset()
-
-    if character is not None:
-        from world.magic.specialization.services import (  # noqa: PLC0415
-            gift_resonances_for,
-        )
-
-        resonances = gift_resonances_for(character, technique.gift)
-    else:
-        resonances = technique.gift.cached_resonances
-
-    # Ensure properties are prefetched onto each resonance.
-    property_ids: set[int] = set()
-    for resonance in resonances:
-        try:
-            props = resonance.cached_properties
-        except AttributeError:
-            props = list(resonance.properties.all())
-            resonance.cached_properties = props
-        property_ids.update(p.pk for p in props)
-    return frozenset(property_ids)
+    return frozenset(prop.pk for prop in technique.properties.all())
 
 
 def _get_technique_affinity(
@@ -1444,9 +1412,7 @@ def _build_clash_for_action(
     # either side has no authored effect properties, fall through (we're
     # in pre-Phase-1 content territory). Once seed content authors
     # Properties for production, the gate engages naturally.
-    pc_props = _technique_effect_property_ids(
-        technique, character=pc_action.participant.character_sheet.character
-    )
+    pc_props = _technique_effect_property_ids(technique)
     npc_props = frozenset(npc_action.threat_entry.effect_properties.values_list("pk", flat=True))
     if pc_props and npc_props and not can_clash(pc_props, npc_props):
         return None

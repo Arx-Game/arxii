@@ -32,7 +32,7 @@ How much damage a conjured wall on a `PositionEdge` can still take before it fal
 _Avoid_: wall HP, barrier health, hardness
 
 **Traversal** (#4607, slice 2 of #4576):
-How a mover crosses the position graph (`CreatureTraversal`: WALKS, CLIMBS, LEAPS, FLIES). A walker crosses only what the walker rule leaves open. A climber or leaper also crosses a wall that has a way past it (an active gating challenge) for one extra hop, and the two differ in narration only. A flier also uses the aerial layer, so it passes over any wall that does not block flight. A hard seal stops everyone on the ground. `edge_crossing_cost` turns an edge and a traversal into hops, and `find_path` routes over it. Staff set it on a creature template; it is not derived from tier.
+How a mover crosses the position graph (`CreatureTraversal`: WALKS, CLIMBS, LEAPS, FLIES, and for player characters only BLINKS and PHASES, #5019, #5066). A phaser crosses a wall whose gating challenge carries a Phase Through application's target property, at one hop. A walker crosses only what the walker rule leaves open. A climber or leaper also crosses a wall that has a way past it (an active gating challenge) for one extra hop, and the two differ in narration only. A flier also uses the aerial layer, so it passes over any wall that does not block flight. A hard seal stops everyone on the ground. `edge_crossing_cost` turns an edge and a traversal into hops, and `find_path` routes over it. Staff set it on a creature template; it is not derived from tier.
 _Avoid_: movement mode, locomotion, move type
 
 **Held ground** (#4663):
@@ -43,8 +43,8 @@ _Avoid_: blocked place, zone of control, chokepoint
 The roll a character with a matching capability makes to get past held ground (`attempt_pass`, `PassHeldGroundAction`, `position/pass <name>`) against the `MovementConfig.held_ground_challenge` template. Clean and partial both end in the held place with her hop spent (partial carries the template's authored consequence, which must target `self` to hit her); stopped ends there with no hops left. Distinct from getting past a wall's gating challenge, which opens an edge for everyone.
 _Avoid_: dodge, break through, slip past
 
-**Player traversal** (#4663):
-A player's `CreatureTraversal` set, read from her capabilities: WALKS always, plus each `CapabilityType.traversal` whose capability she holds above its `innate_baseline` (`player_traversals`). It replaces a staff-set creature field for players, so a flier from a species modifier and one from a technique move the same way. See **Traversal**.
+**Player traversal** (#4663, #5066):
+A player's `CreatureTraversal` set, read from the applications her sources match: WALKS always, plus the `way_of_moving` of each `Application` without `dodges` that one of her capability sources matches (`player_traversals`, `matched_movement`; see the mechanics glossary's **Application**). It replaces a staff-set creature field for players, so a flier from a species modifier and one from a technique move the same way. See **Traversal**.
 
 **Hop** (#4607):
 One step along a `PositionEdge`, the unit of movement on the battle map. Crossing a wall with a way past it costs a climber or leaper two hops, and taking off into the aerial layer or landing costs one.

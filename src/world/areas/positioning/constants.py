@@ -17,9 +17,12 @@ class CreatureTraversal(models.TextChoices):
     past it (an active gating challenge) at one extra hop; they differ in narration only.
     FLIES also uses the aerial layer, so it passes over walls that do not block flight.
     BLINKS crosses edges as a walker does, and on her turn its holder may also move
-    straight to any place her dodge with that capability could land (``reaction_reach``),
-    crossing no edge at all (#5019). Player characters only: a bestiary entry never blinks
-    (``NPC_TRAVERSAL_CHOICES``).
+    straight to any place her blink's strength reaches, crossing no edge at all (#5019,
+    #5066). PHASES crosses a wall whose gating challenge carries the target property of a
+    Phase Through application, at one hop, and nothing else a walker cannot (#5066).
+    Player characters only for BLINKS and PHASES: a bestiary entry never blinks or phases
+    (``NPC_TRAVERSAL_CHOICES``). A player character's ways of moving come from the
+    applications her capability sources match (``traversal.player_traversals``).
     """
 
     WALKS = "walks", "Walks"
@@ -27,36 +30,38 @@ class CreatureTraversal(models.TextChoices):
     LEAPS = "leaps", "Leaps"
     FLIES = "flies", "Flies"
     BLINKS = "blinks", "Blinks"
+    PHASES = "phases", "Phases"
 
 
-#: The ways of moving a bestiary entry may have: every one but BLINKS (#5019).
+#: Ways of moving only a player character's powers give (#5019, #5066).
+PLAYER_ONLY_TRAVERSALS = frozenset({CreatureTraversal.BLINKS, CreatureTraversal.PHASES})
+
+#: The ways of moving a bestiary entry may have: every one but BLINKS and PHASES.
 NPC_TRAVERSAL_CHOICES = [
     (value, label)
     for value, label in CreatureTraversal.choices
-    if value != CreatureTraversal.BLINKS
+    if value not in PLAYER_ONLY_TRAVERSALS
 ]
+
+#: Ways of moving that ignore edges within reach: a blink or a phase lands without
+#: walking there (#5066).
+EDGELESS_TRAVERSALS = PLAYER_ONLY_TRAVERSALS
 
 
 class ReactionReach(models.TextChoices):
-    """How far a capability lets its holder move when she dodges an attack (#4676).
+    """How far one use of a movement power may take her (#4676, #5066).
 
-    NONE gives no dodge. IN_PLACE dodges without moving. ADJACENT may land in a place
-    next to hers, ANY_PLACE anywhere in the room, AIRBORNE next door or in the air
-    above her place.
+    The strength of the use sets it, through the shared bands on ``MovementConfig``
+    (``reach_for_strength``): NONE gives no move, IN_PLACE stays put, ADJACENT reaches a
+    place next to hers, TWO_PLACES one more beyond, ANY_PLACE anywhere in the room. How
+    the places connect depends on the way of moving (``reachable_landings``).
     """
 
     NONE = "none", "No dodge"
     IN_PLACE = "in_place", "In place"
-    ADJACENT = "adjacent", "An adjacent place"
+    ADJACENT = "adjacent", "A neighbouring place"
+    TWO_PLACES = "two_places", "Two places away"
     ANY_PLACE = "any_place", "Any place in the room"
-    AIRBORNE = "airborne", "An adjacent place or the air above"
-
-
-class ReactionCostKind(models.TextChoices):
-    """What a dodge with this capability costs: anima, or fatigue for a physical one (#4676)."""
-
-    ANIMA = "anima", "Anima"
-    FATIGUE = "fatigue", "Fatigue"
 
 
 AERIAL_PROPERTY_NAME = "aerial"
@@ -148,6 +153,10 @@ BLINKED_PAID = "You blink to {place} for {cost}."
 BLINK_ROOM = "{name} blinks to {place}."
 BLINK_ENTRY = "Blink to {place}"
 BLINK_ENTRY_PAID = "Blink to {place} ({cost})"
+BLINK_SHORT = "Your blink falls short of {place}."
+BLINK_FAILED = "Your blink fails; you stay where you are ({cost})."
+BLINK_FAILED_FREE = "Your blink fails; you stay where you are."
+BLINK_CANNOT_CAST = "Your {name} cannot be cast."
 
 
 class RampartCrackState(models.TextChoices):

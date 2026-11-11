@@ -200,7 +200,7 @@ class CastingWithATechniqueSkill(JourneyCase):
 
         self.cast_and_read_the_roll(
             self.ysmay,
-            cast_pull=CastPullDeclaration(resonance=resonance, tier=1, threads=(thread,)),
+            cast_pull=CastPullDeclaration(tier=1, threads=(thread,)),
         )
 
         self.assertEqual(self.roll_modifiers - unpulled, 3)

@@ -1,7 +1,7 @@
 # ADR-4676: Reactions cost and escalate with no cap, and dodges read capabilities
 
 **Date:** 2026-10-25
-**Status:** Accepted
+**Status:** Accepted; superseded in part by ADR-5066 (dodges come from applications matched on each source's properties; a technique dodge is a cast of it; reach follows the roll's strength; non-technique dodges cost physical fatigue)
 **Issue:** #4676 (slice 4 of #4651)
 **Supersedes in part:** ADR-0161 (the one-reaction-per-round budget), ADR-4584-A (a standing
 guard spending "her one reaction"), and Phase Step's game-picked destination (ADR-0118).

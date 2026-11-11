@@ -150,9 +150,11 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute. The specialist-selection, sustained-action,
         # and protection-commitment surfaces add three bounded queries.
-        # The viewer's own dodge plan (#4676) adds one: her Phase Step ward (the
-        # capabilities that dodge come from the warmed cached_all()). Only her own row
-        # computes it, so it does not scale with the participant count.
+        # The viewer's own dodge plan (#4676, #5066) adds two: the applications that are
+        # about moving (her capability sources are read only when there is one) and her
+        # Phase Step ward. Her technique pick is read only when a technique of hers can
+        # dodge. Only her own row computes it, so it does not scale with the participant
+        # count.
         # The viewer's own Strike weapons (#4858) add one: the strike skills the attack
         # check types weight, read once for her own row only.
         # The viewer's own compulsion (#4802) adds one: the movement config the steady
@@ -160,7 +162,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         # only, so it does not scale with the participant count.
         # The roster's persona names (#4802) add two: the sheets' worn personas and the
         # persona rows, read once for every participant.
-        with self.assertNumQueries(21):
+        with self.assertNumQueries(22):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

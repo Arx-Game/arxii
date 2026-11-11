@@ -809,9 +809,7 @@ class CombatAndSpeciesRollSiteTests(ActivityTermTestCase):
         )
         CharacterResonanceFactory(character_sheet=servant, resonance=resonance, balance=20)
         wire_court_grant_petition_content()
-        declaration = CastPullDeclaration(
-            resonance=resonance, tier=1, threads=(thread,), beseech_bonus=8
-        )
+        declaration = CastPullDeclaration(tier=1, threads=(thread,), beseech_bonus=8)
 
         self.assert_terms_reach(
             "world.checks.services.perform_check",

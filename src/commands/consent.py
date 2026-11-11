@@ -52,7 +52,7 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
     calls. All consent logic stays in the service; this is a thin shell.
 
     Optionally accepts a thread-pull declaration (#1919):
-        <key> <character> [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]
+        <key> <character> [pull=<thread>[,…] [tier=<1-3>]]
 
     The ``pull=`` / ``resonance=`` / ``tier=`` tokens are stripped from the raw
     args before target-name resolution (same as ``cast``'s approach). The
@@ -63,7 +63,7 @@ class ConsentRequestCommand(PullParsingMixin, ArxCommand):
     the action's check (#4333); the invocation rolls when the target accepts.
 
     Usage:
-        <key> <character> [pull=<thread> resonance=<name> [tier=<1-3>]]
+        <key> <character> [pull=<thread>[,…] [tier=<1-3>]]
             [/invoke <being>[=<line>]]
     """
 

@@ -50,6 +50,8 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     resonance: 1,
     resonance_name: 'Bene',
     target_kind: 'FACET',
+    target_trait_id: null,
+    target_technique_id: null,
     name: 'Tidal Surge',
     description: '',
     level: 10,

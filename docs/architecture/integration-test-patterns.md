@@ -76,9 +76,10 @@ The technique grants two capabilities with different characteristics:
 
 ### Properties and Applications
 
-Effect properties are linked to Resonances via a direct M2M relationship
-(Resonance.properties). Each Resonance declares which Properties it carries.
-This was refactored from name-matching to M2M in PR #360.
+Resonances carry Properties via a direct M2M relationship (Resonance.properties),
+refactored from name-matching to M2M in PR #360. Since #5066 (ADR-5066) a technique's
+effect properties are its own `Technique.properties`, never its gift's resonances, so a
+builder that needs a technique to carry `flame` ticks it on the technique.
 
 | Property | Category | Purpose | Matches Resonance |
 |----------|----------|---------|-------------------|

@@ -188,6 +188,7 @@ from actions.definitions.distinctions import (
     SubmitSheetUpdateRequestAction,
 )
 from actions.definitions.divorce import InitiateDivorceAction
+from actions.definitions.dodge_settings import DodgeSettingsAction
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
@@ -510,6 +511,7 @@ from actions.definitions.room_features import (
     StartDefenseInstallationAction,
     StartRoomFeatureProjectAction,
 )
+from actions.definitions.round_pull import PullForTheRoundAction
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -912,6 +914,8 @@ _ALL_ACTIONS: list[Action] = [
     MarkAction(),
     DodgePlanAction(),
     SteadyPlanAction(),
+    DodgeSettingsAction(),
+    PullForTheRoundAction(),
     StandoffReadAction(),
     StandoffPressAction(),
     StandoffTermsAction(),

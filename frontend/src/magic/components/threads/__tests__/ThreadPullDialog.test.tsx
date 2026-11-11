@@ -1,6 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThreadPullDialog } from '../ThreadPullDialog';
+import { previewPull } from '../../../api';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,6 +14,7 @@ const mockThreads = {
       name: 'Bond of Flame',
       target_kind: 'FACET',
       resonance: 7,
+      resonance_name: 'Flamevein',
       owner: 12,
       retired_at: null,
       level: 5,
@@ -25,6 +27,48 @@ const mockThreads = {
       owner: 12,
       retired_at: null,
       level: 3,
+    },
+    {
+      id: 4,
+      name: 'Step Strand',
+      target_kind: 'TECHNIQUE',
+      target_technique_id: 41,
+      target_trait_id: null,
+      resonance: 7,
+      owner: 12,
+      retired_at: null,
+      level: 10,
+    },
+    {
+      id: 5,
+      name: 'Lash Strand',
+      target_kind: 'TECHNIQUE',
+      target_technique_id: 99,
+      target_trait_id: null,
+      resonance: 7,
+      owner: 12,
+      retired_at: null,
+      level: 10,
+    },
+    {
+      id: 6,
+      name: 'Tide Bond',
+      target_kind: 'FACET',
+      resonance: 9,
+      resonance_name: 'Tidecall',
+      owner: 12,
+      retired_at: null,
+      level: 4,
+    },
+    {
+      id: 7,
+      name: 'Stone Bond',
+      target_kind: 'FACET',
+      resonance: 8,
+      resonance_name: 'Stoneheart',
+      owner: 12,
+      retired_at: null,
+      level: 4,
     },
     {
       id: 3,
@@ -41,6 +85,7 @@ const mockThreads = {
 const mockResonances = [
   { resonance: 7, resonance_name: 'Flamevein', balance: 20, lifetime_earned: 100 },
   { resonance: 8, resonance_name: 'Stoneheart', balance: 0 }, // balance 0 — excluded
+  { resonance: 9, resonance_name: 'Tidecall', balance: 5 },
 ];
 
 vi.mock('../../../queries', () => ({
@@ -80,64 +125,79 @@ describe('ThreadPullDialog', () => {
     expect(screen.getByText('Pull Threads')).toBeInTheDocument();
   });
 
-  it('only shows resonances with balance > 0 and eligible threads', () => {
+  it('lists eligible threads of every resonance with a balance, no resonance to pick', () => {
     render(<ThreadPullDialog {...defaultProps} />);
-    // Flamevein has balance 20 and eligible FACET thread → shown
-    expect(screen.getByTestId('resonance-btn-7')).toBeInTheDocument();
-    // Stoneheart has balance 0 → not shown
-    expect(screen.queryByTestId('resonance-btn-8')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('resonance-selector')).not.toBeInTheDocument();
+    expect(screen.getByTestId('thread-checkbox-1')).toHaveTextContent('Flamevein');
+    expect(screen.getByTestId('thread-checkbox-6')).toHaveTextContent('Tidecall');
+    // Stoneheart has balance 0: its thread is not offered.
+    expect(screen.queryByTestId('thread-checkbox-7')).not.toBeInTheDocument();
   });
 
-  it('TRAIT thread not shown for always-in-action filter (no combat prop)', async () => {
+  it('TRAIT thread not shown for always-in-action filter (no combat prop)', () => {
     render(<ThreadPullDialog {...defaultProps} />);
-    fireEvent.click(screen.getByTestId('resonance-btn-7'));
-    // Thread #1 (FACET) shown; Thread #2 (TRAIT) not in ALWAYS_IN_ACTION_KINDS
-    await waitFor(() => {
-      expect(screen.getByTestId('thread-checkbox-1')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('thread-checkbox-1')).toBeInTheDocument();
     expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
   });
 
-  it('calls onSelect with resonance/tier/thread_ids when Select Pull is clicked', async () => {
+  it('in combat, offers a technique thread only when its technique is involved (#5066)', () => {
+    render(
+      <ThreadPullDialog
+        {...defaultProps}
+        combat={{
+          encounterId: 1,
+          participantId: 1,
+          involvedTraitIds: [],
+          involvedTechniqueIds: [41],
+        }}
+      />
+    );
+    expect(screen.getByTestId('thread-checkbox-4')).toBeInTheDocument();
+    expect(screen.queryByTestId('thread-checkbox-5')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
+  });
+
+  it('selects threads of two resonances in one pull (#5066)', async () => {
     const onSelect = vi.fn();
     const onClose = vi.fn();
     render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} onClose={onClose} />);
 
-    fireEvent.click(screen.getByTestId('resonance-btn-7'));
-    await waitFor(() => screen.getByTestId('thread-checkbox-1'));
-    fireEvent.click(screen.getByTestId('thread-checkbox-1'));
+    fireEvent.click(within(screen.getByTestId('thread-checkbox-1')).getByRole('checkbox'));
+    fireEvent.click(within(screen.getByTestId('thread-checkbox-6')).getByRole('checkbox'));
 
-    // Wait for preview to resolve and button to be enabled
     await waitFor(() => {
       expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled();
+    });
+    expect(previewPull).toHaveBeenLastCalledWith({
+      character_sheet_id: 12,
+      tier: 1,
+      thread_ids: [1, 6],
     });
 
     fireEvent.click(screen.getByTestId('commit-pull-btn'));
 
     expect(onSelect).toHaveBeenCalledWith({
-      resonance_id: 7,
       tier: 1,
-      thread_ids: [1],
+      thread_ids: [1, 6],
+      resonances: [
+        { id: 7, name: 'Flamevein' },
+        { id: 9, name: 'Tidecall' },
+      ],
     });
     expect(onClose).toHaveBeenCalled();
   });
 
   it('retired threads are never shown', () => {
     render(<ThreadPullDialog {...defaultProps} />);
-    fireEvent.click(screen.getByTestId('resonance-btn-7'));
     expect(screen.queryByTestId('thread-checkbox-3')).not.toBeInTheDocument();
   });
 
-  it('commit button disabled until resonance + thread selected and affordable', async () => {
+  it('commit button disabled until a thread is selected and affordable', async () => {
     render(<ThreadPullDialog {...defaultProps} />);
-    const commitBtn = screen.getByTestId('commit-pull-btn');
-    expect(commitBtn).toBeDisabled();
+    expect(screen.getByTestId('commit-pull-btn')).toBeDisabled();
 
-    fireEvent.click(screen.getByTestId('resonance-btn-7'));
-    await waitFor(() => screen.getByTestId('thread-checkbox-1'));
-    fireEvent.click(screen.getByTestId('thread-checkbox-1'));
+    fireEvent.click(within(screen.getByTestId('thread-checkbox-1')).getByRole('checkbox'));
 
-    // After preview resolves (affordable: true), button should be enabled
     await waitFor(() => {
       expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled();
     });

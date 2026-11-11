@@ -83,6 +83,38 @@ _Avoid_: explosive, detonatable (prefer "volatile" as the canonical adjective), 
 A way to resolve a challenge (`ChallengeApproach`), connecting what a character can do (an `Application`) with how it is rolled (a `CheckType`) for a specific challenge template, optionally gated by a required effect property.
 _Avoid_: method, tactic, option, resolution path
 
+**Application** (way of moving, dodges; #5066, ADR-5066):
+What a capability means in a given spot: a capability, a target property and an optional
+required effect property. Since #5066 an application also says what it means for moving:
+`way_of_moving` (a `CreatureTraversal`: a matching source moves that way on her turn) and
+`dodges` (a matching source dodges attacks automatically, landing by that way). A null
+`target_property` means "anywhere she moves" (Evade, Blink, Fly) and is never a challenge
+approach (`ChallengeApproach.clean` refuses it); a set one means only where the thing crossed
+carries it (Phase Through against `solid`). A source **matches** an application when it raises
+the application's capability above its innate baseline and carries the required effect property
+(`source_matches_application`). _Avoid_: movement mode, blink capability (a blink is `traversal`
+from a source marked `teleport`).
+
+**Movement source** (#5066):
+One of her capability sources paired with one movement application it matches
+(`MovementSource`, `world/areas/positioning/traversal.py`; `matched_movement`). A technique's
+marks are its own `Technique.properties`, a condition's are its template's and current stage's
+properties; trained ability, species and distinctions carry none. _Avoid_: movement capability.
+
+**Strength** (of a movement use, #5066):
+How strong one use of a movement power is: for a technique source, its grant's value at the
+cast's power scaled by the cast roll's success level (`scaled_strength`; a failure gives none);
+for any other source, its value. A dodge adds it to her defense roll; it sets the use's
+**reach band**. It lasts only that use and never raises the standing capability (ADR-0248).
+_Avoid_: capability value (that is the standing number), power (the cast's ledger figure).
+
+**Reach band** (#5066):
+How far one movement use may take her, from its strength through the one shared set of
+`MovementConfig` thresholds (`reach_for_strength`): in place, a neighbouring place
+(`reach_neighbour_at`), two places away (`reach_two_places_at`) or anywhere in the room
+(`reach_anywhere_at`). The same bands for every power, dodge landing and turn move alike.
+_Avoid_: dodge reach, `reaction_reach` (the removed per-capability setting).
+
 **World-interaction template** (#2503):
 A `ChallengeTemplate` wired onto an `Application.default_template` — the curated,
 authored resolution content (approaches, check type, consequence pool) a bare-object

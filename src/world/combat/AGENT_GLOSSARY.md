@@ -144,25 +144,34 @@ A declined guardian is told privately why (#3574, ADR-0271); the table is not.
 _Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
 budget, not a general action-point system).
 
-**Dodge** (#4676, ADR-4676):
-A character's automatic reaction to an NPC attack, from a capability whose
-`CapabilityType.reaction_reach` is not `none` (or a Phase Step ward). It is her defense roll
-with that capability's value as a bonus, costs anima or physical fatigue
-(`reaction_cost_kind`), and is harder by one `reaction_difficulty_step` per reaction already
-made this round. A dodge that at least partly succeeds may move her (her **Dodge plan**).
+**Dodge** (#4676, ADR-4676, ADR-5066):
+A character's automatic reaction to an NPC attack, from a capability source that matches an
+`Application` with `dodges` set (or a Phase Step ward). It is her defense roll with the dodge's
+**strength** as a bonus, harder by one `reaction_difficulty_step` per reaction already made this
+round. With a technique source each dodge is a cast of that technique (its anima through the
+deficit and Soulfray path, its check, its power and related pulls; the roll sets the strength);
+any other source costs physical fatigue and its value is the strength. A dodge that at least
+partly succeeds may move her (her **Dodge plan**), as far as the strength reaches.
 _Avoid_: evade (the defense check itself), blink (one way of dodging), parry.
 
-**Turn blink** (#5019, ADR-5019):
-Moving on her own turn with a capability whose `traversal` is Blinks: straight to any place her
-dodge with that capability could land, crossing no edge. One hop plus one dodge's cost in a fight,
-free outside; not a reaction. The same capability is her blink dodge.
+**Turn blink** (#5019, ADR-5019, ADR-5066):
+Moving on her own turn with a source that matches an application whose `way_of_moving` is
+Blinks: straight to a place the blink reaches, crossing no edge. One use of that source (a cast
+of its technique, in a fight or out of one, whose roll sets the reach; else physical fatigue in a
+fight), plus one hop in a fight; not a reaction. A technique marked `teleport` that grants
+`traversal` usually reaches both a blink and a blink dodge.
 _Avoid_: teleport move, blink mode (a technique has no modes), Phase Jump (a cast that spends her
 action).
 
-**Dodge plan** (#4676):
+**Dodge plan** (#4676, #5066):
 `CombatParticipant.dodge_enabled` and `dodge_landing`, set while declaring (`combat_dodge`):
-dodge in place, land in a place her reach covers, or do not dodge. Private to her; reset each
-round. _Avoid_: dodge target, escape route.
+dodge in place, land in a place one of her dodge sources reaches, or do not dodge; reset each
+round. Beside it stand her **dodge settings** for the whole fight (`dodge_settings`):
+`dodge_technique` (which technique answers; unset falls back to her saved
+`CharacterTechnique.default_dodge`, then her strongest source), `dodge_into_soulfray` (keep
+dodging when the cast would overspend into Soulfray; the turn's Soulfray check-in asks it), and
+`auto_pull_defense` with its saved `defense_pull_tier` (the automatic defensive pull, of
+every related thread of any resonance). Private to her. _Avoid_: dodge target, escape route.
 
 **Area attack** (#4676):
 An NPC attack whose `ThreatPoolEntry.covers_place` is set: it hits everyone standing in its
@@ -274,6 +283,7 @@ _Avoid_: push, overcharge, effort (effort modifies the roll; strain scales power
 
 **CombatPull**:
 A per-(participant, round) commit envelope capturing the resonance, tier, and threads a participant spends on a thread pull during combat. Resolved effects are snapshotted so mid-round authoring edits cannot retroactively change a committed pull.
+It lasts the round and boosts only the uses its threads relate to, each cast, clash, dodge or blink matched on its own (`round_pull_bonus`, #5067, #5066). It is declared with a cast or clash, on its own (`combat_pull`), or committed by the automatic defensive pull (`auto_pull_for_defense`).
 _Avoid_: thread pull (the in-combat record specifically), draw
 
 **ThreatPool**:

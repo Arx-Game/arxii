@@ -21,7 +21,11 @@ from commands.utils.gm_resolution import resolve_account_or_none
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
 from world.areas.positioning.constants import (
+    BLINK_CANNOT_CAST,
+    BLINK_FAILED,
+    BLINK_FAILED_FREE,
     BLINK_ROOM,
+    BLINK_SHORT,
     BLINKED,
     BLINKED_PAID,
     STUNT_CANT_FROM_HERE,
@@ -43,6 +47,7 @@ from world.areas.positioning.models import (
 )
 from world.areas.positioning.services import (
     attach_feature,
+    blink_landings,
     blink_to_position,
     check_move_to_position,
     detach_feature,
@@ -61,9 +66,12 @@ from world.areas.positioning.services import (
 )
 from world.areas.positioning.stunts import perform_stunt
 from world.areas.positioning.traversal import (
+    MovementSource,
     best_crossing_cost,
-    blink_capability_to,
+    cheapest_crossing,
+    reach_for_strength,
     traversals_of,
+    turn_movement_sources,
 )
 from world.combat.constants import (
     HELD_GROUND_GOT_PAST,
@@ -82,14 +90,13 @@ from world.combat.services.movement_budget import (
     hops_left,
     spend_combat_hop,
 )
-from world.combat.services.reactions import capability_use_cost, spend_capability_use
+from world.combat.services.movement_use import MovementUse, use_movement_source
 from world.gm.constants import GMLevel
 from world.mechanics.models import ChallengeApproach
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.combat.models import CombatParticipant
-    from world.conditions.models import CapabilityType
 
 STOPPED_BY_HOLDER = "You are stopped by {name}."
 _ERR_SQUARE_PAIR = "Pick a square with both coordinates."
@@ -178,10 +185,9 @@ class MoveToPositionAction(Action):
 
         # Read before the move: a mover's own place never counts as held against her.
         held = held_position_ids_against(actor) if participant is not None else frozenset()
-        try:
-            move_to_position(actor, target, traversals=traversals, square=square)
-        except PositionError as exc:
-            return ActionResult(success=False, message=exc.user_message)
+        refused = _commit_step(actor, target, traversals, square)
+        if refused is not None:
+            return refused
 
         # The prerequisite let a DECLARING-round move through; it now costs its hops.
         message = None
@@ -196,6 +202,26 @@ class MoveToPositionAction(Action):
         return ActionResult(success=True, message=message)
 
 
+def _commit_step(
+    actor: ObjectDB,
+    target: Position,
+    traversals: frozenset[str],
+    square: tuple[int, int] | None,
+) -> ActionResult | None:
+    """Make the step and pay for a wall only a power crosses; a refusal, or None when done."""
+    try:
+        with transaction.atomic():
+            origin = position_of(actor)
+            move_to_position(actor, target, traversals=traversals, square=square)
+            refusal = _pay_for_crossing(actor, origin, target, traversals)
+            if refusal is not None:
+                transaction.set_rollback(True)
+                return ActionResult(success=False, message=refusal)
+    except PositionError as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    return None
+
+
 def _unwalkable_step(
     actor: ObjectDB,
     target: Position,
@@ -203,7 +229,7 @@ def _unwalkable_step(
     square: tuple[int, int] | None,
     context: ActionContext | None,
 ) -> ActionResult | None:
-    """None when she can walk (or climb, leap, fly) to ``target``; else blink or refuse.
+    """None when she can walk (or climb, leap, fly, phase) to ``target``; else blink or refuse.
 
     Walking wins wherever it reaches. A place walking cannot reach this step may be one
     her blink reaches (#5019); otherwise the walk's refusal is the answer.
@@ -212,53 +238,151 @@ def _unwalkable_step(
         check_move_to_position(actor, target, traversals=traversals)
     except PositionTransitionError as refusal:
         blinks = CreatureTraversal.BLINKS in traversals
-        blink = blink_capability_to(actor, target) if blinks else None
+        blink = blink_source_to(actor, target) if blinks else None
         if blink is None:
             return ActionResult(success=False, message=refusal.user_message)
         return _blink(actor, target, blink, square, context)
     return None
 
 
+def blink_source_to(actor: ObjectDB, target: Position) -> MovementSource | None:
+    """Her strongest blink source whose standing reach lands on ``target``, or None (#5066)."""
+    for movement in turn_movement_sources(actor, CreatureTraversal.BLINKS):
+        reach = reach_for_strength(movement.standing_strength)
+        if target in blink_landings(actor, reach):
+            return movement
+    return None
+
+
+def _nearest_landing(actor: ObjectDB, target: Position, reach: str) -> Position | None:
+    """The place within ``reach`` of her blink nearest ``target`` (``target`` itself when
+    reached), counting steps across any edge; None when she reaches nowhere."""
+    from collections import deque  # noqa: PLC0415
+
+    from world.areas.positioning.models import PositionEdge  # noqa: PLC0415
+
+    landings = {p.pk: p for p in blink_landings(actor, reach)}
+    if not landings:
+        return None
+    if target.pk in landings:
+        return target
+    neighbours: dict[int, list[int]] = {}
+    for a_id, b_id in PositionEdge.objects.filter(position_a__room_id=target.room_id).values_list(
+        "position_a_id", "position_b_id"
+    ):
+        neighbours.setdefault(a_id, []).append(b_id)
+        neighbours.setdefault(b_id, []).append(a_id)
+    seen = {target.pk}
+    frontier = deque([target.pk])
+    while frontier:
+        here = frontier.popleft()
+        for other in sorted(neighbours.get(here, [])):
+            if other in seen:
+                continue
+            if other in landings:
+                return landings[other]
+            seen.add(other)
+            frontier.append(other)
+    return None
+
+
 def _blink(
     actor: ObjectDB,
     target: Position,
-    capability: CapabilityType,
+    movement: MovementSource,
     square: tuple[int, int] | None,
     context: ActionContext | None,
 ) -> ActionResult:
-    """Blink straight to ``target`` with ``capability`` (#5019).
+    """Blink toward ``target`` with ``movement`` (#5019, #5066).
 
-    In a declaring round it costs one hop and one use of the capability (a dodge's cost:
-    anima, or fatigue for a physical one); it is not a reaction, so later dodges this round
-    are no harder. Too little anima never stops her: the charge runs through the cast's
-    anima-and-Soulfray path (``spend_capability_use``, owner ruling 2026-11-08). Landing in
-    held ground stops her there. Outside a fight it is free.
+    Each blink is one use of its source (``use_movement_source``): with a technique it is a
+    cast of it, in a fight or out of one (out of a fight her control usually makes it
+    free; intensity brings the cost back), and the roll's strength sets how far she
+    reaches. She lands on her choice when it is within reach, else at the reachable place
+    nearest it; a failed roll leaves her where she is, paid. Anything else costs physical
+    fatigue in a fight. In a declaring round it also costs one hop; it is not a reaction.
+    Too little anima never stops her: the cast overspends into Soulfray. Landing in held
+    ground stops her there.
     """
     participant = _declaring_participant(actor)
-    sheet = actor.sheet_data
-    cost_kind = capability.reaction_cost_kind
-    cost = capability_use_cost(cost_kind)
+    lethal = participant.encounter.is_lethal if participant is not None else False
     # Read before the move: her own place never counts as held against her.
     held = held_position_ids_against(actor) if participant is not None else frozenset()
     try:
-        # The move, the payment, the hop and the held-ground stop land together.
         with transaction.atomic():
-            blink_to_position(actor, target, reach=capability.reaction_reach, square=square)
-            message = BLINKED.format(place=target.name)
+            use = use_movement_source(actor, movement, participant=participant, lethal=lethal)
+            if not use.went_off:
+                refusal = BLINK_CANNOT_CAST.format(name=movement.name)
+                return ActionResult(success=False, message=refusal)
+            cost = _use_cost_text(use)
+            landing = _nearest_landing(actor, target, use.reach)
             if participant is not None:
-                spend_capability_use(sheet, cost_kind, lethal=participant.encounter.is_lethal)
                 spend_combat_hop(participant)
-                message = BLINKED_PAID.format(place=target.name, cost=cost)
-                stopped = _stop_in_held_ground(actor, participant, target, held)
+            if landing is None:
+                message = BLINK_FAILED.format(cost=cost) if cost else BLINK_FAILED_FREE
+                return ActionResult(success=True, message=message)
+            blink_to_position(
+                actor,
+                landing,
+                reach=use.reach,
+                square=square if landing.pk == target.pk else None,
+            )
+            message = (
+                BLINKED_PAID.format(place=landing.name, cost=cost)
+                if cost
+                else BLINKED.format(place=landing.name)
+            )
+            if landing.pk != target.pk:
+                message = f"{message} {BLINK_SHORT.format(place=target.name)}"
+            if participant is not None:
+                stopped = _stop_in_held_ground(actor, participant, landing, held)
                 if stopped:
                     message = f"{message} {stopped}"
     except PositionError as exc:
         return ActionResult(success=False, message=exc.user_message)
 
-    _narrate_blink(actor, target)
+    _narrate_blink(actor, landing)
     sdm = context.scene_data if context else SceneDataManager()
     send_room_state(sdm.initialize_state_for_object(actor))
     return ActionResult(success=True, message=message)
+
+
+def _use_cost_text(use: MovementUse) -> str:
+    """What a use cost, for her message: "4 anima", "1 fatigue", or "" when free."""
+    if use.anima_paid:
+        return f"{use.anima_paid} anima"
+    if use.fatigue_paid:
+        return f"{use.fatigue_paid} fatigue"
+    return ""
+
+
+def _pay_for_crossing(
+    actor: ObjectDB,
+    current: Position | None,
+    target: Position,
+    traversals: frozenset[str],
+) -> str | None:
+    """Pay for a step only a power makes: a wall crossed by climbing, leaping or phasing.
+
+    One use of the source that gives the way of moving (#5066): a technique's cast, else
+    physical fatigue in a fight. None when the step needed no power or was paid; a
+    refusal line when a technique source could not be cast.
+    """
+    edge = edge_between(current, target) if current is not None else None
+    if edge is None or not edge_blocks_crossing(edge):
+        return None
+    crossing = cheapest_crossing(edge, traversals)
+    if crossing is None:
+        return None
+    sources = turn_movement_sources(actor, crossing[1])
+    if not sources:
+        return None
+    participant = _declaring_participant(actor)
+    lethal = participant.encounter.is_lethal if participant is not None else False
+    use = use_movement_source(actor, sources[0], participant=participant, lethal=lethal)
+    if not use.went_off:
+        return BLINK_CANNOT_CAST.format(name=sources[0].name)
+    return None
 
 
 def _narrate_blink(actor: ObjectDB, target: Position) -> None:
@@ -573,8 +697,23 @@ class TakeFlightAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        sources = turn_movement_sources(actor, CreatureTraversal.FLIES)
+        participant = _declaring_participant(actor)
+        lethal = participant.encounter.is_lethal if participant is not None else False
         try:
-            enter_aerial(actor)
+            with transaction.atomic():
+                enter_aerial(actor)
+                # Taking off is one use of her flight (#5066): a technique's cast, else
+                # physical fatigue in a fight. Flying from place to place after is free.
+                if sources:
+                    use = use_movement_source(
+                        actor, sources[0], participant=participant, lethal=lethal
+                    )
+                    if not use.went_off:
+                        transaction.set_rollback(True)
+                        return ActionResult(
+                            success=False, message=BLINK_CANNOT_CAST.format(name=sources[0].name)
+                        )
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
         _spend_one_hop(actor)

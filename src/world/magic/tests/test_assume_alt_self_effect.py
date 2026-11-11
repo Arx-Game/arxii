@@ -153,7 +153,6 @@ class AssumeAlternateSelfEffectTests(TestCase):
             total_points=0,
         )
         cast_pull = CastPullDeclaration(
-            resonance=self.resonance,
             tier=1,
             threads=(self.thread,),
         )

@@ -105,17 +105,18 @@ def check_resonance_focus(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - rolls, conditions and messages take the character
     technique: Technique,
     *,
-    pulled_resonance: Resonance | None = None,
+    pulled_resonances: tuple[Resonance, ...] = (),
 ) -> FocusOutcome | None:
     """Roll the caster's focus against her carried drift, once per cast.
 
     ``use_technique`` calls it for every cast, after anima is deducted and before
     ``resolve_fn`` gathers the cast's check modifiers, so a condition applied here
     reaches the same cast's roll. A pull is part of its cast, not a roll of its own:
-    ``pulled_resonance`` is the resonance this cast pulls, which the caller names
-    (the declared cast pull's, or the combat round's committed pull); None means
-    the cast pulls nothing. Working it outside her dominant affinity adds
-    ``off_aura_pull_steps``.
+    ``pulled_resonances`` are the resonances this cast pulls, which the caller names
+    (the declared cast pull's threads', or the combat round's committed pull's); empty
+    means the cast pulls nothing. Working any of them outside her dominant affinity adds
+    ``off_aura_pull_steps`` (once; a pull may mix resonances since #5066, maintainer
+    ruling 2026-11-11).
 
     Returns None, rolling nothing, when the config's focus check type or conflict
     condition is unset (the Required content dashboard lists both) or when there are
@@ -143,10 +144,7 @@ def check_resonance_focus(
     if reading.dominant_affinity is None:
         return None
     steps = reading.steps_past
-    if (
-        pulled_resonance is not None
-        and pulled_resonance.affinity_id != reading.dominant_affinity.pk
-    ):
+    if any(r.affinity_id != reading.dominant_affinity.pk for r in pulled_resonances):
         steps += cfg.off_aura_pull_steps
     if steps <= 0:
         return None

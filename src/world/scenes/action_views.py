@@ -72,14 +72,13 @@ def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | No
     """Build a CastPullDeclaration from validated serializer data (#1919).
 
     Returns None when no pull was declared. The serializer's validate() step
-    already resolved the resonance + threads instances and attached them to
+    already resolved the thread instances and attached them to
     the pull dict; this helper just wraps them into the in-memory dataclass.
     """
     pull_data = validated_data.get("pull")
     if not pull_data:
         return None
     return CastPullDeclaration(
-        resonance=pull_data["resonance"],
         tier=pull_data["tier"],
         threads=tuple(pull_data["threads"]),
     )
@@ -757,10 +756,10 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
             cast_pull = CastPullDeclaration(
-                resonance=pull_data["resonance"],
                 tier=pull_data["tier"],
                 threads=tuple(pull_data["threads"]),
                 burn=pull_data.get("burn", 0),
+                burn_resonance=pull_data.get("burn_resonance"),
             )
 
         try:

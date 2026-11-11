@@ -30,7 +30,7 @@ Routes through the COMBAT backend, wiring the resolved ``Clash.pk`` as
 ``_dispatch_clash_contribution`` which calls ``declare_clash_contribution``.
 
 Syntax: ``clash <opponent> with <technique> [strain=<n>]``
-         ``[pull=<thread>[,…] resonance=<name> [tier=N] [beseech=N]]``
+         ``[pull=<thread>[,…] [tier=N] [beseech=N]]``
 
 The optional pull keywords are parsed by the same mixin helpers used by
 ``CmdDeclareTechnique`` — no duplicate implementation.  When present, a
@@ -87,7 +87,7 @@ _POSITION_PAIR_PREFIX = "position_a="
 # Usage hint for the clash command (shared across three error sites in _parse_args).
 _CLASH_USAGE = (
     "Usage: clash <opponent> with <technique> [strain=<n>]"
-    " [pull=<thread> resonance=<name> [tier=N] [beseech=N] [burn=N]]"
+    " [pull=<thread>[,…] [tier=N] [beseech=N] [burn=N [resonance=<name>]]]"
 )
 
 # Mapping from ActionCategory to the corresponding passive CombatActionSlot.
@@ -224,8 +224,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     cast, a one-way choice: it can only remove concealment a subtle style
     already imposes, never add concealment to an overt one.
 
-    With a thread pull (``pull=<thread> resonance=<name>``), ``burn=<n>`` burns
-    that much resonance from it on top of any ``strain=<n>`` to push harder.
+    With a thread pull (``pull=<thread>[,…]``; the threads may be of any resonances,
+    each paid from its own), ``burn=<n>`` burns that much resonance on top of any
+    ``strain=<n>`` to push harder; on a pull of several resonances ``resonance=<name>``
+    says which one burns.
 
     Use ``fury=<tier> anchor=<name>`` to surrender control for intensity: the tier
     (by name or depth) is how much control you surrender for the rest of the fight,
@@ -1085,7 +1087,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
 
     Usage:
         clash <opponent> with <technique> [strain=<n>]
-            [pull=<thread>[,…] resonance=<name> [tier=N] [beseech=N] [burn=N]]
+            [pull=<thread>[,…] [tier=N] [beseech=N] [burn=N [resonance=<name>]]]
 
     ``burn=N`` (with a pull) burns resonance from the pulled thread to push harder.
 
@@ -1137,8 +1139,8 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
             raise CommandError(_CLASH_USAGE)
 
         # Strip pull=<threads>, resonance=<name>, tier=<1-3>, beseech=<n> FIRST —
-        # order-independent. _extract_pull_keywords also validates tier range and
-        # pull+resonance pairing.
+        # order-independent. _extract_pull_keywords also validates the tier range;
+        # resonance= only names the resonance a burn on a mixed pull comes from (#5066).
         raw, pull_thread_str, resonance_str, pull_tier, beseech_bonus = self._extract_pull_keywords(
             raw
         )

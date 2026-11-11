@@ -99,6 +99,7 @@ from world.mechanics.factories import (
     ChallengeTemplateFactory,
     CharacterEngagementFactory,
     ModifierCategoryFactory,
+    MovementApplicationFactory,
 )
 from world.mechanics.models import (
     ChallengeInstance,
@@ -160,11 +161,13 @@ class _TheCauseway(JourneyCase):
             ensure_foundational_capabilities()
         AerialPropertyFactory()
         OpponentTierTemplateFactory(tier=OpponentTier.MOOK, base_health=30, base_soak=0)
-        self.flight = CapabilityTypeFactory(
-            name="winged flight", innate_baseline=0, traversal=CreatureTraversal.FLIES
+        self.flight = CapabilityTypeFactory(name="winged flight", innate_baseline=0)
+        MovementApplicationFactory(
+            name="Fly", capability=self.flight, way_of_moving=CreatureTraversal.FLIES
         )
-        self.climbing = CapabilityTypeFactory(
-            name="climbing", innate_baseline=0, traversal=CreatureTraversal.CLIMBS
+        self.climbing = CapabilityTypeFactory(name="climbing", innate_baseline=0)
+        MovementApplicationFactory(
+            name="Climb", capability=self.climbing, way_of_moving=CreatureTraversal.CLIMBS
         )
         self.room = self.make_room("The Causeway")
         self.lane = PositionFactory(room=self.room, name="Lane")

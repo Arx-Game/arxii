@@ -50369,8 +50369,6 @@ components:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
       properties:
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -50381,7 +50379,6 @@ components:
             type: integer
           maxItems: 20
       required:
-      - resonance_id
       - thread_ids
       - tier
     CastPullWithBurnRequestRequest:
@@ -50391,8 +50388,6 @@ components:
 
         The burn lives inside the pull, so a burn without a pull cannot be sent.
       properties:
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -50407,8 +50402,12 @@ components:
           maximum: 2147483647
           minimum: 0
           default: 0
+        burn_resonance_id:
+          type: integer
+          nullable: true
+          description: Which pulled resonance the burn comes from (#5066); needed
+            only when the pull's threads mix resonances.
       required:
-      - resonance_id
       - thread_ids
       - tier
     CastableTechnique:
@@ -56487,8 +56486,8 @@ components:
       - name
     DodgePlan:
       type: object
-      description: Schema-only shape of the viewer's own dodge plan (#4676). Private
-        to its owner.
+      description: 'Schema-only shape of the viewer''s own dodge plan (#4676, #5066).
+        Private to its owner.'
       properties:
         enabled:
           type: boolean
@@ -56501,11 +56500,59 @@ components:
             $ref: '#/components/schemas/DodgeLanding'
         cost_line:
           type: string
+        techniques:
+          type: array
+          items:
+            $ref: '#/components/schemas/DodgeTechnique'
+        technique_id:
+          type: integer
+          nullable: true
+          description: The technique answering her dodges this fight, if any.
+        into_soulfray:
+          type: boolean
+          description: Keep dodging when a dodge's cast would overspend into Soulfray.
+        auto_pull:
+          type: boolean
+          description: Pull threads for defense when attacked.
+        auto_pull_tier:
+          type: integer
+          nullable: true
+        soulfray_check_in:
+          allOf:
+          - $ref: '#/components/schemas/SoulfrayWarning'
+          nullable: true
+          description: 'Her Soulfray stage when her technique dodges would cast into
+            it: the turn''s check-in to keep or stop dodging into Soulfray (#5066).'
       required:
+      - auto_pull
+      - auto_pull_tier
       - cost_line
       - enabled
+      - into_soulfray
       - landing_id
       - options
+      - soulfray_check_in
+      - technique_id
+      - techniques
+    DodgeTechnique:
+      type: object
+      description: One technique of hers that can answer her dodges (#5066).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cost_line:
+          type: string
+          description: What one dodge with it costs now.
+        is_default:
+          type: boolean
+          description: Her saved default for every fight.
+      required:
+      - cost_line
+      - id
+      - is_default
+      - name
     DomainEnum:
       enum:
       - BEAST
@@ -96955,6 +97002,14 @@ components:
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
             * `ORGANIZATION` - Organization
+        target_trait_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        target_technique_id:
+          type: integer
+          readOnly: true
+          nullable: true
         name:
           type: string
           default: ''
@@ -97009,6 +97064,8 @@ components:
       - resonance_name
       - retired_at
       - target_kind
+      - target_technique_id
+      - target_trait_id
       - updated_at
     ThreadApplicability:
       type: object
@@ -97083,8 +97140,6 @@ components:
       properties:
         character_sheet_id:
           type: integer
-        resonance_id:
-          type: integer
         tier:
           type: integer
           maximum: 3
@@ -97093,6 +97148,9 @@ components:
           type: array
           items:
             type: integer
+        burn_resonance_id:
+          type: integer
+          nullable: true
         action_context:
           $ref: '#/components/schemas/PullActionContextRequest'
         scene_id:
@@ -97106,7 +97164,6 @@ components:
           nullable: true
       required:
       - character_sheet_id
-      - resonance_id
       - thread_ids
       - tier
     ThreadPullPreviewResponse:

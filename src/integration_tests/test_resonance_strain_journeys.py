@@ -754,7 +754,7 @@ class BurningResonanceInCombat(_BurningResonance):
         again = self.dispatch(ysmay, self.focused_ref(), self.focused_kwargs(thread, pull_burn=6))
 
         self.assertEqual(again.status_code, 200, again.data)
-        self.assertEqual(CombatPull.objects.filter(resonance=resonance).count(), 1)
+        self.assertEqual(CombatPull.objects.filter(threads__resonance=resonance).count(), 1)
         self.assertEqual(self.balance(ysmay, resonance), 10 - 1 - 4)
         self.assertEqual(self.said(ysmay).count("You burn 4 of 6"), 1)
 

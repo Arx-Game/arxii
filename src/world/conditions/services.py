@@ -84,6 +84,7 @@ from world.conditions.types import (
     CapabilityStatus,
     CheckModifierResult,
     ChronicTickSummary,
+    ConditionCapabilityContribution,
     ConditionStageAdvanceCheckPayload,
     DamageInteractionResult,
     DecayTickSummary,
@@ -2855,95 +2856,126 @@ def get_effective_capability_value(
     )
 
 
+def condition_capability_contributions(
+    character_sheet: "CharacterSheet",
+) -> list[ConditionCapabilityContribution]:
+    """What each active condition adds to each capability, with its marks (#5066).
+
+    One entry per (condition instance, capability), its effects summed and scaled by
+    severity or stage as ``get_capability_status`` does, carrying the template's and
+    current stage's properties. The availability oracle turns each into its own
+    ``CapabilitySource`` so a condition reaches an application by what it carries.
+    Batched: one query for the effects, one for each properties table.
+    """
+    target = character_sheet.character
+    active_instances = list(get_active_conditions(target))
+    if not active_instances:
+        return []
+    condition_ids = [i.condition_id for i in active_instances]
+    query = Q(condition_id__in=condition_ids)
+    stage_ids = [i.current_stage_id for i in active_instances if i.current_stage_id]
+    if stage_ids:
+        query |= Q(stage_id__in=stage_ids)
+    effects = ConditionCapabilityEffect.objects.filter(query)
+    instance_by_condition: dict[int, ConditionInstance] = {
+        i.condition_id: i for i in active_instances
+    }
+    instance_by_stage: dict[int, ConditionInstance] = {
+        i.current_stage_id: i for i in active_instances if i.current_stage_id
+    }
+    values: dict[tuple[int, int], int] = {}
+    for effect in effects:
+        instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
+            effect.stage_id
+        )
+        if not instance:
+            continue
+        modifier = effect.value
+        # effective_severity already folds in the stage multiplier, so scaling
+        # by severity and by the stage are mutually exclusive — if/elif, not two
+        # ifs, mirroring get_capability_status (#2708). Two ifs would double-apply
+        # the stage multiplier for a staged, severity-scaled effect.
+        if effect.scales_with_severity:
+            modifier = int(modifier * instance.effective_severity)
+        elif instance.current_stage:
+            modifier = int(modifier * instance.current_stage.severity_multiplier)
+        key = (instance.pk, effect.capability_id)
+        values[key] = values.get(key, 0) + modifier
+    if not values:
+        return []
+    marks = _condition_marks(active_instances)
+    by_pk = {i.pk: i for i in active_instances}
+    return [
+        ConditionCapabilityContribution(
+            instance_id=instance_pk,
+            condition_name=by_pk[instance_pk].condition.name,
+            capability_id=capability_id,
+            value=value,
+            property_ids=marks.get(instance_pk, frozenset()),
+        )
+        for (instance_pk, capability_id), value in values.items()
+    ]
+
+
+def _condition_marks(instances: list[ConditionInstance]) -> dict[int, frozenset[int]]:
+    """Each instance's template and current-stage properties, in two queries."""
+    template_marks: dict[int, set[int]] = {}
+    for template_id, property_id in ConditionTemplate.properties.through.objects.filter(
+        conditiontemplate_id__in={i.condition_id for i in instances}
+    ).values_list("conditiontemplate_id", "property_id"):
+        template_marks.setdefault(template_id, set()).add(property_id)
+    stage_marks: dict[int, set[int]] = {}
+    stage_ids = {i.current_stage_id for i in instances if i.current_stage_id}
+    if stage_ids:
+        for stage_id, property_id in ConditionStage.properties.through.objects.filter(
+            conditionstage_id__in=stage_ids
+        ).values_list("conditionstage_id", "property_id"):
+            stage_marks.setdefault(stage_id, set()).add(property_id)
+    return {
+        i.pk: frozenset(
+            template_marks.get(i.condition_id, set()) | stage_marks.get(i.current_stage_id, set())
+        )
+        for i in instances
+    }
+
+
 def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:
     """
-    Get all capability values for a character.
+    Get all capability values for a character from conditions and thread grants.
 
-    Batch-queries all ConditionCapabilityEffect rows for active conditions
-    and aggregates per capability. This is condition/baseline aggregation for
-    *source enumeration* — its sole real consumer is the availability oracle
-    (``world.mechanics.services._get_condition_sources``), which enumerates
-    per-source ``CapabilitySource`` rows for action discovery.
+    The per-capability total of ``condition_capability_contributions`` plus the
+    thread-passive grants. The availability oracle now reads conditions per instance
+    (``world.mechanics.services._get_condition_sources``, #5066) and the grants through
+    ``thread_passive_capability_grants``; this total remains for callers that want one
+    number per capability.
 
     **One-oracle merge (#2504) boundary:** technique grants are deliberately
     NOT folded in here. They already enter the availability oracle via its own
-    dedicated channel — ``world.mechanics.services._get_technique_sources``,
-    which emits one properly-attributed TECHNIQUE-type ``CapabilitySource`` per
-    grant (source_name, prerequisite, effect_property_ids intact). Folding
-    technique values into this bulk dict as well would double-count them as a
-    second, poorly-specified CONDITION-type source and duplicate actions in
-    ``get_available_actions`` (regression caught in
-    ``test_pipeline_integration.ChallengePathTests``). The agency oracle
-    (``get_effective_capability_value``, single-capability gate/requirement
-    checks) is where technique grants fold in — see ``_technique_capability_values``.
-
-    Args:
-        target: The ObjectDB instance
+    dedicated channel — ``world.mechanics.services._get_technique_sources``.
+    The agency oracle (``get_effective_capability_value``) is where technique grants
+    fold in — see ``_technique_capability_values``.
 
     Returns:
         Dict mapping capability PK to total values (floor 0)
     """
-    target = character_sheet.character
-    active_instances = list(get_active_conditions(target))
-
-    # Aggregate condition-derived values (may be empty with no active conditions).
     totals: dict[int, int] = {}
-    if active_instances:
-        # Build batch filter
-        condition_ids = [i.condition_id for i in active_instances]
-        query = Q(condition_id__in=condition_ids)
-        stage_ids = [i.current_stage_id for i in active_instances if i.current_stage_id]
-        if stage_ids:
-            query |= Q(stage_id__in=stage_ids)
-
-        effects = ConditionCapabilityEffect.objects.filter(query).select_related("capability")
-
-        # Build instance lookup maps
-        instance_by_condition: dict[int, ConditionInstance] = {
-            i.condition_id: i for i in active_instances
-        }
-        instance_by_stage: dict[int, ConditionInstance] = {
-            i.current_stage_id: i for i in active_instances if i.current_stage_id
-        }
-
-        for effect in effects:
-            instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
-                effect.stage_id
-            )
-            if not instance:
-                continue
-
-            modifier = effect.value
-            # effective_severity already folds in the stage multiplier, so scaling
-            # by severity and by the stage are mutually exclusive — if/elif, not two
-            # ifs, mirroring get_capability_status (#2708). Two ifs would double-apply
-            # the stage multiplier for a staged, severity-scaled effect.
-            if effect.scales_with_severity:
-                modifier = int(modifier * instance.effective_severity)
-            elif instance.current_stage:
-                modifier = int(modifier * instance.current_stage.severity_multiplier)
-
-            cap_id = effect.capability_id
-            totals[cap_id] = totals.get(cap_id, 0) + modifier
-
-    # Thread-passive grants (#751 B2): fold engaged tier-0 role CAPABILITY_GRANT
-    # PKs in so the obstacle/action-generation consumer
-    # (mechanics._get_condition_sources) sees them. Called ONCE; the handler
-    # caches threads. The early-return for the no-active-conditions case was
-    # removed above so grants surface even when the character has no
-    # conditions at all.
-    # #2708: fold the actual granted value, not a hardcoded 1 — ThreadPullEffect
-    # grants are curved by thread level and power (see
-    # CharacterThreadHandler._passive_capability_grants_cache); the #2022
-    # CovenantRole.granted_capabilities M2M source stays flat at 1 upstream. This
-    # is the availability oracle's read of the same grants the agency oracle folds
-    # in via get_effective_capability_value's grant_floor — both must agree.
-    granted = _passive_capability_grants(character_sheet)
-    for cap_id, value in granted.items():
+    for contribution in condition_capability_contributions(character_sheet):
+        totals[contribution.capability_id] = (
+            totals.get(contribution.capability_id, 0) + contribution.value
+        )
+    for cap_id, value in thread_passive_capability_grants(character_sheet).items():
         totals[cap_id] = totals.get(cap_id, 0) + value
-
-    # Floor at 0
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
+
+
+def thread_passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, int]:
+    """Thread-passive capability grants (#751 B2), by capability pk.
+
+    Engaged tier-0 role CAPABILITY_GRANT values, curved by thread level and power
+    (#2708, see ``CharacterThreadHandler._passive_capability_grants_cache``); the agency
+    oracle folds the same grants in via ``get_effective_capability_value``'s grant floor.
+    """
+    return _passive_capability_grants(character_sheet)
 
 
 def _is_sized(instance: ConditionInstance) -> bool:

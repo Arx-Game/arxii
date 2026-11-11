@@ -598,11 +598,13 @@ export interface CastableTechnique {
 }
 
 export interface CastPullRequestBody {
-  resonance_id: number;
   tier: 1 | 2 | 3;
+  /** The threads may mix resonances; each is paid from its own (#5066). */
   thread_ids: number[];
   /** Resonance burned for strain (#4736); omitted when 0. */
   burn?: number;
+  /** Which pulled resonance the burn comes from, when the pull mixes several (#5066). */
+  burn_resonance_id?: number;
 }
 
 export interface CastRequestBody {

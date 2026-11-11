@@ -212,12 +212,17 @@ class CmdDeclareTechniquePullParseTests(TestCase):
             with self.assertRaises(CommandError):
                 cmd.resolve_action_ref()
 
-    def test_pull_without_resonance_raises(self) -> None:
-        """pull= without resonance= must raise CommandError."""
+    def test_pull_needs_no_resonance(self) -> None:
+        """pull= alone resolves: a pull may mix resonances, each thread paid from its own
+        (#5066); resonance= only names which resonance a burn comes from."""
         cmd = self._make_cmd(f"Firebolt pull={self.thread.name}")
-        with patch.object(cmd, "_resolve_technique_id", return_value=1):
-            with self.assertRaises(CommandError):
-                cmd.resolve_action_ref()
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs["cast_pull"].threads, (self.thread,))
 
     def test_no_pull_leaves_state_none(self) -> None:
         """Without pull= the command caches _pull_thread_str as None."""
@@ -244,7 +249,7 @@ class CmdDeclareTechniquePullParseTests(TestCase):
         self.assertIn("cast_pull", kwargs)
         pull = kwargs["cast_pull"]
         self.assertIsInstance(pull, CastPullDeclaration)
-        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.resonances, (self.resonance,))
         self.assertEqual(pull.tier, 1)
         self.assertIn(self.thread, pull.threads)
 
@@ -331,7 +336,7 @@ class CmdDeclareTechniquePullParseTests(TestCase):
         self.assertEqual(kwargs["effort_level"], "high")
         self.assertIn("cast_pull", kwargs)
         pull: CastPullDeclaration = kwargs["cast_pull"]
-        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.resonances, (self.resonance,))
         self.assertEqual(pull.threads[0], self.thread)
 
     def test_pull_effort_order_independent_effort_before_pull(self) -> None:
@@ -348,7 +353,7 @@ class CmdDeclareTechniquePullParseTests(TestCase):
         self.assertEqual(kwargs["effort_level"], "high")
         self.assertIn("cast_pull", kwargs)
         pull: CastPullDeclaration = kwargs["cast_pull"]
-        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.resonances, (self.resonance,))
         self.assertEqual(pull.threads[0], self.thread)
 
 

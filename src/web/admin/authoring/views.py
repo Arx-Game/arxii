@@ -107,12 +107,14 @@ from web.admin.authoring.links import admin_change_url, workbench_page_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import DEFAULT_BACKLOG_STATUS, BacklogStatusFilter
+from web.admin.power_builder.live import picker_label
 from web.admin.tuning.views import superuser_required
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
 from world.distinctions.models import Distinction
 from world.magic.models import GlimpseTag
 from world.magic.services.soulfray import soulfray_stages
+from world.mechanics.models import Application
 
 _QUEUE_DISPLAY_CAP = 100
 
@@ -177,7 +179,7 @@ def _setup_required(request: HttpRequest) -> bool:
 
 
 def _builders_context() -> dict[str, object]:
-    """The Builders panel's five option lists (#3675 Task 10, #4089): one query each.
+    """The Builders panel's option lists (#3675 Task 10, #4089, #5066): one query each.
 
     ``upbringings`` is a list of plain dicts rather than the model rows
     themselves - the panel's option text ("{beginning} - {name}") needs a
@@ -196,7 +198,19 @@ def _builders_context() -> dict[str, object]:
         ],
         "soulfray_stages": list(soulfray_stages()),
         "glimpse_tag_count": GlimpseTag.objects.filter(is_active=True).count(),
+        "power_applications": _applications_by_capability(),
     }
+
+
+def _applications_by_capability() -> list[tuple[str, list[tuple[int, str]]]]:
+    """Every Application grouped by its capability's name, for the Power Builder picker:
+    (pk, "Evade (dodges, lands by blinking)") pairs, one query."""
+    groups: dict[str, list[tuple[int, str]]] = {}
+    for app in Application.objects.select_related("capability", "target_property").order_by(
+        "capability__name", "name"
+    ):
+        groups.setdefault(app.capability.name, []).append((app.pk, picker_label(app)))
+    return list(groups.items())
 
 
 #: The headline noun for each status: "212 to write", "60 to review" (#3828).

@@ -398,8 +398,12 @@ outcome.
    single Technique typically grants 2-4 Capabilities.
 2. **Properties on effects** — when this Technique's Capabilities are used
    in Actions, what Properties do the effects carry (e.g., Flame Lance
-   carries `fire`, `concussive`, `light`). These come from the Technique
-   itself and from the Gift's resonance.
+   carries `fire`, `concussive`, `light`). These are the Technique's own
+   `Technique.properties`, ticked per technique by staff (#5066). The Gift's
+   resonances never count: resonance is how she feels when she casts, not
+   what the magic does. A Gift's substance (`GiftSubstance.property`) only
+   pre-ticks one property on a new Technique of that Gift, as an authoring
+   convenience (`world/magic/services/technique_marks.py`).
 3. **Check type** — how the Technique resolves when used as a mechanism
    (this may come from the Technique's existing fields like style or
    effect_type rather than a new field)
@@ -812,9 +816,26 @@ character-loss patterns live in the Challenge consequence system.
 - **Unified effective capability value** — `[ABSENT]`. No single function sums
   condition + trait + technique sources; the general `CharacterModifier`→
   `ModifierTarget.target_capability` link does **not** feed capability values.
-- **Combat using the capability pipeline** — `[ABSENT]`. Combat eligibility is
-  hardcoded on `CharacterVitals.status`; combat techniques bypass capability
-  gating. (#595 addresses this.)
+- **Combat using the capability pipeline** — `[BUILT & WIRED]` for movement
+  and dodging (#5066, ADR-5066). Each of her capability sources is matched
+  against every `Application` that says something about moving
+  (`Application.way_of_moving`, `Application.dodges`) by
+  `source_matches_application` (`world/mechanics/services.py`): same
+  capability, held above its innate baseline, carrying the application's
+  required effect property. A technique carries its own `Technique.properties`,
+  a condition its template's and current stage's properties, and trained
+  ability, species and distinctions carry none. Matched turn-move applications
+  give her ways of moving (`player_traversals`, `turn_movement_sources` in
+  `world/areas/positioning/traversal.py`); matched dodging applications let her
+  dodge automatically (`dodge_sources`, `make_dodge` in
+  `world/combat/services/reactions.py`). Each use of a technique source is a
+  `use_technique` cast of that technique (`use_movement_source`,
+  `world/combat/services/movement_use.py`): its anima, its check, its power and
+  the round's related pulls; the roll's strength is the dodge's bonus and,
+  through `reach_for_strength`, how far she lands. Other sources pay physical
+  fatigue in a fight. Other combat eligibility is still hardcoded on
+  `CharacterVitals.status`, and attacking techniques still bypass capability
+  gating. (#595 addresses that part.)
 - **Trait-derived baselines for foundational capabilities** — `[ABSENT]`
   (open question #2). (#595 introduces foundational baselines.)
 - **Damage-dealing pipeline calling interaction/resistance** — `[PARTIAL]`
@@ -878,7 +899,7 @@ Key points relevant to this architecture:
 | System | How It Connects |
 |--------|----------------|
 | Combat | Properties on attacks and targets drive situational interactions; boss defenses are obstacle-like; structured combos are a separate system informed by Properties |
-| Magic | Techniques grant Capabilities with optional constraints; Gift resonances suggest (not dictate) Technique effect Properties |
+| Magic | Techniques grant Capabilities with optional constraints; a Technique's effect Properties are its own `Technique.properties`; a Gift's substance only pre-ticks one on a new Technique (#5066) |
 | Items & Equipment | Items have Properties (metallic, enchanted); equipped items contribute Capabilities |
 | Character Progression | Higher path levels unlock Techniques with higher Capability values |
 | Relationships | Relationship states can modify Capability values; narrative events spike intensity |
@@ -1028,6 +1049,15 @@ Application distinguishes them:
 Applications with no required effect are broadly accessible — anyone with
 `force` can attempt "Drain." Applications with a required effect need a
 specific kind of source.
+
+Since #5066 an Application also carries what it means for moving:
+`way_of_moving` (a `CreatureTraversal`: climbs, leaps, flies, blinks,
+phases) and `dodges` (a matching source dodges attacks automatically,
+landing by that way of moving). Its `target_property` may be null, meaning
+"anywhere she moves" (Evade, Blink, Fly); a set target means only where the
+thing crossed carries it (Phase Through against `solid`). A null-target
+Application is never offered as a challenge approach
+(`ChallengeApproach.clean` refuses one).
 
 **Applications are pure eligibility.** No difficulty, no check type, no
 minimum Capability value. Difficulty comes from the Challenge; check type

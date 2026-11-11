@@ -35,7 +35,8 @@ from world.magic.services.threads import (
     compute_effective_cap,
     compute_level_cap,
     get_imbue_cost_multiplier,
-    get_pull_cost,
+    pull_cost_totals,
+    pull_resonance_costs,
     recompute_max_health_with_threads,
     relationship_side_from_row,
     shown_thread_level,
@@ -1030,18 +1031,18 @@ def _fold_distinction_pull_bonus(
     resolved: list[ResolvedPullEffect],
     *,
     character_sheet: CharacterSheet,
-    resonance: ResonanceModel,
     threads: list[Thread],
 ) -> list[ResolvedPullEffect]:
-    """Append a synthetic FLAT_BONUS entry for a distinction's resonance-scoped POWER modifier.
+    """Append a synthetic FLAT_BONUS for a distinction's POWER modifier on the pulled resonances.
 
-    A distinction expresses potency for ``resonance`` by authoring a ``DistinctionEffect`` on
+    A distinction expresses potency for a resonance by authoring a ``DistinctionEffect`` on
     a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same modifier a
     technique cast already reads via ``_derive_power``'s FLAT stage
-    (``magic/services/techniques.py``). Folds that one modifier into the pull's own magnitude
-    once per pull (not per thread/tier — every thread here shares ``resonance`` by
-    construction) (#1834 Task 7). No-op (returns ``resolved`` unchanged) when there is no
-    matching modifier.
+    (``magic/services/techniques.py``) (#1834 Task 7). A pull may mix resonances (#5066,
+    maintainer ruling 2026-11-11): each distinct pulled resonance's scoped potency applies
+    once, and an unscoped POWER target (no ``target_resonance``) once for the whole pull, so
+    the bonus is folded once per pull, not per thread or tier. No-op (returns ``resolved``
+    unchanged) when there is no matching modifier.
 
     Not full parity with a cast: ``_derive_power``'s FLAT stage also sums condition-sourced
     POWER contributions (``get_condition_modifier_breakdown``), which this fold does not
@@ -1049,7 +1050,11 @@ def _fold_distinction_pull_bonus(
     """
     from world.mechanics.services import power_flat_bonus_for_resonance  # noqa: PLC0415
 
-    bonus = power_flat_bonus_for_resonance(character_sheet, resonance.pk)
+    resonance_ids = list(dict.fromkeys(thread.resonance_id for thread in threads))
+    bonus = power_flat_bonus_for_resonance(character_sheet, None) + sum(
+        power_flat_bonus_for_resonance(character_sheet, rid, scoped_only=True)
+        for rid in resonance_ids
+    )
     if not bonus:
         return resolved
     return [
@@ -1060,7 +1065,7 @@ def _fold_distinction_pull_bonus(
             level_multiplier=1,
             scaled_value=bonus,
             vital_target=None,
-            # threads[0] is an arbitrary pick (every thread here shares one resonance, so
+            # threads[0] is an arbitrary pick (the bonus belongs to the pull as a whole, so
             # there's no real per-thread attribution for this synthetic entry) — but it IS
             # serialized as source_thread_id over the wire
             # (ResolvedPullEffectSerializer.get_source_thread_id, the pull-preview API).
@@ -1080,19 +1085,15 @@ def _fold_distinction_pull_bonus(
 def _validate_pull_threads(
     threads: list[Thread],
     character_sheet: CharacterSheet,
-    resonance: ResonanceModel,
     excluded_kinds: frozenset[str] | None,
 ) -> None:
-    """Validate ownership, same-resonance, and excluded-kinds for pull threads.
+    """Validate ownership and excluded-kinds for pull threads (any mix of resonances).
 
     Raises ``InvalidImbueAmount`` on the first failing thread.
     """
     for t in threads:
         if t.owner_id != character_sheet.pk:
             msg = "Thread not owned by character."
-            raise InvalidImbueAmount(msg)
-        if t.resonance_id != resonance.pk:
-            msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
         if excluded_kinds and t.target_kind in excluded_kinds:
             msg = "Thread anchor is not involved in this action."
@@ -1145,7 +1146,6 @@ def _check_anima_waiver(scene_id: int | None, anima_cost: int) -> int:
 
 def preview_resonance_pull(  # noqa: PLR0913
     character_sheet: CharacterSheet,
-    resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     *,
@@ -1154,14 +1154,17 @@ def preview_resonance_pull(  # noqa: PLR0913
     excluded_kinds: frozenset[str] | None = None,
     target: ObjectDB | None = None,
     technique: Technique | None = None,
+    burn_resonance: ResonanceModel | None = None,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
 
     ``technique`` (#4736): the technique the pull rides. When given, the result's
     ``burn`` carries the burn ceiling (from the technique's runtime intensity, capped
-    by the balance left after the pull's cost) and what one burned point is worth.
+    by the balance left after the pull's cost) and what one burned point is worth, for
+    ``burn_resonance`` (the only pulled resonance when the pull has one, #5066).
 
-    Validates ownership + same-resonance + non-empty threads, computes the
+    Validates ownership + non-empty threads (the threads may be of any resonances; each
+    is paid from its own, #5066), computes the
     tier's resonance / anima cost, reads current balances WITHOUT locking or
     debiting, and resolves per-thread effects across tiers 0..tier using the
     same helper that the commit path uses. Never mutates state.
@@ -1173,10 +1176,8 @@ def preview_resonance_pull(  # noqa: PLR0913
 
     Args:
         character_sheet: Character whose balances the preview reads.
-        resonance: Resonance the pull would channel (must match every
-            thread).
         tier: 1..3, the pull intensity tier.
-        threads: Non-empty list of owned threads matching ``resonance``.
+        threads: Non-empty list of owned threads, of any resonances.
         combat_encounter: Provided for combat-context previews; ``None``
             for ephemeral / RP previews.
         scene_id: When provided (#1919), the preview computes the combat/DANGER
@@ -1200,41 +1201,44 @@ def preview_resonance_pull(  # noqa: PLR0913
         resolved_effects, capped_intensity.
 
     Raises:
-        InvalidImbueAmount: empty threads, ownership / resonance mismatch, or
+        InvalidImbueAmount: empty threads, an ownership mismatch, or
             a thread whose ``target_kind`` is in ``excluded_kinds``.
     """
     if not threads:
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    _validate_pull_threads(threads, character_sheet, resonance, excluded_kinds)
+    _validate_pull_threads(threads, character_sheet, excluded_kinds)
 
-    cost = get_pull_cost(tier, None)
-    n_threads = len(threads)
-    anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
+    totals = pull_cost_totals(tier, len(threads))
+    anima_cost = totals.anima
 
     # #1919: Anima waiver for social-action previews. When scene_id is provided,
     # check whether the scene is high-stakes (active combat or DANGER round).
     # If not, the anima cost is waived (zeroed).
     anima_cost = _check_anima_waiver(scene_id, anima_cost)
 
-    # Balances — no locks, no debit.
-    cr = CharacterResonance.objects.filter(
-        character_sheet=character_sheet,
-        resonance=resonance,
-    ).first()
-    balance = cr.balance if cr else 0
+    # Balances — no locks, no debit. Each resonance must cover its own threads.
+    costs = pull_resonance_costs(tier, threads)
+    balances = dict(
+        CharacterResonance.objects.filter(
+            character_sheet=character_sheet, resonance_id__in=costs
+        ).values_list("resonance_id", "balance")
+    )
     anima = CharacterAnima.objects.filter(character=character_sheet).first()
     current_anima = anima.current if anima else 0
 
-    affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
+    affordable = (
+        all(balances.get(rid, 0) >= cost for rid, cost in costs.items())
+        and current_anima >= anima_cost
+    )
 
     in_combat = combat_encounter is not None
     resolved = resolve_pull_effects(
         threads, tier, in_combat=in_combat, target=target, character_sheet=character_sheet
     )
     resolved = _fold_distinction_pull_bonus(
-        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
+        resolved, character_sheet=character_sheet, threads=threads
     )
 
     # Cap detection: sum all INTENSITY_BUMP scaled_values, compare against
@@ -1246,14 +1250,19 @@ def preview_resonance_pull(  # noqa: PLR0913
     highest_tier = IntensityTier.objects.order_by("-threshold").first()
     capped_intensity = highest_tier is not None and total_intensity_bump > highest_tier.threshold
 
+    if burn_resonance is None:
+        pulled = {thread.resonance_id: thread.resonance for thread in threads}
+        burn_resonance = next(iter(pulled.values())) if len(pulled) == 1 else None
     burn = None
-    if technique is not None:
+    if technique is not None and burn_resonance is not None:
         from world.magic.services.burn import preview_burn  # noqa: PLC0415
 
-        burn = preview_burn(character_sheet, resonance, technique, cost.resonance_cost)
+        burn = preview_burn(
+            character_sheet, burn_resonance, technique, costs.get(burn_resonance.pk, 0)
+        )
 
     return PullPreviewResult(
-        resonance_cost=cost.resonance_cost,
+        resonance_cost=totals.resonance,
         anima_cost=anima_cost,
         affordable=affordable,
         resolved_effects=resolved,
@@ -1265,13 +1274,13 @@ def preview_resonance_pull(  # noqa: PLR0913
 def _persist_combat_pull(  # noqa: PLR0913
     *,
     ctx: PullActionContext,
-    resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     resolved: list[ResolvedPullEffect],
     resonance_cost: int,
     anima_total: int,
     resonance_burned: int = 0,
+    burned_resonance: ResonanceModel | None = None,
     burn_valuation: BurnValuation | None = None,
     burned_for: str = "",
 ) -> None:
@@ -1293,11 +1302,11 @@ def _persist_combat_pull(  # noqa: PLR0913
         participant=participant,
         encounter=encounter,
         round_number=encounter.round_number,
-        resonance=resonance,
         tier=tier,
         resonance_spent=resonance_cost,
         anima_spent=anima_total,
         resonance_burned=resonance_burned,
+        burned_resonance=burned_resonance if resonance_burned > 0 else None,
         burn_valued_points=burn_valuation.valued_points if burn_valuation else 0,
         burn_strain_units=burn_valuation.strain_units if burn_valuation else 0,
         burn_hasty_fall=burn_valuation.hasty_fall if burn_valuation else False,
@@ -1332,10 +1341,9 @@ def _persist_combat_pull(  # noqa: PLR0913
 def _validate_pull_threads_for_commit(
     threads: list[Thread],
     character_sheet: CharacterSheet,
-    resonance: ResonanceModel,
     action_context: PullActionContext,
 ) -> None:
-    """Validate ownership, resonance match, anchor involvement, and facet items.
+    """Validate ownership, anchor involvement, and facet items (any mix of resonances).
 
     Raises ``InvalidImbueAmount``, ``CovenantRoleNotEngagedError``, or
     ``NoMatchingWornFacetItemsError`` on the first failing thread.
@@ -1343,9 +1351,6 @@ def _validate_pull_threads_for_commit(
     for t in threads:
         if t.owner_id != character_sheet.pk:
             msg = "Thread not owned by character."
-            raise InvalidImbueAmount(msg)
-        if t.resonance_id != resonance.pk:
-            msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
         if not _anchor_in_action(t, action_context):
             if t.target_kind == TargetKind.COVENANT_ROLE:
@@ -1359,10 +1364,51 @@ def _validate_pull_threads_for_commit(
             raise NoMatchingWornFacetItemsError
 
 
+def _lock_pull_resonances(
+    character_sheet: CharacterSheet,
+    tier: int,
+    threads: list[Thread],
+    burn: int,
+    burn_resonance: ResonanceModel | None,
+) -> tuple[dict[int, int], dict[int, CharacterResonance]]:
+    """Lock and check every resonance a pull spends; ``(cost by resonance id, rows)``.
+
+    Each thread pays the tier's resonance cost from its own resonance; a burn comes from
+    the one pulled resonance it names (#5066, maintainer ruling 2026-11-11). The rows are
+    locked with ``select_for_update`` so concurrent ephemeral pulls cannot both pass the
+    balance check against an unlocked read and double-spend, in resonance order so two
+    pulls over the same resonances cannot deadlock. (The combat path is also gated by the
+    (participant, round_number) unique key; ephemeral pulls have no such constraint.)
+
+    Raises:
+        InvalidImbueAmount: A burn that names no pulled resonance.
+        ResonanceInsufficient: A resonance whose balance is below what it must pay.
+    """
+    costs = pull_resonance_costs(tier, threads)
+    if burn > 0:
+        if burn_resonance is None or burn_resonance.pk not in costs:
+            msg = "Name which of the pulled resonances to burn."
+            raise InvalidImbueAmount(msg)
+        costs[burn_resonance.pk] += burn
+    held = {
+        cr.resonance_id: cr
+        for cr in CharacterResonance.objects.select_for_update()
+        .filter(character_sheet=character_sheet, resonance_id__in=costs)
+        .order_by("resonance_id")
+    }
+    for resonance_id, needed in costs.items():
+        cr = held.get(resonance_id)
+        balance = cr.balance if cr is not None else 0
+        if balance < needed:
+            name = next(t.resonance.name for t in threads if t.resonance_id == resonance_id)
+            msg = f"Need {needed} {name} resonance, have {balance}."
+            raise ResonanceInsufficient(msg)
+    return costs, held
+
+
 @transaction.atomic
 def spend_resonance_for_pull(  # noqa: PLR0913, C901
     character_sheet: CharacterSheet,
-    resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     action_context: PullActionContext,
@@ -1370,13 +1416,15 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     beseech_bonus: int = 0,
     anima_cost_override: int | None = None,
     burn: int = 0,
+    burn_resonance: ResonanceModel | None = None,
     burn_valuation: BurnValuation | None = None,
     burned_for: str = "",
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
-    Validates ownership, resonance match, and anchor involvement; debits the
-    per-tier resonance cost + anima total; resolves per-thread effects across
+    Validates ownership and anchor involvement; debits each thread's tier cost from its
+    own resonance (the threads may mix resonances, #5066, maintainer ruling 2026-11-11),
+    all or nothing, plus the anima total; resolves per-thread effects across
     tiers 0..tier; and either persists a ``CombatPull`` (combat context) or
     returns the resolved effects ephemerally (RP context). VITAL_BONUS rows
     are flagged ``inactive`` in ephemeral context with ``scaled_value=0`` —
@@ -1384,9 +1432,8 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
 
     Args:
         character_sheet: Character paying the cost.
-        resonance: Resonance shared by every pulled thread.
         tier: 1..3, the pull intensity tier.
-        threads: Non-empty list of owned threads matching ``resonance``.
+        threads: Non-empty list of owned threads, of any resonances.
         action_context: PullActionContext describing the action.
         beseech_bonus_thread_id: PK of the thread whose effective level gets the
             emergency thread-bond draw bonus for this resolution only (#1718).
@@ -1398,8 +1445,11 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
             existing per-spec formula applies.
         burn: Resonance burned on top of the pull for strain (#4736): the REACHED
             amount from ``resolve_resonance_burn``, debited with the pull under the
-            same lock and recorded on ``CombatPull.resonance_burned``. The balance
-            must cover the pull cost plus the burn, or nothing is debited.
+            same lock and recorded on ``CombatPull.resonance_burned``. The burned
+            resonance's balance must cover its threads' cost plus the burn, or nothing
+            is debited.
+        burn_resonance: The pulled resonance the burn comes from (#5066); required with
+            a burn, and it must be one of the pulled threads' resonances.
         burn_valuation: What the burn is worth, valued at declaration; a combat pull
             stores it so the action reads it at resolution without re-valuing.
         burned_for: The declared action a combat burn strains (``PullBurnAction``);
@@ -1410,9 +1460,10 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
 
     Raises:
-        InvalidImbueAmount: empty threads, ownership / resonance mismatch, or
-            an anchor that is not in-action.
-        ResonanceInsufficient: balance below cost or insufficient anima.
+        InvalidImbueAmount: empty threads, an ownership mismatch, an anchor that is not
+            in-action, or a burn whose resonance is not one of the pulled ones.
+        ResonanceInsufficient: a resonance's balance below its cost, or insufficient
+            anima.
     """
     from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
 
@@ -1423,30 +1474,19 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    cost = get_pull_cost(tier, None)
-    n_threads = len(threads)
+    totals = pull_cost_totals(tier, len(threads))
 
-    _validate_pull_threads_for_commit(threads, character_sheet, resonance, action_context)
+    _validate_pull_threads_for_commit(threads, character_sheet, action_context)
 
-    # select_for_update on cr + anima so concurrent ephemeral pulls cannot
-    # both pass the balance check against an unlocked read and double-spend.
-    # The combat path is also gated by the (participant, round_number) unique
-    # key, but ephemeral pulls have no DB-level uniqueness constraint.
-    cr = CharacterResonance.objects.select_for_update().get(
-        character_sheet=character_sheet,
-        resonance=resonance,
-    )
     burn = max(burn, 0)
-    if cr.balance < cost.resonance_cost + burn:
-        needed = cost.resonance_cost + burn
-        msg = "Need " + str(needed) + " resonance, have " + str(cr.balance) + "."
-        raise ResonanceInsufficient(msg)
+    costs, held = _lock_pull_resonances(character_sheet, tier, threads, burn, burn_resonance)
 
-    # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
+    # Anima cost: every pulled thread pays its tier's share, the first included (#5066:
+    # a pull lasts until her next turn and boosts every use it relates to).
     # #1919: social-action pulls may waive anima entirely when no combat encounter
     # or DANGER round is active — anima_cost_override=0 zeroes the cost before the
     # balance check and skips the lock query entirely.
-    anima_total = cost.anima_per_thread * max(0, n_threads - 1)
+    anima_total = totals.anima
     if anima_cost_override is not None:
         anima_total = anima_cost_override
     if anima_total > 0:
@@ -1470,7 +1510,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         character_sheet=character_sheet,
     )
     resolved = _fold_distinction_pull_bonus(
-        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
+        resolved, character_sheet=character_sheet, threads=threads
     )
 
     applicable = [e for e in resolved if not e.inactive]
@@ -1486,20 +1526,22 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     if in_combat:
         _persist_combat_pull(
             ctx=action_context,
-            resonance=resonance,
             tier=tier,
             threads=threads,
             resolved=resolved,
-            resonance_cost=cost.resonance_cost,
+            resonance_cost=totals.resonance,
             anima_total=anima_total,
             resonance_burned=burn,
+            burned_resonance=burn_resonance,
             burn_valuation=burn_valuation,
             burned_for=burned_for,
         )
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).
-    cr.balance -= cost.resonance_cost + burn
-    cr.save(update_fields=["balance"])
+    for resonance_id, spent in costs.items():
+        cr = held[resonance_id]
+        cr.balance -= spent
+        cr.save(update_fields=["balance"])
     if anima_total:
         anima.current -= anima_total
         anima.save(update_fields=["current"])
@@ -1527,7 +1569,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     # exists (spec §5.4 step 7). Currently a no-op.
 
     return ResonancePullResult(
-        resonance_spent=cost.resonance_cost,
+        resonance_spent=totals.resonance,
         anima_spent=anima_total,
         resolved_effects=resolved,
         resonance_burned=burn,

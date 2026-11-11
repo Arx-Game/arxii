@@ -241,8 +241,15 @@ class PropertyAdmin(admin.ModelAdmin):
 
 @admin.register(Application)
 class ApplicationAdmin(admin.ModelAdmin):
-    list_display = ["name", "capability", "target_property", "required_effect_property"]
-    list_filter = ["capability"]
+    list_display = [
+        "name",
+        "capability",
+        "target_property",
+        "required_effect_property",
+        "way_of_moving",
+        "dodges",
+    ]
+    list_filter = ["capability", "way_of_moving", "dodges"]
     search_fields = ["name"]
     list_select_related = ["capability", "target_property", "required_effect_property"]
 

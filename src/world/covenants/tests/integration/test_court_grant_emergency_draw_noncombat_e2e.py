@@ -114,7 +114,7 @@ class EmergencyDrawNonCombatE2ETests(CastScenarioMixin):
 
     def _self_cast_with_beseech(self, *, beseech_bonus: int):
         declaration = CastPullDeclaration(
-            resonance=self.resonance, tier=1, threads=(self.thread,), beseech_bonus=beseech_bonus
+            tier=1, threads=(self.thread,), beseech_bonus=beseech_bonus
         )
         return request_technique_cast(
             scene=self.scene,

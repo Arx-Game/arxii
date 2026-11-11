@@ -152,7 +152,6 @@ def _cap_strain_by_anima(attrs: dict) -> dict:
 class CastPullRequestSerializer(serializers.Serializer):
     """Nested pull declaration on the cast endpoint (#854)."""
 
-    resonance_id = serializers.IntegerField()
     tier = serializers.IntegerField(min_value=1, max_value=3)
     thread_ids = serializers.ListField(
         child=serializers.IntegerField(),
@@ -170,13 +169,23 @@ class CastPullWithBurnRequestSerializer(CastPullRequestSerializer):
     burn = serializers.IntegerField(
         min_value=0, max_value=MAX_RESONANCE_BURN, required=False, default=0
     )
+    burn_resonance_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text=(
+            "Which pulled resonance the burn comes from (#5066); needed only when the "
+            "pull's threads mix resonances."
+        ),
+    )
 
 
 def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> dict:
     """Resolve + validate a declared pull against the initiator's sheet.
 
-    Attaches resolved instances to attrs["pull"]["resonance"|"threads"] so the
-    view can build a CastPullDeclaration without re-querying. Affordability and
+    Attaches resolved instances to attrs["pull"]["threads"|"burn_resonance"] so the
+    view can build a CastPullDeclaration without re-querying. The threads may mix
+    resonances; each is paid from its own (#5066). Affordability and
     anchor-involvement stay with spend_resonance_for_pull at charge time.
 
     Core ID→instance resolution is delegated to
@@ -192,7 +201,8 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
             require ``technique_id``. When False (social path), skip both.
 
     Raises:
-        serializers.ValidationError: On ownership/resonance mismatch, unknown
+        serializers.ValidationError: On an ownership mismatch, a burn naming no pulled
+            resonance, unknown
             technique, hostile technique (cast path only), or unknown persona.
     """
     from world.combat.pull_helpers import build_cast_pull_declaration  # noqa: PLC0415
@@ -220,15 +230,16 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
     try:
         declaration = build_cast_pull_declaration(
             persona.character_sheet_id,
-            resonance_id=pull["resonance_id"],
             tier=pull["tier"],
             thread_ids=pull["thread_ids"],
+            burn=pull.get("burn", 0),
+            burn_resonance_id=pull.get("burn_resonance_id"),
         )
     except InvalidImbueAmount as exc:
         raise serializers.ValidationError({"pull": exc.user_message}) from exc
 
-    pull["resonance"] = declaration.resonance
     pull["threads"] = list(declaration.threads)
+    pull["burn_resonance"] = declaration.burned_resonance if declaration.burn else None
     return attrs
 
 

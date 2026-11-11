@@ -140,7 +140,6 @@ class PulledResistanceCommitTests(TestCase):
         ctx = PullActionContext(combat_encounter=encounter, participant=participant)
         spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=ctx,
@@ -240,7 +239,6 @@ class FlatBonusPullNonRegressionTests(TestCase):
         )
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[thread],
             action_context=ctx,

@@ -41,7 +41,6 @@ class CastPullValidationTests(TestCase):
 
     def _data(self, **pull_overrides: object) -> dict:
         pull: dict = {
-            "resonance_id": self.resonance.pk,
             "tier": 2,
             "thread_ids": [self.thread.pk],
             **pull_overrides,
@@ -57,7 +56,6 @@ class CastPullValidationTests(TestCase):
         ser = TechniqueCastCreateSerializer(data=self._data())
         self.assertTrue(ser.is_valid(), ser.errors)
         pull = ser.validated_data["pull"]
-        self.assertEqual(pull["resonance"].pk, self.resonance.pk)
         self.assertEqual([t.pk for t in pull["threads"]], [self.thread.pk])
 
     def test_unowned_thread_rejected(self) -> None:
@@ -72,10 +70,20 @@ class CastPullValidationTests(TestCase):
         self.assertFalse(ser.is_valid())
         self.assertIn("pull", ser.errors)
 
-    def test_resonance_mismatch_rejected(self) -> None:
-        ser = TechniqueCastCreateSerializer(data=self._data(resonance_id=ResonanceFactory().pk))
-        self.assertFalse(ser.is_valid())
-        self.assertIn("pull", ser.errors)
+    def test_threads_of_two_resonances_are_one_pull(self) -> None:
+        """A pull may mix resonances, each thread paid from its own (#5066)."""
+        other = ThreadFactory(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=self.technique,
+        )
+        ser = TechniqueCastCreateSerializer(data=self._data(thread_ids=[self.thread.pk, other.pk]))
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(
+            [t.pk for t in ser.validated_data["pull"]["threads"]], [self.thread.pk, other.pk]
+        )
 
     def test_tier_out_of_bounds_rejected(self) -> None:
         ser = TechniqueCastCreateSerializer(data=self._data(tier=4))

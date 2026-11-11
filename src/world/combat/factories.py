@@ -347,7 +347,6 @@ class CombatPullFactory(factory_django.DjangoModelFactory):
     participant = factory.SubFactory(CombatParticipantFactory)
     encounter = factory.SelfAttribute("participant.encounter")
     round_number = 1
-    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
     tier = 1
     resonance_spent = 1
     anima_spent = 1

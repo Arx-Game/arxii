@@ -177,7 +177,6 @@ class FacetThreadPullCombatTests(TestCase):
 
         result = spend_resonance_for_pull(
             self.sheet,
-            self.resonance,
             tier=1,
             threads=[self.thread],
             action_context=self.ctx,
@@ -285,7 +284,6 @@ class FacetThreadPullNoItemTests(TestCase):
         with self.assertRaises(NoMatchingWornFacetItemsError):
             spend_resonance_for_pull(
                 self.sheet,
-                self.resonance,
                 tier=1,
                 threads=[self.thread],
                 action_context=self.ctx,

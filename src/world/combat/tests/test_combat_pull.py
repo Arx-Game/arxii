@@ -16,7 +16,7 @@ from world.combat.factories import (
 from world.combat.models import CombatPull, CombatPullResolvedEffect
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.constants import EffectKind, VitalBonusTarget
-from world.magic.factories import ResonanceFactory, ThreadFactory
+from world.magic.factories import ThreadFactory
 
 
 class CombatPullShapeTests(TestCase):
@@ -501,13 +501,11 @@ class CombatPullEncounterRoundQueryTests(TestCase):
             participant=p1,
             encounter=p1.encounter,
             round_number=3,
-            resonance=ResonanceFactory(),
         )
         CombatPullFactory(
             participant=p2,
             encounter=p1.encounter,
             round_number=3,
-            resonance=ResonanceFactory(),
         )
         self.assertEqual(
             CombatPull.objects.filter(encounter=p1.encounter, round_number=3).count(),
