@@ -1774,6 +1774,7 @@ class DomainTerrainCountInline(admin.TabularInline):
     Read-only here: the Recount action rewrites it from the map."""
 
     model = DomainTerrainCount
+    formset = OneRowPerFormSet
     extra = 0
     fields = ["terrain", "pips"]
     readonly_fields = ["terrain", "pips"]
@@ -1861,8 +1862,10 @@ class DominionConfigAdmin(admin.ModelAdmin):
     ]
 
     def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002
-        """Prevent adding if the settings row already exists."""
-        return not DominionConfig.objects.exists()
+        """Prevent adding if the settings row already exists. Django asks this on
+        every admin page for the sidebar, so it reads the identity map (loaded once),
+        never the table."""
+        return not DominionConfig.objects.cached_all()
 
     def has_delete_permission(
         self,
