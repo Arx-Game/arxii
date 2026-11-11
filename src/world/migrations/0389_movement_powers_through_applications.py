@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0387_technique_marks"),
+        ("arxii", "0388_technique_marks"),
     ]
 
     operations = [

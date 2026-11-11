@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0386_dominion_layout_fill_and_capacity_override"),
+        ("arxii", "0387_dormancy"),
     ]
 
     operations = [

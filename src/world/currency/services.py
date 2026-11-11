@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -1719,18 +1720,41 @@ def run_weekly_economy() -> dict[str, int]:
     weeks; then businesses roll their fortune. Each phase isolates failures per row — one broken org
     never wedges the rollover.
     """
-    return {
-        "interest": _weekly_interest_accrual(),
-        "territory": _weekly_territory_streams(),
-        "income": _weekly_income_streams(),
-        "materials": _weekly_mine_accrual(),
-        "assets": _weekly_asset_income(),
-        "debt_service": _weekly_debt_service(),
-        "obligations": _weekly_obligation_settlement(),
-        "contracts": _weekly_contract_settlement(),
-        "wages": _weekly_wages(),
-        "businesses": _weekly_business_fortunes(),
-    }
+    # Dormancy first (#5069): a house nobody plays is stamped before anything accrues,
+    # so its pools freeze this week, not next. Every phase logs the rows it touched and
+    # its wall time, so the cost shows the week it starts to creep (the tick budget).
+    phases = (
+        ("dormant", _weekly_dormancy),
+        ("interest", _weekly_interest_accrual),
+        ("territory", _weekly_territory_streams),
+        ("income", _weekly_income_streams),
+        ("materials", _weekly_mine_accrual),
+        ("assets", _weekly_asset_income),
+        ("debt_service", _weekly_debt_service),
+        ("obligations", _weekly_obligation_settlement),
+        ("contracts", _weekly_contract_settlement),
+        ("wages", _weekly_wages),
+        ("businesses", _weekly_business_fortunes),
+    )
+    counts: dict[str, int] = {}
+    for name, phase in phases:
+        started = time.monotonic()
+        counts[name] = phase()
+        logger.info(
+            "weekly economy: %s touched %d rows in %.2fs",
+            name,
+            counts[name],
+            time.monotonic() - started,
+        )
+    return counts
+
+
+def _weekly_dormancy() -> int:
+    """Stamp every house with income and no played character dormant (#5069); the
+    accrual phases below skip a dormant organization's side."""
+    from world.societies.houses.dormancy import mark_dormant_houses  # noqa: PLC0415
+
+    return mark_dormant_houses()
 
 
 def _weekly_mine_accrual() -> int:
@@ -1745,8 +1769,16 @@ def _weekly_mine_accrual() -> int:
     from world.items.materials_production import accrue_holding_materials  # noqa: PLC0415
     from world.societies.houses.models import DomainHolding  # noqa: PLC0415
 
+    # A holding whose payee is dormant (its own owner, or the land's owner when it has
+    # none of its own) accrues nothing while nobody plays (#5069).
     count = 0
-    for holding in DomainHolding.objects.filter(material_sources__isnull=False).distinct():
+    holdings = (
+        DomainHolding.objects.filter(material_sources__isnull=False)
+        .exclude(owner_org__dormant_since__isnull=False)
+        .exclude(owner_org__isnull=True, domain__owner_org__dormant_since__isnull=False)
+        .distinct()
+    )
+    for holding in holdings:
         try:
             accrue_holding_materials(holding=holding)
             count += 1
@@ -1787,8 +1819,12 @@ def _weekly_debt_service() -> int:
 
 def _weekly_interest_accrual() -> int:
     """Weekly fraction of the monthly reference rate lands in arrears."""
+    # A dormant debtor's arrears stand still with its income (#5069): the house is
+    # frozen, not bleeding, until someone plays it again.
     count = 0
-    for debt in DebtInstrument.objects.filter(active=True):
+    for debt in DebtInstrument.objects.filter(
+        active=True, debtor_organization__dormant_since__isnull=True
+    ):
         try:
             weekly = debt.monthly_interest // 4
             if weekly > 0:
@@ -1811,8 +1847,12 @@ def _weekly_territory_streams() -> int:
 def _weekly_income_streams() -> int:
     # #930 / ADR-0081: the weekly cycle only amasses pools — money reaches a
     # treasury exclusively through an active collection dispatch.
+    # A dormant organization's streams are left as they are (#5069): coin freezes while
+    # nobody plays, so an apper finds the pool as the last player left it.
     count = 0
-    for stream in OrgIncomeStream.objects.filter(active=True).select_related("organization"):
+    for stream in OrgIncomeStream.objects.filter(
+        active=True, organization__dormant_since__isnull=True
+    ).select_related("organization"):
         try:
             accrue_income_stream(stream)
             count += 1
@@ -1861,7 +1901,8 @@ def _weekly_obligation_settlement() -> int:
         active=True, from_organization_id__in=unsettled_org_ids
     ).values("from_organization_id")
     count = 0
-    for organization in Organization.objects.filter(pk__in=org_ids):
+    # A dormant house settles nothing while nobody plays (#5069); its declarations wait.
+    for organization in Organization.objects.filter(pk__in=org_ids, dormant_since__isnull=True):
         try:
             if settle_obligations(organization):
                 count += 1

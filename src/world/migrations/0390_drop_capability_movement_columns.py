@@ -9,7 +9,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0388_movement_powers_through_applications"),
+        ("arxii", "0389_movement_powers_through_applications"),
     ]
 
     operations = [
