@@ -7135,6 +7135,10 @@ Unified modifier system — categories, types, sources, and per-character modifi
   `TechniqueDamageBonus.read_opponent` / `for_type(type, opponent)` cache per (damage type,
   opponent). Not built: opponent scopes on a single maneuver effect, to hit, or derived and sized
   amounts. See `mechanics.md` "Opponent scopes".
+- **Power Builder (#5066 item 8):** a superuser admin page per `Application`
+  (`web/admin/power_builder/`, `_power_builder/<pk>/`): edits the application, compares every
+  technique and other source of its capability at a reference character, lists near misses and
+  adds a technique on a gift and path. See `mechanics.md` "Power Builder".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".
