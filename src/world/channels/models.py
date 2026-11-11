@@ -54,6 +54,15 @@ class Channel(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def display_name(self) -> str:
+        """The name players see and type. An ORG channel reads its organization's name
+        live, so an org rename never leaves a stale label; the stored ``name`` stays the
+        unique slot (it may carry an " (org)" suffix from a provisioning clash)."""
+        if self.kind == ChannelKind.ORG and self.organization is not None:
+            return self.organization.name
+        return self.name
+
 
 class ChannelMessage(SharedMemoryModel):
     """One message on a channel, authored by the tenure the player spoke as."""

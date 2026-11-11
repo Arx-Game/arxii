@@ -32,6 +32,7 @@ class WebsocketMessageType(str, Enum):
     OOB = "oob"
     GM_PROMPT = "gm_prompt"
     INTERACTION_CHANGED = "interaction_changed"
+    CHANNEL_MESSAGE = "channel_message"
 
 
 @dataclass
@@ -199,6 +200,26 @@ class MailArrivedPayload:
     mail_id: int
     sender_display: str
     subject: str
+
+
+@dataclass
+class ChannelMessagePayload:
+    """Payload for ``channel_message`` messages (#3299).
+
+    Anonymity boundary: ``speaker`` is the author tenure's ``speaker_name`` (the bare
+    character name, or "2nd player of Ariel"); never an account id, username or tenure id.
+    ``notification_level`` is the RECIPIENT's subscription level, so the client decides
+    whether to toast or only bump the unread badge.
+    """
+
+    message_id: int
+    channel_id: int
+    channel_name: str
+    speaker: str
+    body: str
+    created_at: str
+    is_own: bool
+    notification_level: str
 
 
 @dataclass
