@@ -115,6 +115,10 @@ AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
 # "The Character does not exist." when there is none.
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
+# Player channels are Arx models (world.channels, #3299), not Evennia ChannelDB rows.
+# No stock "Public" channel is made at server start or joined at account creation.
+# CHANNEL_MUDINFO stays: it is Evennia's staff connection log, not a player channel.
+DEFAULT_CHANNELS = []
 
 # Where Evennia writes server.log / portal.log / http_requests.log /
 # lockwarnings.log. Env-driven (#3599): production sets LOG_DIR=/var/log/arxii

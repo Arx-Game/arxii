@@ -642,6 +642,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         # ADR-0294). `ooc` is now OOC speech to the room, CharacterCmdSet's CmdOOC.
         # A session can still be left with no character (a retirement, a refused
         # puppet), and there Evennia's account `look` still draws its stock screen.
+        # @channel (#3299): Evennia's stock channel command (aliases @chan, @channels)
+        # speaks on ChannelDB rows; player channels are world.channels models now.
+        # Removing by key drops its aliases with it.
         for cmdname in (
             "ic",
             "characters",
@@ -650,6 +653,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
             "charcreate",
             "chardelete",
             "ooc",
+            "@channel",
         ):
             self.remove(cmdname)
 
