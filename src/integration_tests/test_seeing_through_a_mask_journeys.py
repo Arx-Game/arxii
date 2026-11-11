@@ -9,6 +9,7 @@ from evennia.utils.ansi import strip_ansi
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.areas.positioning.factories import ObjectPositionFactory, PositionFactory
+from world.consent.factories import SocialConsentPreferenceFactory
 from world.forms.factories import CharacterFormFactory
 from world.forms.models import FormType
 from world.mechanics.constants import DISGUISE_SIGHT_CATEGORY_NAME
@@ -109,10 +110,16 @@ class AMaskInTheScenesPersonaList(JourneyCase):
         return {row["name"]: row for row in response.data["results"]}
 
     def test_a_stranger_sees_the_mask_with_nothing_tying_it_to_her(self) -> None:
+        SocialConsentPreferenceFactory(
+            tenure=self.ysmay.sheet_data.roster_entry.current_tenure, allow_social_actions=False
+        )
         wat = self.account_of(self.wat)
         personas, positions = self._scene(wat)
         self.assertIsNone(personas["Stag Mask"]["character_sheet"])
         self.assertIsNone(personas["Stag Mask"]["roster_entry"])
+        # Her own refusal of social actions stays hers: the mask shows the default.
+        self.assertFalse(personas["Ysmay"]["allow_social_actions"])
+        self.assertTrue(personas["Stag Mask"]["allow_social_actions"])
         # Her barefaced face is unchanged, and so is Wat's own.
         self.assertEqual(personas["Ysmay"]["character_sheet"], self.ysmay.pk)
         self.assertEqual(personas["Ysmay"]["roster_entry"]["name"], "Ysmay")

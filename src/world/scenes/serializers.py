@@ -85,7 +85,8 @@ class _PersonaListSerializer(serializers.ListSerializer):
 class PersonaSerializer(serializers.ModelSerializer):
     """A persona as a list or a profile shows it."""
 
-    # ``character_sheet`` and ``roster_entry`` name the character behind the face, so for a
+    # ``character_sheet`` and ``roster_entry`` name the character behind the face (and
+    # ``allow_social_actions`` reads that character's own setting), so for a
     # disguise they reach only the viewers ``_sheet_linked_persona_ids`` allows and are null
     # for everyone else (#4888). Pass the request (and, for a scene's list, the scene) in
     # context; without a request a disguise is never linked.
@@ -155,6 +156,9 @@ class PersonaSerializer(serializers.ModelSerializer):
         if instance.pk not in linked:
             data["character_sheet"] = None
             data["roster_entry"] = None
+            # The real character's consent setting is a fact about them, so a disguise
+            # shows the default; dispatch still enforces the real gate.
+            data["allow_social_actions"] = True
         return data
 
     def get_display_name(self, obj: Persona) -> str:
