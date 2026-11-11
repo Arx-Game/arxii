@@ -11,10 +11,14 @@ from django.forms import ModelForm
 from django.http import HttpRequest
 from django.utils.html import format_html_join
 
+from world.achievements.models import RewardDefinition
 from world.admin_utils import OneRowPerFormSet
 from world.conditions.models import ConditionModifierEffect
+from world.covenants.models import CovenantLevelBonus, CovenantRoleBonus, VowStatScaling
 from world.distinctions.models import DistinctionEffect
+from world.forms.models import FormCombatProfileEffect
 from world.items.crafting.models import CraftingRecipeModifier
+from world.items.models import FashionStyleBonus
 from world.mechanics.constants import MANEUVER_EFFECT_BASE_HELP, EffectKind
 from world.mechanics.models import (
     AestheticAxisConfig,
@@ -116,36 +120,70 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "target_check_category",
         "target_scope_check_type",
     ]
-    # #4386: staff see which distinctions, conditions and crafting recipes hand out a
-    # target (e.g. which grant "cannot botch at Riding") without leaving the page.
+    # #4386: staff see what hands out a target (e.g. what grants "cannot botch at
+    # Riding") without leaving the page: every authored row that grants a modifier on it.
     readonly_fields = ["granted_by"]
 
     @admin.display(description="Granted by")
     def granted_by(self, obj: ModifierTarget) -> str:
-        """The distinction effects, condition effects and crafting recipe modifiers that
-        point at this target."""
+        """The authored rows that grant a modifier on this target: distinction effects,
+        condition effects, crafting recipe modifiers, achievement reward definitions, form
+        combat profile effects, covenant level and role bonuses, vow stat scalings and
+        fashion style bonuses. Per-character rows are left out."""
         if obj.pk is None:
             return "-"
-        labels = [
-            *(
-                f"Distinction: {effect}"
-                for effect in DistinctionEffect.objects.filter(target=obj).select_related(
+        sources = (
+            (
+                "Distinction",
+                DistinctionEffect.objects.filter(target=obj).select_related(
                     "distinction", "target"
-                )
+                ),
             ),
-            *(
-                f"Condition: {effect}"
-                for effect in ConditionModifierEffect.objects.filter(
-                    modifier_target=obj
-                ).select_related("condition", "stage__condition", "modifier_target")
+            (
+                "Condition",
+                ConditionModifierEffect.objects.filter(modifier_target=obj).select_related(
+                    "condition", "stage__condition", "modifier_target"
+                ),
             ),
-            *(
-                f"Crafting recipe: {row}"
-                for row in CraftingRecipeModifier.objects.filter(target=obj).select_related(
+            (
+                "Crafting recipe",
+                CraftingRecipeModifier.objects.filter(target=obj).select_related(
                     "recipe", "target"
-                )
+                ),
             ),
-        ]
+            ("Achievement reward", RewardDefinition.objects.filter(modifier_target=obj)),
+            (
+                "Form combat profile",
+                FormCombatProfileEffect.objects.filter(target=obj).select_related(
+                    "profile__form", "target__category"
+                ),
+            ),
+            (
+                "Covenant level bonus",
+                CovenantLevelBonus.objects.filter(modifier_target=obj).select_related(
+                    "modifier_target"
+                ),
+            ),
+            (
+                "Covenant role bonus",
+                CovenantRoleBonus.objects.filter(modifier_target=obj).select_related(
+                    "covenant_role", "modifier_target"
+                ),
+            ),
+            (
+                "Vow stat scaling",
+                VowStatScaling.objects.filter(modifier_target=obj).select_related(
+                    "covenant_role", "modifier_target"
+                ),
+            ),
+            (
+                "Fashion style",
+                FashionStyleBonus.objects.filter(target=obj).select_related(
+                    "fashion_style", "target"
+                ),
+            ),
+        )
+        labels = [f"{kind}: {row}" for kind, rows in sources for row in rows]
         if not labels:
             return "Nothing grants this target yet."
         return format_html_join("", "<div>{}</div>", ((label,) for label in labels))
