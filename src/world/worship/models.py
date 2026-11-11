@@ -1631,6 +1631,17 @@ class Pledge(CreditedContent, SharedMemoryModel):
         related_name="closing_for_pledges",
         help_text="One of the being's own tier 1 or 2 rites; performing it closes the pledge.",
     )
+    pact_offer = models.ForeignKey(
+        "arxii.PactOffer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pledges",
+        help_text=(
+            "A pact the being offers at this pledge's close (#4341). The holder may accept "
+            "it when the closing rite succeeds. Empty = no pact offered."
+        ),
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -1657,6 +1668,12 @@ class Pledge(CreditedContent, SharedMemoryModel):
                 errors["closing_rite"] = (
                     "The closing rite must be tier 1 or 2; a tier 3 rite is a ceremony."
                 )
+        if (
+            self.pact_offer_id is not None
+            and self.being_id is not None
+            and self.pact_offer.being_id != self.being_id
+        ):
+            errors["pact_offer"] = "The pact offered must be one of this being's own offers."
         if errors:
             raise ValidationError(errors)
 

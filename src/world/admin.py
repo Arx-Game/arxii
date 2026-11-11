@@ -75,6 +75,7 @@ import world.military.admin
 import world.missions.admin
 import world.narrative.admin
 import world.npc_services.admin
+import world.pacts.admin
 import world.player_submissions.admin
 import world.predators.admin
 import world.progression.admin
