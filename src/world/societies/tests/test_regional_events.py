@@ -7,8 +7,11 @@ from datetime import timedelta
 import math
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
+from evennia_extensions.factories import AccountFactory
+from world.areas.constants import AreaLevel
 from world.character_creation.factories import RealmFactory
 from world.game_clock.factories import GameClockFactory
 from world.roster.factories import FamilyFactory
@@ -179,3 +182,53 @@ class RegionalEventTests(TestCase):
         multipliers = active_capacity_multipliers()
         self.assertIn(rung_area_for_title(barony).pk, multipliers)
         self.assertNotIn(self._county_domain().area_id, multipliers)
+
+
+class RegionalEventAdminTests(TestCase):
+    """Staff open and close an event from the admin too (#5080): the add form goes
+    through ``open_regional_event`` so the land beneath is rebased, and a changelist
+    action closes."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = RealmFactory(name="Inferna")
+        cls.crown = OrganizationFactory(name="Piropa", family=FamilyFactory(name="Piropa"))
+        cls.kingdom = plant_rung(
+            realm=cls.realm, tier=TitleTier.KINGDOM, name="Inferna", held_by=cls.crown
+        )
+        cls.blight = RegionalEventKind.objects.create(name="Blight", capacity_cut_pct=50)
+        cls.superuser = AccountFactory(username="eventstaff", is_staff=True, is_superuser=True)
+
+    def setUp(self):
+        self.client.force_login(self.superuser)
+
+    def test_the_pages_render(self):
+        for url in (
+            reverse("admin:arxii_regionaleventkind_changelist"),
+            reverse("admin:arxii_regionalevent_changelist"),
+            reverse("admin:arxii_regionalevent_add"),
+        ):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_adding_opens_through_the_service_and_the_action_closes(self):
+        area = rung_area_for_title(self.kingdom)
+        before = timezone.now()
+        response = self.client.post(
+            reverse("admin:arxii_regionalevent_add"),
+            {"kind": self.blight.pk, "area": area.pk, "severity_pct": 70, "note": "GM only"},
+        )
+        self.assertEqual(response.status_code, 302, response.content[:2000])
+        event = RegionalEvent.objects.get()
+        self.assertEqual(event.severity_pct, 70)
+        self.assertEqual(event.opened_by_id, self.superuser.pk)
+        county = Domain.objects.filter(area__realm=self.realm, area__level=AreaLevel.COUNTY).first()
+        self.assertIsNotNone(county)
+        self.assertGreaterEqual(county.population_rebased_at, before, "rebased at open")
+
+        response = self.client.post(
+            reverse("admin:arxii_regionalevent_changelist"),
+            {"action": "close_events", "_selected_action": [event.pk]},
+        )
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertFalse(event.is_active)

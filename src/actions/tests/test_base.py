@@ -758,6 +758,8 @@ class ActionRegistryTests(TestCase):
             "almanach_site_holding",
             "almanach_rename_holding",
             "almanach_set_capacity",
+            "almanach_open_regional_event",
+            "almanach_close_regional_event",
             "almanach_remove_holding",
             "almanach_delete_rung",
             "almanach_move_rung",

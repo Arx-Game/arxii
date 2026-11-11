@@ -211,6 +211,34 @@ class AlmanachPagesTests(TestCase):
         self.assertEqual(len(doc.vassals), 1)
         self.assertEqual(doc.vassals[0]["held_by"], "")
 
+    def test_rung_document_carries_the_events_over_its_land(self):
+        """#5080: the Events row names every open event striking this rung's land, over
+        it or beneath it, and the title carries its area so staff can open one here."""
+        from world.societies.houses.models import RegionalEventKind
+        from world.societies.houses.regional_events import (
+            close_regional_event,
+            open_regional_event,
+        )
+
+        blight = RegionalEventKind.objects.create(name="Blight", capacity_cut_pct=50)
+        duchy_area = _rung_area(self.duchy)
+        event = open_regional_event(kind=blight, area=duchy_area, severity_pct=80, note="GM only")
+
+        doc = rung_document(self.duchy)
+        self.assertEqual(doc.title["area_id"], duchy_area.pk)
+        self.assertEqual([e["event_id"] for e in doc.events], [event.pk])
+        row = doc.events[0]
+        self.assertEqual(row["kind"], "Blight")
+        self.assertEqual(row["area_id"], duchy_area.pk)
+        self.assertEqual(row["area"], duchy_area.name)
+        self.assertEqual(row["severity_pct"], 80)
+        self.assertNotIn("note", row)
+        # the county beneath is struck by it; the crown above sees it on its land
+        self.assertEqual([e["event_id"] for e in rung_document(self.county).events], [event.pk])
+        self.assertEqual([e["event_id"] for e in rung_document(self.throne).events], [event.pk])
+        close_regional_event(event)
+        self.assertEqual(rung_document(self.duchy).events, [])
+
     def test_rung_document_for_an_inner_chain_rung(self):
         """The empire's own chain kingdom (planted with it, sharing its seat) gets a
         page: sworn to the empire by its chain, not refused as a non-top (#5011)."""

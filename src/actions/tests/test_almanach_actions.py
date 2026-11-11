@@ -16,6 +16,7 @@ from actions.definitions.almanach import (
     AlmanachAssignHolderAction,
     AlmanachBatchUnclaimedAction,
     AlmanachCharterFiefAction,
+    AlmanachCloseRegionalEventAction,
     AlmanachDeleteRungAction,
     AlmanachDescribeDemesneAction,
     AlmanachEditHouseAction,
@@ -23,6 +24,7 @@ from actions.definitions.almanach import (
     AlmanachLayOutAction,
     AlmanachMoveRungAction,
     AlmanachNameRungAction,
+    AlmanachOpenRegionalEventAction,
     AlmanachPlanEstateAction,
     AlmanachPlantRungAction,
     AlmanachPublishAction,
@@ -116,6 +118,49 @@ class AlmanachActionTests(TestCase):
         assert seat.capacity_override is None
         assert seat.population_capacity == 0, "no terrain under a test seat"
         assert not AlmanachSetCapacityAction().run(self.staff, domain_id=0, capacity=5).success
+
+    def test_staff_opens_and_closes_a_regional_event(self) -> None:
+        # A blight over the crown's land (#5080): one row, severity and a GM note, closed
+        # by its id; a player is refused, and so is a bad severity or a closed event.
+        from world.societies.houses.almanach import rung_area_for_title
+        from world.societies.houses.models import RegionalEvent, RegionalEventKind
+
+        blight = RegionalEventKind.objects.create(name="Blight", capacity_cut_pct=50)
+        area = rung_area_for_title(self.kingdom)
+        refused = AlmanachOpenRegionalEventAction().run(
+            self.player, kind_id=blight.pk, area_id=area.pk
+        )
+        assert not refused.success
+
+        result = AlmanachOpenRegionalEventAction().run(
+            self.staff, kind_id=blight.pk, area_id=area.pk, severity_pct=60, note="The fields."
+        )
+        assert result.success, result.message
+        event = RegionalEvent.objects.get(pk=result.data["event_id"])
+        assert event.severity_pct == 60
+        assert event.note == "The fields."
+        assert event.opened_by_id == self.staff.db_account_id
+        assert event.is_active
+        for bad in ({"kind_id": 0, "area_id": area.pk}, {"kind_id": blight.pk, "area_id": 0}):
+            assert not AlmanachOpenRegionalEventAction().run(self.staff, **bad).success
+        assert (
+            not AlmanachOpenRegionalEventAction()
+            .run(self.staff, kind_id=blight.pk, area_id=area.pk, severity_pct=0)
+            .success
+        )
+        assert (
+            not AlmanachOpenRegionalEventAction()
+            .run(self.staff, kind_id=blight.pk, area_id=area.pk, severity_pct="lots")
+            .success
+        )
+
+        assert not AlmanachCloseRegionalEventAction().run(self.player, event_id=event.pk).success
+        result = AlmanachCloseRegionalEventAction().run(self.staff, event_id=event.pk)
+        assert result.success, result.message
+        event.refresh_from_db()
+        assert event.ended_at is not None
+        assert not AlmanachCloseRegionalEventAction().run(self.staff, event_id=event.pk).success
+        assert not AlmanachCloseRegionalEventAction().run(self.staff, event_id=0).success
 
     def test_staff_plants_names_batches_edits_and_publishes(self) -> None:
         result = AlmanachPlantRungAction().run(
