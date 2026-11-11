@@ -79,15 +79,21 @@ from world.conditions.constants import BLINK_CONDITION_NAME
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionInstanceFactory,
+    ConditionStageFactory,
     ConditionTemplateFactory,
+    SoulfrayTemplateFactory,
 )
+from world.conditions.models import ConditionInstance
 from world.fatigue.models import FatiguePool
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
+    GiftFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
+    ensure_soulfray_config,
 )
+from world.magic.models import CharacterTechnique
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.effect_handlers import BLINK_DODGE_HANDLER_PATH
 from world.mechanics.factories import (
@@ -535,3 +541,137 @@ class PhaseStepFollowsTheDodgePlan(_TheCellar):
         self.assertEqual(position_of(self.bram), self.floor)
         self.assertLess(self.health(self.bram), 100)
         self.assertEqual(self.anima(self.bram), 17)  # paid for the attempt
+
+
+class TwoGiftsOneProperty(_TheCellar):
+    """A light-gift technique marked teleport dodges by blinking with nothing else authored,
+    at its own price (#5066 verification 1); she picks which answers, and saves a default."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.light_step = TechniqueFactory(
+            name="Light Step",
+            gift=GiftFactory(name="Radiance"),
+            anima_cost=5,
+            intensity=1,
+            control=1,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory(name="Light Cast")),
+        )
+        self.light_step.properties.add(self.teleport)
+        TechniqueCapabilityGrantFactory(
+            technique=self.light_step,
+            capability=self.traversal,
+            base_value=3,
+            intensity_multiplier=0,
+        )
+        self.ondrelle = self.fighter("Ondrelle", at=self.stage, blinks=True)
+        CharacterTechniqueFactory(character=self.ondrelle.sheet_data, technique=self.light_step)
+
+    def test_her_strongest_answers_until_she_picks_another(self) -> None:
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4])  # Blink Step's 4 beats Light Step's 3
+        self.assertEqual(self.anima(self.ondrelle), 18)  # Blink Step's own 2
+
+    def test_she_picks_light_step_and_pays_its_own_price(self) -> None:
+        told = self.web(self.ondrelle, "dodge_settings", technique_id=self.light_step.pk)
+        self.assertTrue(told.detail.success, told.detail.message)
+        self.assertEqual(told.detail.message, "You'll dodge with Light Step.")
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [3])
+        self.assertEqual(self.anima(self.ondrelle), 15)  # Light Step's own 5
+
+    def test_a_saved_default_answers_in_every_fight(self) -> None:
+        told = self.telnet(self.ondrelle, "combat dodgedefault Light Step")
+        self.assertIn("Light Step is your default dodge.", told)
+        hold = CharacterTechnique.objects.get(
+            character=self.ondrelle.sheet_data, technique=self.light_step
+        )
+        self.assertTrue(hold.default_dodge)
+        self.web(self.ondrelle, "dodge_settings", technique_id="")  # back to the default
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [3])
+
+    def test_a_technique_that_does_not_dodge_cannot_be_picked(self) -> None:
+        other = TechniqueFactory(name="Ember Lash")
+        CharacterTechniqueFactory(character=self.ondrelle.sheet_data, technique=other)
+
+        told = self.web(self.ondrelle, "dodge_settings", technique_id=other.pk)
+
+        self.assertFalse(told.detail.success)
+        self.assertEqual(told.detail.message, "None of your techniques that dodge is that one.")
+
+
+class DodgingIntoSoulfray(_TheCellar):
+    """At zero anima her dodge still casts and overspends into Soulfray while her box is
+    ticked; in Soulfray her turn asks her to keep or stop (#5066 decision 13)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.soulfray = SoulfrayTemplateFactory()
+        self.fraying = ConditionStageFactory(
+            condition=self.soulfray, stage_order=1, name="Fraying", severity_threshold=1
+        )
+        ensure_soulfray_config()
+        self.ondrelle = self.fighter("Ondrelle", at=self.stage, blinks=True)
+        pool = CharacterAnima.objects.get(character=self.ondrelle.sheet_data)
+        pool.current = 0
+        pool.save(update_fields=["current"])
+
+    def soulfray_on(self, character) -> ConditionInstance | None:
+        return ConditionInstance.objects.filter(target=character, condition=self.soulfray).first()
+
+    def test_with_no_anima_she_still_dodges_and_soulfray_rises(self) -> None:
+        for name in ("Archer", "Bowman"):
+            self.blade(name, at=self.gallery)
+        roll = RecordingRoll(2, 2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4, 2])  # both dodges happened
+        self.assertIsNotNone(self.soulfray_on(self.ondrelle))
+
+    def test_in_soulfray_her_turn_asks_and_her_answer_holds(self) -> None:
+        ConditionInstanceFactory(
+            target=self.ondrelle, condition=self.soulfray, current_stage=self.fraying, severity=1
+        )
+        url = f"/api/combat/{self.encounter.pk}/"
+        payload = self.api(self.account_of(self.ondrelle)).get(url).json()
+        seat = self.participant(self.ondrelle).pk
+        plan = next(p for p in payload["participants"] if p["id"] == seat)["dodge_plan"]
+        self.assertEqual(plan["soulfray_check_in"]["stage_name"], "Fraying")
+
+        told = self.telnet(self.ondrelle, "decline dodgesoulfray")
+        self.assertIn("You won't dodge when it would cost you Soulfray.", told)
+        self.assertFalse(self.participant(self.ondrelle).dodge_into_soulfray)
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [0])  # no dodge
+        self.assertEqual(self.participant(self.ondrelle).reactions_used, 0)
+
+    def test_she_can_choose_to_keep_dodging_into_it(self) -> None:
+        ConditionInstanceFactory(
+            target=self.ondrelle, condition=self.soulfray, current_stage=self.fraying, severity=1
+        )
+        told = self.web(self.ondrelle, "dodge_settings", into_soulfray=True)
+        self.assertEqual(told.detail.message, "You'll keep dodging into Soulfray.")
+        self.blade("Archer", at=self.gallery)
+        roll = RecordingRoll(2)
+
+        self.resolve(roll)
+
+        self.assertEqual(roll.extras(), [4])

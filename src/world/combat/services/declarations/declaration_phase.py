@@ -171,6 +171,17 @@ def _open_round(encounter: CombatEncounter, guard: CacheGuard) -> None:
     # round *after* round_number has advanced so the < comparison catches
     # the old rows. recompute_max_health_with_threads runs per affected
     # participant inside expire_pulls_for_round (clamp-not-injure).
-    expire_pulls_for_round(enc)
+    _expire_pulls_and_ask(enc)
     # Refresh the caller's instance so it reflects the new state.
     encounter.refresh_from_db()
+
+
+def _expire_pulls_and_ask(enc: CombatEncounter) -> None:
+    """Expire last round's pulls, then ask each player in Soulfray whether her dodges keep
+    casting into it (#5066 decision 13)."""
+    from world.combat.services.dodge_check_in import (  # noqa: PLC0415
+        announce_soulfray_check_ins,
+    )
+
+    expire_pulls_for_round(enc)
+    announce_soulfray_check_ins(enc)

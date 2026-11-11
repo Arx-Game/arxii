@@ -44,6 +44,9 @@ _SUBVERBS: dict[str, str] = {
     "parley": "combat_parley",
     "mark": "combat_mark",
     "dodge": "combat_dodge",
+    "dodgewith": "dodge_settings",
+    "dodgedefault": "dodge_settings",
+    "autopull": "dodge_settings",
     "steady": "combat_steady",
     "charge": "combat_charge",
     "strike": "combat_strike",
@@ -55,6 +58,10 @@ _SUBVERBS: dict[str, str] = {
 
 # subverbs that set a reaction plan for the round.
 _PLAN_SUBVERBS = {"dodge", "steady"}
+# subverbs that set her standing dodge answers (#5066): which technique, the defensive pull.
+_DODGE_SETTING_SUBVERBS = frozenset({"dodgewith", "dodgedefault", "autopull"})
+_DEFAULT_WORD = "default"
+_OFF_WORD = "off"
 # subverbs that declare the round's focused action (#4802), so a compulsion may warn.
 _DECLARING_SUBVERBS = frozenset(
     {
@@ -149,6 +156,12 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat mark <opp>           - mark a foe for your covenant-mates this round
         combat dodge [<place>|here|off] - where you land if you dodge this round
+        combat dodgewith <technique>|default - which technique answers your dodges
+                                     this fight (default: your saved one)
+        combat dodgedefault <technique> - save it as your dodge in every fight
+        combat autopull <resonance> <tier>|off - pull threads for defense when attacked
+                                     (answer the Soulfray check-in: accept/decline
+                                     dodgesoulfray)
         combat steady [on|off] - steady an ally who loses their nerve
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat strike <opp> [with <weapon> [thrown]] [using <technique> [soulfray]]
@@ -221,12 +234,15 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         if self._subverb == "use":  # noqa: STRING_LITERAL
             return self._resolve_use_item_args(self._require_rest("an item"))
-        if self._subverb in _PLAN_SUBVERBS:
+        if self._subverb in _PLAN_SUBVERBS or self._subverb in _DODGE_SETTING_SUBVERBS:
             return self._resolve_plan_args()
         return self._resolve_technique_subverb_args()
 
     def _resolve_plan_args(self) -> dict[str, Any]:
-        """The reaction plans: ``dodge ...`` (#4676) and ``steady [on|off]`` (#4802)."""
+        """The reaction plans: ``dodge ...`` (#4676), ``steady [on|off]`` (#4802), and the
+        standing dodge answers (#5066)."""
+        if self._subverb in _DODGE_SETTING_SUBVERBS:
+            return self._resolve_dodge_setting_args()
         if self._subverb == "steady":  # noqa: STRING_LITERAL
             word = self._rest.strip().lower()
             if word not in ("", "on", "off"):  # noqa: STRING_LITERAL
@@ -234,6 +250,35 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                 raise CommandError(msg)
             return {"steady": word != "off"}  # noqa: STRING_LITERAL
         return self._resolve_dodge_args(self._rest)
+
+    def _resolve_dodge_setting_args(self) -> dict[str, Any]:
+        """``dodgewith <technique>|default``, ``dodgedefault <technique>``,
+        ``autopull <resonance> <tier>|off`` (#5066)."""
+        text = self._rest.strip()
+        if self._subverb == "autopull":  # noqa: STRING_LITERAL
+            return self._resolve_autopull_args(text)
+        if not text:
+            msg = f"Usage: combat {self._subverb} <technique>."
+            raise CommandError(msg)
+        if self._subverb == "dodgewith" and text.lower() == _DEFAULT_WORD:  # noqa: STRING_LITERAL
+            return {"technique_id": ""}
+        kwargs: dict[str, Any] = {"technique_id": self._find_technique_id(text)}
+        if self._subverb == "dodgedefault":  # noqa: STRING_LITERAL
+            kwargs["save_default"] = True
+        return kwargs
+
+    def _resolve_autopull_args(self, text: str) -> dict[str, Any]:
+        """``off``, or ``<resonance> <tier>`` naming the saved defensive pull."""
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        if text.lower() == _OFF_WORD:
+            return {"auto_pull": False}
+        name, _, tier = text.rpartition(" ")
+        resonance = Resonance.objects.filter(name__iexact=name.strip()).first()
+        if resonance is None or not tier.isdigit():
+            msg = "Usage: combat autopull <resonance> <tier>, or combat autopull off."
+            raise CommandError(msg)
+        return {"auto_pull": True, "pull_resonance_id": resonance.pk, "pull_tier": int(tier)}
 
     @staticmethod
     def _resolve_dodge_args(text: str) -> dict[str, Any]:
